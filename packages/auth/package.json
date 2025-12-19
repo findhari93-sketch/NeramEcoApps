@@ -1,0 +1,32 @@
+{
+  "name": "@neram/auth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authentication utilities for Neram Classes (Firebase & Microsoft)",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./firebase": "./src/firebase.ts",
+    "./microsoft": "./src/microsoft.ts",
+    "./hooks": "./src/hooks.ts"
+  },
+  "scripts": {
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo node_modules"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "^3.6.0",
+    "@azure/msal-react": "^2.0.8",
+    "firebase": "^10.7.0",
+    "@neram/database": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "typescript": "^5.3.3"
+  }
+}

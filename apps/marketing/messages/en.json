@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "Welcome to Neram Classes",
+    "subtitle": "Excellence in Education",
+    "featuredCourses": "Featured Courses",
+    "tools": "Learning Tools",
+    "testimonials": "What Our Students Say"
+  },
+  "about": {
+    "title": "About Us",
+    "mission": "Our Mission",
+    "vision": "Our Vision",
+    "values": "Our Core Values"
+  },
+  "courses": {
+    "title": "Our Courses",
+    "filter": "Filter by Category",
+    "viewDetails": "View Details"
+  },
+  "courseDetail": {
+    "about": "About This Course",
+    "curriculum": "Curriculum",
+    "features": "Course Features",
+    "faculty": "Expert Faculty",
+    "enroll": "Enroll Now"
+  },
+  "contact": {
+    "title": "Contact Us",
+    "subtitle": "Get in Touch",
+    "form": {
+      "name": "Full Name",
+      "email": "Email Address",
+      "phone": "Phone Number",
+      "subject": "Subject",
+      "message": "Message",
+      "submit": "Send Message"
+    }
+  },
+  "apply": {
+    "title": "Apply for Admission",
+    "steps": {
+      "personal": "Personal Information",
+      "academic": "Academic Details",
+      "course": "Course Selection",
+      "review": "Review & Submit"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Success",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "next": "Next",
+    "back": "Back"
+  }
+}

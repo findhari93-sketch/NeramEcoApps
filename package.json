@@ -1,0 +1,77 @@
+{
+  "name": "neram-ecosystem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Neram Classes - NATA & JEE Paper 2 Coaching Platform Ecosystem",
+  "author": "Neram Classes",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:marketing": "turbo run dev --filter=@neram/marketing",
+    "dev:app": "turbo run dev --filter=@neram/app",
+    "dev:nexus": "turbo run dev --filter=@neram/nexus",
+    "dev:admin": "turbo run dev --filter=@neram/admin",
+    "build": "turbo run build",
+    "build:marketing": "turbo run build --filter=@neram/marketing",
+    "build:app": "turbo run build --filter=@neram/app",
+    "build:nexus": "turbo run build --filter=@neram/nexus",
+    "build:admin": "turbo run build --filter=@neram/admin",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "type-check": "turbo run type-check",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:generate": "pnpm --filter @neram/database generate",
+    "db:push": "pnpm --filter @neram/database push",
+    "db:studio": "pnpm --filter @neram/database studio",
+    "db:migrate": "pnpm --filter @neram/database migrate",
+    "vercel:login": "vercel login",
+    "vercel:link": "turbo run vercel:link",
+    "vercel:deploy": "turbo run vercel:deploy",
+    "vercel:deploy:prod": "turbo run vercel:deploy:prod",
+    "supabase:login": "supabase login",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:db:push": "supabase db push",
+    "supabase:db:pull": "supabase db pull",
+    "supabase:gen:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > packages/database/src/types/supabase.ts",
+    "firebase:login": "firebase login",
+    "firebase:init": "firebase init",
+    "firebase:deploy": "firebase deploy",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "eslint": "^8.55.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.1",
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "firebase-tools": "^13.0.0",
+    "supabase": "^1.120.0",
+    "vercel": "^33.0.0"
+  },
+  "packageManager": "pnpm@8.12.0",
+  "engines": {
+    "node": ">=18.17.0",
+    "pnpm": ">=8.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  }
+}

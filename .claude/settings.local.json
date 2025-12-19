@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(supabase login:*)",
+      "Bash(firebase login:*)",
+      "Bash(npm install:*)",
+      "Bash(where:*)",
+      "Bash(npx supabase --version)",
+      "Bash(npx supabase login)",
+      "Bash(npx supabase:*)",
+      "Bash(cat:*)",
+      "Bash(npx supabase link:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm turbo build:*)",
+      "Bash(move:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)"
+    ]
+  }
+}
