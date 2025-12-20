@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -15,69 +15,81 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress,
+  Alert,
 } from '@neram/ui';
 
-interface College {
+interface CollegePrediction {
+  id: string;
   name: string;
-  location: string;
-  type: string;
-  fees: string;
+  city: string;
+  state: string;
+  collegeType: string;
+  annualFee: number | null;
   chance: 'High' | 'Medium' | 'Low';
+  cutoffScore: number;
+  difference: number;
 }
 
 export default function CollegePredictorPage() {
   const [nataScore, setNataScore] = useState<string>('');
   const [category, setCategory] = useState<string>('General');
   const [state, setState] = useState<string>('');
-  const [results, setResults] = useState<College[]>([]);
+  const [states, setStates] = useState<string[]>([]);
+  const [results, setResults] = useState<CollegePrediction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [statesLoading, setStatesLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const predictColleges = () => {
+  // Fetch available states on mount
+  useEffect(() => {
+    fetch('/api/tools/college-predictor')
+      .then((res) => res.json())
+      .then((data) => {
+        setStates(data.states || []);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch states:', err);
+      })
+      .finally(() => {
+        setStatesLoading(false);
+      });
+  }, []);
+
+  const predictColleges = async () => {
     const score = parseFloat(nataScore);
     if (isNaN(score) || score < 0 || score > 200) {
-      alert('Please enter a valid NATA score between 0 and 200');
+      setError('Please enter a valid NATA score between 0 and 200');
       return;
     }
 
-    // Mock data - replace with actual API call
-    const mockColleges: College[] = [
-      {
-        name: 'IIT Kharagpur - Architecture',
-        location: 'West Bengal',
-        type: 'Government',
-        fees: '₹2,00,000/year',
-        chance: score >= 160 ? 'High' : score >= 140 ? 'Medium' : 'Low',
-      },
-      {
-        name: 'NIT Trichy - Architecture',
-        location: 'Tamil Nadu',
-        type: 'Government',
-        fees: '₹1,50,000/year',
-        chance: score >= 150 ? 'High' : score >= 130 ? 'Medium' : 'Low',
-      },
-      {
-        name: 'School of Planning and Architecture, Delhi',
-        location: 'Delhi',
-        type: 'Government',
-        fees: '₹1,00,000/year',
-        chance: score >= 170 ? 'High' : score >= 150 ? 'Medium' : 'Low',
-      },
-      {
-        name: 'Chandigarh College of Architecture',
-        location: 'Chandigarh',
-        type: 'Government',
-        fees: '₹80,000/year',
-        chance: score >= 140 ? 'High' : score >= 120 ? 'Medium' : 'Low',
-      },
-      {
-        name: 'SRM Institute of Science and Technology',
-        location: 'Tamil Nadu',
-        type: 'Private',
-        fees: '₹2,50,000/year',
-        chance: score >= 100 ? 'High' : score >= 80 ? 'Medium' : 'Low',
-      },
-    ];
+    setLoading(true);
+    setError(null);
 
-    setResults(mockColleges);
+    try {
+      const response = await fetch('/api/tools/college-predictor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nataScore: score,
+          category,
+          state: state || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to predict colleges');
+      }
+
+      setResults(data.predictions || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getChanceColor = (chance: string) => {
@@ -91,6 +103,11 @@ export default function CollegePredictorPage() {
       default:
         return 'default';
     }
+  };
+
+  const formatFees = (fee: number | null) => {
+    if (!fee) return 'Contact college';
+    return `₹${fee.toLocaleString('en-IN')}/year`;
   };
 
   return (
@@ -139,14 +156,14 @@ export default function CollegePredictorPage() {
                 value={state}
                 label="Preferred State"
                 onChange={(e) => setState(e.target.value)}
+                disabled={statesLoading}
               >
                 <MenuItem value="">Any State</MenuItem>
-                <MenuItem value="Delhi">Delhi</MenuItem>
-                <MenuItem value="Maharashtra">Maharashtra</MenuItem>
-                <MenuItem value="Karnataka">Karnataka</MenuItem>
-                <MenuItem value="Tamil Nadu">Tamil Nadu</MenuItem>
-                <MenuItem value="West Bengal">West Bengal</MenuItem>
-                <MenuItem value="Telangana">Telangana</MenuItem>
+                {states.map((s) => (
+                  <MenuItem key={s} value={s}>
+                    {s}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
 
@@ -155,8 +172,9 @@ export default function CollegePredictorPage() {
               fullWidth
               size="large"
               onClick={predictColleges}
+              disabled={loading}
             >
-              Predict Colleges
+              {loading ? <CircularProgress size={24} /> : 'Predict Colleges'}
             </Button>
           </Paper>
 
@@ -183,14 +201,32 @@ export default function CollegePredictorPage() {
 
         {/* Results Section */}
         <Grid item xs={12} md={8}>
-          {results.length > 0 ? (
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {loading ? (
+            <Paper
+              sx={{
+                p: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 400,
+              }}
+            >
+              <CircularProgress />
+            </Paper>
+          ) : results.length > 0 ? (
             <Box>
               <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
                 Predicted Colleges ({results.length})
               </Typography>
               <Grid container spacing={2}>
-                {results.map((college, index) => (
-                  <Grid item xs={12} key={index}>
+                {results.map((college) => (
+                  <Grid item xs={12} key={college.id}>
                     <Card>
                       <CardContent>
                         <Box
@@ -211,11 +247,23 @@ export default function CollegePredictorPage() {
                           />
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                          <Chip label={college.location} size="small" variant="outlined" />
-                          <Chip label={college.type} size="small" variant="outlined" />
+                          <Chip
+                            label={`${college.city}, ${college.state}`}
+                            size="small"
+                            variant="outlined"
+                          />
+                          <Chip label={college.collegeType} size="small" variant="outlined" />
+                          {college.cutoffScore > 0 && (
+                            <Chip
+                              label={`Cutoff: ${college.cutoffScore}`}
+                              size="small"
+                              variant="outlined"
+                              color="primary"
+                            />
+                          )}
                         </Box>
                         <Typography variant="body2" color="text.secondary">
-                          Annual Fees: {college.fees}
+                          Annual Fees: {formatFees(college.annualFee)}
                         </Typography>
                       </CardContent>
                     </Card>

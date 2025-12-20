@@ -20,3 +20,21 @@ export * from './types';
 
 // Queries
 export * from './queries';
+
+// Services
+export {
+  sendEmail,
+  sendTemplateEmail,
+  notifyAdmin,
+} from './services/email';
+export type { EmailData, TemplateData } from './services/email';
+
+// Data
+export {
+  locations,
+  getLocationByCity,
+  getLocationsByState,
+  getLocationsByRegion,
+  getAllCities,
+} from './data/locations';
+export type { Location } from './data/locations';

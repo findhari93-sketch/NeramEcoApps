@@ -15,7 +15,16 @@
       "Bash(move:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Neram Classes ecosystem\n\nMonorepo structure with 4 Next.js applications:\n- Marketing site \\(neramclasses.com\\) - 28 pages, 5 languages\n- Tools PWA \\(app.neramclasses.com\\) - Calculators & predictors\n- Admin panel \\(admin.neramclasses.com\\) - Lead & payment management\n- Nexus classroom \\(nexus.neramclasses.com\\) - Student portal\n\nShared packages:\n- @neram/ui - Material UI theme, components, hooks\n- @neram/database - Supabase client & types\n- @neram/auth - Firebase + Microsoft Entra ID auth\n- @neram/i18n - 5 languages \\(EN, TA, HI, KN, ML\\)\n\nStack: Turborepo, pnpm, Next.js 14, TypeScript, MUI v5, Supabase\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(dir:*)",
+      "Bash(pnpm turbo type-check:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

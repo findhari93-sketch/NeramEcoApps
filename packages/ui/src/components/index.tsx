@@ -440,6 +440,25 @@ export function EmptyState({
   );
 }
 
+// ============================================
+// APPLICATION FORM COMPONENTS
+// ============================================
+
+// Document Upload Component
+export { DocumentUpload } from './DocumentUpload';
+export type { DocumentUploadProps } from './DocumentUpload';
+
+// Chat Widget Component
+export { ChatWidget } from './ChatWidget';
+export type {
+  ChatWidgetProps,
+  ChatMessage,
+  ChatStep,
+  ChatFlowConfig,
+  ChatInputConfig,
+} from './ChatWidget';
+export { applicationFormFlow } from './ChatWidget/applicationFlow';
+
 /**
  * Status badge component
  */

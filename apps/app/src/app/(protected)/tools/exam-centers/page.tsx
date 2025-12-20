@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -15,15 +15,21 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress,
+  Alert,
 } from '@neram/ui';
 
 interface ExamCenter {
+  id: string;
   name: string;
   address: string;
   city: string;
   state: string;
   pincode: string;
-  distance?: string;
+  latitude: number | null;
+  longitude: number | null;
+  exam_types: string[];
+  distance?: number;
 }
 
 export default function ExamCentersPage() {
@@ -31,63 +37,118 @@ export default function ExamCentersPage() {
   const [selectedCity, setSelectedCity] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [centers, setCenters] = useState<ExamCenter[]>([]);
+  const [states, setStates] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [statesLoading, setStatesLoading] = useState(true);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [useLocation, setUseLocation] = useState(false);
 
-  const states = [
-    'Delhi',
-    'Maharashtra',
-    'Karnataka',
-    'Tamil Nadu',
-    'West Bengal',
-    'Telangana',
-    'Gujarat',
-    'Rajasthan',
-  ];
+  // Fetch states on mount
+  useEffect(() => {
+    fetch('/api/tools/exam-centers?action=states')
+      .then((res) => res.json())
+      .then((data) => {
+        setStates(data.states || []);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch states:', err);
+      })
+      .finally(() => {
+        setStatesLoading(false);
+      });
+  }, []);
 
-  const cities: Record<string, string[]> = {
-    Delhi: ['New Delhi', 'North Delhi', 'South Delhi', 'East Delhi'],
-    Maharashtra: ['Mumbai', 'Pune', 'Nagpur', 'Nashik'],
-    Karnataka: ['Bangalore', 'Mysore', 'Mangalore', 'Hubli'],
-    'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Trichy'],
+  // Fetch cities when state changes
+  useEffect(() => {
+    if (!selectedState) {
+      setCities([]);
+      return;
+    }
+
+    setCitiesLoading(true);
+    fetch(`/api/tools/exam-centers?action=cities&state=${encodeURIComponent(selectedState)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setCities(data.cities || []);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch cities:', err);
+      })
+      .finally(() => {
+        setCitiesLoading(false);
+      });
+  }, [selectedState]);
+
+  const searchCenters = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const body: Record<string, unknown> = {};
+
+      if (selectedState) body.state = selectedState;
+      if (selectedCity) body.city = selectedCity;
+      if (searchQuery) body.search = searchQuery;
+
+      // Try to get user location if enabled
+      if (useLocation && navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              timeout: 5000,
+              enableHighAccuracy: true,
+            });
+          });
+          body.latitude = position.coords.latitude;
+          body.longitude = position.coords.longitude;
+        } catch {
+          // Location not available, continue without it
+        }
+      }
+
+      const response = await fetch('/api/tools/exam-centers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to search exam centers');
+      }
+
+      setCenters(data.centers || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      setCenters([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const searchCenters = () => {
-    // Mock data - replace with actual API call
-    const mockCenters: ExamCenter[] = [
-      {
-        name: 'Delhi Public School',
-        address: 'Mathura Road, East of Kailash',
-        city: 'New Delhi',
-        state: 'Delhi',
-        pincode: '110065',
-        distance: '2.5 km',
-      },
-      {
-        name: 'Modern School',
-        address: 'Barakhamba Road',
-        city: 'New Delhi',
-        state: 'Delhi',
-        pincode: '110001',
-        distance: '5.2 km',
-      },
-      {
-        name: 'Amity International School',
-        address: 'Sector 46, Noida',
-        city: 'Noida',
-        state: 'Delhi',
-        pincode: '201301',
-        distance: '15.8 km',
-      },
-      {
-        name: 'Ryan International School',
-        address: 'Vasant Kunj',
-        city: 'New Delhi',
-        state: 'Delhi',
-        pincode: '110070',
-        distance: '8.3 km',
-      },
-    ];
+  const formatDistance = (distance?: number) => {
+    if (!distance) return null;
+    if (distance < 1) return `${Math.round(distance * 1000)} m`;
+    return `${distance.toFixed(1)} km`;
+  };
 
-    setCenters(mockCenters);
+  const openDirections = (center: ExamCenter) => {
+    if (center.latitude && center.longitude) {
+      window.open(
+        `https://www.google.com/maps/dir/?api=1&destination=${center.latitude},${center.longitude}`,
+        '_blank'
+      );
+    } else {
+      window.open(
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          `${center.name}, ${center.address}, ${center.city}`
+        )}`,
+        '_blank'
+      );
+    }
   };
 
   return (
@@ -113,6 +174,7 @@ export default function ExamCentersPage() {
                   setSelectedState(e.target.value);
                   setSelectedCity('');
                 }}
+                disabled={statesLoading}
               >
                 <MenuItem value="">All States</MenuItem>
                 {states.map((state) => (
@@ -123,7 +185,7 @@ export default function ExamCentersPage() {
               </Select>
             </FormControl>
 
-            <FormControl fullWidth sx={{ mb: 2 }} disabled={!selectedState}>
+            <FormControl fullWidth sx={{ mb: 2 }} disabled={!selectedState || citiesLoading}>
               <InputLabel>Select City</InputLabel>
               <Select
                 value={selectedCity}
@@ -131,12 +193,11 @@ export default function ExamCentersPage() {
                 onChange={(e) => setSelectedCity(e.target.value)}
               >
                 <MenuItem value="">All Cities</MenuItem>
-                {selectedState &&
-                  cities[selectedState]?.map((city) => (
-                    <MenuItem key={city} value={city}>
-                      {city}
-                    </MenuItem>
-                  ))}
+                {cities.map((city) => (
+                  <MenuItem key={city} value={city}>
+                    {city}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
 
@@ -146,11 +207,28 @@ export default function ExamCentersPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Enter center name or pincode"
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
             />
 
-            <Button variant="contained" fullWidth size="large" onClick={searchCenters}>
-              Search Centers
+            <Box sx={{ mb: 2 }}>
+              <Button
+                size="small"
+                variant={useLocation ? 'contained' : 'outlined'}
+                onClick={() => setUseLocation(!useLocation)}
+                sx={{ fontSize: '0.8rem' }}
+              >
+                {useLocation ? 'Location enabled' : 'Use my location'}
+              </Button>
+            </Box>
+
+            <Button
+              variant="contained"
+              fullWidth
+              size="large"
+              onClick={searchCenters}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Search Centers'}
             </Button>
           </Paper>
 
@@ -172,14 +250,32 @@ export default function ExamCentersPage() {
 
         {/* Results Section */}
         <Grid item xs={12} md={8}>
-          {centers.length > 0 ? (
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {loading ? (
+            <Paper
+              sx={{
+                p: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 400,
+              }}
+            >
+              <CircularProgress />
+            </Paper>
+          ) : centers.length > 0 ? (
             <Box>
               <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
                 Exam Centers ({centers.length})
               </Typography>
               <Grid container spacing={2}>
-                {centers.map((center, index) => (
-                  <Grid item xs={12} key={index}>
+                {centers.map((center) => (
+                  <Grid item xs={12} key={center.id}>
                     <Card>
                       <CardContent>
                         <Box
@@ -194,7 +290,11 @@ export default function ExamCentersPage() {
                             {center.name}
                           </Typography>
                           {center.distance && (
-                            <Chip label={center.distance} size="small" color="primary" />
+                            <Chip
+                              label={formatDistance(center.distance)}
+                              size="small"
+                              color="primary"
+                            />
                           )}
                         </Box>
                         <Typography variant="body2" color="text.secondary" paragraph>
@@ -204,13 +304,17 @@ export default function ExamCentersPage() {
                           <Chip label={center.city} size="small" variant="outlined" />
                           <Chip label={center.state} size="small" variant="outlined" />
                           <Chip label={center.pincode} size="small" variant="outlined" />
+                          {center.exam_types?.map((type) => (
+                            <Chip key={type} label={type} size="small" color="info" />
+                          ))}
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button size="small" variant="outlined">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => openDirections(center)}
+                          >
                             Get Directions
-                          </Button>
-                          <Button size="small" variant="text">
-                            View Details
                           </Button>
                         </Box>
                       </CardContent>

@@ -19,6 +19,16 @@ export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual';
 export type CourseType = 'nata' | 'jee_paper2' | 'both';
 export type ExamType = 'NATA' | 'JEE_PAPER_2' | 'BOTH';
 
+// New enums for application form
+export type ScholarshipVerificationStatus = 'pending' | 'verified' | 'rejected';
+export type CashbackType = 'youtube_subscription' | 'instagram_follow' | 'direct_payment';
+export type CashbackStatus = 'pending' | 'verified' | 'processed' | 'rejected' | 'expired';
+export type DocumentType = 'school_id_card' | 'income_certificate' | 'payment_screenshot' | 'aadhar_card' | 'marksheet' | 'photo' | 'signature' | 'other';
+export type InstallmentStatus = 'pending' | 'paid' | 'overdue' | 'waived';
+export type PaymentScheme = 'full' | 'installment';
+export type SourceCategory = 'youtube' | 'instagram' | 'facebook' | 'google_search' | 'friend_referral' | 'school_visit' | 'newspaper' | 'hoarding' | 'whatsapp' | 'other';
+export type CasteCategory = 'general' | 'obc' | 'sc' | 'st' | 'ews' | 'other';
+
 // ============================================
 // BASE TYPES
 // ============================================
@@ -68,21 +78,21 @@ export interface User extends Timestamps {
 export interface LeadProfile extends Timestamps {
   id: string;
   user_id: string;
-  
+
   // Source tracking
   source: ApplicationSource;
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
   referral_code: string | null;
-  
+
   // Application data
   interest_course: CourseType;
   qualification: string | null;
   school_college: string | null;
   city: string | null;
   state: string | null;
-  
+
   // Application form data (JSON)
   application_data: {
     father_name?: string;
@@ -93,12 +103,230 @@ export interface LeadProfile extends Timestamps {
     additional_notes?: string;
     [key: string]: unknown;
   } | null;
-  
+
   // Admin review
   reviewed_by: string | null;       // Admin user_id
   reviewed_at: string | null;
   admin_notes: string | null;
   rejection_reason: string | null;
+
+  // Fee & Payment (added for enhanced workflow)
+  assigned_fee: number | null;
+  discount_amount: number | null;
+  coupon_code: string | null;
+  final_fee: number | null;
+  payment_scheme: PaymentScheme;
+  payment_deadline: string | null;
+  installment_reminder_date: string | null;
+  full_payment_discount: number | null;
+
+  // Cashback tracking
+  total_cashback_eligible: number;
+  total_cashback_processed: number;
+
+  // Form completion tracking
+  form_step_completed: number;
+  form_completed_at: string | null;
+
+  // Notification tracking
+  email_sent_at: string | null;
+  whatsapp_sent_at: string | null;
+  last_reminder_sent_at: string | null;
+}
+
+/**
+ * Scholarship applications - for 95% scholarship eligibility
+ */
+export interface ScholarshipApplication extends Timestamps {
+  id: string;
+  lead_profile_id: string;
+
+  // School verification
+  is_government_school: boolean;
+  government_school_years: number;
+  school_name: string | null;
+
+  // Documents
+  school_id_card_url: string | null;
+  income_certificate_url: string | null;
+
+  // Income verification
+  is_low_income: boolean;
+  annual_income_range: string | null;
+
+  // Scholarship eligibility
+  scholarship_percentage: number;
+  eligibility_reason: string | null;
+
+  // Admin verification
+  verification_status: ScholarshipVerificationStatus;
+  verified_by: string | null;
+  verified_at: string | null;
+  verification_notes: string | null;
+  rejection_reason: string | null;
+}
+
+/**
+ * Cashback claims - YouTube, Instagram, Direct Payment
+ */
+export interface CashbackClaim extends Timestamps {
+  id: string;
+  lead_profile_id: string | null;
+  user_id: string;
+
+  // Cashback details
+  cashback_type: CashbackType;
+  amount: number;
+
+  // YouTube verification
+  youtube_channel_subscribed: boolean;
+  youtube_verification_data: Record<string, unknown> | null;
+  youtube_verified_at: string | null;
+
+  // Instagram verification
+  instagram_username: string | null;
+  instagram_self_declared: boolean;
+  instagram_screenshot_url: string | null;
+
+  // Direct payment link
+  payment_id: string | null;
+
+  // Processing
+  status: CashbackStatus;
+  processed_by: string | null;
+  processed_at: string | null;
+  processing_notes: string | null;
+
+  // Transfer details
+  cashback_phone: string | null;
+  cashback_upi_id: string | null;
+  cashback_transferred_at: string | null;
+}
+
+/**
+ * Application documents - uploaded files
+ */
+export interface ApplicationDocument extends Timestamps {
+  id: string;
+  lead_profile_id: string;
+  user_id: string | null;
+
+  // Document details
+  document_type: DocumentType;
+  file_url: string;
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+
+  // Verification
+  is_verified: boolean;
+  verified_by: string | null;
+  verified_at: string | null;
+  verification_notes: string | null;
+
+  // Metadata
+  uploaded_from: string | null;
+}
+
+/**
+ * Payment installments - for partial payment scheme
+ */
+export interface PaymentInstallment extends Timestamps {
+  id: string;
+  lead_profile_id: string;
+  payment_id: string | null;
+
+  // Installment details
+  installment_number: number;
+  amount: number;
+  due_date: string;
+
+  // Reminder
+  reminder_date: string | null;
+  reminder_sent: boolean;
+  reminder_sent_at: string | null;
+
+  // Status
+  status: InstallmentStatus;
+  paid_at: string | null;
+  paid_amount: number | null;
+
+  // Late fee
+  late_fee: number;
+  late_fee_waived: boolean;
+
+  admin_notes: string | null;
+}
+
+/**
+ * Source tracking - "How did you hear about us?"
+ */
+export interface SourceTracking {
+  id: string;
+  lead_profile_id: string;
+
+  // Source info
+  source_category: SourceCategory | null;
+  source_detail: string | null;
+
+  // Referral
+  friend_referral_name: string | null;
+  friend_referral_phone: string | null;
+  referral_code: string | null;
+
+  // UTM tracking
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+
+  created_at: string;
+}
+
+/**
+ * Post-enrollment details - after payment
+ */
+export interface PostEnrollmentDetails extends Timestamps {
+  id: string;
+  student_profile_id: string;
+  user_id: string | null;
+
+  // Caste details
+  caste_category: CasteCategory | null;
+  caste_certificate_url: string | null;
+
+  // Aadhar details
+  aadhar_number: string | null;
+  aadhar_verified: boolean;
+  aadhar_document_url: string | null;
+
+  // Parent details
+  father_name: string | null;
+  father_phone: string | null;
+  father_occupation: string | null;
+  mother_name: string | null;
+  mother_phone: string | null;
+  mother_occupation: string | null;
+
+  // Emergency contact
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
+
+  // Medical info
+  blood_group: string | null;
+  medical_conditions: string | null;
+
+  // Nexus (MS Teams) account
+  nexus_account_created: boolean;
+  nexus_email: string | null;
+  nexus_password_set: boolean;
+  nexus_created_at: string | null;
+  nexus_created_by: string | null;
+
+  // Form completion
+  form_completed: boolean;
+  form_completed_at: string | null;
 }
 
 /**
@@ -381,34 +609,45 @@ export interface Payment extends Timestamps {
   id: string;
   user_id: string;
   student_profile_id: string | null;
-  
+  lead_profile_id: string | null;
+
   // Amount
   amount: number;
   currency: string;                  // 'INR'
-  
+
   // Razorpay details
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
   razorpay_signature: string | null;
-  
+
   // Status
   status: PaymentStatus;
-  
+
   // Details
   description: string | null;
-  payment_method: string | null;     // 'card', 'upi', 'netbanking', etc.
-  
+  payment_method: string | null;     // 'razorpay', 'upi_screenshot', 'bank_transfer'
+
   // Receipt
   receipt_number: string | null;
   receipt_url: string | null;
-  
+
+  // Screenshot verification (for direct payment)
+  screenshot_url: string | null;
+  screenshot_verified: boolean;
+  verified_by: string | null;
+  verified_at: string | null;
+  verification_notes: string | null;
+
+  // Installment tracking
+  installment_number: number | null;
+
   // Metadata
   metadata: Record<string, unknown> | null;
-  
+
   // Failure info
   failure_code: string | null;
   failure_reason: string | null;
-  
+
   paid_at: string | null;
 }
 
@@ -660,6 +899,37 @@ export interface Database {
         Insert: Omit<PageView, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<PageView, 'id' | 'created_at' | 'updated_at'>>;
       };
+      // New tables for enhanced application form
+      scholarship_applications: {
+        Row: ScholarshipApplication;
+        Insert: Omit<ScholarshipApplication, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<ScholarshipApplication, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      cashback_claims: {
+        Row: CashbackClaim;
+        Insert: Omit<CashbackClaim, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<CashbackClaim, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      application_documents: {
+        Row: ApplicationDocument;
+        Insert: Omit<ApplicationDocument, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<ApplicationDocument, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      payment_installments: {
+        Row: PaymentInstallment;
+        Insert: Omit<PaymentInstallment, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<PaymentInstallment, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      source_tracking: {
+        Row: SourceTracking;
+        Insert: Omit<SourceTracking, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<SourceTracking, 'id' | 'created_at'>>;
+      };
+      post_enrollment_details: {
+        Row: PostEnrollmentDetails;
+        Insert: Omit<PostEnrollmentDetails, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<PostEnrollmentDetails, 'id' | 'created_at' | 'updated_at'>>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -670,6 +940,14 @@ export interface Database {
       application_source: ApplicationSource;
       course_type: CourseType;
       exam_type: ExamType;
+      scholarship_verification_status: ScholarshipVerificationStatus;
+      cashback_type: CashbackType;
+      cashback_status: CashbackStatus;
+      document_type: DocumentType;
+      installment_status: InstallmentStatus;
+      payment_scheme: PaymentScheme;
+      source_category: SourceCategory;
+      caste_category: CasteCategory;
     };
   };
 }

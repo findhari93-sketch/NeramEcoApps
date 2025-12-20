@@ -22,7 +22,8 @@
     "clean": "rm -rf dist .turbo node_modules"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "resend": "^2.1.0"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
