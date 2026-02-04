@@ -1,6 +1,5 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
 import {
   Box,
   Container,
@@ -19,10 +18,10 @@ import Link from 'next/link';
 
 const coachingPrograms = [
   {
-    id: 'nata',
-    title: 'NATA Coaching',
-    subtitle: 'National Aptitude Test in Architecture',
-    description: 'Comprehensive NATA preparation with drawing skills, aptitude training, and mock tests.',
+    id: 'architecture-year-long',
+    title: 'Architecture Entrance - Year Long',
+    subtitle: 'NATA + JEE Paper 2 (B.Arch/B.Planning)',
+    description: 'Comprehensive year-long preparation for NATA and JEE Paper 2 with IIT/NIT architect alumni faculty.',
     features: [
       'Drawing & Sketching Masterclass',
       'Mathematics & Logical Reasoning',
@@ -31,63 +30,63 @@ const coachingPrograms = [
       'Weekly Mock Tests',
       'Personal Mentoring',
     ],
-    duration: '6-12 Months',
+    duration: '1 Year',
     mode: ['Online', 'Offline'],
-    slug: 'nata-coaching',
+    slug: 'architecture-entrance-year-long',
     highlight: true,
   },
   {
-    id: 'jee-paper2',
-    title: 'JEE Paper 2 Coaching',
-    subtitle: 'B.Arch & B.Planning Entrance',
-    description: 'Expert coaching for JEE Main Paper 2 (B.Arch/B.Planning) with focus on aptitude and drawing.',
+    id: 'architecture-crash',
+    title: 'Architecture Entrance - Crash Course',
+    subtitle: 'NATA + JEE Paper 2 Intensive',
+    description: 'Intensive crash course for NATA and JEE Paper 2. Perfect for quick revision and last-minute preparation.',
     features: [
-      'Architecture Aptitude Training',
-      'Drawing & Design Skills',
-      'Mathematics for JEE',
-      'Planning Aptitude',
+      'Focused Revision',
+      'Daily Practice Sessions',
+      'Exam Strategies',
       'Previous Year Analysis',
+      'Mock Tests',
       'Doubt Clearing Sessions',
     ],
-    duration: '6-12 Months',
+    duration: '2-3 Months',
     mode: ['Online', 'Offline'],
-    slug: 'jee-paper-2-coaching',
+    slug: 'architecture-entrance-crash-course',
     highlight: true,
   },
   {
-    id: 'neet',
-    title: 'NEET Coaching',
-    subtitle: 'Medical Entrance Preparation',
-    description: 'Result-oriented NEET preparation with experienced faculty and comprehensive study material.',
+    id: 'revit',
+    title: 'Revit Architecture Training',
+    subtitle: 'Professional BIM Software',
+    description: 'Industry-focused Autodesk Revit training for architects and designers. Learn BIM modeling and documentation.',
     features: [
-      'Physics, Chemistry, Biology',
-      'NCERT-Based Teaching',
-      'Regular Assessments',
-      'Previous Year Papers',
-      'All India Mock Tests',
-      'Personalized Guidance',
+      'BIM Fundamentals',
+      'Architectural Modeling',
+      'Documentation & Sheets',
+      'Rendering & Visualization',
+      'Industry Projects',
+      'Job Assistance',
     ],
-    duration: '1-2 Years',
-    mode: ['Offline'],
-    slug: 'neet-preparation',
+    duration: '3 Months',
+    mode: ['Online', 'Offline'],
+    slug: 'revit-training',
     highlight: false,
   },
   {
-    id: 'foundation',
-    title: 'Foundation Course',
-    subtitle: 'Classes 8th to 10th',
-    description: 'Build a strong academic foundation for future competitive exams with our foundation program.',
+    id: 'autocad',
+    title: 'AutoCAD Training',
+    subtitle: '2D & 3D Drafting',
+    description: 'Complete AutoCAD training covering 2D drafting and 3D modeling for architecture professionals.',
     features: [
-      'Conceptual Learning',
-      'Board Exam Preparation',
-      'Competitive Exam Basics',
-      'Regular Tests',
-      'Parent-Teacher Meetings',
-      'Olympiad Training',
+      '2D Drafting Basics',
+      '3D Modeling',
+      'Layouts & Plotting',
+      'Industry Standards',
+      'Real Projects',
+      'Certificate',
     ],
-    duration: '1-3 Years',
-    mode: ['Offline'],
-    slug: 'foundation-course',
+    duration: '2 Months',
+    mode: ['Online', 'Offline'],
+    slug: 'autocad-training',
     highlight: false,
   },
 ];
@@ -100,8 +99,6 @@ const stats = [
 ];
 
 export default function CoachingPage() {
-  const t = useTranslations('coaching');
-
   return (
     <Box>
       {/* Hero Section */}
@@ -119,8 +116,8 @@ export default function CoachingPage() {
                 Transform Your Future with Expert Coaching
               </Typography>
               <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
-                Join India's premier coaching institute for NATA, JEE Paper 2, NEET, and Foundation courses.
-                Learn from the best, achieve the best.
+                Join India's premier coaching institute for NATA, JEE Paper 2, and Architecture entrance exams.
+                Learn from IIT/NIT architect alumni, achieve the best.
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                 <Button
