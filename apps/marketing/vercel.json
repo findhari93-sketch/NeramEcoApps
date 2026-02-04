@@ -3,7 +3,6 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm build --filter=@neram/marketing",
-  "regions": ["bom1", "sin1"],
   "headers": [
     {
       "source": "/(.*)",
