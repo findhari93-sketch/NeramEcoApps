@@ -72,3 +72,4 @@ ui-debug.log
 nul
 
 .vercel
+.env*.local
