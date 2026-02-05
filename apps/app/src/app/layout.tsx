@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
-import { NeramThemeProvider } from '@neram/ui';
+import { NeramThemeProvider, toolsAppLightTheme, toolsAppDarkTheme } from '@neram/ui';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  themeColor: '#1976d2',
+  themeColor: '#1A73E8', // Material 3 primary blue
 };
 
 export default function RootLayout({
@@ -44,7 +44,11 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className={inter.className}>
-        <NeramThemeProvider>
+        <NeramThemeProvider
+          lightTheme={toolsAppLightTheme}
+          darkTheme={toolsAppDarkTheme}
+          defaultMode="light"
+        >
           {children}
         </NeramThemeProvider>
       </body>

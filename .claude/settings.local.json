@@ -24,7 +24,27 @@
       "Bash(git commit:*)",
       "Bash(dir:*)",
       "Bash(pnpm turbo type-check:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(find:*)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm --filter @neram/marketing dev)",
+      "Bash(timeout 5 cmd:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(cd:*)",
+      "Bash(git -C \"c:\\\\Users\\\\Haribabu\\\\Documents\\\\AppsCopilot\\\\2026\\\\NeramEcosystem\" log --oneline)",
+      "Bash(npx firebase:*)",
+      "Bash(npx vercel:*)",
+      "Bash(pnpm build:marketing:*)",
+      "Bash(pnpm install:*)",
+      "Bash(git checkout:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(pnpm build:*)",
+      "Bash(ls:*)"
     ]
   }
 }

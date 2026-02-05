@@ -10,8 +10,10 @@
 export {
   initFirebase,
   getFirebaseAuth,
+  initFirebaseWithPersistence,
   isFirebaseConfigured,
   signInWithGoogle,
+  signInWithGoogleYouTube,
   signInWithEmail,
   createAccountWithEmail,
   resetPassword,
@@ -24,6 +26,11 @@ export {
   onAuthChange,
   updateUserProfile,
   sendVerificationEmail,
+  // Cross-domain redirect helpers
+  setAuthRedirectUrl,
+  getAuthRedirectUrl,
+  hasAuthRedirectUrl,
+  clearAuthRedirectUrl,
 } from './firebase';
 export type { FirebaseUser, ConfirmationResult } from './firebase';
 

@@ -778,6 +778,24 @@ export interface EmailLog extends Timestamps {
 }
 
 // ============================================
+// YOUTUBE SUBSCRIPTION COUPONS
+// ============================================
+
+/**
+ * YouTube subscription coupons - tracks users who subscribed and received coupons
+ */
+export interface YouTubeSubscriptionCoupon extends Timestamps {
+  id: string;
+  user_id: string;
+  coupon_id: string;
+  youtube_channel_id: string;
+  youtube_subscription_id: string | null;
+  subscribed_at: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+}
+
+// ============================================
 // ANALYTICS & TRACKING
 // ============================================
 
@@ -929,6 +947,11 @@ export interface Database {
         Row: PostEnrollmentDetails;
         Insert: Omit<PostEnrollmentDetails, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<PostEnrollmentDetails, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      youtube_subscription_coupons: {
+        Row: YouTubeSubscriptionCoupon;
+        Insert: Omit<YouTubeSubscriptionCoupon, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<YouTubeSubscriptionCoupon, 'id' | 'created_at' | 'updated_at'>>;
       };
     };
     Views: Record<string, never>;

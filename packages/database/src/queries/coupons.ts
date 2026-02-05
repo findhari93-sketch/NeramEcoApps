@@ -361,3 +361,152 @@ export async function activateCoupon(
 ): Promise<void> {
   await updateCoupon(couponId, { is_active: true }, client);
 }
+
+// ============================================
+// YOUTUBE SUBSCRIPTION COUPON
+// ============================================
+
+/**
+ * Generate a random alphanumeric code
+ */
+function generateRandomCode(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
+ * Create a YouTube subscription coupon for a user
+ * Returns existing coupon if user already has one for the channel
+ */
+export async function createYouTubeSubscriptionCoupon(
+  userId: string,
+  channelId: string,
+  subscriptionData?: {
+    subscriptionId?: string;
+    subscribedAt?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  },
+  client?: TypedSupabaseClient
+): Promise<{ coupon: Coupon; isNew: boolean }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Check if user already has a coupon for this channel
+  const { data: existing } = await supabase
+    .from('youtube_subscription_coupons')
+    .select('*, coupons(*)')
+    .eq('user_id', userId)
+    .eq('youtube_channel_id', channelId)
+    .single();
+
+  if (existing && existing.coupons) {
+    return {
+      coupon: existing.coupons as Coupon,
+      isNew: false,
+    };
+  }
+
+  // Generate unique coupon code
+  let couponCode = `YTSUB50-${generateRandomCode(6)}`;
+
+  // Ensure code is unique
+  let attempts = 0;
+  while (attempts < 10) {
+    const existingCoupon = await getCouponByCode(couponCode, supabase);
+    if (!existingCoupon) break;
+    couponCode = `YTSUB50-${generateRandomCode(6)}`;
+    attempts++;
+  }
+
+  // Create coupon valid for 30 days
+  const validUntil = new Date();
+  validUntil.setDate(validUntil.getDate() + 30);
+
+  const coupon = await createCoupon({
+    code: couponCode,
+    discount_type: 'fixed',
+    discount_value: 50,
+    valid_from: new Date().toISOString(),
+    valid_until: validUntil.toISOString(),
+    max_uses: 1,
+    applicable_courses: null, // Valid for all courses
+    min_amount: null,
+    is_active: true,
+  }, supabase);
+
+  // Create YouTube subscription coupon record
+  const { error: linkError } = await supabase
+    .from('youtube_subscription_coupons')
+    .insert({
+      user_id: userId,
+      coupon_id: coupon.id,
+      youtube_channel_id: channelId,
+      youtube_subscription_id: subscriptionData?.subscriptionId || null,
+      subscribed_at: subscriptionData?.subscribedAt || new Date().toISOString(),
+      ip_address: subscriptionData?.ipAddress || null,
+      user_agent: subscriptionData?.userAgent || null,
+    } as any);
+
+  if (linkError) {
+    console.error('Error linking YouTube subscription to coupon:', linkError);
+    // Don't throw - coupon was still created
+  }
+
+  return {
+    coupon,
+    isNew: true,
+  };
+}
+
+/**
+ * Check if user has a YouTube subscription coupon for a channel
+ */
+export async function hasYouTubeSubscriptionCoupon(
+  userId: string,
+  channelId: string,
+  client?: TypedSupabaseClient
+): Promise<boolean> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  const { data, error } = await supabase
+    .from('youtube_subscription_coupons')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('youtube_channel_id', channelId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error checking YouTube subscription coupon:', error);
+  }
+
+  return !!data;
+}
+
+/**
+ * Get user's YouTube subscription coupon
+ */
+export async function getYouTubeSubscriptionCoupon(
+  userId: string,
+  channelId: string,
+  client?: TypedSupabaseClient
+): Promise<Coupon | null> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  const { data, error } = await supabase
+    .from('youtube_subscription_coupons')
+    .select('*, coupons(*)')
+    .eq('user_id', userId)
+    .eq('youtube_channel_id', channelId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+
+  return data?.coupons as Coupon || null;
+}

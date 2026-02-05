@@ -27,6 +27,8 @@ import {
   sendEmailVerification,
   PhoneAuthProvider,
   linkWithCredential,
+  browserLocalPersistence,
+  setPersistence,
 } from 'firebase/auth';
 
 // ============================================
@@ -58,12 +60,32 @@ export function initFirebase(): FirebaseApp {
   return firebaseApp;
 }
 
+let persistenceSet = false;
+
 export function getFirebaseAuth(): Auth {
   if (!firebaseAuth) {
     initFirebase();
     firebaseAuth = getAuth(firebaseApp!);
   }
   return firebaseAuth;
+}
+
+/**
+ * Initialize Firebase auth with local persistence
+ * This ensures sessions persist across browser tabs and restarts
+ * Call this before any auth operations
+ */
+export async function initFirebaseWithPersistence(): Promise<Auth> {
+  const auth = getFirebaseAuth();
+  if (!persistenceSet) {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      persistenceSet = true;
+    } catch (error) {
+      console.error('Error setting Firebase persistence:', error);
+    }
+  }
+  return auth;
 }
 
 export function isFirebaseConfigured(): boolean {
@@ -86,6 +108,39 @@ export async function signInWithGoogle(): Promise<FirebaseUser> {
   const auth = getFirebaseAuth();
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
+}
+
+/**
+ * Sign in with Google including YouTube scope for subscription management
+ * Returns both the Firebase user and the OAuth access token for YouTube API calls
+ */
+export async function signInWithGoogleYouTube(): Promise<{
+  user: FirebaseUser;
+  accessToken: string | null;
+}> {
+  const auth = getFirebaseAuth();
+
+  // Create a new provider with YouTube scope
+  const youtubeProvider = new GoogleAuthProvider();
+  youtubeProvider.addScope('email');
+  youtubeProvider.addScope('profile');
+  youtubeProvider.addScope('https://www.googleapis.com/auth/youtube.force-ssl');
+
+  // Force account selection to ensure user consent
+  youtubeProvider.setCustomParameters({
+    prompt: 'consent',
+  });
+
+  const result = await signInWithPopup(auth, youtubeProvider);
+
+  // Get the OAuth access token from the credential
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken || null;
+
+  return {
+    user: result.user,
+    accessToken,
+  };
 }
 
 // ============================================
@@ -189,6 +244,54 @@ export async function linkPhoneToAccount(
   
   const result = await linkWithCredential(user, credential);
   return result.user;
+}
+
+// ============================================
+// CROSS-DOMAIN REDIRECT HANDLING
+// ============================================
+
+const AUTH_REDIRECT_KEY = 'neram_auth_redirect_url';
+
+/**
+ * Store return URL before redirecting to auth flow
+ * Used for cross-domain authentication between neramclasses.com and app.neramclasses.com
+ */
+export function setAuthRedirectUrl(url: string): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(AUTH_REDIRECT_KEY, url);
+  }
+}
+
+/**
+ * Get and clear the stored redirect URL after successful authentication
+ * Returns null if no redirect URL was stored
+ */
+export function getAuthRedirectUrl(): string | null {
+  if (typeof window !== 'undefined') {
+    const url = sessionStorage.getItem(AUTH_REDIRECT_KEY);
+    sessionStorage.removeItem(AUTH_REDIRECT_KEY);
+    return url;
+  }
+  return null;
+}
+
+/**
+ * Check if there's a pending redirect URL
+ */
+export function hasAuthRedirectUrl(): boolean {
+  if (typeof window !== 'undefined') {
+    return sessionStorage.getItem(AUTH_REDIRECT_KEY) !== null;
+  }
+  return false;
+}
+
+/**
+ * Clear any pending redirect URL without returning it
+ */
+export function clearAuthRedirectUrl(): void {
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem(AUTH_REDIRECT_KEY);
+  }
 }
 
 // ============================================

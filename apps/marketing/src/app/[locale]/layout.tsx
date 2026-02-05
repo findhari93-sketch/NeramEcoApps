@@ -1,10 +1,11 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { NeramThemeProvider } from '@neram/ui';
+import { NeramThemeProvider, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
 import { locales } from '@/i18n';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import AuthProvider from '@/components/AuthProvider';
 import '@/styles/globals.css';
 
 export function generateStaticParams() {
@@ -37,13 +38,22 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
-      <body>
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        <meta name="emotion-insertion-point" content="" />
+      </head>
+      <body suppressHydrationWarning>
         <NextIntlClientProvider messages={messages}>
-          <NeramThemeProvider>
-            <Header />
-            <main>{children}</main>
-            <Footer />
+          <NeramThemeProvider
+            lightTheme={marketingLightTheme}
+            darkTheme={marketingDarkTheme}
+            defaultMode="light"
+          >
+            <AuthProvider>
+              <Header />
+              <main>{children}</main>
+              <Footer />
+            </AuthProvider>
           </NeramThemeProvider>
         </NextIntlClientProvider>
       </body>

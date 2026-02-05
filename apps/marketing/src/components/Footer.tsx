@@ -21,10 +21,10 @@ const footerLinks = {
     { label: 'Apply Now', href: '/apply' },
   ],
   courses: [
-    { label: 'NEET Preparation', href: '/courses/neet-preparation' },
-    { label: 'JEE Main & Advanced', href: '/courses/jee-main-advanced' },
-    { label: 'Foundation Course', href: '/courses/foundation-course' },
-    { label: 'Board Exams', href: '/courses/class-11-12-boards' },
+    { label: 'Architecture Entrance - Year Long', href: '/courses/architecture-entrance-year-long' },
+    { label: 'Architecture Entrance - Crash Course', href: '/courses/architecture-entrance-crash-course' },
+    { label: 'Revit Training', href: '/courses/revit-training' },
+    { label: 'AutoCAD Training', href: '/courses/autocad-training' },
   ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },

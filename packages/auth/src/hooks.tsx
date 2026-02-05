@@ -50,8 +50,11 @@ export function useFirebaseAuth() {
 
     const initAuth = async () => {
       try {
-        const { onAuthChange } = await import('./firebase');
-        
+        const { onAuthChange, initFirebaseWithPersistence } = await import('./firebase');
+
+        // Initialize with local persistence for sessions that survive browser restarts
+        await initFirebaseWithPersistence();
+
         unsubscribe = onAuthChange((firebaseUser) => {
           if (firebaseUser) {
             setState({

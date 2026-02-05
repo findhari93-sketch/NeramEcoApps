@@ -16,11 +16,43 @@ export const localeLabels: Record<Locale, string> = {
   ml: 'മലയാളം',
 };
 
-export default getRequestConfig(async ({ locale }) => {
+// Deep merge function to combine messages
+function deepMerge(target: any, source: any): any {
+  const output = { ...target };
+  for (const key in source) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      output[key] = deepMerge(target[key] || {}, source[key]);
+    } else {
+      output[key] = source[key];
+    }
+  }
+  return output;
+}
+
+export default getRequestConfig(async ({ requestLocale }) => {
+  // Get the locale from the request
+  const locale = await requestLocale;
+
   // Validate that the incoming `locale` parameter is valid
-  if (!locales.includes(locale as Locale)) notFound();
+  if (!locale || !locales.includes(locale as Locale)) notFound();
+
+  // Always load English as the base (fallback)
+  const englishMessages = (await import(`../messages/en.json`)).default;
+
+  // If the locale is English, just return English messages
+  if (locale === 'en') {
+    return {
+      locale,
+      messages: englishMessages,
+    };
+  }
+
+  // For other locales, merge with English (locale-specific overrides English)
+  const localeMessages = (await import(`../messages/${locale}.json`)).default;
+  const mergedMessages = deepMerge(englishMessages, localeMessages);
 
   return {
-    messages: (await import(`../messages/${locale}.json`)).default,
+    locale,
+    messages: mergedMessages,
   };
 });

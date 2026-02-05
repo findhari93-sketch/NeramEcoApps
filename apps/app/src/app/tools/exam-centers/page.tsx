@@ -18,6 +18,8 @@ import {
   CircularProgress,
   Alert,
 } from '@neram/ui';
+import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
+import { AuthGate } from '@/components/AuthGate';
 
 interface ExamCenter {
   id: string;
@@ -33,6 +35,7 @@ interface ExamCenter {
 }
 
 export default function ExamCentersPage() {
+  const { user } = useFirebaseAuth();
   const [selectedState, setSelectedState] = useState<string>('');
   const [selectedCity, setSelectedCity] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -44,8 +47,9 @@ export default function ExamCentersPage() {
   const [citiesLoading, setCitiesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useLocation, setUseLocation] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  // Fetch states on mount
+  // Fetch states on mount (public data)
   useEffect(() => {
     fetch('/api/tools/exam-centers?action=states')
       .then((res) => res.json())
@@ -60,7 +64,7 @@ export default function ExamCentersPage() {
       });
   }, []);
 
-  // Fetch cities when state changes
+  // Fetch cities when state changes (public data)
   useEffect(() => {
     if (!selectedState) {
       setCities([]);
@@ -82,10 +86,26 @@ export default function ExamCentersPage() {
   }, [selectedState]);
 
   const searchCenters = async () => {
+    setHasSearched(true);
+
+    // If not authenticated, don't fetch - AuthGate will show
+    if (!user) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
+      // Get Firebase ID token for authentication
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        setError('Please sign in to view results');
+        return;
+      }
+      const idToken = await currentUser.getIdToken();
+
       const body: Record<string, unknown> = {};
 
       if (selectedState) body.state = selectedState;
@@ -110,13 +130,19 @@ export default function ExamCentersPage() {
 
       const response = await fetch('/api/tools/exam-centers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify(body),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return;
+        }
         throw new Error(data.error || 'Failed to search exam centers');
       }
 
@@ -128,6 +154,13 @@ export default function ExamCentersPage() {
       setLoading(false);
     }
   };
+
+  // Re-fetch when user authenticates
+  useEffect(() => {
+    if (user && hasSearched && centers.length === 0 && !loading) {
+      searchCenters();
+    }
+  }, [user]);
 
   const formatDistance = (distance?: number) => {
     if (!distance) return null;
@@ -153,8 +186,11 @@ export default function ExamCentersPage() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
         NATA Exam Centers
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Find NATA exam centers near you with address, distance, and directions.
       </Typography>
 
       <Grid container spacing={3}>
@@ -248,7 +284,7 @@ export default function ExamCentersPage() {
           </Paper>
         </Grid>
 
-        {/* Results Section */}
+        {/* Results Section - Gated */}
         <Grid item xs={12} md={8}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -256,94 +292,122 @@ export default function ExamCentersPage() {
             </Alert>
           )}
 
-          {loading ? (
-            <Paper
-              sx={{
-                p: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 400,
-              }}
-            >
-              <CircularProgress />
-            </Paper>
-          ) : centers.length > 0 ? (
-            <Box>
-              <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-                Exam Centers ({centers.length})
-              </Typography>
-              <Grid container spacing={2}>
-                {centers.map((center) => (
-                  <Grid item xs={12} key={center.id}>
-                    <Card>
-                      <CardContent>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            mb: 1,
-                          }}
-                        >
-                          <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
-                            {center.name}
-                          </Typography>
-                          {center.distance && (
-                            <Chip
-                              label={formatDistance(center.distance)}
-                              size="small"
-                              color="primary"
-                            />
-                          )}
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          {center.address}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                          <Chip label={center.city} size="small" variant="outlined" />
-                          <Chip label={center.state} size="small" variant="outlined" />
-                          <Chip label={center.pincode} size="small" variant="outlined" />
-                          {center.exam_types?.map((type) => (
-                            <Chip key={type} label={type} size="small" color="info" />
-                          ))}
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => openDirections(center)}
+          <AuthGate
+            hasData={hasSearched}
+            pendingData={{ selectedState, selectedCity, searchQuery, useLocation }}
+            onAuthenticated={searchCenters}
+            title="Sign up to see exam centers"
+            description="Create a free account to view exam center details and get directions."
+          >
+            {loading ? (
+              <Paper
+                sx={{
+                  p: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 400,
+                }}
+              >
+                <CircularProgress />
+              </Paper>
+            ) : centers.length > 0 ? (
+              <Box>
+                <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                  Exam Centers ({centers.length})
+                </Typography>
+                <Grid container spacing={2}>
+                  {centers.map((center) => (
+                    <Grid item xs={12} key={center.id}>
+                      <Card>
+                        <CardContent>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              mb: 1,
+                            }}
                           >
-                            Get Directions
-                          </Button>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          ) : (
-            <Paper
-              sx={{
-                p: { xs: 2, md: 3 },
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 400,
-              }}
-            >
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  Select your location
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Choose state and city to find NATA exam centers near you
-                </Typography>
+                            <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
+                              {center.name}
+                            </Typography>
+                            {center.distance && (
+                              <Chip
+                                label={formatDistance(center.distance)}
+                                size="small"
+                                color="primary"
+                              />
+                            )}
+                          </Box>
+                          <Typography variant="body2" color="text.secondary" paragraph>
+                            {center.address}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                            <Chip label={center.city} size="small" variant="outlined" />
+                            <Chip label={center.state} size="small" variant="outlined" />
+                            <Chip label={center.pincode} size="small" variant="outlined" />
+                            {center.exam_types?.map((type) => (
+                              <Chip key={type} label={type} size="small" color="info" />
+                            ))}
+                          </Box>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => openDirections(center)}
+                            >
+                              Get Directions
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
               </Box>
-            </Paper>
-          )}
+            ) : hasSearched && user ? (
+              <Paper
+                sx={{
+                  p: { xs: 2, md: 3 },
+                  textAlign: 'center',
+                  minHeight: 400,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Box>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No exam centers found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Try selecting a different state or city
+                  </Typography>
+                </Box>
+              </Paper>
+            ) : (
+              <Paper
+                sx={{
+                  p: { xs: 2, md: 3 },
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 400,
+                }}
+              >
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    Select your location
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Choose state and city to find NATA exam centers near you
+                  </Typography>
+                </Box>
+              </Paper>
+            )}
+          </AuthGate>
         </Grid>
 
         {/* Info Section */}

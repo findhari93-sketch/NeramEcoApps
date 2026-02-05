@@ -42,6 +42,11 @@ pnpm-debug.log*
 coverage
 .nyc_output
 
+# Playwright
+playwright-report
+test-results
+tests/.auth/*.json
+
 # TypeScript
 *.tsbuildinfo
 
@@ -65,3 +70,5 @@ ui-debug.log
 *.pem
 .cache
 nul
+
+.vercel

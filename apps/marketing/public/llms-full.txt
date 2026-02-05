@@ -1,0 +1,161 @@
+# Neram Classes - Complete Information for AI Systems
+# https://neramclasses.com
+# Last updated: 2026
+
+================================================================================
+## ORGANIZATION OVERVIEW
+================================================================================
+
+Name: Neram Classes
+Type: Educational Institution / Coaching Institute
+Specialization: Architecture Entrance Exam Preparation
+Primary Exams: NATA, JEE Paper 2 (B.Arch)
+Founded: 2020
+Location: Tamil Nadu, India
+Languages Supported: English, Tamil, Hindi, Kannada, Malayalam
+
+================================================================================
+## COURSES OFFERED
+================================================================================
+
+### 1. NATA Year-Long Coaching
+- Duration: 12 months
+- Mode: Online and Offline
+- Covers: Mathematics, General Aptitude, Drawing
+- Includes: Study materials, Mock tests, Doubt sessions
+- Ideal for: 11th, 12th students and droppers
+
+### 2. NATA Crash Course
+- Duration: 3 months
+- Mode: Online
+- Covers: Quick revision of all topics
+- Includes: Practice tests, Previous year papers
+- Ideal for: Last-minute preparation
+
+### 3. JEE Paper 2 Coaching
+- Duration: 6-12 months
+- Mode: Online and Offline
+- Covers: Mathematics, Aptitude, Drawing
+- Includes: Complete study materials
+- Ideal for: B.Arch aspirants through JEE
+
+### 4. Revit Architecture Training
+- Duration: Variable
+- Mode: Online
+- For: Architecture students and professionals
+
+================================================================================
+## FREE NATA TOOLS
+================================================================================
+
+All tools available at: https://app.neramclasses.com/tools
+
+### Cutoff Calculator
+URL: https://app.neramclasses.com/tools/cutoff-calculator
+Function: Calculate expected NATA cutoff based on section scores
+Input: Mathematics, General Aptitude, Drawing scores (0-100 each)
+Output: Total score, percentage, admission chances
+
+### College Predictor
+URL: https://app.neramclasses.com/tools/college-predictor
+Function: Find architecture colleges matching your NATA score
+Input: NATA score (0-200), Category, Preferred state
+Output: List of eligible colleges with admission chances
+
+### Exam Center Locator
+URL: https://app.neramclasses.com/tools/exam-centers
+Function: Find NATA exam centers near your location
+Input: State, City, or coordinates
+Output: List of exam centers with address and directions
+
+================================================================================
+## NATA EXAM INFORMATION
+================================================================================
+
+### What is NATA?
+National Aptitude Test in Architecture (NATA) is conducted by the Council of Architecture (COA) for admission to 5-year B.Arch programs in India.
+
+### NATA Exam Pattern
+- Total Marks: 200
+- Duration: 3 hours
+- Sections:
+  1. Mathematics: 20 questions (MCQ)
+  2. General Aptitude: 40 questions (MCQ)
+  3. Drawing: 2 questions
+
+### NATA Eligibility
+- 10+2 with Mathematics
+- Minimum 50% marks in aggregate
+- Age: No upper limit
+
+### NATA Exam Dates (Typical)
+- First Test: April-May
+- Second Test: June-July
+- Third Test: August (if conducted)
+
+================================================================================
+## FREQUENTLY ASKED QUESTIONS
+================================================================================
+
+Q: What is the passing score for NATA?
+A: There is no official passing score. However, a score of 80-100+ is generally considered good for admission to decent colleges.
+
+Q: Can I take NATA multiple times?
+A: Yes, NATA is conducted 2-3 times a year. You can take multiple attempts and the best score is considered.
+
+Q: What is the difference between NATA and JEE Paper 2?
+A: NATA is conducted by COA and accepted by most private architecture colleges. JEE Paper 2 is conducted by NTA and required for NITs, IITs (through AAT), and centrally funded institutions.
+
+Q: How should I prepare for NATA drawing test?
+A: Practice 2D/3D composition, sketching, perspective drawing, and creative design. Use quality drawing materials and practice regularly.
+
+Q: What is a good NATA score for top colleges?
+A: For top private colleges, aim for 150+ out of 200. For government colleges, cutoffs vary by state and category.
+
+================================================================================
+## WEBSITE STRUCTURE
+================================================================================
+
+Main Site: neramclasses.com
+- /courses - All courses
+- /courses/nata - NATA coaching details
+- /courses/jee-paper-2 - JEE Paper 2 coaching
+- /coaching - Coaching methodology
+- /apply - Application form
+- /about - About us
+- /blog - Educational articles
+- /contact - Contact information
+
+Tools App: app.neramclasses.com
+- /tools - All free tools
+- /tools/cutoff-calculator - Cutoff calculator
+- /tools/college-predictor - College predictor
+- /tools/exam-centers - Exam center locator
+
+================================================================================
+## CONTACT INFORMATION
+================================================================================
+
+Website: https://neramclasses.com
+Email: info@neramclasses.com
+Apply: https://neramclasses.com/apply
+
+================================================================================
+## SOCIAL MEDIA
+================================================================================
+
+YouTube: @neramclasses
+Instagram: @neramclasses
+Facebook: /neramclasses
+
+================================================================================
+## TECHNICAL INFORMATION
+================================================================================
+
+Website Technology: Next.js, React
+Database: Supabase
+Authentication: Firebase Auth
+Hosting: Vercel
+Multi-language: Yes (5 languages via next-intl)
+
+================================================================================

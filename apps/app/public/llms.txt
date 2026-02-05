@@ -1,0 +1,30 @@
+# NATA Exam Tools by Neram Classes
+# https://app.neramclasses.com/tools
+
+## About
+Free NATA preparation tools to help students calculate cutoffs, predict colleges, and find exam centers.
+
+## Available Tools
+
+### 1. Cutoff Calculator
+URL: /tools/cutoff-calculator
+Purpose: Calculate your expected NATA cutoff score
+Input: Section-wise scores (Mathematics, Aptitude, Drawing)
+Output: Total score, percentage, performance category
+
+### 2. College Predictor
+URL: /tools/college-predictor
+Purpose: Find architecture colleges matching your NATA score
+Input: NATA score, Category, Preferred state
+Output: List of colleges with admission chances
+Database: 5000+ colleges across India
+
+### 3. Exam Center Locator
+URL: /tools/exam-centers
+Purpose: Find NATA exam centers near you
+Input: State, City, or use location
+Output: Exam center details with directions
+
+## Provider
+Neram Classes - NATA & JEE Paper 2 Coaching
+Website: https://neramclasses.com

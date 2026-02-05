@@ -11,9 +11,136 @@ import {
   Divider,
   CircularProgress,
 } from '@neram/ui';
-import { useFirebaseAuth } from '@neram/auth';
+import { useFirebaseAuth, getAuthRedirectUrl, clearAuthRedirectUrl, getFirebaseAuth, signInWithGoogleYouTube } from '@neram/auth';
 
-export default function AuthButtons() {
+// Storage key for YouTube subscribe intent
+const YOUTUBE_SUBSCRIBE_KEY = 'neram_youtube_subscribe_intent';
+
+interface AuthButtonsProps {
+  isYouTubeSubscribe?: boolean;
+}
+
+/**
+ * Handle post-authentication redirect for YouTube subscribe flow
+ * Uses the access token from Firebase Google sign-in to subscribe directly,
+ * then redirects back to marketing site with coupon and auth token.
+ */
+async function handleYouTubeSubscribeRedirect(accessToken: string | null) {
+  // Get the stored redirect URL
+  const stored = sessionStorage.getItem(YOUTUBE_SUBSCRIBE_KEY);
+  let redirectUrl = '';
+
+  if (stored) {
+    try {
+      const data = JSON.parse(stored);
+      redirectUrl = data.redirectUrl;
+    } catch {
+      // Ignore parse errors
+    }
+    sessionStorage.removeItem(YOUTUBE_SUBSCRIBE_KEY);
+  }
+
+  // If we don't have an access token, we can't proceed
+  if (!accessToken) {
+    console.error('No YouTube access token available');
+    window.location.href = redirectUrl || '/dashboard';
+    return;
+  }
+
+  try {
+    // Get the Firebase ID token for server verification
+    const auth = getFirebaseAuth();
+    const user = auth.currentUser;
+    if (!user) {
+      console.error('No Firebase user found');
+      window.location.href = redirectUrl || '/dashboard';
+      return;
+    }
+
+    const idToken = await user.getIdToken();
+
+    // Call the direct subscribe endpoint that handles:
+    // 1. YouTube subscription
+    // 2. Coupon generation
+    // 3. Firebase custom token for cross-domain auth
+    const response = await fetch('/api/youtube/subscribe-direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idToken,
+        accessToken,
+        redirectUrl,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.success && result.redirectUrl) {
+      // Redirect to marketing site with coupon and auth token
+      window.location.href = result.redirectUrl;
+      return;
+    }
+
+    // Handle error
+    console.error('YouTube subscription failed:', result.error);
+    const errorUrl = new URL(redirectUrl || '/dashboard');
+    errorUrl.searchParams.set('error', result.error || 'Subscription failed');
+    window.location.href = errorUrl.toString();
+  } catch (error) {
+    console.error('Error during YouTube subscription:', error);
+    window.location.href = redirectUrl || '/dashboard';
+  }
+}
+
+/**
+ * Handle post-authentication redirect
+ *
+ * Flow:
+ * 1. After login, check if there's a pending cross-domain redirect
+ * 2. If yes, immediately redirect back to marketing site with auth token
+ *    (phone verification will happen on marketing site)
+ * 3. If no redirect URL, go to dashboard normally
+ *    (phone verification will happen on tools-app)
+ */
+async function handlePostAuthRedirect(router: ReturnType<typeof useRouter>) {
+  const redirectUrl = getAuthRedirectUrl();
+
+  if (redirectUrl) {
+    // IMMEDIATE redirect - don't show dashboard
+    try {
+      const auth = getFirebaseAuth();
+      const user = auth.currentUser;
+      if (user) {
+        const idToken = await user.getIdToken();
+
+        // Call exchange-token API to get custom token
+        const response = await fetch('/api/auth/exchange-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (response.ok) {
+          const { customToken } = await response.json();
+          clearAuthRedirectUrl();
+
+          // Redirect to marketing site with custom token
+          const url = new URL(redirectUrl);
+          url.searchParams.set('authToken', customToken);
+          window.location.href = url.toString();
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error during cross-domain redirect:', error);
+    }
+  }
+
+  // No redirect URL or error - go to dashboard normally
+  router.push('/dashboard');
+}
+
+export default function AuthButtons({ isYouTubeSubscribe = false }: AuthButtonsProps) {
   const { signInWithGoogle, signInWithEmail, createAccount } = useFirebaseAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -26,8 +153,15 @@ export default function AuthButtons() {
     setLoading(true);
     setError('');
     try {
-      await signInWithGoogle();
-      router.push('/dashboard');
+      if (isYouTubeSubscribe) {
+        // Use YouTube-enabled Google sign-in
+        const { accessToken } = await signInWithGoogleYouTube();
+        await handleYouTubeSubscribeRedirect(accessToken);
+      } else {
+        // Regular Google sign-in
+        await signInWithGoogle();
+        await handlePostAuthRedirect(router);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
     } finally {
@@ -46,7 +180,7 @@ export default function AuthButtons() {
       } else {
         await signInWithEmail(email, password);
       }
-      router.push('/dashboard');
+      await handlePostAuthRedirect(router);
     } catch (err: any) {
       setError(err.message || `Failed to ${isSignUp ? 'sign up' : 'sign in'}`);
     } finally {
@@ -59,7 +193,7 @@ export default function AuthButtons() {
       {/* Google Sign In */}
       <Button
         fullWidth
-        variant="outlined"
+        variant={isYouTubeSubscribe ? 'contained' : 'outlined'}
         size="large"
         onClick={handleGoogleSignIn}
         disabled={loading}
@@ -67,16 +201,26 @@ export default function AuthButtons() {
           py: 1.5,
           textTransform: 'none',
           fontSize: '1rem',
-          borderColor: '#dadce0',
-          color: '#3c4043',
-          '&:hover': {
-            borderColor: '#d2d2d2',
-            bgcolor: '#f8f9fa',
-          },
+          ...(isYouTubeSubscribe
+            ? {
+                bgcolor: '#FF0000',
+                color: 'white',
+                '&:hover': {
+                  bgcolor: '#CC0000',
+                },
+              }
+            : {
+                borderColor: '#dadce0',
+                color: '#3c4043',
+                '&:hover': {
+                  borderColor: '#d2d2d2',
+                  bgcolor: '#f8f9fa',
+                },
+              }),
         }}
       >
         {loading ? (
-          <CircularProgress size={24} />
+          <CircularProgress size={24} color={isYouTubeSubscribe ? 'inherit' : 'primary'} />
         ) : (
           <>
             <Box
@@ -88,9 +232,15 @@ export default function AuthButtons() {
                 display: 'inline-block',
               }}
             >
-              G
+              {isYouTubeSubscribe ? (
+                <svg viewBox="0 0 24 24" style={{ width: 20, height: 20, fill: 'currentColor' }}>
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+              ) : (
+                'G'
+              )}
             </Box>
-            Continue with Google
+            {isYouTubeSubscribe ? 'Subscribe with Google' : 'Continue with Google'}
           </>
         )}
       </Button>

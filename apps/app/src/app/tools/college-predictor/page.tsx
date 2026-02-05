@@ -18,6 +18,8 @@ import {
   CircularProgress,
   Alert,
 } from '@neram/ui';
+import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
+import { AuthGate } from '@/components/AuthGate';
 
 interface CollegePrediction {
   id: string;
@@ -32,6 +34,7 @@ interface CollegePrediction {
 }
 
 export default function CollegePredictorPage() {
+  const { user } = useFirebaseAuth();
   const [nataScore, setNataScore] = useState<string>('');
   const [category, setCategory] = useState<string>('General');
   const [state, setState] = useState<string>('');
@@ -40,8 +43,9 @@ export default function CollegePredictorPage() {
   const [loading, setLoading] = useState(false);
   const [statesLoading, setStatesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
-  // Fetch available states on mount
+  // Fetch available states on mount (this is public data)
   useEffect(() => {
     fetch('/api/tools/college-predictor')
       .then((res) => res.json())
@@ -63,13 +67,32 @@ export default function CollegePredictorPage() {
       return;
     }
 
+    setHasSearched(true);
+
+    // If not authenticated, don't fetch - AuthGate will show
+    if (!user) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
+      // Get Firebase ID token for authentication
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        setError('Please sign in to view results');
+        return;
+      }
+      const idToken = await currentUser.getIdToken();
+
       const response = await fetch('/api/tools/college-predictor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
           nataScore: score,
           category,
@@ -80,6 +103,10 @@ export default function CollegePredictorPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // User needs to authenticate
+          return;
+        }
         throw new Error(data.error || 'Failed to predict colleges');
       }
 
@@ -91,6 +118,13 @@ export default function CollegePredictorPage() {
       setLoading(false);
     }
   };
+
+  // Re-fetch when user authenticates
+  useEffect(() => {
+    if (user && hasSearched && results.length === 0 && !loading) {
+      predictColleges();
+    }
+  }, [user]);
 
   const getChanceColor = (chance: string) => {
     switch (chance) {
@@ -112,8 +146,11 @@ export default function CollegePredictorPage() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
         College Predictor
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Find architecture colleges that match your NATA score with our AI-powered prediction engine.
       </Typography>
 
       <Grid container spacing={3}>
@@ -172,7 +209,7 @@ export default function CollegePredictorPage() {
               fullWidth
               size="large"
               onClick={predictColleges}
-              disabled={loading}
+              disabled={loading || !nataScore}
             >
               {loading ? <CircularProgress size={24} /> : 'Predict Colleges'}
             </Button>
@@ -199,7 +236,7 @@ export default function CollegePredictorPage() {
           </Paper>
         </Grid>
 
-        {/* Results Section */}
+        {/* Results Section - Gated */}
         <Grid item xs={12} md={8}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -207,91 +244,119 @@ export default function CollegePredictorPage() {
             </Alert>
           )}
 
-          {loading ? (
-            <Paper
-              sx={{
-                p: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 400,
-              }}
-            >
-              <CircularProgress />
-            </Paper>
-          ) : results.length > 0 ? (
-            <Box>
-              <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-                Predicted Colleges ({results.length})
-              </Typography>
-              <Grid container spacing={2}>
-                {results.map((college) => (
-                  <Grid item xs={12} key={college.id}>
-                    <Card>
-                      <CardContent>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            mb: 1,
-                          }}
-                        >
-                          <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
-                            {college.name}
-                          </Typography>
-                          <Chip
-                            label={`${college.chance} Chance`}
-                            color={getChanceColor(college.chance) as any}
-                            size="small"
-                          />
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                          <Chip
-                            label={`${college.city}, ${college.state}`}
-                            size="small"
-                            variant="outlined"
-                          />
-                          <Chip label={college.collegeType} size="small" variant="outlined" />
-                          {college.cutoffScore > 0 && (
+          <AuthGate
+            hasData={hasSearched}
+            pendingData={{ nataScore, category, state }}
+            onAuthenticated={predictColleges}
+            title="Sign up to see college predictions"
+            description="Create a free account to view colleges that match your NATA score."
+          >
+            {loading ? (
+              <Paper
+                sx={{
+                  p: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 400,
+                }}
+              >
+                <CircularProgress />
+              </Paper>
+            ) : results.length > 0 ? (
+              <Box>
+                <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                  Predicted Colleges ({results.length})
+                </Typography>
+                <Grid container spacing={2}>
+                  {results.map((college) => (
+                    <Grid item xs={12} key={college.id}>
+                      <Card>
+                        <CardContent>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              mb: 1,
+                            }}
+                          >
+                            <Typography variant="h6" sx={{ fontSize: '1.1rem' }}>
+                              {college.name}
+                            </Typography>
                             <Chip
-                              label={`Cutoff: ${college.cutoffScore}`}
+                              label={`${college.chance} Chance`}
+                              color={getChanceColor(college.chance) as any}
+                              size="small"
+                            />
+                          </Box>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                            <Chip
+                              label={`${college.city}, ${college.state}`}
                               size="small"
                               variant="outlined"
-                              color="primary"
                             />
-                          )}
-                        </Box>
-                        <Typography variant="body2" color="text.secondary">
-                          Annual Fees: {formatFees(college.annualFee)}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          ) : (
-            <Paper
-              sx={{
-                p: { xs: 2, md: 3 },
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 400,
-              }}
-            >
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  Enter your details
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Fill in your NATA score and preferences to get college predictions
-                </Typography>
+                            <Chip label={college.collegeType} size="small" variant="outlined" />
+                            {college.cutoffScore > 0 && (
+                              <Chip
+                                label={`Cutoff: ${college.cutoffScore}`}
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                              />
+                            )}
+                          </Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Annual Fees: {formatFees(college.annualFee)}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
               </Box>
-            </Paper>
-          )}
+            ) : hasSearched && user ? (
+              <Paper
+                sx={{
+                  p: { xs: 2, md: 3 },
+                  textAlign: 'center',
+                  minHeight: 400,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Box>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No colleges found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Try adjusting your score or selecting a different state
+                  </Typography>
+                </Box>
+              </Paper>
+            ) : (
+              <Paper
+                sx={{
+                  p: { xs: 2, md: 3 },
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 400,
+                }}
+              >
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    Enter your details
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Fill in your NATA score and preferences to get college predictions
+                  </Typography>
+                </Box>
+              </Paper>
+            )}
+          </AuthGate>
         </Grid>
 
         {/* Info Section */}
@@ -305,8 +370,8 @@ export default function CollegePredictorPage() {
               score to predict colleges where you have chances of admission.
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Predictions are based on previous year data and may vary depending on various
-              factors including the number of applicants, seat availability, and cutoff trends.
+              Predictions are based on previous year data and may vary depending on various factors
+              including the number of applicants, seat availability, and cutoff trends.
             </Typography>
           </Paper>
         </Grid>

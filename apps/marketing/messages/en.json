@@ -1,21 +1,75 @@
 {
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "courses": "Courses",
+    "contact": "Contact",
+    "apply": "Apply"
+  },
   "home": {
     "title": "Welcome to Neram Classes",
-    "subtitle": "Excellence in Education",
+    "subtitle": "Excellence in Architecture Education",
+    "heroText": "Join Neram Classes for expert coaching in NATA, JEE Paper 2, and Architecture entrance exams. Excellence in education since 2009.",
     "featuredCourses": "Featured Courses",
     "tools": "Learning Tools",
     "testimonials": "What Our Students Say"
   },
   "about": {
     "title": "About Us",
-    "mission": "Our Mission",
-    "vision": "Our Vision",
-    "values": "Our Core Values"
+    "pageTitle": "About Neram Classes",
+    "heroSubtitle": "Empowering students with quality education and personalized guidance since 2009",
+    "mission": {
+      "title": "Our Mission",
+      "paragraph1": "To provide world-class education that nurtures academic excellence, critical thinking, and holistic development. We are committed to making quality education accessible to all students, regardless of their background.",
+      "paragraph2": "Our comprehensive teaching methodology combines traditional wisdom with modern pedagogical techniques to ensure every student reaches their full potential."
+    },
+    "vision": {
+      "title": "Our Vision",
+      "paragraph1": "To be the most trusted and preferred educational institution, recognized for producing successful professionals who contribute positively to society.",
+      "paragraph2": "We envision a future where every student has access to personalized learning experiences that prepare them not just for exams, but for life's challenges."
+    },
+    "impact": {
+      "title": "Our Impact",
+      "yearsOfExcellence": "Years of Excellence",
+      "studentsEnrolled": "Students Enrolled",
+      "successRate": "Success Rate",
+      "expertFaculty": "Expert Faculty"
+    },
+    "team": {
+      "title": "Meet Our Leadership",
+      "subtitle": "Experienced educators dedicated to your success"
+    },
+    "values": {
+      "title": "Our Core Values",
+      "excellence": {
+        "title": "Excellence",
+        "description": "We strive for the highest standards in everything we do"
+      },
+      "integrity": {
+        "title": "Integrity",
+        "description": "We maintain honesty and strong moral principles in all our dealings"
+      },
+      "innovation": {
+        "title": "Innovation",
+        "description": "We embrace new teaching methods and technologies to enhance learning"
+      },
+      "inclusivity": {
+        "title": "Inclusivity",
+        "description": "We welcome students from all backgrounds and provide equal opportunities"
+      }
+    }
   },
   "courses": {
     "title": "Our Courses",
+    "subtitle": "Architecture entrance exam preparation and professional software training",
     "filter": "Filter by Category",
-    "viewDetails": "View Details"
+    "viewDetails": "View Details",
+    "categories": {
+      "all": "All",
+      "architectureEntrance": "Architecture Entrance",
+      "softwareTraining": "Software Training",
+      "digitalLearning": "Digital Learning"
+    }
   },
   "courseDetail": {
     "about": "About This Course",
@@ -45,6 +99,13 @@
       "review": "Review & Submit"
     }
   },
+  "footer": {
+    "tagline": "Excellence in Education",
+    "quickLinks": "Quick Links",
+    "contact": "Contact",
+    "followUs": "Follow Us",
+    "copyright": "© {year} Neram Classes. All rights reserved."
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",
@@ -52,6 +113,34 @@
     "cancel": "Cancel",
     "submit": "Submit",
     "next": "Next",
-    "back": "Back"
+    "back": "Back",
+    "learnMore": "Learn More",
+    "readMore": "Read More",
+    "viewAll": "View All"
+  },
+  "youtube": {
+    "title": "Learn on YouTube",
+    "subtitle": "Free architecture entrance preparation videos from India's leading NATA & JEE coaching experts",
+    "subscribers": "Subscribers",
+    "videos": "Videos",
+    "ctaTitle": "Subscribe & Get Rs. 50 Off!",
+    "ctaDescription": "Subscribe to our channel and register to claim your exclusive Rs. 50 discount on any course",
+    "subscribeButton": "Subscribe & Get Rs. 50 Off",
+    "rewardNote": "Discount coupon will be generated after subscription verification",
+    "viewChannel": "View Full Channel on YouTube"
+  },
+  "youtubeReward": {
+    "title": "Congratulations!",
+    "subtitle": "Your subscription has been verified",
+    "couponLabel": "Your Discount Coupon",
+    "instructions": "Use this code during payment to get Rs. 50 off on any course",
+    "howToUse": "How to use your coupon",
+    "step1": "Browse and select your preferred course",
+    "step2": "Proceed to payment",
+    "step3": "Enter this coupon code in the discount field",
+    "step4": "Enjoy Rs. 50 off your course fee!",
+    "validityNote": "This coupon is valid for 30 days",
+    "browseCourses": "Browse Courses",
+    "copySuccess": "Coupon code copied!"
   }
 }
