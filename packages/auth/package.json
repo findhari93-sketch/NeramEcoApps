@@ -19,7 +19,7 @@
   "dependencies": {
     "@azure/msal-browser": "^3.6.0",
     "@azure/msal-react": "^2.0.8",
-    "firebase": "^10.7.0",
+    "firebase": "^11.8.0",
     "@neram/database": "workspace:*"
   },
   "peerDependencies": {
