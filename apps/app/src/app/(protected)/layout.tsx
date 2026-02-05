@@ -19,7 +19,7 @@ import {
   MenuItem,
   Container,
 } from '@neram/ui';
-import { useFirebaseAuth } from '@neram/auth';
+import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import Link from 'next/link';
 import PhoneVerificationModal from '@/components/PhoneVerificationModal';
 
@@ -41,6 +41,19 @@ const menuItems = [
   { title: 'Profile', href: '/profile', icon: <ProfileIcon /> },
 ];
 
+// Supabase user type from API response
+interface SupabaseUser {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  phone_verified: boolean;
+  email_verified: boolean;
+  user_type: string;
+  status: string;
+}
+
 export default function ProtectedLayout({
   children,
 }: {
@@ -52,6 +65,8 @@ export default function ProtectedLayout({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
+  const [checkingUser, setCheckingUser] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -59,12 +74,38 @@ export default function ProtectedLayout({
     }
   }, [user, loading, router]);
 
+  // Register/check user in Supabase when Firebase user is available
   useEffect(() => {
-    // Check if user has verified phone number
-    if (user && user.phoneVerified) {
-      setPhoneVerified(true);
+    async function registerUser() {
+      if (!user || loading) return;
+
+      try {
+        const auth = getFirebaseAuth();
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+
+        const idToken = await currentUser.getIdToken();
+
+        const response = await fetch('/api/auth/register-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (response.ok) {
+          const { user: dbUser } = await response.json();
+          setSupabaseUser(dbUser);
+          setPhoneVerified(dbUser.phone_verified);
+        }
+      } catch (error) {
+        console.error('Error registering user:', error);
+      } finally {
+        setCheckingUser(false);
+      }
     }
-  }, [user]);
+
+    registerUser();
+  }, [user, loading]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -84,11 +125,32 @@ export default function ProtectedLayout({
     router.push('/');
   };
 
-  const handlePhoneVerified = () => {
-    setPhoneVerified(true);
+  const handlePhoneVerified = async (phoneNumber: string) => {
+    try {
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+
+      const idToken = await currentUser.getIdToken();
+
+      // Save verified phone to Supabase
+      const verifyResponse = await fetch('/api/auth/verify-phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken, phoneNumber }),
+      });
+
+      if (!verifyResponse.ok) {
+        console.error('Failed to save phone verification');
+      }
+
+      setPhoneVerified(true);
+    } catch (error) {
+      console.error('Error during phone verification:', error);
+    }
   };
 
-  if (loading) {
+  if (loading || checkingUser) {
     return (
       <Box
         sx={{

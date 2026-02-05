@@ -4,108 +4,108 @@ import { useTranslations } from 'next-intl';
 import { Box, Container, Typography, Grid, Chip } from '@neram/ui';
 import CourseCard from '@/components/CourseCard';
 
-// Mock data for all courses
+// Courses offered by Neram Classes
 const courses = [
   {
     id: 1,
-    slug: 'neet-preparation',
-    title: 'NEET Preparation',
+    slug: 'architecture-entrance-year-long',
+    title: 'Architecture Entrance - Year Long',
     description:
-      'Comprehensive NEET coaching with experienced faculty, regular mock tests, and proven results. Coverage of Physics, Chemistry, and Biology as per latest NEET pattern.',
+      'Comprehensive NATA & JEE Paper 2 (B.Arch/B.Planning) preparation with IIT/NIT architect alumni faculty. Complete coverage of Drawing, Aptitude, and Mathematics.',
     duration: '1 Year',
-    level: 'Advanced',
-    category: 'Medical Entrance',
-    image: '/images/courses/neet.jpg',
+    level: 'All Levels',
+    category: 'Architecture Entrance',
+    image: '/images/courses/architecture-year-long.jpg',
     features: [
-      'Daily Practice Tests',
-      'Doubt Clearing Sessions',
-      'Study Material Included',
-      'Previous Year Papers',
-    ],
-  },
-  {
-    id: 2,
-    slug: 'jee-main-advanced',
-    title: 'JEE Main & Advanced',
-    description:
-      'Complete JEE preparation covering Mathematics, Physics, and Chemistry with mock tests, personalized guidance, and comprehensive study material.',
-    duration: '2 Years',
-    level: 'Advanced',
-    category: 'Engineering Entrance',
-    image: '/images/courses/jee.jpg',
-    features: [
-      'IIT Faculty',
-      'Weekly Mock Tests',
-      'Problem Solving Sessions',
-      'Online Test Portal',
-    ],
-  },
-  {
-    id: 3,
-    slug: 'foundation-course',
-    title: 'Foundation Course (8th-10th)',
-    description:
-      'Strong foundation in Mathematics, Science with focus on conceptual clarity and competitive exam basics. Perfect for school students.',
-    duration: '1 Year',
-    level: 'Beginner',
-    category: 'Foundation',
-    image: '/images/courses/foundation.jpg',
-    features: [
-      'School Board Coverage',
-      'Olympiad Preparation',
-      'Concept Building',
-      'Interactive Classes',
-    ],
-  },
-  {
-    id: 4,
-    slug: 'class-11-12-boards',
-    title: 'Class 11 & 12 Boards',
-    description:
-      'Complete board exam preparation with focus on scoring high marks in CBSE, State Boards. Experienced teachers and comprehensive coverage.',
-    duration: '2 Years',
-    level: 'Intermediate',
-    category: 'Board Exams',
-    image: '/images/courses/boards.jpg',
-    features: [
-      'NCERT Focus',
-      'Previous Year Papers',
-      'Regular Tests',
-      'Exam Strategies',
-    ],
-  },
-  {
-    id: 5,
-    slug: 'nda-preparation',
-    title: 'NDA Preparation',
-    description:
-      'National Defence Academy entrance preparation covering Mathematics, General Ability Test, and personality development for SSB interview.',
-    duration: '6 Months',
-    level: 'Intermediate',
-    category: 'Defence Entrance',
-    image: '/images/courses/nda.jpg',
-    features: [
-      'Physical Training',
-      'SSB Interview Prep',
-      'Current Affairs',
+      'NATA + JEE Paper 2',
+      'IIT/NIT Alumni Faculty',
+      'Drawing & Aptitude',
       'Mock Tests',
     ],
   },
   {
-    id: 6,
-    slug: 'ca-foundation',
-    title: 'CA Foundation',
+    id: 2,
+    slug: 'architecture-entrance-crash-course',
+    title: 'Architecture Entrance - Crash Course',
     description:
-      'Chartered Accountancy Foundation level coaching covering Accounting, Law, Economics, and Mathematics with expert faculty.',
-    duration: '4 Months',
-    level: 'Beginner',
-    category: 'Professional Course',
-    image: '/images/courses/ca.jpg',
+      'Intensive NATA & JEE Paper 2 crash course for quick preparation. Focused revision, practice tests, and exam strategies.',
+    duration: '2-3 Months',
+    level: 'All Levels',
+    category: 'Architecture Entrance',
+    image: '/images/courses/architecture-crash.jpg',
     features: [
-      'CA Faculty',
-      'Revision Classes',
-      'Question Bank',
-      'Online Resources',
+      'NATA + JEE Paper 2',
+      'Intensive Training',
+      'Daily Practice',
+      'Exam Strategies',
+    ],
+  },
+  {
+    id: 3,
+    slug: 'revit-training',
+    title: 'Revit Architecture Training',
+    description:
+      'Professional Autodesk Revit training for architects and designers. BIM modeling and documentation.',
+    duration: '3 Months',
+    level: 'Beginner to Advanced',
+    category: 'Software Training',
+    image: '/images/courses/revit.jpg',
+    features: [
+      'Hands-on Projects',
+      'BIM Concepts',
+      'Certified Training',
+      'Job Assistance',
+    ],
+  },
+  {
+    id: 4,
+    slug: 'autocad-training',
+    title: 'AutoCAD Training',
+    description:
+      '2D and 3D AutoCAD training for architecture and design professionals.',
+    duration: '2 Months',
+    level: 'Beginner',
+    category: 'Software Training',
+    image: '/images/courses/autocad.jpg',
+    features: [
+      '2D Drafting',
+      '3D Modeling',
+      'Industry Projects',
+      'Certificate',
+    ],
+  },
+  {
+    id: 5,
+    slug: 'sketchup-training',
+    title: 'SketchUp Training',
+    description:
+      'Learn SketchUp for architectural visualization and 3D modeling.',
+    duration: '1 Month',
+    level: 'Beginner',
+    category: 'Software Training',
+    image: '/images/courses/sketchup.jpg',
+    features: [
+      '3D Modeling',
+      'Rendering',
+      'Plugins',
+      'Portfolio Projects',
+    ],
+  },
+  {
+    id: 6,
+    slug: 'nata-self-learning-app',
+    title: 'NATA Self-Learning App',
+    description:
+      'AI-powered NATA & JEE Paper 2 preparation app with personalized learning paths, practice tests, and progress tracking.',
+    duration: 'Self-paced',
+    level: 'All Levels',
+    category: 'Digital Learning',
+    image: '/images/courses/nata-app.jpg',
+    features: [
+      'AI-Powered',
+      'Practice Tests',
+      'Progress Tracking',
+      'Mobile Access',
     ],
   },
 ];
@@ -113,12 +113,9 @@ const courses = [
 // Categories for filtering
 const categories = [
   'All',
-  'Medical Entrance',
-  'Engineering Entrance',
-  'Foundation',
-  'Board Exams',
-  'Defence Entrance',
-  'Professional Course',
+  'Architecture Entrance',
+  'Software Training',
+  'Digital Learning',
 ];
 
 export default function CoursesPage() {

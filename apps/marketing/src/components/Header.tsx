@@ -19,8 +19,10 @@ import {
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
-import { Link } from '@neram/ui';
+import { Link as MuiLink } from '@neram/ui';
+import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
+import AuthButton from './AuthButton';
 
 const navigationLinks = [
   { label: 'Home', href: '/' },
@@ -35,6 +37,8 @@ export default function Header() {
   const locale = params.locale as Locale;
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const pathname = usePathname();
+  const router = useRouter();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuAnchor, setLangMenuAnchor] = useState<null | HTMLElement>(null);
@@ -47,12 +51,13 @@ export default function Header() {
     setLangMenuAnchor(null);
   };
 
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
+  const handleLocaleChange = (newLocale: Locale) => {
+    router.replace(pathname, { locale: newLocale });
+    handleLangMenuClose();
   };
 
-  const getLocalizedPath = (path: string, targetLocale: Locale) => {
-    return `/${targetLocale}${path}`;
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
   };
 
   return (
@@ -62,8 +67,6 @@ export default function Header() {
           {/* Logo */}
           <Typography
             variant="h6"
-            component={Link}
-            href={`/${locale}`}
             sx={{
               mr: 4,
               fontWeight: 700,
@@ -73,7 +76,9 @@ export default function Header() {
               alignItems: 'center',
             }}
           >
-            Neram Classes
+            <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>
+              Neram Classes
+            </Link>
           </Typography>
 
           {/* Desktop Navigation */}
@@ -82,18 +87,18 @@ export default function Header() {
               {navigationLinks.map((link) => (
                 <Button
                   key={link.href}
-                  component={Link}
-                  href={getLocalizedPath(link.href, locale)}
                   sx={{ color: 'inherit' }}
                 >
-                  {link.label}
+                  <Link href={link.href} style={{ color: 'inherit', textDecoration: 'none' }}>
+                    {link.label}
+                  </Link>
                 </Button>
               ))}
             </Box>
           )}
 
-          {/* Language Switcher */}
-          <Box sx={{ ml: 'auto' }}>
+          {/* Language Switcher & Auth */}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
             <Button
               onClick={handleLangMenuOpen}
               sx={{ color: 'inherit' }}
@@ -109,18 +114,16 @@ export default function Header() {
               {locales.map((loc) => (
                 <MenuItem
                   key={loc}
-                  component={Link}
-                  href={getLocalizedPath(
-                    typeof window !== 'undefined' ? window.location.pathname.replace(`/${locale}`, '') : '/',
-                    loc
-                  )}
-                  onClick={handleLangMenuClose}
+                  onClick={() => handleLocaleChange(loc)}
                   selected={loc === locale}
                 >
                   {localeLabels[loc]}
                 </MenuItem>
               ))}
             </Menu>
+
+            {/* Auth Button */}
+            <AuthButton />
           </Box>
 
           {/* Mobile Menu Button */}
@@ -147,19 +150,19 @@ export default function Header() {
         <Box
           sx={{ width: 250 }}
           role="presentation"
-          onClick={toggleMobileMenu}
         >
           <List>
             {navigationLinks.map((link) => (
-              <ListItem
-                key={link.href}
-                component={Link}
-                href={getLocalizedPath(link.href, locale)}
-              >
-                <ListItemText primary={link.label} />
+              <ListItem key={link.href} onClick={toggleMobileMenu}>
+                <Link href={link.href} style={{ color: 'inherit', textDecoration: 'none', width: '100%' }}>
+                  <ListItemText primary={link.label} />
+                </Link>
               </ListItem>
             ))}
           </List>
+          <Box sx={{ px: 2, py: 1 }}>
+            <AuthButton />
+          </Box>
         </Box>
       </Drawer>
     </AppBar>

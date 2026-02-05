@@ -15,7 +15,7 @@ import {
 
 interface PhoneVerificationModalProps {
   open: boolean;
-  onVerified: () => void;
+  onVerified: (phoneNumber: string) => void;
 }
 
 export default function PhoneVerificationModal({
@@ -67,7 +67,7 @@ export default function PhoneVerificationModal({
 
       // Mock implementation for now
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      onVerified();
+      onVerified(`+91${phoneNumber}`);
     } catch (err: any) {
       setError(err.message || 'Invalid OTP. Please try again.');
     } finally {

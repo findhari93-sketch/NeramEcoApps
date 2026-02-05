@@ -1,13 +1,18 @@
 /**
  * Neram Classes - Design Tokens
- * 
+ *
  * This file contains all design tokens for the Neram Classes ecosystem.
  * These tokens ensure visual consistency across all applications:
  * - neramclasses.com (Marketing/SEO)
  * - app.neramclasses.com (Tools App)
  * - nexus.neramclasses.com (Classroom)
  * - admin.neramclasses.com (Admin Panel)
+ *
+ * Updated 2025: Material 3 (Material You) design system
  */
+
+// Re-export Material 3 tokens (2025 brand refresh)
+export * from './brand-2025';
 
 // ============================================
 // COLOR PALETTE

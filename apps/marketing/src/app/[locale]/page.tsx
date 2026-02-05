@@ -4,35 +4,36 @@ import { useTranslations } from 'next-intl';
 import { Box, Container, Typography, Grid, Card, CardContent, Avatar } from '@neram/ui';
 import Hero from '@/components/Hero';
 import CourseCard from '@/components/CourseCard';
+import YouTubeSection from '@/components/YouTubeSection';
 
-// Mock data for courses
+// Featured courses offered by Neram Classes
 const featuredCourses = [
   {
     id: 1,
-    slug: 'neet-preparation',
-    title: 'NEET Preparation',
-    description: 'Comprehensive NEET coaching with experienced faculty and proven results',
+    slug: 'architecture-entrance-year-long',
+    title: 'Architecture Entrance - Year Long',
+    description: 'Comprehensive NATA & JEE Paper 2 preparation with IIT/NIT architect alumni faculty',
     duration: '1 Year',
-    level: 'Advanced',
-    image: '/images/courses/neet.jpg',
+    level: 'All Levels',
+    image: '/images/courses/architecture-year-long.jpg',
   },
   {
     id: 2,
-    slug: 'jee-main-advanced',
-    title: 'JEE Main & Advanced',
-    description: 'Complete JEE preparation with mock tests and personalized guidance',
-    duration: '2 Years',
-    level: 'Advanced',
-    image: '/images/courses/jee.jpg',
+    slug: 'architecture-entrance-crash-course',
+    title: 'Architecture Entrance - Crash Course',
+    description: 'Intensive NATA & JEE Paper 2 crash course for quick preparation',
+    duration: '2-3 Months',
+    level: 'All Levels',
+    image: '/images/courses/architecture-crash.jpg',
   },
   {
     id: 3,
-    slug: 'foundation-course',
-    title: 'Foundation Course (8th-10th)',
-    description: 'Strong foundation in Mathematics, Science and competitive exam basics',
-    duration: '1 Year',
-    level: 'Beginner',
-    image: '/images/courses/foundation.jpg',
+    slug: 'revit-training',
+    title: 'Revit Architecture Training',
+    description: 'Professional Autodesk Revit training for architects and designers',
+    duration: '3 Months',
+    level: 'Beginner to Advanced',
+    image: '/images/courses/revit.jpg',
   },
 ];
 
@@ -55,28 +56,28 @@ const tools = [
   },
 ];
 
-// Mock testimonials
+// Student testimonials
 const testimonials = [
   {
-    name: 'Rajesh Kumar',
-    role: 'NEET 2024 - AIR 234',
+    name: 'Ananya Krishnan',
+    role: 'NATA 2024 - Top Scorer',
     content:
-      'Neram Classes provided excellent guidance and support throughout my preparation. The faculty is highly experienced and the study material is comprehensive.',
+      'Neram Classes provided excellent guidance and support throughout my NATA preparation. The IIT alumni faculty made complex concepts easy to understand.',
     avatar: '/images/avatars/student1.jpg',
   },
   {
-    name: 'Priya Sharma',
-    role: 'JEE Advanced 2024 - AIR 512',
+    name: 'Vikram Reddy',
+    role: 'JEE Paper 2 2024 - NIT Trichy',
     content:
-      'The personalized attention and regular mock tests helped me identify my weak areas. Thanks to Neram Classes, I achieved my dream rank.',
+      'The personalized attention and regular mock tests helped me crack JEE Paper 2. Thanks to Neram Classes, I got into NIT Trichy B.Arch.',
     avatar: '/images/avatars/student2.jpg',
   },
   {
-    name: 'Amit Patel',
-    role: 'Parent',
+    name: 'Meera Sundaram',
+    role: 'Revit Certified Professional',
     content:
-      'As a parent, I am extremely satisfied with the progress my child has made. The teachers are caring and the infrastructure is excellent.',
-    avatar: '/images/avatars/parent1.jpg',
+      'The Revit training at Neram Classes was industry-focused and practical. I got placed immediately after completing the course.',
+    avatar: '/images/avatars/student3.jpg',
   },
 ];
 
@@ -220,6 +221,9 @@ export default function HomePage() {
           </Grid>
         </Container>
       </Box>
+
+      {/* YouTube Section */}
+      <YouTubeSection />
 
       {/* CTA Section */}
       <Box

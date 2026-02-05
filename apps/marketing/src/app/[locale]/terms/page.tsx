@@ -41,8 +41,8 @@ export default function TermsPage({ params: { locale } }: PageProps) {
             2. Services Description
           </Typography>
           <Typography variant="body1" paragraph>
-            Neram Classes provides online and offline coaching services for competitive examinations
-            including NATA, JEE Paper 2, NEET, and other academic courses. We offer:
+            Neram Classes provides online and offline coaching services for architecture entrance examinations
+            including NATA, JEE Paper 2 (B.Arch/B.Planning), and professional software training. We offer:
           </Typography>
           <Box component="ul" sx={{ pl: 3 }}>
             <Typography component="li" variant="body1">Live and recorded video lectures</Typography>

@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
-import { NeramThemeProvider } from '@neram/ui';
+import { NeramThemeProvider, adminLightTheme, adminDarkTheme } from '@neram/ui';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -10,6 +10,14 @@ export const metadata: Metadata = {
   description: 'Administrative dashboard for Neram Classes',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: '#1A73E8', // Admin blue theme
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -17,8 +25,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <meta name="emotion-insertion-point" content="" />
+      </head>
       <body className={inter.className}>
-        <NeramThemeProvider>
+        <NeramThemeProvider
+          lightTheme={adminLightTheme}
+          darkTheme={adminDarkTheme}
+          defaultMode="light"
+        >
           {children}
         </NeramThemeProvider>
       </body>

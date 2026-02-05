@@ -29,12 +29,11 @@ import {
 const steps = ['Personal Information', 'Academic Details', 'Course Selection', 'Review & Submit'];
 
 const courses = [
-  'NEET Preparation',
-  'JEE Main & Advanced',
-  'Foundation Course (8th-10th)',
-  'Class 11 & 12 Boards',
-  'NDA Preparation',
-  'CA Foundation',
+  'Architecture Entrance (NATA + JEE Paper 2) - Year Long',
+  'Architecture Entrance (NATA + JEE Paper 2) - Crash Course',
+  'Revit Architecture Training',
+  'AutoCAD Training',
+  'SketchUp Training',
 ];
 
 export default function ApplyPage() {

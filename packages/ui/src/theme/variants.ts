@@ -22,6 +22,18 @@ import {
   nexusTokens,
   adminTokens,
 } from './tokens';
+// Material 3 tokens for enhanced theming
+import {
+  m3LightScheme,
+  m3DarkScheme,
+  m3Elevation,
+  m3Motion,
+  m3MarketingAccent,
+  m3AppAccent,
+  m3NexusPrimary,
+  m3AdminAccent,
+  m3StateLayer,
+} from './brand-2025';
 
 // ============================================
 // MARKETING SITE THEME (neramclasses.com)
@@ -30,97 +42,189 @@ import {
 /**
  * Marketing site theme - Warm, inviting, professional
  * Optimized for conversion and SEO landing pages
+ * Material 3 compliant with mobile-first responsive design
  */
 export const createMarketingTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
   const baseTheme = mode === 'light' ? lightTheme : darkTheme;
-  
+  const scheme = mode === 'light' ? m3LightScheme : m3DarkScheme;
+
   return createTheme(baseTheme, {
+    palette: {
+      primary: {
+        main: scheme.primary,
+        light: scheme.primaryContainer,
+        dark: mode === 'light' ? '#0D47A1' : '#1565C0',
+        contrastText: scheme.onPrimary,
+      },
+      secondary: {
+        main: m3MarketingAccent.base,
+        light: m3MarketingAccent.light,
+        dark: m3MarketingAccent.dark,
+        contrastText: '#FFFFFF',
+      },
+      background: {
+        default: scheme.background,
+        paper: scheme.surface,
+      },
+    },
     components: {
-      // Hero sections with gradient backgrounds
+      // Hero sections with M3 gradient backgrounds
       MuiBox: {
         variants: [
           {
             props: { className: 'hero-gradient' },
             style: {
-              background: marketingTokens.heroGradient,
-              color: '#FFFFFF',
+              background: `linear-gradient(135deg, ${scheme.primary} 0%, ${scheme.tertiary} 100%)`,
+              color: scheme.onPrimary,
             },
           },
           {
             props: { className: 'cta-gradient' },
             style: {
-              background: marketingTokens.ctaGradient,
+              background: `linear-gradient(135deg, ${m3MarketingAccent.base} 0%, ${m3MarketingAccent.dark} 100%)`,
+            },
+          },
+          {
+            props: { className: 'm3-surface' },
+            style: {
+              backgroundColor: scheme.surfaceContainerLow,
+              borderRadius: 16,
             },
           },
         ],
       },
-      // Larger, more prominent buttons for CTAs
+      // Mobile-first buttons with M3 styling
       MuiButton: {
         styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 600,
+            borderRadius: 12,
+            minHeight: 48, // Touch-friendly
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.emphasized}`,
+          },
           sizeLarge: {
-            padding: '16px 40px',
-            fontSize: '1.0625rem',
-            borderRadius: borderRadius.lg,
+            padding: '16px 32px',
+            fontSize: '1rem',
+            '@media (min-width: 600px)': {
+              padding: '16px 40px',
+              fontSize: '1.0625rem',
+            },
           },
         },
         variants: [
           {
             props: { variant: 'contained', color: 'secondary' },
             style: {
-              background: marketingTokens.ctaGradient,
-              color: '#000000',
+              background: `linear-gradient(135deg, ${m3MarketingAccent.base} 0%, ${m3MarketingAccent.dark} 100%)`,
+              color: '#FFFFFF',
               fontWeight: 700,
+              boxShadow: m3Elevation.level2,
               '&:hover': {
                 transform: 'translateY(-2px)',
-                boxShadow: shadows.lg,
+                boxShadow: m3Elevation.level4,
+              },
+              '&:active': {
+                transform: 'translateY(0)',
+              },
+            },
+          },
+          {
+            props: { variant: 'contained', color: 'primary' },
+            style: {
+              backgroundColor: scheme.primary,
+              '&:hover': {
+                backgroundColor: scheme.primary,
+                boxShadow: m3Elevation.level3,
               },
             },
           },
         ],
       },
-      // Feature cards with hover effects
+      // M3 Feature cards with hover effects
       MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 16,
+            boxShadow: m3Elevation.level1,
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
+          },
+        },
         variants: [
           {
             props: { className: 'feature-card' },
             style: {
-              borderRadius: borderRadius.xl,
-              transition: 'all 0.3s ease',
+              backgroundColor: scheme.surfaceContainerLow,
+              border: `1px solid ${scheme.outlineVariant}`,
               '&:hover': {
                 transform: 'translateY(-8px)',
-                boxShadow: marketingTokens.cardHoverShadow,
+                boxShadow: m3Elevation.level4,
+                backgroundColor: scheme.surfaceContainerHigh,
+              },
+              // Mobile: reduce hover effect
+              '@media (max-width: 600px)': {
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                },
               },
             },
           },
           {
             props: { className: 'testimonial-card' },
             style: {
-              borderRadius: borderRadius.xl,
-              background: mode === 'light' 
-                ? `linear-gradient(135deg, ${neutralColors.surface} 0%, ${neutralColors.surfaceVariant} 100%)`
-                : 'linear-gradient(135deg, #1A1A1A 0%, #242424 100%)',
+              backgroundColor: scheme.surfaceContainerLowest,
+              border: `1px solid ${scheme.outlineVariant}`,
+            },
+          },
+          {
+            props: { className: 'm3-elevated' },
+            style: {
+              backgroundColor: scheme.surfaceContainerLow,
+              boxShadow: m3Elevation.level2,
             },
           },
         ],
       },
-      // Typography adjustments for marketing
+      // M3 Typography
       MuiTypography: {
         variants: [
           {
             props: { className: 'gradient-text' },
             style: {
-              background: marketingTokens.heroGradient,
+              background: `linear-gradient(135deg, ${scheme.primary} 0%, ${scheme.tertiary} 100%)`,
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
             },
           },
+          {
+            props: { className: 'm3-display' },
+            style: {
+              fontWeight: 400,
+              letterSpacing: '-0.025em',
+              lineHeight: 1.1,
+            },
+          },
         ],
+      },
+      // Mobile-first container
+      MuiContainer: {
+        styleOverrides: {
+          root: {
+            paddingLeft: 16,
+            paddingRight: 16,
+            '@media (min-width: 600px)': {
+              paddingLeft: 24,
+              paddingRight: 24,
+            },
+          },
+        },
       },
     },
     // Custom properties for marketing
     custom: {
       hero: marketingTokens,
+      m3: { scheme, accent: m3MarketingAccent },
     },
   });
 };
@@ -132,84 +236,173 @@ export const createMarketingTheme = (mode: 'light' | 'dark' = 'light'): Theme =>
 /**
  * Tools app theme - Clean, functional, tool-focused
  * Optimized for interactive tools and data visualization
+ * Material 3 compliant with mobile-first responsive design
  */
 export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
   const baseTheme = mode === 'light' ? lightTheme : darkTheme;
-  
+  const scheme = mode === 'light' ? m3LightScheme : m3DarkScheme;
+
   return createTheme(baseTheme, {
+    palette: {
+      primary: {
+        main: scheme.primary,
+        light: scheme.primaryContainer,
+        contrastText: scheme.onPrimary,
+      },
+      secondary: {
+        main: m3AppAccent.base,
+        light: m3AppAccent.light,
+        dark: m3AppAccent.dark,
+        contrastText: '#FFFFFF',
+      },
+      background: {
+        default: scheme.background,
+        paper: scheme.surface,
+      },
+    },
     components: {
-      // Tool cards with distinct styling
+      // M3 Tool cards with mobile-friendly styling
       MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 16,
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
+          },
+        },
         variants: [
           {
             props: { className: 'tool-card' },
             style: {
-              backgroundColor: appTokens.toolCardBg,
-              border: `2px solid ${appTokens.toolCardBorder}`,
-              borderRadius: borderRadius.xl,
+              backgroundColor: scheme.surfaceContainerLow,
+              border: `2px solid ${scheme.outlineVariant}`,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              minHeight: 120, // Touch-friendly
               '&:hover': {
-                borderColor: appTokens.toolCardHoverBorder,
-                boxShadow: shadows.primary,
+                borderColor: scheme.primary,
+                boxShadow: m3Elevation.level3,
                 transform: 'translateY(-4px)',
+              },
+              '&:active': {
+                transform: 'translateY(-2px)',
+                backgroundColor: alpha(scheme.primary, m3StateLayer.pressed),
+              },
+              '@media (max-width: 600px)': {
+                minHeight: 100,
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                },
               },
             },
           },
           {
             props: { className: 'result-card' },
             style: {
-              backgroundColor: alpha(secondaryColors[500], 0.05),
-              border: `2px solid ${secondaryColors[200]}`,
-              borderRadius: borderRadius.lg,
+              backgroundColor: scheme.secondaryContainer,
+              border: `1px solid ${scheme.outlineVariant}`,
+              padding: 16,
             },
           },
         ],
       },
-      // Enhanced form inputs for tools
+      // Mobile-first form inputs
       MuiTextField: {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              backgroundColor: mode === 'light' ? '#FFFFFF' : '#1A1A1A',
+              backgroundColor: scheme.surfaceContainerLowest,
+              borderRadius: 12,
+              minHeight: 56, // Touch-friendly
+              transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
               '&.Mui-focused': {
-                boxShadow: `0 0 0 3px ${alpha(primaryColors[500], 0.15)}`,
+                boxShadow: `0 0 0 3px ${alpha(scheme.primary, 0.15)}`,
               },
+            },
+            '& .MuiInputLabel-root': {
+              fontSize: '1rem', // Prevent iOS zoom
             },
           },
         },
       },
-      // Result highlight boxes
+      // M3 Result highlight boxes
       MuiPaper: {
         variants: [
           {
             props: { className: 'result-highlight' },
             style: {
-              backgroundColor: appTokens.resultHighlight,
-              border: `1px solid ${secondaryColors[300]}`,
-              borderRadius: borderRadius.md,
+              backgroundColor: scheme.primaryContainer,
+              border: `1px solid ${scheme.outlineVariant}`,
+              borderRadius: 12,
               padding: '16px 20px',
+            },
+          },
+          {
+            props: { className: 'm3-surface' },
+            style: {
+              backgroundColor: scheme.surfaceContainerLow,
+              borderRadius: 16,
             },
           },
         ],
       },
-      // Stepper for multi-step tools
+      // Mobile-friendly stepper
       MuiStepper: {
         styleOverrides: {
           root: {
             backgroundColor: 'transparent',
+            '@media (max-width: 600px)': {
+              '& .MuiStepLabel-label': {
+                fontSize: '0.75rem',
+              },
+            },
           },
         },
       },
       MuiStepIcon: {
         styleOverrides: {
           root: {
-            color: neutralColors.border,
+            color: scheme.outline,
+            width: 32,
+            height: 32,
             '&.Mui-active': {
-              color: primaryColors[500],
+              color: scheme.primary,
             },
             '&.Mui-completed': {
-              color: accentColors[500],
+              color: scheme.tertiary,
+            },
+          },
+        },
+      },
+      // Mobile-first buttons
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 600,
+            borderRadius: 12,
+            minHeight: 48,
+            transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
+          },
+        },
+      },
+      // Bottom navigation for mobile
+      MuiBottomNavigation: {
+        styleOverrides: {
+          root: {
+            backgroundColor: scheme.surfaceContainer,
+            borderTop: `1px solid ${scheme.outlineVariant}`,
+          },
+        },
+      },
+      // FAB for primary actions
+      MuiFab: {
+        styleOverrides: {
+          root: {
+            backgroundColor: scheme.primaryContainer,
+            color: scheme.onPrimaryContainer,
+            boxShadow: m3Elevation.level3,
+            '&:hover': {
+              backgroundColor: scheme.primaryContainer,
+              boxShadow: m3Elevation.level4,
             },
           },
         },
@@ -217,6 +410,7 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
     },
     custom: {
       tools: appTokens,
+      m3: { scheme, accent: m3AppAccent },
     },
   });
 };
@@ -228,120 +422,217 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
 /**
  * Nexus classroom theme - Premium, focused, learning-oriented
  * Optimized for content consumption and learning experience
+ * Material 3 compliant with mobile-first responsive design
  */
 export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
   const baseTheme = mode === 'light' ? lightTheme : darkTheme;
-  
+  const scheme = mode === 'light' ? m3LightScheme : m3DarkScheme;
+
   return createTheme(baseTheme, {
+    palette: {
+      primary: {
+        main: m3NexusPrimary.base,
+        light: m3NexusPrimary.light,
+        dark: m3NexusPrimary.dark,
+        contrastText: '#FFFFFF',
+      },
+      secondary: {
+        main: scheme.tertiary,
+        light: scheme.tertiaryContainer,
+        contrastText: scheme.onTertiary,
+      },
+      background: {
+        default: scheme.background,
+        paper: scheme.surface,
+      },
+    },
     components: {
-      // Sidebar styling
+      // M3 Sidebar styling with mobile drawer support
       MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            borderRight: 'none',
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.emphasized}`,
+          },
+        },
         variants: [
           {
             props: { className: 'nexus-sidebar' },
             style: {
               '& .MuiDrawer-paper': {
-                backgroundColor: nexusTokens.sidebarBg,
-                color: nexusTokens.sidebarText,
-                borderRight: 'none',
+                backgroundColor: scheme.surfaceContainer,
+                color: scheme.onSurface,
+                width: 280,
+                '@media (max-width: 600px)': {
+                  width: '85vw',
+                  maxWidth: 320,
+                },
               },
             },
           },
         ],
       },
-      // Lesson cards
+      // M3 Lesson cards with mobile optimization
       MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 16,
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
+          },
+        },
         variants: [
           {
             props: { className: 'lesson-card' },
             style: {
-              backgroundColor: nexusTokens.lessonCardBg,
-              borderRadius: borderRadius.lg,
-              transition: 'all 0.2s ease',
+              backgroundColor: scheme.surfaceContainerLow,
+              border: `1px solid ${scheme.outlineVariant}`,
+              minHeight: 80, // Touch-friendly
               '&:hover': {
-                boxShadow: shadows.md,
+                boxShadow: m3Elevation.level2,
+                backgroundColor: scheme.surfaceContainerHigh,
+              },
+              '&:active': {
+                backgroundColor: alpha(m3NexusPrimary.base, m3StateLayer.pressed),
               },
             },
           },
           {
             props: { className: 'lesson-card-completed' },
             style: {
-              borderLeft: `4px solid ${nexusTokens.completedBadge}`,
+              borderLeft: `4px solid ${scheme.tertiary}`,
+              backgroundColor: alpha(scheme.tertiaryContainer, 0.3),
             },
           },
           {
             props: { className: 'lesson-card-active' },
             style: {
-              borderLeft: `4px solid ${nexusTokens.progressBar}`,
+              borderLeft: `4px solid ${m3NexusPrimary.base}`,
+              backgroundColor: alpha(m3NexusPrimary.light, 0.1),
             },
           },
         ],
       },
-      // Progress indicators
+      // M3 Progress indicators
       MuiLinearProgress: {
         styleOverrides: {
           root: {
-            height: '6px',
-            borderRadius: '3px',
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: scheme.surfaceContainerHighest,
+          },
+          bar: {
+            borderRadius: 4,
           },
           barColorPrimary: {
-            backgroundColor: nexusTokens.progressBar,
+            backgroundColor: m3NexusPrimary.base,
           },
         },
       },
-      // Video player container
+      // Video player container - mobile optimized
       MuiPaper: {
         variants: [
           {
             props: { className: 'video-container' },
             style: {
               backgroundColor: '#000000',
-              borderRadius: borderRadius.lg,
+              borderRadius: 16,
               overflow: 'hidden',
               aspectRatio: '16/9',
-            },
-          },
-        ],
-      },
-      // Assignment cards
-      MuiAccordion: {
-        variants: [
-          {
-            props: { className: 'assignment-accordion' },
-            style: {
-              borderRadius: borderRadius.md,
-              marginBottom: '8px',
-              '&:before': {
-                display: 'none',
+              '@media (max-width: 600px)': {
+                borderRadius: 0,
+                marginLeft: -16,
+                marginRight: -16,
+                width: 'calc(100% + 32px)',
               },
             },
           },
+          {
+            props: { className: 'm3-surface' },
+            style: {
+              backgroundColor: scheme.surfaceContainerLow,
+              borderRadius: 16,
+            },
+          },
         ],
       },
-      // Chip for status
+      // Assignment accordions
+      MuiAccordion: {
+        styleOverrides: {
+          root: {
+            borderRadius: '12px !important',
+            marginBottom: 8,
+            backgroundColor: scheme.surfaceContainerLow,
+            border: `1px solid ${scheme.outlineVariant}`,
+            '&:before': {
+              display: 'none',
+            },
+            '&.Mui-expanded': {
+              margin: '0 0 8px 0',
+            },
+          },
+        },
+      },
+      // M3 Status chips
       MuiChip: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+            fontWeight: 500,
+            height: 32,
+          },
+        },
         variants: [
           {
             props: { className: 'status-completed' },
             style: {
-              backgroundColor: alpha(nexusTokens.completedBadge, 0.1),
-              color: nexusTokens.completedBadge,
-              fontWeight: 600,
+              backgroundColor: scheme.tertiaryContainer,
+              color: scheme.onTertiaryContainer,
             },
           },
           {
             props: { className: 'status-in-progress' },
             style: {
-              backgroundColor: alpha(nexusTokens.progressBar, 0.1),
-              color: nexusTokens.progressBar,
-              fontWeight: 600,
+              backgroundColor: alpha(m3NexusPrimary.base, 0.12),
+              color: m3NexusPrimary.base,
             },
           },
         ],
       },
+      // Mobile-friendly buttons
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 600,
+            borderRadius: 12,
+            minHeight: 48,
+          },
+        },
+      },
+      // Mobile navigation rail / bottom nav
+      MuiBottomNavigation: {
+        styleOverrides: {
+          root: {
+            backgroundColor: scheme.surfaceContainer,
+            borderTop: `1px solid ${scheme.outlineVariant}`,
+            height: 80,
+          },
+        },
+      },
+      MuiBottomNavigationAction: {
+        styleOverrides: {
+          root: {
+            color: scheme.onSurfaceVariant,
+            '&.Mui-selected': {
+              color: m3NexusPrimary.base,
+            },
+          },
+        },
+      },
     },
     custom: {
       nexus: nexusTokens,
+      m3: { scheme, accent: m3NexusPrimary },
     },
   });
 };
@@ -353,159 +644,294 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
 /**
  * Admin panel theme - Professional, data-focused, efficient
  * Optimized for data management and admin workflows
+ * Material 3 compliant with mobile-first responsive design
+ * Note: 40% desktop users, but quick reviews on mobile
  */
 export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
   const baseTheme = mode === 'light' ? lightTheme : darkTheme;
-  
+  const scheme = mode === 'light' ? m3LightScheme : m3DarkScheme;
+
   return createTheme(baseTheme, {
+    palette: {
+      primary: {
+        main: scheme.primary,
+        light: scheme.primaryContainer,
+        contrastText: scheme.onPrimary,
+      },
+      secondary: {
+        main: m3AdminAccent.base,
+        light: m3AdminAccent.light,
+        dark: m3AdminAccent.dark,
+        contrastText: '#FFFFFF',
+      },
+      error: {
+        main: scheme.error,
+        light: scheme.errorContainer,
+        contrastText: scheme.onError,
+      },
+      background: {
+        default: scheme.background,
+        paper: scheme.surface,
+      },
+    },
     components: {
-      // Admin sidebar
+      // M3 Admin sidebar with mobile drawer
       MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            borderRight: 'none',
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.emphasized}`,
+          },
+        },
         variants: [
           {
             props: { className: 'admin-sidebar' },
             style: {
               '& .MuiDrawer-paper': {
-                backgroundColor: adminTokens.sidebarBg,
-                color: adminTokens.sidebarText,
-                borderRight: 'none',
+                backgroundColor: scheme.surfaceContainer,
+                color: scheme.onSurface,
                 width: 260,
+                '@media (max-width: 900px)': {
+                  width: 240,
+                },
+                '@media (max-width: 600px)': {
+                  width: '85vw',
+                  maxWidth: 300,
+                },
               },
             },
           },
         ],
       },
-      // Admin header
+      // M3 Admin header
       MuiAppBar: {
+        styleOverrides: {
+          root: {
+            backgroundColor: scheme.surface,
+            color: scheme.onSurface,
+            boxShadow: 'none',
+          },
+        },
         variants: [
           {
             props: { className: 'admin-header' },
             style: {
-              backgroundColor: adminTokens.headerBg,
-              borderBottom: `1px solid ${adminTokens.tableBorder}`,
+              backgroundColor: scheme.surface,
+              borderBottom: `1px solid ${scheme.outlineVariant}`,
             },
           },
         ],
       },
-      // Data tables
+      // M3 Data tables - responsive
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            borderRadius: borderRadius.md,
-            border: `1px solid ${adminTokens.tableBorder}`,
+            borderRadius: 12,
+            border: `1px solid ${scheme.outlineVariant}`,
+            backgroundColor: scheme.surface,
+            '@media (max-width: 600px)': {
+              borderRadius: 8,
+              overflowX: 'auto',
+            },
+          },
+        },
+      },
+      MuiTableHead: {
+        styleOverrides: {
+          root: {
+            backgroundColor: scheme.surfaceContainerLow,
+            '& .MuiTableCell-root': {
+              fontWeight: 600,
+              color: scheme.onSurface,
+            },
           },
         },
       },
       MuiTableRow: {
         styleOverrides: {
           root: {
+            transition: `background-color ${m3Motion.duration.short4}ms`,
             '&:hover': {
-              backgroundColor: adminTokens.tableRowHover,
+              backgroundColor: alpha(scheme.primary, m3StateLayer.hover),
             },
           },
         },
       },
-      // Status chips for admin
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            borderColor: scheme.outlineVariant,
+            padding: '16px',
+            '@media (max-width: 600px)': {
+              padding: '12px 8px',
+              fontSize: '0.875rem',
+            },
+          },
+        },
+      },
+      // M3 Status chips
       MuiChip: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+            fontWeight: 500,
+            height: 28,
+          },
+        },
         variants: [
           {
             props: { className: 'status-pending' },
             style: {
-              backgroundColor: alpha(adminTokens.statusPending, 0.15),
-              color: adminTokens.statusPending,
-              fontWeight: 600,
+              backgroundColor: alpha('#F59E0B', 0.12),
+              color: '#B45309',
             },
           },
           {
             props: { className: 'status-approved' },
             style: {
-              backgroundColor: alpha(adminTokens.statusApproved, 0.15),
-              color: adminTokens.statusApproved,
-              fontWeight: 600,
+              backgroundColor: scheme.tertiaryContainer,
+              color: scheme.onTertiaryContainer,
             },
           },
           {
             props: { className: 'status-rejected' },
             style: {
-              backgroundColor: alpha(adminTokens.statusRejected, 0.15),
-              color: adminTokens.statusRejected,
-              fontWeight: 600,
+              backgroundColor: scheme.errorContainer,
+              color: scheme.onErrorContainer,
             },
           },
         ],
       },
-      // Stat cards for dashboard
+      // M3 Stat cards - responsive
       MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 16,
+            boxShadow: m3Elevation.level1,
+            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
+          },
+        },
         variants: [
           {
             props: { className: 'stat-card' },
             style: {
-              borderRadius: borderRadius.lg,
-              padding: '24px',
+              padding: '20px',
+              '@media (min-width: 600px)': {
+                padding: '24px',
+              },
             },
           },
           {
             props: { className: 'stat-card-primary' },
             style: {
-              background: `linear-gradient(135deg, ${primaryColors[500]} 0%, ${primaryColors[700]} 100%)`,
-              color: '#FFFFFF',
+              background: `linear-gradient(135deg, ${scheme.primary} 0%, ${scheme.primary}dd 100%)`,
+              color: scheme.onPrimary,
             },
           },
           {
             props: { className: 'stat-card-secondary' },
             style: {
-              background: `linear-gradient(135deg, ${secondaryColors[500]} 0%, ${secondaryColors[600]} 100%)`,
-              color: '#000000',
+              backgroundColor: scheme.secondaryContainer,
+              color: scheme.onSecondaryContainer,
             },
           },
           {
             props: { className: 'stat-card-accent' },
             style: {
-              background: `linear-gradient(135deg, ${accentColors[500]} 0%, ${accentColors[700]} 100%)`,
+              background: `linear-gradient(135deg, ${m3AdminAccent.base} 0%, ${m3AdminAccent.dark} 100%)`,
               color: '#FFFFFF',
             },
           },
         ],
       },
-      // Quick action buttons
+      // M3 Action buttons - touch-friendly
       MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 600,
+            borderRadius: 12,
+            minHeight: 44,
+            transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
+            '@media (max-width: 600px)': {
+              minHeight: 48,
+              fontSize: '1rem',
+            },
+          },
+        },
         variants: [
           {
             props: { className: 'action-approve' },
             style: {
-              backgroundColor: adminTokens.statusApproved,
-              color: '#FFFFFF',
+              backgroundColor: scheme.tertiary,
+              color: scheme.onTertiary,
               '&:hover': {
-                backgroundColor: alpha(adminTokens.statusApproved, 0.9),
+                backgroundColor: alpha(scheme.tertiary, 0.9),
+                boxShadow: m3Elevation.level2,
               },
             },
           },
           {
             props: { className: 'action-reject' },
             style: {
-              backgroundColor: adminTokens.statusRejected,
-              color: '#FFFFFF',
+              backgroundColor: scheme.error,
+              color: scheme.onError,
               '&:hover': {
-                backgroundColor: alpha(adminTokens.statusRejected, 0.9),
+                backgroundColor: alpha(scheme.error, 0.9),
+                boxShadow: m3Elevation.level2,
               },
             },
           },
         ],
       },
-      // List items for sidebar navigation
+      // M3 Sidebar navigation
       MuiListItemButton: {
         styleOverrides: {
           root: {
-            borderRadius: borderRadius.base,
+            borderRadius: 12,
             margin: '2px 8px',
+            minHeight: 48, // Touch-friendly
+            transition: `all ${m3Motion.duration.short4}ms`,
             '&.Mui-selected': {
-              backgroundColor: alpha('#FFFFFF', 0.12),
+              backgroundColor: scheme.secondaryContainer,
+              color: scheme.onSecondaryContainer,
               '&:hover': {
-                backgroundColor: alpha('#FFFFFF', 0.16),
+                backgroundColor: alpha(scheme.secondaryContainer, 0.9),
               },
             },
             '&:hover': {
-              backgroundColor: alpha('#FFFFFF', 0.08),
+              backgroundColor: alpha(scheme.onSurface, m3StateLayer.hover),
+            },
+          },
+        },
+      },
+      // Mobile FAB for quick actions
+      MuiFab: {
+        styleOverrides: {
+          root: {
+            backgroundColor: scheme.primaryContainer,
+            color: scheme.onPrimaryContainer,
+            boxShadow: m3Elevation.level3,
+            '&:hover': {
+              backgroundColor: scheme.primaryContainer,
+              boxShadow: m3Elevation.level4,
+            },
+          },
+        },
+      },
+      // Responsive dialogs
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            borderRadius: 28,
+            '@media (max-width: 600px)': {
+              borderRadius: '28px 28px 0 0',
+              margin: 0,
+              maxHeight: '90vh',
+              position: 'fixed',
+              bottom: 0,
+              width: '100%',
+              maxWidth: '100%',
             },
           },
         },
@@ -513,6 +939,7 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
     },
     custom: {
       admin: adminTokens,
+      m3: { scheme, accent: m3AdminAccent },
     },
   });
 };
@@ -533,6 +960,10 @@ export const nexusDarkTheme = createNexusTheme('dark');
 export const adminLightTheme = createAdminTheme('light');
 export const adminDarkTheme = createAdminTheme('dark');
 
+// M3 accent types for type augmentation
+type M3AccentType = typeof m3MarketingAccent | typeof m3AppAccent | typeof m3NexusPrimary | typeof m3AdminAccent;
+type M3SchemeType = typeof m3LightScheme | typeof m3DarkScheme;
+
 // Type augmentation for custom theme properties
 declare module '@mui/material/styles' {
   interface Theme {
@@ -541,6 +972,10 @@ declare module '@mui/material/styles' {
       tools?: typeof appTokens;
       nexus?: typeof nexusTokens;
       admin?: typeof adminTokens;
+      m3?: {
+        scheme: M3SchemeType;
+        accent: M3AccentType;
+      };
     };
   }
   interface ThemeOptions {
@@ -549,6 +984,10 @@ declare module '@mui/material/styles' {
       tools?: typeof appTokens;
       nexus?: typeof nexusTokens;
       admin?: typeof adminTokens;
+      m3?: {
+        scheme: M3SchemeType;
+        accent: M3AccentType;
+      };
     };
   }
 }

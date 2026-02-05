@@ -62,8 +62,8 @@ export default function Hero() {
                 lineHeight: 1.6,
               }}
             >
-              Join Neram Classes for expert coaching in NEET, JEE, and competitive
-              exams. Excellence in education since 2009.
+              Join Neram Classes for expert coaching in NATA, JEE Paper 2, and Architecture
+              entrance exams. Excellence in education since 2009.
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Button

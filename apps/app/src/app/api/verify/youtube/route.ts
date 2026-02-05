@@ -2,8 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@neram/database';
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const NERAM_CHANNEL_ID = process.env.NERAM_YOUTUBE_CHANNEL_ID || 'UCxxxxxxxxxx'; // Replace with actual channel ID
+const YOUTUBE_API_KEY = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
+const YOUTUBE_CHANNEL_ID = process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID || '';
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const response = await youtube.subscriptions.list({
       part: ['snippet'],
       mine: true,
-      forChannelId: NERAM_CHANNEL_ID,
+      forChannelId: YOUTUBE_CHANNEL_ID,
     });
 
     const isSubscribed = response.data.items && response.data.items.length > 0;
