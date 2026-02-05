@@ -1,0 +1,19 @@
+{
+  "name": "@neram/scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seo:schema": "tsx seo/generate-schema.ts",
+    "seo:indexnow": "tsx seo/indexnow-submit.ts",
+    "seo:cwv": "tsx seo/cwv-monitor.ts",
+    "seo:all": "npm run seo:schema && npm run seo:cwv"
+  },
+  "dependencies": {
+    "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}

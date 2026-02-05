@@ -9,8 +9,26 @@ import {
   findNearestExamCenters,
   logToolUsage,
 } from '@neram/database';
+import { verifyIdToken } from '@/lib/firebase-admin';
 
-// GET /api/tools/exam-centers - List centers or get states/cities
+// Helper to verify user from Authorization header
+async function verifyUser(request: NextRequest): Promise<{ uid: string } | null> {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  try {
+    const idToken = authHeader.slice(7);
+    const decodedToken = await verifyIdToken(idToken);
+    return { uid: decodedToken.uid };
+  } catch (error) {
+    console.error('Token verification failed:', error);
+    return null;
+  }
+}
+
+// GET /api/tools/exam-centers - List centers or get states/cities (PUBLIC)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -29,7 +47,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ cities });
     }
 
-    // Default: list all centers with optional filters
+    // Default: list all centers with optional filters (public preview)
     const state = searchParams.get('state') || undefined;
     const city = searchParams.get('city') || undefined;
     const search = searchParams.get('search') || undefined;
@@ -49,9 +67,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/tools/exam-centers - Search with location or filters
+// POST /api/tools/exam-centers - Search with location or filters (REQUIRES AUTH)
 export async function POST(request: NextRequest) {
   try {
+    // Verify authentication
+    const user = await verifyUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required to get results. Please sign in.' },
+        { status: 401 }
+      );
+    }
+
     const startTime = Date.now();
     const body = await request.json();
     const { state, city, search, latitude, longitude, maxDistance } = body;
@@ -81,10 +108,11 @@ export async function POST(request: NextRequest) {
 
     const executionTime = Date.now() - startTime;
 
-    // Log tool usage (non-blocking)
+    // Log tool usage with user ID (non-blocking)
     logToolUsage(
       {
         toolName: 'exam_center_locator',
+        userId: user.uid,
         inputData: { state, city, search, latitude, longitude },
         resultData: { count },
         executionTimeMs: executionTime,

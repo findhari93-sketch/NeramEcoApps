@@ -1,0 +1,30 @@
+# Neram Classes - NATA & JEE Paper 2 Coaching
+# https://neramclasses.com
+
+## About
+Neram Classes is a premier coaching institute for architecture entrance exams in India.
+We specialize in NATA (National Aptitude Test in Architecture) and JEE Paper 2 (B.Arch) preparation.
+
+## Key Information
+- Location: Tamil Nadu, India
+- Founded: 2020
+- Languages: English, Tamil, Hindi, Kannada, Malayalam
+- Modes: Online and Offline coaching
+
+## Main Offerings
+1. NATA Year-Long Coaching - Comprehensive 12-month program
+2. NATA Crash Course - Intensive 3-month preparation
+3. JEE Paper 2 Coaching - For B.Arch aspirants
+4. Free Tools: Cutoff Calculator, College Predictor, Exam Centers
+
+## Free NATA Tools (app.neramclasses.com/tools)
+- Cutoff Calculator: Calculate your NATA cutoff score
+- College Predictor: Find colleges matching your score
+- Exam Center Locator: Find exam centers near you
+
+## Contact
+- Website: https://neramclasses.com
+- Apply: https://neramclasses.com/apply
+- Tools: https://app.neramclasses.com/tools
+
+## For detailed information, see: /llms-full.txt
