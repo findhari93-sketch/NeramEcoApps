@@ -63,21 +63,21 @@ const testimonials = [
     role: 'NATA 2024 - Top Scorer',
     content:
       'Neram Classes provided excellent guidance and support throughout my NATA preparation. The IIT alumni faculty made complex concepts easy to understand.',
-    avatar: '/images/avatars/student1.jpg',
+    avatar: '/images/avatars/student1.svg',
   },
   {
     name: 'Vikram Reddy',
     role: 'JEE Paper 2 2024 - NIT Trichy',
     content:
       'The personalized attention and regular mock tests helped me crack JEE Paper 2. Thanks to Neram Classes, I got into NIT Trichy B.Arch.',
-    avatar: '/images/avatars/student2.jpg',
+    avatar: '/images/avatars/student2.svg',
   },
   {
     name: 'Meera Sundaram',
     role: 'Revit Certified Professional',
     content:
       'The Revit training at Neram Classes was industry-focused and practical. I got placed immediately after completing the course.',
-    avatar: '/images/avatars/student3.jpg',
+    avatar: '/images/avatars/student3.svg',
   },
 ];
 

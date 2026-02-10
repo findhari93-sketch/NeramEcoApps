@@ -24,11 +24,15 @@ import {
   User as FirebaseUser,
   sendPasswordResetEmail,
   updateProfile,
+  updatePassword,
   sendEmailVerification,
   PhoneAuthProvider,
   linkWithCredential,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   browserLocalPersistence,
   setPersistence,
+  signInWithCustomToken as firebaseSignInWithCustomToken,
 } from 'firebase/auth';
 
 // ============================================
@@ -227,9 +231,60 @@ export async function verifyPhoneOTP(otp: string): Promise<FirebaseUser> {
   if (!confirmationResult) {
     throw new Error('No OTP was sent. Call sendPhoneOTP first.');
   }
-  
+
   const result = await confirmationResult.confirm(otp);
   return result.user;
+}
+
+/**
+ * Verify phone OTP and link to existing account if user is signed in.
+ *
+ * When a user is already signed in (e.g., via Google), this links the phone
+ * credential to their existing account rather than creating a new sign-in,
+ * which would replace their session.
+ *
+ * When no user is signed in (standalone phone login), falls back to
+ * confirmationResult.confirm() for a regular phone sign-in.
+ */
+export async function verifyPhoneAndLink(otp: string): Promise<FirebaseUser> {
+  if (!confirmationResult) {
+    throw new Error('No OTP was sent. Call sendPhoneOTP first.');
+  }
+
+  const auth = getFirebaseAuth();
+  const currentUser = auth.currentUser;
+
+  if (currentUser) {
+    // User is already signed in — link phone to their existing account
+    // instead of creating a new sign-in that would replace the session
+    const credential = PhoneAuthProvider.credential(
+      confirmationResult.verificationId,
+      otp
+    );
+
+    try {
+      const result = await linkWithCredential(currentUser, credential);
+      return result.user;
+    } catch (error: any) {
+      if (error?.code === 'auth/provider-already-linked') {
+        // Phone provider already linked to this account — OTP was still validated
+        return currentUser;
+      }
+      if (error?.code === 'auth/credential-already-in-use' ||
+          error?.code === 'auth/account-exists-with-different-credential') {
+        // Phone number is already associated with a different Firebase account
+        // (e.g., from a previous test or orphaned phone-only account).
+        // The OTP was still validated by Firebase — return current user
+        // so session is not disrupted. Phone will be saved to Supabase.
+        return currentUser;
+      }
+      throw error;
+    }
+  } else {
+    // No user signed in — regular phone sign-in flow
+    const result = await confirmationResult.confirm(otp);
+    return result.user;
+  }
 }
 
 export async function linkPhoneToAccount(
@@ -303,6 +358,12 @@ export function getCurrentUser(): FirebaseUser | null {
   return auth.currentUser;
 }
 
+export async function signInWithCustomToken(customToken: string): Promise<FirebaseUser> {
+  const auth = getFirebaseAuth();
+  const result = await firebaseSignInWithCustomToken(auth, customToken);
+  return result.user;
+}
+
 export async function signOut(): Promise<void> {
   const auth = getFirebaseAuth();
   await firebaseSignOut(auth);
@@ -331,6 +392,70 @@ export async function sendVerificationEmail(): Promise<void> {
   const user = getCurrentUser();
   if (!user) throw new Error('No user is signed in');
   await sendEmailVerification(user);
+}
+
+// ============================================
+// PASSWORD MANAGEMENT
+// ============================================
+
+/**
+ * Change password for current user
+ * Requires re-authentication with current password
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('No user is signed in');
+  if (!user.email) throw new Error('User has no email for password auth');
+
+  // Re-authenticate with current password
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+
+  // Update to new password
+  await updatePassword(user, newPassword);
+}
+
+/**
+ * Set password for a user who signed up with OAuth (Google)
+ * This links email/password auth to their existing account
+ */
+export async function setPasswordForOAuthUser(
+  email: string,
+  password: string
+): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('No user is signed in');
+
+  // Create email/password credential
+  const credential = EmailAuthProvider.credential(email, password);
+
+  // Link the credential to the current user
+  await linkWithCredential(user, credential);
+}
+
+/**
+ * Clear reCAPTCHA verifier (call when unmounting)
+ */
+export function clearRecaptcha(): void {
+  if (recaptchaVerifier) {
+    try {
+      recaptchaVerifier.clear();
+    } catch (e) {
+      // Ignore errors when clearing
+    }
+    recaptchaVerifier = null;
+  }
+  confirmationResult = null;
+}
+
+/**
+ * Get the current confirmation result (for linking phone to account)
+ */
+export function getConfirmationResult(): ConfirmationResult | null {
+  return confirmationResult;
 }
 
 // ============================================

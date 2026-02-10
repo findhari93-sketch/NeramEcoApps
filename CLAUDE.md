@@ -84,10 +84,10 @@ xl: 1536    // Large desktop
 
 ```
 apps/
-├── marketing/  → Port 3001, No auth (public) - neramclasses.com
-├── app/        → Port 3000, Firebase Auth (students) - app.neramclasses.com
-├── nexus/      → Port 3002, Microsoft Auth (teachers) - nexus.neramclasses.com
-└── admin/      → Port 3003, Microsoft Auth (staff) - admin.neramclasses.com
+├── marketing/  → Port 3010, No auth (public) - neramclasses.com
+├── app/        → Port 3011, Firebase Auth (students) - app.neramclasses.com
+├── nexus/      → Port 3012, Microsoft Auth (teachers) - nexus.neramclasses.com
+└── admin/      → Port 3013, Microsoft Auth (staff) - admin.neramclasses.com
 
 packages/
 ├── database/   → Supabase client, types, queries (SHARED BY ALL)
@@ -132,10 +132,10 @@ When a feature spans multiple apps, work in this order:
 ```bash
 # Development
 pnpm dev                    # Run all apps
-pnpm dev:marketing          # Run marketing only (port 3001)
-pnpm dev:app               # Run app only (port 3000)
-pnpm dev:nexus             # Run nexus only (port 3002)
-pnpm dev:admin             # Run admin only (port 3003)
+pnpm dev:marketing          # Run marketing only (port 3010)
+pnpm dev:app               # Run app only (port 3011)
+pnpm dev:nexus             # Run nexus only (port 3012)
+pnpm dev:admin             # Run admin only (port 3013)
 
 # Build & Validate
 pnpm build                  # Build all apps
@@ -151,7 +151,27 @@ pnpm supabase:db:push      # Push migrations to remote
 # Testing
 pnpm test                  # Run unit tests (Vitest)
 pnpm test:e2e              # Run E2E tests (Playwright)
+pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 ```
+
+## Post-Implementation E2E Verification (REQUIRED)
+
+> **After implementing ANY feature, run relevant Playwright E2E tests to verify the implementation works end-to-end.**
+
+### Rules
+1. After implementing a feature, run `pnpm test:e2e` (or the relevant project) to verify
+2. If tests fail, fix the issues before considering the implementation complete
+3. If no E2E tests exist for the feature, create them in `tests/e2e/`
+4. Check the browser console for errors during E2E runs - zero console errors is the target
+5. Cross-app features (SSO, auth) must have integration tests (`tests/e2e/*integration*.spec.ts`)
+
+### Test File Naming Convention
+| App/Feature | Pattern | Project |
+|-------------|---------|---------|
+| Marketing | `*marketing*.spec.ts` | `marketing-chrome` |
+| Student App | `*app*.spec.ts` or `*profile*.spec.ts` | `app-chrome` |
+| Cross-app SSO | `*integration*.spec.ts` | `integration` |
+| Mobile/PWA | `*mobile*.spec.ts` | `mobile-chrome` |
 
 ## Deployment Pipeline
 

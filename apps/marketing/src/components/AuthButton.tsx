@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   Button,
   Avatar,
@@ -11,13 +11,12 @@ import {
   Typography,
   Divider,
   CircularProgress,
+  LoginModal,
 } from '@neram/ui';
-import { useFirebaseAuth, firebaseSignOut, getFirebaseAuth } from '@neram/auth';
-import { signInWithCustomToken } from 'firebase/auth';
+import { useFirebaseAuth, firebaseSignOut, getFirebaseAuth, signInWithCustomToken } from '@neram/auth';
 
-// Auth app URL - uses NEXT_PUBLIC_APP_URL from environment
-// Development: http://localhost:3001, Production: https://app.neramclasses.com
-const AUTH_APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+// App URL for API calls (cross-origin)
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 // Inner component that uses useSearchParams
 function AuthButtonInner() {
@@ -25,16 +24,15 @@ function AuthButtonInner() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const searchParams = useSearchParams();
-  const router = useRouter();
 
-  // Handle custom token from cross-domain auth
+  // Handle custom token from cross-domain auth (backward compatibility)
   useEffect(() => {
     const authToken = searchParams.get('authToken');
     if (authToken && !user && !loading && !signingIn) {
       setSigningIn(true);
-      const auth = getFirebaseAuth();
-      signInWithCustomToken(auth, authToken)
+      signInWithCustomToken(authToken)
         .then(() => {
           // Remove authToken from URL without refresh
           const url = new URL(window.location.href);
@@ -43,6 +41,10 @@ function AuthButtonInner() {
         })
         .catch((error: Error) => {
           console.error('Error signing in with custom token:', error);
+          // Remove authToken from URL to prevent retry loop
+          const url = new URL(window.location.href);
+          url.searchParams.delete('authToken');
+          window.history.replaceState({}, '', url.toString());
         })
         .finally(() => {
           setSigningIn(false);
@@ -59,10 +61,15 @@ function AuthButtonInner() {
   };
 
   const handleLogin = () => {
-    // Redirect to auth app with return URL
-    // Note: (auth) is a route group in Next.js - the URL is /login, not /auth/login
-    const returnUrl = encodeURIComponent(window.location.href);
-    window.location.href = `${AUTH_APP_URL}/login?redirect=${returnUrl}`;
+    setLoginModalOpen(true);
+  };
+
+  const handleLoginModalClose = () => {
+    setLoginModalOpen(false);
+  };
+
+  const handleAuthenticated = () => {
+    setLoginModalOpen(false);
   };
 
   const handleSignOut = async () => {
@@ -70,17 +77,49 @@ function AuthButtonInner() {
     try {
       await firebaseSignOut();
       handleMenuClose();
-      // Refresh the page to clear any cached auth state
-      window.location.reload();
+      // Clear SSO flag so next visit to tools app retries SSO
+      try { sessionStorage.removeItem('neram_sso_attempted'); } catch {}
+      // Sign out tools app via hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = `${APP_URL}/auth/signout`;
+      document.body.appendChild(iframe);
+      // Give iframe time to sign out, then reload
+      setTimeout(() => {
+        iframe.remove();
+        window.location.reload();
+      }, 500);
     } catch (error) {
       console.error('Sign out error:', error);
+      window.location.reload();
     } finally {
       setSigningOut(false);
     }
   };
 
-  const handleGoToApp = () => {
-    window.location.href = AUTH_APP_URL;
+  const handleGoToApp = async () => {
+    handleMenuClose();
+    try {
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const idToken = await currentUser.getIdToken();
+        const response = await fetch(`${APP_URL}/api/auth/exchange-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken }),
+        });
+        if (response.ok) {
+          const { customToken } = await response.json();
+          window.open(`${APP_URL}?authToken=${encodeURIComponent(customToken)}`, '_blank');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error exchanging token for app:', error);
+    }
+    // Fallback: open without auth token
+    window.open(APP_URL, '_blank');
   };
 
   // Loading state
@@ -92,24 +131,33 @@ function AuthButtonInner() {
     );
   }
 
-  // Not authenticated - show login button
+  // Not authenticated - show login button + modal
   if (!user) {
     return (
-      <Button
-        variant="outlined"
-        onClick={handleLogin}
-        sx={{
-          ml: 2,
-          color: 'inherit',
-          borderColor: 'rgba(255, 255, 255, 0.5)',
-          '&:hover': {
-            borderColor: 'white',
-            bgcolor: 'rgba(255, 255, 255, 0.1)',
-          },
-        }}
-      >
-        Login
-      </Button>
+      <>
+        <Button
+          variant="outlined"
+          onClick={handleLogin}
+          sx={{
+            ml: 2,
+            color: 'inherit',
+            borderColor: 'rgba(255, 255, 255, 0.5)',
+            '&:hover': {
+              borderColor: 'white',
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+            },
+          }}
+        >
+          Login
+        </Button>
+        <LoginModal
+          open={loginModalOpen}
+          onClose={handleLoginModalClose}
+          allowClose={true}
+          onAuthenticated={handleAuthenticated}
+          apiBaseUrl={APP_URL}
+        />
+      </>
     );
   }
 

@@ -142,5 +142,77 @@
     "validityNote": "This coupon is valid for 30 days",
     "browseCourses": "Browse Courses",
     "copySuccess": "Coupon code copied!"
+  },
+  "demoClass": {
+    "title": "Free Demo Class",
+    "subtitle": "Experience our teaching methodology before enrolling",
+    "heroText": "Join our free Sunday demo class and see why thousands of students trust Neram Classes for their NATA/JEE preparation",
+    "selectDate": "Select a Date",
+    "selectTime": "Select a Time",
+    "morning": "Morning",
+    "afternoon": "Afternoon",
+    "spotsLeft": "{count} spots left",
+    "full": "Full",
+    "noSlot": "No slot available",
+    "minRegistrations": "Demo class will be conducted when 10+ students register",
+    "continue": "Continue",
+    "form": {
+      "title": "Complete Registration",
+      "name": "Your Name",
+      "phone": "Phone Number",
+      "email": "Email (Optional)",
+      "currentClass": "Current Class",
+      "interest": "Interested In",
+      "city": "City (Optional)",
+      "submit": "Book Demo Class",
+      "verifyPhone": "Verify"
+    },
+    "verification": {
+      "title": "Verify Your Phone",
+      "subtitle": "We'll send you class details via WhatsApp"
+    },
+    "success": {
+      "title": "You're Registered!",
+      "subtitle": "Your registration is being reviewed",
+      "message": "You'll receive a confirmation email with class details once approved.",
+      "backToHome": "Back to Home",
+      "exploreCourses": "Explore Courses"
+    },
+    "classes": {
+      "class10": "Class 10",
+      "class11": "Class 11",
+      "class12": "Class 12",
+      "class12Pass": "12th Pass"
+    },
+    "courses": {
+      "nata": "NATA",
+      "jeePaper2": "JEE Paper 2",
+      "both": "Both NATA & JEE"
+    }
+  },
+  "demoSurvey": {
+    "title": "How was your Demo Class?",
+    "overallExperience": "Overall Experience",
+    "teachingQuality": "Teaching Quality",
+    "recommendation": "Would you recommend us to friends?",
+    "likedMost": "What did you like most?",
+    "likedMostPlaceholder": "Share what you enjoyed about the class...",
+    "suggestions": "Any suggestions for improvement?",
+    "suggestionsPlaceholder": "Help us improve (optional)",
+    "enrollmentInterest": "Interested in enrolling?",
+    "enrollmentOptions": {
+      "yes": "Yes, definitely!",
+      "maybe": "Maybe, need more info",
+      "no": "Not right now"
+    },
+    "submit": "Submit Feedback",
+    "thankYou": {
+      "title": "Thank You!",
+      "message": "Your feedback helps us improve our teaching and serve you better."
+    },
+    "alreadySubmitted": {
+      "title": "You've already submitted your feedback",
+      "message": "Thank you for sharing your thoughts with us!"
+    }
   }
 }

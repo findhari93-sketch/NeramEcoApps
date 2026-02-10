@@ -459,6 +459,10 @@ export type {
 } from './ChatWidget';
 export { applicationFormFlow } from './ChatWidget/applicationFlow';
 
+// Login Modal Component
+export { LoginModal } from './LoginModal';
+export type { LoginModalProps } from './LoginModal';
+
 /**
  * Status badge component
  */

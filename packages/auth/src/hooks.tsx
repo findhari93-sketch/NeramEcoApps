@@ -207,8 +207,8 @@ export function usePhoneVerification(): UsePhoneVerificationReturn {
     setLoading(true);
     setError(null);
     try {
-      const { verifyPhoneOTP } = await import('./firebase');
-      await verifyPhoneOTP(otp);
+      const { verifyPhoneAndLink } = await import('./firebase');
+      await verifyPhoneAndLink(otp);
     } catch (err) {
       setError(err as Error);
       throw err;

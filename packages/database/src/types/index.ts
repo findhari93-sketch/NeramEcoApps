@@ -29,6 +29,27 @@ export type PaymentScheme = 'full' | 'installment';
 export type SourceCategory = 'youtube' | 'instagram' | 'facebook' | 'google_search' | 'friend_referral' | 'school_visit' | 'newspaper' | 'hoarding' | 'whatsapp' | 'other';
 export type CasteCategory = 'general' | 'obc' | 'sc' | 'st' | 'ews' | 'other';
 
+// Profile enums
+export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';
+export type AreaOfInterest = 'nata' | 'jee_paper_2' | 'b_arch' | 'interior_design' | 'landscape_architecture' | 'urban_planning' | 'other';
+export type ProfileChangeSource = 'user' | 'admin' | 'system';
+
+// Application form enums (migration 005)
+export type ApplicantCategory = 'school_student' | 'diploma_student' | 'college_student' | 'working_professional';
+export type ApplicationStatus = 'draft' | 'pending_verification' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'deleted';
+export type LocationSource = 'geolocation' | 'pincode' | 'manual';
+export type CallbackStatus = 'pending' | 'scheduled' | 'attempted' | 'completed' | 'cancelled';
+export type CallbackSlot = 'morning' | 'afternoon' | 'evening';
+export type VisitBookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+export type DeletionType = 'user_requested' | 'admin_deleted' | 'duplicate' | 'spam' | 'test_data';
+export type CourseCategory = 'entrance_exam' | 'training' | 'workshop';
+
+// Demo class enums (migration 006)
+export type DemoSlotStatus = 'draft' | 'scheduled' | 'confirmed' | 'conducted' | 'cancelled';
+export type DemoRegistrationStatus = 'pending' | 'approved' | 'rejected' | 'attended' | 'no_show' | 'cancelled';
+export type DemoMode = 'online' | 'offline' | 'hybrid';
+export type EnrollmentInterest = 'yes' | 'maybe' | 'no';
+
 // ============================================
 // BASE TYPES
 // ============================================
@@ -52,25 +73,172 @@ export interface User extends Timestamps {
   name: string;
   username: string | null;
   avatar_url: string | null;
-  
+
+  // Profile fields (added in migration 004)
+  first_name: string | null;
+  last_name: string | null;
+  nickname: string | null;
+  description: string | null;
+  area_of_interest: AreaOfInterest[] | null;
+  date_of_birth: string | null;     // ISO date string
+  gender: Gender | null;
+
+  // Password auth fields
+  has_password: boolean;
+  password_updated_at: string | null;
+
   // External auth identifiers
   firebase_uid: string | null;      // From Firebase (app.neramclasses.com)
   ms_oid: string | null;            // Microsoft Object ID (nexus & admin)
   google_id: string | null;         // Google account ID
-  
+
   // Status
   user_type: UserType;
   status: UserStatus;
   email_verified: boolean;
   phone_verified: boolean;
-  
+
   // Preferences
   preferred_language: string;       // 'en' | 'ta' | 'hi' | 'kn' | 'ml'
-  
+
   // Metadata
   last_login_at: string | null;
   metadata: Record<string, unknown> | null;
 }
+
+/**
+ * User profile history - tracks all profile changes for admin visibility
+ */
+export interface UserProfileHistory {
+  id: string;
+  user_id: string;
+
+  // What changed
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+
+  // Change metadata
+  changed_by: string | null;        // Admin user_id, null if user changed own
+  change_source: ProfileChangeSource;
+  ip_address: string | null;
+  user_agent: string | null;
+
+  created_at: string;
+}
+
+/**
+ * User avatars - stores avatar history with crop data
+ */
+export interface UserAvatar extends Timestamps {
+  id: string;
+  user_id: string;
+
+  // Avatar data
+  storage_path: string;             // Supabase Storage path
+  file_name: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+
+  // Dimensions
+  width: number | null;
+  height: number | null;
+  crop_data: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    zoom?: number;
+    rotation?: number;
+  } | null;
+
+  // Status
+  is_current: boolean;
+}
+
+/**
+ * Input type for updating user profile
+ */
+export interface UpdateUserProfileInput {
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  description?: string;
+  area_of_interest?: AreaOfInterest[];
+  date_of_birth?: string;
+  gender?: Gender;
+  username?: string;
+}
+
+/**
+ * Area of interest display labels
+ */
+export const AREA_OF_INTEREST_LABELS: Record<AreaOfInterest, string> = {
+  nata: 'NATA',
+  jee_paper_2: 'JEE Paper 2',
+  b_arch: 'B.Arch',
+  interior_design: 'Interior Design',
+  landscape_architecture: 'Landscape Architecture',
+  urban_planning: 'Urban Planning',
+  other: 'Other',
+};
+
+// ============================================
+// ACADEMIC DATA TYPES (for conditional form fields)
+// ============================================
+
+/**
+ * Academic data for school students
+ */
+export interface SchoolStudentAcademicData {
+  current_class: string;              // '8', '9', '10', '11', '12'
+  school_name: string;
+  school_place_id?: string;           // Google Places ID
+  board: string;                      // 'cbse', 'icse', 'state_tn', etc.
+  previous_percentage?: number;       // Optional
+}
+
+/**
+ * Academic data for diploma students
+ */
+export interface DiplomaStudentAcademicData {
+  college_name: string;
+  college_place_id?: string;
+  department: string;
+  completed_grade: '10th' | '12th';   // Which grade they completed before diploma
+  marks?: number;
+}
+
+/**
+ * Academic data for college students
+ */
+export interface CollegeStudentAcademicData {
+  college_name: string;
+  college_place_id?: string;
+  department: string;
+  year_of_study: number;              // 1, 2, 3, 4
+  twelfth_year: number;               // Year of 12th completion
+  twelfth_percentage?: number;
+  reason_for_exam?: string;           // Why writing entrance exam while in college
+}
+
+/**
+ * Academic data for working professionals
+ */
+export interface WorkingProfessionalAcademicData {
+  twelfth_year: number;
+  occupation?: string;
+  company?: string;
+}
+
+/**
+ * Union type for all academic data
+ */
+export type AcademicData =
+  | SchoolStudentAcademicData
+  | DiplomaStudentAcademicData
+  | CollegeStudentAcademicData
+  | WorkingProfessionalAcademicData;
 
 /**
  * Lead profiles - for users who submitted application forms
@@ -79,6 +247,9 @@ export interface LeadProfile extends Timestamps {
   id: string;
   user_id: string;
 
+  // Application number (auto-generated)
+  application_number: string | null;
+
   // Source tracking
   source: ApplicationSource;
   utm_source: string | null;
@@ -86,14 +257,52 @@ export interface LeadProfile extends Timestamps {
   utm_campaign: string | null;
   referral_code: string | null;
 
-  // Application data
+  // Personal data (migration 005)
+  father_name: string | null;
+
+  // Application data (legacy)
   interest_course: CourseType;
   qualification: string | null;
   school_college: string | null;
   city: string | null;
   state: string | null;
 
-  // Application form data (JSON)
+  // Location fields (migration 005)
+  country: string;
+  pincode: string | null;
+  address: string | null;
+  district: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_source: LocationSource | null;
+
+  // Applicant category (migration 005)
+  applicant_category: ApplicantCategory | null;
+
+  // Academic data (category-specific, migration 005)
+  academic_data: AcademicData | null;
+
+  // Common academic fields (migration 005)
+  caste_category: CasteCategory | null;
+  target_exam_year: number | null;
+
+  // Course selection (migration 005)
+  selected_course_id: string | null;
+  selected_center_id: string | null;
+  hybrid_learning_accepted: boolean;
+
+  // Application status (migration 005)
+  status: ApplicationStatus;
+
+  // Phone verification (migration 005)
+  phone_verified: boolean;
+  phone_verified_at: string | null;
+
+  // Soft delete (migration 005)
+  deleted_at: string | null;
+  deletion_reason: string | null;
+
+  // Application form data (JSON - legacy, for backward compatibility)
   application_data: {
     father_name?: string;
     mother_name?: string;
@@ -329,6 +538,251 @@ export interface PostEnrollmentDetails extends Timestamps {
   form_completed_at: string | null;
 }
 
+// ============================================
+// OFFLINE CENTERS & VISIT BOOKINGS (migration 005)
+// ============================================
+
+/**
+ * Operating hours structure
+ */
+export interface OperatingHours {
+  [day: string]: {
+    open: string;   // "09:00"
+    close: string;  // "18:00"
+  } | null;         // null means closed
+}
+
+/**
+ * Offline learning centers for hybrid classes
+ */
+export interface OfflineCenter extends Timestamps {
+  id: string;
+  name: string;
+  slug: string;
+
+  // Address
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  pincode: string | null;
+
+  // Coordinates
+  latitude: number | null;
+  longitude: number | null;
+
+  // Google integration
+  google_business_url: string | null;
+  google_maps_url: string | null;
+  google_place_id: string | null;
+
+  // Media
+  photos: string[];
+
+  // Facilities
+  facilities: string[];
+
+  // Operating info
+  operating_hours: OperatingHours | null;
+  preferred_visit_times: string[];
+
+  // Contact
+  contact_phone: string | null;
+  contact_email: string | null;
+
+  // Capacity
+  capacity: number | null;
+  current_students: number;
+
+  // Status
+  is_active: boolean;
+  display_order: number;
+}
+
+/**
+ * Center visit bookings for prospective students
+ */
+export interface CenterVisitBooking extends Timestamps {
+  id: string;
+  center_id: string;
+  user_id: string | null;
+
+  // Visitor details
+  visitor_name: string;
+  visitor_phone: string;
+  visitor_email: string | null;
+
+  // Booking details
+  visit_date: string;
+  visit_time_slot: string;
+  purpose: string | null;
+
+  // Status
+  status: VisitBookingStatus;
+
+  // Admin handling
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  admin_notes: string | null;
+
+  // Follow-up
+  follow_up_required: boolean;
+  follow_up_notes: string | null;
+}
+
+// ============================================
+// CALLBACK REQUESTS (migration 005)
+// ============================================
+
+/**
+ * Callback requests for users who prefer to be called
+ */
+export interface CallbackRequest extends Timestamps {
+  id: string;
+  user_id: string | null;
+
+  // Contact info
+  name: string;
+  phone: string;
+  email: string | null;
+
+  // Preferred time
+  preferred_date: string | null;
+  preferred_slot: CallbackSlot | null;
+  timezone: string;
+
+  // Interest
+  course_interest: CourseType | null;
+  query_type: string | null;
+  notes: string | null;
+
+  // Status
+  status: CallbackStatus;
+
+  // Admin handling
+  assigned_to: string | null;
+  scheduled_at: string | null;
+  attempt_count: number;
+  last_attempt_at: string | null;
+  completed_at: string | null;
+  call_notes: string | null;
+  call_outcome: string | null;
+
+  // Link to lead if form submitted later
+  lead_profile_id: string | null;
+}
+
+// ============================================
+// PIN CODE CACHE (migration 005)
+// ============================================
+
+/**
+ * Location data from pin code lookup
+ */
+export interface PinCodeLocation {
+  name: string;
+  district: string;
+  state: string;
+}
+
+/**
+ * Cached pin code lookup data
+ */
+export interface PinCodeCache {
+  pincode: string;
+  country: string;
+  city: string | null;
+  district: string | null;
+  state: string | null;
+  region: string | null;
+  raw_data: Record<string, unknown> | null;
+  locations: PinCodeLocation[];
+  created_at: string;
+  expires_at: string;
+  hit_count: number;
+  last_accessed_at: string;
+}
+
+// ============================================
+// APPLICATION DELETIONS (migration 005)
+// ============================================
+
+/**
+ * Audit trail for soft deleted applications
+ */
+export interface ApplicationDeletion {
+  id: string;
+  lead_profile_id: string;
+  deleted_by: string | null;
+  deletion_type: DeletionType;
+  deletion_reason: string;
+  deleted_at: string;
+  can_restore: boolean;
+  restored_at: string | null;
+  restored_by: string | null;
+  restoration_notes: string | null;
+}
+
+// ============================================
+// EDUCATION BOARDS (migration 005)
+// ============================================
+
+/**
+ * Education boards lookup
+ */
+export interface EducationBoard {
+  id: string;
+  code: string;
+  name: string;
+  full_name: string | null;
+  country: string;
+  states: string[];
+  is_active: boolean;
+  display_order: number;
+}
+
+/**
+ * Board options for form dropdown
+ */
+export const EDUCATION_BOARD_OPTIONS: { code: string; name: string; fullName: string }[] = [
+  { code: 'cbse', name: 'CBSE', fullName: 'Central Board of Secondary Education' },
+  { code: 'icse', name: 'ICSE', fullName: 'Indian Certificate of Secondary Education' },
+  { code: 'state_tn', name: 'State Board (TN)', fullName: 'Tamil Nadu State Board' },
+  { code: 'matriculation', name: 'Matriculation', fullName: 'Tamil Nadu Matriculation Board' },
+  { code: 'state_ka', name: 'State Board (KA)', fullName: 'Karnataka State Board' },
+  { code: 'state_ap', name: 'State Board (AP)', fullName: 'Andhra Pradesh State Board' },
+  { code: 'state_ke', name: 'State Board (KE)', fullName: 'Kerala State Board' },
+  { code: 'ib', name: 'IB', fullName: 'International Baccalaureate' },
+  { code: 'igcse', name: 'IGCSE', fullName: 'Cambridge IGCSE' },
+  { code: 'nios', name: 'NIOS', fullName: 'National Institute of Open Schooling' },
+  { code: 'other', name: 'Other', fullName: 'Other Board' },
+];
+
+/**
+ * Caste category options for form dropdown
+ */
+export const CASTE_CATEGORY_OPTIONS: { value: CasteCategory; label: string }[] = [
+  { value: 'general', label: 'General' },
+  { value: 'obc', label: 'OBC (Other Backward Classes)' },
+  { value: 'sc', label: 'SC (Scheduled Caste)' },
+  { value: 'st', label: 'ST (Scheduled Tribe)' },
+  { value: 'ews', label: 'EWS (Economically Weaker Section)' },
+];
+
+/**
+ * Applicant category options for form
+ */
+export const APPLICANT_CATEGORY_OPTIONS: { value: ApplicantCategory; label: string; description: string }[] = [
+  { value: 'school_student', label: 'School Student', description: 'Currently studying in class 8-12' },
+  { value: 'diploma_student', label: 'Diploma Student', description: 'Currently pursuing diploma course' },
+  { value: 'college_student', label: 'College Student', description: 'Currently in degree college' },
+  { value: 'working_professional', label: 'Working Professional', description: 'Working or completed education' },
+];
+
+// ============================================
+// STUDENT & TEACHER PROFILES
+// ============================================
+
 /**
  * Student profiles - for enrolled, paying students
  */
@@ -399,28 +853,36 @@ export interface Course extends Timestamps {
   slug: string;
   description: string | null;
   short_description: string | null;
-  
+
   course_type: CourseType;
   duration_months: number;
   total_lessons: number;
-  
+
   // Pricing
   regular_fee: number;
   discounted_fee: number | null;
   discount_valid_until: string | null;
-  
+
   // Content
   syllabus: string | null;          // Markdown content
   features: string[];
-  
+
   // SEO
   meta_title: string | null;
   meta_description: string | null;
-  
+
   // Status
   is_active: boolean;
   is_featured: boolean;
   display_order: number;
+
+  // Admin control fields (migration 005)
+  course_category: CourseCategory;
+  target_audience: string | null;
+  enrollment_open: boolean;
+  enrollment_deadline: string | null;
+  max_students: number | null;
+  current_students: number;
 }
 
 /**
@@ -826,6 +1288,248 @@ export interface PageView extends Timestamps {
 }
 
 // ============================================
+// DEMO CLASS TABLES (migration 006)
+// ============================================
+
+/**
+ * Demo class slots - admin-created time slots for demo classes
+ */
+export interface DemoClassSlot extends Timestamps {
+  id: string;
+
+  // Slot Details
+  title: string;
+  description: string | null;
+
+  // Scheduling
+  slot_date: string;                 // ISO date (YYYY-MM-DD)
+  slot_time: string;                 // Time (HH:mm:ss)
+  duration_minutes: number;
+
+  // Capacity Management
+  min_registrations: number;
+  max_registrations: number;
+  current_registrations: number;
+
+  // Meeting Details
+  meeting_link: string | null;
+  meeting_password: string | null;
+  venue_address: string | null;
+  demo_mode: DemoMode;
+
+  // Status
+  status: DemoSlotStatus;
+
+  // Instructor
+  instructor_name: string | null;
+  instructor_id: string | null;
+
+  // Course association
+  course_id: string | null;
+
+  // Admin tracking
+  created_by: string | null;
+  confirmed_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+
+  // Notification tracking
+  confirmation_notifications_sent: boolean;
+  reminder_24h_sent: boolean;
+  reminder_1h_sent: boolean;
+}
+
+/**
+ * Demo class registrations - user bookings for demo slots
+ */
+export interface DemoClassRegistration extends Timestamps {
+  id: string;
+
+  // References
+  slot_id: string;
+  user_id: string | null;
+
+  // Contact Info
+  name: string;
+  email: string | null;
+  phone: string;
+
+  // Student Context
+  current_class: string | null;
+  interest_course: string | null;
+  city: string | null;
+
+  // Status
+  status: DemoRegistrationStatus;
+
+  // Admin Processing
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+
+  // Notification Tracking
+  confirmation_email_sent: boolean;
+  confirmation_email_sent_at: string | null;
+  whatsapp_sent: boolean;
+  whatsapp_sent_at: string | null;
+  calendar_invite_sent: boolean;
+  reminder_24h_sent: boolean;
+  reminder_1h_sent: boolean;
+
+  // Survey tracking
+  survey_email_sent: boolean;
+  survey_email_sent_at: string | null;
+  survey_completed: boolean;
+
+  // Attendance
+  attended: boolean | null;
+  attendance_marked_at: string | null;
+  attendance_marked_by: string | null;
+
+  // Conversion tracking
+  converted_to_lead: boolean;
+  lead_profile_id: string | null;
+
+  // Source Tracking (UTM)
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  referral_code: string | null;
+}
+
+/**
+ * Demo class surveys - post-demo feedback from attendees
+ */
+export interface DemoClassSurvey {
+  id: string;
+  registration_id: string;
+
+  // Ratings (1-5 scale)
+  overall_rating: number | null;
+  teaching_rating: number | null;
+
+  // Net Promoter Score (1-5)
+  nps_score: number | null;
+
+  // Open-ended feedback
+  liked_most: string | null;
+  suggestions: string | null;
+
+  // Enrollment interest
+  enrollment_interest: EnrollmentInterest | null;
+
+  // Additional feedback
+  additional_comments: string | null;
+
+  // Follow-up preference
+  contact_for_followup: boolean;
+
+  submitted_at: string;
+}
+
+/**
+ * Input type for creating a demo slot
+ */
+export interface CreateDemoSlotInput {
+  title?: string;
+  description?: string;
+  slot_date: string;
+  slot_time: string;
+  duration_minutes?: number;
+  min_registrations?: number;
+  max_registrations?: number;
+  demo_mode?: DemoMode;
+  instructor_name?: string;
+  instructor_id?: string;
+  course_id?: string;
+  created_by?: string;
+}
+
+/**
+ * Input type for creating a demo registration
+ */
+export interface CreateDemoRegistrationInput {
+  slot_id: string;
+  user_id?: string;
+  name: string;
+  email?: string;
+  phone: string;
+  current_class?: string;
+  interest_course?: string;
+  city?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  referral_code?: string;
+}
+
+/**
+ * Input type for submitting a survey
+ */
+export interface CreateDemoSurveyInput {
+  registration_id: string;
+  overall_rating?: number;
+  teaching_rating?: number;
+  nps_score?: number;
+  liked_most?: string;
+  suggestions?: string;
+  enrollment_interest?: EnrollmentInterest;
+  additional_comments?: string;
+  contact_for_followup?: boolean;
+}
+
+/**
+ * Demo slot with computed fields for display
+ */
+export interface DemoSlotDisplay extends DemoClassSlot {
+  display_date: string;              // "Sunday, Feb 9"
+  display_time: string;              // "10:00 AM"
+  spots_left: number;
+  is_filling: boolean;               // < 20% spots left
+  is_full: boolean;
+}
+
+/**
+ * Demo slot stats for admin dashboard
+ */
+export interface DemoSlotStats {
+  total_registrations: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  attended_count: number;
+  no_show_count: number;
+  survey_count: number;
+  avg_overall_rating: number | null;
+  avg_teaching_rating: number | null;
+  avg_nps_score: number | null;
+  enrollment_interest_breakdown: {
+    yes: number;
+    maybe: number;
+    no: number;
+  };
+}
+
+/**
+ * Options for current class dropdown
+ */
+export const CURRENT_CLASS_OPTIONS = [
+  { value: '10th', label: 'Class 10' },
+  { value: '11th', label: 'Class 11' },
+  { value: '12th', label: 'Class 12' },
+  { value: '12th-pass', label: '12th Pass / Graduate' },
+] as const;
+
+/**
+ * Options for interest course dropdown
+ */
+export const INTEREST_COURSE_OPTIONS = [
+  { value: 'nata', label: 'NATA' },
+  { value: 'jee_paper2', label: 'JEE Paper 2' },
+  { value: 'both', label: 'Both NATA & JEE' },
+] as const;
+
+// ============================================
 // DATABASE SCHEMA TYPE
 // ============================================
 
@@ -953,6 +1657,53 @@ export interface Database {
         Insert: Omit<YouTubeSubscriptionCoupon, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<YouTubeSubscriptionCoupon, 'id' | 'created_at' | 'updated_at'>>;
       };
+      // New tables for application form revamp (migration 005)
+      offline_centers: {
+        Row: OfflineCenter;
+        Insert: Omit<OfflineCenter, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<OfflineCenter, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      center_visit_bookings: {
+        Row: CenterVisitBooking;
+        Insert: Omit<CenterVisitBooking, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<CenterVisitBooking, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      callback_requests: {
+        Row: CallbackRequest;
+        Insert: Omit<CallbackRequest, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<CallbackRequest, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      pin_code_cache: {
+        Row: PinCodeCache;
+        Insert: Omit<PinCodeCache, 'created_at'>;
+        Update: Partial<Omit<PinCodeCache, 'pincode' | 'created_at'>>;
+      };
+      application_deletions: {
+        Row: ApplicationDeletion;
+        Insert: Omit<ApplicationDeletion, 'id'> & { id?: string };
+        Update: Partial<Omit<ApplicationDeletion, 'id' | 'lead_profile_id'>>;
+      };
+      education_boards: {
+        Row: EducationBoard;
+        Insert: Omit<EducationBoard, 'id'> & { id?: string };
+        Update: Partial<Omit<EducationBoard, 'id'>>;
+      };
+      // Demo class tables (migration 006)
+      demo_class_slots: {
+        Row: DemoClassSlot;
+        Insert: Omit<DemoClassSlot, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<DemoClassSlot, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      demo_class_registrations: {
+        Row: DemoClassRegistration;
+        Insert: Omit<DemoClassRegistration, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<DemoClassRegistration, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      demo_class_surveys: {
+        Row: DemoClassSurvey;
+        Insert: Omit<DemoClassSurvey, 'id' | 'submitted_at'> & { id?: string };
+        Update: Partial<Omit<DemoClassSurvey, 'id' | 'registration_id' | 'submitted_at'>>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -971,6 +1722,20 @@ export interface Database {
       payment_scheme: PaymentScheme;
       source_category: SourceCategory;
       caste_category: CasteCategory;
+      // New enums (migration 005)
+      applicant_category: ApplicantCategory;
+      application_status: ApplicationStatus;
+      location_source: LocationSource;
+      callback_status: CallbackStatus;
+      callback_slot: CallbackSlot;
+      visit_booking_status: VisitBookingStatus;
+      deletion_type: DeletionType;
+      course_category: CourseCategory;
+      // Demo class enums (migration 006)
+      demo_slot_status: DemoSlotStatus;
+      demo_registration_status: DemoRegistrationStatus;
+      demo_mode: DemoMode;
+      enrollment_interest: EnrollmentInterest;
     };
   };
 }

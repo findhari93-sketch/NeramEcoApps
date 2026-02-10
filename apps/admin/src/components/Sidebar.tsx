@@ -21,6 +21,7 @@ import BookIcon from '@mui/icons-material/Book';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import VideocamIcon from '@mui/icons-material/Videocam';
 import { useMicrosoftAuth } from '@neram/auth';
 
 interface SidebarProps {
@@ -30,6 +31,7 @@ interface SidebarProps {
 const menuItems = [
   { text: 'Dashboard', icon: DashboardIcon, path: '/' },
   { text: 'Leads', icon: AssignmentIcon, path: '/leads' },
+  { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
   { text: 'Payments', icon: PaymentIcon, path: '/payments' },
   { text: 'Students', icon: PeopleIcon, path: '/students' },
   { text: 'Courses', icon: BookIcon, path: '/courses' },

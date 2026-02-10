@@ -202,39 +202,65 @@ export async function getOrCreateUserFromFirebase(
     email?: string | null;
     phoneNumber?: string | null;
     displayName?: string | null;
+    photoURL?: string | null;
   },
   client?: TypedSupabaseClient
 ): Promise<User> {
   const supabase = client || getSupabaseAdminClient();
-  
+
+  // Build profile updates from Firebase data (fill missing fields)
+  function buildProfileUpdates(existingUser: User): Record<string, unknown> {
+    const updates: Record<string, unknown> = {};
+    if (firebaseUser.displayName && (!existingUser.name || existingUser.name === 'User')) {
+      updates.name = firebaseUser.displayName;
+    }
+    if (firebaseUser.email && !existingUser.email) {
+      updates.email = firebaseUser.email;
+      updates.email_verified = true;
+    }
+    if (firebaseUser.photoURL && !existingUser.avatar_url) {
+      updates.avatar_url = firebaseUser.photoURL;
+    }
+    return updates;
+  }
+
   // First, try to find by Firebase UID
   let user = await getUserByFirebaseUid(firebaseUser.uid, supabase);
-  if (user) return user;
-  
+  if (user) {
+    // Update any missing profile fields from Firebase data
+    const updates = buildProfileUpdates(user);
+    if (Object.keys(updates).length > 0) {
+      return updateUser(user.id, updates, supabase);
+    }
+    return user;
+  }
+
   // Try to find by phone or email
   if (firebaseUser.phoneNumber) {
     user = await getUserByPhone(firebaseUser.phoneNumber, supabase);
     if (user) {
-      // Link Firebase UID to existing user
-      return linkFirebaseToUser(user.id, firebaseUser.uid, supabase);
+      // Link Firebase UID and sync profile data
+      const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
+      return updateUser(user.id, updates, supabase);
     }
   }
-  
+
   if (firebaseUser.email) {
     user = await getUserByEmail(firebaseUser.email, supabase);
     if (user) {
-      // Link Firebase UID to existing user
-      return linkFirebaseToUser(user.id, firebaseUser.uid, supabase);
+      // Link Firebase UID and sync profile data
+      const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
+      return updateUser(user.id, updates, supabase);
     }
   }
-  
+
   // Create new user
   return createUser({
     name: firebaseUser.displayName || 'User',
     email: firebaseUser.email || null,
     phone: firebaseUser.phoneNumber || null,
     username: null,
-    avatar_url: null,
+    avatar_url: firebaseUser.photoURL || null,
     firebase_uid: firebaseUser.uid,
     ms_oid: null,
     google_id: null,

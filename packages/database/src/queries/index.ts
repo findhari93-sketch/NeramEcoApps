@@ -12,3 +12,6 @@ export * from './tools';
 export * from './coupons';
 export * from './emails';
 export * from './blog';
+export * from './profile-history';
+export * from './applications';
+export * from './demo-classes';

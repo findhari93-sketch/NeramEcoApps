@@ -7,11 +7,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, getSupabaseAdminClient } from '@neram/database';
 
 // CORS headers for cross-domain requests
 const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3000',
+  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -32,23 +32,45 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify the Firebase ID token
-    const decodedToken = await verifyIdToken(idToken);
-
-    // Get user from Supabase
-    const user = await getUserByFirebaseUid(decodedToken.uid);
-
-    if (!user) {
+    let decodedToken;
+    try {
+      decodedToken = await verifyIdToken(idToken);
+    } catch (tokenError) {
+      console.error('Firebase token verification failed:', tokenError);
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404, headers: corsHeaders }
+        { error: 'Invalid authentication token' },
+        { status: 401, headers: corsHeaders }
       );
     }
 
-    // Update user with verified phone
+    const adminClient = getSupabaseAdminClient();
+
+    // Get user from Supabase (use admin client to bypass RLS)
+    let user = await getUserByFirebaseUid(decodedToken.uid, adminClient);
+
+    if (!user) {
+      // Fallback: create user if register-user hadn't completed
+      try {
+        user = await getOrCreateUserFromFirebase({
+          uid: decodedToken.uid,
+          email: decodedToken.email || null,
+          phoneNumber: phoneNumber,
+          displayName: decodedToken.name || null,
+        });
+      } catch (createError) {
+        console.error('Failed to create fallback user:', createError);
+        return NextResponse.json(
+          { error: 'User not found and could not be created' },
+          { status: 404, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Update user with verified phone (use admin client to bypass RLS)
     const updatedUser = await updateUser(user.id, {
       phone: phoneNumber,
       phone_verified: true,
-    });
+    }, adminClient);
 
     return NextResponse.json({
       success: true,
