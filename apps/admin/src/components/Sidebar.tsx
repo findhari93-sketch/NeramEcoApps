@@ -21,7 +21,11 @@ import BookIcon from '@mui/icons-material/Book';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import QuizIcon from '@mui/icons-material/Quiz';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import { useMicrosoftAuth } from '@neram/auth';
+import NotificationBell from './NotificationBell';
 
 interface SidebarProps {
   width: number;
@@ -29,10 +33,12 @@ interface SidebarProps {
 
 const menuItems = [
   { text: 'Dashboard', icon: DashboardIcon, path: '/' },
-  { text: 'Leads', icon: AssignmentIcon, path: '/leads' },
+  { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
+  { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
   { text: 'Payments', icon: PaymentIcon, path: '/payments' },
-  { text: 'Students', icon: PeopleIcon, path: '/students' },
   { text: 'Courses', icon: BookIcon, path: '/courses' },
+  { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },
+  { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 
@@ -61,12 +67,17 @@ export default function Sidebar({ width }: SidebarProps) {
       }}
     >
       <Box sx={{ p: 3 }}>
-        <Typography variant="h5" component="h1" fontWeight="bold" color="primary">
-          Neram Classes
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Admin Panel
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box>
+            <Typography variant="h5" component="h1" fontWeight="bold" color="primary">
+              Neram Classes
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Admin Panel
+            </Typography>
+          </Box>
+          <NotificationBell />
+        </Box>
       </Box>
 
       <Divider />

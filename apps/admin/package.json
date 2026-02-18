@@ -3,17 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3003",
+    "dev": "next dev -p 3013",
     "build": "next build",
-    "start": "next start -p 3003",
+    "start": "next start -p 3013",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@mui/icons-material": "^5.15.10",
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
     "@neram/ui": "workspace:*",
+    "material-react-table": "^3.0.1",
     "next": "14.2.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

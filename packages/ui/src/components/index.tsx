@@ -18,6 +18,7 @@ export {
   CardContent,
   CardHeader,
   CardActions,
+  CardActionArea,
   CardMedia,
   Divider,
   
@@ -37,6 +38,10 @@ export {
   Tab,
   Pagination,
   
+  // Toggle
+  ToggleButton,
+  ToggleButtonGroup,
+
   // Inputs
   Button,
   IconButton,
@@ -86,7 +91,8 @@ export {
   TableFooter,
   Typography,
   Tooltip,
-  
+  Rating,
+
   // Feedback
   Alert,
   AlertTitle,
@@ -458,6 +464,10 @@ export type {
   ChatInputConfig,
 } from './ChatWidget';
 export { applicationFormFlow } from './ChatWidget/applicationFlow';
+
+// Login Modal Component
+export { LoginModal } from './LoginModal';
+export type { LoginModalProps } from './LoginModal';
 
 /**
  * Status badge component

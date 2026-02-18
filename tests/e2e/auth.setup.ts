@@ -36,7 +36,7 @@ setup('authenticate as student', async ({ page }) => {
   console.log(`🔐 Authenticating as student: ${testEmail}`);
 
   // Go to the student app login page
-  await page.goto('http://localhost:3000/login');
+  await page.goto('http://localhost:3011/login');
 
   // Wait for Firebase to load
   await page.waitForLoadState('networkidle');
@@ -89,7 +89,7 @@ setup('authenticate as teacher', async ({ page }) => {
   console.log(`🔐 Authenticating as teacher: ${testEmail}`);
 
   // Go to nexus login
-  await page.goto('http://localhost:3002/login');
+  await page.goto('http://localhost:3011/login');
 
   // Microsoft OAuth flow is complex to automate
   // Option 1: Use a test endpoint that generates tokens
@@ -97,13 +97,13 @@ setup('authenticate as teacher', async ({ page }) => {
   // Option 3: Mock authentication for E2E tests
 
   // For now, check if there's a test login endpoint
-  const testLoginResponse = await page.request.post('http://localhost:3002/api/auth/test-login', {
+  const testLoginResponse = await page.request.post('http://localhost:3011/api/auth/test-login', {
     data: { email: testEmail, password: testPassword },
   }).catch(() => null);
 
   if (testLoginResponse?.ok()) {
     // Test endpoint worked
-    await page.goto('http://localhost:3002/dashboard');
+    await page.goto('http://localhost:3011/dashboard');
     await page.waitForLoadState('networkidle');
     console.log('✅ Teacher authentication successful via test endpoint');
   } else {

@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Student App', () => {
   // Use the app's base URL
-  test.use({ baseURL: 'http://localhost:3000' });
+  test.use({ baseURL: 'http://localhost:3011' });
 
   test.describe('Homepage', () => {
     test('should load app homepage', async ({ page }) => {
@@ -84,7 +84,7 @@ test.describe('Student App', () => {
 });
 
 test.describe('Phone Verification Flow', () => {
-  test.use({ baseURL: 'http://localhost:3000' });
+  test.use({ baseURL: 'http://localhost:3011' });
 
   test('should show phone verification modal', async ({ page }) => {
     // This test would typically require authentication setup
@@ -105,7 +105,7 @@ test.describe('Phone Verification Flow', () => {
 });
 
 test.describe('API Routes', () => {
-  test.use({ baseURL: 'http://localhost:3000' });
+  test.use({ baseURL: 'http://localhost:3011' });
 
   test('should have health check endpoint', async ({ request }) => {
     // Check if there's a health endpoint

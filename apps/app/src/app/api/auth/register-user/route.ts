@@ -7,11 +7,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient } from '@neram/database';
 
 // CORS headers for cross-domain requests
 const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3000',
+  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -32,7 +32,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify the Firebase ID token
-    const decodedToken = await verifyIdToken(idToken);
+    let decodedToken;
+    try {
+      decodedToken = await verifyIdToken(idToken);
+    } catch (tokenError) {
+      console.error('Firebase token verification failed:', tokenError);
+      return NextResponse.json(
+        { error: 'Invalid authentication token' },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    const adminClient = getSupabaseAdminClient();
 
     // Get or create user in Supabase
     const user = await getOrCreateUserFromFirebase({
@@ -40,12 +51,13 @@ export async function POST(req: NextRequest) {
       email: decodedToken.email || null,
       phoneNumber: decodedToken.phone_number || null,
       displayName: decodedToken.name || null,
+      photoURL: decodedToken.picture || null,
     });
 
-    // Update last login time
+    // Update last login time (use admin client to bypass RLS)
     await updateUser(user.id, {
       last_login_at: new Date().toISOString(),
-    });
+    }, adminClient);
 
     return NextResponse.json({
       user: {
@@ -58,6 +70,7 @@ export async function POST(req: NextRequest) {
         email_verified: user.email_verified,
         user_type: user.user_type,
         status: user.status,
+        onboarding_completed: (user as any).onboarding_completed ?? false,
       },
     }, { headers: corsHeaders });
 

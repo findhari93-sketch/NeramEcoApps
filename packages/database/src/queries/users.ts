@@ -66,22 +66,23 @@ export async function getUserByPhone(
   client?: TypedSupabaseClient
 ): Promise<User | null> {
   const supabase = client || getSupabaseBrowserClient();
-  
+
   // Normalize phone number
   const normalizedPhone = phone.replace(/\D/g, '');
-  
+
+  // Use .limit(1) instead of .single() to handle potential duplicates gracefully
+  // Order by phone_verified desc so we prefer the verified account
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone}`)
-    .single();
-  
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
-  
-  return data;
+    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone},phone.eq.+${normalizedPhone}`)
+    .order('phone_verified', { ascending: false })
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (error) throw error;
+
+  return data && data.length > 0 ? data[0] : null;
 }
 
 /**
@@ -194,7 +195,39 @@ export async function linkMicrosoftToUser(
 }
 
 /**
- * Get or create user from Firebase auth
+ * Check if a phone number is already used by another user.
+ * Returns the existing user if found, null otherwise.
+ */
+export async function checkPhoneExists(
+  phone: string,
+  excludeUserId?: string,
+  client?: TypedSupabaseClient
+): Promise<User | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const normalizedPhone = phone.replace(/\D/g, '');
+
+  let query = supabase
+    .from('users')
+    .select('*')
+    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone},phone.eq.+${normalizedPhone}`);
+
+  if (excludeUserId) {
+    query = query.neq('id', excludeUserId);
+  }
+
+  const { data, error } = await query.limit(1);
+  if (error) throw error;
+
+  return data && data.length > 0 ? data[0] : null;
+}
+
+/**
+ * Get or create user from Firebase auth.
+ *
+ * Lookup order: Firebase UID → Phone → Email → Create new.
+ * If the phone is already taken by another user, the new account is
+ * created WITHOUT the phone to avoid duplicates. The user must verify
+ * their phone separately, which will detect the conflict.
  */
 export async function getOrCreateUserFromFirebase(
   firebaseUser: {
@@ -202,46 +235,91 @@ export async function getOrCreateUserFromFirebase(
     email?: string | null;
     phoneNumber?: string | null;
     displayName?: string | null;
+    photoURL?: string | null;
   },
   client?: TypedSupabaseClient
 ): Promise<User> {
   const supabase = client || getSupabaseAdminClient();
-  
+
+  // Build profile updates from Firebase data (fill missing fields)
+  function buildProfileUpdates(existingUser: User): Record<string, unknown> {
+    const updates: Record<string, unknown> = {};
+    if (firebaseUser.displayName && (!existingUser.name || existingUser.name === 'User')) {
+      updates.name = firebaseUser.displayName;
+    }
+    if (firebaseUser.email && !existingUser.email) {
+      updates.email = firebaseUser.email;
+      updates.email_verified = true;
+    }
+    if (firebaseUser.photoURL && !existingUser.avatar_url) {
+      updates.avatar_url = firebaseUser.photoURL;
+    }
+    return updates;
+  }
+
   // First, try to find by Firebase UID
   let user = await getUserByFirebaseUid(firebaseUser.uid, supabase);
-  if (user) return user;
-  
-  // Try to find by phone or email
+  if (user) {
+    // Update any missing profile fields from Firebase data
+    const updates = buildProfileUpdates(user);
+    if (Object.keys(updates).length > 0) {
+      return updateUser(user.id, updates, supabase);
+    }
+    return user;
+  }
+
+  // Try to find by phone — if found, link this Firebase UID to that existing user
   if (firebaseUser.phoneNumber) {
     user = await getUserByPhone(firebaseUser.phoneNumber, supabase);
     if (user) {
-      // Link Firebase UID to existing user
-      return linkFirebaseToUser(user.id, firebaseUser.uid, supabase);
+      // Link Firebase UID and sync profile data
+      const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
+      return updateUser(user.id, updates, supabase);
     }
   }
-  
+
+  // Try to find by email
   if (firebaseUser.email) {
     user = await getUserByEmail(firebaseUser.email, supabase);
     if (user) {
-      // Link Firebase UID to existing user
-      return linkFirebaseToUser(user.id, firebaseUser.uid, supabase);
+      // Link Firebase UID and sync profile data
+      const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
+      return updateUser(user.id, updates, supabase);
     }
   }
-  
+
+  // Before creating: double-check phone isn't already taken
+  // (covers race conditions and edge cases)
+  let phoneForNewUser = firebaseUser.phoneNumber || null;
+  let phoneVerifiedForNewUser = Boolean(firebaseUser.phoneNumber);
+  if (firebaseUser.phoneNumber) {
+    const existingPhoneUser = await checkPhoneExists(firebaseUser.phoneNumber, undefined, supabase);
+    if (existingPhoneUser) {
+      // Phone already belongs to another account — create without phone
+      // User will need to verify phone separately, which will detect the conflict
+      console.warn(
+        `Phone ${firebaseUser.phoneNumber} already belongs to user ${existingPhoneUser.id}. ` +
+        `Creating new user (Firebase UID: ${firebaseUser.uid}) without phone.`
+      );
+      phoneForNewUser = null;
+      phoneVerifiedForNewUser = false;
+    }
+  }
+
   // Create new user
   return createUser({
     name: firebaseUser.displayName || 'User',
     email: firebaseUser.email || null,
-    phone: firebaseUser.phoneNumber || null,
+    phone: phoneForNewUser,
     username: null,
-    avatar_url: null,
+    avatar_url: firebaseUser.photoURL || null,
     firebase_uid: firebaseUser.uid,
     ms_oid: null,
     google_id: null,
     user_type: 'lead',
     status: 'active',
     email_verified: Boolean(firebaseUser.email),
-    phone_verified: Boolean(firebaseUser.phoneNumber),
+    phone_verified: phoneVerifiedForNewUser,
     preferred_language: 'en',
     last_login_at: new Date().toISOString(),
     metadata: null,

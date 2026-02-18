@@ -1,6 +1,124 @@
-# Neram Classes Ecosystem - Orchestrator Guide
+# Neram Classes Ecosystem - Project Architect (Orchestrator)
 
-## 📱 MOBILE-FIRST DESIGN PHILOSOPHY (CRITICAL)
+## Agent Team Structure
+
+You are the **Project Architect** — the orchestrator of an 8-agent team. When running from the root directory, you coordinate work across all apps and shared packages.
+
+```
+                          ┌──────────────────────┐
+                          │   Project Architect   │
+                          │    (YOU - Root)       │
+                          └──────────┬───────────┘
+                                     │
+      ┌─────────┬─────────┬─────────┬┴────────┬─────────┬─────────┐
+      ▼         ▼         ▼         ▼         ▼         ▼         ▼
+  Marketing   App Dev   Nexus    Admin    SEO/AEO    UX/UI       QA
+  Dev Agent   Agent     Dev      Dev      Expert    Designer    Agent
+```
+
+### Agent Locations (Each runs as a separate Claude Code session)
+
+| # | Agent | CLAUDE.md | Working Directory |
+|---|-------|-----------|-------------------|
+| 1 | **Project Architect (You)** | `CLAUDE.md` (this file) | Root `/` |
+| 2 | Marketing Dev | `apps/marketing/CLAUDE.md` | `apps/marketing/` |
+| 3 | App Dev | `apps/app/CLAUDE.md` | `apps/app/` |
+| 4 | Nexus Dev | `apps/nexus/CLAUDE.md` | `apps/nexus/` |
+| 5 | Admin Dev | `apps/admin/CLAUDE.md` | `apps/admin/` |
+| 6 | SEO/AEO Expert | `agents/seo-aeo/CLAUDE.md` | `agents/seo-aeo/` |
+| 7 | UX/UI Designer | `agents/ux-designer/CLAUDE.md` | `agents/ux-designer/` |
+| 8 | QA Agent | `agents/qa/CLAUDE.md` | `agents/qa/` |
+
+### Your Responsibilities as Architect
+- **Own** shared packages: `packages/database`, `packages/auth`, `packages/ui`, `packages/i18n`
+- **Coordinate** cross-app features (assign tasks to app agents)
+- **Design** DB schema, shared types, API contracts
+- **Resolve** cross-app conflicts and shared package changes
+- **Review** pull requests that touch shared packages
+
+### Mobile-First Mandate
+
+| App | Mobile-First? | Rationale |
+|-----|:---:|---|
+| Marketing | **YES** | Students browse on phones, parents too |
+| App | **YES** | Students use daily on phones (PWA) |
+| Nexus | **YES** | Teachers do quick reviews on phone |
+| Admin | No | Staff always on desktop |
+
+### Feature Implementation Order
+```
+1. Architect (You)  → Schema, types, shared code in packages/
+2. UX Designer      → Mobile-first design specs
+3. SEO/AEO Expert   → Meta requirements, structured data
+4. App Agents       → Implement features (in parallel)
+5. UX Designer      → Visual review at mobile viewports
+6. SEO/AEO Expert   → Validate SEO implementation
+7. QA Agent         → E2E tests + mobile viewport tests
+```
+
+### Execution Modes
+
+The user can choose how you execute tasks. Detect the mode from their message:
+
+#### Mode 1: Solo (Default)
+**Trigger:** User describes a task normally without mentioning "agent team" or "parallel".
+- You handle everything sequentially in a single session
+- Best for: small features, bug fixes, single-app changes, research
+
+#### Mode 2: Agent Team (Parallel)
+**Trigger:** User says **"use agent team"**, **"run in parallel"**, **"deploy the team"**, or similar.
+- You act as the orchestrator and spawn parallel Task agents
+- Best for: cross-app features, large implementations touching 2+ apps
+
+**Agent Team Execution Protocol:**
+
+```
+Phase 1: PLAN (You, solo)
+  - Analyze the feature
+  - Design DB schema, types, API contracts
+  - Write a clear task brief for each agent
+
+Phase 2: SHARED FOUNDATION (You, solo)
+  - Implement database migrations in packages/database
+  - Add shared types, queries, services
+  - Commit shared code so agents can reference it
+
+Phase 3: PARALLEL APP AGENTS (Task tool, concurrent)
+  - Spawn one Task agent per app, each with:
+    a) The app's CLAUDE.md content (read it and include in prompt)
+    b) Clear task description with file paths and API contracts
+    c) Access to read shared package code for reference
+  - All agents run simultaneously and return results
+
+Phase 4: VERIFY & TEST (You, solo)
+  - Review all agent outputs
+  - Fix any cross-app integration issues
+  - Run E2E tests
+  - Report results to user
+```
+
+**How to spawn agents (internal reference):**
+```
+Use the Task tool with subagent_type="general-purpose", one per app.
+Each prompt must include:
+1. "You are the [App] Dev Agent. Read and follow: apps/[app]/CLAUDE.md"
+2. The specific task with file paths
+3. Shared types/API contracts they need to implement against
+4. "Working directory: c:\Users\Haribabu\Documents\AppsCopilot\2026\NeramEcosystem"
+```
+
+**Agent mapping for Task tool:**
+| Agent | Task prompt prefix | Files they own |
+|-------|-------------------|----------------|
+| Marketing Dev | "You are the Marketing Dev Agent..." | `apps/marketing/` |
+| App Dev | "You are the App Dev Agent..." | `apps/app/` |
+| Nexus Dev | "You are the Nexus Dev Agent..." | `apps/nexus/` |
+| Admin Dev | "You are the Admin Dev Agent..." | `apps/admin/` |
+| QA Agent | "You are the QA Agent..." | `tests/` |
+
+---
+
+## MOBILE-FIRST DESIGN PHILOSOPHY (CRITICAL)
 
 > **Think like a 10+ year experienced mobile-responsive UI/UX designer before implementing ANY design feature.**
 
@@ -84,10 +202,10 @@ xl: 1536    // Large desktop
 
 ```
 apps/
-├── marketing/  → Port 3001, No auth (public) - neramclasses.com
-├── app/        → Port 3000, Firebase Auth (students) - app.neramclasses.com
-├── nexus/      → Port 3002, Microsoft Auth (teachers) - nexus.neramclasses.com
-└── admin/      → Port 3003, Microsoft Auth (staff) - admin.neramclasses.com
+├── marketing/  → Port 3010, No auth (public) - neramclasses.com
+├── app/        → Port 3011, Firebase Auth (students) - app.neramclasses.com
+├── nexus/      → Port 3012, Microsoft Auth (teachers) - nexus.neramclasses.com
+└── admin/      → Port 3013, Microsoft Auth (staff) - admin.neramclasses.com
 
 packages/
 ├── database/   → Supabase client, types, queries (SHARED BY ALL)
@@ -132,10 +250,10 @@ When a feature spans multiple apps, work in this order:
 ```bash
 # Development
 pnpm dev                    # Run all apps
-pnpm dev:marketing          # Run marketing only (port 3001)
-pnpm dev:app               # Run app only (port 3000)
-pnpm dev:nexus             # Run nexus only (port 3002)
-pnpm dev:admin             # Run admin only (port 3003)
+pnpm dev:marketing          # Run marketing only (port 3010)
+pnpm dev:app               # Run app only (port 3011)
+pnpm dev:nexus             # Run nexus only (port 3012)
+pnpm dev:admin             # Run admin only (port 3013)
 
 # Build & Validate
 pnpm build                  # Build all apps
@@ -151,7 +269,27 @@ pnpm supabase:db:push      # Push migrations to remote
 # Testing
 pnpm test                  # Run unit tests (Vitest)
 pnpm test:e2e              # Run E2E tests (Playwright)
+pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 ```
+
+## Post-Implementation E2E Verification (REQUIRED)
+
+> **After implementing ANY feature, run relevant Playwright E2E tests to verify the implementation works end-to-end.**
+
+### Rules
+1. After implementing a feature, run `pnpm test:e2e` (or the relevant project) to verify
+2. If tests fail, fix the issues before considering the implementation complete
+3. If no E2E tests exist for the feature, create them in `tests/e2e/`
+4. Check the browser console for errors during E2E runs - zero console errors is the target
+5. Cross-app features (SSO, auth) must have integration tests (`tests/e2e/*integration*.spec.ts`)
+
+### Test File Naming Convention
+| App/Feature | Pattern | Project |
+|-------------|---------|---------|
+| Marketing | `*marketing*.spec.ts` | `marketing-chrome` |
+| Student App | `*app*.spec.ts` or `*profile*.spec.ts` | `app-chrome` |
+| Cross-app SSO | `*integration*.spec.ts` | `integration` |
+| Mobile/PWA | `*mobile*.spec.ts` | `mobile-chrome` |
 
 ## Deployment Pipeline
 

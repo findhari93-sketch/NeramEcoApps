@@ -27,7 +27,7 @@ export async function GET(
 
     // Get student profile with course and batch
     const { data: profile } = await (supabase as any)
-      .from('student_profiles')
+      .from('student_profiles' as any)
       .select(`
         *,
         courses:course_id (id, name, course_type, duration_months, total_lessons),
@@ -38,7 +38,7 @@ export async function GET(
 
     // Get payment history
     const { data: payments } = await (supabase as any)
-      .from('payments')
+      .from('payments' as any)
       .select('*')
       .eq('user_id', id)
       .order('created_at', { ascending: false })

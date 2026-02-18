@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
   Box,
@@ -31,10 +30,10 @@ interface ChannelStats {
   videos: YouTubeVideo[];
 }
 
+const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@neramclassesnata';
+
 export default function YouTubeSection() {
   const t = useTranslations('youtube');
-  const params = useParams();
-  const locale = params.locale as string;
 
   const [stats, setStats] = useState<ChannelStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,15 +59,10 @@ export default function YouTubeSection() {
     fetchStats();
   }, []);
 
-  const handleSubscribeClick = () => {
-    // Build the redirect URL back to this page
-    const currentUrl = window.location.href;
-    const encodedRedirect = encodeURIComponent(currentUrl);
-
-    // Redirect to app.neramclasses.com with youtube_subscribe source
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
-    window.location.href = `${appUrl}/login?source=youtube_subscribe&redirect=${encodedRedirect}`;
-  };
+  const channelId = stats?.channelId || process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID || '';
+  const subscribeUrl = channelId
+    ? `https://www.youtube.com/channel/${channelId}?sub_confirmation=1`
+    : `${YOUTUBE_CHANNEL_URL}?sub_confirmation=1`;
 
   if (loading) {
     return (
@@ -102,7 +96,7 @@ export default function YouTubeSection() {
       <Container maxWidth="lg">
         {/* Section Header */}
         <Box sx={{ textAlign: 'center', mb: 6 }}>
-          {/* YouTube Logo/Icon */}
+          {/* YouTube Logo */}
           <Box
             sx={{
               display: 'inline-flex',
@@ -114,11 +108,7 @@ export default function YouTubeSection() {
             <Box
               component="svg"
               viewBox="0 0 24 24"
-              sx={{
-                width: 48,
-                height: 48,
-                fill: '#FF0000',
-              }}
+              sx={{ width: 48, height: 48, fill: '#FF0000' }}
             >
               <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
             </Box>
@@ -141,9 +131,9 @@ export default function YouTubeSection() {
             {t('subtitle')}
           </Typography>
 
-          {/* Subscriber Count Badge */}
+          {/* Channel Stats Badges */}
           {stats && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap', mb: 4 }}>
               <Chip
                 label={`${stats.subscriberCount} ${t('subscribers')}`}
                 color="error"
@@ -182,7 +172,7 @@ export default function YouTubeSection() {
         <Box
           sx={{
             textAlign: 'center',
-            p: 4,
+            p: { xs: 3, md: 4 },
             borderRadius: 3,
             bgcolor: 'background.paper',
             boxShadow: 2,
@@ -194,11 +184,14 @@ export default function YouTubeSection() {
           <Typography color="text.secondary" sx={{ mb: 3 }}>
             {t('ctaDescription')}
           </Typography>
+
           <Button
             variant="contained"
             color="error"
             size="large"
-            onClick={handleSubscribeClick}
+            href={subscribeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             sx={{
               px: 4,
               py: 1.5,
@@ -223,6 +216,7 @@ export default function YouTubeSection() {
           >
             {t('subscribeButton')}
           </Button>
+
           <Typography
             variant="body2"
             color="text.secondary"
@@ -236,7 +230,7 @@ export default function YouTubeSection() {
         <Box sx={{ textAlign: 'center', mt: 4 }}>
           <Button
             variant="text"
-            href="https://www.youtube.com/@neramclassesnata"
+            href={YOUTUBE_CHANNEL_URL}
             target="_blank"
             rel="noopener noreferrer"
             sx={{ textTransform: 'none' }}

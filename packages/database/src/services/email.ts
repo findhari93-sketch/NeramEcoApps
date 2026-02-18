@@ -13,7 +13,7 @@ function getResendClient(): Resend {
   return resendClient;
 }
 
-const FROM_EMAIL = 'Neram Classes <notifications@neramclasses.com>';
+const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'Neram Classes <noreply@neram.co.in>';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@neramclasses.com';
 
 export interface EmailData {
@@ -444,6 +444,180 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
               <div class="info-row"><span class="info-label">Source:</span> ${data.source}</div>
 
               <a href="https://admin.neramclasses.com/leads/${data.leadId}" class="button">Review Application</a>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    'application-confirmation': {
+      subject: 'Application Received - ${data.applicationNumber}',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 0 auto; }
+            .header { background: linear-gradient(135deg, #1565C0, #0D47A1); color: white; padding: 40px 30px; text-align: center; }
+            .header h1 { margin: 0 0 10px; font-size: 28px; }
+            .header p { margin: 0; opacity: 0.9; }
+            .content { padding: 30px; background: #fff; }
+            .app-number { background: #E3F2FD; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+            .app-number-label { color: #666; font-size: 14px; margin-bottom: 5px; }
+            .app-number-value { font-family: 'Courier New', monospace; font-size: 24px; font-weight: bold; color: #1565C0; letter-spacing: 2px; }
+            .section { margin: 25px 0; }
+            .section-title { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 15px; border-bottom: 2px solid #1565C0; padding-bottom: 8px; display: inline-block; }
+            .info-grid { display: table; width: 100%; }
+            .info-row { display: table-row; }
+            .info-label { display: table-cell; padding: 8px 15px 8px 0; color: #666; width: 40%; }
+            .info-value { display: table-cell; padding: 8px 0; font-weight: 500; }
+            .steps { background: #F5F5F5; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .step { display: flex; margin: 15px 0; align-items: flex-start; }
+            .step-num { background: #1565C0; color: white; min-width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px; font-size: 14px; }
+            .step-text { flex: 1; line-height: 1.5; }
+            .cta { text-align: center; margin: 30px 0; }
+            .button { display: inline-block; background: #1565C0; color: white; padding: 14px 40px; text-decoration: none; border-radius: 6px; font-weight: 600; }
+            .footer { background: #F5F5F5; padding: 20px 30px; text-align: center; color: #666; font-size: 13px; }
+            .contact { margin-top: 15px; }
+            .contact a { color: #1565C0; text-decoration: none; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Application Received!</h1>
+              <p>Thank you for applying to Neram Classes</p>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${data.name}</strong>,</p>
+              <p>We're excited to have you begin your journey with Neram Classes! Your application has been successfully submitted and is now under review.</p>
+
+              <div class="app-number">
+                <div class="app-number-label">Your Application Number</div>
+                <div class="app-number-value">${data.applicationNumber}</div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">Application Summary</div>
+                <div class="info-grid">
+                  <div class="info-row">
+                    <div class="info-label">Course Interest:</div>
+                    <div class="info-value">${data.course}</div>
+                  </div>
+                  <div class="info-row">
+                    <div class="info-label">Applicant Category:</div>
+                    <div class="info-value">${data.category}</div>
+                  </div>
+                  <div class="info-row">
+                    <div class="info-label">Target Exam Year:</div>
+                    <div class="info-value">${data.targetYear}</div>
+                  </div>
+                  <div class="info-row">
+                    <div class="info-label">Phone:</div>
+                    <div class="info-value">${data.phone} (Verified ✓)</div>
+                  </div>
+                  <div class="info-row">
+                    <div class="info-label">Location:</div>
+                    <div class="info-value">${data.location}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="steps">
+                <div class="section-title" style="border-bottom: none; padding-bottom: 0;">What happens next?</div>
+                <div class="step">
+                  <div class="step-num">1</div>
+                  <div class="step-text">Our counselor will review your application within <strong>24-48 hours</strong></div>
+                </div>
+                <div class="step">
+                  <div class="step-num">2</div>
+                  <div class="step-text">You'll receive a call to discuss course details, batch timing, and fees</div>
+                </div>
+                <div class="step">
+                  <div class="step-num">3</div>
+                  <div class="step-text">Complete payment to confirm your enrollment and get started!</div>
+                </div>
+              </div>
+
+              <div class="cta">
+                <a href="https://app.neramclasses.com/my-applications" class="button">Track Application Status</a>
+              </div>
+
+              <p style="color: #666; font-size: 14px;">
+                Have questions? Reply to this email or reach us at the contact details below.
+              </p>
+            </div>
+            <div class="footer">
+              <strong>Neram Classes</strong> - Architecture Entrance Coaching
+              <div class="contact">
+                <a href="tel:+919876543210">+91 98765 43210</a> |
+                <a href="mailto:support@neramclasses.com">support@neramclasses.com</a>
+              </div>
+              <div style="margin-top: 10px;">Chennai, Tamil Nadu | www.neramclasses.com</div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    'admin-application-notification': {
+      subject: '[New Application] ${data.applicationNumber} - ${data.name}',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; }
+            .header { background: #1565C0; color: white; padding: 20px; }
+            .header h2 { margin: 0; }
+            .content { padding: 20px; background: #f9f9f9; }
+            .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+            .badge-new { background: #E8F5E9; color: #2E7D32; }
+            .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            .info-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+            .info-table td:first-child { font-weight: 600; width: 40%; color: #666; }
+            .button { display: inline-block; background: #1565C0; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+            .urgent { background: #FFF3E0; padding: 15px; border-left: 4px solid #FF9800; margin: 15px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>New Application Received</h2>
+            </div>
+            <div class="content">
+              <p><span class="badge badge-new">NEW</span> A new application has been submitted</p>
+
+              <table class="info-table">
+                <tr><td>Application #:</td><td><strong>${data.applicationNumber}</strong></td></tr>
+                <tr><td>Name:</td><td>${data.name}</td></tr>
+                <tr><td>Father's Name:</td><td>${data.fatherName || 'Not provided'}</td></tr>
+                <tr><td>Email:</td><td><a href="mailto:${data.email}">${data.email}</a></td></tr>
+                <tr><td>Phone:</td><td><a href="tel:${data.phone}">${data.phone}</a> ${data.phoneVerified ? '✓ Verified' : ''}</td></tr>
+                <tr><td>Course Interest:</td><td>${data.course}</td></tr>
+                <tr><td>Category:</td><td>${data.category}</td></tr>
+                <tr><td>Target Year:</td><td>${data.targetYear}</td></tr>
+                <tr><td>Location:</td><td>${data.location}</td></tr>
+                <tr><td>Hybrid Learning:</td><td>${data.hybridLearning ? 'Yes' : 'No'}</td></tr>
+                <tr><td>Preferred Center:</td><td>${data.center || 'None selected'}</td></tr>
+                <tr><td>Source:</td><td>${data.source}${data.utmSource ? ' (' + data.utmSource + ')' : ''}</td></tr>
+                <tr><td>Submitted At:</td><td>${data.submittedAt}</td></tr>
+              </table>
+
+              ${data.academicInfo ? `
+              <div class="urgent">
+                <strong>Academic Details:</strong><br>
+                ${data.academicInfo}
+              </div>
+              ` : ''}
+
+              <a href="https://admin.neramclasses.com/applications/${data.applicationId}" class="button">Review Application</a>
             </div>
           </div>
         </body>

@@ -7,10 +7,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken, createCustomToken } from '@/lib/firebase-admin';
+import { getOrCreateUserFromFirebase } from '@neram/database';
 
 // CORS headers for cross-domain requests
 const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3000',
+  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -32,9 +33,22 @@ export async function POST(req: NextRequest) {
 
     // Verify the ID token
     const decodedToken = await verifyIdToken(idToken);
+    console.log('[exchange-token] Verified ID token for UID:', decodedToken.uid);
+    console.log('[exchange-token] Token issuer:', decodedToken.iss);
+
+    // Sync Google profile data to Supabase while we have the full token data
+    // (custom tokens only carry UID, so register-user won't have this data)
+    await getOrCreateUserFromFirebase({
+      uid: decodedToken.uid,
+      email: decodedToken.email || null,
+      phoneNumber: decodedToken.phone_number || null,
+      displayName: decodedToken.name || null,
+      photoURL: decodedToken.picture || null,
+    });
 
     // Create a custom token for the user
     const customToken = await createCustomToken(decodedToken.uid);
+    console.log('[exchange-token] Custom token created for UID:', decodedToken.uid, 'Admin email:', process.env.FIREBASE_ADMIN_CLIENT_EMAIL);
 
     return NextResponse.json(
       {
@@ -49,7 +63,7 @@ export async function POST(req: NextRequest) {
       { headers: corsHeaders }
     );
   } catch (error: any) {
-    console.error('Token exchange error:', error);
+    console.error('[exchange-token] Error:', error.code, error.message);
 
     // Handle specific Firebase errors
     if (error.code === 'auth/id-token-expired') {

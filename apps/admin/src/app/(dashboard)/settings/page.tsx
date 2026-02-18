@@ -12,8 +12,11 @@ import {
   Switch,
   FormControlLabel,
 } from '@neram/ui';
+import { useRouter } from 'next/navigation';
+import { KeyboardArrowRight as ArrowRightIcon } from '@mui/icons-material';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [settings, setSettings] = useState({
     siteName: 'Neram Classes',
     siteEmail: 'admin@neramclasses.com',
@@ -129,6 +132,18 @@ export default function SettingsPage() {
                 label="SMS Notifications"
               />
             </Box>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Button
+              variant="outlined"
+              endIcon={<ArrowRightIcon />}
+              onClick={() => router.push('/settings/notifications')}
+              fullWidth
+              sx={{ justifyContent: 'space-between', textTransform: 'none' }}
+            >
+              Manage Notification Recipients
+            </Button>
           </Paper>
 
           <Paper sx={{ p: 3, mt: 3 }}>

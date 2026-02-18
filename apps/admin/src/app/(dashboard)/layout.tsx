@@ -50,7 +50,6 @@ export default function DashboardLayout({
           flexGrow: 1,
           p: 3,
           width: `calc(100% - ${SIDEBAR_WIDTH}px)`,
-          ml: `${SIDEBAR_WIDTH}px`,
           bgcolor: 'background.default',
         }}
       >

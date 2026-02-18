@@ -23,20 +23,20 @@ export async function GET() {
     ] = await Promise.all([
       // Total students count
       supabase
-        .from('users')
+        .from('users' as any)
         .select('id', { count: 'exact', head: true })
         .eq('user_type', 'student')
         .eq('status', 'active'),
 
       // Pending leads count
       supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         .select('id', { count: 'exact', head: true })
         .eq('status', 'new'),
 
       // Pending payments count
       supabase
-        .from('payments')
+        .from('payments' as any)
         .select('id', { count: 'exact', head: true })
         .eq('status', 'pending'),
 
@@ -48,7 +48,7 @@ export async function GET() {
 
       // Recent leads (last 5)
       supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         .select(`
           *,
           users:user_id (id, name, email, phone, created_at)
@@ -58,7 +58,7 @@ export async function GET() {
 
       // Recent payments (last 5)
       supabase
-        .from('payments')
+        .from('payments' as any)
         .select(`
           *,
           users:user_id (id, name, email)
@@ -72,7 +72,7 @@ export async function GET() {
     lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
 
     const { count: lastMonthStudents } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('id', { count: 'exact', head: true })
       .eq('user_type', 'student')
       .eq('status', 'active')

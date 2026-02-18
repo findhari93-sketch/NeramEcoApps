@@ -9,6 +9,7 @@ export {
   getSupabaseBrowserClient,
   createServerClient,
   getSupabaseAdminClient,
+  getSupabaseAdminClient as createAdminClient,
   isSupabaseConfigured,
   handleSupabaseError,
   supabase,
@@ -21,13 +22,61 @@ export * from './types';
 // Queries
 export * from './queries';
 
-// Services
+// Services - Email
 export {
   sendEmail,
   sendTemplateEmail,
   notifyAdmin,
 } from './services/email';
 export type { EmailData, TemplateData } from './services/email';
+
+// Services - Telegram
+export {
+  sendTelegramMessage,
+  isTelegramConfigured,
+  formatOnboardingMessage,
+  formatOnboardingSkippedMessage,
+  formatApplicationMessage,
+  formatPaymentMessage,
+  formatScholarshipSubmittedMessage,
+  formatScholarshipApprovedMessage,
+  formatScholarshipRejectedMessage,
+  formatCallbackRequestMessage,
+} from './services/telegram';
+export type {
+  OnboardingNotificationData,
+  ApplicationNotificationData,
+  PaymentNotificationData,
+  ScholarshipNotificationData,
+  CallbackNotificationData,
+} from './services/telegram';
+
+// Services - WhatsApp
+export {
+  sendWhatsAppTemplate,
+  sendApplicationConfirmation as sendWhatsAppApplicationConfirmation,
+  sendApplicationApproved as sendWhatsAppApplicationApproved,
+  sendScholarshipAvailableNotification as sendWhatsAppScholarshipAvailable,
+  sendScholarshipApprovedNotification as sendWhatsAppScholarshipApproved,
+  sendScholarshipRejectedNotification as sendWhatsAppScholarshipRejected,
+  isWhatsAppConfigured,
+} from './services/whatsapp';
+
+// Services - Unified Notifications
+export {
+  dispatchNotification,
+  notifyOnboardingCompleted,
+  notifyOnboardingSkipped,
+  notifyNewApplication,
+  notifyPaymentReceived,
+  notifyApplicationApproved,
+  notifyScholarshipOpened,
+  notifyScholarshipSubmitted,
+  notifyScholarshipApproved,
+  notifyScholarshipRejected,
+  notifyScholarshipRevisionRequested,
+  notifyNewCallback,
+} from './services/notifications';
 
 // Data
 export {

@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     // Find or create user
     let user: User | null = null;
     const { data: existingUser } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('*')
       .eq('email', userInfo.email)
       .single();
@@ -112,14 +112,14 @@ export async function GET(request: NextRequest) {
       // Update Google ID if not set
       if (!(existingUser as User).google_id) {
         await supabase
-          .from('users')
+          .from('users' as any)
           .update({ google_id: userInfo.id } as never)
           .eq('id', (existingUser as User).id);
       }
     } else {
       // Create new user
       const { data: newUser, error: createError } = await supabase
-        .from('users')
+        .from('users' as any)
         .insert({
           email: userInfo.email,
           name: userInfo.name,
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
     // Check if user already has a YouTube subscription coupon
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existingCoupon } = await supabase
-      .from('youtube_subscription_coupons')
+      .from('youtube_subscription_coupons' as any)
       .select('*, coupons(*)')
       .eq('user_id', user.id)
       .eq('youtube_channel_id', YOUTUBE_CHANNEL_ID)
@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
       validUntil.setDate(validUntil.getDate() + 30); // Valid for 30 days
 
       const { data: newCoupon, error: couponError } = await supabase
-        .from('coupons')
+        .from('coupons' as any)
         .insert({
           code: couponCode,
           discount_type: 'fixed',
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
 
       // Create YouTube subscription record
       const { error: subscriptionError } = await supabase
-        .from('youtube_subscription_coupons')
+        .from('youtube_subscription_coupons' as any)
         .insert({
           user_id: user.id,
           coupon_id: newCoupon?.id,
@@ -214,13 +214,13 @@ export async function GET(request: NextRequest) {
 
       // Also create a cashback claim record for admin visibility
       const { data: leadProfile } = await supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         .select('id')
         .eq('user_id', user.id)
         .single() as { data: { id: string } | null };
 
       await supabase
-        .from('cashback_claims')
+        .from('cashback_claims' as any)
         .upsert({
           lead_profile_id: leadProfile?.id || null,
           user_id: user.id,

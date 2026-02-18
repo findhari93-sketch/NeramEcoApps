@@ -42,7 +42,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://localhost:3001',
+    baseURL: 'http://localhost:3010',
 
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
@@ -71,7 +71,7 @@ export default defineConfig({
       name: 'marketing-chrome',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3001',
+        baseURL: 'http://localhost:3010',
       },
       testMatch: /.*marketing.*\.spec\.ts/,
       // No auth needed for marketing site
@@ -84,11 +84,11 @@ export default defineConfig({
       name: 'app-chrome',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3000',
+        baseURL: 'http://localhost:3011',
         // Reuse saved authentication state
         storageState: STUDENT_AUTH_FILE,
       },
-      testMatch: /.*app.*\.spec\.ts/,
+      testMatch: /.*(app|profile).*\.spec\.ts/,
       // Run after setup completes
       dependencies: ['setup'],
     },
@@ -100,7 +100,7 @@ export default defineConfig({
       name: 'mobile-chrome',
       use: {
         ...devices['Pixel 5'],
-        baseURL: 'http://localhost:3000',
+        baseURL: 'http://localhost:3011',
         // Reuse saved authentication state
         storageState: STUDENT_AUTH_FILE,
       },
@@ -115,7 +115,7 @@ export default defineConfig({
       name: 'nexus-chrome',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3002',
+        baseURL: 'http://localhost:3012',
         // Reuse saved teacher authentication state
         storageState: TEACHER_AUTH_FILE,
       },
@@ -130,7 +130,7 @@ export default defineConfig({
       name: 'admin-chrome',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3003',
+        baseURL: 'http://localhost:3013',
         // Reuse saved teacher authentication state (admins use same MS auth)
         storageState: TEACHER_AUTH_FILE,
       },
@@ -145,7 +145,7 @@ export default defineConfig({
       name: 'integration',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3001',
+        baseURL: 'http://localhost:3010',
         storageState: STUDENT_AUTH_FILE,
       },
       testMatch: /.*integration.*\.spec\.ts/,
@@ -157,29 +157,29 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm dev:marketing',
-      url: 'http://localhost:3001',
+      url: 'http://localhost:3010',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000, // 2 minutes for Next.js to start
     },
     {
       command: 'pnpm dev:app',
-      url: 'http://localhost:3000',
+      url: 'http://localhost:3011',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
     },
-    // Uncomment these when you have tests for nexus/admin
+    // Uncomment when you have tests for nexus
     // {
     //   command: 'pnpm dev:nexus',
-    //   url: 'http://localhost:3002',
+    //   url: 'http://localhost:3012',
     //   reuseExistingServer: !process.env.CI,
     //   timeout: 120 * 1000,
     // },
-    // {
-    //   command: 'pnpm dev:admin',
-    //   url: 'http://localhost:3003',
-    //   reuseExistingServer: !process.env.CI,
-    //   timeout: 120 * 1000,
-    // },
+    {
+      command: 'pnpm dev:admin',
+      url: 'http://localhost:3013',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
   ],
 
   /* Output folder for test artifacts */

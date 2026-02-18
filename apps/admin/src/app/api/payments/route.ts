@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const enhancedPayments = await Promise.all(
       payments.map(async (payment) => {
         const { data: user } = await (supabase as any)
-          .from('users')
+          .from('users' as any)
           .select('name, email, phone')
           .eq('id', payment.user_id)
           .single();

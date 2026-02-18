@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     // Get lead profile with fee details
     const { data: leadProfile, error: leadError } = await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       .select(`
         *,
         scholarship_applications(scholarship_percentage, verification_status)
@@ -62,7 +62,12 @@ export async function POST(request: NextRequest) {
 
     let amount = leadProfile.final_fee;
 
-    // For installment payment, calculate first installment (50%)
+    // Apply full payment discount for full payment scheme
+    if (paymentScheme === 'full' && leadProfile.full_payment_discount) {
+      amount = leadProfile.final_fee - leadProfile.full_payment_discount;
+    }
+
+    // For installment payment, calculate first installment (50% of total fee, no discount)
     if (paymentScheme === 'installment') {
       amount = Math.ceil(leadProfile.final_fee / 2);
     }
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     // Store payment record
     const { data: payment, error: paymentError } = await supabase
-      .from('payments')
+      .from('payments' as any)
       // @ts-ignore - Supabase types not generated
       .insert({
         lead_profile_id: leadProfileId,

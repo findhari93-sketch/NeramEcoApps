@@ -20,17 +20,25 @@ export {
   initRecaptcha,
   sendPhoneOTP,
   verifyPhoneOTP,
+  verifyPhoneAndLink,
   linkPhoneToAccount,
+  clearRecaptcha,
+  getConfirmationResult,
   getCurrentUser,
   signOut as firebaseSignOut,
   onAuthChange,
   updateUserProfile,
   sendVerificationEmail,
+  // Password management
+  changePassword,
+  setPasswordForOAuthUser,
   // Cross-domain redirect helpers
   setAuthRedirectUrl,
   getAuthRedirectUrl,
   hasAuthRedirectUrl,
   clearAuthRedirectUrl,
+  // Cross-domain auth
+  signInWithCustomToken,
 } from './firebase';
 export type { FirebaseUser, ConfirmationResult } from './firebase';
 

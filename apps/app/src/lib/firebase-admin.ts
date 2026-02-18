@@ -67,3 +67,25 @@ export async function createCustomToken(uid: string) {
   const auth = getFirebaseAdminAuth();
   return auth.createCustomToken(uid);
 }
+
+/**
+ * Verify that Firebase Admin SDK credentials are valid.
+ * Useful for diagnosing auth/invalid-custom-token errors.
+ */
+export async function verifyAdminConfig(): Promise<{
+  ok: boolean;
+  projectId: string | undefined;
+  clientEmail: string | undefined;
+  error?: string;
+}> {
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+
+  try {
+    const auth = getFirebaseAdminAuth();
+    await auth.listUsers(1);
+    return { ok: true, projectId, clientEmail };
+  } catch (error: any) {
+    return { ok: false, projectId, clientEmail, error: error.message };
+  }
+}
