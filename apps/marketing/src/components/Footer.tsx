@@ -8,6 +8,7 @@ import {
   Grid,
   Link as MuiLink,
   Divider,
+  Chip,
 } from '@neram/ui';
 import { Link } from '@neram/ui';
 import { type Locale } from '@/i18n';
@@ -66,6 +67,20 @@ export default function Footer() {
             <Typography variant="body2" sx={{ opacity: 0.9 }}>
               Excellence in Education
             </Typography>
+            <Chip
+              label="Supported by Microsoft"
+              size="small"
+              sx={{
+                mt: 1.5,
+                height: 22,
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                bgcolor: 'rgba(255,255,255,0.15)',
+                color: 'inherit',
+                border: '1px solid rgba(255,255,255,0.3)',
+                '& .MuiChip-label': { px: 1.5 },
+              }}
+            />
           </Grid>
 
           {/* Quick Links */}

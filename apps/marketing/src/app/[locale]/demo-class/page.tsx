@@ -105,12 +105,12 @@ export default function DemoClassPage() {
     if (user) {
       setFormData(prev => ({
         ...prev,
-        name: user.displayName || prev.name,
+        name: user.name || prev.name,
         email: user.email || prev.email,
-        phone: user.phoneNumber?.replace('+91', '') || prev.phone,
+        phone: user.phone?.replace('+91', '') || prev.phone,
       }));
-      if (user.phoneNumber) {
-        setVerifiedPhone(user.phoneNumber.replace('+91', ''));
+      if (user.phone) {
+        setVerifiedPhone(user.phone.replace('+91', ''));
       }
     }
   }, [user]);
@@ -231,7 +231,7 @@ export default function DemoClassPage() {
           currentClass: formData.currentClass,
           interestCourse: formData.interestCourse,
           city: formData.city,
-          firebaseUid: user?.uid,
+          firebaseUid: user?.id,
         }),
       });
 

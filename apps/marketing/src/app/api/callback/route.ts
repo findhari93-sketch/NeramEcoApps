@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, notifyNewCallback } from '@neram/database';
 import {
   createCallbackRequest,
   getCallbackRequestsByUserId,
@@ -46,7 +46,7 @@ async function tryVerifyToken(request: NextRequest): Promise<{ userId: string } 
 
     const supabase = createAdminClient();
     const { data: user } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('id')
       .eq('firebase_uid', decodedToken.uid)
       .single();
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
     const cleanPhone = body.phone.replace(/^\+91/, '').replace(/\s/g, '');
 
     const { count } = await supabase
-      .from('callback_requests')
+      .from('callback_requests' as any)
       .select('*', { count: 'exact', head: true })
       .eq('phone', cleanPhone)
       .gte('created_at', oneHourAgo);
@@ -175,8 +175,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
 
     const callback = await createCallbackRequest(supabase, callbackData);
 
-    // TODO: Send notification to admin (email/WhatsApp)
-    // TODO: Send confirmation SMS to user
+    // Notify admin via Telegram, email, and in-app bell (non-blocking)
+    notifyNewCallback({
+      userId: auth?.userId,
+      userName: callbackData.name,
+      phone: callbackData.phone,
+      preferredSlot: callbackData.preferred_slot,
+      preferredDate: callbackData.preferred_date,
+      courseInterest: callbackData.course_interest,
+      queryType: callbackData.query_type,
+      notes: callbackData.notes,
+    }).catch((err) => {
+      console.error('Callback notification dispatch failed:', err);
+    });
 
     return NextResponse.json(
       { success: true, data: callback },

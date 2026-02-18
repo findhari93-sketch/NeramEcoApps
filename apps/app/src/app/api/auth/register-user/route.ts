@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
         email_verified: user.email_verified,
         user_type: user.user_type,
         status: user.status,
+        onboarding_completed: (user as any).onboarding_completed ?? false,
       },
     }, { headers: corsHeaders });
 

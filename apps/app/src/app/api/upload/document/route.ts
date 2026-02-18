@@ -84,14 +84,14 @@ export async function POST(request: NextRequest) {
 
     // Store document reference in database
     const { data: leadProfile } = await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       .select('id')
       .eq('user_id', user.id)
       .single();
 
     if (leadProfile) {
       await supabase
-        .from('application_documents')
+        .from('application_documents' as any)
         // @ts-ignore - Supabase types not generated
         .insert({
           lead_profile_id: leadProfile.id,

@@ -13,7 +13,7 @@ function getResendClient(): Resend {
   return resendClient;
 }
 
-const FROM_EMAIL = 'Neram Classes <notifications@neramclasses.com>';
+const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'Neram Classes <noreply@neram.co.in>';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@neramclasses.com';
 
 export interface EmailData {

@@ -167,19 +167,19 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
     },
-    // Uncomment these when you have tests for nexus/admin
+    // Uncomment when you have tests for nexus
     // {
     //   command: 'pnpm dev:nexus',
     //   url: 'http://localhost:3012',
     //   reuseExistingServer: !process.env.CI,
     //   timeout: 120 * 1000,
     // },
-    // {
-    //   command: 'pnpm dev:admin',
-    //   url: 'http://localhost:3013',
-    //   reuseExistingServer: !process.env.CI,
-    //   timeout: 120 * 1000,
-    // },
+    {
+      command: 'pnpm dev:admin',
+      url: 'http://localhost:3013',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
   ],
 
   /* Output folder for test artifacts */

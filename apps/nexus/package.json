@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3012",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@neram/auth": "workspace:*",

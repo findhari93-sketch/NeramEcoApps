@@ -16,7 +16,7 @@ export type UserType = 'lead' | 'student' | 'teacher' | 'admin';
 export type UserStatus = 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual';
-export type CourseType = 'nata' | 'jee_paper2' | 'both';
+export type CourseType = 'nata' | 'jee_paper2' | 'both' | 'not_sure';
 export type ExamType = 'NATA' | 'JEE_PAPER_2' | 'BOTH';
 
 // New enums for application form
@@ -49,6 +49,26 @@ export type DemoSlotStatus = 'draft' | 'scheduled' | 'confirmed' | 'conducted' |
 export type DemoRegistrationStatus = 'pending' | 'approved' | 'rejected' | 'attended' | 'no_show' | 'cancelled';
 export type DemoMode = 'online' | 'offline' | 'hybrid';
 export type EnrollmentInterest = 'yes' | 'maybe' | 'no';
+
+// Learning mode enum (migration 008)
+export type LearningMode = 'hybrid' | 'online_only';
+
+// School type enum (migration 010)
+export type SchoolType = 'private_school' | 'government_aided' | 'government_school';
+
+// Admin application management (migration 015)
+export type ContactedStatus = 'talked' | 'unreachable' | 'callback_scheduled';
+export type PaymentRecommendation = 'full' | 'installment';
+
+// Scholarship application status enum (migration 010)
+export type ScholarshipApplicationStatus =
+  | 'not_eligible'
+  | 'eligible_pending'
+  | 'documents_submitted'
+  | 'under_review'
+  | 'approved'
+  | 'rejected'
+  | 'revision_requested';
 
 // ============================================
 // BASE TYPES
@@ -196,6 +216,7 @@ export interface SchoolStudentAcademicData {
   school_place_id?: string;           // Google Places ID
   board: string;                      // 'cbse', 'icse', 'state_tn', etc.
   previous_percentage?: number;       // Optional
+  school_type?: SchoolType;           // Private, Government-Aided, Government (migration 010)
 }
 
 /**
@@ -290,6 +311,7 @@ export interface LeadProfile extends Timestamps {
   selected_course_id: string | null;
   selected_center_id: string | null;
   hybrid_learning_accepted: boolean;
+  learning_mode: LearningMode;
 
   // Application status (migration 005)
   status: ApplicationStatus;
@@ -337,18 +359,31 @@ export interface LeadProfile extends Timestamps {
   form_step_completed: number;
   form_completed_at: string | null;
 
+  // Admin contact tracking (migration 015)
+  contacted_status: ContactedStatus | null;
+  contacted_at: string | null;
+  contacted_by: string | null;
+  payment_recommendation: PaymentRecommendation;
+
   // Notification tracking
   email_sent_at: string | null;
   whatsapp_sent_at: string | null;
   last_reminder_sent_at: string | null;
+
+  // School type & scholarship (migration 010)
+  school_type: SchoolType | null;
+  scholarship_eligible: boolean;
+  scholarship_opened_at: string | null;
+  scholarship_opened_by: string | null;
 }
 
 /**
- * Scholarship applications - for 95% scholarship eligibility
+ * Scholarship applications - for government school student scholarship
  */
 export interface ScholarshipApplication extends Timestamps {
   id: string;
   lead_profile_id: string;
+  user_id: string | null;
 
   // School verification
   is_government_school: boolean;
@@ -358,6 +393,8 @@ export interface ScholarshipApplication extends Timestamps {
   // Documents
   school_id_card_url: string | null;
   income_certificate_url: string | null;
+  aadhar_card_url: string | null;
+  mark_sheet_url: string | null;
 
   // Income verification
   is_low_income: boolean;
@@ -367,12 +404,21 @@ export interface ScholarshipApplication extends Timestamps {
   scholarship_percentage: number;
   eligibility_reason: string | null;
 
-  // Admin verification
+  // Legacy admin verification
   verification_status: ScholarshipVerificationStatus;
   verified_by: string | null;
   verified_at: string | null;
   verification_notes: string | null;
   rejection_reason: string | null;
+
+  // Enhanced scholarship workflow (migration 010)
+  scholarship_status: ScholarshipApplicationStatus;
+  approved_fee: number | null;
+  revision_notes: string | null;
+  revision_requested_at: string | null;
+  revision_requested_by: string | null;
+  submitted_at: string | null;
+  admin_notes: string | null;
 }
 
 /**
@@ -778,6 +824,28 @@ export const APPLICANT_CATEGORY_OPTIONS: { value: ApplicantCategory; label: stri
   { value: 'college_student', label: 'College Student', description: 'Currently in degree college' },
   { value: 'working_professional', label: 'Working Professional', description: 'Working or completed education' },
 ];
+
+/**
+ * School type options for form dropdown (migration 010)
+ */
+export const SCHOOL_TYPE_OPTIONS: { value: SchoolType; label: string }[] = [
+  { value: 'private_school', label: 'Private School' },
+  { value: 'government_aided', label: 'Government-Aided School' },
+  { value: 'government_school', label: 'Government School' },
+];
+
+/**
+ * Scholarship application status labels
+ */
+export const SCHOLARSHIP_STATUS_CONFIG: Record<ScholarshipApplicationStatus, { label: string; color: string }> = {
+  not_eligible: { label: 'Not Eligible', color: '#9E9E9E' },
+  eligible_pending: { label: 'Eligible - Pending Documents', color: '#FF9800' },
+  documents_submitted: { label: 'Documents Submitted', color: '#2196F3' },
+  under_review: { label: 'Under Review', color: '#9C27B0' },
+  approved: { label: 'Approved', color: '#4CAF50' },
+  rejected: { label: 'Rejected', color: '#F44336' },
+  revision_requested: { label: 'Revision Requested', color: '#FF5722' },
+};
 
 // ============================================
 // STUDENT & TEACHER PROFILES
@@ -1527,7 +1595,375 @@ export const INTEREST_COURSE_OPTIONS = [
   { value: 'nata', label: 'NATA' },
   { value: 'jee_paper2', label: 'JEE Paper 2' },
   { value: 'both', label: 'Both NATA & JEE' },
+  { value: 'not_sure', label: 'Not Sure Yet' },
 ] as const;
+
+// ============================================
+// ONBOARDING TABLES (migration 007)
+// ============================================
+
+export type OnboardingQuestionType = 'single_select' | 'multi_select' | 'scale';
+export type OnboardingSessionStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
+export type ProgramType = 'year_long' | 'crash_course';
+export type NotificationEventType =
+  | 'new_onboarding'
+  | 'onboarding_skipped'
+  | 'new_application'
+  | 'payment_received'
+  | 'demo_registration'
+  | 'new_callback'
+  | 'scholarship_opened'
+  | 'scholarship_submitted'
+  | 'scholarship_approved'
+  | 'scholarship_rejected'
+  | 'scholarship_revision_requested'
+  | 'application_approved';
+export type NotificationRecipientRole = 'admin' | 'team_lead' | 'team_member';
+
+/**
+ * Onboarding questions - admin-configurable
+ */
+export interface OnboardingQuestion extends Timestamps {
+  id: string;
+  question_key: string;
+  question_text: string;
+  question_text_ta: string | null;
+  question_type: OnboardingQuestionType;
+  options: OnboardingQuestionOption[] | OnboardingScaleOptions;
+  display_order: number;
+  is_active: boolean;
+  is_required: boolean;
+  maps_to_field: string | null;
+}
+
+export interface OnboardingQuestionOption {
+  value: string;
+  label: string;
+  label_ta?: string;
+  icon?: string;
+}
+
+export interface OnboardingScaleOptions {
+  min: number;
+  max: number;
+  min_label: string;
+  max_label: string;
+  min_label_ta?: string;
+  max_label_ta?: string;
+}
+
+/**
+ * Onboarding responses - user answers
+ */
+export interface OnboardingResponse {
+  id: string;
+  user_id: string;
+  question_id: string;
+  response: OnboardingResponseValue;
+  responded_at: string;
+}
+
+export type OnboardingResponseValue =
+  | { value: string }
+  | { values: string[] }
+  | { scale: number };
+
+/**
+ * Onboarding sessions - tracks completion
+ */
+export interface OnboardingSession extends Timestamps {
+  id: string;
+  user_id: string;
+  status: OnboardingSessionStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  skipped_at: string | null;
+  source_app: 'marketing' | 'app' | null;
+  questions_answered: number;
+  total_questions: number;
+  admin_notified: boolean;
+  telegram_notified: boolean;
+}
+
+/**
+ * Fee structures - admin-managed pricing
+ */
+export interface FeeStructure extends Timestamps {
+  id: string;
+  course_type: CourseType;
+  program_type: ProgramType;
+  display_name: string;
+  display_name_ta: string | null;
+  fee_amount: number;
+  combo_extra_fee: number;
+  duration: string;
+  schedule_summary: string | null;
+  features: string[];
+  is_active: boolean;
+  display_order: number;
+
+  // Payment options (migration 010)
+  single_payment_discount: number;
+  installment_1_amount: number | null;
+  installment_2_amount: number | null;
+  is_hidden_from_public: boolean;
+}
+
+/**
+ * Notification recipients - admin-managed team members
+ */
+export interface NotificationRecipient extends Timestamps {
+  id: string;
+  email: string;
+  name: string;
+  role: NotificationRecipientRole;
+  notification_preferences: NotificationPreferences;
+  is_active: boolean;
+  added_by: string | null;
+}
+
+export interface NotificationPreferences {
+  new_onboarding: boolean;
+  onboarding_skipped: boolean;
+  new_application: boolean;
+  payment_received: boolean;
+  demo_registration: boolean;
+  new_callback: boolean;
+  daily_summary: boolean;
+  // Scholarship events (migration 010)
+  scholarship_opened: boolean;
+  scholarship_submitted: boolean;
+  scholarship_approved: boolean;
+  scholarship_rejected: boolean;
+  scholarship_revision_requested: boolean;
+  // Application approval (migration 015)
+  application_approved: boolean;
+}
+
+/**
+ * Admin notifications - in-app notification bell
+ */
+export interface AdminNotification {
+  id: string;
+  event_type: NotificationEventType;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  is_read: boolean;
+  read_by: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Input types for onboarding
+ */
+export interface SaveOnboardingResponsesInput {
+  user_id: string;
+  responses: {
+    question_id: string;
+    response: OnboardingResponseValue;
+  }[];
+  source_app: 'marketing' | 'app';
+}
+
+export interface CreateFeeStructureInput {
+  course_type: CourseType;
+  program_type: ProgramType;
+  display_name: string;
+  display_name_ta?: string;
+  fee_amount: number;
+  combo_extra_fee?: number;
+  duration: string;
+  schedule_summary?: string;
+  features?: string[];
+  display_order?: number;
+  // Payment options (migration 010)
+  single_payment_discount?: number;
+  installment_1_amount?: number;
+  installment_2_amount?: number;
+  is_hidden_from_public?: boolean;
+}
+
+export interface NotificationEvent {
+  type: NotificationEventType;
+  title: string;
+  message: string;
+  data: Record<string, unknown>;
+}
+
+// ============================================
+// CRM PIPELINE TYPES (for admin user management)
+// ============================================
+
+/**
+ * Pipeline stages - non-linear, shows highest stage reached.
+ * Users can skip stages (e.g., skip demo and go straight to application).
+ */
+export type PipelineStage =
+  | 'new_lead'
+  | 'demo_requested'
+  | 'demo_attended'
+  | 'phone_verified'
+  | 'application_submitted'
+  | 'admin_approved'
+  | 'payment_complete'
+  | 'enrolled';
+
+/**
+ * Pipeline stage display configuration
+ */
+export const PIPELINE_STAGE_CONFIG: Record<PipelineStage, { label: string; color: string; order: number }> = {
+  new_lead: { label: 'New Lead', color: '#9E9E9E', order: 0 },
+  demo_requested: { label: 'Demo Requested', color: '#2196F3', order: 1 },
+  demo_attended: { label: 'Demo Attended', color: '#03A9F4', order: 2 },
+  phone_verified: { label: 'Phone Verified', color: '#FF9800', order: 3 },
+  application_submitted: { label: 'App Submitted', color: '#9C27B0', order: 4 },
+  admin_approved: { label: 'Approved', color: '#4CAF50', order: 5 },
+  payment_complete: { label: 'Payment Done', color: '#00BCD4', order: 6 },
+  enrolled: { label: 'Enrolled', color: '#388E3C', order: 7 },
+};
+
+/**
+ * Unified user journey row returned from user_journey_view
+ */
+export interface UserJourney {
+  // Core user fields
+  id: string;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  user_type: UserType;
+  status: UserStatus;
+  phone_verified: boolean;
+  email_verified: boolean;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+  preferred_language: string;
+
+  // Computed pipeline stage
+  pipeline_stage: PipelineStage;
+
+  // Lead profile summary
+  lead_profile_id: string | null;
+  application_number: string | null;
+  application_status: ApplicationStatus | null;
+  applicant_category: ApplicantCategory | null;
+  interest_course: CourseType | null;
+  selected_center_id: string | null;
+  learning_mode: LearningMode | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  pincode: string | null;
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  assigned_fee: number | null;
+  final_fee: number | null;
+  payment_scheme: PaymentScheme | null;
+  form_step_completed: number | null;
+  application_created_at: string | null;
+
+  // School type & scholarship (migration 010)
+  school_type: SchoolType | null;
+  scholarship_eligible: boolean;
+  scholarship_status: ScholarshipApplicationStatus | null;
+
+  // Demo class summary
+  has_demo_registration: boolean;
+  demo_registration_count: number;
+  latest_demo_status: DemoRegistrationStatus | null;
+  demo_attended: boolean;
+  demo_survey_completed: boolean;
+
+  // Payment summary
+  total_paid: number;
+  payment_status: PaymentStatus | null;
+  has_pending_payment: boolean;
+  payment_count: number;
+
+  // Student profile
+  student_profile_id: string | null;
+  enrollment_date: string | null;
+  batch_id: string | null;
+  student_course_id: string | null;
+
+  // Onboarding
+  onboarding_status: OnboardingSessionStatus | null;
+  onboarding_completed_at: string | null;
+  onboarding_questions_answered: number;
+}
+
+/**
+ * Filter/pagination options for CRM user list
+ */
+export interface UserJourneyListOptions {
+  pipelineStage?: PipelineStage;
+  search?: string;
+  status?: UserStatus;
+  userType?: UserType;
+  applicationStatus?: ApplicationStatus;
+  interestCourse?: CourseType;
+  hasDemoRegistration?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+  orderBy?: string;
+  orderDirection?: 'asc' | 'desc';
+}
+
+/**
+ * Counts per pipeline stage for the funnel component
+ */
+export interface PipelineStageCounts {
+  new_lead: number;
+  demo_requested: number;
+  demo_attended: number;
+  phone_verified: number;
+  application_submitted: number;
+  admin_approved: number;
+  payment_complete: number;
+  enrolled: number;
+  total: number;
+}
+
+/**
+ * Comprehensive user detail for CRM detail page
+ */
+export interface UserJourneyDetail {
+  user: User;
+  leadProfile: LeadProfile | null;
+  studentProfile: StudentProfile | null;
+  demoRegistrations: (DemoClassRegistration & { slot?: DemoClassSlot; survey?: DemoClassSurvey })[];
+  payments: Payment[];
+  installments: PaymentInstallment[];
+  onboardingSession: OnboardingSession | null;
+  onboardingResponses: (OnboardingResponse & { question?: OnboardingQuestion })[];
+  documents: ApplicationDocument[];
+  scholarshipApplication: ScholarshipApplication | null;
+  cashbackClaims: CashbackClaim[];
+  profileHistory: (UserProfileHistory & { changed_by_user?: Pick<User, 'id' | 'name' | 'email'> })[];
+  adminNotes: AdminUserNote[];
+  pipelineStage: PipelineStage;
+}
+
+/**
+ * Admin user note
+ */
+export interface AdminUserNote {
+  id: string;
+  user_id: string;
+  admin_id: string;
+  admin_name: string;
+  note: string;
+  created_at: string;
+}
 
 // ============================================
 // DATABASE SCHEMA TYPE
@@ -1704,8 +2140,49 @@ export interface Database {
         Insert: Omit<DemoClassSurvey, 'id' | 'submitted_at'> & { id?: string };
         Update: Partial<Omit<DemoClassSurvey, 'id' | 'registration_id' | 'submitted_at'>>;
       };
+      // Onboarding & notifications tables (migration 007)
+      onboarding_questions: {
+        Row: OnboardingQuestion;
+        Insert: Omit<OnboardingQuestion, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<OnboardingQuestion, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      onboarding_responses: {
+        Row: OnboardingResponse;
+        Insert: Omit<OnboardingResponse, 'id' | 'responded_at'> & { id?: string };
+        Update: Partial<Omit<OnboardingResponse, 'id' | 'user_id' | 'question_id'>>;
+      };
+      onboarding_sessions: {
+        Row: OnboardingSession;
+        Insert: Omit<OnboardingSession, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<OnboardingSession, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      fee_structures: {
+        Row: FeeStructure;
+        Insert: Omit<FeeStructure, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<FeeStructure, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      notification_recipients: {
+        Row: NotificationRecipient;
+        Insert: Omit<NotificationRecipient, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<NotificationRecipient, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      admin_notifications: {
+        Row: AdminNotification;
+        Insert: Omit<AdminNotification, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<AdminNotification, 'id' | 'created_at'>>;
+      };
+      // CRM tables (migration 009)
+      admin_user_notes: {
+        Row: AdminUserNote;
+        Insert: Omit<AdminUserNote, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<AdminUserNote, 'id' | 'created_at'>>;
+      };
     };
-    Views: Record<string, never>;
+    Views: {
+      user_journey_view: {
+        Row: UserJourney;
+      };
+    };
     Functions: Record<string, never>;
     Enums: {
       user_type: UserType;
@@ -1736,6 +2213,15 @@ export interface Database {
       demo_registration_status: DemoRegistrationStatus;
       demo_mode: DemoMode;
       enrollment_interest: EnrollmentInterest;
+      // Onboarding & notification enums (migration 007)
+      onboarding_question_type: OnboardingQuestionType;
+      onboarding_session_status: OnboardingSessionStatus;
+      program_type: ProgramType;
+      notification_event_type: NotificationEventType;
+      notification_recipient_role: NotificationRecipientRole;
+      // School type & scholarship enums (migration 010)
+      school_type: SchoolType;
+      scholarship_application_status: ScholarshipApplicationStatus;
     };
   };
 }

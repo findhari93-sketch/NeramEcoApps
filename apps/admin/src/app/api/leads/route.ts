@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const leadsWithProfiles = await Promise.all(
       users.map(async (user) => {
         const { data: profile } = await supabase
-          .from('lead_profiles')
+          .from('lead_profiles' as any)
           .select('*')
           .eq('user_id', user.id)
           .single();

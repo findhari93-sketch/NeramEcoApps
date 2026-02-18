@@ -27,14 +27,14 @@ export async function POST(request: NextRequest) {
       console.log('YouTube API key not configured, marking for manual verification');
 
       const { data: leadProfile } = await supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         .select('id')
         .eq('user_id', user.id)
         .single();
 
       if (leadProfile) {
         await supabase
-          .from('cashback_claims')
+          .from('cashback_claims' as any)
           // @ts-ignore - Supabase types not generated
           .upsert({
             lead_profile_id: leadProfile.id,
@@ -85,14 +85,14 @@ export async function POST(request: NextRequest) {
 
     // Store the claim
     const { data: leadProfile } = await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       .select('id')
       .eq('user_id', user.id)
       .single();
 
     if (leadProfile) {
       await supabase
-        .from('cashback_claims')
+        .from('cashback_claims' as any)
         // @ts-ignore - Supabase types not generated
         .upsert({
           lead_profile_id: leadProfile.id,

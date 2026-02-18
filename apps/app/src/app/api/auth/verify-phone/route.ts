@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, getSupabaseAdminClient } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient } from '@neram/database';
 
 // CORS headers for cross-domain requests
 const corsHeaders = {
@@ -64,6 +64,18 @@ export async function POST(req: NextRequest) {
           { status: 404, headers: corsHeaders }
         );
       }
+    }
+
+    // Check if this phone number is already used by a DIFFERENT user
+    const existingPhoneUser = await checkPhoneExists(phoneNumber, user.id, adminClient);
+    if (existingPhoneUser) {
+      return NextResponse.json(
+        {
+          error: 'PHONE_ALREADY_EXISTS',
+          message: 'This phone number is already registered with another account. Please use a different phone number or sign in with the existing account.',
+        },
+        { status: 409, headers: corsHeaders }
+      );
     }
 
     // Update user with verified phone (use admin client to bypass RLS)

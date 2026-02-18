@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     // Verify lead profile belongs to user
     const { data: leadProfile, error: leadError } = await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       .select('id, final_fee, full_name, email')
       .eq('id', leadProfileId)
       .eq('user_id', user.id)
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Create payment record with pending status (needs admin verification)
     const { data: payment, error: paymentError } = await supabase
-      .from('payments')
+      .from('payments' as any)
       // @ts-ignore - Supabase types not generated
       .insert({
         lead_profile_id: leadProfileId,
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Store document reference
     await supabase
-      .from('application_documents')
+      .from('application_documents' as any)
       // @ts-ignore - Supabase types not generated
       .insert({
         lead_profile_id: leadProfileId,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     // Create direct payment cashback claim (pending admin approval)
     await supabase
-      .from('cashback_claims')
+      .from('cashback_claims' as any)
       // @ts-ignore - Supabase types not generated
       .upsert({
         lead_profile_id: leadProfileId,
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Update lead profile status
     await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       // @ts-ignore - Supabase types not generated
       .update({
         status: 'payment_pending_verification',

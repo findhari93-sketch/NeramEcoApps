@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, Card, CardContent, Typography } from '@neram/ui';
+import { useState } from 'react';
+import { Box, Card, CardContent, Typography, CardActionArea } from '@neram/ui';
 
 interface VideoCardProps {
   video: {
@@ -13,7 +14,14 @@ interface VideoCardProps {
 }
 
 export default function VideoCard({ video }: VideoCardProps) {
+  const [playing, setPlaying] = useState(false);
   const isMockVideo = video.id.startsWith('mock');
+
+  const handlePlay = () => {
+    if (!isMockVideo) {
+      setPlaying(true);
+    }
+  };
 
   return (
     <Card
@@ -23,12 +31,12 @@ export default function VideoCard({ video }: VideoCardProps) {
         flexDirection: 'column',
         transition: 'all 0.3s ease',
         '&:hover': {
-          transform: 'translateY(-8px)',
+          transform: 'translateY(-4px)',
           boxShadow: 6,
         },
       }}
     >
-      {/* Video Embed or Thumbnail */}
+      {/* Video Thumbnail or Embed */}
       <Box
         sx={{
           position: 'relative',
@@ -37,48 +45,9 @@ export default function VideoCard({ video }: VideoCardProps) {
           overflow: 'hidden',
         }}
       >
-        {isMockVideo ? (
-          // Mock video placeholder
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              bgcolor: 'grey.800',
-            }}
-          >
-            <Box
-              sx={{
-                width: 60,
-                height: 60,
-                borderRadius: '50%',
-                bgcolor: 'error.main',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Box
-                sx={{
-                  width: 0,
-                  height: 0,
-                  borderTop: '12px solid transparent',
-                  borderBottom: '12px solid transparent',
-                  borderLeft: '20px solid white',
-                  ml: 1,
-                }}
-              />
-            </Box>
-          </Box>
-        ) : (
-          // YouTube iframe embed
+        {playing ? (
           <iframe
-            src={`https://www.youtube.com/embed/${video.id}?rel=0`}
+            src={`https://www.youtube.com/embed/${video.id}?autoplay=1&rel=0`}
             title={video.title}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -91,6 +60,78 @@ export default function VideoCard({ video }: VideoCardProps) {
               border: 'none',
             }}
           />
+        ) : (
+          <CardActionArea
+            onClick={handlePlay}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+            }}
+          >
+            {/* Thumbnail Image */}
+            {!isMockVideo && video.thumbnail ? (
+              <Box
+                component="img"
+                src={video.thumbnail}
+                alt={video.title}
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  bgcolor: 'grey.800',
+                }}
+              />
+            )}
+
+            {/* Play Button Overlay */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 64,
+                height: 44,
+                bgcolor: 'rgba(255, 0, 0, 0.85)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: '#FF0000',
+                  transform: 'translate(-50%, -50%) scale(1.1)',
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 0,
+                  height: 0,
+                  borderTop: '10px solid transparent',
+                  borderBottom: '10px solid transparent',
+                  borderLeft: '16px solid white',
+                  ml: '3px',
+                }}
+              />
+            </Box>
+          </CardActionArea>
         )}
       </Box>
 
@@ -111,11 +152,9 @@ export default function VideoCard({ video }: VideoCardProps) {
         >
           {video.title}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            {video.viewCount} views
-          </Typography>
-        </Box>
+        <Typography variant="body2" color="text.secondary">
+          {video.viewCount} views
+        </Typography>
       </CardContent>
     </Card>
   );

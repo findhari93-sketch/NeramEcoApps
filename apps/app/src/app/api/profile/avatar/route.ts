@@ -185,8 +185,8 @@ export async function DELETE(req: NextRequest) {
     // Update user to remove avatar_url
     const supabase = getSupabaseAdminClient();
 
-    const { error } = await supabase
-      .from('users')
+    const { error } = await (supabase
+      .from('users' as any) as any)
       .update({
         avatar_url: null,
         updated_at: new Date().toISOString(),
@@ -198,8 +198,8 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Update current avatar to not current
-    await supabase
-      .from('user_avatars')
+    await (supabase
+      .from('user_avatars' as any) as any)
       .update({ is_current: false })
       .eq('user_id', user.id)
       .eq('is_current', true);

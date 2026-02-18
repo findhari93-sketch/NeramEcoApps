@@ -132,7 +132,7 @@ export async function DELETE(
 
     // Delete user (cascade will delete lead_profile)
     const { error } = await (supabase as any)
-      .from('users')
+      .from('users' as any)
       .delete()
       .eq('id', id);
 

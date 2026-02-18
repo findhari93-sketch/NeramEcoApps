@@ -1,9 +1,58 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { ApplicationFormData, FormStep, StepValidation, ValidationError } from './types';
 import { DEFAULT_FORM_DATA, STEP_LABELS } from './types';
 import { useFirebaseAuth } from '@neram/auth';
+import { getCountryConfig } from './countryConfig';
+
+// ============================================
+// LOCAL STORAGE PERSISTENCE
+// ============================================
+
+const STORAGE_KEY = 'neram_application_draft';
+
+interface SavedFormState {
+  formData: ApplicationFormData;
+  activeStep: FormStep;
+  savedAt: string;
+}
+
+function saveToStorage(formData: ApplicationFormData, activeStep: FormStep): void {
+  try {
+    const state: SavedFormState = { formData, activeStep, savedAt: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+function loadFromStorage(): SavedFormState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const state: SavedFormState = JSON.parse(raw);
+    // Expire after 7 days
+    if (state.savedAt) {
+      const age = Date.now() - new Date(state.savedAt).getTime();
+      if (age > 7 * 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+    }
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+function clearStorage(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 // ============================================
 // CONTEXT TYPE
@@ -46,6 +95,9 @@ interface FormContextType {
   submissionError: string | null;
   setSubmissionError: (error: string | null) => void;
 
+  // Persistence
+  clearSavedForm: () => void;
+
   // User auth state
   isAuthenticated: boolean;
   isAuthLoading: boolean;
@@ -72,8 +124,12 @@ function validatePersonalInfo(data: ApplicationFormData): StepValidation {
     errors.push({ field: 'email', message: 'Valid email is required' });
   }
 
-  if (!data.personal.phone || !/^[6-9]\d{9}$/.test(data.personal.phone)) {
-    errors.push({ field: 'phone', message: 'Valid 10-digit phone number is required' });
+  const countryConfig = getCountryConfig(data.location.country);
+  // Skip phone format validation if already verified (phone was validated at verification time)
+  if (!data.personal.phoneVerified) {
+    if (!data.personal.phone || !countryConfig.phonePattern.test(data.personal.phone)) {
+      errors.push({ field: 'phone', message: `Valid ${countryConfig.phoneLength}-digit phone number is required` });
+    }
   }
 
   if (!data.personal.phoneVerified) {
@@ -88,17 +144,19 @@ function validatePersonalInfo(data: ApplicationFormData): StepValidation {
     errors.push({ field: 'gender', message: 'Gender is required' });
   }
 
-  // Location validation
-  if (!data.location.pincode || data.location.pincode.length !== 6) {
-    errors.push({ field: 'pincode', message: 'Valid 6-digit pin code is required' });
+  // Location validation (country-aware)
+  if (countryConfig.postalCode.required) {
+    if (!data.location.pincode || (countryConfig.postalCode.format && !countryConfig.postalCode.format.test(data.location.pincode))) {
+      errors.push({ field: 'pincode', message: `Valid ${countryConfig.postalCode.label.toLowerCase()} is required` });
+    }
   }
 
-  if (!data.location.city) {
+  if (countryConfig.locationFields.cityRequired && !data.location.city) {
     errors.push({ field: 'city', message: 'City is required' });
   }
 
-  if (!data.location.state) {
-    errors.push({ field: 'state', message: 'State is required' });
+  if (countryConfig.locationFields.stateRequired && !data.location.state) {
+    errors.push({ field: 'state', message: `${countryConfig.locationFields.stateLabel} is required` });
   }
 
   return { isValid: errors.length === 0, errors };
@@ -210,11 +268,50 @@ export function FormProvider({ children }: FormProviderProps) {
   const [prefilledFields, setPrefilledFields] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const hasRestoredRef = useRef(false);
 
-  // Pre-fill form from user profile
+  // Restore saved state from localStorage after mount (avoids hydration mismatch)
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+    const saved = loadFromStorage();
+    if (saved) {
+      // Sanitize any stale onboarding values stored in localStorage
+      const validCategories = ['school_student', 'diploma_student', 'college_student', 'working_professional'];
+      const categoryMap: Record<string, string> = {
+        '8th': 'school_student', '9th': 'school_student', '10th': 'school_student',
+        '11th': 'school_student', '12th': 'school_student',
+        'college': 'college_student', 'working': 'working_professional',
+      };
+      const cat = saved.formData.academic?.applicantCategory;
+      if (cat && !validCategories.includes(cat)) {
+        const mapped = categoryMap[cat];
+        saved.formData.academic.applicantCategory = (mapped || null) as any;
+      }
+
+      setFormData(saved.formData);
+      setActiveStepState(saved.activeStep);
+    }
+  }, []);
+
+  // Auto-save form data and step to localStorage on every change
+  useEffect(() => {
+    if (!hasRestoredRef.current) return; // Don't save until initial restore is done
+    saveToStorage(formData, activeStep);
+  }, [formData, activeStep]);
+
+  const clearSavedForm = useCallback(() => {
+    clearStorage();
+    setFormData(DEFAULT_FORM_DATA);
+    setActiveStepState(0);
+  }, []);
+
+  // Pre-fill form from user profile (only fills empty fields, won't overwrite saved data)
   useEffect(() => {
     const fetchAndPrefill = async () => {
       if (!user || authLoading) return;
+
+      const prefilled = new Set<string>();
 
       try {
         const idToken = await (user.raw as any)?.getIdToken?.();
@@ -227,34 +324,38 @@ export function FormProvider({ children }: FormProviderProps) {
 
         if (response.ok) {
           const { user: profile } = await response.json();
-          const prefilled = new Set<string>();
 
+          // Only pre-fill fields that are currently empty (don't overwrite saved data)
           if (profile.first_name) {
-            setFormData((prev) => ({
-              ...prev,
-              personal: { ...prev.personal, firstName: profile.first_name },
-            }));
+            setFormData((prev) => {
+              if (prev.personal.firstName) return prev;
+              return { ...prev, personal: { ...prev.personal, firstName: profile.first_name } };
+            });
             prefilled.add('firstName');
           }
 
           if (profile.email) {
-            setFormData((prev) => ({
-              ...prev,
-              personal: { ...prev.personal, email: profile.email },
-            }));
+            setFormData((prev) => {
+              if (prev.personal.email) return prev;
+              return { ...prev, personal: { ...prev.personal, email: profile.email } };
+            });
             prefilled.add('email');
           }
 
           if (profile.phone) {
-            const phone = profile.phone.replace(/^\+91/, '');
-            setFormData((prev) => ({
-              ...prev,
-              personal: {
-                ...prev.personal,
-                phone,
-                phoneVerified: profile.phone_verified || false,
-              },
-            }));
+            // Strip any known country prefix
+            const phone = profile.phone.replace(/^\+\d{1,3}/, '');
+            setFormData((prev) => {
+              if (prev.personal.phone) return prev;
+              return {
+                ...prev,
+                personal: {
+                  ...prev.personal,
+                  phone,
+                  phoneVerified: profile.phone_verified || false,
+                },
+              };
+            });
             prefilled.add('phone');
             if (profile.phone_verified) {
               prefilled.add('phoneVerified');
@@ -262,32 +363,126 @@ export function FormProvider({ children }: FormProviderProps) {
           }
 
           if (profile.date_of_birth) {
-            setFormData((prev) => ({
-              ...prev,
-              personal: { ...prev.personal, dateOfBirth: profile.date_of_birth },
-            }));
+            setFormData((prev) => {
+              if (prev.personal.dateOfBirth) return prev;
+              return { ...prev, personal: { ...prev.personal, dateOfBirth: profile.date_of_birth } };
+            });
             prefilled.add('dateOfBirth');
           }
 
           if (profile.gender) {
-            setFormData((prev) => ({
-              ...prev,
-              personal: { ...prev.personal, gender: profile.gender },
-            }));
+            setFormData((prev) => {
+              if (prev.personal.gender && prev.personal.gender !== 'male') return prev;
+              return { ...prev, personal: { ...prev.personal, gender: profile.gender } };
+            });
             prefilled.add('gender');
           }
-
-          setPrefilledFields(prefilled);
         }
       } catch (error) {
         console.error('Error pre-filling form:', error);
       }
+
+      // Pre-fill from onboarding responses (maps_to_field mapping)
+      try {
+        const idToken = await (user.raw as any)?.getIdToken?.();
+        if (idToken) {
+          const prefillRes = await fetch('/api/onboarding/prefill', {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+
+          if (prefillRes.ok) {
+            const { prefill } = await prefillRes.json();
+
+            // Map onboarding fields to form fields
+            if (prefill.interest_course && !prefilled.has('interestCourse')) {
+              const courseValue = Array.isArray(prefill.interest_course)
+                ? prefill.interest_course[0]
+                : prefill.interest_course;
+              setFormData((prev) => ({
+                ...prev,
+                course: { ...prev.course, interestCourse: courseValue },
+              }));
+              prefilled.add('interestCourse');
+            }
+
+            if (prefill.applicant_category && !prefilled.has('applicantCategory')) {
+              // Map onboarding education stage values to valid applicant_category enum values
+              const categoryMap: Record<string, string> = {
+                '8th': 'school_student',
+                '9th': 'school_student',
+                '10th': 'school_student',
+                '11th': 'school_student',
+                '12th': 'school_student',
+                'college': 'college_student',
+                'working': 'working_professional',
+                // Pass through already-valid values
+                'school_student': 'school_student',
+                'diploma_student': 'diploma_student',
+                'college_student': 'college_student',
+                'working_professional': 'working_professional',
+              };
+              const mappedCategory = categoryMap[prefill.applicant_category];
+              if (mappedCategory) {
+                setFormData((prev) => ({
+                  ...prev,
+                  academic: { ...prev.academic, applicantCategory: mappedCategory as any },
+                }));
+                prefilled.add('applicantCategory');
+              }
+            }
+
+            if (prefill.caste_category && !prefilled.has('casteCategory')) {
+              setFormData((prev) => ({
+                ...prev,
+                academic: { ...prev.academic, casteCategory: prefill.caste_category },
+              }));
+              prefilled.add('casteCategory');
+            }
+          }
+        }
+      } catch (error) {
+        // Non-critical — onboarding pre-fill is optional
+        console.error('Error pre-filling from onboarding:', error);
+      }
+
+      // Fallback: use Google displayName if first name / father's name not yet filled
+      if (user.name) {
+        const nameParts = user.name.trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const fatherName = nameParts.slice(1).join(' ') || '';
+
+        if (firstName && !prefilled.has('firstName')) {
+          setFormData((prev) => ({
+            ...prev,
+            personal: { ...prev.personal, firstName },
+          }));
+          prefilled.add('firstName');
+        }
+        if (fatherName && !prefilled.has('fatherName')) {
+          setFormData((prev) => ({
+            ...prev,
+            personal: { ...prev.personal, fatherName },
+          }));
+          prefilled.add('fatherName');
+        }
+      }
+
+      // Fallback: use Google email if not yet filled
+      if (!prefilled.has('email') && user.email) {
+        setFormData((prev) => ({
+          ...prev,
+          personal: { ...prev.personal, email: user.email! },
+        }));
+        prefilled.add('email');
+      }
+
+      setPrefilledFields(prefilled);
     };
 
     fetchAndPrefill();
   }, [user, authLoading]);
 
-  // Get UTM parameters from URL
+  // Get UTM parameters, center selection, and learning mode from URL
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -304,6 +499,46 @@ export function FormProvider({ children }: FormProviderProps) {
           utmCampaign,
           referralCode,
         }));
+      }
+
+      // Read learning mode from URL (?mode=online)
+      const mode = params.get('mode');
+      if (mode === 'online') {
+        setFormData((prev) => ({
+          ...prev,
+          course: {
+            ...prev.course,
+            learningMode: 'online_only',
+            selectedCenterId: null,
+            selectedCenterName: null,
+            hybridLearningAccepted: false,
+          },
+        }));
+      }
+
+      // Read center slug from URL (?center=slug) and auto-select
+      const centerSlug = params.get('center');
+      if (centerSlug) {
+        fetch(`/api/centers?slug=${encodeURIComponent(centerSlug)}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.data) {
+              const center = data.data;
+              setFormData((prev) => ({
+                ...prev,
+                course: {
+                  ...prev.course,
+                  selectedCenterId: center.id,
+                  selectedCenterName: center.name,
+                  hybridLearningAccepted: true,
+                  learningMode: 'hybrid',
+                },
+              }));
+            }
+          })
+          .catch(() => {
+            // Ignore - invalid center slug
+          });
       }
     }
   }, []);
@@ -363,15 +598,21 @@ export function FormProvider({ children }: FormProviderProps) {
   };
 
   const onPhoneVerified = useCallback((phone: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      personal: {
-        ...prev.personal,
-        phone: phone.replace(/^\+91/, ''),
-        phoneVerified: true,
-        phoneVerifiedAt: new Date().toISOString(),
-      },
-    }));
+    setFormData((prev) => {
+      const config = getCountryConfig(prev.location.country);
+      // Strip the country prefix if present
+      const prefixEscaped = config.phonePrefix.replace(/\+/g, '\\+');
+      const cleanedPhone = phone.replace(new RegExp(`^${prefixEscaped}`), '');
+      return {
+        ...prev,
+        personal: {
+          ...prev.personal,
+          phone: cleanedPhone,
+          phoneVerified: true,
+          phoneVerifiedAt: new Date().toISOString(),
+        },
+      };
+    });
     setShowPhoneVerification(false);
   }, []);
 
@@ -406,6 +647,7 @@ export function FormProvider({ children }: FormProviderProps) {
     setIsSubmitting,
     submissionError,
     setSubmissionError,
+    clearSavedForm,
     isAuthenticated: !!user,
     isAuthLoading: authLoading,
   };

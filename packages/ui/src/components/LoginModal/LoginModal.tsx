@@ -195,6 +195,13 @@ export default function LoginModal({
       body: JSON.stringify({ idToken, phoneNumber: phone }),
     });
     if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (errorData.error === 'PHONE_ALREADY_EXISTS') {
+        throw new Error(
+          errorData.message ||
+          'This phone number is already registered with another account. Please use a different number.'
+        );
+      }
       throw new Error(`Phone verification failed: ${response.status}`);
     }
     return response.json();
@@ -321,7 +328,16 @@ export default function LoginModal({
 
       onAuthenticated?.();
     } catch (err: any) {
-      setPhoneError(getFirebaseErrorMessage(err));
+      // Check if this is a duplicate phone error from our API
+      const errMsg = err?.message || '';
+      if (errMsg.includes('already registered')) {
+        setPhoneError(errMsg);
+        // Go back to phone step so user can enter a different number
+        setStep('phone');
+        setOtp('');
+      } else {
+        setPhoneError(getFirebaseErrorMessage(err));
+      }
     } finally {
       setPhoneLoading(false);
     }

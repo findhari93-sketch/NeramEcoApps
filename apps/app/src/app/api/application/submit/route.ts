@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     // Check if user already has a lead profile
     // @ts-ignore - Supabase types not generated
     const { data: existingLead } = await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       .select('id')
       .eq('user_id', user.id)
       .single() as { data: { id: string } | null };
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (existingLead) {
       // Update existing lead profile
       const { data: updatedLead, error: updateError } = await supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         // @ts-ignore - Supabase types not generated
         .update({
           full_name: body.fullName,
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Create new lead profile
       const { data: newLead, error: createError } = await supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         // @ts-ignore - Supabase types not generated
         .insert({
           user_id: user.id,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     // Create scholarship application if applicable
     if (body.isGovernmentSchool) {
       await supabase
-        .from('scholarship_applications')
+        .from('scholarship_applications' as any)
         // @ts-ignore - Supabase types not generated
         .upsert({
           lead_profile_id: leadProfileId,
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     // Create cashback claims
     if (body.youtubeVerified) {
       await supabase
-        .from('cashback_claims')
+        .from('cashback_claims' as any)
         // @ts-ignore - Supabase types not generated
         .upsert({
           lead_profile_id: leadProfileId,
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
 
     if (body.instagramFollowed && body.instagramUsername) {
       await supabase
-        .from('cashback_claims')
+        .from('cashback_claims' as any)
         // @ts-ignore - Supabase types not generated
         .upsert({
           lead_profile_id: leadProfileId,
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     // Create source tracking
     await supabase
-      .from('source_tracking')
+      .from('source_tracking' as any)
       // @ts-ignore - Supabase types not generated
       .upsert({
         lead_profile_id: leadProfileId,

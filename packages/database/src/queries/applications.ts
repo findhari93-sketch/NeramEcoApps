@@ -16,6 +16,7 @@ import type {
   AcademicData,
   CasteCategory,
   CourseType,
+  LearningMode,
   LocationSource,
 } from '../types';
 
@@ -47,6 +48,8 @@ export interface CreateApplicationInput {
   selected_course_id?: string;
   selected_center_id?: string;
   hybrid_learning_accepted?: boolean;
+  learning_mode?: LearningMode;
+  school_type?: 'private_school' | 'government_aided' | 'government_school' | null;
   // Status
   status?: ApplicationStatus;
   phone_verified?: boolean;
@@ -72,23 +75,25 @@ export interface UpdateApplicationInput extends Partial<CreateApplicationInput> 
 
 /**
  * Create a new application (lead profile)
+ * Uses RPC function to bypass PostgREST INSERT schema cache issues.
  */
 export async function createApplication(
   supabase: SupabaseClient,
   input: CreateApplicationInput
 ): Promise<LeadProfile> {
-  const { data, error } = await supabase
-    .from('lead_profiles')
-    .insert({
-      ...input,
-      status: input.status || 'draft',
-      country: input.country || 'IN',
-    })
-    .select()
-    .single();
+  const payload = {
+    ...input,
+    status: input.status || 'draft',
+    country: input.country || 'IN',
+  };
+
+  // Use RPC function which goes through SQL directly
+  const { data, error } = await supabase.rpc('create_lead_profile', {
+    payload: payload,
+  });
 
   if (error) throw error;
-  return data;
+  return data as LeadProfile;
 }
 
 /**
@@ -262,6 +267,28 @@ export async function restoreApplication(
 
   if (auditError) throw auditError;
 
+  return data;
+}
+
+/**
+ * Get the latest submitted (non-draft) application for a user.
+ * Used to copy personal/academic data when adding a new course.
+ */
+export async function getLatestSubmittedApplication(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<LeadProfile | null> {
+  const { data, error } = await supabase
+    .from('lead_profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .in('status', ['submitted', 'under_review', 'approved'])
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error;
   return data;
 }
 

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // Update payment record
     const { data: payment, error: updateError } = await supabase
-      .from('payments')
+      .from('payments' as any)
       // @ts-ignore - Supabase types not generated
       .update({
         razorpay_payment_id,
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       (payment.payment_scheme === 'installment' && payment.installment_number === 2);
 
     await supabase
-      .from('lead_profiles')
+      .from('lead_profiles' as any)
       // @ts-ignore - Supabase types not generated
       .update({
         status: isFullPayment ? 'enrolled' : 'partial_payment',
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       dueDate.setDate(dueDate.getDate() + 30); // Due in 30 days
 
       await supabase
-        .from('payment_installments')
+        .from('payment_installments' as any)
         // @ts-ignore - Supabase types not generated
         .insert({
           lead_profile_id: leadProfile.id,
@@ -102,14 +102,14 @@ export async function POST(request: NextRequest) {
     if (isFullPayment) {
       // Check if student profile exists
       const { data: existingStudent } = await supabase
-        .from('student_profiles')
+        .from('student_profiles' as any)
         .select('id')
         .eq('user_id', user.id)
         .single();
 
       if (!existingStudent) {
         await supabase
-          .from('student_profiles')
+          .from('student_profiles' as any)
           // @ts-ignore - Supabase types not generated
           .insert({
             user_id: user.id,
@@ -120,12 +120,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // TODO: Send payment confirmation email
-    // await sendEmail(leadProfile.email, 'payment-confirmation', {
-    //   name: leadProfile.full_name,
-    //   amount: payment.amount,
-    //   course: leadProfile.course_interest,
-    // });
+    // Send payment confirmation notifications
+    try {
+      const { notifyPaymentReceived } = await import('@neram/database');
+      await notifyPaymentReceived({
+        userId: user.id,
+        userName: leadProfile.full_name || 'Student',
+        amount: payment.amount,
+        method: 'razorpay',
+        paymentId: razorpay_payment_id,
+      });
+    } catch (notifError) {
+      console.error('Failed to send payment notifications:', notifError);
+    }
 
     return NextResponse.json({
       success: true,

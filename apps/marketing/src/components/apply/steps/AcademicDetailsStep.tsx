@@ -36,7 +36,9 @@ import {
   EDUCATION_BOARD_OPTIONS,
   CASTE_CATEGORY_OPTIONS,
   APPLICANT_CATEGORY_OPTIONS,
+  SCHOOL_TYPE_OPTIONS,
   type ApplicantCategory,
+  type SchoolType,
   type SchoolStudentAcademicData,
   type DiplomaStudentAcademicData,
   type CollegeStudentAcademicData,
@@ -260,6 +262,28 @@ export default function AcademicDetailsStep() {
                   placeholder="Enter your school name"
                   helperText="Start typing to search for your school"
                 />
+              </Grid>
+
+              {/* School Type Dropdown */}
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Type of School</InputLabel>
+                  <Select
+                    value={academic.schoolType || ''}
+                    onChange={(e) =>
+                      updateFormData('academic', {
+                        schoolType: e.target.value as SchoolType,
+                      })
+                    }
+                    label="Type of School"
+                  >
+                    {SCHOOL_TYPE_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
 
               <Grid item xs={12} sm={6}>

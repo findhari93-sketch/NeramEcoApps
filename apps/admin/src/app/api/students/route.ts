@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const studentsWithProfiles = await Promise.all(
       users.map(async (user) => {
         const { data: profile } = await (supabase as any)
-          .from('student_profiles')
+          .from('student_profiles' as any)
           .select(`
             *,
             courses:course_id (name, course_type),

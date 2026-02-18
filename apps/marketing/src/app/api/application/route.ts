@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, sendTemplateEmail } from '@neram/database';
+import { createAdminClient, sendTemplateEmail, notifyNewApplication } from '@neram/database';
 import {
   createApplication,
   getApplicationsByUserId,
@@ -15,9 +15,9 @@ if (!getApps().length) {
   try {
     initializeApp({
       credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY)?.replace(/\\n/g, '\n'),
       }),
     });
   } catch {
@@ -36,6 +36,7 @@ const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
   jee_paper2: 'JEE Paper 2',
   both: 'Both NATA & JEE Paper 2',
+  not_sure: 'Not Sure Yet',
 };
 
 // Category labels
@@ -100,6 +101,7 @@ async function sendSubmissionEmails(
       targetYear: application.target_exam_year?.toString() || 'N/A',
       location,
       hybridLearning: application.hybrid_learning_accepted || false,
+      learningMode: application.learning_mode || 'hybrid',
       center: application.selected_center_id ? 'Center Selected' : null,
       source: application.source || 'website_form',
       utmSource: application.utm_source || null,
@@ -131,7 +133,7 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string; emai
     // Get user from database
     const supabase = createAdminClient();
     const { data: user } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('id, email, first_name, last_name, phone')
       .eq('firebase_uid', decodedToken.uid)
       .single();
@@ -198,8 +200,27 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       }
     }
 
-    // Prepare application data
-    const applicationData: CreateApplicationInput = {
+    // Sanitize enum values that may come from onboarding with different value sets
+    const VALID_APPLICANT_CATEGORIES = ['school_student', 'diploma_student', 'college_student', 'working_professional'];
+    const APPLICANT_CATEGORY_MAP: Record<string, string> = {
+      '8th': 'school_student', '9th': 'school_student', '10th': 'school_student',
+      '11th': 'school_student', '12th': 'school_student',
+      'college': 'college_student', 'working': 'working_professional',
+    };
+    const VALID_COURSE_TYPES = ['nata', 'jee_paper2', 'both', 'not_sure'];
+
+    let sanitizedCategory = body.applicant_category;
+    if (sanitizedCategory && !VALID_APPLICANT_CATEGORIES.includes(sanitizedCategory)) {
+      sanitizedCategory = APPLICANT_CATEGORY_MAP[sanitizedCategory] || undefined;
+    }
+
+    let sanitizedCourse = body.interest_course;
+    if (sanitizedCourse && !VALID_COURSE_TYPES.includes(sanitizedCourse)) {
+      sanitizedCourse = undefined;
+    }
+
+    // Prepare application data — strip undefined values and sanitize UUIDs
+    const raw: CreateApplicationInput = {
       user_id: auth.userId,
       father_name: body.father_name,
       country: body.country || 'IN',
@@ -208,92 +229,218 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       district: body.district,
       pincode: body.pincode,
       address: body.address,
-      latitude: body.latitude,
-      longitude: body.longitude,
-      location_source: body.location_source,
-      applicant_category: body.applicant_category,
+      latitude: body.latitude ? Number(body.latitude) : undefined,
+      longitude: body.longitude ? Number(body.longitude) : undefined,
+      location_source: body.location_source || undefined,
+      applicant_category: sanitizedCategory,
       academic_data: body.academic_data,
-      caste_category: body.caste_category,
-      target_exam_year: body.target_exam_year,
-      interest_course: body.interest_course,
-      selected_course_id: body.selected_course_id,
-      selected_center_id: body.selected_center_id,
+      caste_category: body.caste_category || undefined,
+      target_exam_year: body.target_exam_year ? Number(body.target_exam_year) : undefined,
+      interest_course: sanitizedCourse,
+      selected_course_id: body.selected_course_id || undefined,
+      selected_center_id: body.selected_center_id || undefined,
       hybrid_learning_accepted: body.hybrid_learning_accepted || false,
+      learning_mode: body.learning_mode || 'hybrid',
+      school_type: body.school_type || undefined,
       status: isSubmitting ? 'submitted' : 'draft',
       phone_verified: body.phone_verified,
-      phone_verified_at: body.phone_verified_at,
+      phone_verified_at: body.phone_verified_at || undefined,
       source: 'website_form',
-      utm_source: body.utm_source,
-      utm_medium: body.utm_medium,
-      utm_campaign: body.utm_campaign,
-      referral_code: body.referral_code,
+      utm_source: body.utm_source || undefined,
+      utm_medium: body.utm_medium || undefined,
+      utm_campaign: body.utm_campaign || undefined,
+      referral_code: body.referral_code || undefined,
     };
 
-    // Check if user already has an application
-    const hasExisting = await hasExistingApplication(supabase, auth.userId);
+    // Remove undefined keys so they aren't sent to PostgREST
+    const applicationData = Object.fromEntries(
+      Object.entries(raw).filter(([, v]) => v !== undefined)
+    ) as CreateApplicationInput;
+
+    console.log('[Application API] Sanitized payload keys:', Object.keys(applicationData));
+    console.log('[Application API] Sanitized payload:', JSON.stringify(applicationData, null, 2));
+
+    // Step 1: Check if user already has an application
+    let hasExisting: boolean;
+    try {
+      hasExisting = await hasExistingApplication(supabase, auth.userId);
+      console.log('[Application API] hasExisting:', hasExisting);
+    } catch (checkError: any) {
+      console.error('[Application API] hasExistingApplication FAILED:', checkError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to check existing applications.', debug: { step: 'hasExistingApplication', error: checkError?.message, code: checkError?.code } },
+        { status: 500 }
+      );
+    }
 
     let application;
 
     if (hasExisting) {
       // Get existing application
-      const existing = await getApplicationsByUserId(supabase, auth.userId);
+      let existing;
+      try {
+        existing = await getApplicationsByUserId(supabase, auth.userId);
+        console.log('[Application API] Existing applications:', existing.length);
+      } catch (fetchError: any) {
+        console.error('[Application API] getApplicationsByUserId FAILED:', fetchError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch existing applications.', debug: { step: 'getApplicationsByUserId', error: fetchError?.message, code: fetchError?.code } },
+          { status: 500 }
+        );
+      }
+
       const draftApplication = existing.find((a) => a.status === 'draft');
 
       if (draftApplication) {
         // Update existing draft
-        const { data, error } = await supabase
-          .from('lead_profiles')
-          .update(applicationData)
-          .eq('id', draftApplication.id)
-          .select()
-          .single();
+        try {
+          const { data, error } = await supabase
+            .from('lead_profiles' as any)
+            .update(applicationData)
+            .eq('id', draftApplication.id)
+            .select()
+            .single();
 
-        if (error) throw error;
-        application = data;
+          if (error) throw error;
+          application = data;
+          console.log('[Application API] Updated draft:', draftApplication.id);
+        } catch (updateError: any) {
+          console.error('[Application API] UPDATE draft FAILED:', updateError);
+          return NextResponse.json(
+            { success: false, error: 'Failed to update draft.', debug: { step: 'updateDraft', error: updateError?.message, code: updateError?.code, details: updateError?.details, hint: updateError?.hint } },
+            { status: 500 }
+          );
+        }
 
         // If submitting, trigger application number generation
         if (isSubmitting) {
-          application = await submitApplication(supabase, draftApplication.id);
+          try {
+            application = await submitApplication(supabase, draftApplication.id);
+            console.log('[Application API] Submitted draft:', application?.application_number);
+          } catch (submitError: any) {
+            console.error('[Application API] submitApplication FAILED:', submitError);
+            return NextResponse.json(
+              { success: false, error: 'Failed to submit application.', debug: { step: 'submitDraft', error: submitError?.message, code: submitError?.code, details: submitError?.details } },
+              { status: 500 }
+            );
+          }
         }
       } else {
-        // User already has a non-draft application
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'You already have an active application. Please contact support if you need to make changes.',
-          },
-          { status: 400 }
-        );
+        // User has existing non-draft application(s) — create a new one for additional course
+        try {
+          application = await createApplication(supabase, applicationData);
+          console.log('[Application API] Created additional application:', application?.id);
+        } catch (createError: any) {
+          console.error('[Application API] createApplication (additional) FAILED:', createError);
+          return NextResponse.json(
+            { success: false, error: 'Failed to create application.', debug: { step: 'createAdditional', error: createError?.message, code: createError?.code, details: createError?.details, hint: createError?.hint } },
+            { status: 500 }
+          );
+        }
+
+        if (isSubmitting) {
+          try {
+            application = await submitApplication(supabase, application.id);
+          } catch (submitError: any) {
+            console.error('[Application API] submitApplication (additional) FAILED:', submitError);
+            return NextResponse.json(
+              { success: false, error: 'Failed to submit application.', debug: { step: 'submitAdditional', error: submitError?.message, code: submitError?.code, details: submitError?.details } },
+              { status: 500 }
+            );
+          }
+        }
       }
     } else {
       // Create new application
-      application = await createApplication(supabase, applicationData);
+      try {
+        application = await createApplication(supabase, applicationData);
+        console.log('[Application API] Created new application:', application?.id);
+      } catch (createError: any) {
+        console.error('[Application API] createApplication FAILED:', JSON.stringify({
+          message: createError?.message,
+          code: createError?.code,
+          details: createError?.details,
+          hint: createError?.hint,
+          statusCode: createError?.statusCode,
+        }));
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Failed to create application.',
+            debug: {
+              step: 'createNew',
+              error: createError?.message,
+              code: createError?.code,
+              details: createError?.details,
+              hint: createError?.hint,
+              payload: applicationData,
+            },
+          },
+          { status: 500 }
+        );
+      }
 
       // If submitting, trigger application number generation
       if (isSubmitting) {
-        application = await submitApplication(supabase, application.id);
+        try {
+          application = await submitApplication(supabase, application.id);
+          console.log('[Application API] Submitted new application:', application?.application_number);
+        } catch (submitError: any) {
+          console.error('[Application API] submitApplication FAILED:', submitError);
+          return NextResponse.json(
+            { success: false, error: 'Failed to submit application.', debug: { step: 'submitNew', error: submitError?.message, code: submitError?.code, details: submitError?.details } },
+            { status: 500 }
+          );
+        }
       }
     }
 
-    // Send confirmation emails if submitting
-    if (isSubmitting && application && auth.email) {
-      // Don't await - send emails in background
-      const userName = auth.name || body.first_name || 'Student';
-      sendSubmissionEmails(
-        { ...application, phone: auth.phone || body.phone },
-        auth.email,
-        userName
-      ).catch((err) => console.error('Email sending failed:', err));
+    // Update user's first_name if provided
+    if (body.first_name) {
+      await supabase.from('users' as any).update({ first_name: body.first_name }).eq('id', auth.userId);
+    }
+
+    // Send confirmation emails and dispatch notifications if submitting
+    if (isSubmitting && application) {
+      const userName = body.first_name || auth.name || 'Student';
+
+      // Send confirmation emails (non-blocking)
+      if (auth.email) {
+        sendSubmissionEmails(
+          { ...application, phone: auth.phone || body.phone },
+          auth.email,
+          userName
+        ).catch((err) => console.error('Email sending failed:', err));
+      }
+
+      // Dispatch notifications to Telegram + team emails + admin bell (non-blocking)
+      notifyNewApplication({
+        userName,
+        phone: auth.phone || body.phone || 'N/A',
+        course: application.interest_course || body.interest_course || '',
+        schoolName: body.academic_data?.school_name || body.academic_data?.college_name,
+        city: body.city,
+        state: body.state,
+        applicationNumber: application.application_number || undefined,
+      }).catch((err) => console.error('Notification dispatch failed:', err));
     }
 
     return NextResponse.json(
       { success: true, data: application },
       { status: 201 }
     );
-  } catch (error) {
-    console.error('Application submission error:', error);
+  } catch (error: any) {
+    console.error('[Application API] Unexpected error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to process application. Please try again.' },
+      {
+        success: false,
+        error: 'Failed to process application. Please try again.',
+        debug: {
+          step: 'unexpected',
+          error: error?.message || String(error),
+          code: error?.code,
+        },
+      },
       { status: 500 }
     );
   }

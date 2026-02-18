@@ -1,18 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
+import { useParams } from 'next/navigation';
 import {
   Box,
   Container,
   Typography,
   Card,
   CardContent,
-  CardMedia,
   Button,
   Grid,
   Chip,
-  IconButton,
   Skeleton,
   Alert,
   Dialog,
@@ -37,24 +36,42 @@ import {
   LocalParkingOutlined,
   AcUnitOutlined,
   CheckCircleOutlined,
+  LaptopOutlined,
+  SchoolOutlined,
 } from '@mui/icons-material';
 import type { OfflineCenter } from '@neram/database';
+import Link from 'next/link';
 
 // Facility icons mapping
-const facilityIcons: Record<string, React.ReactNode> = {
+const facilityIcons: Record<string, React.ReactElement> = {
   AC: <AcUnitOutlined fontSize="small" />,
   WiFi: <WifiOutlined fontSize="small" />,
   Parking: <LocalParkingOutlined fontSize="small" />,
 };
 
+// City gradient colors for placeholder images
+const cityGradients: Record<string, string> = {
+  Pudukkottai: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  Tiruchirapalli: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  Coimbatore: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  Chennai: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  Madurai: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  Tiruppur: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+};
+
+const defaultGradient = 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)';
+
 export default function CentersPage() {
   const t = useTranslations('centers');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const params = useParams();
+  const locale = (params?.locale as string) || 'en';
 
   const [centers, setCenters] = useState<OfflineCenter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState('All');
 
   // Visit booking modal state
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -91,6 +108,18 @@ export default function CentersPage() {
     }
   };
 
+  // Derive unique cities for filter
+  const cities = useMemo(() => {
+    const uniqueCities = [...new Set(centers.map((c) => c.city))].sort();
+    return ['All', ...uniqueCities];
+  }, [centers]);
+
+  // Filter centers by city
+  const filteredCenters = useMemo(() => {
+    if (selectedCity === 'All') return centers;
+    return centers.filter((c) => c.city === selectedCity);
+  }, [centers, selectedCity]);
+
   const handleBookVisit = (center: OfflineCenter) => {
     setSelectedCenter(center);
     setBookingOpen(true);
@@ -121,7 +150,6 @@ export default function CentersPage() {
 
       if (data.success) {
         setBookingSuccess(true);
-        // Reset form
         setBookingForm({
           name: '',
           phone: '',
@@ -158,10 +186,6 @@ export default function CentersPage() {
     }
   };
 
-  const handleCall = (phone: string) => {
-    window.location.href = `tel:${phone}`;
-  };
-
   // Get minimum date for booking (tomorrow)
   const getMinDate = () => {
     const tomorrow = new Date();
@@ -170,22 +194,27 @@ export default function CentersPage() {
   };
 
   return (
-    <Box sx={{ py: 4 }}>
+    <Box sx={{ py: 4, pb: isMobile ? 10 : 4 }}>
       <Container maxWidth="lg">
         {/* Hero Section */}
-        <Box textAlign="center" mb={6}>
+        <Box textAlign="center" mb={4}>
           <Typography
             variant="h3"
             component="h1"
             gutterBottom
-            sx={{ fontWeight: 700 }}
+            sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' } }}
           >
             {t('title') || 'Visit Our Learning Centers'}
           </Typography>
           <Typography
             variant="h6"
             color="text.secondary"
-            sx={{ maxWidth: 600, mx: 'auto', mb: 3 }}
+            sx={{
+              maxWidth: 600,
+              mx: 'auto',
+              mb: 3,
+              fontSize: { xs: '0.95rem', sm: '1.1rem' },
+            }}
           >
             {t('subtitle') ||
               'Experience our hybrid learning environment. Visit any of our centers to explore facilities and meet our faculty.'}
@@ -197,7 +226,7 @@ export default function CentersPage() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 1,
-              bgcolor: 'primary.light',
+              bgcolor: 'primary.main',
               color: 'primary.contrastText',
               px: 3,
               py: 1.5,
@@ -205,18 +234,63 @@ export default function CentersPage() {
             }}
           >
             <PhoneOutlined />
-            <Typography variant="h6" component="span">
+            <Typography variant="body1" component="span" fontWeight={600}>
               {t('customerCare') || 'Customer Care:'}{' '}
               <Box
                 component="a"
-                href="tel:+919876543210"
-                sx={{ color: 'inherit', fontWeight: 700 }}
+                href="tel:+919176137043"
+                sx={{ color: 'inherit', fontWeight: 700, textDecoration: 'none' }}
               >
-                +91 98765 43210
+                +91 91761 37043 / 88074 37399
               </Box>
             </Typography>
           </Box>
         </Box>
+
+        {/* Online Classes Banner */}
+        <Card
+          variant="outlined"
+          sx={{
+            mb: 4,
+            borderColor: 'success.main',
+            bgcolor: 'success.50',
+            borderRadius: 2,
+          }}
+        >
+          <CardContent
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: 2,
+              py: { xs: 2, sm: 2.5 },
+              '&:last-child': { pb: { xs: 2, sm: 2.5 } },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <LaptopOutlined sx={{ fontSize: 36, color: 'success.main' }} />
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  {t('preferOnline') || 'Prefer 100% Online Classes?'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {t('onlineDescription') ||
+                    'No need to visit a center. Learn from anywhere with live online classes.'}
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              color="success"
+              component={Link}
+              href={`/${locale}/apply?mode=online`}
+              sx={{ minHeight: 48, minWidth: 180, whiteSpace: 'nowrap' }}
+            >
+              {t('applyOnline') || 'Apply for Online Classes'}
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Error Alert */}
         {error && (
@@ -225,11 +299,43 @@ export default function CentersPage() {
           </Alert>
         )}
 
+        {/* City Filter Chips */}
+        {!loading && centers.length > 0 && (
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              overflowX: 'auto',
+              pb: 1,
+              mb: 3,
+              '&::-webkit-scrollbar': { display: 'none' },
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+            }}
+          >
+            {cities.map((city) => (
+              <Chip
+                key={city}
+                label={city}
+                onClick={() => setSelectedCity(city)}
+                color={selectedCity === city ? 'primary' : 'default'}
+                variant={selectedCity === city ? 'filled' : 'outlined'}
+                sx={{
+                  minHeight: 40,
+                  minWidth: 80,
+                  fontWeight: selectedCity === city ? 600 : 400,
+                  flexShrink: 0,
+                }}
+              />
+            ))}
+          </Box>
+        )}
+
         {/* Centers Grid */}
         {loading ? (
           <Grid container spacing={3}>
             {[1, 2, 3].map((i) => (
-              <Grid item xs={12} md={6} lg={4} key={i}>
+              <Grid item xs={12} sm={6} lg={4} key={i}>
                 <Card>
                   <Skeleton variant="rectangular" height={200} />
                   <CardContent>
@@ -254,8 +360,8 @@ export default function CentersPage() {
           </Box>
         ) : (
           <Grid container spacing={3}>
-            {centers.map((center) => (
-              <Grid item xs={12} md={6} lg={4} key={center.id}>
+            {filteredCenters.map((center) => (
+              <Grid item xs={12} sm={6} lg={4} key={center.id}>
                 <Card
                   sx={{
                     height: '100%',
@@ -268,41 +374,50 @@ export default function CentersPage() {
                     },
                   }}
                 >
-                  {/* Center Image */}
+                  {/* Center Image / Placeholder */}
                   {center.photos && center.photos.length > 0 ? (
-                    <CardMedia
+                    <Box
                       component="img"
-                      height="200"
-                      image={center.photos[0]}
+                      src={center.photos[0]}
                       alt={center.name}
-                      sx={{ objectFit: 'cover' }}
+                      sx={{
+                        height: 180,
+                        width: '100%',
+                        objectFit: 'cover',
+                      }}
                     />
                   ) : (
                     <Box
                       sx={{
-                        height: 200,
-                        bgcolor: 'grey.200',
+                        height: 180,
+                        background: cityGradients[center.city] || defaultGradient,
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        color: 'white',
+                        position: 'relative',
                       }}
                     >
-                      <BusinessOutlined sx={{ fontSize: 64, color: 'grey.400' }} />
+                      <BusinessOutlined sx={{ fontSize: 48, opacity: 0.8, mb: 1 }} />
+                      <Typography variant="h6" fontWeight={600} sx={{ opacity: 0.9 }}>
+                        {center.city}
+                      </Typography>
                     </Box>
                   )}
 
                   <CardContent sx={{ flexGrow: 1 }}>
                     {/* Center Name */}
-                    <Typography variant="h6" gutterBottom fontWeight={600}>
+                    <Typography variant="h6" gutterBottom fontWeight={700} sx={{ fontSize: '1.05rem' }}>
                       {center.name}
                     </Typography>
 
                     {/* Address */}
-                    <Box display="flex" alignItems="flex-start" gap={1} mb={2}>
+                    <Box display="flex" alignItems="flex-start" gap={1} mb={1.5}>
                       <LocationOnOutlined
                         fontSize="small"
                         color="action"
-                        sx={{ mt: 0.5 }}
+                        sx={{ mt: 0.3 }}
                       />
                       <Typography variant="body2" color="text.secondary">
                         {center.address}
@@ -313,7 +428,7 @@ export default function CentersPage() {
 
                     {/* Operating Hours */}
                     {center.preferred_visit_times && center.preferred_visit_times.length > 0 && (
-                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                      <Box display="flex" alignItems="center" gap={1} mb={1.5}>
                         <ScheduleOutlined fontSize="small" color="action" />
                         <Typography variant="body2" color="text.secondary">
                           {t('visitingHours') || 'Visiting Hours:'}{' '}
@@ -324,13 +439,13 @@ export default function CentersPage() {
 
                     {/* Facilities */}
                     {center.facilities && center.facilities.length > 0 && (
-                      <Box display="flex" flexWrap="wrap" gap={0.5} mb={2}>
+                      <Box display="flex" flexWrap="wrap" gap={0.5} mb={1.5}>
                         {center.facilities.map((facility) => (
                           <Chip
                             key={facility}
                             label={facility}
                             size="small"
-                            icon={facilityIcons[facility] || undefined}
+                            icon={facilityIcons[facility]}
                             variant="outlined"
                           />
                         ))}
@@ -339,7 +454,7 @@ export default function CentersPage() {
 
                     {/* Contact Phone */}
                     {center.contact_phone && (
-                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                      <Box display="flex" alignItems="center" gap={1}>
                         <PhoneOutlined fontSize="small" color="action" />
                         <Typography
                           variant="body2"
@@ -359,27 +474,48 @@ export default function CentersPage() {
                       p: 2,
                       pt: 0,
                       display: 'flex',
+                      flexDirection: 'column',
                       gap: 1,
-                      flexDirection: isMobile ? 'column' : 'row',
                     }}
                   >
+                    {/* Apply with this Center - Primary CTA */}
                     <Button
                       variant="contained"
-                      startIcon={<DirectionsOutlined />}
-                      onClick={() => handleGetDirections(center)}
-                      fullWidth={isMobile}
+                      color="secondary"
+                      startIcon={<SchoolOutlined />}
+                      component={Link}
+                      href={`/${locale}/apply?center=${center.slug}`}
+                      fullWidth
                       sx={{ minHeight: 48 }}
                     >
-                      {t('getDirections') || 'Get Directions'}
+                      {t('applyWithCenter') || 'Apply with this Center'}
                     </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => handleBookVisit(center)}
-                      fullWidth={isMobile}
-                      sx={{ minHeight: 48 }}
+
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        gap: 1,
+                        flexDirection: isMobile ? 'column' : 'row',
+                      }}
                     >
-                      {t('bookVisit') || 'Book a Visit'}
-                    </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<DirectionsOutlined />}
+                        onClick={() => handleGetDirections(center)}
+                        fullWidth
+                        sx={{ minHeight: 44 }}
+                      >
+                        {t('getDirections') || 'Get Directions'}
+                      </Button>
+                      <Button
+                        variant="text"
+                        onClick={() => handleBookVisit(center)}
+                        fullWidth
+                        sx={{ minHeight: 44 }}
+                      >
+                        {t('bookVisit') || 'Book a Visit'}
+                      </Button>
+                    </Box>
                   </Box>
 
                   {/* Google Business Link */}
@@ -591,6 +727,39 @@ export default function CentersPage() {
           </DialogActions>
         </Dialog>
       </Container>
+
+      {/* Sticky Mobile Phone Bar */}
+      {isMobile && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1100,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1,
+            py: 1.5,
+            px: 2,
+            boxShadow: '0 -2px 10px rgba(0,0,0,0.15)',
+          }}
+        >
+          <PhoneOutlined />
+          <Typography variant="body1" fontWeight={600}>
+            <Box
+              component="a"
+              href="tel:+919176137043"
+              sx={{ color: 'inherit', textDecoration: 'none' }}
+            >
+              {t('customerCare') || 'Customer Care:'} +91 91761 37043
+            </Box>
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }

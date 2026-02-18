@@ -27,17 +27,17 @@ export async function GET(request: Request) {
 
     // Get stats for dashboard
     const { data: allSlots } = await supabase
-      .from('demo_class_slots')
+      .from('demo_class_slots' as any)
       .select('id, status, current_registrations')
-      .gte('slot_date', new Date().toISOString().split('T')[0]);
+      .gte('slot_date', new Date().toISOString().split('T')[0]) as { data: { id: string; status: string; current_registrations: number }[] | null };
 
     const { count: pendingCount } = await supabase
-      .from('demo_class_registrations')
+      .from('demo_class_registrations' as any)
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
 
     const { count: totalRegistrations } = await supabase
-      .from('demo_class_registrations')
+      .from('demo_class_registrations' as any)
       .select('*', { count: 'exact', head: true });
 
     const stats = {

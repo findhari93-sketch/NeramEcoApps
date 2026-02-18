@@ -40,7 +40,7 @@ async function tryGetUserId(request: NextRequest): Promise<string | undefined> {
 
     const supabase = createAdminClient();
     const { data: user } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('id')
       .eq('firebase_uid', decodedToken.uid)
       .single();
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VisitResp
     // Check for duplicate bookings (same phone, same center, same date)
     const cleanPhone = body.visitor_phone.replace(/^\+91/, '').replace(/\s/g, '');
     const { count } = await supabase
-      .from('center_visit_bookings')
+      .from('center_visit_bookings' as any)
       .select('*', { count: 'exact', head: true })
       .eq('center_id', body.center_id)
       .eq('visitor_phone', cleanPhone)

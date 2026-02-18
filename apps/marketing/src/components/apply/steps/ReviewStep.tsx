@@ -26,7 +26,7 @@ import {
   CalendarTodayOutlined,
 } from '@mui/icons-material';
 import { useFormContext } from '../FormContext';
-import { APPLICANT_CATEGORY_OPTIONS, CASTE_CATEGORY_OPTIONS } from '@neram/database';
+import { APPLICANT_CATEGORY_OPTIONS, CASTE_CATEGORY_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
 import Link from 'next/link';
 
 // Course type labels
@@ -34,6 +34,7 @@ const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
   jee_paper2: 'JEE Paper 2',
   both: 'Both NATA & JEE Paper 2',
+  not_sure: 'Not Sure Yet',
 };
 
 // Gender labels
@@ -116,6 +117,13 @@ export default function ReviewStep({ onEditStep }: ReviewStepProps) {
     return caste?.label || academic.casteCategory || '';
   };
 
+  // Get school type label
+  const getSchoolTypeLabel = () => {
+    if (!academic.schoolType) return null;
+    const schoolType = SCHOOL_TYPE_OPTIONS.find((opt) => opt.value === academic.schoolType);
+    return schoolType?.label || academic.schoolType;
+  };
+
   // Format date of birth
   const formatDob = () => {
     if (!personal.dateOfBirth) return null;
@@ -138,6 +146,7 @@ export default function ReviewStep({ onEditStep }: ReviewStepProps) {
             <ReviewItem label="Current Class" value={schoolStudentData?.current_class} />
             <ReviewItem label="School Name" value={schoolStudentData?.school_name} />
             <ReviewItem label="Board" value={schoolStudentData?.board} />
+            <ReviewItem label="School Type" value={getSchoolTypeLabel()} />
             {schoolStudentData?.previous_year_percentage && (
               <ReviewItem
                 label="Previous Year Percentage"
@@ -312,20 +321,26 @@ export default function ReviewStep({ onEditStep }: ReviewStepProps) {
           </Typography>
         </Box>
 
-        {course.hybridLearningAccepted && (
+        <Box mb={2}>
+          <Typography variant="body2" fontWeight={600}>
+            Learning Mode
+          </Typography>
           <Chip
-            label="Hybrid Learning Accepted"
-            color="success"
+            label={course.learningMode === 'online_only' ? '100% Online Classes' : 'Hybrid (Online + Offline)'}
+            color={course.learningMode === 'online_only' ? 'success' : 'primary'}
             size="small"
             icon={<CheckCircleOutlined />}
-            sx={{ mb: 2 }}
+            sx={{ mt: 0.5 }}
           />
-        )}
+        </Box>
 
-        {course.selectedCenterId && (
+        {course.learningMode === 'hybrid' && course.selectedCenterId && (
           <Box>
+            <Typography variant="body2" fontWeight={600}>
+              Preferred Offline Center
+            </Typography>
             <Typography variant="body2" color="text.secondary">
-              Preferred Offline Center Selected
+              {course.selectedCenterName || 'Center Selected'}
             </Typography>
           </Box>
         )}

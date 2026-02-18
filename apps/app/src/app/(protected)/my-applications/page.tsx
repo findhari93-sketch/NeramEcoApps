@@ -24,6 +24,13 @@ import {
   Select,
   MenuItem,
   Divider,
+  Snackbar,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormLabel,
+  CircularProgress,
+  LinearProgress,
 } from '@neram/ui';
 import {
   DescriptionOutlined,
@@ -36,10 +43,13 @@ import {
   CancelOutlined,
   PendingOutlined,
   EditOutlined,
+  LibraryAddOutlined,
+  SchoolOutlined,
+  OpenInNewOutlined,
 } from '@mui/icons-material';
 import { useFirebaseAuth } from '@neram/auth';
 import Link from 'next/link';
-import type { ApplicationStatus } from '@neram/database';
+import type { ApplicationStatus, ScholarshipApplication, ScholarshipApplicationStatus } from '@neram/database';
 
 interface Application {
   id: string;
@@ -54,8 +64,89 @@ interface Application {
   form_completed_at: string | null;
 }
 
+interface ScholarshipData {
+  scholarship: ScholarshipApplication | null;
+  leadProfile: {
+    scholarship_eligible: boolean;
+    school_type: string | null;
+  } | null;
+}
+
+// Scholarship banner config by status
+const SCHOLARSHIP_BANNER_CONFIG: Record<
+  ScholarshipApplicationStatus,
+  {
+    message: string;
+    severity: 'info' | 'success' | 'warning' | 'error';
+    bgGradient: string;
+    borderColor: string;
+    textColor: string;
+    showButton?: boolean;
+    buttonLabel?: string;
+    showProgress?: boolean;
+  }
+> = {
+  not_eligible: {
+    message: '',
+    severity: 'info',
+    bgGradient: 'linear-gradient(135deg, #F5F5F5 0%, #EEEEEE 100%)',
+    borderColor: '#BDBDBD',
+    textColor: '#616161',
+  },
+  eligible_pending: {
+    message: 'You are eligible for our scholarship program! Submit your documents to apply.',
+    severity: 'info',
+    bgGradient: 'linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)',
+    borderColor: '#42A5F5',
+    textColor: '#1565C0',
+    showButton: true,
+    buttonLabel: 'Apply for Scholarship',
+  },
+  documents_submitted: {
+    message: 'Your scholarship application is under review. We\'ll notify you once a decision is made.',
+    severity: 'info',
+    bgGradient: 'linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%)',
+    borderColor: '#AB47BC',
+    textColor: '#7B1FA2',
+    showProgress: true,
+  },
+  under_review: {
+    message: 'Your scholarship application is under review. We\'ll notify you once a decision is made.',
+    severity: 'info',
+    bgGradient: 'linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%)',
+    borderColor: '#AB47BC',
+    textColor: '#7B1FA2',
+    showProgress: true,
+  },
+  approved: {
+    message: 'Congratulations! Your scholarship has been approved.',
+    severity: 'success',
+    bgGradient: 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)',
+    borderColor: '#66BB6A',
+    textColor: '#2E7D32',
+  },
+  rejected: {
+    message: 'We\'re sorry, your scholarship application was not approved.',
+    severity: 'error',
+    bgGradient: 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)',
+    borderColor: '#FFA726',
+    textColor: '#E65100',
+  },
+  revision_requested: {
+    message: 'Please update your scholarship documents.',
+    severity: 'warning',
+    bgGradient: 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)',
+    borderColor: '#FF9800',
+    textColor: '#E65100',
+    showButton: true,
+    buttonLabel: 'Update Documents',
+  },
+};
+
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com';
+
 // Status configuration
-const STATUS_CONFIG: Record<string, { label: string; color: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'; icon: React.ReactNode }> = {
+const STATUS_CONFIG: Record<string, { label: string; color: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'; icon: React.ReactElement }> = {
   draft: { label: 'Draft', color: 'default', icon: <EditOutlined fontSize="small" /> },
   pending_verification: { label: 'Pending Verification', color: 'warning', icon: <HourglassEmptyOutlined fontSize="small" /> },
   submitted: { label: 'Submitted', color: 'info', icon: <PendingOutlined fontSize="small" /> },
@@ -94,6 +185,10 @@ export default function MyApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Scholarship state
+  const [scholarshipData, setScholarshipData] = useState<ScholarshipData | null>(null);
+  const [scholarshipLoading, setScholarshipLoading] = useState(true);
+
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingApp, setDeletingApp] = useState<Application | null>(null);
@@ -104,6 +199,19 @@ export default function MyApplicationsPage() {
   // View dialog state
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewingApp, setViewingApp] = useState<Application | null>(null);
+
+  // Add Course dialog state
+  const [addCourseOpen, setAddCourseOpen] = useState(false);
+  const [addCourseData, setAddCourseData] = useState({
+    interest_course: '',
+    learning_mode: 'hybrid',
+  });
+  const [addCourseLoading, setAddCourseLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const fetchApplications = async () => {
     if (!user) return;
@@ -139,8 +247,36 @@ export default function MyApplicationsPage() {
     }
   };
 
+  const fetchScholarshipStatus = async () => {
+    if (!user) return;
+
+    setScholarshipLoading(true);
+
+    try {
+      const idToken = await (user.raw as any)?.getIdToken?.();
+      if (!idToken) return;
+
+      const response = await fetch('/api/scholarship/status', {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setScholarshipData(data.data || null);
+      }
+    } catch (err) {
+      console.error('Error fetching scholarship status:', err);
+    } finally {
+      setScholarshipLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchApplications();
+    fetchScholarshipStatus();
   }, [user]);
 
   const handleDeleteClick = (app: Application) => {
@@ -195,12 +331,180 @@ export default function MyApplicationsPage() {
     setViewDialogOpen(true);
   };
 
+  const handleAddCourseSubmit = async () => {
+    if (!user || !addCourseData.interest_course) return;
+
+    setAddCourseLoading(true);
+
+    try {
+      const idToken = await (user.raw as any)?.getIdToken?.();
+      if (!idToken) {
+        setSnackbar({ open: true, message: 'Unable to authenticate. Please try refreshing.', severity: 'error' });
+        return;
+      }
+
+      const response = await fetch('/api/application/add-course', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(addCourseData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setAddCourseOpen(false);
+        setAddCourseData({ interest_course: '', learning_mode: 'hybrid' });
+        setSnackbar({ open: true, message: 'Course application submitted successfully!', severity: 'success' });
+        fetchApplications();
+      } else {
+        setSnackbar({ open: true, message: data.error || 'Failed to submit. Please try again.', severity: 'error' });
+      }
+    } catch (err) {
+      console.error('Error adding course:', err);
+      setSnackbar({ open: true, message: 'An error occurred. Please try again.', severity: 'error' });
+    } finally {
+      setAddCourseLoading(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
+  };
+
+  const renderScholarshipBanner = () => {
+    // Don't render if still loading or no data
+    if (scholarshipLoading || !scholarshipData) return null;
+
+    const { scholarship, leadProfile } = scholarshipData;
+
+    // Only show if user is scholarship eligible
+    if (!leadProfile?.scholarship_eligible) return null;
+
+    // Determine the effective status
+    const status: ScholarshipApplicationStatus = scholarship?.scholarship_status || 'eligible_pending';
+
+    // Don't show banner for not_eligible
+    if (status === 'not_eligible') return null;
+
+    const config = SCHOLARSHIP_BANNER_CONFIG[status];
+    if (!config) return null;
+
+    // Build the message with dynamic data
+    let displayMessage = config.message;
+    if (status === 'approved' && scholarship?.approved_fee != null) {
+      displayMessage = `Congratulations! Your scholarship has been approved. Your fee is \u20B9${scholarship.approved_fee.toLocaleString('en-IN')}.`;
+    }
+    if (status === 'rejected' && scholarship?.rejection_reason) {
+      displayMessage = `${config.message} Reason: ${scholarship.rejection_reason}`;
+    }
+    if (status === 'revision_requested' && scholarship?.revision_notes) {
+      displayMessage = `${config.message} ${scholarship.revision_notes}`;
+    }
+
+    const scholarshipLink = `${MARKETING_URL}/scholarship`;
+
+    return (
+      <Card
+        variant="outlined"
+        sx={{
+          mb: 3,
+          background: config.bgGradient,
+          borderColor: config.borderColor,
+          borderWidth: 1.5,
+          overflow: 'hidden',
+        }}
+      >
+        {config.showProgress && (
+          <LinearProgress
+            variant="indeterminate"
+            sx={{
+              height: 3,
+              '& .MuiLinearProgress-bar': {
+                backgroundColor: config.borderColor,
+              },
+              backgroundColor: 'rgba(0,0,0,0.06)',
+            }}
+          />
+        )}
+        <CardContent sx={{ p: { xs: 2, sm: 2.5 }, '&:last-child': { pb: { xs: 2, sm: 2.5 } } }}>
+          <Box display="flex" alignItems="flex-start" gap={1.5}>
+            <SchoolOutlined
+              sx={{
+                color: config.textColor,
+                fontSize: { xs: 28, sm: 32 },
+                mt: 0.25,
+                flexShrink: 0,
+              }}
+            />
+            <Box flex={1} minWidth={0}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 600,
+                  color: config.textColor,
+                  mb: 0.5,
+                  fontSize: { xs: '0.9rem', sm: '1rem' },
+                }}
+              >
+                {status === 'approved'
+                  ? 'Scholarship Approved'
+                  : status === 'rejected'
+                    ? 'Scholarship Update'
+                    : status === 'revision_requested'
+                      ? 'Action Required'
+                      : status === 'eligible_pending'
+                        ? 'Scholarship Available'
+                        : 'Scholarship Under Review'}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: config.textColor,
+                  opacity: 0.9,
+                  lineHeight: 1.5,
+                  fontSize: { xs: '0.825rem', sm: '0.875rem' },
+                }}
+              >
+                {displayMessage}
+              </Typography>
+
+              {config.showButton && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  endIcon={<OpenInNewOutlined sx={{ fontSize: 16 }} />}
+                  href={scholarshipLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    mt: 1.5,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8125rem',
+                    bgcolor: config.borderColor,
+                    color: '#fff',
+                    '&:hover': {
+                      bgcolor: config.textColor,
+                    },
+                    minHeight: 36,
+                    px: 2,
+                  }}
+                >
+                  {config.buttonLabel}
+                </Button>
+              )}
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+    );
   };
 
   const renderApplicationCard = (app: Application) => {
@@ -334,15 +638,16 @@ export default function MyApplicationsPage() {
             <IconButton onClick={fetchApplications} sx={{ color: 'white' }}>
               <RefreshOutlined />
             </IconButton>
-            <Button
-              variant="contained"
-              startIcon={<AddOutlined />}
-              component={Link}
-              href="/apply"
-              sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
-            >
-              New Application
-            </Button>
+            {applications.length > 0 && (
+              <Button
+                variant="contained"
+                startIcon={<LibraryAddOutlined />}
+                onClick={() => setAddCourseOpen(true)}
+                sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
+              >
+                Add Course
+              </Button>
+            )}
           </Box>
         </Box>
       </Paper>
@@ -353,6 +658,9 @@ export default function MyApplicationsPage() {
           {error}
         </Alert>
       )}
+
+      {/* Scholarship Status Banner */}
+      {renderScholarshipBanner()}
 
       {/* Loading State */}
       {loading && (
@@ -516,6 +824,66 @@ export default function MyApplicationsPage() {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Add Course Dialog */}
+      <Dialog
+        open={addCourseOpen}
+        onClose={() => !addCourseLoading && setAddCourseOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Apply for Another Course</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Your personal and academic details will be copied from your existing application.
+            Just select the new course you want to apply for.
+          </Typography>
+
+          <FormControl component="fieldset" sx={{ mb: 3, width: '100%' }}>
+            <FormLabel component="legend" sx={{ mb: 1 }}>Select Course</FormLabel>
+            <RadioGroup
+              value={addCourseData.interest_course}
+              onChange={(e) => setAddCourseData({ ...addCourseData, interest_course: e.target.value })}
+            >
+              <FormControlLabel value="nata" control={<Radio />} label="NATA" />
+              <FormControlLabel value="jee_paper2" control={<Radio />} label="JEE Paper 2" />
+              <FormControlLabel value="both" control={<Radio />} label="Both NATA & JEE Paper 2" />
+            </RadioGroup>
+          </FormControl>
+
+          <FormControl component="fieldset" sx={{ width: '100%' }}>
+            <FormLabel component="legend" sx={{ mb: 1 }}>Learning Mode</FormLabel>
+            <RadioGroup
+              value={addCourseData.learning_mode}
+              onChange={(e) => setAddCourseData({ ...addCourseData, learning_mode: e.target.value })}
+            >
+              <FormControlLabel value="hybrid" control={<Radio />} label="Hybrid (Online + Offline)" />
+              <FormControlLabel value="online_only" control={<Radio />} label="100% Online" />
+            </RadioGroup>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddCourseOpen(false)} disabled={addCourseLoading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAddCourseSubmit}
+            variant="contained"
+            disabled={addCourseLoading || !addCourseData.interest_course}
+            startIcon={addCourseLoading ? <CircularProgress size={16} color="inherit" /> : <LibraryAddOutlined />}
+          >
+            {addCourseLoading ? 'Submitting...' : 'Submit Application'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar for feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        message={snackbar.message}
+      />
     </Box>
   );
 }

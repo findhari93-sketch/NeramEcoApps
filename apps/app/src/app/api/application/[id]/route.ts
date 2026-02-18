@@ -42,10 +42,10 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string } | n
     // Get user from database
     const supabase = createAdminClient();
     const { data: user } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('id')
       .eq('firebase_uid', decodedToken.uid)
-      .single();
+      .single() as { data: { id: string } | null };
 
     if (!user) {
       return null;

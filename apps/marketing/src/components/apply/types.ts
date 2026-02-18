@@ -9,6 +9,7 @@ import type {
   CasteCategory,
   CourseType,
   LocationSource,
+  SchoolType,
   SchoolStudentAcademicData,
   DiplomaStudentAcademicData,
   CollegeStudentAcademicData,
@@ -56,6 +57,9 @@ export interface AcademicDetailsData {
   casteCategory: CasteCategory | null;
   targetExamYear: number | null;
 
+  // School type (only for school_student category)
+  schoolType: SchoolType | null;
+
   // School student fields
   schoolStudentData: SchoolStudentAcademicData | null;
 
@@ -76,7 +80,9 @@ export interface CourseSelectionData {
   interestCourse: CourseType | null;
   selectedCourseId: string | null;
   selectedCenterId: string | null;
+  selectedCenterName: string | null;
   hybridLearningAccepted: boolean;
+  learningMode: 'hybrid' | 'online_only';
 }
 
 /**
@@ -132,6 +138,7 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     applicantCategory: null,
     casteCategory: null,
     targetExamYear: new Date().getFullYear() + 1,
+    schoolType: null,
     schoolStudentData: null,
     diplomaStudentData: null,
     collegeStudentData: null,
@@ -141,7 +148,9 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     interestCourse: null,
     selectedCourseId: null,
     selectedCenterId: null,
+    selectedCenterName: null,
     hybridLearningAccepted: false,
+    learningMode: 'hybrid',
   },
   termsAccepted: false,
   utmSource: null,

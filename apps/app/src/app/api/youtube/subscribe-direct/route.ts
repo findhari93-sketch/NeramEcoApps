@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Find or create user
     let userId: string;
     const { data: existingUser } = await supabase
-      .from('users')
+      .from('users' as any)
       .select('id')
       .eq('firebase_uid', firebaseUid)
       .single() as { data: { id: string } | null };
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Try to find by email
       const { data: userByEmail } = await supabase
-        .from('users')
+        .from('users' as any)
         .select('id')
         .eq('email', userEmail)
         .single() as { data: { id: string } | null };
@@ -97,13 +97,13 @@ export async function POST(request: NextRequest) {
         userId = userByEmail.id;
         // Update Firebase UID
         await supabase
-          .from('users')
+          .from('users' as any)
           .update({ firebase_uid: firebaseUid } as never)
           .eq('id', userId);
       } else {
         // Create new user
         const { data: newUser, error: createError } = await supabase
-          .from('users')
+          .from('users' as any)
           .insert({
             email: userEmail,
             name: userName,
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user already has a YouTube subscription coupon
     const { data: existingCoupon } = await supabase
-      .from('youtube_subscription_coupons')
+      .from('youtube_subscription_coupons' as any)
       .select('*, coupons(*)')
       .eq('user_id', userId)
       .eq('youtube_channel_id', YOUTUBE_CHANNEL_ID)
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
       validUntil.setDate(validUntil.getDate() + 30); // Valid for 30 days
 
       const { data: newCoupon, error: couponError } = await supabase
-        .from('coupons')
+        .from('coupons' as any)
         .insert({
           code: couponCode,
           discount_type: 'fixed',
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
 
       // Create YouTube subscription record
       await supabase
-        .from('youtube_subscription_coupons')
+        .from('youtube_subscription_coupons' as any)
         .insert({
           user_id: userId,
           coupon_id: newCoupon.id,
@@ -189,13 +189,13 @@ export async function POST(request: NextRequest) {
 
       // Also create a cashback claim record
       const { data: leadProfile } = await supabase
-        .from('lead_profiles')
+        .from('lead_profiles' as any)
         .select('id')
         .eq('user_id', userId)
         .single() as { data: { id: string } | null };
 
       await supabase
-        .from('cashback_claims')
+        .from('cashback_claims' as any)
         .upsert({
           lead_profile_id: leadProfile?.id || null,
           user_id: userId,

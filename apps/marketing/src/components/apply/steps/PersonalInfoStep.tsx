@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   TextField,
@@ -17,6 +17,9 @@ import {
   Alert,
   Button,
   CircularProgress,
+  MenuItem,
+  Select,
+  InputLabel,
 } from '@neram/ui';
 import {
   CheckCircleOutlined,
@@ -26,6 +29,7 @@ import {
 } from '@mui/icons-material';
 import { useFormContext } from '../FormContext';
 import { GENDER_OPTIONS } from '../types';
+import { SUPPORTED_COUNTRIES, getCountryConfig } from '../countryConfig';
 
 export default function PersonalInfoStep() {
   const {
@@ -41,6 +45,11 @@ export default function PersonalInfoStep() {
   const [isLocationEditable, setIsLocationEditable] = useState(false);
   const [isGeolocating, setIsGeolocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+
+  const countryConfig = useMemo(
+    () => getCountryConfig(formData.location.country),
+    [formData.location.country]
+  );
 
   // Request geolocation on mount
   useEffect(() => {
@@ -74,6 +83,13 @@ export default function PersonalInfoStep() {
           const data = await response.json();
 
           if (data.address) {
+            // Auto-detect country if it matches a supported country
+            const detectedCountryCode = data.address.country_code?.toUpperCase();
+            const supportedCodes = SUPPORTED_COUNTRIES.map((c) => c.code);
+            if (detectedCountryCode && supportedCodes.includes(detectedCountryCode)) {
+              updateFormData('location', { country: detectedCountryCode });
+            }
+
             updateFormData('location', {
               city: data.address.city || data.address.town || data.address.village || '',
               state: data.address.state || '',
@@ -96,57 +112,84 @@ export default function PersonalInfoStep() {
     );
   };
 
-  // Pin code lookup
-  const lookupPincode = useCallback(async (pincode: string) => {
-    if (pincode.length !== 6) return;
+  // Postal code lookup
+  const lookupPincode = useCallback(
+    async (pincode: string, country: string) => {
+      const config = getCountryConfig(country);
+      if (!config.postalCode.lookupSupported) return;
+      if (config.postalCode.format && !config.postalCode.format.test(pincode)) return;
 
-    setIsPincodeLooking(true);
-    setPincodeError(null);
+      setIsPincodeLooking(true);
+      setPincodeError(null);
 
-    try {
-      const response = await fetch(`/api/pincode/${pincode}`);
-      const data = await response.json();
+      try {
+        const response = await fetch(`/api/pincode/${pincode}?country=${country}`);
+        const data = await response.json();
 
-      if (data.success && data.data) {
-        updateFormData('location', {
-          city: data.data.city || data.data.district,
-          state: data.data.state,
-          district: data.data.district,
-          locationSource: 'pincode',
-        });
-        setIsLocationEditable(false);
-      } else {
-        setPincodeError(data.error || 'Could not find location for this pin code');
+        if (data.success && data.data) {
+          updateFormData('location', {
+            city: data.data.city || data.data.district,
+            state: data.data.state,
+            district: data.data.district,
+            locationSource: 'pincode',
+          });
+          setIsLocationEditable(false);
+        } else {
+          setPincodeError(data.error || 'Could not find location for this postal code');
+          setIsLocationEditable(true);
+        }
+      } catch {
+        setPincodeError('Failed to lookup postal code. Please enter location manually.');
         setIsLocationEditable(true);
+      } finally {
+        setIsPincodeLooking(false);
       }
-    } catch {
-      setPincodeError('Failed to lookup pin code. Please enter location manually.');
-      setIsLocationEditable(true);
-    } finally {
-      setIsPincodeLooking(false);
-    }
-  }, [updateFormData]);
+    },
+    [updateFormData]
+  );
 
   const handlePincodeChange = (value: string) => {
-    // Only allow digits
-    const cleaned = value.replace(/\D/g, '').slice(0, 6);
+    const isNumeric = countryConfig.postalCode.inputMode === 'numeric';
+    const cleaned = isNumeric
+      ? value.replace(/\D/g, '').slice(0, countryConfig.postalCode.maxLength)
+      : value.replace(/[^A-Z0-9]/gi, '').slice(0, countryConfig.postalCode.maxLength);
+
     updateFormData('location', { pincode: cleaned });
     setPincodeError(null);
 
-    // Auto-lookup when 6 digits entered
-    if (cleaned.length === 6) {
-      lookupPincode(cleaned);
+    // Auto-lookup when the postal code matches the expected format
+    if (
+      countryConfig.postalCode.lookupSupported &&
+      countryConfig.postalCode.format &&
+      countryConfig.postalCode.format.test(cleaned)
+    ) {
+      lookupPincode(cleaned, formData.location.country);
+    }
+  };
+
+  const handleCountryChange = (newCountry: string) => {
+    updateFormData('location', {
+      country: newCountry,
+      pincode: '',
+      city: '',
+      state: '',
+      district: '',
+    });
+    setPincodeError(null);
+    setIsLocationEditable(false);
+    // Only reset phone if it's NOT already verified
+    if (!formData.personal.phoneVerified) {
+      updateFormData('personal', { phone: '', phoneVerified: false, phoneVerifiedAt: null });
     }
   };
 
   const handlePhoneChange = (value: string) => {
-    // Only allow digits
-    const cleaned = value.replace(/\D/g, '').slice(0, 10);
+    const cleaned = value.replace(/\D/g, '').slice(0, countryConfig.phoneLength);
     updateFormData('personal', { phone: cleaned, phoneVerified: false, phoneVerifiedAt: null });
   };
 
   const handleVerifyPhone = () => {
-    if (formData.personal.phone.length === 10) {
+    if (formData.personal.phone.length === countryConfig.phoneLength) {
       setShowPhoneVerification(true);
     }
   };
@@ -189,6 +232,13 @@ export default function PersonalInfoStep() {
             value={formData.personal.fatherName}
             onChange={(e) => updateFormData('personal', { fatherName: e.target.value })}
             helperText="As per official documents"
+            InputProps={{
+              endAdornment: isFieldPrefilled('fatherName') && (
+                <InputAdornment position="end">
+                  <Chip label="Pre-filled" size="small" color="info" variant="outlined" />
+                </InputAdornment>
+              ),
+            }}
             inputProps={{ minLength: 2 }}
           />
         </Grid>
@@ -220,37 +270,49 @@ export default function PersonalInfoStep() {
             required
             value={formData.personal.phone}
             onChange={(e) => handlePhoneChange(e.target.value)}
-            placeholder="9876543210"
+            placeholder={countryConfig.phonePlaceholder}
             inputProps={{
               inputMode: 'numeric',
               pattern: '[0-9]*',
-              maxLength: 10,
+              maxLength: countryConfig.phoneLength,
             }}
             InputProps={{
               startAdornment: (
-                <InputAdornment position="start">+91</InputAdornment>
+                <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                  <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                    {countryConfig.phonePrefix}
+                  </Typography>
+                </InputAdornment>
               ),
               endAdornment: formData.personal.phoneVerified ? (
-                <InputAdornment position="end">
+                <InputAdornment position="end" sx={{ ml: 0.5 }}>
                   <Chip
-                    icon={<VerifiedOutlined />}
+                    icon={<VerifiedOutlined sx={{ fontSize: 14 }} />}
                     label="Verified"
                     size="small"
                     color="success"
+                    sx={{ height: 24, '& .MuiChip-label': { px: 0.75, fontSize: '0.75rem' } }}
                   />
                 </InputAdornment>
-              ) : formData.personal.phone.length === 10 ? (
-                <InputAdornment position="end">
-                  <Button size="small" variant="text" onClick={handleVerifyPhone}>
+              ) : formData.personal.phone.length === countryConfig.phoneLength ? (
+                <InputAdornment position="end" sx={{ ml: 0.5 }}>
+                  <Button size="small" variant="text" onClick={handleVerifyPhone} sx={{ minWidth: 'auto', px: 1 }}>
                     Verify
                   </Button>
                 </InputAdornment>
               ) : null,
+              sx: { '& input': { minWidth: 0 } },
             }}
-            error={formData.personal.phone.length > 0 && formData.personal.phone.length !== 10}
+            error={
+              !formData.personal.phoneVerified &&
+              formData.personal.phone.length > 0 &&
+              formData.personal.phone.length !== countryConfig.phoneLength
+            }
             helperText={
-              formData.personal.phone.length > 0 && formData.personal.phone.length !== 10
-                ? 'Please enter a valid 10-digit number'
+              !formData.personal.phoneVerified &&
+              formData.personal.phone.length > 0 &&
+              formData.personal.phone.length !== countryConfig.phoneLength
+                ? `Please enter a valid ${countryConfig.phoneLength}-digit number`
                 : !formData.personal.phoneVerified
                 ? 'Phone verification is required'
                 : ''
@@ -336,70 +398,114 @@ export default function PersonalInfoStep() {
           )}
         </Grid>
 
-        {/* Pin Code - First! */}
-        <Grid item xs={12} sm={4}>
+        {/* Country Selector */}
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth>
+            <InputLabel>Country</InputLabel>
+            <Select
+              value={formData.location.country}
+              label="Country"
+              onChange={(e) => handleCountryChange(e.target.value as string)}
+            >
+              {SUPPORTED_COUNTRIES.map((c) => (
+                <MenuItem key={c.code} value={c.code}>
+                  {c.flag} {c.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        {/* Postal Code */}
+        <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
-            label="Pin Code"
-            required
+            label={countryConfig.postalCode.label}
+            required={countryConfig.postalCode.required}
             value={formData.location.pincode}
             onChange={(e) => handlePincodeChange(e.target.value)}
-            placeholder="600001"
+            placeholder={countryConfig.postalCode.placeholder}
             inputProps={{
-              inputMode: 'numeric',
-              pattern: '[0-9]*',
-              maxLength: 6,
+              inputMode: countryConfig.postalCode.inputMode,
+              maxLength: countryConfig.postalCode.maxLength,
             }}
             InputProps={{
               endAdornment: isPincodeLooking ? (
                 <InputAdornment position="end">
                   <CircularProgress size={20} />
                 </InputAdornment>
-              ) : formData.location.city && !isLocationEditable ? (
+              ) : formData.location.city &&
+                !isLocationEditable &&
+                countryConfig.postalCode.lookupSupported ? (
                 <InputAdornment position="end">
                   <CheckCircleOutlined color="success" />
                 </InputAdornment>
               ) : null,
             }}
             error={!!pincodeError}
-            helperText={pincodeError || 'Enter 6-digit pin code for auto-fill'}
+            helperText={pincodeError || countryConfig.postalCode.helperText}
           />
         </Grid>
 
-        {/* City - Auto-filled */}
-        <Grid item xs={12} sm={4}>
+        {/* State / Emirate / Region / Governorate / Municipality */}
+        <Grid item xs={12} sm={6}>
+          {countryConfig.locationFields.stateOptions ? (
+            <FormControl fullWidth required={countryConfig.locationFields.stateRequired}>
+              <InputLabel>{countryConfig.locationFields.stateLabel}</InputLabel>
+              <Select
+                value={formData.location.state}
+                label={countryConfig.locationFields.stateLabel}
+                onChange={(e) =>
+                  updateFormData('location', { state: e.target.value as string, locationSource: 'manual' })
+                }
+              >
+                {countryConfig.locationFields.stateOptions.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <TextField
+              fullWidth
+              label={countryConfig.locationFields.stateLabel}
+              required={countryConfig.locationFields.stateRequired}
+              value={formData.location.state}
+              onChange={(e) => updateFormData('location', { state: e.target.value })}
+              disabled={!isLocationEditable && !!formData.location.state}
+              InputProps={{
+                endAdornment:
+                  !isLocationEditable && formData.location.state ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setIsLocationEditable(true)}>
+                        <EditOutlined fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null,
+              }}
+            />
+          )}
+        </Grid>
+
+        {/* City - Auto-filled or manual */}
+        <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
             label="City"
-            required
+            required={countryConfig.locationFields.cityRequired}
             value={formData.location.city}
             onChange={(e) => updateFormData('location', { city: e.target.value })}
-            disabled={!isLocationEditable && !!formData.location.city}
+            disabled={
+              !isLocationEditable &&
+              !!formData.location.city &&
+              countryConfig.postalCode.lookupSupported
+            }
             InputProps={{
               endAdornment:
-                !isLocationEditable && formData.location.city ? (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setIsLocationEditable(true)}>
-                      <EditOutlined fontSize="small" />
-                    </IconButton>
-                  </InputAdornment>
-                ) : null,
-            }}
-          />
-        </Grid>
-
-        {/* State - Auto-filled */}
-        <Grid item xs={12} sm={4}>
-          <TextField
-            fullWidth
-            label="State"
-            required
-            value={formData.location.state}
-            onChange={(e) => updateFormData('location', { state: e.target.value })}
-            disabled={!isLocationEditable && !!formData.location.state}
-            InputProps={{
-              endAdornment:
-                !isLocationEditable && formData.location.state ? (
+                !isLocationEditable &&
+                formData.location.city &&
+                countryConfig.postalCode.lookupSupported ? (
                   <InputAdornment position="end">
                     <IconButton size="small" onClick={() => setIsLocationEditable(true)}>
                       <EditOutlined fontSize="small" />

@@ -1,4 +1,28 @@
-# Marketing Site Specialist (@neram/marketing)
+# Marketing Dev Agent (@neram/marketing)
+
+## Agent Role
+You are the **Marketing Dev Agent** — a full-stack developer specializing in the public-facing marketing site. You implement features, build pages, and write API routes. You work closely with the **UX/UI Designer** (for mobile-first designs) and the **SEO/AEO Expert** (for search optimization).
+
+**You do NOT decide** design patterns or SEO strategy — you **implement** what the UX Designer and SEO Expert specify. Focus on clean code, performance, and i18n correctness.
+
+## MOBILE-FIRST MANDATE (CRITICAL)
+
+> **This app serves ~60% mobile users (students on phones, parents). Every component MUST be designed mobile-first.**
+
+### Mobile-First Rules
+- Design for **375px** viewport first, then scale up (600px → 900px → 1200px)
+- Touch targets: **48x48px minimum** (Material 3 guideline)
+- Spacing between interactive elements: **8px minimum**
+- Base font: **16px** (prevents iOS auto-zoom)
+- Line height: **1.5** for readability
+- Content max-width: **600px** for mobile readability
+- **No horizontal scroll** on any viewport
+- Forms: one field per row on mobile, 48px input height
+- Bottom sheets over modal dialogs on mobile
+- Skeleton loaders over spinners
+- Performance budget: **LCP < 2.5s on 3G**
+- Use `next/image` with responsive sizing for all images
+- Lazy load below-fold content
 
 ## My Domain
 Public website at neramclasses.com - Multi-language marketing site
@@ -8,7 +32,6 @@ Public website at neramclasses.com - Multi-language marketing site
 - Lead capture (application form)
 - YouTube subscription rewards
 - Blog and testimonials
-- SEO and performance optimization
 - i18n (5 languages: EN, TA, HI, KN, ML)
 
 ## Tech Stack
@@ -95,12 +118,22 @@ export function generateStaticParams() {
 - Affects student app → `apps/app/CLAUDE.md`
 - Need shared UI components → `packages/ui/CLAUDE.md`
 
-## SEO Considerations
-- Use `generateMetadata()` for page metadata
-- Add structured data for courses
-- Ensure proper `hreflang` tags for i18n
+## SEO Implementation (Directed by SEO/AEO Expert Agent)
+- Use `generateMetadata()` for page metadata — titles, descriptions, OG tags
+- Implement structured data / JSON-LD as specified by SEO agent
+- Ensure proper `hreflang` tags for i18n (en/ta)
+- Maintain `sitemap.xml` generation (dynamic)
+- Follow canonical URL patterns specified by SEO agent
+- Add `alt` text to all images
 
 ## Performance
 - Use ISR (Incremental Static Regeneration) for content pages
 - Lazy load below-fold components
 - Optimize images with next/image
+- Target Core Web Vitals: LCP < 2.5s, FID < 100ms, CLS < 0.1
+
+## Agent Collaboration
+- **UX/UI Designer** → Sends mobile-first design specs → You implement them
+- **SEO/AEO Expert** → Sends SEO requirements (meta, schema, sitemap) → You implement them
+- **Project Architect** → Provides shared packages, DB queries, API patterns
+- **QA Agent** → Tests your implementations at mobile viewports (375px, 600px, 900px)

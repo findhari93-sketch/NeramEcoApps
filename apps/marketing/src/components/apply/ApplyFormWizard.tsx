@@ -19,13 +19,24 @@ import {
 } from '@neram/ui';
 import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined } from '@mui/icons-material';
 import { useFormContext, FormProvider } from './FormContext';
-import { STEP_LABELS } from './types';
+import { STEP_LABELS, type FormStep } from './types';
 import PersonalInfoStep from './steps/PersonalInfoStep';
 import AcademicDetailsStep from './steps/AcademicDetailsStep';
 import CourseSelectionStep from './steps/CourseSelectionStep';
 import ReviewStep from './steps/ReviewStep';
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
+import QuickInfoPanel from './QuickInfoPanel';
+
+// Wrapper to pass context-aware props to QuickInfoPanel
+function QuickInfoPanelWithContext() {
+  const { formData } = useFormContext();
+  const isGovernmentSchool =
+    formData.academic.applicantCategory === 'school_student' &&
+    formData.academic.schoolType === 'government_school';
+
+  return <QuickInfoPanel hideFeesForScholarship={isGovernmentSchool} />;
+}
 
 // ============================================
 // STEP CONTENT RENDERER
@@ -56,6 +67,8 @@ function StepContent({ step, onEditStep }: StepContentProps) {
 // ============================================
 
 function SuccessScreen({ applicationNumber }: { applicationNumber: string }) {
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
+
   return (
     <Box textAlign="center" py={6}>
       <CheckCircleOutlined sx={{ fontSize: 80, color: 'success.main', mb: 3 }} />
@@ -79,12 +92,52 @@ function SuccessScreen({ applicationNumber }: { applicationNumber: string }) {
       >
         {applicationNumber}
       </Typography>
-      <Typography color="text.secondary" sx={{ maxWidth: 500, mx: 'auto', mt: 3 }}>
-        We have received your application. Our team will review it and get back to you
-        within 24-48 hours. You will receive a confirmation email shortly.
-      </Typography>
-      <Box mt={4}>
-        <Button variant="contained" href="/" size="large">
+
+      {/* What happens next timeline */}
+      <Box sx={{ maxWidth: 480, mx: 'auto', mt: 4, textAlign: 'left' }}>
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          What happens next?
+        </Typography>
+        {[
+          { step: '1', text: 'Application received', done: true },
+          { step: '2', text: 'Our team reviews your application (24-48 hours)' },
+          { step: '3', text: 'You will be notified via email & WhatsApp' },
+          { step: '4', text: 'Complete enrollment in your student dashboard' },
+        ].map((item) => (
+          <Box key={item.step} display="flex" alignItems="center" gap={2} mb={1.5}>
+            <Box
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                bgcolor: item.done ? 'success.main' : 'grey.300',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14,
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              {item.done ? '\u2713' : item.step}
+            </Box>
+            <Typography variant="body2" color={item.done ? 'success.main' : 'text.secondary'}>
+              {item.text}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+
+      <Box mt={4} display="flex" gap={2} justifyContent="center" flexWrap="wrap">
+        <Button
+          variant="contained"
+          href={`${APP_URL}/my-applications`}
+          size="large"
+        >
+          Track Your Application
+        </Button>
+        <Button variant="outlined" href="/" size="large">
           Back to Home
         </Button>
       </Box>
@@ -104,6 +157,7 @@ function FormWizardInner() {
   const {
     formData,
     activeStep,
+    setActiveStep,
     goToNextStep,
     goToPreviousStep,
     isFirstStep,
@@ -116,11 +170,13 @@ function FormWizardInner() {
     setIsSubmitting,
     submissionError,
     setSubmissionError,
+    clearSavedForm,
     isAuthenticated,
   } = useFormContext();
 
   const [submitted, setSubmitted] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const currentValidation = validateStep(activeStep as 0 | 1 | 2 | 3);
 
@@ -171,6 +227,7 @@ function FormWizardInner() {
 
       const payload = {
         // Personal
+        first_name: formData.personal.firstName,
         father_name: formData.personal.fatherName,
         phone_verified: formData.personal.phoneVerified,
         phone_verified_at: formData.personal.phoneVerifiedAt,
@@ -191,12 +248,14 @@ function FormWizardInner() {
         academic_data: academicData,
         caste_category: formData.academic.casteCategory,
         target_exam_year: formData.academic.targetExamYear,
+        school_type: formData.academic.schoolType,
 
         // Course
         interest_course: formData.course.interestCourse,
         selected_course_id: formData.course.selectedCourseId,
         selected_center_id: formData.course.selectedCenterId,
         hybrid_learning_accepted: formData.course.hybridLearningAccepted,
+        learning_mode: formData.course.learningMode,
 
         // Status - submit the application
         status: 'submitted',
@@ -219,7 +278,12 @@ function FormWizardInner() {
       if (result.success) {
         setApplicationNumber(result.data.application_number || 'NERAM-PENDING');
         setSubmitted(true);
+        clearSavedForm();
       } else {
+        console.error('Application submission failed:', result);
+        if (result.debug) {
+          console.error('Debug info:', JSON.stringify(result.debug, null, 2));
+        }
         setSubmissionError(result.error || 'Failed to submit application. Please try again.');
       }
     } catch (error) {
@@ -275,12 +339,25 @@ function FormWizardInner() {
         </Box>
       )}
 
-      {/* Auth Warning */}
+      {/* Login Suggestion Banner */}
       {!isAuthenticated && activeStep === 0 && (
-        <Alert severity="info" sx={{ mb: 3 }}>
+        <Alert
+          severity="info"
+          sx={{ mb: 3 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              onClick={() => setShowLoginModal(true)}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              Login
+            </Button>
+          }
+        >
           <Typography variant="body2">
-            <strong>Tip:</strong> Log in to save your progress and manage your applications later.
-            You can still submit without logging in.
+            <strong>Tip:</strong> Log in to auto-fill your details and save your application progress.
           </Typography>
         </Alert>
       )}
@@ -302,7 +379,7 @@ function FormWizardInner() {
       {/* Step Content */}
       <Card elevation={isMobile ? 0 : 2} sx={{ mb: 3 }}>
         <CardContent sx={{ p: { xs: 2, md: 4 } }}>
-          <StepContent step={activeStep} onEditStep={setActiveStep} />
+          <StepContent step={activeStep} onEditStep={(step) => setActiveStep(step as FormStep)} />
         </CardContent>
       </Card>
 
@@ -372,6 +449,18 @@ function FormWizardInner() {
         apiBaseUrl={process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}
         phoneOnly={true}
       />
+
+      {/* Google Login Modal (for pre-fill) */}
+      <LoginModal
+        open={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        allowClose={true}
+        onAuthenticated={() => {
+          setShowLoginModal(false);
+          // FormContext will auto-prefill from user profile on next render
+        }}
+        apiBaseUrl={process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}
+      />
     </Box>
   );
 }
@@ -386,6 +475,7 @@ export default function ApplyFormWizard() {
       <Container maxWidth="md">
         <FormWizardInner />
       </Container>
+      <QuickInfoPanelWithContext />
     </FormProvider>
   );
 }

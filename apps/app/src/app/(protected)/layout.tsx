@@ -23,6 +23,7 @@ import {
 } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
+import { OnboardingWizard } from '@/components/onboarding';
 import Link from 'next/link';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
@@ -35,9 +36,11 @@ const SchoolIcon = () => <span>🏫</span>;
 const LocationIcon = () => <span>📍</span>;
 const FormIcon = () => <span>📝</span>;
 const ProfileIcon = () => <span>👤</span>;
+const ApplicationsIcon = () => <span>📄</span>;
 
 const menuItems = [
   { title: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
+  { title: 'My Applications', href: '/my-applications', icon: <ApplicationsIcon /> },
   { title: 'Cutoff Calculator', href: '/tools/cutoff-calculator', icon: <CalculatorIcon /> },
   { title: 'College Predictor', href: '/tools/college-predictor', icon: <SchoolIcon /> },
   { title: 'Exam Centers', href: '/tools/exam-centers', icon: <LocationIcon /> },
@@ -56,6 +59,7 @@ interface SupabaseUser {
   email_verified: boolean;
   user_type: string;
   status: string;
+  onboarding_completed: boolean;
 }
 
 function ProtectedLayoutInner({
@@ -70,9 +74,11 @@ function ProtectedLayoutInner({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [checkingUser, setCheckingUser] = useState(true);
   const [registrationError, setRegistrationError] = useState(false);
+  const [idToken, setIdToken] = useState<string | null>(null);
   const sso = useSSOToken();
 
   // Redirect to login if not authenticated (skip if SSO is processing)
@@ -105,6 +111,8 @@ function ProtectedLayoutInner({
           const { user: dbUser } = await response.json();
           setSupabaseUser(dbUser);
           setPhoneVerified(dbUser.phone_verified);
+          setOnboardingCompleted(dbUser.onboarding_completed ?? false);
+          setIdToken(idToken);
         } else {
           console.error('Register user failed:', response.status);
           setRegistrationError(true);
@@ -141,6 +149,8 @@ function ProtectedLayoutInner({
         const { user: dbUser } = await response.json();
         setSupabaseUser(dbUser);
         setPhoneVerified(dbUser.phone_verified);
+        setOnboardingCompleted(dbUser.onboarding_completed ?? false);
+        setIdToken(idToken);
       } else {
         console.error('Retry register user failed:', response.status);
         setRegistrationError(true);
@@ -457,6 +467,17 @@ function ProtectedLayoutInner({
           onAuthenticated={handlePhoneVerified}
           apiBaseUrl=""
           phoneOnly={true}
+        />
+      )}
+
+      {/* Onboarding Wizard - shows after phone verification, before dashboard */}
+      {phoneVerified && !onboardingCompleted && idToken && (
+        <OnboardingWizard
+          userToken={idToken}
+          userName={user.name || undefined}
+          sourceApp="app"
+          onComplete={() => setOnboardingCompleted(true)}
+          onSkip={() => setOnboardingCompleted(true)}
         />
       )}
     </Box>
