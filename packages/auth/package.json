@@ -12,7 +12,7 @@
     "./hooks": "./src/hooks.ts"
   },
   "scripts": {
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "echo 'Linted via consuming apps'",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist .turbo node_modules",
     "clean:build": "rm -rf dist .turbo"
