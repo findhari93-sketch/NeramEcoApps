@@ -4,7 +4,8 @@ import { Box, Chip, Divider, Paper, Typography } from '@neram/ui';
 import PersonIcon from '@mui/icons-material/Person';
 import SchoolIcon from '@mui/icons-material/School';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import type { UserJourneyDetail } from '@neram/database';
+import type { UserJourneyDetail, AcademicData, SchoolStudentAcademicData, DiplomaStudentAcademicData, CollegeStudentAcademicData, WorkingProfessionalAcademicData, ApplicantCategory } from '@neram/database';
+import { EDUCATION_BOARD_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
 
 interface UserProfileSectionProps {
   detail: UserJourneyDetail;
@@ -29,7 +30,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       >
         {label}
       </Typography>
-      <Typography variant="body2" sx={{ flex: 1, fontSize: 13 }}>
+      <Typography variant="body2" component="div" sx={{ flex: 1, fontSize: 13 }}>
         {value || <span style={{ color: '#bdbdbd' }}>--</span>}
       </Typography>
     </Box>
@@ -48,6 +49,79 @@ function SectionLabel({ icon: Icon, label }: { icon: React.ElementType; label: s
       </Typography>
     </Box>
   );
+}
+
+function getBoardLabel(code: string): string {
+  const board = EDUCATION_BOARD_OPTIONS.find((b) => b.code === code);
+  return board ? board.name : code;
+}
+
+function getSchoolTypeLabel(value: string): string {
+  const st = SCHOOL_TYPE_OPTIONS.find((s) => s.value === value);
+  return st ? st.label : value;
+}
+
+function renderAcademicData(data: AcademicData, category: ApplicantCategory | null) {
+  switch (category) {
+    case 'school_student': {
+      const d = data as unknown as SchoolStudentAcademicData;
+      return (
+        <>
+          {d.board && <InfoRow label="Board" value={getBoardLabel(d.board)} />}
+          {d.school_name && <InfoRow label="School Name" value={d.school_name} />}
+          {d.current_class && <InfoRow label="Current Class" value={`Class ${d.current_class}`} />}
+          {d.school_type && <InfoRow label="School Type" value={getSchoolTypeLabel(d.school_type)} />}
+          {d.previous_percentage != null && <InfoRow label="Previous Year %" value={`${d.previous_percentage}%`} />}
+        </>
+      );
+    }
+    case 'diploma_student': {
+      const d = data as unknown as DiplomaStudentAcademicData;
+      return (
+        <>
+          {d.college_name && <InfoRow label="College Name" value={d.college_name} />}
+          {d.department && <InfoRow label="Department" value={d.department} />}
+          {d.completed_grade && <InfoRow label="Completed Grade" value={d.completed_grade === '10th' ? '10th Standard' : '12th Standard'} />}
+          {d.marks != null && <InfoRow label="Marks" value={`${d.marks}%`} />}
+        </>
+      );
+    }
+    case 'college_student': {
+      const d = data as unknown as CollegeStudentAcademicData;
+      return (
+        <>
+          {d.college_name && <InfoRow label="College Name" value={d.college_name} />}
+          {d.department && <InfoRow label="Department" value={d.department} />}
+          {d.year_of_study && <InfoRow label="Year of Study" value={`${d.year_of_study} Year`} />}
+          {d.twelfth_year && <InfoRow label="12th Completed Year" value={d.twelfth_year} />}
+          {d.twelfth_percentage != null && <InfoRow label="12th Percentage" value={`${d.twelfth_percentage}%`} />}
+          {d.reason_for_exam && <InfoRow label="Reason for Exam" value={d.reason_for_exam} />}
+        </>
+      );
+    }
+    case 'working_professional': {
+      const d = data as unknown as WorkingProfessionalAcademicData;
+      return (
+        <>
+          {d.twelfth_year && <InfoRow label="12th Completed Year" value={d.twelfth_year} />}
+          {d.occupation && <InfoRow label="Occupation" value={d.occupation} />}
+          {d.company && <InfoRow label="Company" value={d.company} />}
+        </>
+      );
+    }
+    default: {
+      const entries = Object.entries(data as unknown as Record<string, unknown>);
+      return (
+        <>
+          {entries.map(([key, val]) =>
+            val != null ? (
+              <InfoRow key={key} label={key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} value={String(val)} />
+            ) : null
+          )}
+        </>
+      );
+    }
+  }
 }
 
 export default function UserProfileSection({ detail }: UserProfileSectionProps) {
@@ -108,12 +182,9 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
             <InfoRow label="Category" value={leadProfile.applicant_category ? <span style={{ textTransform: 'capitalize' }}>{leadProfile.applicant_category.replace(/_/g, ' ')}</span> : null} />
             <InfoRow label="Caste Category" value={leadProfile.caste_category?.toUpperCase()} />
             <InfoRow label="Target Exam Year" value={leadProfile.target_exam_year} />
-            {leadProfile.academic_data && (
-              <InfoRow label="Academic Data" value={
-                <Box component="pre" sx={{ m: 0, fontSize: 11, whiteSpace: 'pre-wrap', bgcolor: 'grey.50', p: 1, borderRadius: 1, fontFamily: 'monospace', border: '1px solid', borderColor: 'grey.200' }}>
-                  {JSON.stringify(leadProfile.academic_data, null, 2)}
-                </Box>
-              } />
+            {leadProfile.academic_data && renderAcademicData(
+              leadProfile.academic_data,
+              leadProfile.applicant_category
             )}
 
             <Divider sx={{ my: 2 }} />

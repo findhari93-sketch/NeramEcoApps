@@ -352,6 +352,63 @@ export function useScrolled(threshold = 0): boolean {
 }
 
 // ============================================
+// SCROLL DIRECTION HOOK
+// ============================================
+
+export interface UseScrollDirectionOptions {
+  /** Minimum scroll delta (in px) before direction change is registered. Default: 10 */
+  threshold?: number;
+  /** ScrollY value below which the navbar is always considered "at top". Default: 50 */
+  topThreshold?: number;
+}
+
+export interface UseScrollDirectionReturn {
+  scrollDirection: 'up' | 'down';
+  isAtTop: boolean;
+}
+
+export function useScrollDirection(
+  options?: UseScrollDirectionOptions
+): UseScrollDirectionReturn {
+  const { threshold = 5, topThreshold = 10 } = options || {};
+
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up');
+  const [isAtTop, setIsAtTop] = useState(true);
+  const lastScrollY = useRef(0);
+  const ticking = useRef(false);
+
+  useEffect(() => {
+    lastScrollY.current = window.scrollY;
+
+    const updateScrollDirection = () => {
+      const currentScrollY = window.scrollY;
+      const delta = currentScrollY - lastScrollY.current;
+
+      setIsAtTop(currentScrollY < topThreshold);
+
+      if (Math.abs(delta) >= threshold) {
+        setScrollDirection(delta > 0 ? 'down' : 'up');
+        lastScrollY.current = currentScrollY;
+      }
+
+      ticking.current = false;
+    };
+
+    const onScroll = () => {
+      if (!ticking.current) {
+        ticking.current = true;
+        requestAnimationFrame(updateScrollDirection);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [threshold, topThreshold]);
+
+  return { scrollDirection, isAtTop };
+}
+
+// ============================================
 // MOUNTED HOOK
 // ============================================
 
@@ -431,3 +488,10 @@ export function useKeyboardShortcut(
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [targetKey, callback, options]);
 }
+
+// ============================================
+// USER NOTIFICATIONS HOOK
+// ============================================
+
+export { useUserNotifications } from './useUserNotifications';
+export type { UseUserNotificationsOptions, UseUserNotificationsReturn, UserNotificationItem } from './useUserNotifications';

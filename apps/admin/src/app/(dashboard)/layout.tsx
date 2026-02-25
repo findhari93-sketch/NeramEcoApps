@@ -5,16 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Box } from '@neram/ui';
 import { useMicrosoftAuth } from '@neram/auth';
 import Sidebar from '@/components/Sidebar';
+import { AdminProfileProvider } from '@/contexts/AdminProfileContext';
+import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 
-const SIDEBAR_WIDTH = 260;
-
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function DashboardContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading } = useMicrosoftAuth();
+  const { sidebarWidth } = useSidebar();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -43,18 +40,34 @@ export default function DashboardLayout({
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar width={SIDEBAR_WIDTH} />
+      <Sidebar />
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
-          width: `calc(100% - ${SIDEBAR_WIDTH}px)`,
+          width: `calc(100% - ${sidebarWidth}px)`,
           bgcolor: 'background.default',
+          transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          overflow: 'hidden',
         }}
       >
         {children}
       </Box>
     </Box>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <AdminProfileProvider>
+      <SidebarProvider>
+        <DashboardContent>{children}</DashboardContent>
+      </SidebarProvider>
+    </AdminProfileProvider>
   );
 }

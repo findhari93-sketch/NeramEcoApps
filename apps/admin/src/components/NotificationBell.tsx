@@ -16,7 +16,7 @@ import {
   CircularProgress,
 } from '@neram/ui';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import { useMicrosoftAuth } from '@neram/auth';
+import { useAdminProfile } from '@/contexts/AdminProfileContext';
 
 interface AdminNotification {
   id: string;
@@ -39,10 +39,27 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   application_approved: '#4caf50',
 };
 
+const EVENT_SECTION_MAP: Record<string, string> = {
+  new_application: 'application',
+  application_approved: 'application',
+  payment_received: 'payment',
+  new_onboarding: 'onboarding',
+  onboarding_skipped: 'onboarding',
+  demo_registration: 'demo',
+  new_callback: 'application',
+  scholarship_opened: 'scholarship',
+  scholarship_submitted: 'scholarship',
+  scholarship_approved: 'scholarship',
+  scholarship_rejected: 'scholarship',
+};
+
 function getNavigationUrl(notification: AdminNotification): string | null {
   const userId = notification.metadata?.user_id as string;
-  if (userId) return `/crm/${userId}`;
-  return null;
+  if (!userId) return null;
+
+  const section = EVENT_SECTION_MAP[notification.event_type];
+  if (section) return `/crm/${userId}?section=${section}`;
+  return `/crm/${userId}`;
 }
 
 function timeAgo(dateStr: string): string {
@@ -62,7 +79,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function NotificationBell() {
-  const { user } = useMicrosoftAuth();
+  const { supabaseUserId } = useAdminProfile();
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
@@ -120,13 +137,13 @@ export default function NotificationBell() {
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
-    if (!user?.email) return;
+    if (!supabaseUserId) return;
 
     try {
       await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId, userId: user.email }),
+        body: JSON.stringify({ notificationId, userId: supabaseUserId }),
       });
 
       setNotifications((prev) =>
@@ -141,13 +158,13 @@ export default function NotificationBell() {
   };
 
   const handleMarkAllAsRead = async () => {
-    if (!user?.email) return;
+    if (!supabaseUserId) return;
 
     try {
       await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.email }),
+        body: JSON.stringify({ userId: supabaseUserId }),
       });
 
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));

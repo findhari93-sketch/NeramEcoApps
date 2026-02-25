@@ -28,11 +28,12 @@ interface DataTableProps {
   columns: Column[];
   loading?: boolean;
   onRowClick?: (row: any) => void;
+  defaultRowsPerPage?: number;
 }
 
-export default function DataTable({ rows, columns, loading = false, onRowClick }: DataTableProps) {
+export default function DataTable({ rows, columns, loading = false, onRowClick, defaultRowsPerPage = 10 }: DataTableProps) {
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
   const [selected, setSelected] = useState<string[]>([]);
 
   const handleChangePage = (_event: unknown, newPage: number) => {

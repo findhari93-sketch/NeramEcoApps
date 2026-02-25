@@ -87,11 +87,65 @@ export default function FeeStructuresPage() {
   const [editingFee, setEditingFee] = useState<FeeStructure | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
     severity: 'success',
   });
+
+  const validateField = (field: string, formData = form): string => {
+    switch (field) {
+      case 'display_name':
+        return !formData.display_name.trim() ? 'Display name is required' : '';
+      case 'fee_amount':
+        return Number(formData.fee_amount) <= 0 ? 'Fee amount must be greater than 0' : '';
+      case 'duration':
+        return !formData.duration.trim() ? 'Duration is required' : '';
+      case 'single_payment_discount':
+        return Number(formData.single_payment_discount) < 0
+          ? 'Discount cannot be negative'
+          : Number(formData.single_payment_discount) >= Number(formData.fee_amount) && Number(formData.fee_amount) > 0
+            ? 'Discount must be less than fee amount'
+            : '';
+      case 'combo_extra_fee':
+        return Number(formData.combo_extra_fee) < 0 ? 'Combo extra fee cannot be negative' : '';
+      case 'display_order':
+        return Number(formData.display_order) < 0 ? 'Display order cannot be negative' : '';
+      case 'installments': {
+        const i1 = Number(formData.installment_1_amount);
+        const i2 = Number(formData.installment_2_amount);
+        const fee = Number(formData.fee_amount);
+        if ((i1 > 0 || i2 > 0) && fee > 0 && i1 + i2 !== fee) {
+          return `Installments must sum to ${formatCurrency(fee)}`;
+        }
+        return '';
+      }
+      default:
+        return '';
+    }
+  };
+
+  const validate = (): boolean => {
+    const fields = ['display_name', 'fee_amount', 'duration', 'single_payment_discount', 'combo_extra_fee', 'display_order', 'installments'];
+    const newErrors: Record<string, string> = {};
+    for (const field of fields) {
+      const error = validateField(field);
+      if (error) newErrors[field] = error;
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleFieldBlur = (field: string) => {
+    const error = validateField(field);
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (error) next[field] = error;
+      else delete next[field];
+      return next;
+    });
+  };
 
   const fetchFeeStructures = useCallback(async () => {
     try {
@@ -135,6 +189,7 @@ export default function FeeStructuresPage() {
       setEditingFee(null);
       setForm(emptyForm);
     }
+    setErrors({});
     setDialogOpen(true);
   };
 
@@ -142,9 +197,11 @@ export default function FeeStructuresPage() {
     setDialogOpen(false);
     setEditingFee(null);
     setForm(emptyForm);
+    setErrors({});
   };
 
   const handleSave = async () => {
+    if (!validate()) return;
     try {
       setSaving(true);
 
@@ -172,7 +229,14 @@ export default function FeeStructuresPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error('Failed to update');
+        if (!res.ok) {
+          let errorMessage = `Failed to update (HTTP ${res.status})`;
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) errorMessage = errBody.error;
+          } catch { /* response not JSON */ }
+          throw new Error(errorMessage);
+        }
         setSnackbar({ open: true, message: 'Fee structure updated successfully', severity: 'success' });
       } else {
         const res = await fetch('/api/fee-structures', {
@@ -180,7 +244,14 @@ export default function FeeStructuresPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error('Failed to create');
+        if (!res.ok) {
+          let errorMessage = `Failed to create (HTTP ${res.status})`;
+          try {
+            const errBody = await res.json();
+            if (errBody?.error) errorMessage = errBody.error;
+          } catch { /* response not JSON */ }
+          throw new Error(errorMessage);
+        }
         setSnackbar({ open: true, message: 'Fee structure created successfully', severity: 'success' });
       }
 
@@ -188,7 +259,8 @@ export default function FeeStructuresPage() {
       fetchFeeStructures();
     } catch (error) {
       console.error('Error saving fee structure:', error);
-      setSnackbar({ open: true, message: 'Failed to save fee structure', severity: 'error' });
+      const msg = error instanceof Error ? error.message : 'Failed to save fee structure';
+      setSnackbar({ open: true, message: msg, severity: 'error' });
     } finally {
       setSaving(false);
     }
@@ -199,12 +271,20 @@ export default function FeeStructuresPage() {
 
     try {
       const res = await fetch(`/api/fee-structures/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete');
+      if (!res.ok) {
+        let errorMessage = `Failed to delete (HTTP ${res.status})`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) errorMessage = errBody.error;
+        } catch { /* response not JSON */ }
+        throw new Error(errorMessage);
+      }
       setSnackbar({ open: true, message: 'Fee structure deleted successfully', severity: 'success' });
       fetchFeeStructures();
     } catch (error) {
       console.error('Error deleting fee structure:', error);
-      setSnackbar({ open: true, message: 'Failed to delete fee structure', severity: 'error' });
+      const msg = error instanceof Error ? error.message : 'Failed to delete fee structure';
+      setSnackbar({ open: true, message: msg, severity: 'error' });
     }
   };
 
@@ -372,10 +452,18 @@ export default function FeeStructuresPage() {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            {Object.keys(errors).length > 0 && (
+              <Alert severity="error" sx={{ mb: 1 }}>
+                Please fix the errors below before saving.
+              </Alert>
+            )}
             <TextField
               label="Display Name"
               value={form.display_name}
               onChange={(e) => setForm({ ...form, display_name: e.target.value })}
+              onBlur={() => handleFieldBlur('display_name')}
+              error={!!errors.display_name}
+              helperText={errors.display_name}
               fullWidth
               required
               placeholder="e.g., NATA Year Long Program"
@@ -418,7 +506,15 @@ export default function FeeStructuresPage() {
               label="Fee Amount (Rs.)"
               type="number"
               value={form.fee_amount}
-              onChange={(e) => setForm({ ...form, fee_amount: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                const i1 = Math.ceil(val / 2);
+                const i2 = val - i1;
+                setForm({ ...form, fee_amount: val, installment_1_amount: i1, installment_2_amount: i2 });
+              }}
+              onBlur={() => handleFieldBlur('fee_amount')}
+              error={!!errors.fee_amount}
+              helperText={errors.fee_amount}
               fullWidth
               required
             />
@@ -427,8 +523,16 @@ export default function FeeStructuresPage() {
               type="number"
               value={form.combo_extra_fee}
               onChange={(e) => setForm({ ...form, combo_extra_fee: parseFloat(e.target.value) || 0 })}
+              onBlur={() => handleFieldBlur('combo_extra_fee')}
+              error={!!errors.combo_extra_fee}
+              helperText={
+                errors.combo_extra_fee ||
+                (form.course_type !== 'both' && Number(form.combo_extra_fee) > 0
+                  ? "Combo extra fee only applies to 'Both' course type"
+                  : 'Additional fee for combo course selection')
+              }
               fullWidth
-              helperText="Additional fee for combo course selection"
+              color={form.course_type !== 'both' && Number(form.combo_extra_fee) > 0 ? 'warning' : undefined}
             />
 
             <Divider sx={{ my: 0.5 }} />
@@ -441,25 +545,37 @@ export default function FeeStructuresPage() {
               type="number"
               value={form.single_payment_discount}
               onChange={(e) => setForm({ ...form, single_payment_discount: parseFloat(e.target.value) || 0 })}
+              onBlur={() => handleFieldBlur('single_payment_discount')}
+              error={!!errors.single_payment_discount}
+              helperText={errors.single_payment_discount || 'Discount when student pays full fee in a single payment'}
               fullWidth
-              helperText="Discount when student pays full fee in a single payment"
             />
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
                 label="Installment 1 Amount (Rs.)"
                 type="number"
                 value={form.installment_1_amount}
-                onChange={(e) => setForm({ ...form, installment_1_amount: parseFloat(e.target.value) || 0 })}
-                fullWidth
+                onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                setForm({ ...form, installment_1_amount: val, installment_2_amount: Math.max(0, form.fee_amount - val) });
+              }}
+                onBlur={() => handleFieldBlur('installments')}
+                error={!!errors.installments}
                 helperText="First installment amount"
+                fullWidth
               />
               <TextField
                 label="Installment 2 Amount (Rs.)"
                 type="number"
                 value={form.installment_2_amount}
-                onChange={(e) => setForm({ ...form, installment_2_amount: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                setForm({ ...form, installment_2_amount: val, installment_1_amount: Math.max(0, form.fee_amount - val) });
+              }}
+                onBlur={() => handleFieldBlur('installments')}
+                error={!!errors.installments}
+                helperText={errors.installments || 'Second installment amount'}
                 fullWidth
-                helperText="Second installment amount"
               />
             </Box>
             <FormControlLabel
@@ -481,6 +597,9 @@ export default function FeeStructuresPage() {
               label="Duration"
               value={form.duration}
               onChange={(e) => setForm({ ...form, duration: e.target.value })}
+              onBlur={() => handleFieldBlur('duration')}
+              error={!!errors.duration}
+              helperText={errors.duration}
               fullWidth
               required
               placeholder="e.g., 12 months"
@@ -507,6 +626,9 @@ export default function FeeStructuresPage() {
               type="number"
               value={form.display_order}
               onChange={(e) => setForm({ ...form, display_order: parseInt(e.target.value) || 0 })}
+              onBlur={() => handleFieldBlur('display_order')}
+              error={!!errors.display_order}
+              helperText={errors.display_order}
               fullWidth
             />
             <FormControlLabel
@@ -525,7 +647,7 @@ export default function FeeStructuresPage() {
           <Button
             variant="contained"
             onClick={handleSave}
-            disabled={saving || !form.display_name || !form.duration || !form.fee_amount}
+            disabled={saving}
           >
             {saving ? 'Saving...' : editingFee ? 'Update' : 'Create'}
           </Button>

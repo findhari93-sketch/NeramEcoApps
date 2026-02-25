@@ -12,7 +12,6 @@ import {
 } from '@neram/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
-import FilterListOffIcon from '@mui/icons-material/FilterListOff';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import type {
   UserJourney,
@@ -23,10 +22,13 @@ import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 import type { MRT_PaginationState, MRT_SortingState } from 'material-react-table';
 import PipelineFunnel from '../../../components/crm/PipelineFunnel';
 import UsersTable from '../../../components/crm/UsersTable';
+import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
+import { useAdminProfile } from '@/contexts/AdminProfileContext';
 
 export default function CRMPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { supabaseUserId } = useAdminProfile();
 
   const [users, setUsers] = useState<UserJourney[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -46,6 +48,10 @@ export default function CRMPage() {
     { id: 'created_at', desc: true },
   ]);
   const [globalFilter, setGlobalFilter] = useState('');
+
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [usersToDelete, setUsersToDelete] = useState<UserJourney[]>([]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -110,6 +116,33 @@ export default function CRMPage() {
     setSearchDebounce(timeout);
   };
 
+  const handleBulkDeleteRequest = (selectedUsers: UserJourney[]) => {
+    setUsersToDelete(selectedUsers);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleBulkDelete = async (userIds: string[]) => {
+    if (!supabaseUserId) {
+      throw new Error('Admin user ID not found. Please refresh and try again.');
+    }
+
+    const res = await fetch('/api/crm/users/bulk-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds, adminId: supabaseUserId }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to delete users');
+    }
+
+    // Close dialog and refresh
+    setDeleteDialogOpen(false);
+    setUsersToDelete([]);
+    await fetchUsers();
+  };
+
   const activeStageConfig = activeStage ? PIPELINE_STAGE_CONFIG[activeStage] : null;
 
   return (
@@ -153,9 +186,11 @@ export default function CRMPage() {
             />
           )}
           <Tooltip title="Refresh data">
-            <IconButton size="small" onClick={fetchUsers} disabled={loading}>
-              <RefreshIcon fontSize="small" />
-            </IconButton>
+            <span>
+              <IconButton size="small" onClick={fetchUsers} disabled={loading}>
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       </Box>
@@ -198,8 +233,20 @@ export default function CRMPage() {
           globalFilter={globalFilter}
           onGlobalFilterChange={handleGlobalFilterChange}
           onRowClick={handleRowClick}
+          onBulkDeleteRequest={handleBulkDeleteRequest}
         />
       </Paper>
+
+      {/* Bulk delete confirmation dialog */}
+      <BulkDeleteDialog
+        open={deleteDialogOpen}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setUsersToDelete([]);
+        }}
+        users={usersToDelete}
+        onConfirm={handleBulkDelete}
+      />
     </Box>
   );
 }

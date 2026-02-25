@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Container,
@@ -13,6 +14,7 @@ import {
   Alert,
 } from '@neram/ui';
 import VideoCard from './VideoCard';
+import YouTubeSubscribeModal from './YouTubeSubscribeModal';
 
 interface YouTubeVideo {
   id: string;
@@ -34,10 +36,12 @@ const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@neramclassesnata';
 
 export default function YouTubeSection() {
   const t = useTranslations('youtube');
+  const router = useRouter();
 
   const [stats, setStats] = useState<ChannelStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchStats() {
@@ -59,10 +63,11 @@ export default function YouTubeSection() {
     fetchStats();
   }, []);
 
-  const channelId = stats?.channelId || process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID || '';
-  const subscribeUrl = channelId
-    ? `https://www.youtube.com/channel/${channelId}?sub_confirmation=1`
-    : `${YOUTUBE_CHANNEL_URL}?sub_confirmation=1`;
+  const handleSubscribeSuccess = ({ couponCode }: { couponCode: string; discount: number }) => {
+    setSubscribeModalOpen(false);
+    // Navigate to the reward page to show the coupon
+    router.push(`/en/youtube-reward?coupon=${couponCode}`);
+  };
 
   if (loading) {
     return (
@@ -189,9 +194,7 @@ export default function YouTubeSection() {
             variant="contained"
             color="error"
             size="large"
-            href={subscribeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={() => setSubscribeModalOpen(true)}
             sx={{
               px: 4,
               py: 1.5,
@@ -239,6 +242,13 @@ export default function YouTubeSection() {
           </Button>
         </Box>
       </Container>
+
+      {/* YouTube Subscribe Modal */}
+      <YouTubeSubscribeModal
+        open={subscribeModalOpen}
+        onClose={() => setSubscribeModalOpen(false)}
+        onSuccess={handleSubscribeSuccess}
+      />
     </Box>
   );
 }

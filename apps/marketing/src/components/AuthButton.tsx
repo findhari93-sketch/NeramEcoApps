@@ -167,6 +167,7 @@ function AuthButtonInner() {
       <Avatar
         src={user.avatar || undefined}
         alt={user.name || user.email || 'User'}
+        imgProps={{ referrerPolicy: 'no-referrer' }}
         onClick={handleMenuOpen}
         sx={{
           cursor: 'pointer',

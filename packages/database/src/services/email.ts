@@ -13,7 +13,7 @@ function getResendClient(): Resend {
   return resendClient;
 }
 
-const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'Neram Classes <noreply@neram.co.in>';
+const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'Neram Classes <noreply@neramclasses.com>';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@neramclasses.com';
 
 export interface EmailData {
@@ -145,70 +145,145 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
     },
 
     'application-approved': {
-      subject: 'Application Approved - Complete Your Payment',
+      subject: `Application Approved${data.applicationNumber ? ` (${data.applicationNumber})` : ''} - Complete Your Payment`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background: #f5f5f5; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
-            .button { display: inline-block; background: #2E7D32; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-            .fee-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
-            .fee-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+            .header { background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 35px 30px; text-align: center; border-radius: 12px 12px 0 0; }
+            .header h1 { margin: 0; font-size: 28px; }
+            .header p { margin: 8px 0 0; font-size: 16px; opacity: 0.9; }
+            .content { background: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+            .greeting { font-size: 16px; margin-bottom: 5px; }
+            .button { display: inline-block; background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white !important; padding: 14px 36px; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: 600; font-size: 16px; }
+            .fee-box { background: #f8faf8; padding: 24px; border-radius: 10px; margin: 20px 0; border: 1px solid #e8f5e9; }
+            .fee-box h3 { margin-top: 0; color: #2E7D32; font-size: 16px; }
+            .fee-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px; }
             .fee-total { font-size: 1.3em; font-weight: bold; color: #1565C0; }
-            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+            .savings-badge { background: #e8f5e9; color: #2E7D32; padding: 10px 16px; border-radius: 8px; margin: 16px 0; font-size: 14px; font-weight: 600; text-align: center; }
+            .installment-box { background: #f3f0ff; padding: 16px 20px; border-radius: 8px; margin: 16px 0; border-left: 4px solid #7c4dff; }
+            .installment-box h4 { margin: 0 0 8px; color: #5c2db8; font-size: 14px; }
+            .installment-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+            .coupon-box { background: #FFF3E0; padding: 16px 20px; border-radius: 8px; border-left: 4px solid #FF9800; margin: 16px 0; }
+            .steps-box { background: #e3f2fd; padding: 20px; border-radius: 10px; margin: 20px 0; }
+            .steps-box h4 { margin: 0 0 12px; color: #1565C0; font-size: 15px; }
+            .step { display: flex; align-items: flex-start; margin-bottom: 10px; font-size: 14px; }
+            .step-num { background: #1565C0; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px; flex-shrink: 0; }
+            .ref-box { background: #fafafa; padding: 12px 16px; border-radius: 8px; margin: 16px 0; font-size: 13px; color: #666; }
+            .footer { text-align: center; padding: 24px 20px; color: #999; font-size: 12px; }
+            .footer a { color: #2E7D32; text-decoration: none; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h1 style="margin: 0;">Congratulations!</h1>
-              <p style="margin: 10px 0 0;">Your application has been approved</p>
+              <h1>Congratulations!</h1>
+              <p>Your application has been approved</p>
             </div>
             <div class="content">
-              <p>Dear <strong>${data.name}</strong>,</p>
-              <p>Great news! Your application for <strong>${data.course}</strong> has been approved.</p>
+              <p class="greeting">Dear <strong>${data.name}</strong>,</p>
+              <p>We are pleased to inform you that your application for <strong>${data.course}</strong> at Neram Classes has been <strong style="color: #2E7D32;">approved</strong>.</p>
+
+              ${data.applicationNumber ? `
+              <div class="ref-box">
+                <strong>Application No:</strong> ${data.applicationNumber}
+              </div>
+              ` : ''}
 
               <div class="fee-box">
-                <h3 style="margin-top: 0;">Fee Details</h3>
+                <h3>Fee Summary</h3>
                 <div class="fee-row">
-                  <span>Course Fee:</span>
-                  <span>Rs. ${data.baseFee}</span>
+                  <span>Course Fee</span>
+                  <span>Rs. ${Number(data.baseFee).toLocaleString('en-IN')}</span>
                 </div>
                 ${Number(data.scholarshipDiscount) > 0 ? `
                 <div class="fee-row" style="color: #2E7D32;">
-                  <span>Scholarship Discount (${data.scholarshipPercentage}%):</span>
-                  <span>- Rs. ${data.scholarshipDiscount}</span>
+                  <span>Scholarship Discount (${data.scholarshipPercentage}%)</span>
+                  <span>- Rs. ${Number(data.scholarshipDiscount).toLocaleString('en-IN')}</span>
+                </div>
+                ` : ''}
+                ${Number(data.fullPaymentDiscount) > 0 ? `
+                <div class="fee-row" style="color: #2E7D32;">
+                  <span>Full Payment Discount</span>
+                  <span>- Rs. ${Number(data.fullPaymentDiscount).toLocaleString('en-IN')}</span>
                 </div>
                 ` : ''}
                 <div class="fee-row fee-total" style="border: none; padding-top: 15px;">
-                  <span>Amount to Pay:</span>
-                  <span>Rs. ${data.finalFee}</span>
+                  <span>Amount to Pay</span>
+                  <span>Rs. ${Number(data.finalFee).toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
-              ${data.couponCode ? `
-              <p style="background: #FFF3E0; padding: 15px; border-radius: 8px; border-left: 4px solid #FF9800;">
-                <strong>Your Coupon Code:</strong> <code style="background: #fff; padding: 5px 10px; border-radius: 4px; font-size: 1.1em;">${data.couponCode}</code><br>
-                Use this code during payment for additional discount!
-              </p>
+              ${Number(data.fullPaymentDiscount) > 0 ? `
+              <div class="savings-badge">
+                Save Rs. ${Number(data.fullPaymentDiscount).toLocaleString('en-IN')} by paying in full!
+              </div>
               ` : ''}
 
-              <p><strong>Payment Deadline:</strong> ${data.paymentDeadline}</p>
+              ${data.allowedPaymentModes === 'full_and_installment' && Number(data.installment1Amount) > 0 ? `
+              <div class="installment-box">
+                <h4>Installment Option Available</h4>
+                <div class="installment-row">
+                  <span>1st Installment (due now)</span>
+                  <span><strong>Rs. ${Number(data.installment1Amount).toLocaleString('en-IN')}</strong></span>
+                </div>
+                <div class="installment-row">
+                  <span>2nd Installment (due in ${data.installment2DueDays || 45} days)</span>
+                  <span><strong>Rs. ${Number(data.installment2Amount).toLocaleString('en-IN')}</strong></span>
+                </div>
+              </div>
+              ` : ''}
 
-              <a href="https://app.neramclasses.com/payment/${data.leadId}" class="button">Pay Now & Confirm Seat</a>
+              ${data.couponCode ? `
+              <div class="coupon-box">
+                <strong>Your Coupon Code:</strong> <code style="background: #fff; padding: 4px 10px; border-radius: 4px; font-size: 1.1em; font-weight: bold;">${data.couponCode}</code><br>
+                <span style="font-size: 13px; color: #666;">Apply this code during payment for additional discount!</span>
+              </div>
+              ` : ''}
 
-              <p style="color: #666; font-size: 0.9em;">
+              <p style="font-size: 15px;"><strong>Payment Deadline:</strong> ${data.paymentDeadline}</p>
+
+              <div class="steps-box">
+                <h4>Next Steps</h4>
+                <div class="step">
+                  <span class="step-num">1</span>
+                  <span>Click the button below to go to the payment page</span>
+                </div>
+                <div class="step">
+                  <span class="step-num">2</span>
+                  <span>Choose your payment mode (Full payment${data.allowedPaymentModes === 'full_and_installment' ? ' or Installment' : ''})</span>
+                </div>
+                <div class="step">
+                  <span class="step-num">3</span>
+                  <span>Complete the payment via UPI, Bank Transfer, or Card</span>
+                </div>
+                <div class="step">
+                  <span class="step-num">4</span>
+                  <span>Your seat will be confirmed immediately!</span>
+                </div>
+              </div>
+
+              <div style="text-align: center;">
+                <a href="https://app.neramclasses.com/payment/${data.leadId}" class="button">Pay Now & Confirm Your Seat</a>
+              </div>
+
+              <p style="color: #666; font-size: 0.9em; text-align: center; margin-top: 8px;">
                 Tip: Pay via UPI/Bank Transfer to earn Rs. 100 extra cashback!
+              </p>
+
+              <p style="color: #999; font-size: 0.85em; margin-top: 24px;">
+                If you have any questions, feel free to reach out to us at <strong>+91 98765 43210</strong> or reply to this email.
               </p>
             </div>
             <div class="footer">
-              <p>Neram Classes - Architecture Entrance Coaching</p>
-              <p>Chennai, Tamil Nadu | www.neramclasses.com</p>
+              <p><strong>Neram Classes</strong> - Architecture Entrance Coaching</p>
+              <p>Chennai, Tamil Nadu | <a href="https://www.neramclasses.com">www.neramclasses.com</a></p>
+              <p style="margin-top: 8px; font-size: 11px;">This is an automated email from noreply@neramclasses.com. Please do not reply directly to this address.</p>
             </div>
           </div>
         </body>
@@ -217,38 +292,71 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
     },
 
     'payment-confirmation': {
-      subject: 'Payment Confirmed - Welcome to Neram Classes!',
+      subject: `Payment Confirmed${data.receiptNumber ? ` (${data.receiptNumber})` : ''} - Welcome to Neram Classes!`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background: #f5f5f5; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #1565C0, #0D47A1); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
-            .button { display: inline-block; background: #1565C0; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-            .receipt { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #ddd; }
-            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+            .header { background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 35px 30px; text-align: center; border-radius: 12px 12px 0 0; }
+            .header h1 { margin: 0; font-size: 26px; }
+            .header p { margin: 8px 0 0; font-size: 16px; opacity: 0.9; }
+            .content { background: #ffffff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+            .receipt-box { background: #f8faf8; padding: 24px; border-radius: 10px; margin: 20px 0; border: 1px solid #e8f5e9; }
+            .receipt-box h3 { margin: 0 0 15px; color: #2E7D32; font-size: 16px; }
+            .receipt-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+            .receipt-row:last-child { border-bottom: none; }
+            .receipt-total { font-size: 1.2em; font-weight: bold; color: #2E7D32; padding-top: 12px; border-top: 2px solid #2E7D32; }
+            .receipt-number { background: #E8F5E9; padding: 12px 16px; border-radius: 8px; text-align: center; margin: 16px 0; }
+            .receipt-number span { font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; color: #2E7D32; letter-spacing: 1px; }
+            .steps-box { background: #e3f2fd; padding: 20px; border-radius: 10px; margin: 20px 0; }
+            .steps-box h4 { margin: 0 0 12px; color: #1565C0; font-size: 15px; }
+            .step { display: flex; align-items: flex-start; margin-bottom: 10px; font-size: 14px; }
+            .step-num { background: #1565C0; color: white; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 10px; flex-shrink: 0; }
+            .button { display: inline-block; background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white !important; padding: 14px 36px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; }
+            .footer { text-align: center; padding: 24px 20px; color: #999; font-size: 12px; }
+            .footer a { color: #2E7D32; text-decoration: none; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h1 style="margin: 0;">Welcome to Neram Classes!</h1>
-              <p style="margin: 10px 0 0;">Your enrollment is confirmed</p>
+              <h1>Payment Confirmed!</h1>
+              <p>Welcome to Neram Classes</p>
             </div>
             <div class="content">
               <p>Dear <strong>${data.name}</strong>,</p>
               <p>Congratulations! Your payment has been received and your enrollment is now confirmed.</p>
 
-              <div class="receipt">
-                <h3 style="margin-top: 0;">Payment Receipt</h3>
-                <p><strong>Course:</strong> ${data.course}</p>
-                <p><strong>Amount Paid:</strong> Rs. ${data.amount}</p>
-                <p><strong>Payment ID:</strong> ${data.paymentId}</p>
-                <p><strong>Date:</strong> ${data.date}</p>
+              ${data.receiptNumber ? `
+              <div class="receipt-number">
+                <div style="color: #666; font-size: 12px; margin-bottom: 4px;">Receipt Number</div>
+                <span>${data.receiptNumber}</span>
+              </div>
+              ` : ''}
+
+              <div class="receipt-box">
+                <h3>Payment Receipt</h3>
+                <div class="receipt-row">
+                  <span>Course</span>
+                  <span><strong>${data.course}</strong></span>
+                </div>
+                <div class="receipt-row">
+                  <span>Amount Paid</span>
+                  <span><strong>Rs. ${data.amount}</strong></span>
+                </div>
+                <div class="receipt-row">
+                  <span>Payment ID</span>
+                  <span style="font-family: monospace; font-size: 13px;">${data.paymentId}</span>
+                </div>
+                <div class="receipt-row">
+                  <span>Date</span>
+                  <span>${data.date}</span>
+                </div>
               </div>
 
               ${Number(data.cashback) > 0 ? `
@@ -258,18 +366,37 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
               </p>
               ` : ''}
 
-              <h3>What's Next?</h3>
-              <ul>
-                <li>You'll receive batch allocation details within 2 days</li>
-                <li>Download study materials from your dashboard</li>
-                <li>Join our WhatsApp group for updates</li>
-              </ul>
+              <div class="steps-box">
+                <h4>What's Next?</h4>
+                <div class="step">
+                  <span class="step-num">1</span>
+                  <span>A confirmation email has been sent to your inbox (this email!)</span>
+                </div>
+                <div class="step">
+                  <span class="step-num">2</span>
+                  <span>You'll be assigned to a batch within <strong>2 business days</strong></span>
+                </div>
+                <div class="step">
+                  <span class="step-num">3</span>
+                  <span>Join our WhatsApp group for class updates and study materials</span>
+                </div>
+                <div class="step">
+                  <span class="step-num">4</span>
+                  <span>Access your online classroom on Neram Nexus</span>
+                </div>
+              </div>
 
-              <a href="https://app.neramclasses.com/dashboard" class="button">Go to Dashboard</a>
+              <div style="text-align: center;">
+                <a href="https://app.neramclasses.com/dashboard" class="button">Go to Dashboard</a>
+              </div>
+
+              <p style="color: #999; font-size: 0.85em; margin-top: 24px; text-align: center;">
+                Keep this email as your payment receipt. If you have any questions, reach out at <strong>support@neramclasses.com</strong>.
+              </p>
             </div>
             <div class="footer">
-              <p>Neram Classes - Architecture Entrance Coaching</p>
-              <p>Chennai, Tamil Nadu | www.neramclasses.com</p>
+              <p><strong>Neram Classes</strong> - Architecture Entrance Coaching</p>
+              <p>Chennai, Tamil Nadu | <a href="https://www.neramclasses.com">www.neramclasses.com</a></p>
             </div>
           </div>
         </body>
@@ -618,6 +745,233 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
               ` : ''}
 
               <a href="https://admin.neramclasses.com/applications/${data.applicationId}" class="button">Review Application</a>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    // ============================================
+    // REFUND EMAIL TEMPLATES
+    // ============================================
+
+    'refund-request-submitted': {
+      subject: 'Refund Request Received - Neram Classes',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #F57C00, #E65100); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #ddd; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">Refund Request Received</h1>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${data.name}</strong>,</p>
+              <p>We have received your refund request. Our team will review it and get back to you within 24-48 business hours.</p>
+              <div class="info-box">
+                <h3 style="margin-top: 0;">Request Summary</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr><td style="padding: 8px 0;">Payment Amount:</td><td style="padding: 8px 0; text-align: right;"><strong>Rs. ${data.paymentAmount?.toLocaleString?.('en-IN') || data.paymentAmount}</strong></td></tr>
+                  <tr><td style="padding: 8px 0;">Processing Fee (30%):</td><td style="padding: 8px 0; text-align: right; color: #E65100;">- Rs. ${data.processingFee?.toLocaleString?.('en-IN') || data.processingFee}</td></tr>
+                  <tr style="border-top: 2px solid #ddd;"><td style="padding: 8px 0;"><strong>Eligible Refund Amount:</strong></td><td style="padding: 8px 0; text-align: right;"><strong>Rs. ${data.refundAmount?.toLocaleString?.('en-IN') || data.refundAmount}</strong></td></tr>
+                </table>
+              </div>
+              <p style="background: #FFF3E0; padding: 15px; border-radius: 8px; border-left: 4px solid #F57C00; font-size: 14px;">
+                <strong>Please note:</strong> Refund approval is at the sole discretion of Neram Classes administration. A 30% processing fee is applicable on all approved refunds. You will be notified via email and WhatsApp once a decision is made.
+              </p>
+              <p>If you have any questions, please contact us at <strong>support@neramclasses.com</strong>.</p>
+            </div>
+            <div class="footer">
+              <p>Neram Classes - Architecture Entrance Coaching</p>
+              <p>Chennai, Tamil Nadu | www.neramclasses.com</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    'refund-approved': {
+      subject: 'Refund Approved - Neram Classes',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #2E7D32, #1B5E20); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #ddd; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">Refund Approved</h1>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${data.name}</strong>,</p>
+              <p>Your refund request has been approved. Here are the details:</p>
+              <div class="info-box">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr><td style="padding: 8px 0;">Original Payment:</td><td style="padding: 8px 0; text-align: right;">Rs. ${data.paymentAmount?.toLocaleString?.('en-IN') || data.paymentAmount}</td></tr>
+                  <tr><td style="padding: 8px 0;">Processing Fee (30%):</td><td style="padding: 8px 0; text-align: right; color: #666;">Deducted</td></tr>
+                  <tr style="border-top: 2px solid #2E7D32;"><td style="padding: 8px 0;"><strong>Refund Amount:</strong></td><td style="padding: 8px 0; text-align: right; color: #2E7D32;"><strong>Rs. ${data.refundAmount?.toLocaleString?.('en-IN') || data.refundAmount}</strong></td></tr>
+                </table>
+              </div>
+              <p>The refund will be processed to your original payment method within <strong>5-10 business days</strong>.</p>
+              <p>If you have any questions about the refund timeline, please contact us at <strong>support@neramclasses.com</strong>.</p>
+            </div>
+            <div class="footer">
+              <p>Neram Classes - Architecture Entrance Coaching</p>
+              <p>Chennai, Tamil Nadu | www.neramclasses.com</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    'refund-rejected': {
+      subject: 'Refund Request Update - Neram Classes',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #C62828, #B71C1C); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .reason-box { background: #FFF3E0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F57C00; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">Refund Request Update</h1>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${data.name}</strong>,</p>
+              <p>After careful review, your refund request for the payment of <strong>Rs. ${data.paymentAmount?.toLocaleString?.('en-IN') || data.paymentAmount}</strong> has not been approved.</p>
+              ${data.adminNotes ? `
+              <div class="reason-box">
+                <strong>Reason:</strong><br>
+                ${data.adminNotes}
+              </div>
+              ` : ''}
+              <p>As stated in our Refund Policy, all refund decisions are at the sole discretion of Neram Classes administration.</p>
+              <p>Your enrollment remains active and we encourage you to make the most of the learning opportunities. If you have further concerns, please reach out to us at <strong>support@neramclasses.com</strong>.</p>
+            </div>
+            <div class="footer">
+              <p>Neram Classes - Architecture Entrance Coaching</p>
+              <p>Chennai, Tamil Nadu | www.neramclasses.com</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    'admin-payment-received': {
+      subject: `[Payment] Rs. ${data.amount} received from ${data.studentName}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #2E7D32; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+            .header h2 { margin: 0; }
+            .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+            .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            .info-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+            .info-table td:first-child { font-weight: 600; width: 40%; color: #666; }
+            .amount { font-size: 1.5em; color: #2E7D32; font-weight: bold; text-align: center; padding: 15px; background: #E8F5E9; border-radius: 8px; margin: 15px 0; }
+            .button { display: inline-block; background: #1565C0; color: white; padding: 12px 25px; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>Payment Received</h2>
+            </div>
+            <div class="content">
+              <div class="amount">Rs. ${data.amount}</div>
+              <table class="info-table">
+                <tr><td>Student:</td><td><strong>${data.studentName}</strong></td></tr>
+                <tr><td>Email:</td><td>${data.studentEmail}</td></tr>
+                <tr><td>Phone:</td><td>${data.studentPhone}</td></tr>
+                <tr><td>Course:</td><td>${data.course}</td></tr>
+                <tr><td>Payment Type:</td><td>${data.paymentScheme}</td></tr>
+                <tr><td>Receipt #:</td><td><strong>${data.receiptNumber}</strong></td></tr>
+                <tr><td>Razorpay ID:</td><td><code>${data.razorpayId}</code></td></tr>
+                <tr><td>Date:</td><td>${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td></tr>
+              </table>
+              <a href="https://admin.neramclasses.com/payments" class="button">View in Admin Panel</a>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
+
+    'team-refund-request': {
+      subject: 'New Refund Request - Action Required',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #C62828, #B71C1C); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #ddd; }
+            .button { display: inline-block; background: #C62828; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h2>New Refund Request</h2>
+            </div>
+            <div class="content">
+              <p>A new refund request has been submitted and requires your review.</p>
+              <div class="info-box">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr><td style="padding: 8px 0;">Student:</td><td style="padding: 8px 0;"><strong>${data.user_name || data.userName || 'Unknown'}</strong></td></tr>
+                  <tr><td style="padding: 8px 0;">Phone:</td><td style="padding: 8px 0;">${data.phone || ''}</td></tr>
+                  <tr><td style="padding: 8px 0;">Payment Amount:</td><td style="padding: 8px 0;">Rs. ${data.payment_amount || data.paymentAmount || 0}</td></tr>
+                  <tr><td style="padding: 8px 0;">Refund Amount (70%):</td><td style="padding: 8px 0; color: #C62828;"><strong>Rs. ${data.refund_amount || data.refundAmount || 0}</strong></td></tr>
+                  <tr><td style="padding: 8px 0;">Reason:</td><td style="padding: 8px 0;">${data.reason_for_discontinuing || data.reasonForDiscontinuing || 'Not specified'}</td></tr>
+                </table>
+              </div>
+              <a href="https://admin.neramclasses.com/crm" class="button">Review in Admin CRM</a>
+            </div>
+            <div class="footer">
+              <p>This is an automated notification from Neram Classes.</p>
             </div>
           </div>
         </body>

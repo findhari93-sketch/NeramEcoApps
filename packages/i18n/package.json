@@ -12,7 +12,8 @@
   "scripts": {
     "lint": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo node_modules"
+    "clean": "rm -rf dist .turbo node_modules",
+    "clean:build": "rm -rf dist .turbo"
   },
   "dependencies": {
     "next-intl": "^3.4.0"

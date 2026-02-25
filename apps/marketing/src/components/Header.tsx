@@ -24,11 +24,70 @@ import {
   MenuIcon,
   CloseIcon,
   LanguageIcon,
+  HelpOutlineIcon,
+  useScrollDirection,
 } from '@neram/ui';
 import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
 import AuthButton from './AuthButton';
+import UserNotificationBell from './UserNotificationBell';
+import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
+
+function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslations>) {
+  switch (status) {
+    case 'approved':
+      return {
+        label: t('header.payAndJoin'),
+        href: '/apply' as const,
+        variant: 'contained' as const,
+        sx: {
+          bgcolor: '#2E7D32',
+          color: '#fff',
+          animation: 'ctaPulse 2s ease-in-out infinite',
+          '@keyframes ctaPulse': {
+            '0%, 100%': { boxShadow: '0 0 0 0 rgba(46,125,50,0.4)' },
+            '50%': { boxShadow: '0 0 0 8px rgba(46,125,50,0)' },
+          },
+          '&:hover': { bgcolor: '#1B5E20', boxShadow: 2 },
+        },
+      };
+    case 'draft':
+      return {
+        label: t('header.continueApplication'),
+        href: '/apply' as const,
+        variant: 'outlined' as const,
+        sx: {
+          color: 'white',
+          borderColor: 'rgba(255,255,255,0.6)',
+          '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
+        },
+      };
+    case 'submitted':
+    case 'under_review':
+    case 'pending_verification':
+      return {
+        label: t('header.trackApplication'),
+        href: '/apply' as const,
+        variant: 'outlined' as const,
+        sx: {
+          color: 'white',
+          borderColor: 'rgba(144,202,249,0.7)',
+          '&:hover': { borderColor: '#90CAF9', bgcolor: 'rgba(144,202,249,0.1)' },
+        },
+      };
+    default:
+      return {
+        label: t('header.applyNow'),
+        href: '/apply' as const,
+        variant: 'contained' as const,
+        sx: {
+          boxShadow: 'none',
+          '&:hover': { boxShadow: 2 },
+        },
+      };
+  }
+}
 
 const navigationLinks = [
   { labelKey: 'home' as const, href: '/' as const },
@@ -36,7 +95,6 @@ const navigationLinks = [
   { labelKey: 'courses' as const, href: '/courses' as const },
   { labelKey: 'fees' as const, href: '/fees' as const },
   { labelKey: 'contact' as const, href: '/contact' as const },
-  { labelKey: 'apply' as const, href: '/apply' as const },
 ];
 
 export default function Header() {
@@ -47,6 +105,11 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations();
+
+  const isApplyPage = pathname === '/apply';
+  const { scrollDirection, isAtTop } = useScrollDirection();
+  const { status: appStatus } = useApplicationStatus();
+  const ctaConfig = getCtaConfig(appStatus, t);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuAnchor, setLangMenuAnchor] = useState<null | HTMLElement>(null);
@@ -69,7 +132,20 @@ export default function Header() {
   };
 
   return (
-    <AppBar position="sticky" elevation={1}>
+    <>
+    <AppBar
+      position="fixed"
+      elevation={1}
+      sx={{
+        transform: scrollDirection === 'down' && !isAtTop && !mobileMenuOpen
+          ? 'translateY(-100%)'
+          : 'translateY(0)',
+        transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+        '@media (prefers-reduced-motion: reduce)': {
+          transition: 'none',
+        },
+      }}
+    >
       <Container maxWidth="lg">
         <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 } }}>
           {/* Logo + Microsoft Badge */}
@@ -139,28 +215,51 @@ export default function Header() {
           {/* Spacer for mobile */}
           {isMobile && <Box sx={{ flexGrow: 1 }} />}
 
-          {/* Apply Now CTA */}
-          <Button
-            component={Link}
-            href="/apply"
-            variant="contained"
-            color="secondary"
-            size={isMobile ? 'small' : 'medium'}
-            sx={{
-              borderRadius: '20px',
-              fontWeight: 600,
-              fontSize: { xs: '0.75rem', md: '0.875rem' },
-              px: { xs: 1.5, md: 2.5 },
-              mr: 1,
-              textTransform: 'none',
-              boxShadow: 'none',
-              '&:hover': {
-                boxShadow: 2,
-              },
-            }}
-          >
-            {t('header.applyNow')}
-          </Button>
+          {/* CTA Button: "Need Help?" on /apply, dynamic status-aware button elsewhere */}
+          {isApplyPage ? (
+            <Button
+              component={Link}
+              href="/contact"
+              variant="outlined"
+              size={isMobile ? 'small' : 'medium'}
+              startIcon={<HelpOutlineIcon sx={{ fontSize: { xs: 16, md: 18 } }} />}
+              sx={{
+                borderRadius: '20px',
+                fontWeight: 600,
+                fontSize: { xs: '0.75rem', md: '0.875rem' },
+                px: { xs: 1.5, md: 2.5 },
+                mr: 1,
+                textTransform: 'none',
+                color: 'white',
+                borderColor: 'rgba(255,255,255,0.6)',
+                '&:hover': {
+                  borderColor: 'white',
+                  bgcolor: 'rgba(255,255,255,0.1)',
+                },
+              }}
+            >
+              {t('header.needHelp')}
+            </Button>
+          ) : (
+            <Button
+              component={Link}
+              href={ctaConfig.href}
+              variant={ctaConfig.variant}
+              color={appStatus ? undefined : 'secondary'}
+              size={isMobile ? 'small' : 'medium'}
+              sx={{
+                borderRadius: '20px',
+                fontWeight: 600,
+                fontSize: { xs: '0.75rem', md: '0.875rem' },
+                px: { xs: 1.5, md: 2.5 },
+                mr: 1,
+                textTransform: 'none',
+                ...ctaConfig.sx,
+              }}
+            >
+              {ctaConfig.label}
+            </Button>
+          )}
 
           {/* Desktop: Language Globe Icon */}
           {!isMobile && (
@@ -198,7 +297,8 @@ export default function Header() {
             </>
           )}
 
-          {/* Desktop: Auth Button */}
+          {/* Desktop: Notifications + Auth Button */}
+          {!isMobile && <UserNotificationBell />}
           {!isMobile && <AuthButton />}
 
           {/* Mobile: Hamburger Menu */}
@@ -291,6 +391,45 @@ export default function Header() {
             </ListItemButton>
           ))}
         </List>
+
+        {/* Mobile CTA Button */}
+        {!isApplyPage && (
+          <Box sx={{ px: 2, pb: 1.5 }}>
+            <Button
+              component={Link}
+              href={ctaConfig.href}
+              variant={ctaConfig.variant}
+              color={appStatus ? undefined : 'secondary'}
+              fullWidth
+              onClick={toggleMobileMenu}
+              sx={{
+                borderRadius: '20px',
+                fontWeight: 600,
+                textTransform: 'none',
+                py: 1.2,
+                ...(appStatus === 'approved'
+                  ? {
+                      bgcolor: '#2E7D32',
+                      color: '#fff',
+                      '&:hover': { bgcolor: '#1B5E20' },
+                    }
+                  : appStatus === 'draft'
+                    ? {
+                        borderColor: 'primary.main',
+                        color: 'primary.main',
+                      }
+                    : appStatus
+                      ? {
+                          borderColor: '#1976D2',
+                          color: '#1976D2',
+                        }
+                      : {}),
+              }}
+            >
+              {ctaConfig.label}
+            </Button>
+          </Box>
+        )}
         <Divider />
 
         {/* Auth Section */}
@@ -298,9 +437,13 @@ export default function Header() {
           sx={{
             px: 2,
             py: 2,
-            '& .MuiButton-root': { ml: 0, width: '100%' },
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            '& .MuiButton-root': { ml: 0, flex: 1 },
           }}
         >
+          <UserNotificationBell />
           <AuthButton />
         </Box>
         <Divider />
@@ -339,5 +482,8 @@ export default function Header() {
         </Box>
       </SwipeableDrawer>
     </AppBar>
+    {/* Spacer to prevent content from sliding under fixed AppBar */}
+    <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 } }} />
+    </>
   );
 }

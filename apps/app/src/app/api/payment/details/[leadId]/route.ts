@@ -57,6 +57,27 @@ export async function GET(
       not_sure: 'Architecture Entrance Course',
     };
 
+    // Use admin-configured installment amounts, fallback to 55/45 split
+    const installment1Amount = leadProfile.installment_1_amount
+      ? Number(leadProfile.installment_1_amount)
+      : Math.ceil(finalFee * 0.55);
+    const installment2Amount = leadProfile.installment_2_amount
+      ? Number(leadProfile.installment_2_amount)
+      : (finalFee - installment1Amount);
+    const installment2DueDays = leadProfile.installment_2_due_days || 45;
+    const allowedPaymentModes = leadProfile.allowed_payment_modes || 'full_and_installment';
+
+    // Get user contact info for Razorpay prefill
+    const { data: userRecord } = await supabase
+      .from('users' as any)
+      .select('email, phone, first_name, last_name')
+      .eq('id', user.id)
+      .single();
+
+    const userName = [userRecord?.first_name, userRecord?.last_name].filter(Boolean).join(' ') || '';
+    const userEmail = userRecord?.email || user.email || '';
+    const userPhone = userRecord?.phone || leadProfile.application_data?.phone || '';
+
     return NextResponse.json({
       leadProfileId: leadProfile.id,
       courseName: COURSE_LABELS[leadProfile.interest_course] || 'Architecture Entrance Course',
@@ -65,8 +86,10 @@ export async function GET(
       finalFee,
       fullPaymentDiscount,
       fullPaymentAmount: finalFee - fullPaymentDiscount,
-      installment1Amount: Math.ceil(finalFee / 2),
-      installment2Amount: finalFee - Math.ceil(finalFee / 2),
+      installment1Amount,
+      installment2Amount,
+      installment2DueDays,
+      allowedPaymentModes,
       paymentRecommendation,
       paymentScheme: leadProfile.payment_scheme || 'full',
       paymentDeadline: leadProfile.payment_deadline || null,
@@ -76,6 +99,11 @@ export async function GET(
       installments: installments || [],
       scholarshipDiscount: leadProfile.discount_amount || 0,
       couponCode: leadProfile.coupon_code || null,
+      adminCouponCode: leadProfile.coupon_code || null,
+      hasCoupon: !!leadProfile.coupon_code,
+      userName,
+      userEmail,
+      userPhone,
     });
   } catch (error: any) {
     console.error('Payment details error:', error);

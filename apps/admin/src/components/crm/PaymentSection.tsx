@@ -2,7 +2,10 @@
 
 import {
   Box,
+  Button,
   Chip,
+  Divider,
+  IconButton,
   Paper,
   Table,
   TableBody,
@@ -10,6 +13,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@neram/ui';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -17,6 +21,8 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import type { UserJourneyDetail } from '@neram/database';
 
 interface PaymentSectionProps {
@@ -122,6 +128,67 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
             </Box>
           )}
         </Box>
+
+        {/* Payment Mode & Coupon Info */}
+        {leadProfile && (
+          <Box sx={{ display: 'flex', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
+            {/* Allowed Payment Mode */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                Student Payment Options:
+              </Typography>
+              <Chip
+                label={leadProfile.allowed_payment_modes === 'full_only' ? 'Full Payment Only' : 'Full + Installment'}
+                size="small"
+                color={leadProfile.allowed_payment_modes === 'full_only' ? 'warning' : 'primary'}
+                sx={{ height: 22, fontSize: 10.5, fontWeight: 600 }}
+              />
+            </Box>
+
+            {/* Coupon Code */}
+            {leadProfile.coupon_code && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LocalOfferIcon sx={{ fontSize: 14, color: 'success.main' }} />
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                  Coupon:
+                </Typography>
+                <Chip
+                  label={leadProfile.coupon_code}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  sx={{ height: 22, fontSize: 11, fontWeight: 700, fontFamily: 'monospace' }}
+                />
+                <Tooltip title="Copy coupon code">
+                  <IconButton
+                    size="small"
+                    onClick={() => navigator.clipboard.writeText(leadProfile.coupon_code || '')}
+                    sx={{ p: 0.25 }}
+                  >
+                    <ContentCopyIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            )}
+
+            {/* Full Payment Discount */}
+            {leadProfile.full_payment_discount && Number(leadProfile.full_payment_discount) > 0 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                  Full Pay Discount:
+                </Typography>
+                <Chip
+                  label={formatCurrency(Number(leadProfile.full_payment_discount))}
+                  size="small"
+                  color="success"
+                  sx={{ height: 22, fontSize: 10.5, fontWeight: 600 }}
+                />
+              </Box>
+            )}
+          </Box>
+        )}
+
+        <Divider sx={{ mb: 2.5 }} />
 
         {/* Payments table */}
         {payments.length > 0 ? (

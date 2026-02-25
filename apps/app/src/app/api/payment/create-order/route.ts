@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { leadProfileId, paymentScheme } = await request.json();
+    const { leadProfileId, paymentScheme, couponCode, couponDiscount, youtubeDiscount } = await request.json();
 
     // Get lead profile with fee details
     const { data: leadProfile, error: leadError } = await supabase
@@ -60,39 +60,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let amount = leadProfile.final_fee;
+    // Calculate base amount from fee structure
+    let baseAmount = leadProfile.final_fee;
 
-    // Apply full payment discount for full payment scheme
     if (paymentScheme === 'full' && leadProfile.full_payment_discount) {
-      amount = leadProfile.final_fee - leadProfile.full_payment_discount;
+      baseAmount = leadProfile.final_fee - leadProfile.full_payment_discount;
     }
 
-    // For installment payment, calculate first installment (50% of total fee, no discount)
     if (paymentScheme === 'installment') {
-      amount = Math.ceil(leadProfile.final_fee / 2);
+      baseAmount = leadProfile.installment_1_amount
+        ? Number(leadProfile.installment_1_amount)
+        : Math.ceil(leadProfile.final_fee * 0.55);
     }
 
-    // Convert to paise (Razorpay requires amount in smallest currency unit)
+    // Validate and apply coupon discount server-side
+    let validatedCouponDiscount = 0;
+    if (couponCode && couponDiscount > 0) {
+      const { data: coupon } = await supabase
+        .from('coupons' as any)
+        .select('*')
+        .eq('code', couponCode)
+        .eq('is_active', true)
+        .single();
+
+      if (coupon) {
+        if (coupon.discount_type === 'percentage') {
+          validatedCouponDiscount = Math.round(leadProfile.final_fee * (coupon.discount_value / 100));
+        } else {
+          validatedCouponDiscount = coupon.discount_value;
+        }
+        if (coupon.max_discount && validatedCouponDiscount > coupon.max_discount) {
+          validatedCouponDiscount = coupon.max_discount;
+        }
+      }
+    }
+
+    // Validate YouTube discount (max ₹50)
+    const validatedYoutubeDiscount = youtubeDiscount > 0 ? Math.min(Number(youtubeDiscount), 50) : 0;
+
+    // Apply discounts
+    const totalDiscounts = validatedCouponDiscount + validatedYoutubeDiscount;
+    const amount = Math.max(1, baseAmount - totalDiscounts);
+
     const amountInPaise = Math.round(amount * 100);
 
-    // Create Razorpay order
+    // Create Razorpay order (receipt max 40 chars)
     const razorpay = getRazorpayClient();
     const order = await razorpay.orders.create({
       amount: amountInPaise,
       currency: 'INR',
-      receipt: `receipt_${leadProfileId}_${Date.now()}`,
+      receipt: `rcpt_${leadProfileId.substring(0, 8)}_${Date.now()}`,
       notes: {
         lead_profile_id: leadProfileId,
         user_id: user.id,
         payment_scheme: paymentScheme,
-        installment_number: paymentScheme === 'installment' ? 1 : 0,
+        installment_number: String(paymentScheme === 'installment' ? 1 : 0),
+        coupon_code: couponCode || '',
+        coupon_discount: String(validatedCouponDiscount),
+        youtube_discount: String(validatedYoutubeDiscount),
       },
     });
 
     // Store payment record
     const { data: payment, error: paymentError } = await supabase
       .from('payments' as any)
-      // @ts-ignore - Supabase types not generated
       .insert({
         lead_profile_id: leadProfileId,
         user_id: user.id,
@@ -102,6 +133,13 @@ export async function POST(request: NextRequest) {
         status: 'pending',
         payment_scheme: paymentScheme,
         installment_number: paymentScheme === 'installment' ? 1 : null,
+        metadata: totalDiscounts > 0 ? {
+          coupon_code: couponCode || null,
+          coupon_discount: validatedCouponDiscount,
+          youtube_discount: validatedYoutubeDiscount,
+          base_amount: baseAmount,
+          total_discounts: totalDiscounts,
+        } : null,
       })
       .select()
       .single();
@@ -125,7 +163,8 @@ export async function POST(request: NextRequest) {
       keyId: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
-    console.error('Create order error:', error);
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+    console.error('Create order error:', errorMessage);
     return NextResponse.json(
       { error: 'Server Error', message: 'Failed to create payment order' },
       { status: 500 }

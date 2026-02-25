@@ -32,6 +32,15 @@ export async function POST(
       );
     }
 
+    // Validate adminId is a valid UUID (Supabase user ID, not MS OID or email)
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(adminId)) {
+      return NextResponse.json(
+        { error: 'adminId must be a valid UUID (Supabase user ID). Admin profile may not be resolved yet.' },
+        { status: 400 }
+      );
+    }
+
     const created = await addAdminNote(
       params.id,
       adminId,

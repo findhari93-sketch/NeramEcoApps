@@ -9,7 +9,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ui', '@neram/database', '@neram/i18n'],
+  transpilePackages: ['@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth'],
   images: {
     remotePatterns: [
       {

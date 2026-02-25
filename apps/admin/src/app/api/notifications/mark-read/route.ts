@@ -15,6 +15,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate userId is a valid UUID (Supabase user ID, not email)
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(userId)) {
+      return NextResponse.json(
+        { error: 'userId must be a valid UUID (Supabase user ID)' },
+        { status: 400 }
+      );
+    }
+
     if (notificationId) {
       // Mark single notification as read
       await markNotificationRead(notificationId, userId);

@@ -236,6 +236,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
       styleOverrides: {
         html: {
           scrollBehavior: 'smooth',
+          overflowY: 'scroll', // Prevent layout shift when MUI scroll-locks body on modal/popover open
         },
         body: {
           scrollbarWidth: 'thin',
@@ -439,6 +440,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
         },
         filled: {
           backgroundColor: neutralColors.surfaceVariant,
+          color: neutralColors.textPrimary,
         },
         colorPrimary: {
           backgroundColor: alpha(primaryColors[500], 0.1),
@@ -447,6 +449,22 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
         colorSecondary: {
           backgroundColor: alpha(secondaryColors[500], 0.15),
           color: secondaryColors[800],
+        },
+        colorInfo: {
+          backgroundColor: alpha(semanticColors.info.main, 0.12),
+          color: semanticColors.info.dark,
+        },
+        colorSuccess: {
+          backgroundColor: alpha(semanticColors.success.main, 0.12),
+          color: semanticColors.success.dark,
+        },
+        colorWarning: {
+          backgroundColor: alpha(semanticColors.warning.main, 0.12),
+          color: semanticColors.warning.dark,
+        },
+        colorError: {
+          backgroundColor: alpha(semanticColors.error.main, 0.12),
+          color: semanticColors.error.dark,
         },
       },
     },

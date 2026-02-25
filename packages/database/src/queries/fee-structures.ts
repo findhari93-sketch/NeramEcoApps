@@ -1,4 +1,4 @@
-// @ts-nocheck - Supabase types not generated
+// @ts-nocheck - Database type needs regeneration for Supabase v2 compat
 /**
  * Neram Classes - Fee Structure Queries
  *
@@ -132,6 +132,7 @@ export async function createFeeStructure(
 ): Promise<FeeStructure> {
   const supabase = client || getSupabaseAdminClient();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database type needs regeneration
   const { data, error } = await (supabase as any)
     .from('fee_structures')
     .insert({
@@ -154,7 +155,9 @@ export async function createFeeStructure(
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Failed to create fee structure: ${error.message}`);
+  }
   return data as FeeStructure;
 }
 
@@ -168,14 +171,17 @@ export async function updateFeeStructure(
 ): Promise<FeeStructure> {
   const supabase = client || getSupabaseAdminClient();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database type needs regeneration
   const { data, error } = await (supabase as any)
     .from('fee_structures')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(updates)
     .eq('id', feeId)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Failed to update fee structure ${feeId}: ${error.message}`);
+  }
   return data as FeeStructure;
 }
 
@@ -193,5 +199,7 @@ export async function deleteFeeStructure(
     .delete()
     .eq('id', feeId);
 
-  if (error) throw error;
+  if (error) {
+    throw new Error(`Failed to delete fee structure ${feeId}: ${error.message}`);
+  }
 }

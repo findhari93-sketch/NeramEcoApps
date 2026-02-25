@@ -219,10 +219,14 @@
   },
   "header": {
     "applyNow": "Apply Now",
+    "needHelp": "Need Help?",
     "language": "Language",
     "changeLanguage": "Change language",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "continueApplication": "Continue Application",
+    "trackApplication": "Track Application",
+    "payAndJoin": "Pay & Join Now"
   },
   "centers": {
     "title": "Visit Our Learning Centers",
@@ -373,6 +377,26 @@
     "noApplication": "No application found. Please submit your application form first before applying for a scholarship.",
     "applyFirst": "Apply for Admission"
   },
+  "applicationDashboard": {
+    "welcomeBack": "Welcome back, {name}!",
+    "welcomeBackGeneric": "Welcome back!",
+    "manageApplications": "Manage your applications or add another course.",
+    "yourApplications": "Your Applications",
+    "quickActions": "Quick Actions",
+    "addAnotherCourse": "Add Another Course",
+    "startFreshApplication": "Start Fresh Application",
+    "editApplication": "Edit Application",
+    "yourDetails": "Your Details",
+    "autoCarryOverInfo": "Your personal and academic details are automatically carried over when adding a new course.",
+    "statusSubmitted": "Submitted",
+    "statusUnderReview": "Under Review",
+    "statusApproved": "Approved",
+    "statusRejected": "Rejected",
+    "statusPendingVerification": "Pending Verification",
+    "statusDraft": "Draft",
+    "lastSaved": "Last saved",
+    "submitted": "Submitted"
+  },
   "callback": {
     "title": "Request a Callback",
     "subtitle": "We'll call you back at a time that works for you",
@@ -401,5 +425,137 @@
     "errorDuplicate": "You have already requested a callback recently. Our team will contact you soon.",
     "errorGeneric": "Something went wrong. Please try again.",
     "errorPhoneMissing": "Phone verification is required to request a callback"
+  },
+  "terms": {
+    "pageTitle": "Terms & Conditions",
+    "lastUpdated": "Last updated: 24 February 2026",
+    "sections": {
+      "acceptance": {
+        "title": "1. Acceptance of Terms",
+        "content": "By accessing or using the services provided by Neram Classes (\"Company\", \"we\", \"us\", or \"our\"), including our website at neramclasses.com, mobile applications, student portal at app.neramclasses.com, and all related services (collectively, the \"Services\"), you agree to be bound by these Terms and Conditions (\"Terms\"). If you do not agree to these Terms, you must not access or use our Services. These Terms constitute a legally binding agreement between you and Neram Classes. By enrolling in any course, making a payment, or creating an account, you acknowledge that you have read, understood, and agree to be bound by these Terms, along with our Privacy Policy and Refund Policy, which are incorporated herein by reference."
+      },
+      "definitions": {
+        "title": "2. Definitions",
+        "content": "\"Student\" refers to any individual who enrolls in or accesses courses offered by Neram Classes. \"Lead\" refers to any individual who submits an application or inquiry through our platform. \"Services\" means all educational content, coaching sessions, study materials, online tools, assessments, demo classes, and any other offerings provided by Neram Classes. \"Platform\" refers to our websites, web applications, mobile applications, and any other digital medium through which we deliver our Services. \"Content\" includes all course materials, video recordings, documents, presentations, question banks, mock tests, and any other educational or informational material provided through our Services. \"Account\" means the user account created on our Platform using Firebase Authentication (Google Sign-In, Phone OTP) or Microsoft Authentication."
+      },
+      "eligibility": {
+        "title": "3. Eligibility",
+        "content": "Our Services are available to individuals who are at least 14 years of age. If you are under 18, you must have the consent of a parent or legal guardian to use our Services. By using our Services, you represent and warrant that you meet the eligibility requirements and that the information you provide during registration is accurate and complete. We reserve the right to refuse service to anyone at our sole discretion."
+      },
+      "enrollment": {
+        "title": "4. Enrollment Terms",
+        "content": "Enrollment in any course offered by Neram Classes is subject to application approval by our administration. Submission of an application does not guarantee admission. The Company reserves the right to approve, reject, or waitlist any application at its sole discretion. Upon approval, the student must complete the fee payment within the specified deadline to confirm enrollment. Failure to pay within the deadline may result in cancellation of the enrollment offer. Seat availability is limited, and enrollment is confirmed only upon successful payment. The Company may offer scholarships at its discretion, and scholarship terms are subject to separate conditions."
+      },
+      "payment": {
+        "title": "5. Payment Terms",
+        "content": "All fees are quoted in Indian Rupees (INR) and are inclusive of applicable taxes unless stated otherwise. Payments can be made through our approved payment gateway (Razorpay) via UPI, Credit/Debit Cards, Net Banking, or through Direct UPI/Bank Transfer. The Company offers Full Payment and Installment Payment options as determined by the administration for each student. Full payment may include an additional discount as specified at the time of payment. Installment payments must be completed within the specified due dates. Failure to pay installments on time may result in late fees, suspension of access to Services, or termination of enrollment. All payment-related disputes must be raised within 7 days of the transaction. Coupon codes and promotional discounts are subject to specific terms and may be modified or withdrawn at any time without prior notice."
+      },
+      "refundSummary": {
+        "title": "6. Refund Policy Summary",
+        "content": "Refund requests must be submitted within 24 hours of payment completion. A processing fee of 30% of the paid amount will be deducted from all approved refunds. All refund decisions are at the sole discretion of Neram Classes administration. For complete details, please refer to our Refund Policy page."
+      },
+      "dataUsage": {
+        "title": "7. Data Collection and Usage",
+        "content": "By using our Services, you consent to the collection, storage, and processing of your personal data as described in our Privacy Policy. We collect personal information including but not limited to: name, email address, phone number, date of birth, educational background, location data, payment information, and academic performance data. We use this data for: (a) providing and improving our Services; (b) personalizing your learning experience; (c) communicating with you about courses, schedules, and updates; (d) marketing and promotional purposes, including sending newsletters, course recommendations, and special offers via email, SMS, WhatsApp, and in-app notifications; (e) product enhancement, analytics, and research to improve our educational offerings; (f) generating anonymized aggregate data for market research and reporting; (g) complying with legal obligations. You may opt out of marketing communications at any time, but transactional communications related to your enrollment will continue."
+      },
+      "communication": {
+        "title": "8. Communication Consent",
+        "content": "By registering on our Platform, you expressly consent to receive communications from Neram Classes through multiple channels including: email, SMS, WhatsApp messages, Telegram notifications, in-app notifications, and phone calls. These communications may include enrollment updates, payment reminders, course schedules, study materials, promotional offers, event invitations, feedback requests, and system notifications. You acknowledge that some communications are essential for service delivery and cannot be opted out of. Marketing communications can be opted out of through your account settings or by contacting support."
+      },
+      "intellectualProperty": {
+        "title": "9. Intellectual Property",
+        "content": "All content provided through our Services, including but not limited to course materials, video recordings, presentations, question banks, mock tests, study guides, software tools, and website content, is the exclusive intellectual property of Neram Classes and is protected by copyright, trademark, and other intellectual property laws of India. You are granted a limited, non-exclusive, non-transferable license to access and use the content solely for your personal educational purposes. You shall not: (a) reproduce, distribute, or publicly display any content; (b) record, screenshot, or capture any live or recorded sessions; (c) share login credentials or course materials with third parties; (d) use any content for commercial purposes; (e) modify, adapt, or create derivative works from our content; (f) reverse engineer any software or tools provided through our Platform."
+      },
+      "userObligations": {
+        "title": "10. User Obligations",
+        "content": "As a user of our Services, you agree to: (a) provide accurate and complete information during registration and enrollment; (b) maintain the confidentiality of your account credentials; (c) attend scheduled classes and assessments as per the course calendar; (d) treat all staff, teachers, and fellow students with respect and courtesy; (e) comply with all rules and regulations of the institution; (f) not engage in any activity that disrupts the learning environment; (g) promptly notify us of any changes to your personal information; (h) use the Platform and Services only for lawful purposes."
+      },
+      "prohibitedConduct": {
+        "title": "11. Prohibited Conduct",
+        "content": "You shall not: (a) use our Services for any fraudulent, illegal, or unauthorized purpose; (b) impersonate any person or entity; (c) harass, abuse, or threaten other users, staff, or teachers; (d) upload or transmit viruses, malware, or any harmful code; (e) attempt to gain unauthorized access to our systems or data; (f) interfere with the proper functioning of the Platform; (g) share, sell, or distribute course materials or access credentials; (h) use automated tools, bots, or scripts to access our Services; (i) post defamatory, obscene, or offensive content; (j) violate any applicable local, state, national, or international law. Violation of these terms may result in immediate termination of your account and enrollment without refund."
+      },
+      "scholarship": {
+        "title": "12. Scholarship Terms",
+        "content": "Scholarships offered by Neram Classes are subject to the following conditions: (a) eligibility is determined by the administration based on criteria including academic performance, financial background, and school type; (b) scholarship applications require submission of supporting documents which must be genuine and verifiable; (c) submission of fraudulent documents will result in immediate disqualification and potential legal action; (d) scholarship amounts and percentages are at the sole discretion of the administration; (e) scholarships may be revoked if the student fails to meet academic or attendance requirements; (f) scholarship benefits are non-transferable and apply only to the specific course and term for which they are granted."
+      },
+      "limitation": {
+        "title": "13. Limitation of Liability",
+        "content": "To the maximum extent permitted by applicable law, Neram Classes and its directors, employees, agents, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, or opportunities, arising out of or in connection with your use of our Services. Our total liability for any claim arising from these Terms or your use of Services shall not exceed the total amount of fees paid by you to Neram Classes in the 12 months preceding the claim. We do not guarantee admission to any college or university, specific exam scores, or particular academic outcomes."
+      },
+      "indemnification": {
+        "title": "14. Indemnification",
+        "content": "You agree to indemnify, defend, and hold harmless Neram Classes, its directors, officers, employees, agents, and affiliates from and against any and all claims, damages, obligations, losses, liabilities, costs, and expenses (including attorney's fees) arising from: (a) your use of the Services; (b) your violation of these Terms; (c) your violation of any third-party rights; (d) any content you submit or transmit through the Platform; (e) your negligent or wrongful conduct."
+      },
+      "dispute": {
+        "title": "15. Dispute Resolution",
+        "content": "Any dispute, controversy, or claim arising out of or relating to these Terms or the breach thereof shall first be attempted to be resolved through good-faith negotiation between the parties. If the dispute cannot be resolved through negotiation within 30 days, it shall be referred to arbitration in accordance with the Arbitration and Conciliation Act, 1996. The arbitration shall be conducted in Chennai, Tamil Nadu, India. The language of arbitration shall be English. The decision of the arbitrator shall be final and binding on both parties. Subject to the above, the courts of Chennai, Tamil Nadu shall have exclusive jurisdiction over any disputes arising from these Terms."
+      },
+      "modifications": {
+        "title": "16. Modifications to Terms",
+        "content": "Neram Classes reserves the right to modify, update, or change these Terms at any time without prior notice. The updated Terms will be effective immediately upon posting on our Platform. Your continued use of the Services after any modifications constitutes your acceptance of the updated Terms. We recommend that you review these Terms periodically. Material changes will be communicated via email or in-app notification."
+      },
+      "termination": {
+        "title": "17. Termination",
+        "content": "Neram Classes may terminate or suspend your access to the Services at any time, with or without cause, and with or without notice. Grounds for termination include but are not limited to: violation of these Terms, non-payment of fees, academic misconduct, disruptive behavior, or fraudulent activity. Upon termination, your right to use the Services will immediately cease. Provisions of these Terms that by their nature should survive termination shall survive, including but not limited to intellectual property provisions, indemnification, limitation of liability, and dispute resolution."
+      },
+      "governingLaw": {
+        "title": "18. Governing Law",
+        "content": "These Terms shall be governed by and construed in accordance with the laws of India, including but not limited to the Information Technology Act, 2000, the Indian Contract Act, 1872, and the Consumer Protection Act, 2019. Any rights not expressly granted herein are reserved by Neram Classes."
+      },
+      "contact": {
+        "title": "19. Contact Information",
+        "content": "For any questions, concerns, or communications regarding these Terms, please contact us at: Neram Classes, Chennai, Tamil Nadu, India. Email: support@neramclasses.com. Website: www.neramclasses.com. All legal notices must be sent to our registered address or email."
+      }
+    }
+  },
+  "refundPolicy": {
+    "pageTitle": "Refund Policy",
+    "lastUpdated": "Last updated: 24 February 2026",
+    "sections": {
+      "overview": {
+        "title": "1. Overview",
+        "content": "This Refund Policy outlines the terms and conditions under which students of Neram Classes may request a refund of fees paid. By making a payment and enrolling in our courses, you acknowledge that you have read, understood, and agree to the terms of this Refund Policy. All refund decisions are at the sole discretion of Neram Classes administration."
+      },
+      "eligibility": {
+        "title": "2. Refund Eligibility",
+        "content": "Refund requests are accepted ONLY within 24 hours of the payment completion timestamp. After 24 hours, no refund requests will be entertained under any circumstances. The 24-hour window is calculated from the exact time the payment was confirmed (for online payments) or verified by admin (for direct transfers). Each payment is eligible for only one refund request. If a refund request is rejected, the student cannot submit another request for the same payment."
+      },
+      "processingFee": {
+        "title": "3. Processing Fee",
+        "content": "A processing fee of 30% of the paid amount will be deducted from all approved refunds. This fee covers administrative costs, payment gateway charges, and processing expenses. For example: if you paid Rs. 25,000, the maximum refund amount would be Rs. 17,500 (after deducting Rs. 7,500 as processing fee). The processing fee is non-negotiable and applies to all refund requests regardless of the reason."
+      },
+      "adminDiscretion": {
+        "title": "4. Administrative Discretion",
+        "content": "All refund decisions are made at the sole discretion of the Neram Classes administration. Even if a refund request is submitted within the 24-hour window, approval is NOT guaranteed. The administration will review each request on a case-by-case basis considering factors such as: the reason for the refund request, the timing of the request, the student's engagement with the Services, and any other relevant circumstances. The administration's decision is final and binding."
+      },
+      "howToRequest": {
+        "title": "5. How to Request a Refund",
+        "content": "To request a refund, follow these steps: Step 1: Log in to your account on the Neram Classes platform (app.neramclasses.com or neramclasses.com). Step 2: Navigate to your applications or payment section. Step 3: Click on the 'Request Refund' button (available only within 24 hours of payment). Step 4: Fill out the refund request form with the required information. Step 5: Submit the request and wait for the administration's decision. You will be notified via email and WhatsApp about the status of your request."
+      },
+      "requiredInfo": {
+        "title": "6. Required Information",
+        "content": "When submitting a refund request, you must provide: (a) Reason for joining: Why did you initially enroll in the course? (b) Reason for discontinuing: Why do you wish to discontinue and request a refund? (c) Additional notes (optional): Any additional information to support your request. Incomplete or vague submissions may result in automatic rejection of the request."
+      },
+      "reviewProcess": {
+        "title": "7. Review Process",
+        "content": "Upon receiving a refund request, our administration will: (a) Review the request within 24-48 business hours; (b) Verify the payment details and eligibility; (c) Evaluate the reasons provided; (d) Make a decision to approve or reject the request; (e) Notify the student via email, WhatsApp, and in-app notification about the decision. If approved, the refund will be processed within 5-10 business days."
+      },
+      "refundMethod": {
+        "title": "8. Refund Method",
+        "content": "Approved refunds will be processed to the original payment method used for the transaction. Razorpay payments will be refunded through Razorpay's refund mechanism. Direct UPI/Bank Transfer payments will be refunded via bank transfer to the source account. The refund processing time is 5-10 business days from the date of approval, depending on the payment method and banking processes. Neram Classes is not responsible for delays caused by banks or payment gateways."
+      },
+      "installmentPayments": {
+        "title": "9. Installment Payments",
+        "content": "For students who opted for installment payment plans: Only the first installment is eligible for a refund request within the 24-hour window. The 30% processing fee applies to the installment amount paid, not the total course fee. If the first installment is refunded, the enrollment will be cancelled and the student will not be obligated to pay the second installment. Second installment payments are NOT eligible for refund under any circumstances."
+      },
+      "exceptions": {
+        "title": "10. Exceptions and Special Cases",
+        "content": "The following are NOT eligible for refund: (a) Payments made more than 24 hours ago; (b) Second installment payments; (c) Payments where the student has already accessed course materials or attended classes; (d) Payments made using promotional offers or 100% scholarship waivers; (e) Cases where the student has violated the Terms and Conditions. In exceptional circumstances (such as medical emergencies or bereavement), the administration may consider requests outside the standard policy at their sole discretion. Such requests must be supported by valid documentation."
+      },
+      "contact": {
+        "title": "11. Contact Us",
+        "content": "For any questions regarding this Refund Policy or to discuss your specific situation, please contact us at: Email: support@neramclasses.com. Phone: Available during business hours (9 AM - 8 PM IST). Website: www.neramclasses.com/contact. All communications regarding refunds should reference your payment ID and application number."
+      }
+    }
   }
 }

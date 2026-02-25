@@ -8,7 +8,8 @@
     "start": "next start -p 3010",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\"",
+    "clean:build": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@mui/icons-material": "^5.15.0",
@@ -17,14 +18,17 @@
     "@neram/database": "workspace:*",
     "@neram/i18n": "workspace:*",
     "@neram/ui": "workspace:*",
+    "canvas-confetti": "^1.9.4",
     "firebase": "^11.8.0",
     "firebase-admin": "^13.6.0",
     "next": "14.2.21",
     "next-intl": "^3.4.0",
+    "razorpay": "^2.9.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

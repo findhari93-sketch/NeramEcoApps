@@ -87,6 +87,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Link Supabase project (Staging)
+        run: pnpm supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID_STAGING }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push database migrations (Staging)
+        run: pnpm supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_STAGING }}
+
       - name: Install Vercel CLI
         run: pnpm add -g vercel@latest
 
@@ -213,6 +224,17 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Link Supabase project (Production)
+        run: pnpm supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID_PRODUCTION }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push database migrations (Production)
+        run: pnpm supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_PRODUCTION }}
 
       - name: Install Vercel CLI
         run: pnpm add -g vercel@latest

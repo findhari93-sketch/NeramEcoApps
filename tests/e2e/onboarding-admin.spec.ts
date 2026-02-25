@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Admin Onboarding, Fee Structures & Notifications E2E Tests
+ * Admin Onboarding & Notifications E2E Tests
  *
  * Tests for admin dashboard pages and API routes.
  * Note: Admin uses Microsoft auth — these tests cover API routes
  * and basic page accessibility.
+ *
+ * Fee structure tests are in fee-structures-admin.spec.ts
  */
 
 test.describe('Admin Onboarding API Routes', () => {
@@ -22,19 +24,6 @@ test.describe('Admin Onboarding API Routes', () => {
 
   test('GET /api/onboarding/analytics should respond', async ({ request }) => {
     const response = await request.get('/api/onboarding/analytics', {
-      failOnStatusCode: false,
-    });
-
-    // May require auth — should not return 500
-    expect(response.status()).not.toBe(500);
-  });
-});
-
-test.describe('Admin Fee Structures API Routes', () => {
-  test.use({ baseURL: 'http://localhost:3013' });
-
-  test('GET /api/fee-structures should return data', async ({ request }) => {
-    const response = await request.get('/api/fee-structures', {
       failOnStatusCode: false,
     });
 
@@ -90,16 +79,6 @@ test.describe('Admin Dashboard Pages', () => {
       .catch(() => false);
 
     expect(hasAuth || showsError || true).toBe(true); // Flexible check
-  });
-
-  test('fee structures page should be accessible', async ({ page }) => {
-    await page.goto('/fee-structures', { waitUntil: 'domcontentloaded' });
-
-    // Page should load without server crash
-    const status = await page.evaluate(() => {
-      return !document.querySelector('h1')?.textContent?.includes('500');
-    });
-    expect(status).toBe(true);
   });
 
   test('settings page should be accessible', async ({ page }) => {

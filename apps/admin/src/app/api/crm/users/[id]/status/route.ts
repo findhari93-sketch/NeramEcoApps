@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, notifyApplicationApproved } from '@neram/database';
+import { getSupabaseAdminClient, notifyApplicationApproved, createUserSpecificCoupon } from '@neram/database';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function PATCH(
   request: NextRequest,
@@ -23,6 +25,12 @@ export async function PATCH(
       fullPaymentDiscount,
       paymentRecommendation,
       paymentDeadline,
+      // Fee payment flow enhancements
+      allowedPaymentModes,
+      installment1Amount,
+      installment2Amount,
+      installment2DueDays,
+      couponData,
     } = body;
 
     if (!action || !adminId) {
@@ -35,6 +43,14 @@ export async function PATCH(
     if (!['approve', 'reject', 'delete'].includes(action)) {
       return NextResponse.json(
         { error: 'action must be "approve", "reject", or "delete"' },
+        { status: 400 }
+      );
+    }
+
+    // Validate adminId is a valid UUID (Supabase user ID, not MS OID or 'unknown')
+    if (!UUID_REGEX.test(adminId)) {
+      return NextResponse.json(
+        { error: 'adminId must be a valid UUID (Supabase user ID). Admin profile may not be resolved yet. Please wait and try again.' },
         { status: 400 }
       );
     }
@@ -75,23 +91,23 @@ export async function PATCH(
       updateData.status = 'approved';
       if (notes) updateData.admin_notes = notes;
 
-      // Fee assignment data
-      if (assignedFee !== undefined && assignedFee > 0) {
+      // Fee assignment data (with NaN guards)
+      if (assignedFee !== undefined && !isNaN(Number(assignedFee)) && Number(assignedFee) > 0) {
         updateData.assigned_fee = Number(assignedFee);
       }
-      if (discountAmount !== undefined) {
+      if (discountAmount !== undefined && !isNaN(Number(discountAmount))) {
         updateData.discount_amount = Number(discountAmount);
       }
-      if (finalFee !== undefined && finalFee > 0) {
+      if (finalFee !== undefined && !isNaN(Number(finalFee)) && Number(finalFee) > 0) {
         updateData.final_fee = Number(finalFee);
       }
       if (paymentScheme) {
         updateData.payment_scheme = paymentScheme;
       }
-      if (feeStructureId) {
-        updateData.selected_course_id = feeStructureId;
-      }
-      if (fullPaymentDiscount !== undefined) {
+      // Note: feeStructureId is from fee_structures table, NOT courses table.
+      // selected_course_id references courses(id) — do not set it here.
+      // The fee structure selection auto-fills pricing fields only.
+      if (fullPaymentDiscount !== undefined && !isNaN(Number(fullPaymentDiscount))) {
         updateData.full_payment_discount = Number(fullPaymentDiscount);
       }
       if (paymentRecommendation) {
@@ -104,6 +120,20 @@ export async function PATCH(
         const deadline = new Date();
         deadline.setDate(deadline.getDate() + 7);
         updateData.payment_deadline = deadline.toISOString();
+      }
+
+      // Fee payment flow enhancements
+      if (allowedPaymentModes) {
+        updateData.allowed_payment_modes = allowedPaymentModes;
+      }
+      if (installment1Amount !== undefined && !isNaN(Number(installment1Amount))) {
+        updateData.installment_1_amount = Number(installment1Amount);
+      }
+      if (installment2Amount !== undefined && !isNaN(Number(installment2Amount))) {
+        updateData.installment_2_amount = Number(installment2Amount);
+      }
+      if (installment2DueDays !== undefined && !isNaN(Number(installment2DueDays))) {
+        updateData.installment_2_due_days = Number(installment2DueDays);
       }
     } else if (action === 'reject') {
       updateData.status = 'rejected';
@@ -123,43 +153,84 @@ export async function PATCH(
       .select()
       .single();
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('Lead profile update error:', { message: updateError.message, details: updateError.details, hint: updateError.hint, code: updateError.code });
+      throw updateError;
+    }
 
-    // Record in profile history
-    await supabase.from('user_profile_history' as any).insert({
-      user_id: params.id,
-      field_name: 'lead_profile.status',
-      old_value: JSON.stringify(leadProfile.status),
-      new_value: JSON.stringify(updateData.status),
-      changed_by: adminId,
-      change_source: 'admin',
-    });
+    // Create user-specific coupon if requested during approval
+    let createdCouponCode: string | undefined;
+    if (action === 'approve' && couponData && couponData.discountValue > 0) {
+      try {
+        const coupon = await createUserSpecificCoupon({
+          leadProfileId: leadProfile.id,
+          createdBy: adminId,
+          discountType: couponData.discountType || 'fixed',
+          discountValue: Number(couponData.discountValue),
+          expiresInDays: couponData.expiresInDays || 30,
+          description: couponData.description || 'Admin-generated during approval',
+          courseType: leadProfile.interest_course || undefined,
+        }, supabase);
 
-    // If fee was assigned, also record that
-    if (action === 'approve' && finalFee) {
+        createdCouponCode = coupon.code;
+
+        // Link coupon to lead profile
+        await supabase
+          .from('lead_profiles' as any)
+          .update({
+            admin_coupon_id: coupon.id,
+            coupon_code: coupon.code,
+          })
+          .eq('id', leadProfile.id);
+      } catch (couponError) {
+        console.error('Failed to create coupon during approval:', couponError);
+        // Don't fail the approval if coupon creation fails
+      }
+    }
+
+    // Record in profile history (non-blocking)
+    try {
       await supabase.from('user_profile_history' as any).insert({
         user_id: params.id,
-        field_name: 'lead_profile.final_fee',
-        old_value: JSON.stringify(leadProfile.final_fee),
-        new_value: JSON.stringify(finalFee),
+        field_name: 'lead_profile.status',
+        old_value: JSON.stringify(leadProfile.status),
+        new_value: JSON.stringify(updateData.status),
         changed_by: adminId,
         change_source: 'admin',
       });
+
+      // If fee was assigned, also record that
+      if (action === 'approve' && finalFee) {
+        await supabase.from('user_profile_history' as any).insert({
+          user_id: params.id,
+          field_name: 'lead_profile.final_fee',
+          old_value: JSON.stringify(leadProfile.final_fee),
+          new_value: JSON.stringify(finalFee),
+          changed_by: adminId,
+          change_source: 'admin',
+        });
+      }
+    } catch (historyError) {
+      console.error('Failed to record profile history (non-blocking):', historyError);
     }
 
-    // If deleted, create audit record
+    // If deleted, create audit record (non-blocking)
     if (action === 'delete') {
-      await supabase.from('application_deletions' as any).insert({
-        lead_profile_id: leadProfile.id,
-        deleted_by: adminId,
-        deletion_type: 'admin_deleted',
-        deletion_reason: deletionReason || notes || 'Admin deleted',
-        deleted_at: new Date().toISOString(),
-        can_restore: true,
-      });
+      try {
+        await supabase.from('application_deletions' as any).insert({
+          lead_profile_id: leadProfile.id,
+          deleted_by: adminId,
+          deletion_type: 'admin_deleted',
+          deletion_reason: deletionReason || notes || 'Admin deleted',
+          deleted_at: new Date().toISOString(),
+          can_restore: true,
+        });
+      } catch (deleteAuditError) {
+        console.error('Failed to record deletion audit (non-blocking):', deleteAuditError);
+      }
     }
 
-    // If approved, send notifications to student (Email + WhatsApp)
+    // If approved, send notifications to student (Email + WhatsApp + In-App)
     if (action === 'approve' && userData) {
       const effectiveFinalFee = Number(finalFee) || Number(leadProfile.final_fee) || 16500;
       const effectiveDiscount = Number(fullPaymentDiscount) || 5000;
@@ -186,6 +257,12 @@ export async function PATCH(
             ? new Date(updateData.payment_deadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
             : undefined,
           leadProfileId: leadProfile.id,
+          // Enhanced data for email template
+          allowedPaymentModes: allowedPaymentModes || 'full_and_installment',
+          installment1Amount: installment1Amount ? Number(installment1Amount) : undefined,
+          installment2Amount: installment2Amount ? Number(installment2Amount) : undefined,
+          installment2DueDays: installment2DueDays ? Number(installment2DueDays) : undefined,
+          couponCode: createdCouponCode,
         }, supabase);
       } catch (notifError) {
         console.error('Failed to send approval notifications:', notifError);
@@ -194,7 +271,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, leadProfile: updated });
   } catch (error: any) {
-    console.error('CRM status update error:', error);
+    console.error('CRM status update error:', { message: error.message, details: error.details, hint: error.hint, code: error.code });
     return NextResponse.json(
       { error: error.message || 'Failed to update status' },
       { status: 500 }

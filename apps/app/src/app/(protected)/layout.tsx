@@ -20,10 +20,12 @@ import {
   Container,
   Button,
   LoginModal,
+  useScrollDirection,
 } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
 import { OnboardingWizard } from '@/components/onboarding';
+import UserNotificationBell from '@/components/UserNotificationBell';
 import Link from 'next/link';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
@@ -71,6 +73,7 @@ function ProtectedLayoutInner({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { scrollDirection, isAtTop } = useScrollDirection();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
@@ -367,6 +370,13 @@ function ProtectedLayoutInner({
         position="fixed"
         sx={{
           zIndex: (theme) => theme.zIndex.drawer + 1,
+          transform: scrollDirection === 'down' && !isAtTop && !mobileOpen
+            ? 'translateY(-100%)'
+            : 'translateY(0)',
+          transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
+          },
         }}
       >
         <Toolbar>
@@ -381,6 +391,7 @@ function ProtectedLayoutInner({
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Neram Classes
           </Typography>
+          {phoneVerified && <UserNotificationBell />}
           <IconButton onClick={handleProfileMenuOpen} sx={{ p: 0 }}>
             <Avatar
               alt={user.name || 'User'}

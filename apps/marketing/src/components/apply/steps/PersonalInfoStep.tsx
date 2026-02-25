@@ -83,19 +83,39 @@ export default function PersonalInfoStep() {
           const data = await response.json();
 
           if (data.address) {
+            const detectedCity = data.address.city || data.address.town || data.address.village || '';
+            const detectedState = data.address.state || '';
+            const detectedDistrict = data.address.county || data.address.state_district || '';
+            const detectedPincode = data.address.postcode || '';
+            const detectedCountryCode = data.address.country_code?.toUpperCase() || null;
+
+            // Store detected location separately (for admin visibility)
+            updateFormData('location', {
+              detectedLocation: {
+                pincode: detectedPincode,
+                city: detectedCity,
+                state: detectedState,
+                district: detectedDistrict,
+                country: detectedCountryCode,
+              },
+            });
+
             // Auto-detect country if it matches a supported country
-            const detectedCountryCode = data.address.country_code?.toUpperCase();
             const supportedCodes = SUPPORTED_COUNTRIES.map((c) => c.code);
             if (detectedCountryCode && supportedCodes.includes(detectedCountryCode)) {
               updateFormData('location', { country: detectedCountryCode });
             }
 
-            updateFormData('location', {
-              city: data.address.city || data.address.town || data.address.village || '',
-              state: data.address.state || '',
-              district: data.address.county || data.address.state_district || '',
-              pincode: data.address.postcode || '',
-            });
+            // Only fill EMPTY fields — never override user-entered data
+            const updates: Record<string, string> = {};
+            if (!formData.location.city && detectedCity) updates.city = detectedCity;
+            if (!formData.location.state && detectedState) updates.state = detectedState;
+            if (!formData.location.district && detectedDistrict) updates.district = detectedDistrict;
+            if (!formData.location.pincode && detectedPincode) updates.pincode = detectedPincode;
+
+            if (Object.keys(updates).length > 0) {
+              updateFormData('location', updates);
+            }
           }
         } catch {
           // Ignore reverse geocode errors
@@ -314,7 +334,7 @@ export default function PersonalInfoStep() {
               formData.personal.phone.length !== countryConfig.phoneLength
                 ? `Please enter a valid ${countryConfig.phoneLength}-digit number`
                 : !formData.personal.phoneVerified
-                ? 'Phone verification is required'
+                ? `Enter your ${countryConfig.phoneLength}-digit number and click Verify`
                 : ''
             }
           />

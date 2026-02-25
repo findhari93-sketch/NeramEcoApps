@@ -16,6 +16,9 @@ export const metadata = {
   title: 'Neram Classes - Quality Education for All',
   description:
     'Premier educational institution offering comprehensive courses in academics and competitive exams',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default async function RootLayout({
