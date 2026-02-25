@@ -52,6 +52,7 @@ import { useFirebaseAuth } from '@neram/auth';
 import Link from 'next/link';
 import type { ApplicationStatus, ScholarshipApplication, ScholarshipApplicationStatus, RefundRequest } from '@neram/database';
 import { REFUND_PROCESSING_FEE_PERCENT } from '@neram/database';
+import ViewApplicationDialog from './components/ViewApplicationDialog';
 
 interface Application {
   id: string;
@@ -983,80 +984,13 @@ export default function MyApplicationsPage() {
       </Dialog>
 
       {/* View Application Dialog */}
-      <Dialog open={viewDialogOpen} onClose={() => setViewDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Application Details
-          {viewingApp?.application_number && (
-            <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-              {viewingApp.application_number}
-            </Typography>
-          )}
-        </DialogTitle>
-        <DialogContent dividers>
-          {viewingApp && (
-            <Box>
-              <Box mb={2}>
-                <Typography variant="caption" color="text.secondary">Status</Typography>
-                <Box mt={0.5}>
-                  <Chip
-                    size="small"
-                    icon={STATUS_CONFIG[viewingApp.status]?.icon}
-                    label={STATUS_CONFIG[viewingApp.status]?.label || viewingApp.status}
-                    color={STATUS_CONFIG[viewingApp.status]?.color || 'default'}
-                  />
-                </Box>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">Course Interest</Typography>
-                  <Typography variant="body2" fontWeight={500}>
-                    {viewingApp.interest_course ? COURSE_LABELS[viewingApp.interest_course] || viewingApp.interest_course : 'Not selected'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">Category</Typography>
-                  <Typography variant="body2" fontWeight={500}>
-                    {viewingApp.applicant_category ? CATEGORY_LABELS[viewingApp.applicant_category] || viewingApp.applicant_category : 'Not selected'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">Target Year</Typography>
-                  <Typography variant="body2" fontWeight={500}>
-                    {viewingApp.target_exam_year || 'Not selected'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">Location</Typography>
-                  <Typography variant="body2" fontWeight={500}>
-                    {[viewingApp.city, viewingApp.state].filter(Boolean).join(', ') || 'Not provided'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary">Created</Typography>
-                  <Typography variant="body2">{formatDate(viewingApp.created_at)}</Typography>
-                </Grid>
-                {viewingApp.form_completed_at && (
-                  <Grid item xs={6}>
-                    <Typography variant="caption" color="text.secondary">Submitted</Typography>
-                    <Typography variant="body2">{formatDate(viewingApp.form_completed_at)}</Typography>
-                  </Grid>
-                )}
-              </Grid>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
-          {viewingApp?.status === 'draft' && (
-            <Button variant="contained" component={Link} href="/apply">
-              Continue Editing
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+      <ViewApplicationDialog
+        open={viewDialogOpen}
+        onClose={() => setViewDialogOpen(false)}
+        applicationId={viewingApp?.id ?? null}
+        applicationNumber={viewingApp?.application_number ?? null}
+        status={viewingApp?.status ?? null}
+      />
 
       {/* Add Course Dialog */}
       <Dialog

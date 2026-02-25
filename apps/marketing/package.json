@@ -21,6 +21,7 @@
     "canvas-confetti": "^1.9.4",
     "firebase": "^11.8.0",
     "firebase-admin": "^13.6.0",
+    "jspdf": "^4.2.0",
     "next": "14.2.21",
     "next-intl": "^3.4.0",
     "razorpay": "^2.9.2",

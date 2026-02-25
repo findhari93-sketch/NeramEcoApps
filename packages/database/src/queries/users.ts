@@ -6,7 +6,10 @@
  */
 
 import { getSupabaseBrowserClient, getSupabaseAdminClient, TypedSupabaseClient } from '../client';
-import type { User, LeadProfile, StudentProfile, UserType, UserStatus } from '../types';
+import type {
+  User, LeadProfile, StudentProfile, UserType, UserStatus,
+  Payment, ScholarshipApplication, PaymentInstallment,
+} from '../types';
 
 // ============================================
 // USER QUERIES
@@ -543,14 +546,123 @@ export async function getUserWithProfiles(
   studentProfile: StudentProfile | null;
 } | null> {
   const supabase = client || getSupabaseBrowserClient();
-  
+
   const user = await getUserById(userId, supabase);
   if (!user) return null;
-  
+
   const [leadProfile, studentProfile] = await Promise.all([
     getLeadProfileByUserId(userId, supabase),
     getStudentProfileByUserId(userId, supabase),
   ]);
-  
+
   return { user, leadProfile, studentProfile };
+}
+
+// ============================================
+// FULL PROFILE (for profile page)
+// ============================================
+
+export interface FullUserProfile {
+  user: User;
+  leadProfile: LeadProfile | null;
+  studentProfile: StudentProfile | null;
+  payments: Payment[];
+  scholarshipApplication: ScholarshipApplication | null;
+  installments: PaymentInstallment[];
+  courseName: string | null;
+  batchName: string | null;
+  centerName: string | null;
+  centerCity: string | null;
+}
+
+/**
+ * Get comprehensive user profile with all related data.
+ * Used by the profile page to display application, enrollment,
+ * payment, and scholarship information.
+ */
+export async function getFullUserProfile(
+  userId: string,
+  client?: TypedSupabaseClient
+): Promise<FullUserProfile | null> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Round 1: Fetch core data in parallel
+  const [user, leadProfile, studentProfile] = await Promise.all([
+    getUserById(userId, supabase),
+    getLeadProfileByUserId(userId, supabase),
+    getStudentProfileByUserId(userId, supabase),
+  ]);
+
+  if (!user) return null;
+
+  // Round 2: Fetch dependent data in parallel
+  const courseId = studentProfile?.course_id || leadProfile?.selected_course_id;
+  const batchId = studentProfile?.batch_id;
+  const centerId = leadProfile?.selected_center_id;
+  const leadProfileId = leadProfile?.id;
+
+  const [paymentsResult, scholarshipResult, installmentsResult, courseResult, batchResult, centerResult] = await Promise.all([
+    // Payments for this user (paid + pending, most recent first)
+    supabase
+      .from('payments')
+      .select('*')
+      .eq('user_id', userId)
+      .in('status', ['paid', 'pending'])
+      .order('created_at', { ascending: false })
+      .limit(20),
+    // Scholarship application
+    leadProfileId
+      ? supabase
+          .from('scholarship_applications')
+          .select('*')
+          .eq('lead_profile_id', leadProfileId)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    // Payment installments
+    leadProfileId
+      ? supabase
+          .from('payment_installments')
+          .select('*')
+          .eq('lead_profile_id', leadProfileId)
+          .order('installment_number', { ascending: true })
+      : Promise.resolve({ data: null, error: null }),
+    // Course name
+    courseId
+      ? supabase
+          .from('courses')
+          .select('name')
+          .eq('id', courseId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    // Batch name
+    batchId
+      ? supabase
+          .from('batches')
+          .select('name')
+          .eq('id', batchId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    // Center name
+    centerId
+      ? supabase
+          .from('offline_centers')
+          .select('name, city')
+          .eq('id', centerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  return {
+    user,
+    leadProfile,
+    studentProfile,
+    payments: (paymentsResult.data as Payment[]) || [],
+    scholarshipApplication: (scholarshipResult.data as ScholarshipApplication | null) || null,
+    installments: (installmentsResult.data as PaymentInstallment[]) || [],
+    courseName: (courseResult.data as any)?.name || null,
+    batchName: (batchResult.data as any)?.name || null,
+    centerName: (centerResult.data as any)?.name || null,
+    centerCity: (centerResult.data as any)?.city || null,
+  };
 }

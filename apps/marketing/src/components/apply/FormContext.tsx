@@ -183,6 +183,9 @@ interface FormContextType {
 
   // Application deletion
   removeApplication: (id: string) => Promise<boolean>;
+
+  // Refresh applications (after payment, etc.)
+  refreshApplications: () => Promise<void>;
 }
 
 const FormContext = createContext<FormContextType | null>(null);
@@ -685,7 +688,7 @@ export function FormProvider({ children }: FormProviderProps) {
 
             const draft = allApps.find((a: any) => a.status === 'draft');
             const submittedApps = allApps.filter((a: any) =>
-              ['submitted', 'under_review', 'approved', 'rejected', 'pending_verification'].includes(a.status)
+              ['submitted', 'under_review', 'approved', 'rejected', 'pending_verification', 'enrolled', 'partial_payment'].includes(a.status)
             );
 
             if (draft) {
@@ -907,6 +910,23 @@ export function FormProvider({ children }: FormProviderProps) {
     setFormData((prev) => ({ ...prev, termsAccepted: accepted }));
   }, []);
 
+  const refreshApplications = useCallback(async () => {
+    if (!user) return;
+    try {
+      const idToken = await (user.raw as any)?.getIdToken?.();
+      if (!idToken) return;
+      const res = await fetch('/api/application', {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (res.ok) {
+        const { data: applications } = await res.json();
+        setExistingApplications(applications || []);
+      }
+    } catch (error) {
+      console.error('Failed to refresh applications:', error);
+    }
+  }, [user]);
+
   const removeApplication = useCallback(async (id: string): Promise<boolean> => {
     try {
       const idToken = await (user?.raw as any)?.getIdToken?.();
@@ -973,6 +993,7 @@ export function FormProvider({ children }: FormProviderProps) {
     returningUserCheckComplete,
     prefillFromExistingApplication,
     removeApplication,
+    refreshApplications,
   };
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;

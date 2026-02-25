@@ -40,6 +40,7 @@ import {
   isWhatsAppConfigured,
   sendApplicationConfirmation,
   sendApplicationApproved,
+  sendPaymentConfirmation,
   sendScholarshipAvailableNotification,
   sendScholarshipApprovedNotification,
   sendScholarshipRejectedNotification,
@@ -311,6 +312,24 @@ async function sendWhatsAppNotification(
         finalFee,
         fullPaymentDiscount,
         paymentLink,
+      });
+    }
+
+    case 'payment_received': {
+      const userName = (event.data.user_name || event.data.userName || 'Student') as string;
+      const amount = Number(event.data.amount || 0);
+      const receiptNumber = (event.data.receipt_number || event.data.receiptNumber || '') as string;
+      const courseName = (event.data.course || event.data.courseName || 'Architecture Course') as string;
+
+      if (!receiptNumber) {
+        return { success: false, error: 'No receipt number for WhatsApp payment notification' };
+      }
+
+      return sendPaymentConfirmation(phone, {
+        userName,
+        amount: `Rs. ${amount.toLocaleString('en-IN')}`,
+        receiptNumber,
+        courseName,
       });
     }
 
@@ -649,6 +668,9 @@ export async function notifyPaymentReceived(
     amount: number;
     method: string;
     paymentId?: string;
+    phone?: string;
+    receiptNumber?: string;
+    courseName?: string;
   },
   client?: TypedSupabaseClient
 ): Promise<void> {
@@ -663,6 +685,9 @@ export async function notifyPaymentReceived(
         amount: data.amount,
         method: data.method,
         payment_id: data.paymentId || '',
+        phone: data.phone || '',
+        receiptNumber: data.receiptNumber || '',
+        courseName: data.courseName || '',
       },
     },
     client

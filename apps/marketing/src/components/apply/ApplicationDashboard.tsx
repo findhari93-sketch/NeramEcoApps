@@ -29,7 +29,11 @@ import {
 import { useFirebaseAuth } from '@neram/auth';
 import { useFormContext } from './FormContext';
 import type { FormStep } from './types';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import LinearProgress from '@mui/material/LinearProgress';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PaymentDialog from './PaymentDialog';
+import ViewApplicationDialog from './ViewApplicationDialog';
 import RefundRequestButton from './RefundRequestButton';
 import RefundStatusBanner from './RefundStatusBanner';
 import type { RefundRequest } from '@neram/database';
@@ -157,10 +161,50 @@ interface ApplicationCardProps {
   onEdit: (app: any) => void;
   onDelete: (app: any) => void;
   onPayClick?: (app: any) => void;
+  onViewClick?: (app: any) => void;
 }
 
-function ApplicationCard({ application, onEdit, onDelete, onPayClick }: ApplicationCardProps) {
-  const status = STATUS_CONFIG[application.status] || STATUS_CONFIG.submitted;
+function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClick }: ApplicationCardProps) {
+  const { user } = useFirebaseAuth();
+  const [isFullyPaid, setIsFullyPaid] = useState(false);
+  const [isPartiallyPaid, setIsPartiallyPaid] = useState(false);
+  const [paymentData, setPaymentData] = useState<any>(null);
+
+  // Resilience check: if status is 'approved', verify payment status from API
+  // This handles edge cases where the lead profile status update failed after payment
+  useEffect(() => {
+    if (application.status !== 'approved' || !user) return;
+
+    async function checkPaymentStatus() {
+      try {
+        const token = await (user as any).getIdToken?.() || await (user?.raw as any)?.getIdToken?.();
+        if (!token) return;
+        const res = await fetch(`/api/payment/details/${application.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.totalPaid > 0) {
+            if (data.remainingAmount <= 0) {
+              setIsFullyPaid(true);
+            } else {
+              setIsPartiallyPaid(true);
+              setPaymentData(data);
+            }
+          }
+        }
+      } catch {
+        // Silently fail — fallback to status-based rendering
+      }
+    }
+    checkPaymentStatus();
+  }, [application.status, application.id, user]);
+
+  // Determine effective status
+  const effectiveStatus = isFullyPaid ? 'enrolled'
+    : isPartiallyPaid ? 'partial_payment'
+    : application.status;
+  const status = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.submitted;
   const course = COURSE_LABELS[application.interest_course] || application.interest_course || 'Not Selected';
   const submittedDate = application.submitted_at || application.updated_at || application.created_at;
   const formattedDate = submittedDate
@@ -212,8 +256,8 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick }: Applicat
         </Box>
       )}
 
-      {/* Approved — Payment CTA */}
-      {application.status === 'approved' && (
+      {/* Approved — Payment CTA (only if not fully paid) */}
+      {effectiveStatus === 'approved' && (
         <Box
           sx={{
             mb: 1.5,
@@ -289,29 +333,79 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick }: Applicat
         </Box>
       )}
 
-      {/* Enrolled — Show enrollment confirmation + refund option */}
-      {['enrolled', 'partial_payment'].includes(application.status) && (
+      {/* Enrolled — Show enrollment confirmation + onboarding link + refund option */}
+      {['enrolled', 'partial_payment'].includes(effectiveStatus) && (
         <Box
           sx={{
             mb: 1.5,
             p: 2,
             borderRadius: 2,
-            bgcolor: '#E8F5E9',
+            bgcolor: effectiveStatus === 'enrolled' ? '#E8F5E9' : '#FFF3E0',
             border: '1px solid',
-            borderColor: 'success.light',
+            borderColor: effectiveStatus === 'enrolled' ? 'success.light' : '#FFE0B2',
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22 }} />
-            <Typography variant="subtitle2" fontWeight={700} color="success.dark">
-              {application.status === 'enrolled' ? 'Enrolled Successfully!' : 'Partial Payment Received'}
+            <CheckCircleIcon sx={{ color: effectiveStatus === 'enrolled' ? 'success.main' : '#F57C00', fontSize: 22 }} />
+            <Typography variant="subtitle2" fontWeight={700} color={effectiveStatus === 'enrolled' ? 'success.dark' : '#E65100'}>
+              {effectiveStatus === 'enrolled' ? 'Enrolled Successfully!' : 'Partial Payment Received'}
             </Typography>
           </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13 }}>
-            {application.status === 'enrolled'
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, mb: 1.5 }}>
+            {effectiveStatus === 'enrolled'
               ? 'Your enrollment is confirmed. Welcome to Neram Classes!'
               : 'First installment received. Complete remaining payment on schedule.'}
           </Typography>
+
+          {/* Payment progress bar for partial_payment */}
+          {effectiveStatus === 'partial_payment' && paymentData && (
+            <Box sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Paid: Rs. {Number(paymentData.totalPaid).toLocaleString('en-IN')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Due: Rs. {Number(paymentData.remainingAmount).toLocaleString('en-IN')}
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={paymentData.finalFee > 0 ? (paymentData.totalPaid / paymentData.finalFee) * 100 : 0}
+                sx={{ height: 8, borderRadius: 4, bgcolor: '#FFE0B2', '& .MuiLinearProgress-bar': { bgcolor: '#F57C00' } }}
+              />
+            </Box>
+          )}
+
+          {/* CTA Buttons */}
+          <Box sx={{ display: 'flex', gap: 1, flexDirection: { xs: 'column', sm: 'row' } }}>
+            {effectiveStatus === 'enrolled' && (
+              <Button
+                variant="contained"
+                color="success"
+                href={`${process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com'}/welcome`}
+                component="a"
+                target="_blank"
+                endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+                fullWidth
+                sx={{ fontWeight: 700, borderRadius: 2, py: 1.2 }}
+              >
+                Go to Student Dashboard
+              </Button>
+            )}
+            {effectiveStatus === 'partial_payment' && (
+              <Button
+                variant="contained"
+                onClick={() => onPayClick?.(application)}
+                fullWidth
+                sx={{
+                  fontWeight: 700, borderRadius: 2, py: 1.2,
+                  bgcolor: '#E65100', '&:hover': { bgcolor: '#BF360C' },
+                }}
+              >
+                Complete Remaining Payment
+              </Button>
+            )}
+          </Box>
 
           {/* Refund request/status within card */}
           <EnrolledRefundInfo leadProfileId={application.id} />
@@ -329,6 +423,17 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick }: Applicat
             sx={{ minHeight: 40, flex: 1 }}
           >
             Edit Application
+          </Button>
+        )}
+        {application.status !== 'draft' && (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<VisibilityIcon />}
+            onClick={() => onViewClick?.({ ...application, _effectiveStatus: effectiveStatus })}
+            sx={{ minHeight: 40, flex: 1 }}
+          >
+            View Application
           </Button>
         )}
         {application.status !== 'draft' && (
@@ -402,12 +507,14 @@ export default function ApplicationDashboard() {
     formData,
     setFormData,
     removeApplication,
+    refreshApplications,
   } = useFormContext();
 
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<any | null>(null);
+  const [viewTarget, setViewTarget] = useState<any | null>(null);
 
   // Latest submitted application for personal summary
   const latestApp = existingApplications.find(
@@ -489,6 +596,7 @@ export default function ApplicationDashboard() {
             onEdit={handleEditApplication}
             onDelete={setDeleteTarget}
             onPayClick={setPaymentTarget}
+            onViewClick={setViewTarget}
           />
         ))}
       </Box>
@@ -533,14 +641,23 @@ export default function ApplicationDashboard() {
         </Typography>
       </Alert>
 
+      {/* View Application Dialog */}
+      <ViewApplicationDialog
+        open={!!viewTarget}
+        onClose={() => setViewTarget(null)}
+        applicationId={viewTarget?.id || null}
+        applicationNumber={viewTarget?.application_number || null}
+        status={viewTarget?._effectiveStatus || viewTarget?.status || null}
+      />
+
       {/* Payment Dialog */}
       <PaymentDialog
         open={!!paymentTarget}
         leadId={paymentTarget?.id || null}
         onClose={() => setPaymentTarget(null)}
-        onPaymentComplete={() => {
-          // Refresh the page data after payment
-          window.location.reload();
+        onPaymentComplete={async () => {
+          await refreshApplications();
+          setPaymentTarget(null);
         }}
       />
 

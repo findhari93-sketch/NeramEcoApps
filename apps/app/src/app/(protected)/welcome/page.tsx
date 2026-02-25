@@ -19,6 +19,9 @@ import SchoolIcon from '@mui/icons-material/School';
 import GroupsIcon from '@mui/icons-material/Groups';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PersonIcon from '@mui/icons-material/Person';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import SecurityIcon from '@mui/icons-material/Security';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { useFirebaseAuth } from '@neram/auth';
 
 interface StudentInfo {
@@ -63,6 +66,16 @@ export default function WelcomePage() {
 
   const userName = user?.displayName?.split(' ')[0] || 'Student';
 
+  const getAuthenticatorUrl = () => {
+    if (typeof navigator !== 'undefined') {
+      const ua = navigator.userAgent;
+      if (/iPad|iPhone|iPod/.test(ua)) {
+        return 'https://apps.apple.com/app/microsoft-authenticator/id983156458';
+      }
+    }
+    return 'https://play.google.com/store/apps/details?id=com.azure.authenticator';
+  };
+
   const steps = [
     {
       icon: <PersonIcon />,
@@ -80,6 +93,33 @@ export default function WelcomePage() {
       action: () => window.open('https://chat.whatsapp.com/neramclasses', '_blank'),
       buttonText: 'Join Group',
       color: '#25D366',
+      done: false,
+    },
+    {
+      icon: <GetAppIcon />,
+      title: 'Install Microsoft Teams',
+      description: 'Download Microsoft Teams for attending online classes and accessing study materials',
+      action: () => window.open('https://www.microsoft.com/en-in/microsoft-teams/download-app', '_blank'),
+      buttonText: 'Download Teams',
+      color: '#6264A7',
+      done: false,
+    },
+    {
+      icon: <SecurityIcon />,
+      title: 'Set Up Microsoft Authenticator',
+      description: 'Required for secure login to your classroom account',
+      action: () => window.open(getAuthenticatorUrl(), '_blank'),
+      buttonText: 'Download Authenticator',
+      color: '#00A4EF',
+      done: false,
+    },
+    {
+      icon: <VpnKeyIcon />,
+      title: 'Receive Your Classroom Login',
+      description: 'Your classroom login credentials will be shared securely by the admin. Check your email or WhatsApp.',
+      action: undefined,
+      buttonText: 'Pending...',
+      color: '#FF9800',
       done: false,
     },
     {
@@ -172,9 +212,17 @@ export default function WelcomePage() {
       )}
 
       {/* Next Steps */}
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>
-        Your Next Steps
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="subtitle1" fontWeight={700}>
+          Your Next Steps
+        </Typography>
+        <Chip
+          label={`${steps.filter(s => s.done).length}/${steps.length} completed`}
+          size="small"
+          color={steps.every(s => s.done) ? 'success' : 'default'}
+          sx={{ fontWeight: 600, fontSize: 11 }}
+        />
+      </Box>
 
       <Stack spacing={2}>
         {steps.map((step, i) => (

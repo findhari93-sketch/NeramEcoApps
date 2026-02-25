@@ -15,6 +15,7 @@ import {
   Divider,
   FormControlLabel,
   InputAdornment,
+  LinearProgress,
   MenuItem,
   Paper,
   Switch,
@@ -34,6 +35,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PhoneIcon from '@mui/icons-material/Phone';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import SchoolIcon from '@mui/icons-material/School';
 import type { UserJourneyDetail, FeeStructure, ContactedStatus, PaymentRecommendation } from '@neram/database';
 import EditApplicationDialog from './EditApplicationDialog';
 
@@ -49,6 +51,8 @@ const STATUS_CONFIG: Record<string, { color: string; bgColor: string; label: str
   submitted: { color: '#1976D2', bgColor: '#1976D214', label: 'Submitted' },
   under_review: { color: '#F57C00', bgColor: '#F57C0014', label: 'Under Review' },
   approved: { color: '#2E7D32', bgColor: '#2E7D3214', label: 'Approved' },
+  enrolled: { color: '#1B5E20', bgColor: '#1B5E2014', label: 'Enrolled' },
+  partial_payment: { color: '#E65100', bgColor: '#E6510014', label: 'Partial Payment' },
   rejected: { color: '#D32F2F', bgColor: '#D32F2F14', label: 'Rejected' },
   deleted: { color: '#D32F2F', bgColor: '#D32F2F14', label: 'Deleted' },
 };
@@ -203,6 +207,27 @@ export default function ApplicationSection({
     );
   }
 
+  // Compute effective status: enrolled/partial_payment are derived from payment + student profile data
+  const effectiveStatus = (() => {
+    if (!leadProfile) return 'draft';
+    if (detail.studentProfile) return 'enrolled';
+    if (leadProfile.status === 'approved' && detail.payments.length > 0) {
+      const totalPaid = detail.payments
+        .filter((p) => p.status === 'paid')
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      if (totalPaid > 0) {
+        if (leadProfile.final_fee && totalPaid < Number(leadProfile.final_fee)) return 'partial_payment';
+        return 'enrolled';
+      }
+    }
+    return leadProfile.status;
+  })();
+
+  const totalPaid = detail.payments
+    .filter((p) => p.status === 'paid')
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const balanceDue = leadProfile.final_fee ? Number(leadProfile.final_fee) - totalPaid : 0;
+
   const handleApproveSubmit = async () => {
     setActionLoading(true);
     setActionError('');
@@ -356,7 +381,7 @@ export default function ApplicationSection({
   };
 
   const canReview = ['submitted', 'under_review', 'pending_verification'].includes(leadProfile.status);
-  const statusConfig = STATUS_CONFIG[leadProfile.status] || STATUS_CONFIG.draft;
+  const statusConfig = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.draft;
 
   return (
     <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
@@ -453,6 +478,98 @@ export default function ApplicationSection({
                 ? <span style={{ textTransform: 'capitalize' }}>{leadProfile.payment_scheme}</span>
                 : null
             } />
+          </>
+        )}
+
+        {/* Enrollment Info Banner */}
+        {['enrolled', 'partial_payment'].includes(effectiveStatus) && (
+          <>
+            <Divider sx={{ my: 1.5 }} />
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 1.5,
+                bgcolor: effectiveStatus === 'enrolled' ? '#E8F5E9' : '#FFF3E0',
+                border: '1px solid',
+                borderColor: effectiveStatus === 'enrolled' ? '#C8E6C9' : '#FFE0B2',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <SchoolIcon sx={{ fontSize: 18, color: effectiveStatus === 'enrolled' ? '#1B5E20' : '#E65100' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13, color: effectiveStatus === 'enrolled' ? '#1B5E20' : '#E65100' }}>
+                  {effectiveStatus === 'enrolled' ? 'Enrollment Confirmed' : 'Partial Payment — Enrollment Pending'}
+                </Typography>
+              </Box>
+
+              {detail.studentProfile?.enrollment_date && (
+                <InfoRow
+                  label="Enrolled On"
+                  icon={<CalendarTodayIcon sx={{ fontSize: 14, color: '#2E7D32' }} />}
+                  value={formatTimestamp(detail.studentProfile.enrollment_date)}
+                />
+              )}
+
+              {totalPaid > 0 && (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Paid: <strong>{formatCurrency(totalPaid)}</strong>
+                    </Typography>
+                    {balanceDue > 0 && (
+                      <Typography variant="caption" color="text.secondary">
+                        Balance: <strong style={{ color: '#E65100' }}>{formatCurrency(balanceDue)}</strong>
+                      </Typography>
+                    )}
+                  </Box>
+                  {leadProfile.final_fee && Number(leadProfile.final_fee) > 0 && (
+                    <LinearProgress
+                      variant="determinate"
+                      value={(totalPaid / Number(leadProfile.final_fee)) * 100}
+                      sx={{
+                        height: 8,
+                        borderRadius: 4,
+                        bgcolor: effectiveStatus === 'enrolled' ? '#C8E6C9' : '#FFE0B2',
+                        '& .MuiLinearProgress-bar': {
+                          bgcolor: effectiveStatus === 'enrolled' ? '#2E7D32' : '#F57C00',
+                        },
+                      }}
+                    />
+                  )}
+                </>
+              )}
+
+              <InfoRow
+                label="Payment Scheme"
+                value={
+                  leadProfile.payment_scheme
+                    ? <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{leadProfile.payment_scheme}</span>
+                    : null
+                }
+              />
+
+              {detail.installments.length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: 10.5, letterSpacing: 0.5 }}>
+                    INSTALLMENT SCHEDULE
+                  </Typography>
+                  {detail.installments.map((inst, i) => (
+                    <Box key={inst.id} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5 }}>
+                      <Typography variant="caption">
+                        Installment {i + 1}
+                        {inst.due_date ? ` (due ${new Date(inst.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})` : ''}
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>
+                        {formatCurrency(Number(inst.amount))}
+                        {' '}
+                        <span style={{ color: inst.status === 'paid' ? '#2E7D32' : '#F57C00', fontSize: 10 }}>
+                          {inst.status === 'paid' ? 'PAID' : inst.status === 'overdue' ? 'OVERDUE' : 'PENDING'}
+                        </span>
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
           </>
         )}
 

@@ -23,6 +23,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ReceiptDownload from './ReceiptDownload';
 import type { UserJourneyDetail } from '@neram/database';
 
 interface PaymentSectionProps {
@@ -227,7 +228,31 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
                           }}
                         />
                       </TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 11.5, py: 1.25, color: 'text.secondary' }}>{payment.receipt_number || '--'}</TableCell>
+                      <TableCell sx={{ py: 1.25 }}>
+                        {payment.status === 'paid' && payment.receipt_number ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
+                              {payment.receipt_number}
+                            </Typography>
+                            <ReceiptDownload
+                              receiptData={{
+                                receiptNumber: payment.receipt_number,
+                                amount: payment.amount,
+                                razorpayPaymentId: payment.razorpay_payment_id || undefined,
+                                paidAt: payment.paid_at || payment.created_at,
+                                courseName: leadProfile?.interest_course || 'Neram Classes Course',
+                                paymentScheme: (payment as any).payment_scheme,
+                              }}
+                              studentName={detail.user.name || 'Student'}
+                              iconOnly
+                            />
+                          </Box>
+                        ) : (
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
+                            {payment.receipt_number || '--'}
+                          </Typography>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}

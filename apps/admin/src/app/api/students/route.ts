@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Build the main query for student_profiles joined with users and lead_profiles
+    // Build the main query for student_profiles joined with users (and lead_profiles through users)
     let query = supabase
       .from('student_profiles')
       .select(
@@ -33,14 +33,14 @@ export async function GET(request: NextRequest) {
           last_name,
           email,
           phone,
-          avatar_url
-        ),
-        lead_profiles (
-          interest_course,
-          application_number,
-          final_fee,
-          full_payment_discount,
-          discount_amount
+          avatar_url,
+          lead_profiles (
+            interest_course,
+            application_number,
+            final_fee,
+            full_payment_discount,
+            discount_amount
+          )
         )
       `,
         { count: 'exact' }
@@ -53,11 +53,6 @@ export async function GET(request: NextRequest) {
       query = query.or(
         `users.first_name.ilike.%${search}%,users.last_name.ilike.%${search}%,users.email.ilike.%${search}%,users.phone.ilike.%${search}%`
       );
-    }
-
-    // Apply course filter via lead_profiles
-    if (course) {
-      query = query.eq('lead_profiles.interest_course', course);
     }
 
     // Apply payment status filter
@@ -78,9 +73,11 @@ export async function GET(request: NextRequest) {
     // Flatten the joined data for easier frontend consumption
     const flatStudents = (students || []).map((sp: any) => {
       const user = sp.users;
-      const lead = Array.isArray(sp.lead_profiles)
-        ? sp.lead_profiles[0]
-        : sp.lead_profiles;
+      // lead_profiles is nested inside users (joined through users.id)
+      const leadProfiles = user?.lead_profiles;
+      const lead = Array.isArray(leadProfiles)
+        ? leadProfiles[0]
+        : leadProfiles;
 
       return {
         id: sp.id,
@@ -104,6 +101,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Apply course filter in application code (lead_profiles is nested through users)
+    const filteredStudents = course
+      ? flatStudents.filter((s: any) => s.interest_course === course)
+      : flatStudents;
+
     // Fetch stats separately for accuracy (not affected by pagination)
     const { data: allProfiles, error: statsError } = await supabase
       .from('student_profiles')
@@ -125,8 +127,8 @@ export async function GET(request: NextRequest) {
     };
 
     return NextResponse.json({
-      students: flatStudents,
-      total: count || 0,
+      students: filteredStudents,
+      total: course ? filteredStudents.length : (count || 0),
       stats,
     });
   } catch (error: any) {

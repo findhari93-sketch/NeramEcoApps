@@ -68,13 +68,17 @@ export async function POST(request: NextRequest) {
     const isFullPayment = payment.payment_scheme === 'full' ||
       (payment.payment_scheme === 'installment' && payment.installment_number === 2);
 
-    await supabase
+    const { error: leadUpdateError } = await supabase
       .from('lead_profiles' as any)
       .update({
         status: isFullPayment ? 'enrolled' : 'partial_payment',
         updated_at: new Date().toISOString(),
       })
       .eq('id', leadProfile.id);
+
+    if (leadUpdateError) {
+      console.error('Failed to update lead profile status:', leadUpdateError);
+    }
 
     // If installment payment, create next installment record
     if (payment.payment_scheme === 'installment' && payment.installment_number === 1) {
@@ -107,9 +111,8 @@ export async function POST(request: NextRequest) {
           .from('student_profiles' as any)
           .insert({
             user_id: auth.userId,
-            lead_profile_id: leadProfile.id,
-            status: 'active',
-            enrollment_date: new Date().toISOString(),
+            payment_status: 'paid',
+            enrollment_date: new Date().toISOString().split('T')[0],
           });
       }
     }
@@ -136,13 +139,16 @@ export async function POST(request: NextRequest) {
     try {
       const { notifyPaymentReceived, sendTemplateEmail } = await import('@neram/database');
 
-      // 1. Multi-channel notification (Telegram, admin bell, user bell)
+      // 1. Multi-channel notification (Telegram, admin bell, user bell, WhatsApp)
       await notifyPaymentReceived({
         userId: auth.userId,
         userName,
         amount: payment.amount,
         method: 'razorpay',
         paymentId: razorpay_payment_id,
+        phone: auth.phone || '',
+        receiptNumber: receiptNumber || '',
+        courseName,
       });
 
       // 2. Student confirmation email with receipt

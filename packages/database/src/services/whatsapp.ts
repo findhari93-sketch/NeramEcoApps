@@ -262,6 +262,34 @@ export async function sendRefundApprovedNotification(
 }
 
 /**
+ * Send payment confirmation notification to student
+ *
+ * Template: payment_confirmed
+ * Body parameters: {{1}} = userName, {{2}} = amount, {{3}} = receiptNumber, {{4}} = courseName
+ */
+export async function sendPaymentConfirmation(
+  phone: string,
+  data: {
+    userName: string;
+    amount: string;
+    receiptNumber: string;
+    courseName: string;
+  }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'payment_confirmed', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+        { type: 'text', text: data.amount },
+        { type: 'text', text: data.receiptNumber },
+        { type: 'text', text: data.courseName },
+      ],
+    },
+  ]);
+}
+
+/**
  * Send refund rejected notification to student
  *
  * Template: refund_rejected

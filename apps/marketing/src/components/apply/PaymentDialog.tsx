@@ -34,6 +34,7 @@ import SavingsIcon from '@mui/icons-material/Savings';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import YouTubeSubscribeModal from '../YouTubeSubscribeModal';
+import ReceiptDownload from './ReceiptDownload';
 import confetti from 'canvas-confetti';
 
 function fireSavingsConfetti() {
@@ -161,6 +162,14 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+
+  // When closing after a successful payment, notify parent to refresh data
+  const handleClose = useCallback(() => {
+    if (paymentSuccess) {
+      onPaymentComplete?.();
+    }
+    onClose();
+  }, [paymentSuccess, onPaymentComplete, onClose]);
   const [receiptData, setReceiptData] = useState<{
     receiptNumber: string | null;
     amount: number;
@@ -413,7 +422,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
               // Fire confetti for payment success
               fireSavingsConfetti();
               if (leadId) clearSavedChoices(leadId);
-              onPaymentComplete?.();
+              // Note: onPaymentComplete is called when user closes the dialog or clicks "Go to Dashboard"
             } else {
               setError('Payment verification failed. Please contact support.');
             }
@@ -538,17 +547,35 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
           </Paper>
 
           {/* Actions */}
-          <Button
-            variant="contained"
-            onClick={() => {
-              const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
-              window.location.href = `${appUrl}/welcome`;
-            }}
-            fullWidth
-            sx={{ py: 1.25, fontWeight: 600, borderRadius: 2 }}
-          >
-            Go to Dashboard
-          </Button>
+          <Stack spacing={1.5}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                onPaymentComplete?.();
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
+                window.location.href = `${appUrl}/welcome`;
+              }}
+              fullWidth
+              sx={{ py: 1.25, fontWeight: 600, borderRadius: 2 }}
+            >
+              Go to Dashboard
+            </Button>
+            {receiptData && (
+              <ReceiptDownload
+                receiptData={{
+                  receiptNumber: receiptData.receiptNumber || '',
+                  amount: Number(receiptData.amount || payableAmount),
+                  razorpayPaymentId: receiptData.razorpayPaymentId,
+                  paidAt: receiptData.paidAt || new Date().toISOString(),
+                  courseName: receiptData.courseName || details?.courseName || 'Architecture Course',
+                  paymentScheme: receiptData.paymentScheme,
+                }}
+                studentName={user?.displayName || user?.name || ''}
+                variant="outlined"
+                fullWidth
+              />
+            )}
+          </Stack>
         </Box>
       );
     }
@@ -575,16 +602,135 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
       );
     }
 
-    // Already paid
+    // Already paid — show rich confirmation with receipt & next steps
     if (details.remainingAmount <= 0) {
+      const lastPayment = details.payments?.find((p: any) => p.status === 'paid') || details.payments?.[0];
+      const paidDate = lastPayment?.paid_at
+        ? new Date(lastPayment.paid_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+        : '';
+      const receiptNum = lastPayment?.receipt_number;
+      const razorpayId = lastPayment?.razorpay_payment_id;
+
       return (
-        <Box sx={{ textAlign: 'center', py: 4, px: 2 }}>
-          <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main', mb: 2 }} />
-          <Typography variant="h6" fontWeight={700} gutterBottom>Payment Complete</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Your fees have been fully paid. Welcome to Neram Classes!
-          </Typography>
-          <Button variant="contained" onClick={onClose} sx={{ mt: 3 }}>Done</Button>
+        <Box sx={{ py: 3, px: 2 }}>
+          {/* Success Header */}
+          <Box sx={{ textAlign: 'center', mb: 3 }}>
+            <Box
+              sx={{
+                width: 72, height: 72, borderRadius: '50%', bgcolor: '#E8F5E9',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2,
+              }}
+            >
+              <CheckCircleIcon sx={{ fontSize: 44, color: 'success.main' }} />
+            </Box>
+            <Typography variant="h6" fontWeight={700} gutterBottom>
+              You&apos;re Enrolled!
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Your fees are fully paid. Welcome to Neram Classes!
+            </Typography>
+          </Box>
+
+          {/* Receipt Number */}
+          {receiptNum && (
+            <Paper
+              elevation={0}
+              sx={{
+                textAlign: 'center', py: 1.5, px: 2, mb: 2,
+                bgcolor: '#E8F5E9', borderRadius: 2,
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">Receipt Number</Typography>
+              <Typography variant="subtitle1" fontWeight={700} color="success.main" sx={{ fontFamily: 'monospace', letterSpacing: 1 }}>
+                {receiptNum}
+              </Typography>
+            </Paper>
+          )}
+
+          {/* Payment Summary */}
+          <Paper elevation={0} sx={{ p: 2, mb: 2, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Payment Summary</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+              <Typography variant="body2" color="text.secondary">Course</Typography>
+              <Typography variant="body2" fontWeight={500}>{details.courseName}</Typography>
+            </Box>
+            {paidDate && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+                <Typography variant="body2" color="text.secondary">Date</Typography>
+                <Typography variant="body2">{paidDate}</Typography>
+              </Box>
+            )}
+            {razorpayId && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+                <Typography variant="body2" color="text.secondary">Payment ID</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                  {razorpayId}
+                </Typography>
+              </Box>
+            )}
+            <Divider sx={{ my: 1.5 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="subtitle2" fontWeight={700}>Total Paid</Typography>
+              <Typography variant="subtitle2" fontWeight={700} color="success.main">
+                Rs. {Number(details.totalPaid).toLocaleString('en-IN')}
+              </Typography>
+            </Box>
+          </Paper>
+
+          {/* What's Next */}
+          <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: '#E3F2FD', borderRadius: 2 }}>
+            <Typography variant="subtitle2" fontWeight={600} color="primary" sx={{ mb: 1 }}>What&apos;s Next?</Typography>
+            {[
+              'Complete your profile on the student app',
+              'Join WhatsApp group for class updates',
+              'Install Microsoft Teams for online classes',
+              'Batch allocation within 2 business days',
+            ].map((step, i) => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.75 }}>
+                <Box
+                  sx={{
+                    width: 20, height: 20, borderRadius: '50%', bgcolor: 'primary.main',
+                    color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, mr: 1, mt: 0.25, flexShrink: 0,
+                  }}
+                >
+                  {i + 1}
+                </Box>
+                <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{step}</Typography>
+              </Box>
+            ))}
+          </Paper>
+
+          {/* Actions */}
+          <Stack spacing={1.5}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                onPaymentComplete?.();
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
+                window.location.href = `${appUrl}/welcome`;
+              }}
+              fullWidth
+              sx={{ py: 1.25, fontWeight: 600, borderRadius: 2 }}
+            >
+              Go to Dashboard
+            </Button>
+            {lastPayment && (
+              <ReceiptDownload
+                receiptData={{
+                  receiptNumber: receiptNum || '',
+                  amount: Number(details.totalPaid),
+                  razorpayPaymentId: razorpayId || '',
+                  paidAt: lastPayment.paid_at || '',
+                  courseName: details.courseName,
+                  paymentScheme: details.paymentScheme || 'full',
+                }}
+                studentName={details.userName || user?.displayName || user?.name || ''}
+                variant="outlined"
+                fullWidth
+              />
+            )}
+          </Stack>
         </Box>
       );
     }
@@ -991,7 +1137,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
         <SwipeableDrawer
           anchor="bottom"
           open={open}
-          onClose={onClose}
+          onClose={handleClose}
           onOpen={() => {}}
           disableSwipeToOpen
           PaperProps={{
@@ -1013,7 +1159,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
             <Typography variant="subtitle1" fontWeight={700}>
               {paymentSuccess ? 'Payment Complete' : 'Complete Payment'}
             </Typography>
-            <IconButton size="small" onClick={onClose}>
+            <IconButton size="small" onClick={handleClose}>
               <CloseIcon fontSize="small" />
             </IconButton>
           </Box>
@@ -1034,7 +1180,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
     <>
       <Dialog
         open={open}
-        onClose={isProcessing ? undefined : onClose}
+        onClose={isProcessing ? undefined : handleClose}
         maxWidth="sm"
         fullWidth
         scroll="paper"
@@ -1046,7 +1192,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
           <Typography variant="h6" component="span" fontWeight={700}>
             {paymentSuccess ? 'Payment Complete' : 'Complete Payment'}
           </Typography>
-          <IconButton size="small" onClick={onClose} disabled={isProcessing}>
+          <IconButton size="small" onClick={handleClose} disabled={isProcessing}>
             <CloseIcon />
           </IconButton>
         </DialogTitle>
