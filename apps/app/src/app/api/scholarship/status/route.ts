@@ -97,7 +97,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<Scholarshi
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .single() as { data: { scholarship_eligible: boolean; school_type: string | null } | null };
 
     return NextResponse.json({
       success: true,
