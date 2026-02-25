@@ -13,7 +13,7 @@
   },
   "scripts": {
     "lint": "echo 'Linted via consuming apps'",
-    "type-check": "tsc --noEmit",
+    "type-check": "echo 'Type-checked via consuming apps'",
     "clean": "rm -rf dist .turbo node_modules",
     "clean:build": "rm -rf dist .turbo"
   },
