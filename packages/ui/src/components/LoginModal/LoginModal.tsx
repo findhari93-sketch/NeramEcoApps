@@ -359,10 +359,10 @@ export default function LoginModal({
       clearRecaptcha();
       recaptchaInitialized.current = false;
 
-      setTimeout(() => {
-        initRecaptcha('recaptcha-container-login-modal');
-        recaptchaInitialized.current = true;
-      }, 100);
+      // Wait for DOM to update after clearing, then reinitialize
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      initRecaptcha('recaptcha-container-login-modal');
+      recaptchaInitialized.current = true;
 
       await sendPhoneOTP(phoneNumber);
       setResendTimer(60);
