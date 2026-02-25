@@ -46,10 +46,12 @@ import {
   LibraryAddOutlined,
   SchoolOutlined,
   OpenInNewOutlined,
+  PaymentOutlined,
 } from '@mui/icons-material';
 import { useFirebaseAuth } from '@neram/auth';
 import Link from 'next/link';
-import type { ApplicationStatus, ScholarshipApplication, ScholarshipApplicationStatus } from '@neram/database';
+import type { ApplicationStatus, ScholarshipApplication, ScholarshipApplicationStatus, RefundRequest } from '@neram/database';
+import { REFUND_PROCESSING_FEE_PERCENT } from '@neram/database';
 
 interface Application {
   id: string;
@@ -62,6 +64,8 @@ interface Application {
   state: string | null;
   created_at: string;
   form_completed_at: string | null;
+  final_fee: number | null;
+  full_payment_discount: number | null;
 }
 
 interface ScholarshipData {
@@ -154,6 +158,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: 'default' | 'primary
   approved: { label: 'Approved', color: 'success', icon: <CheckCircleOutlined fontSize="small" /> },
   rejected: { label: 'Rejected', color: 'error', icon: <CancelOutlined fontSize="small" /> },
   deleted: { label: 'Deleted', color: 'default', icon: <DeleteOutlined fontSize="small" /> },
+  enrolled: { label: 'Enrolled', color: 'success', icon: <CheckCircleOutlined fontSize="small" /> },
+  partial_payment: { label: 'Partial Payment', color: 'warning', icon: <PaymentOutlined fontSize="small" /> },
 };
 
 // Course labels
@@ -212,6 +218,81 @@ export default function MyApplicationsPage() {
     message: '',
     severity: 'success',
   });
+
+  // Refund state — maps leadProfileId to payment + refund info
+  const [refundData, setRefundData] = useState<Record<string, {
+    payment: any;
+    refundRequest: RefundRequest | null;
+    loading: boolean;
+  }>>({});
+
+  // Refund request dialog state
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [refundDialogAppId, setRefundDialogAppId] = useState<string | null>(null);
+  const [refundReasonJoining, setRefundReasonJoining] = useState('');
+  const [refundReasonDiscontinuing, setRefundReasonDiscontinuing] = useState('');
+  const [refundAdditionalNotes, setRefundAdditionalNotes] = useState('');
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  const handleRefundSubmit = async () => {
+    if (!user || !refundDialogAppId) return;
+
+    const appData = refundData[refundDialogAppId];
+    if (!appData?.payment) return;
+
+    setRefundSubmitting(true);
+    setRefundError(null);
+
+    try {
+      const idToken = await (user.raw as any)?.getIdToken?.();
+      if (!idToken) {
+        setRefundError('Unable to authenticate');
+        return;
+      }
+
+      const res = await fetch('/api/refund/request', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_id: appData.payment.id,
+          reason_for_joining: refundReasonJoining.trim(),
+          reason_for_discontinuing: refundReasonDiscontinuing.trim(),
+          additional_notes: refundAdditionalNotes.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to submit refund request');
+      }
+
+      const data = await res.json();
+
+      // Update refund data state
+      setRefundData((prev) => ({
+        ...prev,
+        [refundDialogAppId]: {
+          ...prev[refundDialogAppId],
+          refundRequest: data.refundRequest,
+        },
+      }));
+
+      setRefundDialogOpen(false);
+      setRefundDialogAppId(null);
+      setRefundReasonJoining('');
+      setRefundReasonDiscontinuing('');
+      setRefundAdditionalNotes('');
+      setSnackbar({ open: true, message: 'Refund request submitted successfully', severity: 'success' });
+    } catch (err) {
+      setRefundError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setRefundSubmitting(false);
+    }
+  };
 
   const fetchApplications = async () => {
     if (!user) return;
@@ -278,6 +359,65 @@ export default function MyApplicationsPage() {
     fetchApplications();
     fetchScholarshipStatus();
   }, [user]);
+
+  // Fetch refund data for enrolled/partial_payment applications
+  useEffect(() => {
+    if (!user || !applications.length) return;
+
+    const enrolledApps = applications.filter(
+      (a) => ['enrolled', 'partial_payment'].includes(a.status)
+    );
+
+    enrolledApps.forEach(async (app) => {
+      if (refundData[app.id]) return; // Already loaded
+
+      setRefundData((prev) => ({
+        ...prev,
+        [app.id]: { payment: null, refundRequest: null, loading: true },
+      }));
+
+      try {
+        const idToken = await (user.raw as any)?.getIdToken?.();
+        if (!idToken) return;
+
+        // Fetch payment details
+        const res = await fetch(`/api/payment/details/${app.id}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const paidPayment = (data.payments || []).find((p: any) => p.status === 'paid');
+        if (!paidPayment) {
+          setRefundData((prev) => ({
+            ...prev,
+            [app.id]: { payment: null, refundRequest: null, loading: false },
+          }));
+          return;
+        }
+
+        // Check for existing refund request
+        let refundReq: RefundRequest | null = null;
+        const refundRes = await fetch(`/api/refund/status/${paidPayment.id}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (refundRes.ok) {
+          const refundJson = await refundRes.json();
+          refundReq = refundJson.refundRequest || null;
+        }
+
+        setRefundData((prev) => ({
+          ...prev,
+          [app.id]: { payment: paidPayment, refundRequest: refundReq, loading: false },
+        }));
+      } catch {
+        setRefundData((prev) => ({
+          ...prev,
+          [app.id]: { payment: null, refundRequest: null, loading: false },
+        }));
+      }
+    });
+  }, [applications, user]);
 
   const handleDeleteClick = (app: Application) => {
     setDeletingApp(app);
@@ -579,6 +719,99 @@ export default function MyApplicationsPage() {
           )}
         </CardContent>
 
+        {/* Fee Payment CTA for approved applications */}
+        {app.status === 'approved' && (
+          <Box sx={{ px: 2, pb: 1 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              color="success"
+              size="large"
+              component={Link}
+              href={`/payment/${app.id}`}
+              startIcon={<PaymentOutlined />}
+              sx={{ fontWeight: 700, borderRadius: 2, py: 1.5, mb: 1 }}
+            >
+              Complete Fee Payment
+            </Button>
+            {app.final_fee && app.full_payment_discount && (
+              <Typography variant="caption" color="success.main" textAlign="center" display="block" sx={{ fontSize: 11 }}>
+                Pay in full and save Rs. {Number(app.full_payment_discount).toLocaleString('en-IN')}!
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Enrolled/Partial Payment — Refund section */}
+        {['enrolled', 'partial_payment'].includes(app.status) && (() => {
+          const data = refundData[app.id];
+          if (!data || data.loading) {
+            return (
+              <Box sx={{ px: 2, pb: 1, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress size={20} />
+              </Box>
+            );
+          }
+
+          if (!data.payment) return null;
+
+          // Show refund status if request exists
+          if (data.refundRequest) {
+            const statusMap = {
+              pending: { color: '#FFF3E0', border: 'warning.light', chip: 'warning' as const, label: 'Refund Pending' },
+              approved: { color: '#E8F5E9', border: 'success.light', chip: 'success' as const, label: 'Refund Approved' },
+              rejected: { color: '#FFEBEE', border: 'error.light', chip: 'error' as const, label: 'Refund Rejected' },
+            };
+            const rr = data.refundRequest;
+            const cfg = statusMap[rr.status] || statusMap.pending;
+
+            return (
+              <Box sx={{ px: 2, pb: 1 }}>
+                <Box sx={{
+                  p: 1.5, borderRadius: 2, bgcolor: cfg.color,
+                  border: '1px solid', borderColor: cfg.border,
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                    <Typography variant="caption" fontWeight={600}>Refund Request</Typography>
+                    <Chip label={cfg.label} color={cfg.chip} size="small" sx={{ fontSize: '0.65rem', height: 22 }} />
+                  </Box>
+                  <Typography variant="body2" sx={{ fontSize: 12 }}>
+                    Eligible refund: Rs. {Number(rr.refund_amount).toLocaleString('en-IN')}
+                  </Typography>
+                  {rr.status === 'rejected' && rr.admin_notes && (
+                    <Typography variant="caption" color="error.main" display="block" sx={{ mt: 0.5 }}>
+                      Reason: {rr.admin_notes}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            );
+          }
+
+          // Show refund button if within 24-hour window
+          const hoursElapsed = (Date.now() - new Date(data.payment.paid_at).getTime()) / (1000 * 60 * 60);
+          if (hoursElapsed > 24) return null;
+
+          return (
+            <Box sx={{ px: 2, pb: 1 }}>
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                fullWidth
+                onClick={() => {
+                  setRefundDialogAppId(app.id);
+                  setRefundDialogOpen(true);
+                  setRefundError(null);
+                }}
+                sx={{ fontWeight: 600 }}
+              >
+                Request Refund
+              </Button>
+            </Box>
+          );
+        })()}
+
         <CardActions sx={{ px: 2, pb: 2, pt: 0 }}>
           <Button
             size="small"
@@ -873,6 +1106,107 @@ export default function MyApplicationsPage() {
             startIcon={addCourseLoading ? <CircularProgress size={16} color="inherit" /> : <LibraryAddOutlined />}
           >
             {addCourseLoading ? 'Submitting...' : 'Submit Application'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Refund Request Dialog */}
+      <Dialog
+        open={refundDialogOpen}
+        onClose={() => { if (!refundSubmitting) setRefundDialogOpen(false); }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Request Refund</DialogTitle>
+        <DialogContent>
+          {/* Refund calculation */}
+          {refundDialogAppId && refundData[refundDialogAppId]?.payment && (() => {
+            const amt = Number(refundData[refundDialogAppId].payment.amount);
+            const fee = Math.round((amt * REFUND_PROCESSING_FEE_PERCENT) / 100);
+            const refund = amt - fee;
+            return (
+              <Box sx={{ bgcolor: '#FFF3E0', borderRadius: 2, p: 2, mb: 2, border: '1px solid #FFE0B2' }}>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, color: '#E65100' }}>
+                  Refund Calculation
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">Payment Amount</Typography>
+                  <Typography variant="body2" fontWeight={600}>Rs. {amt.toLocaleString('en-IN')}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2" color="error.main">Processing Fee (30%)</Typography>
+                  <Typography variant="body2" color="error.main">- Rs. {fee.toLocaleString('en-IN')}</Typography>
+                </Box>
+                <Divider sx={{ my: 1 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" fontWeight={700}>Eligible Refund</Typography>
+                  <Typography variant="body2" fontWeight={700} color="success.dark">Rs. {refund.toLocaleString('en-IN')}</Typography>
+                </Box>
+              </Box>
+            );
+          })()}
+
+          <Alert severity="warning" sx={{ mb: 2, fontSize: 12 }}>
+            Refund approval is at the sole discretion of Neram Classes. A 30% processing fee applies. This decision is final.
+          </Alert>
+
+          {refundError && (
+            <Alert severity="error" sx={{ mb: 2 }}>{refundError}</Alert>
+          )}
+
+          <TextField
+            label="Why did you join Neram Classes?"
+            placeholder="Please explain your original reason for enrolling..."
+            multiline
+            rows={3}
+            fullWidth
+            required
+            value={refundReasonJoining}
+            onChange={(e) => setRefundReasonJoining(e.target.value)}
+            sx={{ mb: 2 }}
+            helperText={refundReasonJoining.length > 0 && refundReasonJoining.length < 10 ? 'Please provide at least 10 characters' : ''}
+            error={refundReasonJoining.length > 0 && refundReasonJoining.length < 10}
+          />
+
+          <TextField
+            label="Why do you want to discontinue?"
+            placeholder="Please explain why you wish to request a refund..."
+            multiline
+            rows={3}
+            fullWidth
+            required
+            value={refundReasonDiscontinuing}
+            onChange={(e) => setRefundReasonDiscontinuing(e.target.value)}
+            sx={{ mb: 2 }}
+            helperText={refundReasonDiscontinuing.length > 0 && refundReasonDiscontinuing.length < 10 ? 'Please provide at least 10 characters' : ''}
+            error={refundReasonDiscontinuing.length > 0 && refundReasonDiscontinuing.length < 10}
+          />
+
+          <TextField
+            label="Additional Notes (Optional)"
+            placeholder="Any other information to support your request..."
+            multiline
+            rows={2}
+            fullWidth
+            value={refundAdditionalNotes}
+            onChange={(e) => setRefundAdditionalNotes(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setRefundDialogOpen(false)} disabled={refundSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleRefundSubmit}
+            disabled={
+              refundSubmitting ||
+              refundReasonJoining.trim().length < 10 ||
+              refundReasonDiscontinuing.trim().length < 10
+            }
+          >
+            {refundSubmitting ? 'Submitting...' : 'Submit Refund Request'}
           </Button>
         </DialogActions>
       </Dialog>

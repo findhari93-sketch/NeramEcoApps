@@ -5,25 +5,10 @@ import {
   getApplicationsByUserId,
   submitApplication,
   hasExistingApplication,
+  deleteApplication,
   type CreateApplicationInput,
 } from '@neram/database/queries';
-import { getAuth } from 'firebase-admin/auth';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-
-// Initialize Firebase Admin if not already initialized
-if (!getApps().length) {
-  try {
-    initializeApp({
-      credential: cert({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.FIREBASE_PRIVATE_KEY)?.replace(/\\n/g, '\n'),
-      }),
-    });
-  } catch {
-    // App might already be initialized in another module
-  }
-}
+import { verifyFirebaseToken } from '../_lib/auth';
 
 interface ApplicationResponse {
   success: boolean;
@@ -117,39 +102,6 @@ async function sendSubmissionEmails(
 }
 
 /**
- * Verify Firebase ID token and get user ID
- */
-async function verifyToken(request: NextRequest): Promise<{ userId: string; email: string | null; name: string | null; phone: string | null } | null> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-
-  try {
-    const decodedToken = await getAuth().verifyIdToken(token);
-
-    // Get user from database
-    const supabase = createAdminClient();
-    const { data: user } = await supabase
-      .from('users' as any)
-      .select('id, email, first_name, last_name, phone')
-      .eq('firebase_uid', decodedToken.uid)
-      .single();
-
-    if (!user) {
-      return null;
-    }
-
-    const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || null;
-    return { userId: user.id, email: user.email, name, phone: user.phone };
-  } catch {
-    return null;
-  }
-}
-
-/**
  * POST /api/application
  *
  * Create or update an application.
@@ -164,7 +116,7 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string; emai
  * - 500: { success: false, error: 'Internal error' }
  */
 export async function POST(request: NextRequest): Promise<NextResponse<ApplicationResponse>> {
-  const auth = await verifyToken(request);
+  const auth = await verifyFirebaseToken(request);
   if (!auth) {
     return NextResponse.json(
       { success: false, error: 'Unauthorized. Please log in to submit an application.' },
@@ -176,8 +128,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
     const body = await request.json();
     const supabase = createAdminClient();
 
-    // Validate required fields
-    if (!body.phone_verified) {
+    // Validate required fields (only enforce phone verification for final submission)
+    if (!body.phone_verified && body.status === 'submitted') {
       return NextResponse.json(
         { success: false, error: 'Phone verification is required to submit an application.' },
         { status: 400 }
@@ -250,6 +202,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       utm_medium: body.utm_medium || undefined,
       utm_campaign: body.utm_campaign || undefined,
       referral_code: body.referral_code || undefined,
+      form_step_completed: body.form_step_completed ? Number(body.form_step_completed) : undefined,
+      detected_location: body.detected_location || undefined,
     };
 
     // Remove undefined keys so they aren't sent to PostgREST
@@ -447,6 +401,127 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
 }
 
 /**
+ * PATCH /api/application?id={applicationId}
+ *
+ * Edit an existing submitted application.
+ * Requires authentication. Only the owning user can edit.
+ * Only whitelisted fields (personal, location, academic, course) are updatable.
+ *
+ * Response:
+ * - 200: { success: true, data: LeadProfile }
+ * - 400: { success: false, error: 'Validation error' }
+ * - 401: { success: false, error: 'Unauthorized' }
+ * - 403: { success: false, error: 'Forbidden' }
+ * - 404: { success: false, error: 'Not found' }
+ * - 500: { success: false, error: 'Internal error' }
+ */
+export async function PATCH(request: NextRequest): Promise<NextResponse<ApplicationResponse>> {
+  const auth = await verifyFirebaseToken(request);
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized. Please log in to edit your application.' },
+      { status: 401 }
+    );
+  }
+
+  const applicationId = request.nextUrl.searchParams.get('id');
+  if (!applicationId) {
+    return NextResponse.json(
+      { success: false, error: 'Application ID is required.' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const supabase = createAdminClient();
+
+    // Verify ownership
+    const { data: existing, error: fetchError } = await supabase
+      .from('lead_profiles' as any)
+      .select('id, user_id, status')
+      .eq('id', applicationId)
+      .single();
+
+    if (fetchError || !existing) {
+      return NextResponse.json(
+        { success: false, error: 'Application not found.' },
+        { status: 404 }
+      );
+    }
+
+    if (existing.user_id !== auth.userId) {
+      return NextResponse.json(
+        { success: false, error: 'You can only edit your own applications.' },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+
+    // Build academic data from category
+    let academicData = null;
+    switch (body.applicant_category) {
+      case 'school_student': academicData = body.academic_data; break;
+      case 'diploma_student': academicData = body.academic_data; break;
+      case 'college_student': academicData = body.academic_data; break;
+      case 'working_professional': academicData = body.academic_data; break;
+    }
+
+    // Whitelist allowed update fields (no status, admin fields, or user_id)
+    const updateData: Record<string, unknown> = {};
+    const ALLOWED_FIELDS = [
+      'first_name', 'father_name',
+      'country', 'city', 'state', 'district', 'pincode', 'address',
+      'latitude', 'longitude', 'location_source', 'detected_location',
+      'applicant_category', 'caste_category', 'target_exam_year', 'school_type',
+      'interest_course', 'selected_course_id', 'selected_center_id',
+      'hybrid_learning_accepted', 'learning_mode',
+    ];
+
+    for (const field of ALLOWED_FIELDS) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
+      }
+    }
+
+    // Handle academic_data separately
+    if (academicData) {
+      updateData.academic_data = academicData;
+    }
+
+    updateData.updated_at = new Date().toISOString();
+
+    const { data: updated, error: updateError } = await supabase
+      .from('lead_profiles' as any)
+      .update(updateData)
+      .eq('id', applicationId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('[Application PATCH] Update failed:', updateError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to update application.' },
+        { status: 500 }
+      );
+    }
+
+    // Update user's first_name if provided
+    if (body.first_name) {
+      await supabase.from('users' as any).update({ first_name: body.first_name }).eq('id', auth.userId);
+    }
+
+    return NextResponse.json({ success: true, data: updated });
+  } catch (error: any) {
+    console.error('[Application PATCH] Unexpected error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to update application.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * GET /api/application
  *
  * Get all applications for the authenticated user.
@@ -458,7 +533,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
  * - 500: { success: false, error: 'Internal error' }
  */
 export async function GET(request: NextRequest): Promise<NextResponse<ApplicationResponse>> {
-  const auth = await verifyToken(request);
+  const auth = await verifyFirebaseToken(request);
   if (!auth) {
     return NextResponse.json(
       { success: false, error: 'Unauthorized. Please log in to view your applications.' },
@@ -475,6 +550,83 @@ export async function GET(request: NextRequest): Promise<NextResponse<Applicatio
     console.error('Get applications error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch applications.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/application?id={applicationId}
+ *
+ * Soft-delete an application. The application is hidden from the user
+ * but remains in the database with status 'deleted' for admin access.
+ * An audit record is created in application_deletions.
+ *
+ * Response:
+ * - 200: { success: true }
+ * - 400: { success: false, error: 'Validation error' }
+ * - 401: { success: false, error: 'Unauthorized' }
+ * - 403: { success: false, error: 'Forbidden' }
+ * - 404: { success: false, error: 'Not found' }
+ * - 500: { success: false, error: 'Internal error' }
+ */
+export async function DELETE(request: NextRequest): Promise<NextResponse<ApplicationResponse>> {
+  const auth = await verifyFirebaseToken(request);
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized. Please log in to delete an application.' },
+      { status: 401 }
+    );
+  }
+
+  const applicationId = request.nextUrl.searchParams.get('id');
+  if (!applicationId) {
+    return NextResponse.json(
+      { success: false, error: 'Application ID is required.' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const supabase = createAdminClient();
+
+    // Verify ownership
+    const { data: existing, error: fetchError } = await supabase
+      .from('lead_profiles' as any)
+      .select('id, user_id, status')
+      .eq('id', applicationId)
+      .is('deleted_at', null)
+      .single();
+
+    if (fetchError || !existing) {
+      return NextResponse.json(
+        { success: false, error: 'Application not found.' },
+        { status: 404 }
+      );
+    }
+
+    if (existing.user_id !== auth.userId) {
+      return NextResponse.json(
+        { success: false, error: 'You can only delete your own applications.' },
+        { status: 403 }
+      );
+    }
+
+    await deleteApplication(
+      supabase,
+      applicationId,
+      'User requested deletion',
+      'user_requested',
+      auth.userId
+    );
+
+    console.log('[Application API] Soft-deleted application:', applicationId);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('[Application API] Delete error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete application.' },
       { status: 500 }
     );
   }

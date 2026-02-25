@@ -37,6 +37,14 @@ export interface PersonalInfoData {
 /**
  * Location data
  */
+export interface DetectedLocation {
+  pincode: string | null;
+  city: string | null;
+  state: string | null;
+  district: string | null;
+  country: string | null;
+}
+
 export interface LocationData {
   country: string;
   pincode: string;
@@ -47,6 +55,7 @@ export interface LocationData {
   latitude: number | null;
   longitude: number | null;
   locationSource: LocationSource | null;
+  detectedLocation: DetectedLocation | null;
 }
 
 /**
@@ -133,6 +142,7 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     latitude: null,
     longitude: null,
     locationSource: null,
+    detectedLocation: null,
   },
   academic: {
     applicantCategory: null,

@@ -38,14 +38,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update payment record
+    // Update payment record (status must be 'paid' to trigger receipt_number generation)
     const { data: payment, error: updateError } = await supabase
       .from('payments' as any)
       // @ts-ignore - Supabase types not generated
       .update({
         razorpay_payment_id,
         razorpay_signature,
-        status: 'completed',
+        status: 'paid',
         paid_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.id)
       .select(`
         *,
-        lead_profiles(id, full_name, email, course_interest, payment_scheme, final_fee)
+        lead_profiles(id, interest_course, payment_scheme, final_fee, full_payment_discount, discount_amount, assigned_fee)
       `)
       .single();
 
@@ -120,15 +120,70 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Re-fetch payment to get DB-trigger-generated receipt_number
+    const { data: updatedPayment } = await supabase
+      .from('payments' as any)
+      .select('receipt_number')
+      .eq('id', paymentId)
+      .single();
+
+    const receiptNumber = updatedPayment?.receipt_number || null;
+
+    // Get user name from users table
+    const { data: userData } = await supabase
+      .from('users' as any)
+      .select('first_name, last_name, email, phone')
+      .eq('id', user.id)
+      .single();
+
+    const userName = userData ? [userData.first_name, userData.last_name].filter(Boolean).join(' ') || 'Student' : 'Student';
+    const userEmail = userData?.email || user.email || '';
+    const userPhone = userData?.phone || '';
+
+    const COURSE_LABELS: Record<string, string> = {
+      nata: 'NATA Preparation Course',
+      jee_paper2: 'JEE Paper 2 Preparation Course',
+      both: 'NATA & JEE Combined Course',
+      not_sure: 'Architecture Entrance Course',
+    };
+    const courseName = COURSE_LABELS[leadProfile.interest_course] || 'Architecture Entrance Course';
+
     // Send payment confirmation notifications
     try {
-      const { notifyPaymentReceived } = await import('@neram/database');
+      const { notifyPaymentReceived, sendTemplateEmail } = await import('@neram/database');
+
+      // 1. Multi-channel notification (Telegram, admin bell, user bell)
       await notifyPaymentReceived({
         userId: user.id,
-        userName: leadProfile.full_name || 'Student',
+        userName,
         amount: payment.amount,
         method: 'razorpay',
         paymentId: razorpay_payment_id,
+      });
+
+      // 2. Student confirmation email with receipt
+      if (userEmail) {
+        await sendTemplateEmail(userEmail, 'payment-confirmation', {
+          name: userName,
+          course: courseName,
+          amount: Number(payment.amount).toLocaleString('en-IN'),
+          paymentId: razorpay_payment_id,
+          receiptNumber: receiptNumber || paymentId,
+          date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
+          cashback: 0,
+        });
+      }
+
+      // 3. Admin notification email
+      await sendTemplateEmail(process.env.ADMIN_EMAIL || 'admin@neramclasses.com', 'admin-payment-received', {
+        studentName: userName,
+        studentEmail: userEmail,
+        studentPhone: userPhone,
+        amount: Number(payment.amount).toLocaleString('en-IN'),
+        razorpayId: razorpay_payment_id,
+        receiptNumber: receiptNumber || paymentId,
+        course: courseName,
+        paymentScheme: payment.payment_scheme === 'full' ? 'Full Payment' : `Installment #${payment.installment_number || 1}`,
       });
     } catch (notifError) {
       console.error('Failed to send payment notifications:', notifError);
@@ -138,6 +193,14 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'Payment verified successfully',
       enrolled: isFullPayment,
+      receipt: {
+        receiptNumber,
+        amount: payment.amount,
+        razorpayPaymentId: razorpay_payment_id,
+        paidAt: new Date().toISOString(),
+        courseName,
+        paymentScheme: payment.payment_scheme,
+      },
       nextInstallmentDue: payment.payment_scheme === 'installment' && payment.installment_number === 1
         ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         : null,

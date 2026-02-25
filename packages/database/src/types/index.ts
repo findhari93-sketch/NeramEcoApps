@@ -26,6 +26,7 @@ export type CashbackStatus = 'pending' | 'verified' | 'processed' | 'rejected' |
 export type DocumentType = 'school_id_card' | 'income_certificate' | 'payment_screenshot' | 'aadhar_card' | 'marksheet' | 'photo' | 'signature' | 'other';
 export type InstallmentStatus = 'pending' | 'paid' | 'overdue' | 'waived';
 export type PaymentScheme = 'full' | 'installment';
+export type AllowedPaymentModes = 'full_only' | 'full_and_installment';
 export type SourceCategory = 'youtube' | 'instagram' | 'facebook' | 'google_search' | 'friend_referral' | 'school_visit' | 'newspaper' | 'hoarding' | 'whatsapp' | 'other';
 export type CasteCategory = 'general' | 'obc' | 'sc' | 'st' | 'ews' | 'other';
 
@@ -375,6 +376,13 @@ export interface LeadProfile extends Timestamps {
   scholarship_eligible: boolean;
   scholarship_opened_at: string | null;
   scholarship_opened_by: string | null;
+
+  // Fee payment flow (migration 20260222)
+  allowed_payment_modes: AllowedPaymentModes;
+  installment_1_amount: number | null;
+  installment_2_amount: number | null;
+  installment_2_due_days: number;
+  admin_coupon_id: string | null;
 }
 
 /**
@@ -1174,6 +1182,15 @@ export interface Payment extends Timestamps {
   // Metadata
   metadata: Record<string, unknown> | null;
 
+  // Razorpay enriched data (fetched after verification)
+  razorpay_method: string | null;       // 'upi', 'card', 'netbanking', 'wallet'
+  razorpay_bank: string | null;
+  razorpay_vpa: string | null;          // UPI ID (e.g., user@paytm)
+  razorpay_card_last4: string | null;
+  razorpay_card_network: string | null; // 'Visa', 'Mastercard', etc.
+  razorpay_fee: number | null;          // Razorpay processing fee
+  razorpay_tax: number | null;          // GST on Razorpay fee
+
   // Failure info
   failure_code: string | null;
   failure_reason: string | null;
@@ -1617,7 +1634,15 @@ export type NotificationEventType =
   | 'scholarship_approved'
   | 'scholarship_rejected'
   | 'scholarship_revision_requested'
-  | 'application_approved';
+  | 'application_approved'
+  | 'refund_requested'
+  | 'refund_approved'
+  | 'refund_rejected';
+
+// Refund request enums & constants
+export type RefundRequestStatus = 'pending' | 'approved' | 'rejected';
+export const REFUND_PROCESSING_FEE_PERCENT = 30;
+export const REFUND_WINDOW_HOURS = 24;
 export type NotificationRecipientRole = 'admin' | 'team_lead' | 'team_member';
 
 /**
@@ -1738,6 +1763,10 @@ export interface NotificationPreferences {
   scholarship_revision_requested: boolean;
   // Application approval (migration 015)
   application_approved: boolean;
+  // Refund events
+  refund_requested: boolean;
+  refund_approved: boolean;
+  refund_rejected: boolean;
 }
 
 /**
@@ -1751,6 +1780,23 @@ export interface AdminNotification {
   metadata: Record<string, unknown> | null;
   is_read: boolean;
   read_by: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+/**
+ * User notifications - per-user in-app notification bell
+ * Unlike admin_notifications (global), these target a specific user.
+ * Both apps/app and apps/marketing share the same table for cross-app read sync.
+ */
+export interface UserNotification {
+  id: string;
+  user_id: string;
+  event_type: NotificationEventType;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  is_read: boolean;
   read_at: string | null;
   created_at: string;
 }
@@ -1790,6 +1836,36 @@ export interface NotificationEvent {
   title: string;
   message: string;
   data: Record<string, unknown>;
+}
+
+// ============================================
+// REFUND REQUEST TYPES
+// ============================================
+
+export interface RefundRequest {
+  id: string;
+  payment_id: string;
+  user_id: string;
+  lead_profile_id: string | null;
+  payment_amount: number;
+  refund_amount: number;
+  processing_fee: number;
+  reason_for_joining: string;
+  reason_for_discontinuing: string;
+  additional_notes: string | null;
+  status: RefundRequestStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRefundRequestInput {
+  payment_id: string;
+  reason_for_joining: string;
+  reason_for_discontinuing: string;
+  additional_notes?: string;
 }
 
 // ============================================
@@ -1873,6 +1949,15 @@ export interface UserJourney {
   school_type: SchoolType | null;
   scholarship_eligible: boolean;
   scholarship_status: ScholarshipApplicationStatus | null;
+
+  // Fee payment flow (migration 20260222)
+  allowed_payment_modes: AllowedPaymentModes | null;
+  installment_1_amount: number | null;
+  installment_2_amount: number | null;
+  installment_2_due_days: number | null;
+  admin_coupon_id: string | null;
+  full_payment_discount: number | null;
+  coupon_code: string | null;
 
   // Demo class summary
   has_demo_registration: boolean;
@@ -2222,6 +2307,8 @@ export interface Database {
       // School type & scholarship enums (migration 010)
       school_type: SchoolType;
       scholarship_application_status: ScholarshipApplicationStatus;
+      // Refund request enum
+      refund_request_status: RefundRequestStatus;
     };
   };
 }

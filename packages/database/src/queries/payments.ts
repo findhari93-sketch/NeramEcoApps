@@ -418,3 +418,52 @@ export async function getMonthlyRevenue(
   const stats = await getPaymentStats({ startDate, endDate }, client);
   return stats.totalRevenue;
 }
+
+// ============================================
+// INSTALLMENT SCHEDULE
+// ============================================
+
+/**
+ * Create a 2-installment schedule for a lead profile
+ */
+export async function createInstallmentSchedule(
+  leadProfileId: string,
+  installment1Amount: number,
+  installment2Amount: number,
+  installment2DueDays: number,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const now = new Date();
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + installment2DueDays);
+
+  // Reminder 7 days before due date
+  const reminderDate = new Date(dueDate);
+  reminderDate.setDate(reminderDate.getDate() - 7);
+
+  const installments = [
+    {
+      lead_profile_id: leadProfileId,
+      installment_number: 1,
+      amount: installment1Amount,
+      due_date: now.toISOString(),
+      status: 'pending',
+    },
+    {
+      lead_profile_id: leadProfileId,
+      installment_number: 2,
+      amount: installment2Amount,
+      due_date: dueDate.toISOString(),
+      reminder_date: reminderDate.toISOString(),
+      status: 'pending',
+    },
+  ];
+
+  const { error } = await supabase
+    .from('payment_installments' as any)
+    .insert(installments);
+
+  if (error) throw error;
+}

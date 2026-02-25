@@ -6,14 +6,18 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogContentText,
   DialogActions,
   Divider,
+  FormControlLabel,
+  InputAdornment,
   MenuItem,
   Paper,
+  Switch,
   TextField,
   Typography,
 } from '@neram/ui';
@@ -28,6 +32,8 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PhoneIcon from '@mui/icons-material/Phone';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import type { UserJourneyDetail, FeeStructure, ContactedStatus, PaymentRecommendation } from '@neram/database';
 import EditApplicationDialog from './EditApplicationDialog';
 
@@ -66,7 +72,7 @@ function InfoRow({ label, value, icon }: { label: string; value: React.ReactNode
           {label}
         </Typography>
       </Box>
-      <Typography variant="body2" sx={{ flex: 1, fontSize: 13 }}>
+      <Typography variant="body2" component="div" sx={{ flex: 1, fontSize: 13 }}>
         {value || <span style={{ color: '#bdbdbd' }}>--</span>}
       </Typography>
     </Box>
@@ -116,6 +122,21 @@ export default function ApplicationSection({
   const [fullPaymentDiscount, setFullPaymentDiscount] = useState(5000);
   const [paymentRecommendation, setPaymentRecommendation] = useState<PaymentRecommendation>('full');
 
+  // Allowed payment modes state
+  const [allowedPaymentModes, setAllowedPaymentModes] = useState<'full_only' | 'full_and_installment'>('full_and_installment');
+
+  // Installment configuration state
+  const [installment1Amount, setInstallment1Amount] = useState(0);
+  const [installment2Amount, setInstallment2Amount] = useState(0);
+  const [installment2DueDays, setInstallment2DueDays] = useState(45);
+
+  // Coupon generation state
+  const [generateCoupon, setGenerateCoupon] = useState(false);
+  const [couponDiscountType, setCouponDiscountType] = useState<'fixed' | 'percentage'>('fixed');
+  const [couponDiscountValue, setCouponDiscountValue] = useState(0);
+  const [couponExpiresInDays, setCouponExpiresInDays] = useState(30);
+  const [couponDescription, setCouponDescription] = useState('');
+
   const selectedFeeStructure = feeStructures.find((f) => f.id === selectedFeeStructureId);
 
   const fetchFeeStructures = useCallback(async () => {
@@ -141,15 +162,31 @@ export default function ApplicationSection({
     if (!selectedFeeStructure || customOverride) return;
     const baseFee = selectedFeeStructure.fee_amount;
     setAssignedFee(baseFee);
-    if (paymentScheme === 'full') {
+    if (allowedPaymentModes === 'full_only') {
+      // Full payment only: bake the discount into the final fee
       const discount = selectedFeeStructure.single_payment_discount || 0;
       setDiscountAmount(discount);
       setFinalFee(baseFee - discount);
     } else {
+      // Both options: finalFee is the full amount (discount is an incentive via fullPaymentDiscount)
       setDiscountAmount(0);
       setFinalFee(baseFee);
     }
-  }, [selectedFeeStructure, paymentScheme, customOverride]);
+  }, [selectedFeeStructure, allowedPaymentModes, customOverride]);
+
+  // Auto-calculate installment amounts from the FULL fee (no discount — discount is only for full payment)
+  useEffect(() => {
+    if (!selectedFeeStructure) return;
+    const baseFee = selectedFeeStructure.fee_amount;
+    if (selectedFeeStructure.installment_1_amount) {
+      setInstallment1Amount(selectedFeeStructure.installment_1_amount);
+      setInstallment2Amount(baseFee - selectedFeeStructure.installment_1_amount);
+    } else {
+      const inst1 = Math.ceil(baseFee * 0.55);
+      setInstallment1Amount(inst1);
+      setInstallment2Amount(baseFee - inst1);
+    }
+  }, [selectedFeeStructure]);
 
   if (!leadProfile) {
     return (
@@ -184,6 +221,16 @@ export default function ApplicationSection({
           finalFee: finalFee || undefined,
           fullPaymentDiscount: fullPaymentDiscount || undefined,
           paymentRecommendation,
+          allowedPaymentModes,
+          installment1Amount: allowedPaymentModes === 'full_and_installment' ? installment1Amount : undefined,
+          installment2Amount: allowedPaymentModes === 'full_and_installment' ? installment2Amount : undefined,
+          installment2DueDays: allowedPaymentModes === 'full_and_installment' ? installment2DueDays : undefined,
+          couponData: generateCoupon ? {
+            discountType: couponDiscountType,
+            discountValue: couponDiscountValue,
+            expiresInDays: couponExpiresInDays,
+            description: couponDescription || undefined,
+          } : undefined,
         }),
       });
       if (!res.ok) {
@@ -291,6 +338,15 @@ export default function ApplicationSection({
     setApproveNotes('');
     setFullPaymentDiscount(5000);
     setPaymentRecommendation('full');
+    setAllowedPaymentModes('full_and_installment');
+    setInstallment1Amount(0);
+    setInstallment2Amount(0);
+    setInstallment2DueDays(45);
+    setGenerateCoupon(false);
+    setCouponDiscountType('fixed');
+    setCouponDiscountValue(0);
+    setCouponExpiresInDays(30);
+    setCouponDescription('');
     setActionError('');
   };
 
@@ -520,7 +576,7 @@ export default function ApplicationSection({
                 Review Action
               </Typography>
             </Box>
-            {actionError && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 1.5, fontSize: 12.5 }}>{actionError}</Alert>}
+            {actionError && !approveDialogOpen && !rejectDialogOpen && !deleteDialogOpen && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 1.5, fontSize: 12.5 }}>{actionError}</Alert>}
             <Box sx={{ display: 'flex', gap: 1.5 }}>
               <Button
                 variant="contained"
@@ -591,7 +647,7 @@ export default function ApplicationSection({
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12.5 }}>{formatCurrency(selectedFeeStructure.fee_amount)}</Typography>
                 </Box>
 
-                {paymentScheme === 'full' && (selectedFeeStructure.single_payment_discount || 0) > 0 && (
+                {allowedPaymentModes === 'full_only' && (selectedFeeStructure.single_payment_discount || 0) > 0 && (
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12.5 }}>Single Payment Discount</Typography>
                     <Typography variant="body2" sx={{ color: 'success.main', fontFamily: 'monospace', fontWeight: 600, fontSize: 12.5 }}>
@@ -627,18 +683,82 @@ export default function ApplicationSection({
               </Paper>
             )}
 
+            {/* Student Payment Options (replaces old Payment Scheme) */}
             <TextField
               select
-              label="Payment Scheme"
-              value={paymentScheme}
-              onChange={(e) => setPaymentScheme(e.target.value as 'full' | 'installment')}
+              label="Student Payment Options"
+              value={allowedPaymentModes}
+              onChange={(e) => {
+                const mode = e.target.value as 'full_only' | 'full_and_installment';
+                setAllowedPaymentModes(mode);
+                // Keep paymentScheme in sync for backward compatibility
+                setPaymentScheme(mode === 'full_only' ? 'full' : 'installment');
+              }}
               fullWidth
               size="small"
+              helperText={
+                allowedPaymentModes === 'full_only'
+                  ? 'Student can only pay the full amount at once'
+                  : 'Student can choose between full payment or installments'
+              }
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
             >
-              <MenuItem value="full">Full Payment</MenuItem>
-              <MenuItem value="installment">2 Installments</MenuItem>
+              <MenuItem value="full_only">Full Payment Only</MenuItem>
+              <MenuItem value="full_and_installment">Both Options (Full + Installment)</MenuItem>
             </TextField>
+
+            {/* Installment Configuration - shown when both options allowed */}
+            <Collapse in={allowedPaymentModes === 'full_and_installment'}>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: '#F5F5F5', mb: 0 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <ReceiptLongIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                  Installment Configuration
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, mb: 1.5 }}>
+                  <TextField
+                    label="1st Installment (Rs.)"
+                    type="number"
+                    value={installment1Amount || ''}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || 0;
+                      setInstallment1Amount(val);
+                      setInstallment2Amount(assignedFee - val);
+                    }}
+                    fullWidth
+                    size="small"
+                    helperText={selectedFeeStructure?.installment_1_amount
+                      ? `Fee structure default: ${formatCurrency(selectedFeeStructure.installment_1_amount)}`
+                      : 'Auto: 55% of final fee'}
+                    InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  />
+                  <TextField
+                    label="2nd Installment (Rs.)"
+                    type="number"
+                    value={installment2Amount || ''}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || 0;
+                      setInstallment2Amount(val);
+                    }}
+                    fullWidth
+                    size="small"
+                    helperText="Remainder of the final fee"
+                    InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  />
+                </Box>
+                <TextField
+                  label="2nd Installment Due (Days)"
+                  type="number"
+                  value={installment2DueDays}
+                  onChange={(e) => setInstallment2DueDays(Number(e.target.value) || 0)}
+                  fullWidth
+                  size="small"
+                  helperText="Number of days after enrollment for the 2nd installment"
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                />
+              </Paper>
+            </Collapse>
 
             <Divider />
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
@@ -720,14 +840,130 @@ export default function ApplicationSection({
               <MenuItem value="installment">Installment</MenuItem>
             </TextField>
 
-            {finalFee > 0 && fullPaymentDiscount > 0 && (
-              <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#E8F5E9', borderRadius: 1.5, border: '1px solid #C8E6C9' }}>
-                <Typography variant="body2" sx={{ fontSize: 12, color: '#2E7D32', fontWeight: 600 }}>
-                  Student will see: Pay {formatCurrency(finalFee - fullPaymentDiscount)} in full and save {formatCurrency(fullPaymentDiscount)}!
+            {/* Inline Coupon Generation */}
+            <Divider />
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: generateCoupon ? 'primary.main' : 'grey.300' }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={generateCoupon}
+                    onChange={(e) => setGenerateCoupon(e.target.checked)}
+                    size="small"
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <LocalOfferIcon sx={{ fontSize: 16, color: generateCoupon ? 'primary.main' : 'text.disabled' }} />
+                    <Typography variant="body2" sx={{ fontSize: 13, fontWeight: 600 }}>
+                      Generate Student-Specific Coupon
+                    </Typography>
+                  </Box>
+                }
+                sx={{ ml: 0, mb: generateCoupon ? 1.5 : 0 }}
+              />
+              <Collapse in={generateCoupon}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: '#F3E5F5', borderRadius: 1.5 }}>
+                    <ConfirmationNumberIcon sx={{ fontSize: 16, color: '#7B1FA2' }} />
+                    <Typography variant="body2" sx={{ fontSize: 12, color: '#6A1B9A', fontWeight: 600 }}>
+                      Coupon code will be auto-generated on approval
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      select
+                      label="Discount Type"
+                      value={couponDiscountType}
+                      onChange={(e) => setCouponDiscountType(e.target.value as 'fixed' | 'percentage')}
+                      fullWidth
+                      size="small"
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                    >
+                      <MenuItem value="fixed">Fixed Amount (Rs.)</MenuItem>
+                      <MenuItem value="percentage">Percentage (%)</MenuItem>
+                    </TextField>
+                    <TextField
+                      label={couponDiscountType === 'fixed' ? 'Discount Amount' : 'Discount %'}
+                      type="number"
+                      value={couponDiscountValue || ''}
+                      onChange={(e) => setCouponDiscountValue(Number(e.target.value) || 0)}
+                      fullWidth
+                      size="small"
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            {couponDiscountType === 'fixed' ? 'Rs.' : '%'}
+                          </InputAdornment>
+                        ),
+                      }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                    />
+                  </Box>
+
+                  <TextField
+                    label="Expires In (Days)"
+                    type="number"
+                    value={couponExpiresInDays}
+                    onChange={(e) => setCouponExpiresInDays(Number(e.target.value) || 0)}
+                    fullWidth
+                    size="small"
+                    helperText="Coupon expires after this many days from creation"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  />
+
+                  <TextField
+                    label="Description (optional)"
+                    value={couponDescription}
+                    onChange={(e) => setCouponDescription(e.target.value)}
+                    fullWidth
+                    size="small"
+                    placeholder="e.g., Special discount for early enrollment"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  />
+
+                  {couponDiscountValue > 0 && (
+                    <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#FFF3E0', borderRadius: 1.5, border: '1px solid #FFE0B2' }}>
+                      <Typography variant="body2" sx={{ fontSize: 12, color: '#E65100', fontWeight: 600 }}>
+                        Coupon Preview: {couponDiscountType === 'fixed'
+                          ? `${formatCurrency(couponDiscountValue)} off`
+                          : `${couponDiscountValue}% off${finalFee > 0 ? ` (approx. ${formatCurrency(Math.round(finalFee * couponDiscountValue / 100))})` : ''}`
+                        }
+                        {couponExpiresInDays > 0 ? ` - Valid for ${couponExpiresInDays} days` : ''}
+                      </Typography>
+                    </Paper>
+                  )}
+                </Box>
+              </Collapse>
+            </Paper>
+
+            {/* Student-Facing Preview */}
+            {finalFee > 0 && (
+              <Paper variant="outlined" sx={{ p: 2, bgcolor: '#E8F5E9', borderRadius: 2, border: '1px solid #C8E6C9' }}>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700, fontSize: 12, color: '#1B5E20', letterSpacing: 0.5 }}>
+                  STUDENT WILL SEE
                 </Typography>
-                <Typography variant="caption" sx={{ fontSize: 11, color: '#558B2F' }}>
-                  Or pay in 2 installments of {formatCurrency(Math.ceil(finalFee / 2))} each
-                </Typography>
+                {/* Full Payment Option */}
+                {fullPaymentDiscount > 0 ? (
+                  <Box sx={{ mb: allowedPaymentModes === 'full_and_installment' ? 1 : 0 }}>
+                    <Typography variant="body2" sx={{ fontSize: 13, color: '#2E7D32', fontWeight: 600 }}>
+                      Full Payment: Pay {formatCurrency(finalFee - fullPaymentDiscount)} and save {formatCurrency(fullPaymentDiscount)}!
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ mb: allowedPaymentModes === 'full_and_installment' ? 1 : 0 }}>
+                    <Typography variant="body2" sx={{ fontSize: 13, color: '#2E7D32', fontWeight: 600 }}>
+                      Full Payment: {formatCurrency(finalFee)}
+                    </Typography>
+                  </Box>
+                )}
+                {/* Installment Option */}
+                {allowedPaymentModes === 'full_and_installment' && installment1Amount > 0 && (
+                  <Typography variant="body2" sx={{ fontSize: 12.5, color: '#558B2F' }}>
+                    Installments: {formatCurrency(installment1Amount)} now + {formatCurrency(installment2Amount)} in {installment2DueDays} days
+                  </Typography>
+                )}
               </Paper>
             )}
 
@@ -767,7 +1003,7 @@ export default function ApplicationSection({
       {/* Reject Dialog */}
       <Dialog
         open={rejectDialogOpen}
-        onClose={() => { setRejectDialogOpen(false); setRejectionReason(''); }}
+        onClose={() => { setRejectDialogOpen(false); setRejectionReason(''); setActionError(''); }}
         maxWidth="xs"
         fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}
@@ -814,7 +1050,7 @@ export default function ApplicationSection({
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
-        onClose={() => { setDeleteDialogOpen(false); setDeletionReason(''); }}
+        onClose={() => { setDeleteDialogOpen(false); setDeletionReason(''); setActionError(''); }}
         maxWidth="xs"
         fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}

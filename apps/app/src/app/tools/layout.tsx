@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, AppBar, Toolbar, Typography, Button, Container } from '@neram/ui';
+import { Box, AppBar, Toolbar, Typography, Button, Container, useScrollDirection } from '@neram/ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -12,11 +12,24 @@ const toolLinks = [
 
 export default function ToolsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { scrollDirection, isAtTop } = useScrollDirection();
+  const shouldHideNavbar = scrollDirection === 'down' && !isAtTop;
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* App Bar */}
-      <AppBar position="sticky" color="default" elevation={1}>
+      <AppBar
+        position="sticky"
+        color="default"
+        elevation={1}
+        sx={{
+          transform: shouldHideNavbar ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
+          },
+        }}
+      >
         <Toolbar>
           <Typography
             variant="h6"

@@ -46,6 +46,9 @@
     "clean": {
       "cache": false
     },
+    "clean:build": {
+      "cache": false
+    },
     "vercel:link": {
       "cache": false
     },

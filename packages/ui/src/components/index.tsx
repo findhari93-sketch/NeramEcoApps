@@ -185,6 +185,7 @@ export { default as ErrorIcon } from '@mui/icons-material/Error';
 export { default as CheckCircleIcon } from '@mui/icons-material/CheckCircle';
 export { default as CancelIcon } from '@mui/icons-material/Cancel';
 export { default as HelpIcon } from '@mui/icons-material/Help';
+export { default as HelpOutlineIcon } from '@mui/icons-material/HelpOutline';
 export { default as NotificationsIcon } from '@mui/icons-material/Notifications';
 export { default as NotificationsNoneIcon } from '@mui/icons-material/NotificationsNone';
 export { default as DashboardIcon } from '@mui/icons-material/Dashboard';

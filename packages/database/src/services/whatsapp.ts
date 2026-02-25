@@ -240,6 +240,48 @@ export async function sendScholarshipRejectedNotification(
   ]);
 }
 
+/**
+ * Send refund approved notification to student
+ *
+ * Template: refund_approved
+ * Body parameters: {{1}} = userName, {{2}} = refundAmount
+ */
+export async function sendRefundApprovedNotification(
+  phone: string,
+  data: { userName: string; refundAmount: number }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'refund_approved', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+        { type: 'text', text: `Rs. ${data.refundAmount.toLocaleString('en-IN')}` },
+      ],
+    },
+  ]);
+}
+
+/**
+ * Send refund rejected notification to student
+ *
+ * Template: refund_rejected
+ * Body parameters: {{1}} = userName, {{2}} = reason
+ */
+export async function sendRefundRejectedNotification(
+  phone: string,
+  data: { userName: string; reason: string }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'refund_rejected', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+        { type: 'text', text: data.reason },
+      ],
+    },
+  ]);
+}
+
 // ============================================
 // HELPERS
 // ============================================

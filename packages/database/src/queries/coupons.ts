@@ -26,6 +26,10 @@ export interface Coupon {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // User-specific coupon fields (migration 20260222)
+  lead_profile_id: string | null;
+  created_by: string | null;
+  description: string | null;
 }
 
 export interface CouponValidationResult {
@@ -509,4 +513,109 @@ export async function getYouTubeSubscriptionCoupon(
   }
 
   return data?.coupons as Coupon || null;
+}
+
+// ============================================
+// USER-SPECIFIC COUPON (Admin-generated)
+// ============================================
+
+/**
+ * Create a user-specific coupon for a student (admin action)
+ */
+export async function createUserSpecificCoupon(
+  data: {
+    leadProfileId: string;
+    createdBy: string;
+    discountType: 'percentage' | 'fixed';
+    discountValue: number;
+    expiresInDays: number;
+    description?: string;
+    courseType?: CourseType;
+  },
+  client?: TypedSupabaseClient
+): Promise<Coupon> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Generate unique code: NERAM-{random 3}-{random 4}
+  let couponCode = `NERAM-${generateRandomCode(3)}-${generateRandomCode(4)}`;
+
+  // Ensure code is unique
+  let attempts = 0;
+  while (attempts < 10) {
+    const existing = await getCouponByCode(couponCode, supabase);
+    if (!existing) break;
+    couponCode = `NERAM-${generateRandomCode(3)}-${generateRandomCode(4)}`;
+    attempts++;
+  }
+
+  const validUntil = new Date();
+  validUntil.setDate(validUntil.getDate() + data.expiresInDays);
+
+  const coupon = await createCoupon({
+    code: couponCode,
+    discount_type: data.discountType,
+    discount_value: data.discountValue,
+    valid_from: new Date().toISOString(),
+    valid_until: validUntil.toISOString(),
+    max_uses: 1,
+    applicable_courses: data.courseType ? [data.courseType] : null,
+    min_amount: null,
+    is_active: true,
+    lead_profile_id: data.leadProfileId,
+    created_by: data.createdBy,
+    description: data.description || null,
+  }, supabase);
+
+  return coupon;
+}
+
+/**
+ * Validate a coupon for a specific user/lead profile.
+ * Extends standard validation with user-specificity check:
+ * - If coupon has lead_profile_id, it must match the requesting user's lead profile
+ */
+export async function validateCouponForUser(
+  code: string,
+  leadProfileId: string,
+  amount: number,
+  courseType?: CourseType,
+  client?: TypedSupabaseClient
+): Promise<CouponValidationResult> {
+  // First run standard validation
+  const result = await validateCoupon(code, amount, courseType, client);
+
+  if (!result.valid) return result;
+
+  // Additional check: if coupon is user-specific, verify it belongs to this user
+  if (result.coupon?.lead_profile_id && result.coupon.lead_profile_id !== leadProfileId) {
+    return { valid: false, error: 'This coupon code is not valid for your account' };
+  }
+
+  return result;
+}
+
+/**
+ * Get the admin-generated coupon for a specific lead profile
+ */
+export async function getCouponForLeadProfile(
+  leadProfileId: string,
+  client?: TypedSupabaseClient
+): Promise<Coupon | null> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .eq('lead_profile_id', leadProfileId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+
+  return data as Coupon;
 }

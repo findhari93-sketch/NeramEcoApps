@@ -55,8 +55,73 @@ function clearStorage(): void {
 }
 
 // ============================================
+// DRAFT PAYLOAD BUILDER
+// ============================================
+
+function buildDraftPayload(formData: ApplicationFormData, stepCompleted: number) {
+  // Always include base fields
+  const payload: Record<string, unknown> = {
+    status: 'draft',
+    form_step_completed: stepCompleted + 1, // 1-indexed: step 0 completed = 1
+    first_name: formData.personal.firstName || undefined,
+    phone_verified: formData.personal.phoneVerified,
+    phone_verified_at: formData.personal.phoneVerifiedAt || undefined,
+    utm_source: formData.utmSource || undefined,
+    utm_medium: formData.utmMedium || undefined,
+    utm_campaign: formData.utmCampaign || undefined,
+    referral_code: formData.referralCode || undefined,
+  };
+
+  // Step 0 data: Personal + Location
+  if (stepCompleted >= 0) {
+    payload.father_name = formData.personal.fatherName || undefined;
+    payload.country = formData.location.country || 'IN';
+    payload.city = formData.location.city || undefined;
+    payload.state = formData.location.state || undefined;
+    payload.district = formData.location.district || undefined;
+    payload.pincode = formData.location.pincode || undefined;
+    payload.address = formData.location.address || undefined;
+    payload.latitude = formData.location.latitude ?? undefined;
+    payload.longitude = formData.location.longitude ?? undefined;
+    payload.location_source = formData.location.locationSource || undefined;
+    payload.detected_location = formData.location.detectedLocation || undefined;
+  }
+
+  // Step 1 data: Academic
+  if (stepCompleted >= 1) {
+    payload.applicant_category = formData.academic.applicantCategory || undefined;
+    payload.caste_category = formData.academic.casteCategory || undefined;
+    payload.target_exam_year = formData.academic.targetExamYear || undefined;
+    payload.school_type = formData.academic.schoolType || undefined;
+
+    // Get the appropriate academic data based on category
+    let academicData = null;
+    switch (formData.academic.applicantCategory) {
+      case 'school_student': academicData = formData.academic.schoolStudentData; break;
+      case 'diploma_student': academicData = formData.academic.diplomaStudentData; break;
+      case 'college_student': academicData = formData.academic.collegeStudentData; break;
+      case 'working_professional': academicData = formData.academic.workingProfessionalData; break;
+    }
+    if (academicData) payload.academic_data = academicData;
+  }
+
+  // Step 2 data: Course
+  if (stepCompleted >= 2) {
+    payload.interest_course = formData.course.interestCourse || undefined;
+    payload.selected_course_id = formData.course.selectedCourseId || undefined;
+    payload.selected_center_id = formData.course.selectedCenterId || undefined;
+    payload.hybrid_learning_accepted = formData.course.hybridLearningAccepted;
+    payload.learning_mode = formData.course.learningMode || 'hybrid';
+  }
+
+  return payload;
+}
+
+// ============================================
 // CONTEXT TYPE
 // ============================================
+
+export type ReturnUserMode = 'dashboard' | 'edit' | 'add-course' | 'new-form';
 
 interface FormContextType {
   // Form data
@@ -98,9 +163,26 @@ interface FormContextType {
   // Persistence
   clearSavedForm: () => void;
 
+  // Draft save to DB
+  saveDraftToDb: (stepCompleted: number) => Promise<boolean>;
+  isSavingDraft: boolean;
+  draftId: string | null;
+  setDraftId: React.Dispatch<React.SetStateAction<string | null>>;
+
   // User auth state
   isAuthenticated: boolean;
   isAuthLoading: boolean;
+
+  // Returning user
+  existingApplications: any[];
+  isReturningUser: boolean;
+  returnUserMode: ReturnUserMode;
+  setReturnUserMode: (mode: ReturnUserMode) => void;
+  returningUserCheckComplete: boolean;
+  prefillFromExistingApplication: (application: any) => void;
+
+  // Application deletion
+  removeApplication: (id: string) => Promise<boolean>;
 }
 
 const FormContext = createContext<FormContextType | null>(null);
@@ -268,7 +350,15 @@ export function FormProvider({ children }: FormProviderProps) {
   const [prefilledFields, setPrefilledFields] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const hasRestoredRef = useRef(false);
+
+  // Returning user state
+  const [existingApplications, setExistingApplications] = useState<any[]>([]);
+  const [isReturningUser, setIsReturningUser] = useState(false);
+  const [returnUserMode, setReturnUserMode] = useState<ReturnUserMode>('new-form');
+  const [returningUserCheckComplete, setReturningUserCheckComplete] = useState(false);
 
   // Restore saved state from localStorage after mount (avoids hydration mismatch)
   useEffect(() => {
@@ -304,7 +394,107 @@ export function FormProvider({ children }: FormProviderProps) {
     clearStorage();
     setFormData(DEFAULT_FORM_DATA);
     setActiveStepState(0);
+    setDraftId(null);
   }, []);
+
+  // Prefill form from an existing submitted application
+  const prefillFromExistingApplication = useCallback((app: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      personal: {
+        ...prev.personal,
+        firstName: app.first_name || prev.personal.firstName || '',
+        fatherName: app.father_name || prev.personal.fatherName || '',
+        phoneVerified: app.phone_verified || prev.personal.phoneVerified || false,
+        phoneVerifiedAt: app.phone_verified_at || prev.personal.phoneVerifiedAt || null,
+      },
+      location: {
+        ...prev.location,
+        country: app.country || prev.location.country || 'IN',
+        pincode: app.pincode || prev.location.pincode || '',
+        city: app.city || prev.location.city || '',
+        state: app.state || prev.location.state || '',
+        district: app.district || prev.location.district || '',
+        address: app.address || prev.location.address || '',
+        latitude: app.latitude ?? prev.location.latitude ?? null,
+        longitude: app.longitude ?? prev.location.longitude ?? null,
+        locationSource: app.location_source || prev.location.locationSource || null,
+        detectedLocation: app.detected_location || prev.location.detectedLocation || null,
+      },
+      academic: {
+        ...prev.academic,
+        applicantCategory: app.applicant_category || prev.academic.applicantCategory || null,
+        casteCategory: app.caste_category || prev.academic.casteCategory || null,
+        targetExamYear: app.target_exam_year || prev.academic.targetExamYear || null,
+        schoolType: app.school_type || prev.academic.schoolType || null,
+        schoolStudentData: app.applicant_category === 'school_student'
+          ? app.academic_data : prev.academic.schoolStudentData,
+        diplomaStudentData: app.applicant_category === 'diploma_student'
+          ? app.academic_data : prev.academic.diplomaStudentData,
+        collegeStudentData: app.applicant_category === 'college_student'
+          ? app.academic_data : prev.academic.collegeStudentData,
+        workingProfessionalData: app.applicant_category === 'working_professional'
+          ? app.academic_data : prev.academic.workingProfessionalData,
+      },
+      // For 'add-course' mode: leave course empty so user picks new course
+      // For 'edit' mode: prefill course too
+      course: {
+        ...prev.course,
+        interestCourse: app.interest_course || prev.course.interestCourse || null,
+        selectedCourseId: app.selected_course_id || prev.course.selectedCourseId || null,
+        selectedCenterId: app.selected_center_id || prev.course.selectedCenterId || null,
+        hybridLearningAccepted: app.hybrid_learning_accepted || prev.course.hybridLearningAccepted || false,
+        learningMode: app.learning_mode || prev.course.learningMode || 'hybrid',
+      },
+    }));
+  }, []);
+
+  // Save current form state as draft to database
+  const saveDraftToDb = useCallback(async (stepCompleted: number): Promise<boolean> => {
+    if (!user) return false;
+
+    setIsSavingDraft(true);
+    try {
+      const idToken = await (user.raw as any)?.getIdToken?.();
+      if (!idToken) {
+        console.warn('No idToken available for draft save');
+        return false;
+      }
+
+      const payload = buildDraftPayload(formData, stepCompleted);
+      console.log('[Draft Save] Saving step', stepCompleted, 'payload keys:', Object.keys(payload));
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+      const response = await fetch('/api/application', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const result = await response.json();
+      console.log('[Draft Save] Response:', result.success, result.error || '');
+
+      if (result.success && result.data?.id) {
+        setDraftId(result.data.id);
+        return true;
+      }
+      console.warn('Draft save response:', result);
+      return false;
+    } catch (error) {
+      console.error('Draft save failed:', error);
+      return false;
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }, [user, formData]);
 
   // Pre-fill form from user profile (only fills empty fields, won't overwrite saved data)
   useEffect(() => {
@@ -343,15 +533,19 @@ export function FormProvider({ children }: FormProviderProps) {
           }
 
           if (profile.phone) {
-            // Strip any known country prefix
-            const phone = profile.phone.replace(/^\+\d{1,3}/, '');
+            // Strip country prefix using country-aware config (not generic regex)
+            // Generic /^\+\d{1,3}/ is greedy and eats first digit of phone
+            // e.g. "+916380194614" → strips "+916" instead of "+91"
             setFormData((prev) => {
               if (prev.personal.phone) return prev;
+              const config = getCountryConfig(prev.location.country || 'IN');
+              const prefixEscaped = config.phonePrefix.replace(/\+/g, '\\+');
+              const cleanedPhone = profile.phone.replace(new RegExp(`^${prefixEscaped}`), '');
               return {
                 ...prev,
                 personal: {
                   ...prev.personal,
-                  phone,
+                  phone: cleanedPhone,
                   phoneVerified: profile.phone_verified || false,
                 },
               };
@@ -476,11 +670,99 @@ export function FormProvider({ children }: FormProviderProps) {
         prefilled.add('email');
       }
 
+      // Restore draft or detect returning user from database
+      try {
+        const idToken = await (user.raw as any)?.getIdToken?.();
+        if (idToken) {
+          const draftRes = await fetch('/api/application', {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+
+          if (draftRes.ok) {
+            const { data: applications } = await draftRes.json();
+            const allApps = applications || [];
+            setExistingApplications(allApps);
+
+            const draft = allApps.find((a: any) => a.status === 'draft');
+            const submittedApps = allApps.filter((a: any) =>
+              ['submitted', 'under_review', 'approved', 'rejected', 'pending_verification'].includes(a.status)
+            );
+
+            if (draft) {
+              // Existing behavior: restore draft into form
+              setDraftId(draft.id);
+
+              // Restore lead_profile-specific fields into form (only empty fields)
+              setFormData((prev) => ({
+                ...prev,
+                personal: {
+                  ...prev.personal,
+                  fatherName: prev.personal.fatherName || draft.father_name || '',
+                  phoneVerified: prev.personal.phoneVerified || draft.phone_verified || false,
+                  phoneVerifiedAt: prev.personal.phoneVerifiedAt || draft.phone_verified_at || null,
+                },
+                location: {
+                  ...prev.location,
+                  country: prev.location.country || draft.country || 'IN',
+                  pincode: prev.location.pincode || draft.pincode || '',
+                  city: prev.location.city || draft.city || '',
+                  state: prev.location.state || draft.state || '',
+                  district: prev.location.district || draft.district || '',
+                  address: prev.location.address || draft.address || '',
+                  latitude: prev.location.latitude ?? draft.latitude ?? null,
+                  longitude: prev.location.longitude ?? draft.longitude ?? null,
+                  locationSource: prev.location.locationSource || draft.location_source || null,
+                  detectedLocation: prev.location.detectedLocation || draft.detected_location || null,
+                },
+                academic: {
+                  ...prev.academic,
+                  applicantCategory: prev.academic.applicantCategory || draft.applicant_category || null,
+                  casteCategory: prev.academic.casteCategory || draft.caste_category || null,
+                  targetExamYear: prev.academic.targetExamYear || draft.target_exam_year || null,
+                  schoolType: prev.academic.schoolType || draft.school_type || null,
+                  schoolStudentData: prev.academic.schoolStudentData || (draft.applicant_category === 'school_student' ? draft.academic_data : null),
+                  diplomaStudentData: prev.academic.diplomaStudentData || (draft.applicant_category === 'diploma_student' ? draft.academic_data : null),
+                  collegeStudentData: prev.academic.collegeStudentData || (draft.applicant_category === 'college_student' ? draft.academic_data : null),
+                  workingProfessionalData: prev.academic.workingProfessionalData || (draft.applicant_category === 'working_professional' ? draft.academic_data : null),
+                },
+                course: {
+                  ...prev.course,
+                  interestCourse: prev.course.interestCourse || draft.interest_course || null,
+                  selectedCourseId: prev.course.selectedCourseId || draft.selected_course_id || null,
+                  selectedCenterId: prev.course.selectedCenterId || draft.selected_center_id || null,
+                  hybridLearningAccepted: prev.course.hybridLearningAccepted || draft.hybrid_learning_accepted || false,
+                  learningMode: prev.course.learningMode || draft.learning_mode || 'hybrid',
+                },
+              }));
+
+              // Restore step progress if localStorage didn't have a more advanced step
+              const dbStep = Math.min((draft.form_step_completed || 1) - 1, 3);
+              setActiveStepState((prev) => Math.max(prev, dbStep) as FormStep);
+            } else if (submittedApps.length > 0) {
+              // Returning user with submitted application(s)
+              setIsReturningUser(true);
+              setReturnUserMode('dashboard');
+            }
+          }
+        }
+      } catch (error) {
+        // Non-critical — draft restoration is optional
+        console.error('Error restoring draft from DB:', error);
+      }
+
       setPrefilledFields(prefilled);
+      setReturningUserCheckComplete(true);
     };
 
     fetchAndPrefill();
   }, [user, authLoading]);
+
+  // Mark check complete for unauthenticated users
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setReturningUserCheckComplete(true);
+    }
+  }, [authLoading, user]);
 
   // Get UTM parameters, center selection, and learning mode from URL
   useEffect(() => {
@@ -625,6 +907,36 @@ export function FormProvider({ children }: FormProviderProps) {
     setFormData((prev) => ({ ...prev, termsAccepted: accepted }));
   }, []);
 
+  const removeApplication = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const idToken = await (user?.raw as any)?.getIdToken?.();
+      if (!idToken) return false;
+
+      const res = await fetch(`/api/application?id=${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+
+      if (!res.ok) return false;
+
+      // Remove from local state
+      setExistingApplications((prev) => {
+        const remaining = prev.filter((app) => app.id !== id);
+        // If no apps remain, switch to new-form mode
+        if (remaining.length === 0) {
+          setReturnUserMode('new-form');
+          setActiveStep(0 as FormStep);
+        }
+        return remaining;
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to delete application:', error);
+      return false;
+    }
+  }, [user, setReturnUserMode, setActiveStep]);
+
   const value: FormContextType = {
     formData,
     setFormData,
@@ -648,8 +960,19 @@ export function FormProvider({ children }: FormProviderProps) {
     submissionError,
     setSubmissionError,
     clearSavedForm,
+    saveDraftToDb,
+    isSavingDraft,
+    draftId,
+    setDraftId,
     isAuthenticated: !!user,
     isAuthLoading: authLoading,
+    existingApplications,
+    isReturningUser,
+    returnUserMode,
+    setReturnUserMode,
+    returningUserCheckComplete,
+    prefillFromExistingApplication,
+    removeApplication,
   };
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;

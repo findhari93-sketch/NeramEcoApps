@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -17,6 +17,16 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  TextField,
+  Stack,
+  CircularProgress,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
 import {
   ArchitectureOutlined,
@@ -28,10 +38,15 @@ import {
   ComputerOutlined,
   LaptopOutlined,
   HelpOutlineOutlined,
+  CloseOutlined,
+  DirectionsOutlined,
+  PhoneOutlined,
+  ScheduleOutlined,
+  AccessTimeOutlined,
 } from '@mui/icons-material';
+import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useFormContext } from '../FormContext';
 import type { CourseType, OfflineCenter } from '@neram/database';
-import Link from 'next/link';
 
 // Course options
 const COURSE_OPTIONS: { value: CourseType; label: string; description: string; icon: React.ReactNode }[] = [
@@ -66,13 +81,29 @@ const COURSE_OPTIONS: { value: CourseType; label: string; description: string; i
   },
 ];
 
+type TimeSlot = 'morning' | 'afternoon' | 'evening';
+
 export default function CourseSelectionStep() {
   const { formData, updateFormData } = useFormContext();
   const { course } = formData;
+  const { user } = useFirebaseAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [centers, setCenters] = useState<OfflineCenter[]>([]);
   const [centersLoading, setCentersLoading] = useState(true);
   const [centerCityFilter, setCenterCityFilter] = useState('all');
+
+  // Dialog state
+  const [centersDialogOpen, setCentersDialogOpen] = useState(false);
+  const [callbackDialogOpen, setCallbackDialogOpen] = useState(false);
+
+  // Callback form state
+  const [callbackSlot, setCallbackSlot] = useState<TimeSlot | null>(null);
+  const [callbackNotes, setCallbackNotes] = useState('');
+  const [callbackSubmitting, setCallbackSubmitting] = useState(false);
+  const [callbackSuccess, setCallbackSuccess] = useState(false);
+  const [callbackError, setCallbackError] = useState<string | null>(null);
 
   // Fetch centers on mount
   useEffect(() => {
@@ -149,6 +180,88 @@ export default function CourseSelectionStep() {
       });
     }
   };
+
+  const handleSelectCenterFromDialog = (center: OfflineCenter) => {
+    handleCenterSelect(center);
+    setCentersDialogOpen(false);
+  };
+
+  const handleGetDirections = (center: OfflineCenter) => {
+    if (center.google_maps_url) {
+      window.open(center.google_maps_url, '_blank');
+    } else if (center.latitude && center.longitude) {
+      window.open(
+        `https://www.google.com/maps/dir/?api=1&destination=${center.latitude},${center.longitude}`,
+        '_blank'
+      );
+    } else {
+      window.open(
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          `${center.name}, ${center.address}, ${center.city}`
+        )}`,
+        '_blank'
+      );
+    }
+  };
+
+  const handleCallbackSubmit = useCallback(async () => {
+    if (!user) return;
+
+    setCallbackSubmitting(true);
+    setCallbackError(null);
+
+    try {
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Not authenticated');
+
+      const idToken = await currentUser.getIdToken();
+      const userName = formData.personal.firstName || user.name || '';
+      const userPhone = (formData.personal.phone || user.phone || '').replace(/^\+91/, '');
+
+      const response = await fetch('/api/callback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          name: userName,
+          phone: userPhone,
+          email: user.email || undefined,
+          preferred_slot: callbackSlot || undefined,
+          notes: callbackNotes.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 400 && data.error?.includes('already requested')) {
+          setCallbackError('You have already requested a callback. Our team will reach out soon.');
+        } else {
+          setCallbackError(data.error || 'Failed to submit callback request. Please try again.');
+        }
+        return;
+      }
+
+      setCallbackSuccess(true);
+      // Auto-close after 3 seconds
+      setTimeout(() => {
+        setCallbackDialogOpen(false);
+        setCallbackSuccess(false);
+        setCallbackSlot(null);
+        setCallbackNotes('');
+      }, 3000);
+    } catch (err) {
+      console.error('Callback request error:', err);
+      setCallbackError('Something went wrong. Please try again.');
+    } finally {
+      setCallbackSubmitting(false);
+    }
+  }, [user, formData.personal, callbackSlot, callbackNotes]);
+
+  const isPhoneVerified = formData.personal.phoneVerified;
 
   return (
     <Box>
@@ -498,10 +611,9 @@ export default function CourseSelectionStep() {
 
             <Box mt={2}>
               <Button
-                component={Link}
-                href="/centers"
                 variant="text"
                 startIcon={<LocationOnOutlined />}
+                onClick={() => setCentersDialogOpen(true)}
               >
                 View all centers with details
               </Button>
@@ -533,10 +645,351 @@ export default function CourseSelectionStep() {
             Our counselors can help you choose the right course and answer your questions.
           </Typography>
         </Box>
-        <Button variant="outlined" startIcon={<PhoneCallbackOutlined />} href="/apply/callback">
+        <Button
+          variant="outlined"
+          startIcon={<PhoneCallbackOutlined />}
+          onClick={() => {
+            setCallbackError(null);
+            setCallbackSuccess(false);
+            setCallbackDialogOpen(true);
+          }}
+        >
           Request Callback
         </Button>
       </Box>
+
+      {/* ============================================ */}
+      {/* CENTERS DETAIL DIALOG */}
+      {/* ============================================ */}
+      <Dialog
+        open={centersDialogOpen}
+        onClose={() => setCentersDialogOpen(false)}
+        fullScreen={isMobile}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            pr: 1,
+          }}
+        >
+          <Typography variant="h6" fontWeight={700}>
+            Our Learning Centers
+          </Typography>
+          <IconButton onClick={() => setCentersDialogOpen(false)} edge="end">
+            <CloseOutlined />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {/* City filter chips */}
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              overflowX: 'auto',
+              pb: 1,
+              mb: 2,
+              '&::-webkit-scrollbar': { display: 'none' },
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
+            }}
+          >
+            <Chip
+              label="All Cities"
+              onClick={() => setCenterCityFilter('all')}
+              color={centerCityFilter === 'all' ? 'primary' : 'default'}
+              variant={centerCityFilter === 'all' ? 'filled' : 'outlined'}
+              sx={{ minHeight: 40, flexShrink: 0 }}
+            />
+            {uniqueCities.map((city) => (
+              <Chip
+                key={city}
+                label={city}
+                onClick={() => setCenterCityFilter(city)}
+                color={centerCityFilter === city ? 'primary' : 'default'}
+                variant={centerCityFilter === city ? 'filled' : 'outlined'}
+                sx={{ minHeight: 40, flexShrink: 0 }}
+              />
+            ))}
+          </Box>
+
+          {/* Center cards */}
+          <Grid container spacing={2}>
+            {filteredCenters.map((center) => (
+              <Grid item xs={12} sm={6} key={center.id}>
+                <Card
+                  variant={course.selectedCenterId === center.id ? 'elevation' : 'outlined'}
+                  sx={{
+                    height: '100%',
+                    borderColor:
+                      course.selectedCenterId === center.id ? 'primary.main' : 'divider',
+                    borderWidth: course.selectedCenterId === center.id ? 2 : 1,
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                  }}
+                >
+                  <CardContent>
+                    {/* Center Name */}
+                    <Box
+                      display="flex"
+                      alignItems="flex-start"
+                      justifyContent="space-between"
+                    >
+                      <Typography variant="subtitle1" fontWeight={700}>
+                        {center.name}
+                      </Typography>
+                      {course.selectedCenterId === center.id && (
+                        <CheckCircleOutlined color="primary" />
+                      )}
+                    </Box>
+
+                    {/* Address */}
+                    <Box display="flex" alignItems="flex-start" gap={1} mt={1}>
+                      <LocationOnOutlined fontSize="small" color="action" sx={{ mt: 0.3 }} />
+                      <Typography variant="body2" color="text.secondary">
+                        {center.address}
+                        <br />
+                        {center.city}, {center.state} {center.pincode}
+                      </Typography>
+                    </Box>
+
+                    {/* Visiting Hours */}
+                    {center.preferred_visit_times &&
+                      center.preferred_visit_times.length > 0 && (
+                        <Box display="flex" alignItems="center" gap={1} mt={1}>
+                          <ScheduleOutlined fontSize="small" color="action" />
+                          <Typography variant="body2" color="text.secondary">
+                            Visiting: {center.preferred_visit_times.join(', ')}
+                          </Typography>
+                        </Box>
+                      )}
+
+                    {/* Contact Phone */}
+                    {center.contact_phone && (
+                      <Box display="flex" alignItems="center" gap={1} mt={1}>
+                        <PhoneOutlined fontSize="small" color="action" />
+                        <Typography
+                          variant="body2"
+                          component="a"
+                          href={`tel:${center.contact_phone}`}
+                          sx={{ color: 'primary.main', textDecoration: 'none' }}
+                        >
+                          {center.contact_phone}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* Facilities */}
+                    {center.facilities && center.facilities.length > 0 && (
+                      <Box display="flex" flexWrap="wrap" gap={0.5} mt={1.5}>
+                        {center.facilities.map((facility) => (
+                          <Chip
+                            key={facility}
+                            label={facility}
+                            size="small"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    )}
+                  </CardContent>
+
+                  {/* Action Buttons */}
+                  <Box sx={{ px: 2, pb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button
+                      variant={course.selectedCenterId === center.id ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => handleSelectCenterFromDialog(center)}
+                      sx={{ minHeight: 40 }}
+                    >
+                      {course.selectedCenterId === center.id ? 'Selected' : 'Select this Center'}
+                    </Button>
+                    <Button
+                      variant="text"
+                      size="small"
+                      startIcon={<DirectionsOutlined />}
+                      onClick={() => handleGetDirections(center)}
+                      sx={{ minHeight: 40 }}
+                    >
+                      Directions
+                    </Button>
+                  </Box>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          {filteredCenters.length === 0 && (
+            <Box textAlign="center" py={4}>
+              <Typography variant="body1" color="text.secondary">
+                No centers found in this city.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setCentersDialogOpen(false)} variant="contained">
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ============================================ */}
+      {/* CALLBACK REQUEST DIALOG */}
+      {/* ============================================ */}
+      <Dialog
+        open={callbackDialogOpen}
+        onClose={() => setCallbackDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            pr: 1,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <PhoneCallbackOutlined color="primary" />
+            <Typography variant="h6" fontWeight={700}>
+              Request a Callback
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setCallbackDialogOpen(false)} edge="end">
+            <CloseOutlined />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {/* Success State */}
+          {callbackSuccess ? (
+            <Box textAlign="center" py={4}>
+              <CheckCircleOutlined sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
+              <Typography variant="h6" gutterBottom fontWeight={600}>
+                Callback Requested!
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+                Our counselors will call you soon to help with your queries.
+              </Typography>
+              <Box display="flex" alignItems="center" justifyContent="center" gap={1} mt={2}>
+                <AccessTimeOutlined sx={{ fontSize: 18, color: 'text.secondary' }} />
+                <Typography variant="body2" color="text.secondary">
+                  Usually within 2-4 hours during business hours
+                </Typography>
+              </Box>
+            </Box>
+          ) : !user ? (
+            /* Not Authenticated */
+            <Box textAlign="center" py={3}>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                Please complete the login and phone verification in the application form first, then request a callback.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => setCallbackDialogOpen(false)}
+                sx={{ minHeight: 48 }}
+              >
+                Go Back to Form
+              </Button>
+            </Box>
+          ) : !isPhoneVerified ? (
+            /* Phone Not Verified */
+            <Box textAlign="center" py={3}>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                Please verify your phone number in Step 1 (Personal Information) first. We need a verified phone number to call you back.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => setCallbackDialogOpen(false)}
+                sx={{ minHeight: 48 }}
+              >
+                Go Back to Form
+              </Button>
+            </Box>
+          ) : (
+            /* Phone Verified - Show Callback Form */
+            <Stack spacing={3} sx={{ mt: 1 }}>
+              {callbackError && (
+                <Alert severity="error" onClose={() => setCallbackError(null)}>
+                  {callbackError}
+                </Alert>
+              )}
+
+              {/* Pre-filled info */}
+              <Stack spacing={2}>
+                <TextField
+                  label="Your Name"
+                  value={formData.personal.firstName || ''}
+                  InputProps={{ readOnly: true }}
+                  fullWidth
+                  size="medium"
+                />
+                <TextField
+                  label="Your Phone"
+                  value={formData.personal.phone?.replace(/^\+91/, '') || ''}
+                  InputProps={{ readOnly: true }}
+                  fullWidth
+                  size="medium"
+                />
+              </Stack>
+
+              {/* Preferred Time Slot */}
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Preferred time for callback (optional)
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {(['morning', 'afternoon', 'evening'] as TimeSlot[]).map((slot) => (
+                    <Chip
+                      key={slot}
+                      label={slot.charAt(0).toUpperCase() + slot.slice(1)}
+                      onClick={() => setCallbackSlot(callbackSlot === slot ? null : slot)}
+                      color={callbackSlot === slot ? 'primary' : 'default'}
+                      variant={callbackSlot === slot ? 'filled' : 'outlined'}
+                      sx={{ minHeight: 40 }}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+
+              {/* Notes */}
+              <TextField
+                label="Any specific questions? (optional)"
+                placeholder="E.g., fee structure, batch timings, center facilities..."
+                value={callbackNotes}
+                onChange={(e) => setCallbackNotes(e.target.value)}
+                multiline
+                rows={3}
+                fullWidth
+              />
+            </Stack>
+          )}
+        </DialogContent>
+        {!callbackSuccess && user && isPhoneVerified && (
+          <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button onClick={() => setCallbackDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleCallbackSubmit}
+              disabled={callbackSubmitting}
+              startIcon={
+                callbackSubmitting ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  <PhoneCallbackOutlined />
+                )
+              }
+              sx={{ minHeight: 48 }}
+            >
+              {callbackSubmitting ? 'Submitting...' : 'Request Callback'}
+            </Button>
+          </DialogActions>
+        )}
+      </Dialog>
     </Box>
   );
 }

@@ -60,6 +60,10 @@ export interface CreateApplicationInput {
   utm_medium?: string;
   utm_campaign?: string;
   referral_code?: string;
+  // Form progress
+  form_step_completed?: number;
+  // Detected location (from browser geolocation, separate from user-entered)
+  detected_location?: Record<string, unknown> | null;
 }
 
 export interface UpdateApplicationInput extends Partial<CreateApplicationInput> {

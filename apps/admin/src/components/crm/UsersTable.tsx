@@ -1,16 +1,18 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   MaterialReactTable,
   type MRT_ColumnDef,
   type MRT_PaginationState,
   type MRT_SortingState,
+  type MRT_RowSelectionState,
   useMaterialReactTable,
 } from 'material-react-table';
-import { Avatar, Box, Chip, Typography } from '@neram/ui';
+import { Avatar, Box, Button, Chip, Typography } from '@neram/ui';
 import VerifiedIcon from '@mui/icons-material/Verified';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 
@@ -25,6 +27,7 @@ interface UsersTableProps {
   globalFilter: string;
   onGlobalFilterChange: (filter: string) => void;
   onRowClick: (userId: string) => void;
+  onBulkDeleteRequest?: (users: UserJourney[]) => void;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -56,6 +59,47 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+function handleExportCsv(rows: UserJourney[]) {
+  const headers = [
+    'Name',
+    'Email',
+    'Phone',
+    'Pipeline Stage',
+    'Application Status',
+    'Course Interest',
+    'City',
+    'State',
+    'Total Paid',
+    'Join Date',
+  ];
+
+  const csvRows = rows.map((user) => [
+    user.name || '',
+    user.email || '',
+    user.phone || '',
+    (user.pipeline_stage || '').replace(/_/g, ' '),
+    user.application_status || '',
+    user.interest_course || '',
+    user.city || '',
+    user.state || '',
+    user.total_paid?.toString() || '0',
+    formatDate(user.created_at),
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...csvRows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `crm_users_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 export default function UsersTable({
   data,
   totalCount,
@@ -67,13 +111,16 @@ export default function UsersTable({
   globalFilter,
   onGlobalFilterChange,
   onRowClick,
+  onBulkDeleteRequest,
 }: UsersTableProps) {
+  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
+
   const columns = useMemo<MRT_ColumnDef<UserJourney>[]>(
     () => [
       {
         accessorKey: 'name',
         header: 'User',
-        size: 260,
+        size: 270,
         enableColumnFilter: false,
         Cell: ({ row }) => (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.5 }}>
@@ -111,8 +158,8 @@ export default function UsersTable({
       },
       {
         accessorKey: 'phone',
-        header: 'Phone',
-        size: 160,
+        header: 'Phone Number',
+        size: 170,
         Cell: ({ row }) => {
           if (!row.original.phone) {
             return (
@@ -135,8 +182,8 @@ export default function UsersTable({
       },
       {
         accessorKey: 'pipeline_stage',
-        header: 'Stage',
-        size: 155,
+        header: 'Pipeline Stage',
+        size: 160,
         filterVariant: 'select',
         filterSelectOptions: Object.entries(PIPELINE_STAGE_CONFIG).map(
           ([value, config]) => ({ value, text: config.label })
@@ -165,7 +212,7 @@ export default function UsersTable({
       {
         accessorKey: 'application_status',
         header: 'Application',
-        size: 135,
+        size: 145,
         filterVariant: 'select',
         filterSelectOptions: [
           { value: 'draft', text: 'Draft' },
@@ -205,7 +252,7 @@ export default function UsersTable({
       {
         accessorKey: 'interest_course',
         header: 'Course',
-        size: 100,
+        size: 110,
         filterVariant: 'select',
         filterSelectOptions: [
           { value: 'nata', text: 'NATA' },
@@ -235,8 +282,8 @@ export default function UsersTable({
       },
       {
         accessorKey: 'has_demo_registration',
-        header: 'Demo',
-        size: 110,
+        header: 'Demo Class',
+        size: 120,
         Cell: ({ row }) => {
           if (!row.original.has_demo_registration) {
             return (
@@ -280,7 +327,7 @@ export default function UsersTable({
       {
         accessorKey: 'total_paid',
         header: 'Payment',
-        size: 130,
+        size: 135,
         Cell: ({ row }) => {
           if (!row.original.payment_count) {
             return (
@@ -324,7 +371,7 @@ export default function UsersTable({
       {
         accessorKey: 'city',
         header: 'Location',
-        size: 140,
+        size: 150,
         Cell: ({ row }) => {
           const city = row.original.city;
           const state = row.original.state;
@@ -345,7 +392,7 @@ export default function UsersTable({
       {
         accessorKey: 'created_at',
         header: 'Joined',
-        size: 100,
+        size: 110,
         Cell: ({ row }) => (
           <Box>
             <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 500 }}>
@@ -364,6 +411,7 @@ export default function UsersTable({
   const table = useMaterialReactTable({
     columns,
     data,
+    getRowId: (row) => row.id,
     rowCount: totalCount,
     state: {
       pagination,
@@ -371,6 +419,7 @@ export default function UsersTable({
       globalFilter,
       isLoading: loading,
       showProgressBars: loading,
+      rowSelection,
     },
     manualPagination: true,
     manualSorting: true,
@@ -386,53 +435,169 @@ export default function UsersTable({
       onSortingChange(newSorting);
     },
     onGlobalFilterChange: onGlobalFilterChange,
+    onRowSelectionChange: setRowSelection,
+
+    // Features
     enableGlobalFilter: true,
     enableColumnFilters: true,
     enableSorting: true,
     enableHiding: true,
     enableDensityToggle: false,
     enableFullScreenToggle: false,
-    enableRowSelection: false,
+    enableRowSelection: true,
+    enableMultiRowSelection: true,
+    enableSelectAll: true,
     enablePinning: false,
+    enableColumnActions: true,
     enableTopToolbar: true,
     enableBottomToolbar: true,
     layoutMode: 'grid',
+
+    // Bulk actions banner
+    positionToolbarAlertBanner: 'top',
+    renderToolbarAlertBannerContent: ({ table: tbl }) => {
+      const selectedRows = tbl.getSelectedRowModel().rows;
+      const count = selectedRows.length;
+      if (count === 0) return null;
+
+      return (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            width: '100%',
+            px: 1,
+          }}
+        >
+          <Typography variant="body2" fontWeight={600} color="primary">
+            {count} user{count > 1 ? 's' : ''} selected
+          </Typography>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />}
+            onClick={() => handleExportCsv(selectedRows.map((r) => r.original))}
+            sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: 13 }}
+          >
+            Export CSV
+          </Button>
+
+          <Button
+            variant="outlined"
+            color="error"
+            size="small"
+            startIcon={<DeleteOutlineIcon sx={{ fontSize: 18 }} />}
+            onClick={() => {
+              if (onBulkDeleteRequest) {
+                onBulkDeleteRequest(selectedRows.map((r) => r.original));
+              }
+            }}
+            sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: 13 }}
+          >
+            Delete
+          </Button>
+        </Box>
+      );
+    },
+
+    // Table container - Apple-like scrollbar, show on hover
     muiTableContainerProps: {
       sx: {
         maxHeight: 'calc(100vh - 380px)',
-        '&::-webkit-scrollbar': { width: 6 },
-        '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.300', borderRadius: 2 },
+        '&::-webkit-scrollbar': { width: 8, height: 8 },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
+        '&::-webkit-scrollbar-thumb': {
+          background: 'transparent',
+          borderRadius: 4,
+          border: '2px solid transparent',
+          backgroundClip: 'content-box',
+          transition: 'background 0.3s',
+        },
+        '&:hover::-webkit-scrollbar-thumb': {
+          background: 'rgba(0,0,0,0.2)',
+          backgroundClip: 'content-box',
+        },
+        '&::-webkit-scrollbar-thumb:hover': {
+          background: 'rgba(0,0,0,0.4)',
+          backgroundClip: 'content-box',
+        },
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'transparent transparent',
+        '&:hover': {
+          scrollbarColor: 'rgba(0,0,0,0.2) transparent',
+        },
       },
     },
+
     muiTablePaperProps: {
       elevation: 0,
-      sx: { boxShadow: 'none' },
+      sx: { boxShadow: 'none', borderRadius: 0 },
     },
+
+    // Column headers - clean, hover-reveal actions
     muiTableHeadCellProps: {
       sx: {
         bgcolor: 'grey.50',
         fontWeight: 600,
-        fontSize: 12,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        color: 'text.secondary',
+        fontSize: 13,
+        textTransform: 'none',
+        letterSpacing: 0.3,
+        color: 'text.primary',
         borderBottom: '2px solid',
         borderBottomColor: 'grey.200',
         py: 1.5,
+        px: 2,
+        whiteSpace: 'nowrap',
+        // Hide sort arrows and column menu by default
+        '& .MuiTableSortLabel-icon': {
+          opacity: 0,
+          transition: 'opacity 0.2s ease',
+        },
+        '& .MuiBox-root > .MuiIconButton-root': {
+          opacity: 0,
+          transition: 'opacity 0.2s ease',
+        },
+        // Show on hover
+        '&:hover .MuiTableSortLabel-icon': {
+          opacity: 0.5,
+        },
+        '&:hover .MuiBox-root > .MuiIconButton-root': {
+          opacity: 0.7,
+        },
+        // Always show when column is sorted
+        '& .MuiTableSortLabel-root.Mui-active .MuiTableSortLabel-icon': {
+          opacity: 1,
+        },
       },
     },
+
     muiTableBodyCellProps: {
       sx: {
         borderBottom: '1px solid',
         borderBottomColor: 'grey.100',
-        py: 1,
+        py: 1.5,
+        px: 2,
       },
     },
+
     muiTableBodyRowProps: ({ row }) => ({
-      onClick: () => onRowClick(row.original.id),
+      onClick: (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (
+          target.closest('.MuiCheckbox-root') ||
+          target.closest('[data-bulk-action]')
+        ) {
+          return;
+        }
+        onRowClick(row.original.id);
+      },
       sx: {
         cursor: 'pointer',
-        transition: 'background-color 0.15s',
+        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
         '&:hover': {
           bgcolor: 'primary.50',
         },
@@ -441,25 +606,30 @@ export default function UsersTable({
         },
       },
     }),
+
     positionGlobalFilter: 'left',
     muiSearchTextFieldProps: {
-      placeholder: 'Search users by name, email, phone, or application #...',
-      variant: 'outlined',
-      size: 'small',
+      placeholder: 'Search by name, email, phone, or application number...',
+      variant: 'outlined' as const,
+      size: 'small' as const,
       sx: {
-        minWidth: 360,
+        minWidth: 400,
         '& .MuiOutlinedInput-root': {
           borderRadius: 2,
           bgcolor: 'grey.50',
+          fontSize: 14,
           '&:hover': { bgcolor: 'grey.100' },
-          '&.Mui-focused': { bgcolor: 'background.paper' },
+          '&.Mui-focused': {
+            bgcolor: 'background.paper',
+            boxShadow: '0 0 0 3px rgba(25, 118, 210, 0.08)',
+          },
         },
       },
     },
     muiTopToolbarProps: {
       sx: {
-        px: 2,
-        py: 1.5,
+        px: 3,
+        py: 2,
         bgcolor: 'background.paper',
         borderBottom: '1px solid',
         borderBottomColor: 'grey.100',
@@ -467,7 +637,8 @@ export default function UsersTable({
     },
     muiBottomToolbarProps: {
       sx: {
-        px: 2,
+        px: 3,
+        py: 1.5,
         bgcolor: 'grey.50',
         borderTop: '1px solid',
         borderTopColor: 'grey.200',
@@ -477,6 +648,15 @@ export default function UsersTable({
       rowsPerPageOptions: [10, 25, 50, 100],
       showFirstButton: true,
       showLastButton: true,
+    },
+    muiLinearProgressProps: {
+      sx: {
+        height: 3,
+        bgcolor: 'grey.100',
+        '& .MuiLinearProgress-bar': {
+          bgcolor: 'primary.main',
+        },
+      },
     },
   });
 

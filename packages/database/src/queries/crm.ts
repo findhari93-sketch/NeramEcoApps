@@ -539,3 +539,64 @@ export async function getAdminNotes(
 
   return (data || []) as AdminUserNote[];
 }
+
+// ============================================
+// ADMIN BULK DELETE USERS
+// ============================================
+
+export interface BulkDeleteResult {
+  deletedUsers: number;
+  deletedLeadProfiles: number;
+  deletedStudentProfiles: number;
+  deletedDemoRegistrations: number;
+  deletedPayments: number;
+  deletedOnboardingSessions: number;
+  deletedOnboardingResponses: number;
+  deletedDocuments: number;
+  deletedScholarships: number;
+  deletedInstallments: number;
+  deletedCashbackClaims: number;
+  deletedAdminNotes: number;
+  deletedProfileHistory: number;
+}
+
+/**
+ * Bulk delete users with all related data using the database function.
+ * Atomic - all or nothing.
+ */
+export async function adminBulkDeleteUsers(
+  userIds: string[],
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<BulkDeleteResult> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase.rpc('admin_bulk_delete_users', {
+    user_ids: userIds,
+    admin_id: adminId,
+  });
+
+  if (error) throw error;
+
+  if (!data || data.length === 0) {
+    throw new Error('Delete function returned no data');
+  }
+
+  const result = data[0];
+
+  return {
+    deletedUsers: result.deleted_users,
+    deletedLeadProfiles: result.deleted_lead_profiles,
+    deletedStudentProfiles: result.deleted_student_profiles,
+    deletedDemoRegistrations: result.deleted_demo_registrations,
+    deletedPayments: result.deleted_payments,
+    deletedOnboardingSessions: result.deleted_onboarding_sessions,
+    deletedOnboardingResponses: result.deleted_onboarding_responses,
+    deletedDocuments: result.deleted_documents,
+    deletedScholarships: result.deleted_scholarships,
+    deletedInstallments: result.deleted_installments,
+    deletedCashbackClaims: result.deleted_cashback_claims,
+    deletedAdminNotes: result.deleted_admin_notes,
+    deletedProfileHistory: result.deleted_profile_history,
+  };
+}

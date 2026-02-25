@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Container,
@@ -16,6 +16,8 @@ import {
   useMediaQuery,
   useTheme,
   MobileStepper,
+  Snackbar,
+  Skeleton,
 } from '@neram/ui';
 import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined } from '@mui/icons-material';
 import { useFormContext, FormProvider } from './FormContext';
@@ -24,6 +26,7 @@ import PersonalInfoStep from './steps/PersonalInfoStep';
 import AcademicDetailsStep from './steps/AcademicDetailsStep';
 import CourseSelectionStep from './steps/CourseSelectionStep';
 import ReviewStep from './steps/ReviewStep';
+import ApplicationDashboard from './ApplicationDashboard';
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
 import QuickInfoPanel from './QuickInfoPanel';
@@ -171,25 +174,69 @@ function FormWizardInner() {
     submissionError,
     setSubmissionError,
     clearSavedForm,
+    saveDraftToDb,
+    isSavingDraft,
     isAuthenticated,
+    isAuthLoading,
+    isReturningUser,
+    returnUserMode,
+    returningUserCheckComplete,
+    draftId,
   } = useFormContext();
 
   const [submitted, setSubmitted] = useState(false);
   const [applicationNumber, setApplicationNumber] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [saveSnackbar, setSaveSnackbar] = useState<{ open: boolean; success: boolean }>({ open: false, success: false });
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
 
   const currentValidation = validateStep(activeStep as 0 | 1 | 2 | 3);
+  const autoPromptedRef = useRef(false);
 
-  const handleNext = () => {
+  // Auto-prompt phone verification for authenticated users on Step 0
+  // who haven't verified their phone yet
+  useEffect(() => {
+    if (
+      isAuthenticated &&
+      returningUserCheckComplete &&
+      activeStep === 0 &&
+      !formData.personal.phoneVerified &&
+      !autoPromptedRef.current
+    ) {
+      autoPromptedRef.current = true;
+      // Small delay to let the form render first
+      const timer = setTimeout(() => setShowPhoneVerification(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, returningUserCheckComplete, activeStep, formData.personal.phoneVerified, setShowPhoneVerification]);
+
+  const handleNext = async () => {
     // Special handling for Step 0 - require phone verification
     if (activeStep === 0 && !formData.personal.phoneVerified) {
       setShowPhoneVerification(true);
       return;
     }
 
-    if (currentValidation.isValid) {
-      goToNextStep();
+    if (!currentValidation.isValid) {
+      setShowValidationErrors(true);
+      // Scroll to top so user sees the validation alert
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
+
+    setShowValidationErrors(false);
+
+    // Save draft to DB if authenticated (non-blocking on failure)
+    if (isAuthenticated) {
+      try {
+        const saved = await saveDraftToDb(activeStep);
+        setSaveSnackbar({ open: true, success: saved });
+      } catch {
+        setSaveSnackbar({ open: true, success: false });
+      }
+    }
+
+    goToNextStep();
   };
 
   const handleSubmit = async () => {
@@ -242,6 +289,7 @@ function FormWizardInner() {
         latitude: formData.location.latitude,
         longitude: formData.location.longitude,
         location_source: formData.location.locationSource,
+        detected_location: formData.location.detectedLocation,
 
         // Academic
         applicant_category: formData.academic.applicantCategory,
@@ -267,8 +315,13 @@ function FormWizardInner() {
         referral_code: formData.referralCode,
       };
 
-      const response = await fetch('/api/application', {
-        method: 'POST',
+      // Use PATCH for editing existing submitted application, POST for new
+      const isEditing = returnUserMode === 'edit' && draftId;
+      const method = isEditing ? 'PATCH' : 'POST';
+      const url = isEditing ? `/api/application?id=${draftId}` : '/api/application';
+
+      const response = await fetch(url, {
+        method,
         headers,
         body: JSON.stringify(payload),
       });
@@ -276,7 +329,7 @@ function FormWizardInner() {
       const result = await response.json();
 
       if (result.success) {
-        setApplicationNumber(result.data.application_number || 'NERAM-PENDING');
+        setApplicationNumber(result.data.application_number || (isEditing ? 'Updated' : 'NERAM-PENDING'));
         setSubmitted(true);
         clearSavedForm();
       } else {
@@ -297,6 +350,24 @@ function FormWizardInner() {
   // If submitted, show success screen
   if (submitted) {
     return <SuccessScreen applicationNumber={applicationNumber} />;
+  }
+
+  // Show loading skeleton while auth is resolving or checking for returning user
+  if (isAuthLoading || (isAuthenticated && !returningUserCheckComplete)) {
+    return (
+      <Box sx={{ py: { xs: 2, md: 4 } }}>
+        <Skeleton variant="text" width="60%" height={40} sx={{ mb: 1 }} />
+        <Skeleton variant="text" width="80%" height={24} sx={{ mb: 3 }} />
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2, mb: 2 }} />
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2, mb: 2 }} />
+        <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1 }} />
+      </Box>
+    );
+  }
+
+  // Show application dashboard for returning users
+  if (isReturningUser && returnUserMode === 'dashboard') {
+    return <ApplicationDashboard />;
   }
 
   return (
@@ -370,9 +441,14 @@ function FormWizardInner() {
       )}
 
       {/* Validation Errors */}
-      {!currentValidation.isValid && currentValidation.errors.length > 0 && activeStep < 3 && (
+      {showValidationErrors && !currentValidation.isValid && currentValidation.errors.length > 0 && activeStep < 3 && (
         <Alert severity="warning" sx={{ mb: 3 }}>
-          Please fill in all required fields before proceeding.
+          Please fill in the following required fields:
+          <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+            {currentValidation.errors.map((err) => (
+              <li key={err.field}>{err.message}</li>
+            ))}
+          </ul>
         </Alert>
       )}
 
@@ -395,7 +471,7 @@ function FormWizardInner() {
         <Button
           variant="outlined"
           onClick={goToPreviousStep}
-          disabled={isFirstStep || isSubmitting}
+          disabled={isFirstStep || isSubmitting || isSavingDraft}
           startIcon={<KeyboardArrowLeft />}
           sx={{ minHeight: 48 }}
           fullWidth={isMobile}
@@ -414,21 +490,22 @@ function FormWizardInner() {
             {isSubmitting ? (
               <>
                 <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                Submitting...
+                {returnUserMode === 'edit' ? 'Updating...' : 'Submitting...'}
               </>
             ) : (
-              'Submit Application'
+              returnUserMode === 'edit' ? 'Update Application' : 'Submit Application'
             )}
           </Button>
         ) : (
           <Button
             variant="contained"
             onClick={handleNext}
-            endIcon={<KeyboardArrowRight />}
+            disabled={isSavingDraft}
+            endIcon={isSavingDraft ? <CircularProgress size={16} color="inherit" /> : <KeyboardArrowRight />}
             sx={{ minHeight: 48 }}
             fullWidth={isMobile}
           >
-            Next
+            {isSavingDraft ? 'Saving...' : isAuthenticated ? 'Save & Next' : 'Next'}
           </Button>
         )}
       </Box>
@@ -460,6 +537,15 @@ function FormWizardInner() {
           // FormContext will auto-prefill from user profile on next render
         }}
         apiBaseUrl={process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}
+      />
+
+      {/* Draft save feedback */}
+      <Snackbar
+        open={saveSnackbar.open}
+        autoHideDuration={2000}
+        onClose={() => setSaveSnackbar((prev) => ({ ...prev, open: false }))}
+        message={saveSnackbar.success ? 'Progress saved' : 'Could not save to server'}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
     </Box>
   );

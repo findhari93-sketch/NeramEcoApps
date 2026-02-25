@@ -14,7 +14,8 @@
   "scripts": {
     "lint": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo node_modules"
+    "clean": "rm -rf dist .turbo node_modules",
+    "clean:build": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.6.0",
