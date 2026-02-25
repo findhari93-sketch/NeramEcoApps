@@ -151,7 +151,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user already has a YouTube subscription coupon
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existingCoupon } = await supabase
       .from('youtube_subscription_coupons' as any)
       .select('*, coupons(*)')
