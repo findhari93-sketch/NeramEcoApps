@@ -100,14 +100,14 @@ const StyledBentoItem = styled(Box)<{
   }),
 
   // Dark mode support
-  [theme.getColorSchemeSelector('dark')]: {
+  ...(theme.palette.mode === 'dark' && {
     backgroundColor: theme.palette.grey[900],
     borderColor: theme.palette.grey[800],
     ...(featured && {
       backgroundColor: theme.palette.primary.dark,
       borderColor: theme.palette.primary.main,
     }),
-  },
+  }),
 
   // Responsive span adjustments
   [theme.breakpoints.down('md')]: {
