@@ -25,7 +25,7 @@ export default function PrivacyPage({ params: { locale } }: PageProps) {
             Privacy Policy
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-            Last updated: January 2025
+            Last updated: February 2026
           </Typography>
 
           <Typography variant="h5" component="h2" gutterBottom sx={{ mt: 4, fontWeight: 600 }}>
@@ -105,7 +105,7 @@ export default function PrivacyPage({ params: { locale } }: PageProps) {
           </Typography>
           <Typography variant="body1">
             Email: privacy@neramclasses.com<br />
-            Phone: +91-XXXX-XXXXXX<br />
+            Phone: +91-9176137043<br />
             Address: Neram Classes, Chennai, Tamil Nadu, India
           </Typography>
         </Paper>

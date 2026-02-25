@@ -15,6 +15,8 @@ import {
   ListItemText,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateCourseSchema, generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
   title: 'NATA Coaching - Best Online & Offline NATA Classes | Neram Classes',
@@ -63,7 +65,28 @@ const popularCities = [
 export default function NataCoachingPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    { question: 'What is the best NATA coaching in India?', answer: 'Neram Classes is consistently rated as one of the best NATA coaching institutes in India with a 95%+ success rate, IIT/NIT alumni faculty, and comprehensive online and offline programs covering all three sections of the NATA exam.' },
+    { question: 'How much does NATA coaching cost?', answer: 'NATA coaching fees at Neram Classes range from ₹15,000 for a 3-month crash course to ₹75,000 for a premium year-long program with 1-on-1 mentoring. Scholarships and EMI options are available for deserving students.' },
+    { question: 'Can I prepare for NATA online?', answer: 'Yes, Neram Classes offers comprehensive online NATA coaching with live interactive sessions, recorded lectures, daily drawing practice, and personal mentoring. Our online program maintains the same 95%+ success rate as our offline classes.' },
+    { question: 'How long should I prepare for NATA?', answer: 'Ideally, 6-12 months of dedicated preparation is recommended for NATA. However, our 3-month crash course is designed for students who need intensive last-minute preparation and covers all essential topics effectively.' },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateCourseSchema({
+        name: 'NATA Coaching - Online & Offline Classes',
+        description: 'Comprehensive NATA preparation course with expert IIT/NIT alumni faculty. Covers Mathematics, General Aptitude, and Drawing. Online and offline classes available.',
+        url: `${baseUrl}/en/coaching/nata-coaching`,
+        modes: ['online', 'onsite'],
+      })} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'Coaching', url: `${baseUrl}/en/coaching` },
+        { name: 'NATA Coaching' },
+      ])} />
+      <JsonLd data={generateFAQSchema(faqs)} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -76,7 +99,7 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
         <Container maxWidth="lg">
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={7}>
-              <Chip label="NATA 2025" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2 }} />
+              <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2 }} />
               <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2.5rem', md: '3.5rem' } }}>
                 Best NATA Coaching in India
               </Typography>
@@ -257,5 +280,6 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

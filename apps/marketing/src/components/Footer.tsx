@@ -18,20 +18,37 @@ const footerLinks = {
     { label: 'Home', href: '/' },
     { label: 'About Us', href: '/about' },
     { label: 'Courses', href: '/courses' },
-    { label: 'Contact', href: '/contact' },
+    { label: 'Coaching', href: '/coaching' },
     { label: 'Apply Now', href: '/apply' },
+    { label: 'Contact', href: '/contact' },
+    { label: 'Fees', href: '/fees' },
+    { label: 'Scholarships', href: '/scholarship' },
   ],
-  courses: [
-    { label: 'Architecture Entrance - Year Long', href: '/courses/architecture-entrance-year-long' },
-    { label: 'Architecture Entrance - Crash Course', href: '/courses/architecture-entrance-crash-course' },
-    { label: 'Revit Training', href: '/courses/revit-training' },
-    { label: 'AutoCAD Training', href: '/courses/autocad-training' },
+  resources: [
+    { label: 'NATA Syllabus 2026', href: '/nata-syllabus' },
+    { label: 'NATA Preparation Guide', href: '/nata-preparation-guide' },
+    { label: 'How to Score 150+ in NATA', href: '/how-to-score-150-in-nata' },
+    { label: 'Important Questions', href: '/nata-important-questions' },
+    { label: 'Best Books for NATA & JEE', href: '/best-books-nata-jee' },
+    { label: 'Previous Year Papers', href: '/previous-year-papers' },
+    { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
+    { label: 'Blog', href: '/blog' },
+  ],
+  topCities: [
+    { label: 'Chennai', href: '/coaching/nata-coaching/nata-coaching-centers-in-chennai' },
+    { label: 'Bangalore', href: '/coaching/nata-coaching/nata-coaching-centers-in-bangalore' },
+    { label: 'Coimbatore', href: '/coaching/nata-coaching/nata-coaching-centers-in-coimbatore' },
+    { label: 'Madurai', href: '/coaching/nata-coaching/nata-coaching-centers-in-madurai' },
+    { label: 'Trichy', href: '/coaching/nata-coaching/nata-coaching-centers-in-trichy' },
+    { label: 'Hyderabad', href: '/coaching/nata-coaching/nata-coaching-centers-in-hyderabad' },
+    { label: 'Mumbai', href: '/coaching/nata-coaching/nata-coaching-centers-in-mumbai' },
+    { label: 'Delhi', href: '/coaching/nata-coaching/nata-coaching-centers-in-delhi' },
+    { label: 'Dubai', href: '/coaching/nata-coaching/nata-coaching-centers-in-dubai' },
   ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },
     { label: 'Terms & Conditions', href: '/terms' },
     { label: 'Refund Policy', href: '/refund-policy' },
-    { label: 'Disclaimer', href: '/disclaimer' },
   ],
 };
 
@@ -42,6 +59,8 @@ export default function Footer() {
   const getLocalizedPath = (path: string) => {
     return `/${locale}${path}`;
   };
+
+  const linkStyle = { opacity: 0.9, '&:hover': { opacity: 1 }, fontSize: '0.85rem' };
 
   return (
     <Box
@@ -61,11 +80,16 @@ export default function Footer() {
               Neram Classes
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, opacity: 0.9 }}>
-              Empowering students with quality education and personalized guidance
-              since 2009.
+              India&apos;s leading NATA & JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 95%+ success rate.
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              Excellence in Education
+              Pudukkottai, Tamil Nadu, India
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
+              Phone: +91-9176137043
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
+              Email: info@neramclasses.com
             </Typography>
             <Chip
               label="Supported by Microsoft"
@@ -84,11 +108,11 @@ export default function Footer() {
           </Grid>
 
           {/* Quick Links */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+          <Grid item xs={6} sm={3} md={2}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
               Quick Links
             </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               {footerLinks.quickLinks.map((link) => (
                 <MuiLink
                   key={link.href}
@@ -96,7 +120,7 @@ export default function Footer() {
                   href={getLocalizedPath(link.href)}
                   color="inherit"
                   underline="hover"
-                  sx={{ opacity: 0.9, '&:hover': { opacity: 1 } }}
+                  sx={linkStyle}
                 >
                   {link.label}
                 </MuiLink>
@@ -104,20 +128,20 @@ export default function Footer() {
             </Box>
           </Grid>
 
-          {/* Courses */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
-              Popular Courses
+          {/* Resources */}
+          <Grid item xs={6} sm={3} md={2}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
+              Resources
             </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {footerLinks.courses.map((link) => (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {footerLinks.resources.map((link) => (
                 <MuiLink
                   key={link.href}
                   component={Link}
                   href={getLocalizedPath(link.href)}
                   color="inherit"
                   underline="hover"
-                  sx={{ opacity: 0.9, '&:hover': { opacity: 1 } }}
+                  sx={linkStyle}
                 >
                   {link.label}
                 </MuiLink>
@@ -125,36 +149,87 @@ export default function Footer() {
             </Box>
           </Grid>
 
-          {/* Contact Info */}
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
-              Contact Us
+          {/* Top Cities */}
+          <Grid item xs={6} sm={3} md={2}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
+              Top Cities
             </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                123 Education Street
-                <br />
-                Bangalore, Karnataka
-                <br />
-                India - 560001
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Phone: +91 80 1234 5678
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Email: info@neramclasses.com
-              </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {footerLinks.topCities.map((link) => (
+                <MuiLink
+                  key={link.href}
+                  component={Link}
+                  href={getLocalizedPath(link.href)}
+                  color="inherit"
+                  underline="hover"
+                  sx={linkStyle}
+                >
+                  {link.label}
+                </MuiLink>
+              ))}
             </Box>
+          </Grid>
+
+          {/* Social + Contact */}
+          <Grid item xs={6} sm={3} md={3}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
+              Follow Us
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <MuiLink
+                href="https://www.youtube.com/@neramclasses"
+                target="_blank"
+                rel="noopener noreferrer"
+                color="inherit"
+                underline="hover"
+                sx={linkStyle}
+              >
+                YouTube
+              </MuiLink>
+              <MuiLink
+                href="https://www.instagram.com/neramclasses"
+                target="_blank"
+                rel="noopener noreferrer"
+                color="inherit"
+                underline="hover"
+                sx={linkStyle}
+              >
+                Instagram
+              </MuiLink>
+              <MuiLink
+                href="https://www.facebook.com/neramclasses"
+                target="_blank"
+                rel="noopener noreferrer"
+                color="inherit"
+                underline="hover"
+                sx={linkStyle}
+              >
+                Facebook
+              </MuiLink>
+            </Box>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 3 }}>
+              Free Demo Class
+            </Typography>
+            <MuiLink
+              component={Link}
+              href={getLocalizedPath('/demo-class')}
+              color="inherit"
+              underline="hover"
+              sx={{ ...linkStyle, fontWeight: 600 }}
+            >
+              Book Now
+            </MuiLink>
           </Grid>
         </Grid>
 
         <Divider sx={{ my: 4, bgcolor: 'rgba(255, 255, 255, 0.2)' }} />
 
         {/* Bottom Section */}
-        <Grid container spacing={2}>
+        <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={6}>
             <Typography variant="body2" sx={{ opacity: 0.8 }}>
-              © {new Date().getFullYear()} Neram Classes. All rights reserved.
+              &copy; {new Date().getFullYear()} Neram Classes. All rights reserved.
             </Typography>
           </Grid>
           <Grid item xs={12} md={6}>
@@ -182,25 +257,6 @@ export default function Footer() {
             </Box>
           </Grid>
         </Grid>
-
-        {/* Social Media Links (Optional) */}
-        <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
-          <Typography variant="body2" sx={{ opacity: 0.8 }}>
-            Follow us:
-          </Typography>
-          <MuiLink href="#" color="inherit" sx={{ opacity: 0.8, '&:hover': { opacity: 1 } }}>
-            Facebook
-          </MuiLink>
-          <MuiLink href="#" color="inherit" sx={{ opacity: 0.8, '&:hover': { opacity: 1 } }}>
-            Twitter
-          </MuiLink>
-          <MuiLink href="#" color="inherit" sx={{ opacity: 0.8, '&:hover': { opacity: 1 } }}>
-            Instagram
-          </MuiLink>
-          <MuiLink href="#" color="inherit" sx={{ opacity: 0.8, '&:hover': { opacity: 1 } }}>
-            LinkedIn
-          </MuiLink>
-        </Box>
       </Container>
     </Box>
   );

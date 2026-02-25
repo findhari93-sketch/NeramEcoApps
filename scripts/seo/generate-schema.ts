@@ -30,7 +30,7 @@ export function generateOrganizationSchema() {
     },
     contactPoint: {
       '@type': 'ContactPoint',
-      telephone: '+91-XXXXXXXXXX',
+      telephone: '+91-9176137043',
       contactType: 'customer service',
       availableLanguage: ['English', 'Tamil'],
     },
@@ -130,7 +130,7 @@ export function generateLocalBusinessSchema(location: {
     name: `Neram Classes ${location.city}`,
     image: 'https://neramclasses.com/logo.png',
     url: `https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
-    telephone: location.phone || '+91-XXXXXXXXXX',
+    telephone: location.phone || '+91-9176137043',
     address: {
       '@type': 'PostalAddress',
       streetAddress: location.address || '',

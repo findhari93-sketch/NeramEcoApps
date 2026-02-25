@@ -1,41 +1,59 @@
-'use client';
+import { Metadata } from 'next';
+import { setRequestLocale } from 'next-intl/server';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import ApplyPageContent from '@/components/ApplyPageContent';
 
-import { Box, Container, Typography } from '@neram/ui';
-import { useTranslations } from 'next-intl';
-import ApplyFormWizard from '../../../components/apply/ApplyFormWizard';
+const baseUrl = 'https://neramclasses.com';
 
-export default function ApplyPage() {
-  const t = useTranslations('apply');
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'Apply for NATA Coaching - Neram Classes Admission',
+    description:
+      'Apply now for NATA and JEE Paper 2 coaching at Neram Classes. Easy online application, scholarships available, flexible batch options.',
+    keywords:
+      'apply NATA coaching, Neram Classes admission, NATA coaching enrollment, architecture coaching application',
+    alternates: {
+      canonical: `${baseUrl}/${locale}/apply`,
+      languages: {
+        en: `${baseUrl}/en/apply`,
+        ta: `${baseUrl}/ta/apply`,
+        hi: `${baseUrl}/hi/apply`,
+        kn: `${baseUrl}/kn/apply`,
+        ml: `${baseUrl}/ml/apply`,
+        'x-default': `${baseUrl}/en/apply`,
+      },
+    },
+    openGraph: {
+      title: 'Apply for NATA Coaching - Neram Classes Admission',
+      description:
+        'Apply now for NATA and JEE Paper 2 coaching at Neram Classes. Scholarships available, flexible batch options.',
+      type: 'website',
+      url: `${baseUrl}/${locale}/apply`,
+    },
+  };
+}
+
+export default function ApplyPage({
+  params: { locale },
+}: {
+  params: { locale: string };
+}) {
+  setRequestLocale(locale);
 
   return (
-    <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          py: { xs: 4, md: 6 },
-        }}
-      >
-        <Container maxWidth="lg">
-          <Typography
-            variant="h3"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 700 }}
-          >
-            {t('title')}
-          </Typography>
-          <Typography variant="h6" sx={{ maxWidth: '700px', opacity: 0.9 }}>
-            {t('subtitle')}
-          </Typography>
-        </Container>
-      </Box>
-
-      {/* Application Form */}
-      <Box sx={{ py: { xs: 3, md: 5 }, bgcolor: 'grey.50' }}>
-        <ApplyFormWizard />
-      </Box>
-    </Box>
+    <>
+      <JsonLd
+        data={generateBreadcrumbSchema([
+          { name: 'Home', url: baseUrl },
+          { name: 'Apply', url: `${baseUrl}/en/apply` },
+        ])}
+      />
+      <ApplyPageContent />
+    </>
   );
 }

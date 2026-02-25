@@ -11,6 +11,8 @@ import {
   Chip,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
   title: 'NATA & Architecture Blog - Tips, News & Guides | Neram Classes',
@@ -49,7 +51,7 @@ const blogPosts = [
   },
   {
     slug: 'best-nata-coaching-chennai',
-    title: 'Best NATA Coaching in Chennai - Complete Guide 2025',
+    title: 'Best NATA Coaching in Chennai - Complete Guide 2026',
     excerpt: 'Find the best NATA coaching institutes in Chennai. Compare features, fees, and success rates to make the right choice.',
     category: 'City Guide',
     author: 'Neram Classes',
@@ -59,7 +61,7 @@ const blogPosts = [
   },
   {
     slug: 'best-nata-coaching-coimbatore',
-    title: 'Best NATA Coaching in Coimbatore - Top Institutes 2025',
+    title: 'Best NATA Coaching in Coimbatore - Top Institutes 2026',
     excerpt: 'Comprehensive guide to NATA coaching in Coimbatore. Find the right coaching institute for your preparation.',
     category: 'City Guide',
     author: 'Neram Classes',
@@ -69,7 +71,7 @@ const blogPosts = [
   },
   {
     slug: 'best-nata-coaching-madurai',
-    title: 'Best NATA Coaching in Madurai - Expert Guide 2025',
+    title: 'Best NATA Coaching in Madurai - Expert Guide 2026',
     excerpt: 'Looking for NATA coaching in Madurai? Here is everything you need to know about preparation options.',
     category: 'City Guide',
     author: 'Neram Classes',
@@ -79,12 +81,102 @@ const blogPosts = [
   },
   {
     slug: 'best-nata-coaching-trichy',
-    title: 'Best NATA Coaching in Trichy - Top Choices 2025',
+    title: 'Best NATA Coaching in Trichy - Top Choices 2026',
     excerpt: 'Discover the best NATA coaching options in Trichy. Compare and choose the right coaching for your success.',
     category: 'City Guide',
     author: 'Neram Classes',
     publishedAt: '2025-01-01',
     readTime: '5 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-pudukkottai',
+    title: 'Best NATA Coaching in Pudukkottai - Neram Classes HQ 2026',
+    excerpt: 'Looking for NATA coaching in Pudukkottai? As the headquarters of Neram Classes, Pudukkottai students get direct access to our expert faculty and personalized coaching.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-01-10',
+    readTime: '17 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-salem',
+    title: 'Best NATA Coaching in Salem - Complete Guide 2026',
+    excerpt: 'Find the best NATA coaching in Salem, the Steel City of India. Expert architecture entrance preparation with flexible online and offline options.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-01-08',
+    readTime: '16 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-tiruppur',
+    title: 'Best NATA Coaching in Tiruppur - Expert Guide 2026',
+    excerpt: 'Discover the best NATA coaching for Tiruppur students. World-class architecture entrance preparation through expert online and offline coaching.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-01-05',
+    readTime: '17 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-bangalore',
+    title: 'Best NATA Coaching in Bangalore 2026 - Complete Guide',
+    excerpt: 'Find the best NATA coaching in Bangalore. Expert online and offline classes for architecture aspirants in India\'s IT capital.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-01-22',
+    readTime: '15 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-dubai',
+    title: 'Best NATA Coaching for Students in Dubai 2026',
+    excerpt: 'Looking for NATA coaching in Dubai? Neram Classes offers comprehensive online NATA preparation for Indian students in the UAE.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-02-01',
+    readTime: '15 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-doha',
+    title: 'Best NATA Coaching for Students in Doha 2026',
+    excerpt: 'Expert NATA coaching for Indian students in Doha, Qatar. Online live classes with timezone accommodation and personal mentoring.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-02-05',
+    readTime: '14 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-muscat',
+    title: 'Best NATA Coaching for Students in Muscat 2026',
+    excerpt: 'Comprehensive NATA coaching for Indian students in Muscat, Oman. Online live interactive classes with expert IIT/NIT alumni faculty.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-02-08',
+    readTime: '14 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-riyadh',
+    title: 'Best NATA Coaching for Students in Riyadh 2026',
+    excerpt: 'Top NATA coaching for Indian students in Riyadh, Saudi Arabia. Online classes with weekend batches and Gulf timezone support.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-02-10',
+    readTime: '14 min read',
+    featured: false,
+  },
+  {
+    slug: 'best-nata-coaching-kuwait-city',
+    title: 'Best NATA Coaching for Students in Kuwait City 2026',
+    excerpt: 'Expert NATA preparation for Indian students in Kuwait City. Online coaching with Gulf timezone accommodation and complete study materials.',
+    category: 'City Guide',
+    author: 'Neram Classes',
+    publishedAt: '2026-02-12',
+    readTime: '14 min read',
     featured: false,
   },
 ];
@@ -96,8 +188,16 @@ export default function BlogPage({ params: { locale } }: PageProps) {
 
   const featuredPosts = blogPosts.filter((post) => post.featured);
   const recentPosts = blogPosts.filter((post) => !post.featured);
+  const baseUrl = 'https://neramclasses.com';
 
   return (
+    <>
+      <JsonLd
+        data={generateBreadcrumbSchema([
+          { name: 'Home', url: baseUrl },
+          { name: 'Blog' },
+        ])}
+      />
     <Box>
       {/* Hero Section */}
       <Box
@@ -235,5 +335,6 @@ export default function BlogPage({ params: { locale } }: PageProps) {
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

@@ -12,11 +12,13 @@ import {
   Paper,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
-  title: 'NATA Important Questions 2025 - Sample Questions & Practice | Neram Classes',
-  description: 'Practice NATA important questions with solutions. Get sample questions for Mathematics, Aptitude, and Drawing sections with detailed explanations.',
-  keywords: 'NATA questions, NATA sample questions, NATA practice questions, NATA important questions 2025',
+  title: 'NATA Important Questions 2026 - Sample Questions & Practice | Neram Classes',
+  description: 'Practice NATA 2026 important questions with solutions. Get sample questions for Mathematics, Aptitude, and Drawing sections with detailed explanations.',
+  keywords: 'NATA questions, NATA sample questions, NATA practice questions, NATA important questions 2026',
   alternates: {
     canonical: 'https://neramclasses.com/en/nata-important-questions',
   },
@@ -100,7 +102,37 @@ const topicDistribution = [
 export default function NataImportantQuestionsPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'What types of questions are asked in the NATA exam?',
+      answer: 'NATA includes three types of questions: Mathematics MCQs covering Algebra, Trigonometry, Coordinate Geometry, Calculus, and Statistics; General Aptitude questions on Logical Reasoning, Visual Reasoning, Spatial Ability, and Architectural Awareness; and Drawing Test questions that assess freehand drawing, perspective, composition, and creative imagination. The exam is computer-based with the drawing section also conducted digitally.',
+    },
+    {
+      question: 'Are previous year NATA papers available for practice?',
+      answer: 'Yes, previous year NATA papers from the last 5-10 years are available through coaching institutes and online platforms. While the Council of Architecture does not officially release full question papers, many questions from previous years are compiled in practice books and question banks. Solving previous year papers is one of the most effective preparation strategies as question patterns tend to repeat.',
+    },
+    {
+      question: 'How many questions should I practice daily for NATA preparation?',
+      answer: 'For effective NATA preparation, aim to practice at least 30-50 MCQ questions daily across Mathematics and Aptitude, plus 1-2 drawing exercises. During the final month, increase this to 50-80 questions daily along with a full drawing practice session. Consistency is more important than volume - regular daily practice over months yields better results than cramming large numbers of questions in a short period.',
+    },
+    {
+      question: 'What is the difference between MCQ and Drawing questions in NATA?',
+      answer: 'MCQ questions in NATA cover Mathematics (40 marks) and General Aptitude (80 marks), where you select answers from given options. These are scored automatically with no negative marking. Drawing questions (80 marks) require you to create drawings digitally on the computer, evaluated by expert examiners on creativity, proportion, perspective, and overall presentation quality.',
+    },
+    {
+      question: 'What is the difficulty level of NATA compared to JEE?',
+      answer: 'NATA Mathematics is generally easier than JEE, focusing more on conceptual understanding than complex problem-solving. The aptitude section in NATA is unique and requires specific preparation in spatial reasoning and architectural awareness. The drawing section is exclusive to NATA and requires consistent practice. Overall, NATA is considered moderately difficult, with the drawing component being the most differentiating factor for scores.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'NATA Important Questions' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -112,7 +144,7 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            NATA Important Questions 2025
+            NATA Important Questions 2026
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
             Practice with the most important and frequently asked questions
@@ -289,5 +321,6 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

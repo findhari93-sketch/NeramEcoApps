@@ -12,10 +12,12 @@ import {
   Divider,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
-  title: 'Best Books for NATA & JEE Paper 2 2025 - Recommended Books | Neram Classes',
-  description: 'Complete list of best books for NATA and JEE Paper 2 preparation. Subject-wise book recommendations for Mathematics, Aptitude, and Drawing.',
+  title: 'Best Books for NATA & JEE Paper 2 2026 - Recommended Books | Neram Classes',
+  description: 'Complete list of best books for NATA and JEE Paper 2 2026 preparation. Subject-wise book recommendations for Mathematics, Aptitude, and Drawing.',
   keywords: 'best books for NATA, NATA books, JEE Paper 2 books, NATA preparation books, architecture entrance books',
   alternates: {
     canonical: 'https://neramclasses.com/en/best-books-nata-jee',
@@ -145,7 +147,37 @@ const bookRecommendations = {
 export default function BestBooksNataJeePage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'What is the best Mathematics book for NATA preparation?',
+      answer: 'For NATA Mathematics, start with NCERT Mathematics (Class 11 & 12) as the foundation. Then move to Objective Mathematics by R.D. Sharma for comprehensive problem practice. For Coordinate Geometry specifically, which is a high-weightage topic, S.L. Loney\'s Coordinate Geometry is highly recommended. These three books together cover the entire NATA Mathematics syllabus effectively.',
+    },
+    {
+      question: 'Which is the best drawing book for NATA exam preparation?',
+      answer: 'The best drawing books for NATA are "Drawing for Architects" by Francis D.K. Ching for foundational architectural drawing skills, and "Perspective Made Easy" by Ernest R. Norling for mastering perspective techniques. Additionally, practicing from NATA-specific drawing books from coaching materials helps you understand the exact type of drawing questions asked in the exam.',
+    },
+    {
+      question: 'Is NCERT sufficient for NATA Mathematics preparation?',
+      answer: 'NCERT is essential but not sufficient on its own for NATA Mathematics. It provides a strong foundation, and you should complete it thoroughly before moving to other books. However, NATA questions require faster problem-solving and deeper conceptual understanding, so supplementing NCERT with books like R.D. Sharma for practice problems and S.L. Loney for Coordinate Geometry is strongly recommended.',
+    },
+    {
+      question: 'How many books do I need for complete NATA preparation?',
+      answer: 'For comprehensive NATA preparation, you need approximately 8-10 books across all subjects. This includes 3-4 books for Mathematics, 2-3 for General Aptitude and Reasoning, 2-3 for Drawing and Sketching, and 1-2 for Architectural Awareness. Focus on quality over quantity - it is better to thoroughly complete fewer books than to superficially read many.',
+    },
+    {
+      question: 'Are there good digital resources and apps for NATA preparation?',
+      answer: 'Yes, several digital resources complement traditional books for NATA preparation. YouTube channels offer free drawing tutorials and aptitude lessons. Apps like Khan Academy help with Mathematics concepts. Online platforms provide NATA mock tests and practice questions. Neram Classes also offers digital study materials and video lectures that pair well with recommended textbooks for a comprehensive preparation strategy.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'Best Books for NATA & JEE' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -378,5 +410,6 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

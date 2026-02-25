@@ -11,11 +11,8 @@
     },
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp-server"],
-      "env": {
-        "PLAYWRIGHT_BROWSERS_PATH": "0"
-      },
-      "description": "E2E testing with Playwright - use sparingly due to browser startup time"
+      "args": ["-y", "@playwright/mcp@latest", "--headless"],
+      "description": "E2E testing with Playwright - browser automation and testing"
     },
     "filesystem": {
       "command": "npx",

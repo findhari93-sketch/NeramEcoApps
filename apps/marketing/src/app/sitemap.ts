@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { locales, defaultLocale } from '@/i18n';
+import { locales } from '@/i18n';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -14,8 +14,11 @@ const staticPages = [
   '/premium',
   '/alumni',
   '/careers',
-  '/privacy',
-  '/terms',
+  '/fees',
+  '/demo-class',
+  '/centers',
+  '/scholarship',
+  '/youtube-reward',
   '/free-resources',
   '/previous-year-papers',
   '/nata-syllabus',
@@ -27,6 +30,9 @@ const staticPages = [
   '/tools/cutoff-calculator',
   '/blog',
   '/coaching/nata-coaching',
+  '/privacy',
+  '/terms',
+  '/refund-policy',
 ];
 
 // Course slugs
@@ -41,9 +47,28 @@ const courseSlugs = [
   'jee-paper-2-coaching',
 ];
 
-// Location data for city pages
+// Blog post slugs (static until database integration)
+const blogSlugs = [
+  { slug: 'nata-2025-preparation-strategy', date: '2025-01-15', isCityGuide: false },
+  { slug: 'top-10-drawing-techniques-nata', date: '2025-01-10', isCityGuide: false },
+  { slug: 'best-nata-coaching-chennai', date: '2025-01-05', isCityGuide: true },
+  { slug: 'best-nata-coaching-coimbatore', date: '2025-01-03', isCityGuide: true },
+  { slug: 'best-nata-coaching-madurai', date: '2025-01-02', isCityGuide: true },
+  { slug: 'best-nata-coaching-trichy', date: '2025-01-01', isCityGuide: true },
+  { slug: 'best-nata-coaching-pudukkottai', date: '2026-01-10', isCityGuide: true },
+  { slug: 'best-nata-coaching-salem', date: '2026-01-08', isCityGuide: true },
+  { slug: 'best-nata-coaching-tiruppur', date: '2026-01-05', isCityGuide: true },
+  { slug: 'best-nata-coaching-bangalore', date: '2026-01-22', isCityGuide: true },
+  { slug: 'best-nata-coaching-dubai', date: '2026-02-01', isCityGuide: true },
+  { slug: 'best-nata-coaching-doha', date: '2026-02-05', isCityGuide: true },
+  { slug: 'best-nata-coaching-muscat', date: '2026-02-08', isCityGuide: true },
+  { slug: 'best-nata-coaching-riyadh', date: '2026-02-10', isCityGuide: true },
+  { slug: 'best-nata-coaching-kuwait-city', date: '2026-02-12', isCityGuide: true },
+];
+
+// Location data for city pages (comprehensive coverage)
 const locations = [
-  // Tamil Nadu
+  // Tamil Nadu - All 38 districts
   { city: 'chennai', state: 'tamil-nadu' },
   { city: 'coimbatore', state: 'tamil-nadu' },
   { city: 'madurai', state: 'tamil-nadu' },
@@ -69,7 +94,21 @@ const locations = [
   { city: 'ambur', state: 'tamil-nadu' },
   { city: 'tiruvannamalai', state: 'tamil-nadu' },
   { city: 'nagapattinam', state: 'tamil-nadu' },
-  // Karnataka
+  { city: 'chengalpattu', state: 'tamil-nadu' },
+  { city: 'ariyalur', state: 'tamil-nadu' },
+  { city: 'kallakurichi', state: 'tamil-nadu' },
+  { city: 'krishnagiri', state: 'tamil-nadu' },
+  { city: 'dharmapuri', state: 'tamil-nadu' },
+  { city: 'mayiladuthurai', state: 'tamil-nadu' },
+  { city: 'perambalur', state: 'tamil-nadu' },
+  { city: 'ramanathapuram', state: 'tamil-nadu' },
+  { city: 'sivaganga', state: 'tamil-nadu' },
+  { city: 'tenkasi', state: 'tamil-nadu' },
+  { city: 'theni', state: 'tamil-nadu' },
+  { city: 'thiruvarur', state: 'tamil-nadu' },
+  { city: 'viluppuram', state: 'tamil-nadu' },
+  { city: 'virudhunagar', state: 'tamil-nadu' },
+  // Karnataka - All 31 districts
   { city: 'bangalore', state: 'karnataka' },
   { city: 'mysore', state: 'karnataka' },
   { city: 'mangalore', state: 'karnataka' },
@@ -80,6 +119,27 @@ const locations = [
   { city: 'bellary', state: 'karnataka' },
   { city: 'shimoga', state: 'karnataka' },
   { city: 'tumkur', state: 'karnataka' },
+  { city: 'bidar', state: 'karnataka' },
+  { city: 'chamarajanagar', state: 'karnataka' },
+  { city: 'chikkaballapura', state: 'karnataka' },
+  { city: 'chikkamagaluru', state: 'karnataka' },
+  { city: 'chitradurga', state: 'karnataka' },
+  { city: 'dharwad', state: 'karnataka' },
+  { city: 'gadag', state: 'karnataka' },
+  { city: 'hassan', state: 'karnataka' },
+  { city: 'haveri', state: 'karnataka' },
+  { city: 'kodagu', state: 'karnataka' },
+  { city: 'kolar', state: 'karnataka' },
+  { city: 'koppal', state: 'karnataka' },
+  { city: 'mandya', state: 'karnataka' },
+  { city: 'raichur', state: 'karnataka' },
+  { city: 'ramanagara', state: 'karnataka' },
+  { city: 'udupi', state: 'karnataka' },
+  { city: 'karwar', state: 'karnataka' },
+  { city: 'bijapur', state: 'karnataka' },
+  { city: 'yadgir', state: 'karnataka' },
+  { city: 'vijayanagara', state: 'karnataka' },
+  { city: 'bengaluru-rural', state: 'karnataka' },
   // Kerala
   { city: 'thiruvananthapuram', state: 'kerala' },
   { city: 'kochi', state: 'kerala' },
@@ -127,17 +187,42 @@ const locations = [
   { city: 'bhopal', state: 'madhya-pradesh' },
   { city: 'chandigarh', state: 'chandigarh' },
   { city: 'bhubaneswar', state: 'odisha' },
-  // Gulf Countries
+  // UAE
   { city: 'dubai', state: 'uae' },
   { city: 'abu-dhabi', state: 'uae' },
   { city: 'sharjah', state: 'uae' },
+  { city: 'ajman', state: 'uae' },
+  { city: 'ras-al-khaimah', state: 'uae' },
+  { city: 'fujairah', state: 'uae' },
+  // Qatar
   { city: 'doha', state: 'qatar' },
+  { city: 'al-wakrah', state: 'qatar' },
+  { city: 'al-khor', state: 'qatar' },
+  { city: 'lusail', state: 'qatar' },
+  // Oman
   { city: 'muscat', state: 'oman' },
+  { city: 'seeb', state: 'oman' },
+  { city: 'sohar', state: 'oman' },
+  { city: 'salalah', state: 'oman' },
+  { city: 'nizwa', state: 'oman' },
+  // Saudi Arabia
   { city: 'riyadh', state: 'saudi-arabia' },
   { city: 'jeddah', state: 'saudi-arabia' },
   { city: 'dammam', state: 'saudi-arabia' },
+  { city: 'al-khobar', state: 'saudi-arabia' },
+  { city: 'jubail', state: 'saudi-arabia' },
+  { city: 'yanbu', state: 'saudi-arabia' },
+  { city: 'makkah', state: 'saudi-arabia' },
+  { city: 'madinah', state: 'saudi-arabia' },
+  // Kuwait
   { city: 'kuwait-city', state: 'kuwait' },
+  { city: 'farwaniya', state: 'kuwait' },
+  { city: 'salmiya', state: 'kuwait' },
+  { city: 'hawally', state: 'kuwait' },
+  // Bahrain
   { city: 'manama', state: 'bahrain' },
+  { city: 'muharraq', state: 'bahrain' },
+  { city: 'riffa', state: 'bahrain' },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -147,11 +232,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Add static pages for each locale
   for (const locale of locales) {
     for (const page of staticPages) {
+      const isHomepage = page === '';
+      const isHighPriority = page.includes('coaching') || page.includes('nata') || page.includes('jee');
       entries.push({
         url: `${baseUrl}/${locale}${page}`,
         lastModified: currentDate,
-        changeFrequency: page === '' ? 'daily' : 'weekly',
-        priority: page === '' ? 1.0 : page.includes('coaching') ? 0.9 : 0.8,
+        changeFrequency: isHomepage ? 'daily' : isHighPriority ? 'weekly' : 'weekly',
+        priority: isHomepage ? 1.0 : isHighPriority ? 0.9 : 0.8,
         alternates: {
           languages: Object.fromEntries(
             locales.map((l) => [l, `${baseUrl}/${l}${page}`])
@@ -192,20 +279,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         },
       });
     }
-  }
 
-  // TODO: Add dynamic blog posts from database
-  // const blogPosts = await getBlogPosts();
-  // for (const post of blogPosts) {
-  //   for (const locale of locales) {
-  //     entries.push({
-  //       url: `${baseUrl}/${locale}/blog/${post.slug}`,
-  //       lastModified: new Date(post.updated_at),
-  //       changeFrequency: 'weekly',
-  //       priority: 0.6,
-  //     });
-  //   }
-  // }
+    // Add blog posts
+    for (const post of blogSlugs) {
+      entries.push({
+        url: `${baseUrl}/${locale}/blog/${post.slug}`,
+        lastModified: new Date(post.date),
+        changeFrequency: 'monthly',
+        priority: post.isCityGuide ? 0.85 : 0.7,
+        alternates: {
+          languages: Object.fromEntries(
+            locales.map((l) => [l, `${baseUrl}/${l}/blog/${post.slug}`])
+          ),
+        },
+      });
+    }
+  }
 
   return entries;
 }

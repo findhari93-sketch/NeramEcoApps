@@ -14,7 +14,7 @@ import {
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Free NATA & JEE Paper 2 Resources 2025 - Study Materials | Neram Classes',
+  title: 'Free NATA & JEE Paper 2 Resources 2026 - Study Materials | Neram Classes',
   description: 'Download free NATA and JEE Paper 2 study materials, e-books, practice papers, and resources. Get free access to quality preparation materials.',
   keywords: 'free NATA books, free JEE Paper 2 resources, NATA study material PDF, free architecture entrance resources',
   alternates: {

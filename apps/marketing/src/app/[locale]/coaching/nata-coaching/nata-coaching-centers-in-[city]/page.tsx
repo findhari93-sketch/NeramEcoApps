@@ -19,6 +19,13 @@ import {
 import Link from 'next/link';
 import { locations, getLocationByCity, type Location } from '@neram/database';
 import { locales } from '@/i18n';
+import { JsonLd } from '@/components/seo/JsonLd';
+import {
+  generateLocalBusinessSchema,
+  generateFAQSchema,
+  generateBreadcrumbSchema,
+  generateCourseSchema,
+} from '@/lib/seo/schemas';
 
 interface PageProps {
   params: { locale: string; city: string };
@@ -40,13 +47,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const location = getLocationByCity(params.city);
   if (!location) return {};
 
-  const title = `NATA Coaching in ${location.cityDisplay} 2025 - Best Classes | Neram Classes`;
-  const description = `Join the best NATA coaching in ${location.cityDisplay}, ${location.stateDisplay}. Expert faculty, comprehensive study material, online & offline classes. Enroll now for NATA 2025!`;
+  const title = `Best NATA Coaching in ${location.cityDisplay} 2026 - Online & Offline Classes`;
+  const description = `Join the #1 NATA coaching in ${location.cityDisplay}, ${location.stateDisplay}. IIT/NIT alumni faculty, comprehensive study material, online & offline classes. 95%+ success rate. Enroll for NATA 2026!`;
 
   return {
     title,
     description,
-    keywords: `NATA coaching ${location.cityDisplay}, NATA classes ${location.cityDisplay}, best NATA coaching in ${location.cityDisplay}, NATA preparation ${location.stateDisplay}`,
+    keywords: `NATA coaching ${location.cityDisplay}, NATA classes ${location.cityDisplay}, best NATA coaching in ${location.cityDisplay}, NATA preparation ${location.stateDisplay}, online NATA coaching ${location.cityDisplay}, architecture entrance coaching ${location.cityDisplay}, NATA coaching near me ${location.cityDisplay}`,
     alternates: {
       canonical: `https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-${params.city}`,
     },
@@ -99,8 +106,43 @@ export default function CityNataCoachingPage({ params: { locale, city } }: PageP
   }
 
   const isGulf = location.region === 'gulf';
+  const baseUrl = 'https://neramclasses.com';
+
+  const faqs = [
+    { question: `What is the fee for NATA coaching in ${location.cityDisplay}?`, answer: 'Our course fees range from ₹15,000 to ₹75,000 depending on the course duration and mode. Contact us for detailed fee structure and scholarship options.' },
+    { question: `Is there an offline center in ${location.cityDisplay}?`, answer: isGulf ? `Currently, we offer online classes for students in ${location.cityDisplay}. Our online program is just as effective with live interactive sessions.` : `Yes, we have a fully-equipped center in ${location.cityDisplay} with drawing studios and classroom facilities. We also offer online classes.` },
+    { question: 'What is the batch timing?', answer: 'We offer multiple batch timings including morning, evening, and weekend batches to accommodate school/college students.' },
+    { question: 'Do you provide study materials?', answer: 'Yes, comprehensive study materials, practice papers, and online resources are included in the course fee.' },
+  ];
 
   return (
+    <>
+      <JsonLd
+        data={generateLocalBusinessSchema({
+          city: location.city,
+          cityDisplay: location.cityDisplay,
+          state: location.state,
+          stateDisplay: location.stateDisplay,
+          slug: location.city,
+        })}
+      />
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd
+        data={generateBreadcrumbSchema([
+          { name: 'Home', url: baseUrl },
+          { name: 'Coaching', url: `${baseUrl}/en/coaching` },
+          { name: 'NATA Coaching', url: `${baseUrl}/en/coaching/nata-coaching` },
+          { name: `NATA Coaching in ${location.cityDisplay}` },
+        ])}
+      />
+      <JsonLd
+        data={generateCourseSchema({
+          name: `NATA Coaching in ${location.cityDisplay}`,
+          description: `Comprehensive NATA preparation course in ${location.cityDisplay}, ${location.stateDisplay}. Expert IIT/NIT alumni faculty, study materials, and mock tests.`,
+          url: `${baseUrl}/en/coaching/nata-coaching/nata-coaching-centers-in-${city}`,
+          modes: isGulf ? ['online'] : ['online', 'onsite'],
+        })}
+      />
     <Box>
       {/* Hero Section */}
       <Box
@@ -117,7 +159,7 @@ export default function CityNataCoachingPage({ params: { locale, city } }: PageP
           </Typography>
           <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
             Join {location.cityDisplay}'s top-rated NATA coaching institute. Expert faculty, proven results,
-            and comprehensive preparation for NATA 2025.
+            and comprehensive preparation for NATA 2026.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -332,17 +374,12 @@ export default function CityNataCoachingPage({ params: { locale, city } }: PageP
             Frequently Asked Questions
           </Typography>
           <Grid container spacing={3}>
-            {[
-              { q: `What is the fee for NATA coaching in ${location.cityDisplay}?`, a: 'Our course fees range from ₹15,000 to ₹75,000 depending on the course duration and mode. Contact us for detailed fee structure and scholarship options.' },
-              { q: `Is there an offline center in ${location.cityDisplay}?`, a: isGulf ? `Currently, we offer online classes for students in ${location.cityDisplay}. Our online program is just as effective with live interactive sessions.` : `Yes, we have a fully-equipped center in ${location.cityDisplay} with drawing studios and classroom facilities. We also offer online classes.` },
-              { q: 'What is the batch timing?', a: 'We offer multiple batch timings including morning, evening, and weekend batches to accommodate school/college students.' },
-              { q: 'Do you provide study materials?', a: 'Yes, comprehensive study materials, practice papers, and online resources are included in the course fee.' },
-            ].map((faq, index) => (
+            {faqs.map((faq, index) => (
               <Grid item xs={12} md={6} key={index}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>{faq.q}</Typography>
-                    <Typography variant="body2" color="text.secondary">{faq.a}</Typography>
+                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>{faq.question}</Typography>
+                    <Typography variant="body2" color="text.secondary">{faq.answer}</Typography>
                   </CardContent>
                 </Card>
               </Grid>
@@ -384,11 +421,12 @@ export default function CityNataCoachingPage({ params: { locale, city } }: PageP
               href="/contact"
               sx={{ borderColor: 'white', color: 'white' }}
             >
-              Call Us: +91-XXXX-XXXXXX
+              Call Us: +91-9176137043
             </Button>
           </Box>
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

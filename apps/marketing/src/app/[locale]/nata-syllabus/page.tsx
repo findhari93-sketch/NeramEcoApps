@@ -16,11 +16,13 @@ import {
   Paper,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
-  title: 'NATA Syllabus 2025 - Complete Subject-wise Syllabus | Neram Classes',
-  description: 'Complete NATA 2025 syllabus with subject-wise breakdown. Learn about Mathematics, General Aptitude, and Drawing Test syllabus for NATA exam preparation.',
-  keywords: 'NATA syllabus, NATA 2025 syllabus, NATA subjects, NATA exam pattern, NATA preparation',
+  title: 'NATA Syllabus 2026 - Complete Subject-wise Syllabus | Neram Classes',
+  description: 'Complete NATA 2026 syllabus with subject-wise breakdown. Learn about Mathematics, General Aptitude, and Drawing Test syllabus for NATA exam preparation.',
+  keywords: 'NATA syllabus, NATA 2026 syllabus, NATA subjects, NATA exam pattern, NATA preparation',
   alternates: {
     canonical: 'https://neramclasses.com/en/nata-syllabus',
   },
@@ -70,7 +72,37 @@ const syllabusTopics = {
 export default function NataSyllabusPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'What subjects are covered in the NATA syllabus?',
+      answer: 'The NATA syllabus covers three main sections: Mathematics (40 marks), General Aptitude (80 marks), and Drawing Test (80 marks). Mathematics includes Algebra, Trigonometry, Coordinate Geometry, 3D Geometry, Calculus, and Statistics. General Aptitude covers Logical Reasoning, Visual Reasoning, Spatial Reasoning, and Architectural Awareness.',
+    },
+    {
+      question: 'What is the marks distribution in the NATA exam?',
+      answer: 'NATA has a total of 200 marks distributed across three sections. Mathematics carries 40 marks, General Aptitude carries 80 marks, and the Drawing Test carries 80 marks. The exam duration is 3 hours, and there is no negative marking for incorrect answers.',
+    },
+    {
+      question: 'What is the format of the NATA Drawing Test?',
+      answer: 'The NATA Drawing Test is conducted on a computer-based platform where candidates must complete drawing tasks using digital tools. It includes Free Hand Drawing, Geometrical Drawing, Composition exercises, and Imagination & Creativity tasks. Candidates are assessed on their ability to sketch from memory, draw perspectives, and express creative ideas visually.',
+    },
+    {
+      question: 'What are the major changes in the NATA 2026 syllabus?',
+      answer: 'The NATA 2026 syllabus continues to follow the three-section format with increased emphasis on digital drawing skills and architectural awareness. The General Aptitude section now includes more questions on environmental awareness and sustainable architecture. Students should also prepare for updated current affairs and modern architectural concepts.',
+    },
+    {
+      question: 'What is the eligibility criteria for NATA exam?',
+      answer: 'To be eligible for NATA, candidates must have passed 10+2 or equivalent with Mathematics as a compulsory subject. They should have scored at least 50% marks in aggregate in Physics, Chemistry, and Mathematics. There is no upper age limit for appearing in NATA, and candidates can attempt the exam up to 3 times in a year.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'NATA Syllabus' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -82,7 +114,7 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            NATA Syllabus 2025
+            NATA Syllabus 2026
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
             Complete subject-wise syllabus for National Aptitude Test in Architecture
@@ -112,7 +144,7 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
       <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50' }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            NATA 2025 Exam Pattern
+            NATA 2026 Exam Pattern
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} md={4}>
@@ -233,5 +265,6 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

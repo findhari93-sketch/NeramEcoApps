@@ -16,10 +16,12 @@ import {
   Divider,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
-  title: 'How to Score 150+ in NATA 2025 - Tips & Strategy | Neram Classes',
-  description: 'Learn proven strategies and tips to score 150+ marks in NATA exam. Expert guidance on section-wise preparation and time management for top scores.',
+  title: 'How to Score 150+ in NATA 2026 - Tips & Strategy | Neram Classes',
+  description: 'Learn proven strategies and tips to score 150+ marks in NATA 2026 exam. Expert guidance on section-wise preparation and time management for top scores.',
   keywords: 'NATA score, how to score in NATA, NATA tips, NATA 150 marks, NATA strategy',
   alternates: {
     canonical: 'https://neramclasses.com/en/how-to-score-150-in-nata',
@@ -70,7 +72,37 @@ const topperTips = [
 export default function HowToScore150InNataPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'Is 150 a good score in NATA?',
+      answer: 'Yes, 150 out of 200 is an excellent score in NATA, placing you in the top percentile of candidates. A score of 150+ typically qualifies you for admission to premier architecture colleges across India, including top private institutions. Most students scoring 150+ secure seats in their preferred colleges with good scholarship opportunities.',
+    },
+    {
+      question: 'What is the best section-wise strategy to score 150+ in NATA?',
+      answer: 'To score 150+, target 32+ in Mathematics (out of 40), 60+ in General Aptitude (out of 80), and 60+ in Drawing (out of 80). Focus on high-weightage topics like Coordinate Geometry and Calculus in Mathematics. For Aptitude, master spatial reasoning and pattern recognition. For Drawing, practice perspective drawing and composition daily for at least 2 hours.',
+    },
+    {
+      question: 'Should I prioritize Drawing or Aptitude for a high NATA score?',
+      answer: 'Both Drawing and Aptitude carry 80 marks each, so neither should be neglected. However, Drawing offers more consistent scoring potential since it relies on practiced skills rather than unpredictable questions. Students who practice drawing daily tend to score more reliably in that section. Ideally, balance your preparation with 2 hours of drawing and 2 hours of aptitude practice daily.',
+    },
+    {
+      question: 'How many mock tests should I take before the NATA exam?',
+      answer: 'You should aim to complete at least 30-50 full-length mock tests before the actual NATA exam. Start with one mock test per week during the initial preparation phase, then increase to 2-3 per week in the final two months. Always analyze your mistakes after each mock test and focus on improving weak areas. Consistent mock test practice is the single most effective strategy for improving scores.',
+    },
+    {
+      question: 'What should I focus on in the last month before NATA?',
+      answer: 'In the last month, focus on daily full-length mock tests under timed conditions, quick revision of mathematical formulas and shortcuts, drawing practice under exam time constraints, and reviewing your error log from previous mock tests. Avoid starting new topics and instead strengthen what you already know. Also prioritize adequate sleep and stress management to perform well on exam day.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'How to Score 150+ in NATA' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -82,7 +114,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            How to Score 150+ in NATA 2025
+            How to Score 150+ in NATA 2026
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
             Proven strategies used by toppers to crack NATA with high scores
@@ -314,5 +346,6 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

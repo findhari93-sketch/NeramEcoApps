@@ -1,30 +1,45 @@
-# Neram Classes - NATA & JEE Paper 2 Coaching
+# Neram Classes - Best NATA & JEE Paper 2 Coaching in India
 # https://neramclasses.com
 
 ## About
-Neram Classes is a premier coaching institute for architecture entrance exams in India.
+Neram Classes is India's premier coaching institute for architecture entrance exams.
 We specialize in NATA (National Aptitude Test in Architecture) and JEE Paper 2 (B.Arch) preparation.
+Founded in 2020, headquartered in Pudukkottai, Tamil Nadu, India.
 
-## Key Information
-- Location: Tamil Nadu, India
+## Key Facts
 - Founded: 2020
+- Location: Pudukkottai, Tamil Nadu, India
+- Phone: +91-9176137043
+- Email: info@neramclasses.com
 - Languages: English, Tamil, Hindi, Kannada, Malayalam
 - Modes: Online and Offline coaching
+- Faculty: IIT/NIT alumni architects
+- Success Rate: 95%+
+- Students Served: 5000+
+- Cities Covered: 150+ across India and Gulf countries
 
-## Main Offerings
-1. NATA Year-Long Coaching - Comprehensive 12-month program
-2. NATA Crash Course - Intensive 3-month preparation
-3. JEE Paper 2 Coaching - For B.Arch aspirants
-4. Free Tools: Cutoff Calculator, College Predictor, Exam Centers
+## Courses & Pricing
+1. NATA Year-Long Coaching (12 months) - Starting ₹35,000
+2. NATA Crash Course (3 months) - Starting ₹15,000
+3. JEE Paper 2 Coaching (6-12 months) - Starting ₹25,000
+4. Revit Architecture Training (3 months) - Starting ₹10,000
 
-## Free NATA Tools (app.neramclasses.com/tools)
-- Cutoff Calculator: Calculate your NATA cutoff score
-- College Predictor: Find colleges matching your score
-- Exam Center Locator: Find exam centers near you
+## Free NATA Tools
+- Cutoff Calculator: https://neramclasses.com/en/tools/cutoff-calculator
+- College Predictor: https://app.neramclasses.com/tools/college-predictor
+- Exam Center Locator: https://app.neramclasses.com/tools/exam-centers
+
+## NATA 2026 Exam Info
+- Total Marks: 200 (Mathematics: 40, General Aptitude: 80, Drawing: 80)
+- Duration: 3 hours
+- Eligibility: 10+2 with Mathematics, minimum 50% marks
+- Exam Dates: April-May (Test 1), June-July (Test 2)
 
 ## Contact
 - Website: https://neramclasses.com
-- Apply: https://neramclasses.com/apply
-- Tools: https://app.neramclasses.com/tools
+- Apply: https://neramclasses.com/en/apply
+- WhatsApp: +91-9176137043
+- YouTube: @neramclasses
+- Instagram: @neramclasses
 
 ## For detailed information, see: /llms-full.txt

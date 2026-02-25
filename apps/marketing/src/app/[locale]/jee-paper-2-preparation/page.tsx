@@ -16,10 +16,12 @@ import {
   Divider,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
-  title: 'JEE Paper 2 Preparation Guide 2025 - B.Arch & B.Planning | Neram Classes',
-  description: 'Complete JEE Main Paper 2 (B.Arch/B.Planning) preparation guide. Learn about exam pattern, syllabus, preparation strategy, and tips to crack JEE Paper 2.',
+  title: 'JEE Paper 2 Preparation Guide 2026 - B.Arch & B.Planning | Neram Classes',
+  description: 'Complete JEE Main Paper 2 (B.Arch/B.Planning) 2026 preparation guide. Learn about exam pattern, syllabus, preparation strategy, and tips to crack JEE Paper 2.',
   keywords: 'JEE Paper 2 preparation, JEE B.Arch, JEE B.Planning, JEE Paper 2 syllabus, JEE Paper 2 tips',
   alternates: {
     canonical: 'https://neramclasses.com/en/jee-paper-2-preparation',
@@ -98,7 +100,37 @@ const topColleges = [
 export default function JeePaper2PreparationPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'What is the difference between JEE Paper 2 and NATA?',
+      answer: 'JEE Paper 2 is conducted by NTA for admission to IITs, NITs, and other government architecture colleges, while NATA is conducted by the Council of Architecture for private architecture colleges. JEE Paper 2 has 400 total marks with a computer-based test plus drawing on paper, whereas NATA has 200 marks with a fully computer-based format including digital drawing. Both exams test Mathematics, Aptitude, and Drawing skills.',
+    },
+    {
+      question: 'What is the difference between B.Arch and B.Planning in JEE Paper 2?',
+      answer: 'B.Arch (Paper 2A) includes Mathematics, Aptitude Test, and a Drawing Test, and leads to a Bachelor of Architecture degree. B.Planning (Paper 2B) includes Mathematics, Aptitude Test, and a Planning-based section instead of Drawing, leading to a Bachelor of Planning degree. Both papers are 400 marks total with a 3-hour duration, but they differ in the third section.',
+    },
+    {
+      question: 'Which NITs accept JEE Paper 2 scores for B.Arch admission?',
+      answer: 'Several prestigious NITs accept JEE Paper 2 scores including NIT Trichy, NIT Calicut, MNIT Jaipur, NIT Rourkela, NIT Patna, and NIT Bhopal among others. Additionally, IITs like IIT Kharagpur and IIT Roorkee accept JEE Paper 2 scores, though IIT admission also requires clearing the AAT (Architecture Aptitude Test). Expected cutoff scores vary from 140+ to 180+ depending on the institution.',
+    },
+    {
+      question: 'How much do NATA and JEE Paper 2 preparation overlap?',
+      answer: 'There is significant overlap between NATA and JEE Paper 2 preparation, approximately 70-80%. Both exams test Mathematics (similar syllabus), General Aptitude (spatial reasoning, logical thinking), and Drawing skills. The main difference is that JEE Paper 2 has a higher difficulty level in Mathematics and the drawing is on paper rather than computer. Students preparing for both exams can follow a unified study plan with minor adjustments.',
+    },
+    {
+      question: 'What is AAT and is it required for IIT B.Arch admission?',
+      answer: 'AAT (Architecture Aptitude Test) is an additional test conducted by IITs after JEE Advanced results. It is mandatory for admission to B.Arch programs at IITs like IIT Kharagpur and IIT Roorkee. AAT tests freehand drawing, architectural awareness, 3D visualization, and imagination. Only students who qualify JEE Advanced are eligible to take AAT. The test is typically conducted within a week after JEE Advanced results.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'JEE Paper 2 Preparation' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -110,7 +142,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            JEE Paper 2 Preparation Guide 2025
+            JEE Paper 2 Preparation Guide 2026
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
             Your complete guide to crack JEE Main Paper 2 for B.Arch & B.Planning
@@ -140,7 +172,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
-            JEE Paper 2 Exam Pattern 2025
+            JEE Paper 2 Exam Pattern 2026
           </Typography>
 
           <Grid container spacing={4}>
@@ -314,5 +346,6 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

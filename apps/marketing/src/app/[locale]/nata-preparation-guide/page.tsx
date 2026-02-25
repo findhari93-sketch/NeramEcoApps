@@ -16,10 +16,12 @@ import {
   Divider,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
 export const metadata: Metadata = {
-  title: 'NATA Preparation Guide 2025 - How to Prepare for NATA | Neram Classes',
-  description: 'Complete NATA 2025 preparation guide with month-wise study plan, tips, strategies, and expert advice. Learn how to crack NATA exam effectively.',
+  title: 'NATA Preparation Guide 2026 - How to Prepare for NATA | Neram Classes',
+  description: 'Complete NATA 2026 preparation guide with month-wise study plan, tips, strategies, and expert advice. Learn how to crack NATA exam effectively.',
   keywords: 'NATA preparation, how to prepare for NATA, NATA study plan, NATA tips, NATA strategy',
   alternates: {
     canonical: 'https://neramclasses.com/en/nata-preparation-guide',
@@ -116,7 +118,37 @@ const subjectStrategies = [
 export default function NataPreparationGuidePage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'How many months are needed to prepare for NATA?',
+      answer: 'Ideally, 6 to 12 months of dedicated preparation is recommended for NATA. Students who start early with a structured study plan covering Mathematics, General Aptitude, and Drawing practice tend to score significantly higher. However, with focused effort and expert coaching, even 3-4 months of intensive preparation can yield good results.',
+    },
+    {
+      question: 'Can Class 12 students prepare for NATA alongside board exams?',
+      answer: 'Yes, Class 12 students can absolutely prepare for NATA alongside board exams. Since NATA Mathematics overlaps with the Class 12 syllabus, board exam preparation helps with NATA as well. Students should dedicate 2-3 extra hours daily for Drawing practice and Aptitude preparation, ideally starting from Class 11 itself.',
+    },
+    {
+      question: 'Is online NATA coaching as effective as offline coaching?',
+      answer: 'Online NATA coaching can be equally effective as offline coaching when it includes live interactive sessions, personalized drawing feedback, and regular mock tests. The key advantage of online coaching is flexibility in scheduling and access to expert faculty regardless of location. However, drawing practice benefits from direct mentor feedback, so hybrid models often work best.',
+    },
+    {
+      question: 'When is the best time to start NATA preparation?',
+      answer: 'The best time to start NATA preparation is during Class 11 or at least 6 months before the exam. Starting early gives you ample time to build strong fundamentals in Mathematics, develop drawing skills through daily practice, and gradually improve your aptitude through consistent problem-solving. Early starters consistently outperform those who begin preparation in the last few months.',
+    },
+    {
+      question: 'Can I crack NATA without coaching?',
+      answer: 'While it is possible to crack NATA through self-study, coaching provides structured preparation, expert guidance on drawing techniques, regular mock tests, and performance analysis that are difficult to replicate on your own. Most top rankers in NATA have had some form of guided coaching. If self-studying, ensure you follow a strict schedule, practice drawing daily, and take plenty of mock tests.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'NATA Preparation Guide' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -128,7 +160,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            NATA Preparation Guide 2025
+            NATA Preparation Guide 2026
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
             Your complete roadmap to cracking NATA with a top rank
@@ -320,5 +352,6 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
         </Container>
       </Box>
     </Box>
+    </>
   );
 }
