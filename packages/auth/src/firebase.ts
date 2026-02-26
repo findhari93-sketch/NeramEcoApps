@@ -449,6 +449,13 @@ export function clearRecaptcha(): void {
     recaptchaVerifier = null;
   }
   confirmationResult = null;
+
+  // Clear rendered reCAPTCHA widgets from DOM to prevent "already rendered" errors
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('[id^="recaptcha-container"]').forEach((el) => {
+      el.innerHTML = '';
+    });
+  }
 }
 
 /**
