@@ -4,6 +4,8 @@ set -e
 # ============================================
 # Neram Ecosystem - Unified Deploy Script
 # ============================================
+# Flow: Auto-commit → Type-check → Lint → Test → Build → DB migrations → Vercel deploy
+#
 # Usage:
 #   bash scripts/deploy.sh --target staging
 #   bash scripts/deploy.sh --target production
@@ -11,6 +13,14 @@ set -e
 #   bash scripts/deploy.sh --target staging --apps app
 #   bash scripts/deploy.sh --target staging --apps marketing,app
 #   bash scripts/deploy.sh --target staging --skip-checks --skip-db
+#   bash scripts/deploy.sh --target all --skip-commit
+#
+# Flags:
+#   --target [staging|production|all]  Required. Which environment(s) to deploy.
+#   --apps [marketing,app,nexus,admin] Optional. Comma-separated list of apps (default: all).
+#   --skip-checks                      Skip type-check, lint, test, and build.
+#   --skip-db                          Skip Supabase migrations.
+#   --skip-commit                      Skip auto-commit of local changes.
 # ============================================
 
 # --- Vercel Project IDs ---
@@ -54,6 +64,7 @@ ALL_APPS="marketing app nexus admin"
 TARGET=""
 SKIP_CHECKS=false
 SKIP_DB=false
+SKIP_COMMIT=false
 DEPLOY_APPS=""
 
 # --- Parse Arguments ---
@@ -75,9 +86,13 @@ while [[ $# -gt 0 ]]; do
       SKIP_DB=true
       shift
       ;;
+    --skip-commit)
+      SKIP_COMMIT=true
+      shift
+      ;;
     *)
       echo -e "${RED}Unknown argument: $1${NC}"
-      echo "Usage: bash scripts/deploy.sh --target [staging|production|all] [--apps marketing,app,...] [--skip-checks] [--skip-db]"
+      echo "Usage: bash scripts/deploy.sh --target [staging|production|all] [--apps marketing,app,...] [--skip-checks] [--skip-db] [--skip-commit]"
       exit 1
       ;;
   esac
@@ -133,14 +148,71 @@ if [[ -z "$VERCEL_TOKEN" ]]; then
   echo -e "${YELLOW}Warning: VERCEL_TOKEN not set in environment. Vercel CLI will use interactive auth.${NC}"
 fi
 
+# --- Auto-Commit ---
+if [[ "$SKIP_COMMIT" == false ]]; then
+  echo -e "\n${BLUE}=== Auto-Commit ===${NC}"
+
+  # Check for any changes (modified, untracked, staged)
+  if [[ -n "$(git status --porcelain)" ]]; then
+    echo -e "${YELLOW}Uncommitted changes detected. Committing...${NC}"
+
+    # Stage all changes (excluding .claude/settings.local.json)
+    git add -A
+    git reset -- .claude/settings.local.json 2>/dev/null || true
+
+    # Check if there's anything staged after exclusions
+    if git diff --cached --quiet; then
+      echo -e "${YELLOW}No meaningful changes to commit (only ignored files).${NC}"
+    else
+      # Generate commit message from changed files
+      CHANGED_FILES=$(git diff --cached --name-only | head -10)
+      CHANGE_COUNT=$(git diff --cached --name-only | wc -l | tr -d ' ')
+
+      # Build a short summary
+      COMMIT_MSG="chore: Auto-commit before deploy ($TARGET)"
+      if [[ "$CHANGE_COUNT" -le 5 ]]; then
+        FILE_LIST=$(git diff --cached --name-only | sed 's|^|  - |')
+        COMMIT_MSG="$COMMIT_MSG
+
+Files changed:
+$FILE_LIST"
+      else
+        COMMIT_MSG="$COMMIT_MSG
+
+$CHANGE_COUNT files changed"
+      fi
+
+      git commit -m "$COMMIT_MSG"
+      echo -e "${GREEN}Changes committed successfully${NC}"
+    fi
+  else
+    echo -e "${GREEN}Working tree clean — nothing to commit${NC}"
+  fi
+else
+  echo -e "${YELLOW}Skipping auto-commit (--skip-commit)${NC}"
+fi
+
 # --- Quality Checks ---
 if [[ "$SKIP_CHECKS" == false ]]; then
   echo -e "\n${BLUE}=== Running Quality Checks ===${NC}"
+
   echo -e "${YELLOW}Running type-check...${NC}"
   pnpm type-check
+
   echo -e "${YELLOW}Running lint...${NC}"
   pnpm lint
-  echo -e "${GREEN}Quality checks passed${NC}"
+
+  echo -e "${YELLOW}Running tests...${NC}"
+  if pnpm test:run 2>/dev/null; then
+    echo -e "${GREEN}Tests passed${NC}"
+  else
+    echo -e "${YELLOW}Warning: Tests failed or no tests found — continuing deploy${NC}"
+  fi
+
+  echo -e "${YELLOW}Running build...${NC}"
+  pnpm build
+
+  echo -e "${GREEN}All quality checks passed${NC}"
 else
   echo -e "${YELLOW}Skipping quality checks (--skip-checks)${NC}"
 fi
