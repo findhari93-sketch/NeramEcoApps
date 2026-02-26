@@ -326,15 +326,23 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 
 > **When the user says "deploy to staging", "deploy to production", "deploy all", "push to staging", "push to prod", or similar — follow this playbook.**
 
+#### How It Works
+
+All deploys go through **Git → GitHub → Vercel** (no direct Vercel CLI deploys):
+- Push to `staging` branch → Vercel auto-deploys to staging domains
+- Push to `main` branch → Vercel auto-deploys to production domains
+
+The deploy script handles: **Auto-commit → Type-check → Lint → Test → Build → DB migrations → Git push**
+
 #### Deploy Commands
 
 ```bash
-# Direct deploy (via Vercel CLI — fast, bypasses GitHub Actions)
-pnpm deploy:staging              # Staging: DB migrations + all 4 apps
-pnpm deploy:prod                 # Production: DB migrations + all 4 apps
-pnpm deploy:all                  # Both staging + production (when no users)
-pnpm deploy:staging --skip-checks  # Skip lint/type-check (faster)
+pnpm deploy:staging              # Auto-commit + checks + push to staging branch
+pnpm deploy:prod                 # Auto-commit + checks + push to main branch
+pnpm deploy:all                  # Auto-commit + checks + push to both branches
+pnpm deploy:staging --skip-checks  # Skip type-check/lint/test/build (faster)
 pnpm deploy:staging --skip-db      # Skip Supabase migrations
+pnpm deploy:staging --skip-commit  # Skip auto-commit (must commit manually first)
 
 # Git-based promote (via GitHub PR — recommended with users)
 pnpm promote:prod                # Create PR: staging → main (review first)
@@ -342,10 +350,10 @@ pnpm promote:prod:auto           # Create PR + auto-merge (CI runs, then deploys
 ```
 
 **Which to use?**
-- **No users yet**: `pnpm deploy:all` (direct, fastest)
-- **With users**: `pnpm deploy:staging` first, test, then `pnpm promote:prod:auto` (goes through GitHub Actions with CI checks)
+- **No users yet**: `pnpm deploy:all` (commits, checks, pushes to both branches)
+- **With users**: `pnpm deploy:staging` first, test, then `pnpm promote:prod` (PR-based)
 
-The deploy script (`scripts/deploy.sh`) handles: Supabase migrations + Vercel deploy for all 4 apps.
+The deploy script (`scripts/deploy.sh`) handles: Auto-commit + quality checks + DB migrations + git push.
 The promote script (`scripts/promote.sh`) handles: PR creation staging → main via `gh` CLI, with optional auto-merge.
 
 #### Before Running Deploy — Checklist
@@ -386,15 +394,16 @@ When asked to deploy, **check these BEFORE running the deploy command**:
 #### Promoting staging → production (with users)
 
 When you have real users, always go staging-first:
-1. `pnpm deploy:staging` — deploy and test on staging
-2. `pnpm promote:prod:auto` — creates PR staging → main, waits for CI, auto-merges
-3. GitHub Actions deploys to production (runs DB migrations + all 4 apps)
+1. `pnpm deploy:staging` — commit, check, push to staging branch
+2. Verify on staging URLs
+3. `pnpm promote:prod` — creates PR staging → main for review
+4. Or `pnpm promote:prod:auto` — creates PR + auto-merges after CI passes
 
 The promote script uses `gh` CLI. It will:
 - Fetch latest, show commits to promote
 - Create PR (or reuse existing one)
 - Wait for CI checks to pass
-- Merge the PR (triggers production deploy via GitHub Actions)
+- Merge the PR (triggers production deploy via Vercel GitHub integration)
 
 #### Platform-specific notes
 

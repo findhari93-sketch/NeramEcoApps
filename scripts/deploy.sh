@@ -4,39 +4,35 @@ set -e
 # ============================================
 # Neram Ecosystem - Unified Deploy Script
 # ============================================
-# Flow: Auto-commit → Type-check → Lint → Test → Build → DB migrations → Vercel deploy
+# Flow: Auto-commit → Quality checks → Git push → Vercel auto-deploys
+#
+# How it works:
+#   Push to `staging` branch  → Vercel deploys to staging domains
+#   Push to `main` branch     → Vercel deploys to production domains
 #
 # Usage:
 #   bash scripts/deploy.sh --target staging
 #   bash scripts/deploy.sh --target production
 #   bash scripts/deploy.sh --target all
-#   bash scripts/deploy.sh --target staging --apps app
-#   bash scripts/deploy.sh --target staging --apps marketing,app
 #   bash scripts/deploy.sh --target staging --skip-checks --skip-db
 #   bash scripts/deploy.sh --target all --skip-commit
 #
 # Flags:
 #   --target [staging|production|all]  Required. Which environment(s) to deploy.
-#   --apps [marketing,app,nexus,admin] Optional. Comma-separated list of apps (default: all).
 #   --skip-checks                      Skip type-check, lint, test, and build.
 #   --skip-db                          Skip Supabase migrations.
 #   --skip-commit                      Skip auto-commit of local changes.
 # ============================================
 
-# --- Vercel Project IDs ---
-ORG_ID="team_pINk5YGOGsajESQgHpsgyoEU"
-declare -A VERCEL_PROJECTS=(
-  ["marketing"]="prj_kCLOVjMqr99PfKvbdiZdM8vHpNST"
-  ["app"]="prj_n1hKWpSZezUx3m3ui0i2eLKq13OR"
-  ["nexus"]="prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX"
-  ["admin"]="prj_QoCOUGXPvDYAfOXHYFpF62f57hWV"
-)
+# --- Branch Mapping ---
+STAGING_BRANCH="staging"
+PRODUCTION_BRANCH="main"
 
 # --- Supabase Project Refs ---
 STAGING_SUPABASE="hgxjavrsrvpihqrpezdh"
 PRODUCTION_SUPABASE="zdnypksjqnhtiblwdaic"
 
-# --- URLs ---
+# --- URLs (for summary display) ---
 declare -A STAGING_URLS=(
   ["marketing"]="https://staging.neramclasses.com"
   ["app"]="https://staging-app.neramclasses.com"
@@ -57,25 +53,17 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# --- All valid app names ---
-ALL_APPS="marketing app nexus admin"
-
 # --- Defaults ---
 TARGET=""
 SKIP_CHECKS=false
 SKIP_DB=false
 SKIP_COMMIT=false
-DEPLOY_APPS=""
 
 # --- Parse Arguments ---
 while [[ $# -gt 0 ]]; do
   case $1 in
     --target)
       TARGET="$2"
-      shift 2
-      ;;
-    --apps)
-      DEPLOY_APPS="$2"
       shift 2
       ;;
     --skip-checks)
@@ -92,7 +80,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo -e "${RED}Unknown argument: $1${NC}"
-      echo "Usage: bash scripts/deploy.sh --target [staging|production|all] [--apps marketing,app,...] [--skip-checks] [--skip-db] [--skip-commit]"
+      echo "Usage: bash scripts/deploy.sh --target [staging|production|all] [--skip-checks] [--skip-db] [--skip-commit]"
       exit 1
       ;;
   esac
@@ -100,36 +88,21 @@ done
 
 if [[ -z "$TARGET" ]]; then
   echo -e "${RED}Error: --target is required${NC}"
-  echo "Usage: bash scripts/deploy.sh --target [staging|production|all] [--apps marketing,app,...] [--skip-checks] [--skip-db]"
+  echo "Usage: bash scripts/deploy.sh --target [staging|production|all] [--skip-checks] [--skip-db] [--skip-commit]"
   exit 1
 fi
-
-# --- Resolve which apps to deploy ---
-if [[ -n "$DEPLOY_APPS" ]]; then
-  # Replace commas with spaces
-  DEPLOY_APPS="${DEPLOY_APPS//,/ }"
-  # Validate each app name
-  for app in $DEPLOY_APPS; do
-    if [[ ! " $ALL_APPS " =~ " $app " ]]; then
-      echo -e "${RED}Error: Unknown app '$app'. Valid apps: $ALL_APPS${NC}"
-      exit 1
-    fi
-  done
-else
-  DEPLOY_APPS="$ALL_APPS"
-fi
-
-echo -e "${BLUE}Apps to deploy: ${DEPLOY_APPS}${NC}"
 
 if [[ "$TARGET" != "staging" && "$TARGET" != "production" && "$TARGET" != "all" ]]; then
   echo -e "${RED}Error: --target must be staging, production, or all${NC}"
   exit 1
 fi
 
-# --- Pre-flight Checks ---
-echo -e "${BLUE}=== Pre-flight Checks ===${NC}"
+echo -e "${BLUE}=== Neram Deploy → ${TARGET^^} ===${NC}"
 
-for cmd in vercel pnpm; do
+# --- Pre-flight Checks ---
+echo -e "\n${BLUE}=== Pre-flight Checks ===${NC}"
+
+for cmd in git pnpm; do
   if ! command -v $cmd &>/dev/null; then
     echo -e "${RED}Error: $cmd is not installed or not in PATH${NC}"
     exit 1
@@ -137,16 +110,22 @@ for cmd in vercel pnpm; do
 done
 
 # Check supabase via npx (installed as monorepo dependency)
-if ! npx supabase --version &>/dev/null 2>&1; then
-  echo -e "${RED}Error: supabase CLI is not available (tried npx supabase)${NC}"
-  exit 1
+if [[ "$SKIP_DB" == false ]]; then
+  if ! npx supabase --version &>/dev/null 2>&1; then
+    echo -e "${RED}Error: supabase CLI is not available (tried npx supabase)${NC}"
+    exit 1
+  fi
 fi
 echo -e "${GREEN}All CLI tools available${NC}"
 
-# Check VERCEL_TOKEN
-if [[ -z "$VERCEL_TOKEN" ]]; then
-  echo -e "${YELLOW}Warning: VERCEL_TOKEN not set in environment. Vercel CLI will use interactive auth.${NC}"
+# Verify git remote
+if ! git remote get-url origin &>/dev/null; then
+  echo -e "${RED}Error: No git remote 'origin' configured${NC}"
+  exit 1
 fi
+
+CURRENT_BRANCH=$(git branch --show-current)
+echo -e "Current branch: ${YELLOW}${CURRENT_BRANCH}${NC}"
 
 # --- Auto-Commit ---
 if [[ "$SKIP_COMMIT" == false ]]; then
@@ -165,7 +144,6 @@ if [[ "$SKIP_COMMIT" == false ]]; then
       echo -e "${YELLOW}No meaningful changes to commit (only ignored files).${NC}"
     else
       # Generate commit message from changed files
-      CHANGED_FILES=$(git diff --cached --name-only | head -10)
       CHANGE_COUNT=$(git diff --cached --name-only | wc -l | tr -d ' ')
 
       # Build a short summary
@@ -220,16 +198,20 @@ fi
 # --- Deploy Function ---
 deploy_env() {
   local env_name="$1"
+  local target_branch=""
   local supabase_ref=""
 
   if [[ "$env_name" == "staging" ]]; then
+    target_branch="$STAGING_BRANCH"
     supabase_ref="$STAGING_SUPABASE"
   else
+    target_branch="$PRODUCTION_BRANCH"
     supabase_ref="$PRODUCTION_SUPABASE"
   fi
 
   echo -e "\n${BLUE}========================================${NC}"
   echo -e "${BLUE}  Deploying to ${env_name^^}${NC}"
+  echo -e "${BLUE}  Pushing to branch: ${target_branch}${NC}"
   echo -e "${BLUE}========================================${NC}"
 
   # --- Supabase Migrations ---
@@ -247,40 +229,33 @@ deploy_env() {
     echo -e "${YELLOW}Skipping database migrations (--skip-db)${NC}"
   fi
 
-  # --- Vercel Deploy Each App ---
-  # Deploy from monorepo root — Vercel uses project's rootDirectory setting
-  # to resolve which subdirectory (apps/marketing, apps/app, etc.) to build.
-  local token_flag=""
-  if [[ -n "$VERCEL_TOKEN" ]]; then
-    token_flag="--token=$VERCEL_TOKEN"
+  # --- Git Push ---
+  echo -e "\n${YELLOW}--- Pushing to origin/${target_branch} ---${NC}"
+
+  if [[ "$CURRENT_BRANCH" == "$target_branch" ]]; then
+    # Already on the target branch — just push
+    git push origin "$target_branch"
+  else
+    # Push current branch's commits to the target branch
+    git push origin "HEAD:${target_branch}"
   fi
 
-  for app_name in $DEPLOY_APPS; do
-    local project_id="${VERCEL_PROJECTS[$app_name]}"
-
-    echo -e "\n${YELLOW}--- Deploying $app_name ($project_id) ---${NC}"
-
-    export VERCEL_ORG_ID="$ORG_ID"
-    export VERCEL_PROJECT_ID="$project_id"
-
-    echo "  Deploying to Vercel (remote build)..."
-    vercel deploy --prod $token_flag --yes
-
-    echo -e "${GREEN}  $app_name deployed successfully${NC}"
-  done
+  echo -e "${GREEN}Pushed to origin/${target_branch} — Vercel will auto-deploy${NC}"
 
   # --- Summary ---
-  echo -e "\n${GREEN}=== ${env_name^^} Deployment Complete ===${NC}"
+  echo -e "\n${GREEN}=== ${env_name^^} Deploy Triggered ===${NC}"
+  echo -e "Vercel will build and deploy from the ${YELLOW}${target_branch}${NC} branch."
+  echo -e ""
   echo -e "┌──────────────┬──────────────────────────────────────────┐"
   echo -e "│ App          │ URL                                      │"
   echo -e "├──────────────┼──────────────────────────────────────────┤"
 
   if [[ "$env_name" == "staging" ]]; then
-    for app_name in $DEPLOY_APPS; do
+    for app_name in marketing app nexus admin; do
       printf "│ %-12s │ %-40s │\n" "$app_name" "${STAGING_URLS[$app_name]}"
     done
   else
-    for app_name in $DEPLOY_APPS; do
+    for app_name in marketing app nexus admin; do
       printf "│ %-12s │ %-40s │\n" "$app_name" "${PRODUCTION_URLS[$app_name]}"
     done
   fi
