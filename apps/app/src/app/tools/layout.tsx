@@ -8,6 +8,7 @@ const toolLinks = [
   { title: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
   { title: 'College Predictor', href: '/tools/college-predictor' },
   { title: 'Exam Centers', href: '/tools/exam-centers' },
+  { title: 'Help', href: '/tools/help' },
 ];
 
 export default function ToolsLayout({ children }: { children: React.ReactNode }) {

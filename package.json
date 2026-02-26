@@ -62,7 +62,12 @@
     "seo:schema": "cd scripts && npx tsx seo/generate-schema.ts",
     "seo:indexnow": "cd scripts && npx tsx seo/indexnow-submit.ts",
     "seo:cwv": "cd scripts && npx tsx seo/cwv-monitor.ts",
-    "seo:all": "pnpm seo:schema && pnpm seo:cwv"
+    "seo:all": "pnpm seo:schema && pnpm seo:cwv",
+    "deploy:staging": "bash scripts/deploy.sh --target staging",
+    "deploy:prod": "bash scripts/deploy.sh --target production",
+    "deploy:all": "bash scripts/deploy.sh --target all",
+    "promote:prod": "bash scripts/promote.sh",
+    "promote:prod:auto": "bash scripts/promote.sh --auto-merge"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0",

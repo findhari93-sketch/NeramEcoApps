@@ -17,7 +17,9 @@
     "AZURE_AD_CLIENT_SECRET",
     "RAZORPAY_KEY_ID",
     "RAZORPAY_KEY_SECRET",
-    "RESEND_API_KEY"
+    "RESEND_API_KEY",
+    "NEXT_PUBLIC_TAWK_PROPERTY_ID",
+    "NEXT_PUBLIC_TAWK_WIDGET_ID"
   ],
   "tasks": {
     "build": {

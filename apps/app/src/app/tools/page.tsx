@@ -46,6 +46,14 @@ const tools = [
     href: '/tools/exam-centers',
     features: ['All India coverage', 'Distance calculator', 'Center details'],
   },
+  {
+    title: 'Help & Support',
+    description:
+      'Chat with our team for instant help with NATA preparation, college selection, and course enrollment.',
+    icon: '💬',
+    href: '/tools/help',
+    features: ['Live chat support', 'Quick responses', 'Expert guidance'],
+  },
 ];
 
 export default function ToolsLandingPage() {
@@ -74,7 +82,7 @@ export default function ToolsLandingPage() {
       {/* Tools Grid */}
       <Grid container spacing={3}>
         {tools.map((tool) => (
-          <Grid item xs={12} md={4} key={tool.href}>
+          <Grid item xs={12} sm={6} md={3} key={tool.href}>
             <Card
               sx={{
                 height: '100%',

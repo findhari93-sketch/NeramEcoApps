@@ -295,58 +295,112 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 
 ### Environments
 
-| Environment | Branch | URLs | Deploy Trigger |
-|-------------|--------|------|----------------|
-| **Preview** | PR branches | `*.vercel.app` | Auto on PR |
-| **Staging** | `staging` | `staging.neramclasses.com` | Auto on merge |
-| **Production** | `main` | `neramclasses.com` | Manual approval |
+| Environment | Branch | URLs | Supabase Ref | Deploy Trigger |
+|-------------|--------|------|-------------|----------------|
+| **Preview** | PR branches | `*.vercel.app` | — | Auto on PR |
+| **Staging** | `staging` | `staging.neramclasses.com` | `hgxjavrsrvpihqrpezdh` | Auto on merge to staging |
+| **Production** | `main` | `neramclasses.com` | `zdnypksjqnhtiblwdaic` | Auto on merge to main |
 
-### Deployment Workflow
+### URLs
 
-```
-feature/* → PR to staging → staging branch → PR to main → production
-            (auto tests)    (QA testing)    (manual approval)
-```
+| App | Staging | Production |
+|-----|---------|------------|
+| Marketing | https://staging.neramclasses.com | https://neramclasses.com |
+| App | https://staging-app.neramclasses.com | https://app.neramclasses.com |
+| Nexus | https://staging-nexus.neramclasses.com | https://nexus.neramclasses.com |
+| Admin | https://staging-admin.neramclasses.com | https://admin.neramclasses.com |
 
-1. **Create feature branch** from `staging`
-2. **Open PR** to `staging` → Preview deployment + tests run
-3. **Merge to staging** → Auto-deploys to staging environment
-4. **QA testing** on staging URLs
-5. **Open PR** from `staging` to `main` → Tests run
-6. **Manual approval** in GitHub Actions → Production deploy
+### Vercel Project IDs
 
-### Staging URLs
+| App | Project ID | Project Name |
+|-----|-----------|-------------|
+| Marketing | `prj_kCLOVjMqr99PfKvbdiZdM8vHpNST` | neram-marketing |
+| App | `prj_n1hKWpSZezUx3m3ui0i2eLKq13OR` | neram-tools-app |
+| Nexus | `prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX` | neram-nexus-new |
+| Admin | `prj_QoCOUGXPvDYAfOXHYFpF62f57hWV` | neram-admin-new |
+| Org ID | `team_pINk5YGOGsajESQgHpsgyoEU` | — |
 
-| App | Staging URL |
-|-----|-------------|
-| Marketing | https://staging.neramclasses.com |
-| App | https://staging-app.neramclasses.com |
-| Nexus | https://staging-nexus.neramclasses.com |
-| Admin | https://staging-admin.neramclasses.com |
+---
 
-### Production URLs
+### One-Command Deploy (CRITICAL - READ THIS)
 
-| App | Production URL |
-|-----|----------------|
-| Marketing | https://neramclasses.com |
-| App | https://app.neramclasses.com |
-| Nexus | https://nexus.neramclasses.com |
-| Admin | https://admin.neramclasses.com |
+> **When the user says "deploy to staging", "deploy to production", "deploy all", "push to staging", "push to prod", or similar — follow this playbook.**
 
-### Backend Environments
-
-- **Staging**: Separate Supabase + Firebase projects (see `.env.staging.example`)
-- **Production**: Production Supabase + Firebase projects
-
-### Manual Deployment Commands
+#### Deploy Commands
 
 ```bash
-# Deploy to staging manually
-pnpm vercel:deploy
+# Direct deploy (via Vercel CLI — fast, bypasses GitHub Actions)
+pnpm deploy:staging              # Staging: DB migrations + all 4 apps
+pnpm deploy:prod                 # Production: DB migrations + all 4 apps
+pnpm deploy:all                  # Both staging + production (when no users)
+pnpm deploy:staging --skip-checks  # Skip lint/type-check (faster)
+pnpm deploy:staging --skip-db      # Skip Supabase migrations
 
-# Deploy to production manually (use with caution)
-pnpm vercel:deploy:prod
+# Git-based promote (via GitHub PR — recommended with users)
+pnpm promote:prod                # Create PR: staging → main (review first)
+pnpm promote:prod:auto           # Create PR + auto-merge (CI runs, then deploys)
 ```
+
+**Which to use?**
+- **No users yet**: `pnpm deploy:all` (direct, fastest)
+- **With users**: `pnpm deploy:staging` first, test, then `pnpm promote:prod:auto` (goes through GitHub Actions with CI checks)
+
+The deploy script (`scripts/deploy.sh`) handles: Supabase migrations + Vercel deploy for all 4 apps.
+The promote script (`scripts/promote.sh`) handles: PR creation staging → main via `gh` CLI, with optional auto-merge.
+
+#### Before Running Deploy — Checklist
+
+When asked to deploy, **check these BEFORE running the deploy command**:
+
+1. **New env vars?** If any new `NEXT_PUBLIC_*` or server env vars were added:
+   - Add to the relevant Vercel project(s) via CLI:
+     ```bash
+     cd apps/<app> && echo "<value>" | vercel env add <KEY> production
+     cd apps/<app> && echo "<value>" | vercel env add <KEY> preview
+     ```
+   - Add to `.env.staging.example` and `.env.example` for documentation
+   - Add `NEXT_PUBLIC_*` vars to `turbo.json` → `globalEnv` array
+
+2. **Database migrations?** If new SQL files in `supabase/migrations/`:
+   - The deploy script handles this automatically via `supabase db push`
+   - If migration requires manual steps (e.g., backfill data), warn the user
+
+3. **Firebase changes?** (auth domains, providers, etc.)
+   - Firebase Console changes CANNOT be automated — tell the user:
+     > "Firebase change needed: Go to Firebase Console → [specific path] and [action]"
+   - For Firebase Admin SDK key rotation, update in Vercel env vars
+
+4. **GitHub secrets?** If new secrets are needed for CI:
+   - Cannot be set via CLI — tell the user:
+     > "GitHub secret needed: Go to repo Settings → Secrets → Actions → New: `SECRET_NAME`"
+
+5. **Supabase dashboard changes?** (RLS policies via dashboard, extensions, etc.)
+   - Use Supabase MCP tools if available, otherwise tell the user
+
+#### After Deploy — Verify
+
+- Check the deployed URLs load correctly
+- If the feature has a specific page, verify it works on the deployed URL
+- Report any deployment errors to the user with the specific app and error message
+
+#### Promoting staging → production (with users)
+
+When you have real users, always go staging-first:
+1. `pnpm deploy:staging` — deploy and test on staging
+2. `pnpm promote:prod:auto` — creates PR staging → main, waits for CI, auto-merges
+3. GitHub Actions deploys to production (runs DB migrations + all 4 apps)
+
+The promote script uses `gh` CLI. It will:
+- Fetch latest, show commits to promote
+- Create PR (or reuse existing one)
+- Wait for CI checks to pass
+- Merge the PR (triggers production deploy via GitHub Actions)
+
+#### Platform-specific notes
+
+- **Firebase**: Only used for phone/Google auth. Config is env vars in Vercel — separate values for Production vs Preview. Rarely changes. If a Firebase Console change is needed, tell the user manually.
+- **Supabase**: Migrations auto-pushed by both `deploy.sh` and GitHub Actions `deploy.yml`. Dashboard-only changes (extensions, RLS via UI) must be applied separately per environment.
+- **Vercel env vars**: Scoped per environment (Production vs Preview). When adding new vars, always add to BOTH via CLI: `vercel env add <KEY> production` AND `vercel env add <KEY> preview`.
 
 ## Prompt Templates (Copy-Paste Ready)
 
