@@ -13,15 +13,10 @@ import {
   getProfileHistory,
   getSupabaseAdminClient,
 } from '@neram/database';
+import { getCorsHeaders } from '@/lib/cors';
 
-// CORS headers for cross-domain requests
-const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || '*',
-  'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
-
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
@@ -30,6 +25,7 @@ export async function OPTIONS() {
  * Get current user profile
  */
 export async function GET(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
     const authHeader = req.headers.get('Authorization');
     const idToken = authHeader?.replace('Bearer ', '');
@@ -96,6 +92,7 @@ export async function GET(req: NextRequest) {
  * Update profile fields with history tracking
  */
 export async function PUT(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
     const authHeader = req.headers.get('Authorization');
     const idToken = authHeader?.replace('Bearer ', '');

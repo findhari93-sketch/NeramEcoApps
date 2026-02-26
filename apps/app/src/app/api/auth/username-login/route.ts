@@ -10,15 +10,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCustomToken } from '@/lib/firebase-admin';
 import { getUserByUsername } from '@neram/database';
+import { getCorsHeaders } from '@/lib/cors';
 
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
@@ -30,6 +25,7 @@ export async function OPTIONS() {
  * This endpoint just resolves username -> firebase_uid
  */
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
     const { username } = await req.json();
 

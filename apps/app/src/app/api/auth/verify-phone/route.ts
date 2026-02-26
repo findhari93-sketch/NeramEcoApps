@@ -9,18 +9,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient } from '@neram/database';
 
-// CORS headers for cross-domain requests
-const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { getCorsHeaders } from '@/lib/cors';
 
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
     const { idToken, phoneNumber } = await req.json();
 

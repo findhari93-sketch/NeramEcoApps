@@ -12,18 +12,13 @@ import {
   createUserAvatar,
   getSupabaseAdminClient,
 } from '@neram/database';
-
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || '*',
-  'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+import { getCorsHeaders } from '@/lib/cors';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
@@ -32,6 +27,7 @@ export async function OPTIONS() {
  * Upload new avatar with crop data
  */
 export async function POST(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
     const authHeader = req.headers.get('Authorization');
     const idToken = authHeader?.replace('Bearer ', '');
@@ -158,6 +154,7 @@ export async function POST(req: NextRequest) {
  * Remove current avatar (set to null)
  */
 export async function DELETE(req: NextRequest) {
+  const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
     const authHeader = req.headers.get('Authorization');
     const idToken = authHeader?.replace('Bearer ', '');

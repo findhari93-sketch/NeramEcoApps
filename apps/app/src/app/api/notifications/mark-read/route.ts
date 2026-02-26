@@ -8,14 +8,10 @@ import {
   markAllUserNotificationsRead,
 } from '@neram/database';
 
-// CORS headers for cross-domain requests (marketing app)
-const corsHeaders = {
-  'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+import { getCorsHeaders } from '@/lib/cors';
 
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request.headers.get('Origin'));
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
@@ -28,6 +24,7 @@ export async function OPTIONS() {
  * Auth: Firebase ID token in Authorization: Bearer <token>
  */
 export async function POST(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request.headers.get('Origin'));
   try {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
