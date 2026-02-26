@@ -38,11 +38,17 @@ const nextConfig = {
   },
   async redirects() {
     return [
+      // City-specific coaching pages — MUST be first (more specific than /coaching)
+      // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper
+      { source: '/coaching/:city', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+
       // Core pages
       { source: '/coaching', destination: '/en/coaching', permanent: true },
       { source: '/premium', destination: '/en/premium', permanent: true },
       { source: '/alumni', destination: '/en/alumni', permanent: true },
       { source: '/careers', destination: '/en/careers', permanent: true },
+      { source: '/askSeniors', destination: '/en/alumni', permanent: true },
+      { source: '/settings', destination: 'https://app.neramclasses.com/settings', permanent: true },
 
       // Study guide pages
       { source: '/nata-syllabus-subjects', destination: '/en/nata-syllabus', permanent: true },
@@ -61,7 +67,11 @@ const nextConfig = {
       { source: '/nata-coaching-online', destination: '/en/coaching/nata-coaching', permanent: true },
       { source: '/jee-paper-2-coaching', destination: '/en/courses/jee-paper-2-coaching', permanent: true },
 
-      // Blog pages
+      // Blog posts that were renamed (old slug had -online suffix, new site dropped it)
+      { source: '/blog/best-nata-coaching-chennai-online', destination: '/en/blog/best-nata-coaching-chennai', permanent: true },
+      { source: '/blog/best-nata-coaching-coimbatore-online', destination: '/en/blog/best-nata-coaching-coimbatore', permanent: true },
+      { source: '/blog/best-nata-coaching-madurai-online', destination: '/en/blog/best-nata-coaching-madurai', permanent: true },
+      { source: '/blog/best-nata-coaching-trichy-online', destination: '/en/blog/best-nata-coaching-trichy', permanent: true },
       { source: '/blog', destination: '/en/blog', permanent: true },
       { source: '/blog/:slug', destination: '/en/blog/:slug', permanent: true },
 
