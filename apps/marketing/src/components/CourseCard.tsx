@@ -53,29 +53,13 @@ export default function CourseCard({ course }: CourseCardProps) {
         sx={{
           height: 200,
           bgcolor: 'primary.light',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           position: 'relative',
           overflow: 'hidden',
+          backgroundImage: `url(${course.image})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
       >
-        {/* Placeholder for course image */}
-        <Box
-          sx={{
-            width: '100%',
-            height: '100%',
-            bgcolor: 'primary.light',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Typography variant="h6" color="primary.contrastText" sx={{ opacity: 0.7 }}>
-            {course.title}
-          </Typography>
-        </Box>
-
         {/* Level Badge */}
         <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
           <Chip

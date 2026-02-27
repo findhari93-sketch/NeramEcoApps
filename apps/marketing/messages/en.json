@@ -226,7 +226,8 @@
     "closeMenu": "Close menu",
     "continueApplication": "Continue Application",
     "trackApplication": "Track Application",
-    "payAndJoin": "Pay & Join Now"
+    "payAndJoin": "Pay & Join Now",
+    "goToApp": "Go to App"
   },
   "centers": {
     "title": "Visit Our Learning Centers",

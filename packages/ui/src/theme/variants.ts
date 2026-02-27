@@ -139,6 +139,46 @@ export const createMarketingTheme = (mode: 'light' | 'dark' = 'light'): Theme =>
               },
             },
           },
+          {
+            props: { className: 'hero-cta' },
+            style: {
+              background: `linear-gradient(135deg, ${m3MarketingAccent.base} 0%, ${m3MarketingAccent.dark} 100%)`,
+              color: '#FFFFFF',
+              fontWeight: 700,
+              border: 'none',
+              boxShadow: '0 4px 14px -2px rgba(249, 115, 22, 0.5)',
+              '&:hover': {
+                background: `linear-gradient(135deg, ${m3MarketingAccent.dark} 0%, ${m3MarketingAccent.base} 100%)`,
+                boxShadow: '0 6px 20px -2px rgba(249, 115, 22, 0.6)',
+                transform: 'translateY(-2px)',
+              },
+              '&:active': {
+                transform: 'translateY(0)',
+                boxShadow: '0 2px 8px -2px rgba(249, 115, 22, 0.4)',
+              },
+            },
+          },
+          {
+            props: { className: 'hero-secondary' },
+            style: {
+              backgroundColor: 'rgba(255, 255, 255, 0.12)',
+              color: '#FFFFFF',
+              fontWeight: 600,
+              border: '1.5px solid rgba(255, 255, 255, 0.4)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderColor: 'rgba(255, 255, 255, 0.6)',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              },
+              '&:active': {
+                transform: 'translateY(0)',
+                backgroundColor: 'rgba(255, 255, 255, 0.25)',
+              },
+            },
+          },
         ],
       },
       // M3 Feature cards with hover effects

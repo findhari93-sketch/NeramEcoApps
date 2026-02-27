@@ -16,6 +16,8 @@ import {
 } from '@mui/icons-material';
 import Link from 'next/link';
 import type { FeeStructure } from '@neram/database';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
 interface FeeCardProps {
   fee: FeeStructure;
@@ -36,6 +38,9 @@ export default function FeeCard({
   isHighlighted = false,
   t,
 }: FeeCardProps) {
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
   const discountedPrice = fee.fee_amount - (fee.single_payment_discount || 0);
   const hasDiscount = (fee.single_payment_discount || 0) > 0;
   const hasInstallments = fee.installment_1_amount && fee.installment_2_amount;
@@ -234,22 +239,41 @@ export default function FeeCard({
 
       {/* CTA Button */}
       <Box sx={{ p: { xs: 2.5, sm: 3 }, pt: 0 }}>
-        <Button
-          variant="contained"
-          color={isHighlighted ? 'primary' : 'secondary'}
-          fullWidth
-          size="large"
-          component={Link}
-          href={`/${locale}/apply`}
-          sx={{
-            minHeight: 48,
-            fontWeight: 600,
-            fontSize: '1rem',
-            borderRadius: 2,
-          }}
-        >
-          {t('applyNow')}
-        </Button>
+        {isEnrolled ? (
+          <Button
+            variant="contained"
+            fullWidth
+            size="large"
+            onClick={goToApp}
+            sx={{
+              minHeight: 48,
+              fontWeight: 600,
+              fontSize: '1rem',
+              borderRadius: 2,
+              bgcolor: '#2E7D32',
+              '&:hover': { bgcolor: '#1B5E20' },
+            }}
+          >
+            Go to App
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            color={isHighlighted ? 'primary' : 'secondary'}
+            fullWidth
+            size="large"
+            component={Link}
+            href={`/${locale}/apply`}
+            sx={{
+              minHeight: 48,
+              fontWeight: 600,
+              fontSize: '1rem',
+              borderRadius: 2,
+            }}
+          >
+            {t('applyNow')}
+          </Button>
+        )}
       </Box>
     </Card>
   );

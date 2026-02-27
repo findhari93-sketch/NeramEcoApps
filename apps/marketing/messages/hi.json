@@ -154,7 +154,8 @@
     "closeMenu": "मेनू बंद करें",
     "continueApplication": "आवेदन जारी रखें",
     "trackApplication": "आवेदन ट्रैक करें",
-    "payAndJoin": "भुगतान करें और जुड़ें"
+    "payAndJoin": "भुगतान करें और जुड़ें",
+    "goToApp": "ऐप पर जाएं"
   },
   "centers": {
     "title": "हमारे लर्निंग सेंटर देखें",

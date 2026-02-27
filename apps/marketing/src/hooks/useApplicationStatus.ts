@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useFirebaseAuth } from '@neram/auth';
 
 export type AppStatusSummary =
+  | 'enrolled'
+  | 'partial_payment'
   | 'approved'
   | 'submitted'
   | 'under_review'
@@ -52,8 +54,10 @@ function clearCachedStatus() {
   }
 }
 
-// Priority: approved > under_review/pending_verification > submitted > draft
+// Priority: enrolled > partial_payment > approved > under_review/pending_verification > submitted > draft
 const STATUS_PRIORITY: Record<string, number> = {
+  enrolled: 6,
+  partial_payment: 5,
   approved: 4,
   under_review: 3,
   pending_verification: 3,

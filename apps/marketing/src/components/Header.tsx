@@ -33,9 +33,22 @@ import { useTranslations } from 'next-intl';
 import AuthButton from './AuthButton';
 import UserNotificationBell from './UserNotificationBell';
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
 function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslations>) {
   switch (status) {
+    case 'enrolled':
+    case 'partial_payment':
+      return {
+        label: t('header.goToApp'),
+        href: null as null,
+        variant: 'contained' as const,
+        sx: {
+          bgcolor: '#2E7D32',
+          color: '#fff',
+          '&:hover': { bgcolor: '#1B5E20', boxShadow: 2 },
+        },
+      };
     case 'approved':
       return {
         label: t('header.payAndJoin'),
@@ -109,6 +122,7 @@ export default function Header() {
   const isApplyPage = pathname === '/apply';
   const { scrollDirection, isAtTop } = useScrollDirection();
   const { status: appStatus } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
   const ctaConfig = getCtaConfig(appStatus, t);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -240,12 +254,29 @@ export default function Header() {
             >
               {t('header.needHelp')}
             </Button>
-          ) : (
+          ) : ctaConfig.href ? (
             <Button
               component={Link}
               href={ctaConfig.href}
               variant={ctaConfig.variant}
               color={appStatus ? undefined : 'secondary'}
+              size={isMobile ? 'small' : 'medium'}
+              sx={{
+                borderRadius: '20px',
+                fontWeight: 600,
+                fontSize: { xs: '0.75rem', md: '0.875rem' },
+                px: { xs: 1.5, md: 2.5 },
+                mr: 1,
+                textTransform: 'none',
+                ...ctaConfig.sx,
+              }}
+            >
+              {ctaConfig.label}
+            </Button>
+          ) : (
+            <Button
+              onClick={goToApp}
+              variant={ctaConfig.variant}
               size={isMobile ? 'small' : 'medium'}
               sx={{
                 borderRadius: '20px',
@@ -395,39 +426,58 @@ export default function Header() {
         {/* Mobile CTA Button */}
         {!isApplyPage && (
           <Box sx={{ px: 2, pb: 1.5 }}>
-            <Button
-              component={Link}
-              href={ctaConfig.href}
-              variant={ctaConfig.variant}
-              color={appStatus ? undefined : 'secondary'}
-              fullWidth
-              onClick={toggleMobileMenu}
-              sx={{
-                borderRadius: '20px',
-                fontWeight: 600,
-                textTransform: 'none',
-                py: 1.2,
-                ...(appStatus === 'approved'
-                  ? {
-                      bgcolor: '#2E7D32',
-                      color: '#fff',
-                      '&:hover': { bgcolor: '#1B5E20' },
-                    }
-                  : appStatus === 'draft'
+            {ctaConfig.href ? (
+              <Button
+                component={Link}
+                href={ctaConfig.href}
+                variant={ctaConfig.variant}
+                color={appStatus ? undefined : 'secondary'}
+                fullWidth
+                onClick={toggleMobileMenu}
+                sx={{
+                  borderRadius: '20px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  py: 1.2,
+                  ...(appStatus === 'approved'
                     ? {
-                        borderColor: 'primary.main',
-                        color: 'primary.main',
+                        bgcolor: '#2E7D32',
+                        color: '#fff',
+                        '&:hover': { bgcolor: '#1B5E20' },
                       }
-                    : appStatus
+                    : appStatus === 'draft'
                       ? {
-                          borderColor: '#1976D2',
-                          color: '#1976D2',
+                          borderColor: 'primary.main',
+                          color: 'primary.main',
                         }
-                      : {}),
-              }}
-            >
-              {ctaConfig.label}
-            </Button>
+                      : appStatus
+                        ? {
+                            borderColor: '#1976D2',
+                            color: '#1976D2',
+                          }
+                        : {}),
+                }}
+              >
+                {ctaConfig.label}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => { toggleMobileMenu(); goToApp(); }}
+                variant={ctaConfig.variant}
+                fullWidth
+                sx={{
+                  borderRadius: '20px',
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  py: 1.2,
+                  bgcolor: '#2E7D32',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#1B5E20' },
+                }}
+              >
+                {ctaConfig.label}
+              </Button>
+            )}
           </Box>
         )}
         <Divider />

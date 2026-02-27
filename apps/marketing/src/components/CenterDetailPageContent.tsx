@@ -27,6 +27,8 @@ import StarIcon from '@mui/icons-material/Star';
 import TawkToChat from './TawkToChat';
 import WhatsAppChatBubble from './WhatsAppChatBubble';
 import type { OfflineCenter } from '@neram/database';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
 interface CenterDetailPageContentProps {
   center: OfflineCenter;
@@ -35,6 +37,9 @@ interface CenterDetailPageContentProps {
 export default function CenterDetailPageContent({ center }: CenterDetailPageContentProps) {
   const params = useParams();
   const locale = (params.locale as string) || 'en';
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
 
   // Contact form state
   const [formData, setFormData] = useState({
@@ -351,21 +356,38 @@ export default function CenterDetailPageContent({ center }: CenterDetailPageCont
                   <Typography variant="body2" sx={{ mb: 2, opacity: 0.9 }}>
                     Apply now at this center and get expert coaching from IIT/NIT alumni.
                   </Typography>
-                  <Button
-                    component={Link}
-                    href={`/${locale}/apply?center=${center.slug}`}
-                    variant="contained"
-                    size="large"
-                    fullWidth
-                    sx={{
-                      bgcolor: 'white',
-                      color: 'primary.main',
-                      '&:hover': { bgcolor: 'grey.100' },
-                      minHeight: 48,
-                    }}
-                  >
-                    Apply Now at This Center
-                  </Button>
+                  {isEnrolled ? (
+                    <Button
+                      variant="contained"
+                      size="large"
+                      fullWidth
+                      onClick={goToApp}
+                      sx={{
+                        bgcolor: '#2E7D32',
+                        color: '#fff',
+                        '&:hover': { bgcolor: '#1B5E20' },
+                        minHeight: 48,
+                      }}
+                    >
+                      Go to App
+                    </Button>
+                  ) : (
+                    <Button
+                      component={Link}
+                      href={`/${locale}/apply?center=${center.slug}`}
+                      variant="contained"
+                      size="large"
+                      fullWidth
+                      sx={{
+                        bgcolor: 'white',
+                        color: 'primary.main',
+                        '&:hover': { bgcolor: 'grey.100' },
+                        minHeight: 48,
+                      }}
+                    >
+                      Apply Now at This Center
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
 

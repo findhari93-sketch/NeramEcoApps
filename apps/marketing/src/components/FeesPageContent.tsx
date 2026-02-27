@@ -20,6 +20,8 @@ import {
 } from '@mui/icons-material';
 import Link from 'next/link';
 import type { FeeStructure } from '@neram/database';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 import FeeCard from '@/components/fees/FeeCard';
 import PaymentToggle from '@/components/fees/PaymentToggle';
 import WhyInvestSection from '@/components/fees/WhyInvestSection';
@@ -28,6 +30,9 @@ import FAQ from '@/components/fees/FAQ';
 
 export default function FeesPageContent() {
   const t = useTranslations('fees');
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const params = useParams();
@@ -301,22 +306,41 @@ export default function FeesPageContent() {
           >
             {t('ctaSubtitle')}
           </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            component={Link}
-            href={`/${locale}/apply`}
-            endIcon={<ArrowForwardOutlined />}
-            sx={{
-              minHeight: 52,
-              px: 4,
-              fontWeight: 700,
-              fontSize: '1.05rem',
-              borderRadius: 2,
-            }}
-          >
-            {t('applyNow')}
-          </Button>
+          {isEnrolled ? (
+            <Button
+              variant="contained"
+              size="large"
+              onClick={goToApp}
+              sx={{
+                minHeight: 52,
+                px: 4,
+                fontWeight: 700,
+                fontSize: '1.05rem',
+                borderRadius: 2,
+                bgcolor: '#2E7D32',
+                '&:hover': { bgcolor: '#1B5E20' },
+              }}
+            >
+              Go to App
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              size="large"
+              component={Link}
+              href={`/${locale}/apply`}
+              endIcon={<ArrowForwardOutlined />}
+              sx={{
+                minHeight: 52,
+                px: 4,
+                fontWeight: 700,
+                fontSize: '1.05rem',
+                borderRadius: 2,
+              }}
+            >
+              {t('applyNow')}
+            </Button>
+          )}
         </Box>
       </Container>
 

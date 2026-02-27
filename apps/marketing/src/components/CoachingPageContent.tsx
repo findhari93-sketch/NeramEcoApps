@@ -15,6 +15,8 @@ import {
   ListItemText,
 } from '@neram/ui';
 import Link from 'next/link';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
 const coachingPrograms = [
   {
@@ -99,6 +101,10 @@ const stats = [
 ];
 
 export default function CoachingPageContent() {
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
+
   return (
     <Box>
       {/* Hero Section */}
@@ -120,15 +126,26 @@ export default function CoachingPageContent() {
                 Learn from IIT/NIT architect alumni, achieve the best.
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <Button
-                  variant="contained"
-                  size="large"
-                  component={Link}
-                  href="/apply"
-                  sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
-                >
-                  Apply Now
-                </Button>
+                {isEnrolled ? (
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={goToApp}
+                    sx={{ bgcolor: '#2E7D32', color: '#fff', '&:hover': { bgcolor: '#1B5E20' } }}
+                  >
+                    Go to App
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    size="large"
+                    component={Link}
+                    href="/apply"
+                    sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
+                  >
+                    Apply Now
+                  </Button>
+                )}
                 <Button
                   variant="outlined"
                   size="large"
@@ -289,15 +306,26 @@ export default function CoachingPageContent() {
             Join Neram Classes today and take the first step towards your dream career.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              size="large"
-              component={Link}
-              href="/apply"
-              sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
-            >
-              Apply Now
-            </Button>
+            {isEnrolled ? (
+              <Button
+                variant="contained"
+                size="large"
+                onClick={goToApp}
+                sx={{ bgcolor: '#2E7D32', color: '#fff', '&:hover': { bgcolor: '#1B5E20' } }}
+              >
+                Go to App
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                size="large"
+                component={Link}
+                href="/apply"
+                sx={{ bgcolor: 'white', color: 'primary.main', '&:hover': { bgcolor: 'grey.100' } }}
+              >
+                Apply Now
+              </Button>
+            )}
             <Button
               variant="outlined"
               size="large"

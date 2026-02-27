@@ -17,6 +17,8 @@ import {
   Divider,
 } from '@neram/ui';
 import { Link } from '@neram/ui';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
 // Course data for architecture entrance and software training
 const coursesData: Record<string, any> = {
@@ -430,6 +432,9 @@ interface CourseDetailContentProps {
 
 export default function CourseDetailContent({ slug, locale }: CourseDetailContentProps) {
   const course = coursesData[slug];
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
 
   if (!course) {
     notFound();
@@ -598,16 +603,28 @@ export default function CourseDetailContent({ slug, locale }: CourseDetailConten
                     </Typography>
                   </Box>
 
-                  <Button
-                    variant="contained"
-                    size="large"
-                    fullWidth
-                    sx={{ mb: 2 }}
-                    component={Link}
-                    href={`/${locale}/apply?course=${slug}`}
-                  >
-                    Apply Now
-                  </Button>
+                  {isEnrolled ? (
+                    <Button
+                      variant="contained"
+                      size="large"
+                      fullWidth
+                      sx={{ mb: 2, bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }}
+                      onClick={goToApp}
+                    >
+                      Go to App
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="contained"
+                      size="large"
+                      fullWidth
+                      sx={{ mb: 2 }}
+                      component={Link}
+                      href={`/${locale}/apply?course=${slug}`}
+                    >
+                      Apply Now
+                    </Button>
+                  )}
 
                   <Button
                     variant="outlined"

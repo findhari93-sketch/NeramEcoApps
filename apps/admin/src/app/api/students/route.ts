@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
           email,
           phone,
           avatar_url,
-          lead_profiles (
+          lead_profiles!lead_profiles_user_id_fkey (
             interest_course,
             application_number,
             final_fee,

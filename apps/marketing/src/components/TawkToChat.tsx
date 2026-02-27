@@ -1,44 +1,32 @@
 'use client';
 
-import { useEffect } from 'react';
+import Script from 'next/script';
 
-declare global {
-  interface Window {
-    Tawk_API?: Record<string, unknown>;
-    Tawk_LoadStart?: Date;
-  }
-}
+const propertyId = process.env.NEXT_PUBLIC_TAWK_PROPERTY_ID;
+const widgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID;
 
 export default function TawkToChat() {
-  useEffect(() => {
-    const propertyId = process.env.NEXT_PUBLIC_TAWK_PROPERTY_ID;
-    const widgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID;
+  if (!propertyId || !widgetId) {
+    return null;
+  }
 
-    if (!propertyId || !widgetId) {
-      console.warn(
-        'Tawk.to configuration missing. Set NEXT_PUBLIC_TAWK_PROPERTY_ID and NEXT_PUBLIC_TAWK_WIDGET_ID'
-      );
-      return;
-    }
-
-    window.Tawk_API = window.Tawk_API || {};
-    window.Tawk_LoadStart = new Date();
-
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = `https://embed.tawk.to/${propertyId}/${widgetId}`;
-    script.charset = 'UTF-8';
-    script.setAttribute('crossorigin', '*');
-    document.head.appendChild(script);
-
-    return () => {
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-      delete window.Tawk_API;
-      delete window.Tawk_LoadStart;
-    };
-  }, []);
-
-  return null;
+  return (
+    <Script
+      id="tawk-to"
+      strategy="afterInteractive"
+      dangerouslySetInnerHTML={{
+        __html: `
+          var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
+          (function(){
+            var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
+            s1.async=true;
+            s1.src='https://embed.tawk.to/${propertyId}/${widgetId}';
+            s1.charset='UTF-8';
+            s1.setAttribute('crossorigin','*');
+            s0.parentNode.insertBefore(s1,s0);
+          })();
+        `,
+      }}
+    />
+  );
 }

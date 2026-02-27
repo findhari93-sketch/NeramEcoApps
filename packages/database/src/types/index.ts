@@ -37,7 +37,7 @@ export type ProfileChangeSource = 'user' | 'admin' | 'system';
 
 // Application form enums (migration 005)
 export type ApplicantCategory = 'school_student' | 'diploma_student' | 'college_student' | 'working_professional';
-export type ApplicationStatus = 'draft' | 'pending_verification' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'deleted';
+export type ApplicationStatus = 'draft' | 'pending_verification' | 'submitted' | 'under_review' | 'approved' | 'enrolled' | 'partial_payment' | 'rejected' | 'deleted';
 export type LocationSource = 'geolocation' | 'pincode' | 'manual';
 export type CallbackStatus = 'pending' | 'scheduled' | 'attempted' | 'completed' | 'cancelled';
 export type CallbackSlot = 'morning' | 'afternoon' | 'evening';

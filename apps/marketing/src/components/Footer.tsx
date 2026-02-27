@@ -12,6 +12,8 @@ import {
 } from '@neram/ui';
 import { Link } from '@neram/ui';
 import { type Locale } from '@/i18n';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
 const footerLinks = {
   quickLinks: [
@@ -57,6 +59,9 @@ const footerLinks = {
 export default function Footer() {
   const params = useParams();
   const locale = params.locale as Locale;
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
 
   const getLocalizedPath = (path: string) => {
     return `/${locale}${path}`;
@@ -115,18 +120,34 @@ export default function Footer() {
               Quick Links
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-              {footerLinks.quickLinks.map((link) => (
-                <MuiLink
-                  key={link.href}
-                  component={Link}
-                  href={getLocalizedPath(link.href)}
-                  color="inherit"
-                  underline="hover"
-                  sx={linkStyle}
-                >
-                  {link.label}
-                </MuiLink>
-              ))}
+              {footerLinks.quickLinks.map((link) => {
+                if (link.href === '/apply' && isEnrolled) {
+                  return (
+                    <MuiLink
+                      key={link.href}
+                      component="button"
+                      onClick={goToApp}
+                      color="inherit"
+                      underline="hover"
+                      sx={{ ...linkStyle, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', p: 0 }}
+                    >
+                      Go to App
+                    </MuiLink>
+                  );
+                }
+                return (
+                  <MuiLink
+                    key={link.href}
+                    component={Link}
+                    href={getLocalizedPath(link.href)}
+                    color="inherit"
+                    underline="hover"
+                    sx={linkStyle}
+                  >
+                    {link.label}
+                  </MuiLink>
+                );
+              })}
             </Box>
           </Grid>
 

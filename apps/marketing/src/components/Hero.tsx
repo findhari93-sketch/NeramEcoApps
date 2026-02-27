@@ -4,10 +4,17 @@ import { useParams } from 'next/navigation';
 import { Box, Container, Typography, Button, Grid } from '@neram/ui';
 import { Link } from '@neram/ui';
 import { type Locale } from '@/i18n';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
+import { useTranslations } from 'next-intl';
 
 export default function Hero() {
   const params = useParams();
   const locale = params.locale as Locale;
+  const { status } = useApplicationStatus();
+  const { goToApp } = useGoToApp();
+  const t = useTranslations();
+  const isEnrolled = status === 'enrolled' || status === 'partial_payment';
 
   return (
     <Box
@@ -66,42 +73,33 @@ export default function Hero() {
               entrance exams. Excellence in education since 2009.
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Button
-                variant="contained"
-                size="large"
-                component={Link}
-                href={`/${locale}/apply`}
-                sx={{
-                  bgcolor: 'background.paper',
-                  color: 'primary.main',
-                  px: 4,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  fontWeight: 600,
-                  '&:hover': {
-                    bgcolor: 'grey.100',
-                  },
-                }}
-              >
-                Apply Now
-              </Button>
+              {isEnrolled ? (
+                <Button
+                  variant="contained"
+                  size="large"
+                  className="hero-cta"
+                  onClick={goToApp}
+                  sx={{ bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }}
+                >
+                  {t('header.goToApp')}
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  size="large"
+                  className="hero-cta"
+                  component={Link}
+                  href={`/${locale}/apply`}
+                >
+                  Apply Now
+                </Button>
+              )}
               <Button
                 variant="outlined"
                 size="large"
+                className="hero-secondary"
                 component={Link}
                 href={`/${locale}/courses`}
-                sx={{
-                  borderColor: 'primary.contrastText',
-                  color: 'primary.contrastText',
-                  px: 4,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  fontWeight: 600,
-                  '&:hover': {
-                    borderColor: 'primary.contrastText',
-                    bgcolor: 'rgba(255, 255, 255, 0.1)',
-                  },
-                }}
               >
                 Explore Courses
               </Button>

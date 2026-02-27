@@ -13,14 +13,15 @@ import {
   CircularProgress,
   LoginModal,
 } from '@neram/ui';
-import { useFirebaseAuth, firebaseSignOut, getFirebaseAuth, signInWithCustomToken } from '@neram/auth';
+import { useFirebaseAuth, firebaseSignOut, signInWithCustomToken } from '@neram/auth';
+import { useGoToApp } from '@/hooks/useGoToApp';
 
-// App URL for API calls (cross-origin)
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 // Inner component that uses useSearchParams
 function AuthButtonInner() {
   const { user, loading } = useFirebaseAuth();
+  const { goToApp } = useGoToApp();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
@@ -97,29 +98,9 @@ function AuthButtonInner() {
     }
   };
 
-  const handleGoToApp = async () => {
+  const handleGoToApp = () => {
     handleMenuClose();
-    try {
-      const auth = getFirebaseAuth();
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const idToken = await currentUser.getIdToken();
-        const response = await fetch(`${APP_URL}/api/auth/exchange-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken }),
-        });
-        if (response.ok) {
-          const { customToken } = await response.json();
-          window.open(`${APP_URL}?authToken=${encodeURIComponent(customToken)}`, '_blank');
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('Error exchanging token for app:', error);
-    }
-    // Fallback: open without auth token
-    window.open(APP_URL, '_blank');
+    goToApp();
   };
 
   // Loading state
