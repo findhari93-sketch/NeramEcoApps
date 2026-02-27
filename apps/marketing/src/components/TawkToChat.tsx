@@ -2,8 +2,8 @@
 
 import Script from 'next/script';
 
-const propertyId = process.env.NEXT_PUBLIC_TAWK_PROPERTY_ID;
-const widgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID;
+const propertyId = process.env.NEXT_PUBLIC_TAWK_PROPERTY_ID?.trim();
+const widgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID?.trim();
 
 export default function TawkToChat() {
   if (!propertyId || !widgetId) {
