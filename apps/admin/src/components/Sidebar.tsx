@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Box,
@@ -14,6 +15,7 @@ import {
   Avatar,
   Tooltip,
   IconButton,
+  Badge,
 } from '@neram/ui';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
@@ -27,6 +29,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import SchoolIcon from '@mui/icons-material/School';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -42,6 +45,7 @@ const menuItems = [
   { text: 'Courses', icon: BookIcon, path: '/courses' },
   { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },
   { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
+  { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 
@@ -50,6 +54,31 @@ export default function Sidebar() {
   const router = useRouter();
   const { user, signOut } = useMicrosoftAuth();
   const { collapsed, toggleSidebar, sidebarWidth } = useSidebar();
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const messageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchMessageUnreadCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/messages/unread-count');
+      if (res.ok) {
+        const data = await res.json();
+        setMessageUnreadCount(data.count || 0);
+      }
+    } catch {
+      // Silently fail for badge count
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMessageUnreadCount();
+    // Poll every 60 seconds
+    messageIntervalRef.current = setInterval(fetchMessageUnreadCount, 60000);
+    return () => {
+      if (messageIntervalRef.current) {
+        clearInterval(messageIntervalRef.current);
+      }
+    };
+  }, [fetchMessageUnreadCount]);
 
   const handleLogout = async () => {
     await signOut();
@@ -167,7 +196,13 @@ export default function Sidebar() {
                   justifyContent: 'center',
                 }}
               >
-                <Icon sx={{ fontSize: 22 }} />
+                {item.hasBadge && messageUnreadCount > 0 ? (
+                  <Badge badgeContent={messageUnreadCount} color="error" max={99}>
+                    <Icon sx={{ fontSize: 22 }} />
+                  </Badge>
+                ) : (
+                  <Icon sx={{ fontSize: 22 }} />
+                )}
               </ListItemIcon>
               {!collapsed && (
                 <ListItemText

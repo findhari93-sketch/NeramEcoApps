@@ -5,8 +5,9 @@ export const alt = 'NATA Coaching - Neram Classes';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-export default async function Image({ params }: { params: { city: string } }) {
-  const cityDisplay = params.city
+export default async function Image({ params }: { params: { slug: string } }) {
+  const city = params.slug.replace('nata-coaching-centers-in-', '');
+  const cityDisplay = city
     .replace(/-/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 

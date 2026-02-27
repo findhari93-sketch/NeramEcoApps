@@ -42,6 +42,7 @@ export {
   formatScholarshipApprovedMessage,
   formatScholarshipRejectedMessage,
   formatCallbackRequestMessage,
+  formatContactMessageNotification,
 } from './services/telegram';
 export type {
   OnboardingNotificationData,
@@ -49,6 +50,7 @@ export type {
   PaymentNotificationData,
   ScholarshipNotificationData,
   CallbackNotificationData,
+  ContactMessageNotificationData,
 } from './services/telegram';
 
 // Services - WhatsApp
@@ -76,6 +78,7 @@ export {
   notifyScholarshipRejected,
   notifyScholarshipRevisionRequested,
   notifyNewCallback,
+  notifyContactMessageReceived,
 } from './services/notifications';
 
 // Data

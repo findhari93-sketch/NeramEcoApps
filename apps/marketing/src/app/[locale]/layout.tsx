@@ -2,12 +2,35 @@ import { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { NeramThemeProvider, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
+import { Poppins, Inter, Noto_Sans_Tamil } from 'next/font/google';
+import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
 import { locales } from '@/i18n';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
 import '@/styles/globals.css';
+
+// Font loading - Next.js preloads these automatically, eliminating font swap flash
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-poppins',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-inter',
+});
+
+const notoSansTamil = Noto_Sans_Tamil({
+  subsets: ['tamil'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-noto-tamil',
+});
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
@@ -101,13 +124,16 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning>
-      <head>
-        <meta name="emotion-insertion-point" content="" />
-      </head>
-      <body suppressHydrationWarning>
+    <html
+      lang={locale}
+      className={`${poppins.variable} ${inter.variable} ${notoSansTamil.variable}`}
+      suppressHydrationWarning
+    >
+      <head />
+      <body className={inter.className} suppressHydrationWarning>
         <NextIntlClientProvider messages={messages}>
-          <NeramThemeProvider
+          <ThemeRegistry
+            options={{ key: 'neram-mui' }}
             lightTheme={marketingLightTheme}
             darkTheme={marketingDarkTheme}
             defaultMode="light"
@@ -117,7 +143,7 @@ export default async function RootLayout({
               <main>{children}</main>
               <Footer />
             </AuthProvider>
-          </NeramThemeProvider>
+          </ThemeRegistry>
         </NextIntlClientProvider>
       </body>
     </html>

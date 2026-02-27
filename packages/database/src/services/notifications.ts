@@ -26,6 +26,8 @@ import {
   type ScholarshipNotificationData,
   formatCallbackRequestMessage,
   type CallbackNotificationData,
+  formatContactMessageNotification,
+  type ContactMessageNotificationData,
 } from './telegram';
 import { sendEmail } from './email';
 import {
@@ -527,6 +529,16 @@ function formatTelegramMessage(event: NotificationEvent): string | null {
         `<b>Name:</b> ${data.user_name || data.userName || 'Unknown'}`,
         `<b>Admin Notes:</b> ${data.admin_notes || data.adminNotes || 'No notes'}`,
       ].join('\n');
+
+    case 'contact_message_received':
+      return formatContactMessageNotification({
+        name: (data.name || data.user_name || data.userName || 'Unknown') as string,
+        email: (data.email || '') as string,
+        phone: (data.phone) as string | undefined,
+        subject: (data.subject || '') as string,
+        message: (data.message || '') as string,
+        source: (data.source) as string | undefined,
+      } satisfies ContactMessageNotificationData);
 
     default:
       return null;
@@ -1114,4 +1126,43 @@ export async function notifyRefundRejected(
   } catch (err) {
     console.error('Failed to send refund rejected email:', err);
   }
+}
+
+// ============================================
+// CONTACT MESSAGE NOTIFICATION
+// ============================================
+
+/**
+ * Notify admin team that a new contact message has been received.
+ * Channels: Telegram + Admin in-app
+ */
+export async function notifyContactMessageReceived(
+  data: {
+    name: string;
+    email: string;
+    phone?: string;
+    subject: string;
+    message: string;
+    source?: string;
+    centerId?: string;
+  },
+  client?: TypedSupabaseClient
+): Promise<void> {
+  await dispatchNotification(
+    {
+      type: 'contact_message_received',
+      title: 'New Contact Message',
+      message: `${data.name} sent a message: ${data.subject}`,
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: data.phone || '',
+        subject: data.subject,
+        message: data.message,
+        source: data.source || 'contact_page',
+        center_id: data.centerId || '',
+      },
+    },
+    client
+  );
 }

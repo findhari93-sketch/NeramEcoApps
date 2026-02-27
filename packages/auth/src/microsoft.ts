@@ -12,6 +12,8 @@ import {
   AccountInfo,
   AuthenticationResult,
   InteractionRequiredAuthError,
+  BrowserAuthError,
+  BrowserAuthErrorCodes,
   SilentRequest,
   RedirectRequest,
   PopupRequest,
@@ -51,6 +53,64 @@ export const loginScopes = {
   graph: ['openid', 'profile', 'email', 'User.Read', 'Mail.Read', 'Calendars.Read'],
   admin: ['openid', 'profile', 'email', 'User.Read', 'User.ReadWrite.All', 'Directory.Read.All'],
 };
+
+// ============================================
+// ERROR HANDLING
+// ============================================
+
+export class MsalLoginError extends Error {
+  code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'MsalLoginError';
+    this.code = code;
+  }
+}
+
+export function getMsalErrorMessage(error: Error): { message: string; canRetry: boolean } {
+  const code = error instanceof MsalLoginError ? error.code : '';
+  const msg = error.message || '';
+
+  if (code === 'user_cancelled' || msg.includes('user_cancelled')) {
+    return { message: 'Sign-in was cancelled. Click the button to try again.', canRetry: true };
+  }
+  if (code === 'redirect_fallback' || msg.includes('Redirecting')) {
+    return { message: 'Redirecting to Microsoft sign-in...', canRetry: false };
+  }
+  if (code === 'popup_blocked') {
+    return {
+      message: 'Your browser blocked the sign-in popup. Please allow popups for this site or try again.',
+      canRetry: true,
+    };
+  }
+  if (code === 'timeout' || msg.includes('timed out')) {
+    return { message: 'Sign-in timed out. Please check your connection and try again.', canRetry: true };
+  }
+  if (msg.includes('interaction_in_progress')) {
+    return { message: 'A previous sign-in is still processing. Please wait and try again.', canRetry: true };
+  }
+  return { message: 'Authentication failed. Please try again.', canRetry: true };
+}
+
+/**
+ * Clear stuck MSAL interaction state from localStorage.
+ * Removes only interaction-tracking keys, preserving cached tokens and accounts.
+ */
+function clearInteractionState(): void {
+  if (typeof window === 'undefined') return;
+
+  const keys = Object.keys(localStorage);
+  for (const key of keys) {
+    if (
+      key.includes('msal.interaction.status') ||
+      key.includes('.interaction_in_progress') ||
+      key.includes('msal.temp')
+    ) {
+      localStorage.removeItem(key);
+    }
+  }
+}
 
 // ============================================
 // MSAL INSTANCE
@@ -104,11 +164,60 @@ export async function signInWithMicrosoft(
   };
 
   if (usePopup) {
-    return msal.loginPopup(request);
+    try {
+      return await msal.loginPopup(request);
+    } catch (error) {
+      // Handle interaction_in_progress: clear stuck state and retry once
+      if (
+        error instanceof BrowserAuthError &&
+        error.errorCode === BrowserAuthErrorCodes.interactionInProgress
+      ) {
+        console.warn('[MSAL] Interaction in progress, clearing state and retrying...');
+        clearInteractionState();
+        msalInstance = null;
+        msalInitialized = false;
+        const freshMsal = await initializeMsal();
+
+        try {
+          return await freshMsal.loginPopup(request);
+        } catch (retryError) {
+          console.warn('[MSAL] Popup retry failed, falling back to redirect.');
+          await freshMsal.loginRedirect(request);
+          throw new MsalLoginError('redirect_fallback', 'Redirecting to Microsoft login...');
+        }
+      }
+
+      // Handle user_cancelled gracefully
+      if (
+        error instanceof BrowserAuthError &&
+        error.errorCode === BrowserAuthErrorCodes.userCancelled
+      ) {
+        throw new MsalLoginError('user_cancelled', 'Sign-in was cancelled. Please try again.');
+      }
+
+      // Handle popup blocked by browser
+      if (
+        error instanceof BrowserAuthError &&
+        error.errorCode === BrowserAuthErrorCodes.popupWindowError
+      ) {
+        console.warn('[MSAL] Popup blocked, falling back to redirect.');
+        await msal.loginRedirect(request);
+        throw new MsalLoginError('popup_blocked', 'Pop-up was blocked. Redirecting...');
+      }
+
+      // Handle popup timeout
+      if (
+        error instanceof BrowserAuthError &&
+        error.errorCode === BrowserAuthErrorCodes.monitorPopupTimeout
+      ) {
+        throw new MsalLoginError('timeout', 'Sign-in timed out. Please try again.');
+      }
+
+      throw error;
+    }
   } else {
     await msal.loginRedirect(request);
-    // This won't return - page will redirect
-    throw new Error('Redirecting to Microsoft login...');
+    throw new MsalLoginError('redirect_fallback', 'Redirecting to Microsoft login...');
   }
 }
 
@@ -155,9 +264,23 @@ export async function getAccessToken(
     return result.accessToken;
   } catch (error) {
     if (error instanceof InteractionRequiredAuthError) {
-      // Token expired, need interactive login
-      const result = await msal.acquireTokenPopup({ scopes });
-      return result.accessToken;
+      try {
+        const result = await msal.acquireTokenPopup({ scopes });
+        return result.accessToken;
+      } catch (popupError) {
+        if (
+          popupError instanceof BrowserAuthError &&
+          popupError.errorCode === BrowserAuthErrorCodes.interactionInProgress
+        ) {
+          clearInteractionState();
+          msalInstance = null;
+          msalInitialized = false;
+          const freshMsal = await initializeMsal();
+          const result = await freshMsal.acquireTokenPopup({ scopes });
+          return result.accessToken;
+        }
+        throw popupError;
+      }
     }
     throw error;
   }

@@ -606,6 +606,8 @@ export interface OperatingHours {
   } | null;         // null means closed
 }
 
+export type CenterType = 'headquarters' | 'sub_office';
+
 /**
  * Offline learning centers for hybrid classes
  */
@@ -651,6 +653,39 @@ export interface OfflineCenter extends Timestamps {
   // Status
   is_active: boolean;
   display_order: number;
+
+  // Center classification
+  center_type: CenterType;
+  description: string | null;
+
+  // Google reviews
+  google_reviews_url: string | null;
+  rating: number | null;
+  review_count: number;
+
+  // SEO
+  seo_slug: string | null;
+  nearby_cities: string[];
+}
+
+/**
+ * Contact form message submissions
+ */
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  subject: string;
+  message: string;
+  center_id: string | null;
+  source: string;
+  status: 'unread' | 'read' | 'replied';
+  replied_by: string | null;
+  replied_at: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
 }
 
 /**
@@ -1637,7 +1672,8 @@ export type NotificationEventType =
   | 'application_approved'
   | 'refund_requested'
   | 'refund_approved'
-  | 'refund_rejected';
+  | 'refund_rejected'
+  | 'contact_message_received';
 
 // Refund request enums & constants
 export type RefundRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -1767,6 +1803,8 @@ export interface NotificationPreferences {
   refund_requested: boolean;
   refund_approved: boolean;
   refund_rejected: boolean;
+  // Contact messages
+  contact_message_received: boolean;
 }
 
 /**
@@ -2256,6 +2294,12 @@ export interface Database {
         Insert: Omit<AdminNotification, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<AdminNotification, 'id' | 'created_at'>>;
       };
+      // Contact messages (migration 20260227)
+      contact_messages: {
+        Row: ContactMessage;
+        Insert: Omit<ContactMessage, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<ContactMessage, 'id' | 'created_at'>>;
+      };
       // CRM tables (migration 009)
       admin_user_notes: {
         Row: AdminUserNote;
@@ -2309,6 +2353,8 @@ export interface Database {
       scholarship_application_status: ScholarshipApplicationStatus;
       // Refund request enum
       refund_request_status: RefundRequestStatus;
+      // Center type enum (migration 20260227)
+      center_type: CenterType;
     };
   };
 }

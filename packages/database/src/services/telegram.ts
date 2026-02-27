@@ -290,6 +290,46 @@ export function formatCallbackRequestMessage(data: CallbackNotificationData): st
   return lines.join('\n');
 }
 
+export interface ContactMessageNotificationData {
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
+  source?: string;
+}
+
+/**
+ * Format contact message notification
+ */
+export function formatContactMessageNotification(data: ContactMessageNotificationData): string {
+  const lines = [
+    '<b>New Contact Message</b>',
+    '',
+    `<b>Name:</b> ${escapeHtml(data.name)}`,
+    `<b>Email:</b> ${escapeHtml(data.email)}`,
+  ];
+
+  if (data.phone) {
+    lines.push(`<b>Phone:</b> ${escapeHtml(data.phone)}`);
+  }
+
+  lines.push(`<b>Subject:</b> ${escapeHtml(data.subject)}`);
+
+  // Truncate long messages
+  const messagePreview = data.message.length > 200
+    ? data.message.substring(0, 200) + '...'
+    : data.message;
+  lines.push(`<b>Message:</b> ${escapeHtml(messagePreview)}`);
+
+  if (data.source && data.source !== 'contact_page') {
+    lines.push(`<b>Source:</b> ${escapeHtml(data.source)}`);
+  }
+
+  lines.push('', '<i>Please respond within 24 hours</i>');
+  return lines.join('\n');
+}
+
 /**
  * Escape HTML special characters for Telegram
  */

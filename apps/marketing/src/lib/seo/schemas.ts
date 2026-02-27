@@ -175,6 +175,126 @@ export function generateLocalBusinessSchema(location: {
   };
 }
 
+// ─── Center LocalBusiness Schema (for /contact/[slug] pages) ────────────────
+
+export function generateCenterLocalBusinessSchema(center: {
+  name: string;
+  url: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city: string;
+  state: string;
+  pincode?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  rating?: number | null;
+  review_count?: number;
+  nearby_cities?: string[];
+  operating_hours?: Record<string, { open: string; close: string } | null>;
+}) {
+  const schema: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    '@id': center.url,
+    name: center.name,
+    image: ORG_LOGO,
+    url: center.url,
+    telephone: center.phone || ORG_PHONE,
+    email: center.email || ORG_EMAIL,
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: center.address || '',
+      addressLocality: center.city,
+      addressRegion: center.state,
+      postalCode: center.pincode || '',
+      addressCountry: center.country || 'IN',
+    },
+    priceRange: '₹₹',
+    parentOrganization: {
+      '@id': `${BASE_URL}/#organization`,
+    },
+    sameAs: SOCIAL_PROFILES,
+    hasOfferCatalog: {
+      '@type': 'OfferCatalog',
+      name: `NATA & JEE Paper 2 Coaching in ${center.city}`,
+      itemListElement: [
+        {
+          '@type': 'Course',
+          name: `NATA Crash Course in ${center.city}`,
+          description: `Intensive 3-month NATA preparation crash course in ${center.city}`,
+          provider: { '@type': 'EducationalOrganization', name: ORG_NAME },
+        },
+        {
+          '@type': 'Course',
+          name: `NATA Regular Course in ${center.city}`,
+          description: `Comprehensive 6-month NATA coaching in ${center.city} with complete syllabus coverage`,
+          provider: { '@type': 'EducationalOrganization', name: ORG_NAME },
+        },
+        {
+          '@type': 'Course',
+          name: `NATA Premium Course in ${center.city}`,
+          description: `12-month premium NATA coaching in ${center.city} with 1-on-1 mentoring`,
+          provider: { '@type': 'EducationalOrganization', name: ORG_NAME },
+        },
+      ],
+    },
+  };
+
+  // Geo coordinates
+  if (center.latitude && center.longitude) {
+    schema.geo = {
+      '@type': 'GeoCoordinates',
+      latitude: center.latitude,
+      longitude: center.longitude,
+    };
+  }
+
+  // Aggregate rating
+  if (center.rating && center.review_count && center.review_count > 0) {
+    schema.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: String(center.rating),
+      reviewCount: String(center.review_count),
+      bestRating: '5',
+      worstRating: '1',
+    };
+  }
+
+  // Area served (nearby cities)
+  if (center.nearby_cities && center.nearby_cities.length > 0) {
+    schema.areaServed = [
+      { '@type': 'City', name: center.city },
+      ...center.nearby_cities.map((city) => ({ '@type': 'City', name: city })),
+    ];
+  }
+
+  // Opening hours from operating_hours
+  if (center.operating_hours) {
+    const dayMap: Record<string, string> = {
+      monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
+      thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
+    };
+    const specs: Array<Record<string, unknown>> = [];
+    for (const [day, hours] of Object.entries(center.operating_hours)) {
+      if (hours && dayMap[day]) {
+        specs.push({
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: dayMap[day],
+          opens: hours.open,
+          closes: hours.close,
+        });
+      }
+    }
+    if (specs.length > 0) {
+      schema.openingHoursSpecification = specs;
+    }
+  }
+
+  return schema;
+}
+
 // ─── BreadcrumbList Schema ──────────────────────────────────────────────────
 
 export function generateBreadcrumbSchema(

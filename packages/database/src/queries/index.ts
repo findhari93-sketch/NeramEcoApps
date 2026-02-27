@@ -22,3 +22,5 @@ export * from './crm';
 export * from './scholarship';
 export * from './user-notifications';
 export * from './refund-requests';
+export * from './contact-messages';
+export * from './centers';

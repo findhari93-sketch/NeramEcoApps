@@ -10,10 +10,10 @@ export const ORG_DESCRIPTION =
   'Premier NATA and JEE Paper 2 coaching institute in Tamil Nadu, India. Expert IIT/NIT alumni faculty, comprehensive study materials, online and offline classes across India and Gulf countries.';
 
 export const ORG_ADDRESS = {
-  streetAddress: '',
-  addressLocality: 'Pudukkottai',
-  addressRegion: 'Tamil Nadu',
-  postalCode: '622001',
+  streetAddress: 'Electronic City Phase 1, Near M5 Mall',
+  addressLocality: 'Bangalore',
+  addressRegion: 'Karnataka',
+  postalCode: '560100',
   addressCountry: 'IN',
 };
 

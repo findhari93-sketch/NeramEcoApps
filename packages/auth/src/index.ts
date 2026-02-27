@@ -59,6 +59,8 @@ export {
   getMicrosoftOid,
   callMsGraph,
   loginScopes,
+  MsalLoginError,
+  getMsalErrorMessage,
 } from './microsoft';
 export type { AccountInfo, AuthenticationResult } from './microsoft';
 

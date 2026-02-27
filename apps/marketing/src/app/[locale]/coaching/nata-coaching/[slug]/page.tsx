@@ -28,15 +28,22 @@ import {
 } from '@/lib/seo/schemas';
 
 interface PageProps {
-  params: { locale: string; city: string };
+  params: { locale: string; slug: string };
+}
+
+const SLUG_PREFIX = 'nata-coaching-centers-in-';
+
+function getCityFromSlug(slug: string): string | null {
+  if (!slug.startsWith(SLUG_PREFIX)) return null;
+  return slug.slice(SLUG_PREFIX.length);
 }
 
 // Generate static params for all cities
 export function generateStaticParams() {
-  const params: { locale: string; city: string }[] = [];
+  const params: { locale: string; slug: string }[] = [];
   for (const locale of locales) {
     for (const location of locations) {
-      params.push({ locale, city: location.city });
+      params.push({ locale, slug: `${SLUG_PREFIX}${location.city}` });
     }
   }
   return params;
@@ -44,7 +51,10 @@ export function generateStaticParams() {
 
 // Generate metadata dynamically
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const location = getLocationByCity(params.city);
+  const city = getCityFromSlug(params.slug);
+  if (!city) return {};
+
+  const location = getLocationByCity(city);
   if (!location) return {};
 
   const title = `Best NATA Coaching in ${location.cityDisplay} 2026 - Online & Offline Classes`;
@@ -55,7 +65,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     description,
     keywords: `NATA coaching ${location.cityDisplay}, NATA classes ${location.cityDisplay}, best NATA coaching in ${location.cityDisplay}, NATA preparation ${location.stateDisplay}, online NATA coaching ${location.cityDisplay}, architecture entrance coaching ${location.cityDisplay}, NATA coaching near me ${location.cityDisplay}`,
     alternates: {
-      canonical: `https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-${params.city}`,
+      canonical: `https://neramclasses.com/en/coaching/nata-coaching/${params.slug}`,
     },
     openGraph: {
       title,
@@ -97,8 +107,13 @@ const coursePlans = [
   },
 ];
 
-export default function CityNataCoachingPage({ params: { locale, city } }: PageProps) {
+export default function CityNataCoachingPage({ params: { locale, slug } }: PageProps) {
   setRequestLocale(locale);
+
+  const city = getCityFromSlug(slug);
+  if (!city) {
+    notFound();
+  }
 
   const location = getLocationByCity(city);
   if (!location) {
@@ -139,7 +154,7 @@ export default function CityNataCoachingPage({ params: { locale, city } }: PageP
         data={generateCourseSchema({
           name: `NATA Coaching in ${location.cityDisplay}`,
           description: `Comprehensive NATA preparation course in ${location.cityDisplay}, ${location.stateDisplay}. Expert IIT/NIT alumni faculty, study materials, and mock tests.`,
-          url: `${baseUrl}/en/coaching/nata-coaching/nata-coaching-centers-in-${city}`,
+          url: `${baseUrl}/en/coaching/nata-coaching/${slug}`,
           modes: isGulf ? ['online'] : ['online', 'onsite'],
         })}
       />

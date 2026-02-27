@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
+import { getAllCenterSeoSlugs } from '@neram/database/queries';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -294,6 +295,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         },
       });
     }
+  }
+
+  // Add center detail pages (dynamic from database)
+  try {
+    const centerSlugs = await getAllCenterSeoSlugs();
+    for (const locale of locales) {
+      for (const centerSlug of centerSlugs) {
+        entries.push({
+          url: `${baseUrl}/${locale}/contact/${centerSlug}`,
+          lastModified: currentDate,
+          changeFrequency: 'monthly',
+          priority: 0.8,
+          alternates: {
+            languages: Object.fromEntries(
+              locales.map((l) => [l, `${baseUrl}/${l}/contact/${centerSlug}`])
+            ),
+          },
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch center slugs for sitemap:', err);
   }
 
   return entries;

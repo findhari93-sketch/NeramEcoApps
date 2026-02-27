@@ -35,15 +35,17 @@ const footerLinks = {
     { label: 'Blog', href: '/blog' },
   ],
   topCities: [
-    { label: 'Chennai', href: '/coaching/nata-coaching/nata-coaching-centers-in-chennai' },
-    { label: 'Bangalore', href: '/coaching/nata-coaching/nata-coaching-centers-in-bangalore' },
-    { label: 'Coimbatore', href: '/coaching/nata-coaching/nata-coaching-centers-in-coimbatore' },
-    { label: 'Madurai', href: '/coaching/nata-coaching/nata-coaching-centers-in-madurai' },
-    { label: 'Trichy', href: '/coaching/nata-coaching/nata-coaching-centers-in-trichy' },
+    { label: 'Chennai', href: '/contact/nata-coaching-center-in-chennai' },
+    { label: 'Bangalore', href: '/contact/nata-coaching-center-in-bangalore' },
+    { label: 'Coimbatore', href: '/contact/nata-coaching-center-in-coimbatore' },
+    { label: 'Madurai', href: '/contact/nata-coaching-center-in-madurai' },
+    { label: 'Trichy', href: '/contact/nata-coaching-center-in-trichy' },
+    { label: 'Tiruppur', href: '/contact/nata-coaching-center-in-tiruppur' },
+    { label: 'Pudukkottai', href: '/contact/nata-coaching-center-in-pudukkottai' },
+    { label: 'Kanchipuram', href: '/contact/nata-coaching-center-in-kanchipuram' },
     { label: 'Hyderabad', href: '/coaching/nata-coaching/nata-coaching-centers-in-hyderabad' },
     { label: 'Mumbai', href: '/coaching/nata-coaching/nata-coaching-centers-in-mumbai' },
     { label: 'Delhi', href: '/coaching/nata-coaching/nata-coaching-centers-in-delhi' },
-    { label: 'Dubai', href: '/coaching/nata-coaching/nata-coaching-centers-in-dubai' },
   ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },
@@ -83,7 +85,7 @@ export default function Footer() {
               India&apos;s leading NATA & JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 95%+ success rate.
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              Pudukkottai, Tamil Nadu, India
+              Bangalore, Karnataka, India
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
               Phone: +91-9176137043

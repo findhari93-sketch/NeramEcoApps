@@ -42,6 +42,9 @@ export {
 } from './provider';
 export type { ThemeMode, ThemeContextType, ThemeProviderProps } from './provider';
 
+// Theme Registry (SSR-compatible for Next.js App Router)
+export { ThemeRegistry } from './ThemeRegistry';
+
 // Re-export useful MUI utilities
 export {
   useTheme,
