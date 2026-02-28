@@ -18,6 +18,7 @@ import { locales } from '@/i18n';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { blogPosts as sharedBlogPosts } from '@/lib/blog/posts';
+import { buildAlternates } from '@/lib/seo/metadata';
 
 interface PageProps {
   params: { locale: string; slug: string };
@@ -1042,9 +1043,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: `${post.title} | Neram Classes Blog`,
     description: post.excerpt,
     keywords: post.tags.join(', '),
-    alternates: {
-      canonical: `https://neramclasses.com/en/blog/${params.slug}`,
-    },
+    alternates: buildAlternates(params.locale, `/blog/${params.slug}`),
     openGraph: {
       title: post.title,
       description: post.excerpt,

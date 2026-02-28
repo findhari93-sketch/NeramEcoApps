@@ -13,15 +13,20 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'NATA & Architecture Blog - Tips, News & Guides | Neram Classes',
-  description: 'Read the latest articles on NATA preparation, architecture career, JEE Paper 2 tips, and more. Expert insights from Neram Classes faculty.',
-  keywords: 'NATA blog, architecture blog, NATA preparation tips, JEE Paper 2 articles, architecture career',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/blog',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'NATA & Architecture Blog - Tips, News & Guides | Neram Classes',
+    description: 'Read the latest articles on NATA preparation, architecture career, JEE Paper 2 tips, and more. Expert insights from Neram Classes faculty.',
+    keywords: 'NATA blog, architecture blog, NATA preparation tips, JEE Paper 2 articles, architecture career',
+    alternates: buildAlternates(locale, '/blog'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

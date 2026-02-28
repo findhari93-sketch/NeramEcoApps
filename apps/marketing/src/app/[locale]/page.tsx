@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateSoftwareApplicationSchema } from '@/lib/seo/schemas';
 import HomePageContent from '@/components/HomePageContent';
 
 const baseUrl = 'https://neramclasses.com';
@@ -54,6 +54,7 @@ export default function HomePage({
           { name: 'Home', url: baseUrl },
         ])}
       />
+      <JsonLd data={generateSoftwareApplicationSchema()} />
       <HomePageContent />
     </>
   );

@@ -13,15 +13,22 @@ import {
   Paper,
 } from '@neram/ui';
 import Link from 'next/link';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'NATA & JEE Paper 2 Previous Year Papers 2015-2024 | Neram Classes',
-  description: 'Download NATA and JEE Paper 2 previous year question papers with solutions. Get 10 years of papers for practice and preparation.',
-  keywords: 'NATA previous year papers, JEE Paper 2 previous papers, NATA question papers with solutions, NATA past papers',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/previous-year-papers',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'NATA & JEE Paper 2 Previous Year Papers 2015-2024 | Neram Classes',
+    description: 'Download NATA and JEE Paper 2 previous year question papers with solutions. Get 10 years of papers for practice and preparation.',
+    keywords: 'NATA previous year papers, JEE Paper 2 previous papers, NATA question papers with solutions, NATA past papers',
+    alternates: buildAlternates(locale, '/previous-year-papers'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };
@@ -54,7 +61,37 @@ const jeePapers = [
 export default function PreviousYearPapersPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const baseUrl = 'https://neramclasses.com';
+  const faqs = [
+    {
+      question: 'Where can I get NATA previous year question papers with solutions?',
+      answer: 'NATA previous year question papers from 2015 to 2024 are available through coaching institutes, online educational platforms, and preparation websites. While the Council of Architecture does not officially publish full papers, compiled question papers with detailed solutions are available in practice books and from coaching centers like Neram Classes that provide curated paper sets with expert solutions.',
+    },
+    {
+      question: 'How many previous year papers should I solve before the NATA exam?',
+      answer: 'You should aim to solve at least 8-10 years of NATA previous year papers (all available sessions) before the exam. Start solving papers without a timer to understand question patterns, then move to timed practice simulating actual exam conditions. Solving papers from 2019 onwards is especially important as the exam pattern was updated. Ideally, complete each paper twice - once for learning and once for timed practice.',
+    },
+    {
+      question: 'Has the NATA exam pattern changed over the years?',
+      answer: 'Yes, the NATA exam pattern has undergone several changes. Before 2019, the exam had a different format with separate offline drawing tests. From 2020 onwards, NATA shifted to a fully computer-based format including digital drawing. The total marks, section distribution, and number of attempts per year have also changed. When solving older papers (pre-2019), focus on the content rather than the format, as question types remain similar even though the delivery method changed.',
+    },
+    {
+      question: 'Are JEE Paper 2 previous year papers also useful for NATA preparation?',
+      answer: 'Yes, JEE Paper 2 previous year papers are extremely useful for NATA preparation since there is a 70-80% overlap in syllabus and question types. The Mathematics and Aptitude sections cover similar topics, and practicing JEE Paper 2 questions helps build stronger problem-solving skills since JEE tends to be slightly more challenging. However, the drawing section format differs, so practice NATA-specific drawing questions separately.',
+    },
+    {
+      question: 'What is the best way to analyze my performance on previous year papers?',
+      answer: 'After solving each paper, spend at least 1 hour on detailed analysis. Note your section-wise scores, identify topics where you lost marks, track time spent per section, and categorize mistakes as conceptual errors, silly mistakes, or time-management issues. Maintain an error log to track recurring weak areas. Compare your scores across papers to measure improvement. At Neram Classes, students get personalized performance analysis and targeted guidance based on their paper-solving data.',
+    },
+  ];
+
   return (
+    <>
+      <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={generateBreadcrumbSchema([
+        { name: 'Home', url: baseUrl },
+        { name: 'Previous Year Papers' },
+      ])} />
     <Box>
       {/* Hero Section */}
       <Box
@@ -257,5 +294,6 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
         </Container>
       </Box>
     </Box>
+    </>
   );
 }

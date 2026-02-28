@@ -311,6 +311,64 @@ export async function sendRefundRejectedNotification(
 }
 
 // ============================================
+// DEMO CLASS
+// ============================================
+
+/**
+ * Send demo class approval confirmation to user
+ *
+ * Template: demo_class_approved
+ * Body parameters: {{1}} = userName, {{2}} = date, {{3}} = time, {{4}} = meetingLink/details
+ */
+export async function sendDemoClassApproved(
+  phone: string,
+  data: {
+    userName: string;
+    date: string;
+    time: string;
+    details: string;
+  }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'demo_class_approved', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+        { type: 'text', text: data.date },
+        { type: 'text', text: data.time },
+        { type: 'text', text: data.details },
+      ],
+    },
+  ]);
+}
+
+/**
+ * Send demo class day-of reminder to user
+ *
+ * Template: demo_class_reminder
+ * Body parameters: {{1}} = userName, {{2}} = time, {{3}} = meetingLink/details
+ */
+export async function sendDemoClassReminder(
+  phone: string,
+  data: {
+    userName: string;
+    time: string;
+    details: string;
+  }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'demo_class_reminder', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+        { type: 'text', text: data.time },
+        { type: 'text', text: data.details },
+      ],
+    },
+  ]);
+}
+
+// ============================================
 // HELPERS
 // ============================================
 

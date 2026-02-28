@@ -13,19 +13,28 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@neram/ui';
 import Link from 'next/link';
+import { locations, type Location } from '@neram/database';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateCourseSchema, generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'NATA Coaching - Best Online & Offline NATA Classes | Neram Classes',
-  description: 'Join the best NATA coaching institute in India. Online and offline classes with expert faculty, comprehensive study material, and proven results.',
-  keywords: 'NATA coaching, NATA classes, best NATA coaching, NATA preparation, online NATA coaching',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/coaching/nata-coaching',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'NATA Coaching - Best Online & Offline NATA Classes | Neram Classes',
+    description: 'Join the best NATA coaching institute in India. Online and offline classes with expert faculty, comprehensive study material, and proven results.',
+    keywords: 'NATA coaching, NATA classes, best NATA coaching, NATA preparation, online NATA coaching',
+    alternates: buildAlternates(locale, '/coaching/nata-coaching'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };
@@ -238,6 +247,96 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
                 Don't see your city? We offer online coaching accessible from anywhere!
               </Typography>
             </Box>
+          </Container>
+        </Box>
+
+        {/* Browse All Cities Section */}
+        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+          <Container maxWidth="lg">
+            <Typography
+              variant="h2"
+              component="h2"
+              align="center"
+              gutterBottom
+              sx={{ mb: 2, fontWeight: 700 }}
+            >
+              Browse NATA Coaching by City
+            </Typography>
+            <Typography
+              variant="h6"
+              align="center"
+              color="text.secondary"
+              sx={{ mb: 4 }}
+            >
+              Find NATA coaching in your city - {locations.length} cities across India and the Gulf
+            </Typography>
+
+            {(() => {
+              // Group locations by stateDisplay
+              const grouped: Record<string, Location[]> = {};
+              for (const loc of locations) {
+                const key = loc.stateDisplay;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(loc);
+              }
+              // Sort states alphabetically
+              const sortedStates = Object.keys(grouped).sort();
+
+              return sortedStates.map((stateName) => (
+                <Accordion
+                  key={stateName}
+                  disableGutters
+                  sx={{
+                    '&:before': { display: 'none' },
+                    mb: 1,
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={
+                      <Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>
+                    }
+                    sx={{
+                      bgcolor: 'white',
+                      '&:hover': { bgcolor: 'grey.100' },
+                    }}
+                  >
+                    <Typography sx={{ fontWeight: 600 }}>
+                      {stateName}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ ml: 1, alignSelf: 'center' }}
+                    >
+                      ({grouped[stateName].length} {grouped[stateName].length === 1 ? 'city' : 'cities'})
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ bgcolor: 'white', pt: 0 }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {grouped[stateName].map((loc) => (
+                        <Chip
+                          key={loc.city}
+                          label={loc.cityDisplay}
+                          component={Link}
+                          href={`/${locale}/coaching/nata-coaching/nata-coaching-centers-in-${loc.city}`}
+                          clickable
+                          size="medium"
+                          sx={{
+                            fontSize: '0.85rem',
+                            '&:hover': {
+                              bgcolor: 'primary.main',
+                              color: 'white',
+                            },
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
+              ));
+            })()}
           </Container>
         </Box>
 

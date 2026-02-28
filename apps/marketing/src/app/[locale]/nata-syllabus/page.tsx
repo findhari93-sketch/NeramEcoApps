@@ -18,15 +18,20 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'NATA Syllabus 2026 - Complete Subject-wise Syllabus | Neram Classes',
-  description: 'Complete NATA 2026 syllabus with subject-wise breakdown. Learn about Mathematics, General Aptitude, and Drawing Test syllabus for NATA exam preparation.',
-  keywords: 'NATA syllabus, NATA 2026 syllabus, NATA subjects, NATA exam pattern, NATA preparation',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/nata-syllabus',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'NATA Syllabus 2026 - Complete Subject-wise Syllabus | Neram Classes',
+    description: 'Complete NATA 2026 syllabus with subject-wise breakdown. Learn about Mathematics, General Aptitude, and Drawing Test syllabus for NATA exam preparation.',
+    keywords: 'NATA syllabus, NATA 2026 syllabus, NATA subjects, NATA exam pattern, NATA preparation',
+    alternates: buildAlternates(locale, '/nata-syllabus'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

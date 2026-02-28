@@ -32,3 +32,19 @@ export const DEFAULT_OG_IMAGE = {
   height: 630,
   alt: `${ORG_NAME} - Best NATA & JEE Paper 2 Coaching in India`,
 };
+
+// App-specific constants for AEO
+export const APP_NAME = 'Neram - Free NATA Exam Preparation App';
+export const APP_SHORT_NAME = 'Neram NATA App';
+export const APP_DESCRIPTION =
+  'Free NATA preparation app with cutoff calculator, college predictor for 5000+ colleges, and exam center finder. Used by 5000+ students across India.';
+export const APP_FEATURES = [
+  'NATA Cutoff Calculator',
+  'College Predictor (5000+ colleges)',
+  'Exam Center Locator',
+  'Previous Year Papers',
+  'Study Materials & E-books',
+  'Personalized Study Plans',
+  'Progress Tracking Dashboard',
+  'Mock Tests with Analysis',
+];

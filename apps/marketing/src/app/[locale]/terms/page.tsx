@@ -2,14 +2,19 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { Box, Container, Paper } from '@neram/ui';
 import TermsContent from '../../../components/legal/TermsContent';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'Terms & Conditions - Neram Classes',
-  description: 'Terms and Conditions for using Neram Classes services. Read our policies on enrollment, payments, data usage, and more.',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/terms',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'Terms & Conditions - Neram Classes',
+    description: 'Terms and Conditions for using Neram Classes services. Read our policies on enrollment, payments, data usage, and more.',
+    alternates: buildAlternates(locale, '/terms'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

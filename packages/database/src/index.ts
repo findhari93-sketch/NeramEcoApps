@@ -62,6 +62,8 @@ export {
   sendScholarshipApprovedNotification as sendWhatsAppScholarshipApproved,
   sendScholarshipRejectedNotification as sendWhatsAppScholarshipRejected,
   isWhatsAppConfigured,
+  sendDemoClassApproved,
+  sendDemoClassReminder,
 } from './services/whatsapp';
 
 // Services - Unified Notifications

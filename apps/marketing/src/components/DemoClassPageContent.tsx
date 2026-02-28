@@ -95,10 +95,40 @@ export default function DemoClassPageContent() {
   const [showPhoneVerification, setShowPhoneVerification] = useState(false);
   const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
 
+  // YouTube video
+  const [youtubeVideoUrl, setYoutubeVideoUrl] = useState<string | null>(null);
+
+  // Active registration check
+  const [activeRegistration, setActiveRegistration] = useState<{
+    id: string;
+    status: string;
+    slotDate?: string;
+    slotTime?: string;
+    slotTitle?: string;
+  } | null>(null);
+
   useEffect(() => {
     generateSundays();
     fetchAvailableSlots();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch('/api/demo-class/settings');
+      const data = await res.json();
+      if (data.settings?.youtube_video_url) {
+        setYoutubeVideoUrl(data.settings.youtube_video_url);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const getYoutubeEmbedId = (url: string): string | null => {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/);
+    return match?.[1] || null;
+  };
 
   useEffect(() => {
     // Pre-fill user data if logged in
@@ -110,7 +140,9 @@ export default function DemoClassPageContent() {
         phone: user.phone?.replace('+91', '') || prev.phone,
       }));
       if (user.phone) {
-        setVerifiedPhone(user.phone.replace('+91', ''));
+        const cleanPhone = user.phone.replace('+91', '');
+        setVerifiedPhone(cleanPhone);
+        checkActiveRegistration(cleanPhone);
       }
     }
   }, [user]);
@@ -193,10 +225,23 @@ export default function DemoClassPageContent() {
     setError(null);
   };
 
+  const checkActiveRegistration = async (phone: string) => {
+    try {
+      const res = await fetch(`/api/demo-class/status?phone=${phone}`);
+      const data = await res.json();
+      if (data.registration) {
+        setActiveRegistration(data.registration);
+      }
+    } catch {
+      // Silently ignore — user can still proceed
+    }
+  };
+
   const handlePhoneVerified = (phone: string) => {
     setVerifiedPhone(phone);
     setFormData(prev => ({ ...prev, phone }));
     setShowPhoneVerification(false);
+    checkActiveRegistration(phone);
   };
 
   const handleSubmit = async () => {
@@ -363,8 +408,62 @@ export default function DemoClassPageContent() {
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
           </Box>
+        ) : activeRegistration ? (
+          <>
+            {/* Active Registration Banner */}
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                You have an active demo class booking
+              </Typography>
+              <Typography variant="body2">
+                {activeRegistration.slotTitle} — {activeRegistration.slotDate && new Date(activeRegistration.slotDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
+              </Typography>
+              <Chip
+                label={activeRegistration.status === 'pending' ? 'Awaiting Approval' : 'Approved'}
+                color={activeRegistration.status === 'approved' ? 'success' : 'warning'}
+                size="small"
+                sx={{ mt: 1 }}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                You&apos;ll receive a confirmation once your registration is processed. You can book a new demo class after this one is completed.
+              </Typography>
+            </Alert>
+          </>
         ) : (
           <>
+            {/* Sample YouTube Video */}
+            {youtubeVideoUrl && getYoutubeEmbedId(youtubeVideoUrl) && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                  Watch a Sample Class
+                </Typography>
+                <Box
+                  sx={{
+                    position: 'relative',
+                    paddingBottom: '56.25%',
+                    height: 0,
+                    overflow: 'hidden',
+                    borderRadius: 2,
+                  }}
+                >
+                  <iframe
+                    src={`https://www.youtube.com/embed/${getYoutubeEmbedId(youtubeVideoUrl)}`}
+                    title="Sample Class"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      border: 0,
+                    }}
+                  />
+                </Box>
+              </Box>
+            )}
+
             {/* Date Selection */}
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <CalendarTodayIcon /> Select a Date

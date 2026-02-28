@@ -1,28 +1,23 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'NATA College Predictor 2025 | Find Best Architecture Colleges',
+  title: 'NATA College Predictor 2026 - Find Best Architecture Colleges | Neram',
   description:
-    'Find architecture colleges matching your NATA score. Get personalized predictions based on historical cutoffs, fees, and admission trends for 5000+ colleges.',
-  keywords: [
-    'NATA college predictor',
-    'architecture college predictor',
-    'NATA score based college',
-    'best architecture colleges in India',
-    'NATA 2025 colleges',
-    'B.Arch college predictor',
-  ],
+    'Predict which architecture colleges you can get into with your NATA score. Search 5000+ colleges across India. Filter by state, category, and college type. Free tool.',
+  keywords:
+    'NATA college predictor, architecture college predictor, NATA score college list, best architecture colleges India',
   openGraph: {
-    title: 'NATA College Predictor 2025 | Neram Classes',
+    title: 'NATA College Predictor 2026 - Find Best Architecture Colleges | Neram',
     description:
-      'Find architecture colleges matching your NATA score with AI-powered predictions for 5000+ colleges across India.',
+      'Predict which architecture colleges you can get into with your NATA score. Search 5000+ colleges across India. Filter by state, category, and college type. Free tool.',
     type: 'website',
     url: 'https://app.neramclasses.com/tools/college-predictor',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'NATA College Predictor 2025',
-    description: 'Find best architecture colleges for your NATA score.',
+    title: 'NATA College Predictor 2026 - Find Best Architecture Colleges | Neram',
+    description:
+      'Predict which architecture colleges you can get into with your NATA score. Search 5000+ colleges across India.',
   },
   alternates: {
     canonical: 'https://app.neramclasses.com/tools/college-predictor',

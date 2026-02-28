@@ -54,6 +54,13 @@ const EVENT_SECTION_MAP: Record<string, string> = {
 };
 
 function getNavigationUrl(notification: AdminNotification): string | null {
+  // Demo registrations navigate to the demo class slot detail page
+  if (notification.event_type === 'demo_registration') {
+    const slotId = notification.metadata?.slot_id as string;
+    if (slotId) return `/demo-classes/${slotId}`;
+    return '/demo-classes';
+  }
+
   const userId = notification.metadata?.user_id as string;
   if (!userId) return null;
 

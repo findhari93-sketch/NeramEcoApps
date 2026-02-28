@@ -1,0 +1,40 @@
+# Neram NATA App - robots.txt
+# https://app.neramclasses.com
+
+User-agent: *
+Allow: /
+Allow: /tools
+Allow: /tools/
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /login
+Disallow: /auth/
+Disallow: /apply
+Disallow: /payment/
+Disallow: /profile
+Disallow: /welcome
+Disallow: /my-applications
+
+# AI Crawlers - Explicitly allowed for AEO
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://app.neramclasses.com/sitemap.xml

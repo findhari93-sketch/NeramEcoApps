@@ -5,6 +5,16 @@ const BASE_URL = 'https://app.neramclasses.com';
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
 
+  // Homepage
+  const homePage = [
+    {
+      url: BASE_URL,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 1.0,
+    },
+  ];
+
   // Static tool pages
   const toolPages = [
     {
@@ -43,5 +53,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
-  return [...toolPages, ...authPages];
+  return [...homePage, ...toolPages, ...authPages];
 }

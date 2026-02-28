@@ -18,15 +18,20 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'NATA Preparation Guide 2026 - How to Prepare for NATA | Neram Classes',
-  description: 'Complete NATA 2026 preparation guide with month-wise study plan, tips, strategies, and expert advice. Learn how to crack NATA exam effectively.',
-  keywords: 'NATA preparation, how to prepare for NATA, NATA study plan, NATA tips, NATA strategy',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/nata-preparation-guide',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'NATA Preparation Guide 2026 - How to Prepare for NATA | Neram Classes',
+    description: 'Complete NATA 2026 preparation guide with month-wise study plan, tips, strategies, and expert advice. Learn how to crack NATA exam effectively.',
+    keywords: 'NATA preparation, how to prepare for NATA, NATA study plan, NATA tips, NATA strategy',
+    alternates: buildAlternates(locale, '/nata-preparation-guide'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

@@ -5,6 +5,7 @@ import {
   createDemoRegistration,
   getDemoSlotById,
   getRegistrationByPhone,
+  getActiveRegistrationByPhone,
   getUserByPhone,
 } from '@neram/database';
 
@@ -67,7 +68,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check for duplicate registration
+    // Check if user already has an active demo registration (any slot)
+    const activeRegistration = await getActiveRegistrationByPhone(phone, supabase);
+    if (activeRegistration) {
+      return NextResponse.json(
+        { error: 'You already have an active demo class registration. Please wait for your current booking to be processed.' },
+        { status: 400 }
+      );
+    }
+
+    // Check for duplicate registration on this specific slot
     const existingRegistration = await getRegistrationByPhone(body.slotId, phone, supabase);
     if (existingRegistration) {
       return NextResponse.json(
@@ -107,6 +117,7 @@ export async function POST(request: Request) {
       userName: body.name.trim(),
       phone,
       email: body.email?.trim(),
+      slotId: body.slotId,
       slotDate: slot.slot_date,
       slotTime: slot.slot_time,
       slotTitle: slot.title,

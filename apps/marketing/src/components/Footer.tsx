@@ -34,6 +34,8 @@ const footerLinks = {
     { label: 'Best Books for NATA & JEE', href: '/best-books-nata-jee' },
     { label: 'Previous Year Papers', href: '/previous-year-papers' },
     { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
+    { label: 'Free NATA App', href: '/nata-app' },
+    { label: 'Online Coaching', href: '/best-nata-coaching-online' },
     { label: 'Blog', href: '/blog' },
   ],
   topCities: [

@@ -14,15 +14,20 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'Best Books for NATA & JEE Paper 2 2026 - Recommended Books | Neram Classes',
-  description: 'Complete list of best books for NATA and JEE Paper 2 2026 preparation. Subject-wise book recommendations for Mathematics, Aptitude, and Drawing.',
-  keywords: 'best books for NATA, NATA books, JEE Paper 2 books, NATA preparation books, architecture entrance books',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/best-books-nata-jee',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'Best Books for NATA & JEE Paper 2 2026 - Recommended Books | Neram Classes',
+    description: 'Complete list of best books for NATA and JEE Paper 2 2026 preparation. Subject-wise book recommendations for Mathematics, Aptitude, and Drawing.',
+    keywords: 'best books for NATA, NATA books, JEE Paper 2 books, NATA preparation books, architecture entrance books',
+    alternates: buildAlternates(locale, '/best-books-nata-jee'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

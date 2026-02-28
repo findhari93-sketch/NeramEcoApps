@@ -1,14 +1,19 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { Box, Container, Typography, Paper } from '@neram/ui';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy - Neram Classes',
-  description: 'Privacy Policy for Neram Classes. Learn how we collect, use, and protect your personal information.',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/privacy',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'Privacy Policy - Neram Classes',
+    description: 'Privacy Policy for Neram Classes. Learn how we collect, use, and protect your personal information.',
+    alternates: buildAlternates(locale, '/privacy'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

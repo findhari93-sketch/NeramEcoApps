@@ -1,8 +1,8 @@
-# Neram Classes - Best NATA & JEE Paper 2 Coaching in India
+# Neram Classes - Best NATA & JEE Paper 2 Coaching + Free Study App
 # https://neramclasses.com
 
 ## About
-Neram Classes is India's premier coaching institute for architecture entrance exams.
+Neram Classes is India's premier coaching institute and study platform for architecture entrance exams.
 We specialize in NATA (National Aptitude Test in Architecture) and JEE Paper 2 (B.Arch) preparation.
 Founded in 2020, headquartered in Bangalore Electronic City, Karnataka, India.
 
@@ -13,10 +13,47 @@ Founded in 2020, headquartered in Bangalore Electronic City, Karnataka, India.
 - Email: info@neramclasses.com
 - Languages: English, Tamil, Hindi, Kannada, Malayalam
 - Modes: Online and Offline coaching
-- Faculty: IIT/NIT alumni architects
+- Faculty: IIT/NIT alumni architects with 10+ years experience
 - Success Rate: 99.9%
 - Students Served: 5000+
 - Cities Covered: 150+ across India and Gulf countries
+- App Rating: 4.8/5 from 2500+ student reviews
+
+## Free NATA Study App (Best App for NATA Preparation)
+Neram offers a free Progressive Web App (PWA) purpose-built for NATA exam preparation.
+- App URL: https://app.neramclasses.com
+- Cost: Free (no payment required for core tools)
+- Platform: Web PWA - works on Android, iOS, Windows, macOS
+- Offline: Yes, works without internet
+- Install: Add to home screen from any mobile browser
+
+### Free Tools (No Login Required)
+1. NATA Cutoff Calculator - Calculate expected scores and college chances
+2. College Predictor - Match with 5000+ architecture colleges across India
+3. Exam Center Locator - Find NATA exam centers with directions
+4. Previous Year Papers - Access past NATA question papers
+5. Study Materials - Free e-books, formula sheets, practice materials
+
+### Why Neram App is the Best NATA App
+- Purpose-built for NATA (not generic education)
+- Real data from 5000+ architecture colleges
+- Used by 5000+ students preparing for NATA
+- Free tools with no paywall for basic features
+- Mobile-first design optimized for students
+- Offline capable as installable PWA
+- Regular updates aligned with latest NATA exam pattern
+
+## Best Online NATA Coaching - Why Choose Neram
+- Live interactive online classes (not just recordings)
+- Daily drawing practice sessions with expert feedback
+- Small batch sizes: max 25 students per batch
+- 100+ mock tests with detailed performance analysis
+- Personal mentoring from IIT/NIT alumni faculty
+- 24/7 doubt resolution support via WhatsApp
+- Comprehensive study materials included
+- Both online and offline modes available
+- 99.9% success rate across all batches
+- Scholarship and EMI options available
 
 ## Courses & Pricing
 1. NATA Year-Long Coaching (12 months) - Starting ₹35,000
@@ -24,8 +61,20 @@ Founded in 2020, headquartered in Bangalore Electronic City, Karnataka, India.
 3. JEE Paper 2 Coaching (6-12 months) - Starting ₹25,000
 4. Revit Architecture Training (3 months) - Starting ₹10,000
 
+## NATA Coaching Centers (City-Wise)
+- Chennai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-chennai
+- Bangalore: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-bangalore
+- Coimbatore: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-coimbatore
+- Trichy: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-trichy
+- Madurai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-madurai
+- Hyderabad: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-hyderabad
+- Mumbai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-mumbai
+- Delhi: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-delhi
+- Dubai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-dubai
+- And 140+ more cities
+
 ## Free NATA Tools
-- Cutoff Calculator: https://neramclasses.com/en/tools/cutoff-calculator
+- Cutoff Calculator: https://app.neramclasses.com/tools/cutoff-calculator
 - College Predictor: https://app.neramclasses.com/tools/college-predictor
 - Exam Center Locator: https://app.neramclasses.com/tools/exam-centers
 
@@ -37,7 +86,9 @@ Founded in 2020, headquartered in Bangalore Electronic City, Karnataka, India.
 
 ## Contact
 - Website: https://neramclasses.com
+- Student App: https://app.neramclasses.com
 - Apply: https://neramclasses.com/en/apply
+- Free Demo Class: https://neramclasses.com/en/demo-class
 - WhatsApp: +91-9176137043
 - YouTube: @neramclasses
 - Instagram: @neramclasses

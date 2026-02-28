@@ -2,14 +2,19 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { Box, Container, Paper } from '@neram/ui';
 import RefundPolicyContent from '../../../components/legal/RefundPolicyContent';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'Refund Policy - Neram Classes',
-  description: 'Refund Policy for Neram Classes. Learn about our 24-hour refund window, processing fees, and how to request a refund.',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/refund-policy',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'Refund Policy - Neram Classes',
+    description: 'Refund Policy for Neram Classes. Learn about our 24-hour refund window, processing fees, and how to request a refund.',
+    alternates: buildAlternates(locale, '/refund-policy'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

@@ -17,7 +17,7 @@ import {
   Paper,
 } from '@neram/ui';
 import Link from 'next/link';
-import { locations, getLocationByCity, type Location } from '@neram/database';
+import { locations, getLocationByCity, getLocationsByState, getLocationsByRegion, type Location } from '@neram/database';
 import { locales } from '@/i18n';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
@@ -26,6 +26,7 @@ import {
   generateBreadcrumbSchema,
   generateCourseSchema,
 } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
 interface PageProps {
   params: { locale: string; slug: string };
@@ -64,9 +65,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title,
     description,
     keywords: `NATA coaching ${location.cityDisplay}, NATA classes ${location.cityDisplay}, best NATA coaching in ${location.cityDisplay}, NATA preparation ${location.stateDisplay}, online NATA coaching ${location.cityDisplay}, architecture entrance coaching ${location.cityDisplay}, NATA coaching near me ${location.cityDisplay}`,
-    alternates: {
-      canonical: `https://neramclasses.com/en/coaching/nata-coaching/${params.slug}`,
-    },
+    alternates: buildAlternates(params.locale, `/coaching/nata-coaching/${params.slug}`),
     openGraph: {
       title,
       description,
@@ -402,6 +401,85 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
           </Grid>
         </Container>
       </Box>
+
+      {/* Nearby Cities Section */}
+      {(() => {
+        // Get same-state cities (excluding current city)
+        const stateMates = getLocationsByState(location.state).filter(
+          (loc) => loc.city !== location.city
+        );
+        // If same state has fewer than 4 cities, supplement with same-region cities
+        const regionMates =
+          stateMates.length < 4
+            ? getLocationsByRegion(location.region).filter(
+                (loc) => loc.city !== location.city && loc.state !== location.state
+              )
+            : [];
+        const nearbyCities = [...stateMates, ...regionMates].slice(0, 8);
+
+        if (nearbyCities.length === 0) return null;
+
+        return (
+          <Box sx={{ py: { xs: 6, md: 10 } }}>
+            <Container maxWidth="lg">
+              <Typography
+                variant="h2"
+                component="h2"
+                align="center"
+                gutterBottom
+                sx={{ fontWeight: 700, mb: 2 }}
+              >
+                NATA Coaching in Nearby Cities
+              </Typography>
+              <Typography
+                variant="body1"
+                align="center"
+                color="text.secondary"
+                sx={{ mb: 4 }}
+              >
+                Explore NATA coaching options in other cities
+                {stateMates.length > 0 ? ` across ${location.stateDisplay}` : ` in your region`}
+              </Typography>
+              <Grid container spacing={2} justifyContent="center">
+                {nearbyCities.map((nearby) => (
+                  <Grid item xs={6} sm={4} md={3} key={nearby.city}>
+                    <Button
+                      component={Link}
+                      href={`/${locale}/coaching/nata-coaching/nata-coaching-centers-in-${nearby.city}`}
+                      variant="outlined"
+                      fullWidth
+                      sx={{
+                        py: 1.5,
+                        textTransform: 'none',
+                        fontSize: { xs: '0.85rem', sm: '0.9rem' },
+                        borderColor: 'divider',
+                        color: 'text.primary',
+                        '&:hover': {
+                          bgcolor: 'primary.main',
+                          color: 'white',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                    >
+                      {nearby.cityDisplay}
+                    </Button>
+                  </Grid>
+                ))}
+              </Grid>
+              <Box sx={{ textAlign: 'center', mt: 4 }}>
+                <Button
+                  component={Link}
+                  href={`/${locale}/coaching/nata-coaching`}
+                  variant="text"
+                  sx={{ textTransform: 'none', fontSize: '1rem' }}
+                >
+                  View all NATA coaching cities →
+                </Button>
+              </Box>
+            </Container>
+          </Box>
+        );
+      })()}
 
       {/* CTA Section */}
       <Box

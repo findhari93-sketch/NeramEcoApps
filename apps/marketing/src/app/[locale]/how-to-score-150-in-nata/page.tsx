@@ -18,15 +18,20 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'How to Score 150+ in NATA 2026 - Tips & Strategy | Neram Classes',
-  description: 'Learn proven strategies and tips to score 150+ marks in NATA 2026 exam. Expert guidance on section-wise preparation and time management for top scores.',
-  keywords: 'NATA score, how to score in NATA, NATA tips, NATA 150 marks, NATA strategy',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/how-to-score-150-in-nata',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'How to Score 150+ in NATA 2026 - Tips & Strategy | Neram Classes',
+    description: 'Learn proven strategies and tips to score 150+ marks in NATA 2026 exam. Expert guidance on section-wise preparation and time management for top scores.',
+    keywords: 'NATA score, how to score in NATA, NATA tips, NATA 150 marks, NATA strategy',
+    alternates: buildAlternates(locale, '/how-to-score-150-in-nata'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };

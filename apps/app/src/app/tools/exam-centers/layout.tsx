@@ -1,28 +1,23 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'NATA Exam Centers 2025 | Find Centers Near You',
+  title: 'NATA Exam Center Locator 2026 - Find Centers Near You | Neram',
   description:
-    'Find NATA exam centers near you with complete address, directions, and distance. Search by state, city, or use your location to find the nearest center.',
-  keywords: [
-    'NATA exam centers',
-    'NATA 2025 exam centers',
-    'NATA exam center list',
-    'NATA center locator',
-    'architecture exam centers',
-    'NATA test centers near me',
-  ],
+    'Find NATA exam centers near your location. Search by state, city, or pincode. Get directions, address, and capacity details for all exam centers across India.',
+  keywords:
+    'NATA exam centers, NATA test centers near me, NATA exam center list 2026, NATA center locator',
   openGraph: {
-    title: 'NATA Exam Centers 2025 | Neram Classes',
+    title: 'NATA Exam Center Locator 2026 - Find Centers Near You | Neram',
     description:
-      'Find NATA exam centers near you with address, directions, and distance information.',
+      'Find NATA exam centers near your location. Search by state, city, or pincode. Get directions, address, and capacity details for all exam centers across India.',
     type: 'website',
     url: 'https://app.neramclasses.com/tools/exam-centers',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'NATA Exam Centers 2025',
-    description: 'Find NATA exam centers near you with complete details.',
+    title: 'NATA Exam Center Locator 2026 - Find Centers Near You | Neram',
+    description:
+      'Find NATA exam centers near your location. Search by state, city, or pincode. Get directions and capacity details.',
   },
   alternates: {
     canonical: 'https://app.neramclasses.com/tools/exam-centers',

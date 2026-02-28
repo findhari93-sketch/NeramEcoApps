@@ -356,6 +356,31 @@ export async function getRegistrationByPhone(
 }
 
 /**
+ * Check if a phone number has an active demo registration (pending or approved).
+ * Returns the registration with slot details if found, null otherwise.
+ */
+export async function getActiveRegistrationByPhone(
+  phone: string,
+  client?: TypedSupabaseClient
+): Promise<(DemoClassRegistration & { slot?: DemoClassSlot }) | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const normalizedPhone = phone.replace(/\D/g, '');
+
+  const { data, error } = await supabase
+    .from('demo_class_registrations')
+    .select('*, slot:demo_class_slots(*)')
+    .eq('phone', normalizedPhone)
+    .in('status', ['pending', 'approved'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data;
+}
+
+/**
  * Get all registrations for a slot
  */
 export async function getRegistrationsBySlot(

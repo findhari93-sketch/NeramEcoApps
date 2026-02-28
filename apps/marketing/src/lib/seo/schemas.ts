@@ -2,6 +2,7 @@ import {
   ORG_NAME,
   ORG_ALTERNATE_NAME,
   BASE_URL,
+  APP_URL,
   ORG_LOGO,
   ORG_PHONE,
   ORG_EMAIL,
@@ -9,6 +10,9 @@ import {
   ORG_DESCRIPTION,
   ORG_ADDRESS,
   SOCIAL_PROFILES,
+  APP_NAME,
+  APP_DESCRIPTION,
+  APP_FEATURES,
 } from './constants';
 
 // ─── Organization Schema ────────────────────────────────────────────────────
@@ -36,6 +40,23 @@ export function generateOrganizationSchema() {
       availableLanguage: ['English', 'Tamil', 'Hindi', 'Kannada', 'Malayalam'],
     },
     sameAs: SOCIAL_PROFILES,
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.8',
+      reviewCount: '2500',
+      bestRating: '5',
+      worstRating: '1',
+    },
+    numberOfEmployees: {
+      '@type': 'QuantitativeValue',
+      value: 50,
+    },
+    owns: {
+      '@type': 'SoftwareApplication',
+      name: APP_NAME,
+      url: APP_URL,
+      applicationCategory: 'EducationalApplication',
+    },
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
       name: 'Architecture Entrance Exam Coaching',
@@ -381,6 +402,58 @@ export function generateWebApplicationSchema(tool: {
       '@type': 'EducationalOrganization',
       name: ORG_NAME,
       url: BASE_URL,
+    },
+  };
+}
+
+// ─── SoftwareApplication Schema (for NATA study app) ────────────────────────
+
+export function generateSoftwareApplicationSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: APP_NAME,
+    alternateName: ['Neram NATA App', 'Neram Classes App', 'Neram Study App'],
+    applicationCategory: 'EducationalApplication',
+    applicationSubCategory: 'Exam Preparation',
+    operatingSystem: 'Web (PWA) - Android, iOS, Windows, macOS',
+    url: APP_URL,
+    installUrl: APP_URL,
+    description: APP_DESCRIPTION,
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'INR',
+      availability: 'https://schema.org/InStock',
+    },
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.8',
+      ratingCount: '2500',
+      bestRating: '5',
+      worstRating: '1',
+    },
+    featureList: APP_FEATURES,
+    softwareVersion: '2.0',
+    datePublished: '2024-01-01',
+    inLanguage: ['en'],
+    isAccessibleForFree: true,
+    provider: {
+      '@type': 'EducationalOrganization',
+      '@id': `${BASE_URL}/#organization`,
+      name: ORG_NAME,
+      url: BASE_URL,
+    },
+    author: {
+      '@type': 'EducationalOrganization',
+      name: ORG_NAME,
+      url: BASE_URL,
+    },
+    educationalUse: 'Exam Preparation',
+    audience: {
+      '@type': 'EducationalAudience',
+      educationalRole: 'student',
+      audienceType: 'NATA & JEE Paper 2 aspirants',
     },
   };
 }

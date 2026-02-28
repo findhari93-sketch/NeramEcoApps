@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Box, Container, Typography, Grid, Card, CardContent, Avatar } from '@neram/ui';
+import { Box, Container, Typography, Grid, Card, CardContent, Avatar, Button } from '@neram/ui';
 import Hero from '@/components/Hero';
 import CourseCard from '@/components/CourseCard';
 import YouTubeSection from '@/components/YouTubeSection';
@@ -38,22 +38,25 @@ const featuredCourses = [
   },
 ];
 
-// Mock data for tools
+// Learning tools available on the app
 const tools = [
   {
-    name: 'Attendance Tracker',
-    description: 'Monitor student attendance and participation',
-    icon: '📊',
+    name: 'Cutoff Calculator',
+    description: 'Calculate your expected NATA cutoff rank based on score',
+    icon: '🧮',
+    link: 'https://app.neramclasses.com/tools/cutoff-calculator',
   },
   {
-    name: 'Progress Analytics',
-    description: 'Track academic progress with detailed insights',
-    icon: '📈',
+    name: 'College Predictor',
+    description: 'Find architecture colleges based on your expected rank',
+    icon: '🎓',
+    link: 'https://app.neramclasses.com/tools/college-predictor',
   },
   {
-    name: 'Practice Tests',
-    description: 'Access thousands of practice questions',
-    icon: '📝',
+    name: 'Exam Center Locator',
+    description: 'Find NATA exam centers near you',
+    icon: '📍',
+    link: 'https://app.neramclasses.com/tools/exam-centers',
   },
 ];
 
@@ -139,11 +142,16 @@ export default function HomePageContent() {
             {tools.map((tool, index) => (
               <Grid item xs={12} sm={6} md={4} key={index}>
                 <Card
+                  component="a"
+                  href={tool.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   sx={{
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
                     textAlign: 'center',
+                    textDecoration: 'none',
                     transition: 'transform 0.2s',
                     '&:hover': {
                       transform: 'translateY(-8px)',
@@ -166,6 +174,18 @@ export default function HomePageContent() {
               </Grid>
             ))}
           </Grid>
+          <Box sx={{ textAlign: 'center', mt: 4 }}>
+            <Button
+              variant="contained"
+              size="large"
+              href="https://app.neramclasses.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ px: 4 }}
+            >
+              Try Our Free App
+            </Button>
+          </Box>
         </Container>
       </Box>
 

@@ -292,29 +292,23 @@ export default function UsersTable({
               </Typography>
             );
           }
-          if (row.original.demo_attended) {
-            return (
-              <Chip
-                label="Attended"
-                size="small"
-                sx={{
-                  bgcolor: '#4CAF5014',
-                  color: '#2E7D32',
-                  fontWeight: 600,
-                  fontSize: 11,
-                  height: 24,
-                  borderRadius: 0.75,
-                }}
-              />
-            );
-          }
+          const status = row.original.latest_demo_status;
+          const statusConfig: Record<string, { label: string; bgcolor: string; color: string }> = {
+            pending: { label: 'Applied', bgcolor: '#FF980014', color: '#E65100' },
+            approved: { label: 'Approved', bgcolor: '#2196F314', color: '#1565C0' },
+            attended: { label: 'Attended', bgcolor: '#4CAF5014', color: '#2E7D32' },
+            no_show: { label: 'No Show', bgcolor: '#F4433614', color: '#C62828' },
+            rejected: { label: 'Rejected', bgcolor: '#9E9E9E14', color: '#616161' },
+            cancelled: { label: 'Cancelled', bgcolor: '#9E9E9E14', color: '#616161' },
+          };
+          const config = statusConfig[status || ''] || { label: 'Requested', bgcolor: '#2196F314', color: '#1565C0' };
           return (
             <Chip
-              label="Requested"
+              label={config.label}
               size="small"
               sx={{
-                bgcolor: '#2196F314',
-                color: '#1565C0',
+                bgcolor: config.bgcolor,
+                color: config.color,
                 fontWeight: 600,
                 fontSize: 11,
                 height: 24,

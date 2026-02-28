@@ -1,7 +1,7 @@
 {
-  "name": "Neram Classes - Tools & Resources",
-  "short_name": "Neram Tools",
-  "description": "NATA coaching tools, cutoff calculators, college predictors, and more",
+  "name": "Neram - Free NATA Exam Preparation App",
+  "short_name": "Neram NATA",
+  "description": "Best free NATA preparation app. Cutoff calculator, college predictor for 5000+ colleges, exam center finder, study materials. By IIT/NIT alumni experts at Neram Classes.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -15,7 +15,8 @@
       "purpose": "any"
     }
   ],
-  "categories": ["education", "productivity"],
+  "categories": ["education", "productivity", "utilities"],
   "lang": "en-IN",
-  "dir": "ltr"
+  "dir": "ltr",
+  "iarc_rating_id": "Everyone"
 }

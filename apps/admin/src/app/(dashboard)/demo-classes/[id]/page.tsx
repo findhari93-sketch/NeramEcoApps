@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -26,6 +26,7 @@ import {
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
+import EmailIcon from '@mui/icons-material/Email';
 import SendIcon from '@mui/icons-material/Send';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -48,8 +49,8 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export default function DemoSlotDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function DemoSlotDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const router = useRouter();
   const [tabValue, setTabValue] = useState(0);
   const [slot, setSlot] = useState<DemoClassSlot | null>(null);
@@ -61,6 +62,9 @@ export default function DemoSlotDetailPage({ params }: { params: Promise<{ id: s
 
   // Dialogs
   const [confirmDialog, setConfirmDialog] = useState(false);
+  const [emailDialog, setEmailDialog] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailResult, setEmailResult] = useState<{ sentCount: number; totalEligible: number } | null>(null);
   const [meetingLink, setMeetingLink] = useState('');
   const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>([]);
 
@@ -182,6 +186,26 @@ export default function DemoSlotDetailPage({ params }: { params: Promise<{ id: s
       setError(err instanceof Error ? err.message : 'Failed to mark attendance');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleSendEmailToAll = async () => {
+    try {
+      setEmailSending(true);
+      setEmailResult(null);
+      const response = await fetch(`/api/demo-classes/${id}/send-email`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      setEmailResult({ sentCount: data.sentCount, totalEligible: data.totalEligible });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send emails');
+      setEmailDialog(false);
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -353,6 +377,7 @@ export default function DemoSlotDetailPage({ params }: { params: Promise<{ id: s
 
   const approvedRegistrations = registrations.filter(r => ['approved', 'attended', 'no_show'].includes(r.status));
   const pendingRegistrations = registrations.filter(r => r.status === 'pending');
+  const emailEligible = registrations.filter(r => ['approved', 'attended'].includes(r.status) && r.email);
 
   return (
     <Box>
@@ -464,6 +489,16 @@ export default function DemoSlotDetailPage({ params }: { params: Promise<{ id: s
             onClick={() => setSelectedRegistrations(pendingRegistrations.map(r => r.id))}
           >
             Select All Pending
+          </Button>
+        )}
+        {emailEligible.length > 0 && (
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<EmailIcon />}
+            onClick={() => { setEmailResult(null); setEmailDialog(true); }}
+          >
+            Send Email to All ({emailEligible.length})
           </Button>
         )}
       </Stack>
@@ -594,6 +629,39 @@ export default function DemoSlotDetailPage({ params }: { params: Promise<{ id: s
           </CardContent>
         </Card>
       </TabPanel>
+
+      {/* Send Email Dialog */}
+      <Dialog open={emailDialog} onClose={() => !emailSending && setEmailDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Send Email to All Registrants</DialogTitle>
+        <DialogContent>
+          {emailResult ? (
+            <Alert severity="success" sx={{ mt: 1 }}>
+              Successfully sent {emailResult.sentCount} of {emailResult.totalEligible} emails.
+            </Alert>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              This will send a confirmation email with demo class details (date, time, meeting link, calendar link) to <strong>{emailEligible.length}</strong> approved registrant{emailEligible.length !== 1 ? 's' : ''} who have an email address.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {emailResult ? (
+            <Button onClick={() => setEmailDialog(false)}>Close</Button>
+          ) : (
+            <>
+              <Button onClick={() => setEmailDialog(false)} disabled={emailSending}>Cancel</Button>
+              <Button
+                variant="contained"
+                onClick={handleSendEmailToAll}
+                disabled={emailSending}
+                startIcon={emailSending ? <CircularProgress size={18} /> : <EmailIcon />}
+              >
+                {emailSending ? 'Sending...' : 'Send Emails'}
+              </Button>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Confirm Dialog */}
       <Dialog open={confirmDialog} onClose={() => setConfirmDialog(false)} maxWidth="sm" fullWidth>

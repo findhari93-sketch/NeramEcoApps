@@ -14,11 +14,14 @@ import {
   Tab,
   CircularProgress,
   Alert,
+  TextField,
+  IconButton,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
 import PeopleIcon from '@mui/icons-material/People';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import SaveIcon from '@mui/icons-material/Save';
 import DataTable from '@/components/DataTable';
 import type { DemoClassSlot, DemoSlotStatus } from '@neram/database';
 
@@ -49,10 +52,41 @@ export default function DemoClassesPage() {
     totalRegistrations: 0,
     pendingApprovals: 0,
   });
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     fetchDemoSlots();
   }, [tabValue]);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch('/api/settings/demo-class');
+      const data = await res.json();
+      setYoutubeUrl(data.settings?.youtube_video_url || '');
+    } catch {
+      // ignore
+    }
+  };
+
+  const saveYoutubeUrl = async () => {
+    try {
+      setSavingSettings(true);
+      await fetch('/api/settings/demo-class', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ youtube_video_url: youtubeUrl }),
+      });
+    } catch {
+      // ignore
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const fetchDemoSlots = async () => {
     try {
@@ -263,6 +297,31 @@ export default function DemoClassesPage() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* YouTube Video Setting */}
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
+          <Typography variant="subtitle2" gutterBottom>
+            Sample YouTube Video (shown on demo class booking page)
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+            />
+            <IconButton
+              color="primary"
+              onClick={saveYoutubeUrl}
+              disabled={savingSettings}
+            >
+              {savingSettings ? <CircularProgress size={20} /> : <SaveIcon />}
+            </IconButton>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>

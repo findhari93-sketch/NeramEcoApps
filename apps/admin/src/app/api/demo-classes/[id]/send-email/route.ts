@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import {
   getSupabaseAdminClient,
-  bulkApproveRegistrations,
   getDemoSlotById,
+  getRegistrationsBySlot,
   updateRegistrationNotification,
-  sendDemoClassApproved,
   sendTemplateEmail,
-  isWhatsAppConfigured,
   formatTimeForDisplay,
 } from '@neram/database';
 
@@ -36,36 +34,24 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
     const supabase = getSupabaseAdminClient();
 
-    // Validate body
-    if (!Array.isArray(body.registrationIds) || body.registrationIds.length === 0) {
-      return NextResponse.json(
-        { error: 'registrationIds must be a non-empty array' },
-        { status: 400 }
-      );
-    }
-
-    // Check if slot exists
     const slot = await getDemoSlotById(id, supabase);
     if (!slot) {
-      return NextResponse.json(
-        { error: 'Demo slot not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Slot not found' }, { status: 404 });
     }
 
-    // TODO: Get admin ID from session
-    const adminId = 'admin'; // Placeholder
+    // Get approved registrations with email
+    const { registrations } = await getRegistrationsBySlot(id, {
+      status: ['approved', 'attended'],
+      limit: 200,
+    }, supabase);
 
-    const registrations = await bulkApproveRegistrations(
-      body.registrationIds,
-      adminId,
-      supabase
-    );
+    const withEmail = registrations.filter((r) => r.email);
+    if (withEmail.length === 0) {
+      return NextResponse.json({ error: 'No registrants with email addresses' }, { status: 400 });
+    }
 
-    // Send notifications to each approved registration (non-blocking)
     const displayDate = new Date(slot.slot_date + 'T00:00:00').toLocaleDateString('en-IN', {
       weekday: 'long',
       day: 'numeric',
@@ -80,26 +66,11 @@ export async function POST(
       duration: slot.duration_minutes,
       meetingLink: slot.meeting_link || undefined,
     });
-    const meetingDetails = slot.meeting_link
-      ? `Meeting Link: ${slot.meeting_link}\nAdd to Calendar: ${calendarUrl}`
-      : `Add to Calendar: ${calendarUrl}`;
 
-    for (const reg of registrations) {
-      // WhatsApp
-      if (isWhatsAppConfigured() && reg.phone) {
-        sendDemoClassApproved(reg.phone, {
-          userName: reg.name,
-          date: displayDate,
-          time: displayTime,
-          details: meetingDetails,
-        })
-          .then(() => updateRegistrationNotification(reg.id, 'whatsapp', supabase))
-          .catch((err) => console.error('WhatsApp bulk approval failed:', err));
-      }
-
-      // Email
-      if (reg.email) {
-        sendTemplateEmail(reg.email, 'demo-class-confirmation', {
+    let sentCount = 0;
+    for (const reg of withEmail) {
+      try {
+        await sendTemplateEmail(reg.email!, 'demo-class-confirmation', {
           name: reg.name,
           date: displayDate,
           time: displayTime,
@@ -107,22 +78,17 @@ export async function POST(
           meeting_link: slot.meeting_link || '',
           venue_address: slot.venue_address || '',
           calendar_link: calendarUrl,
-        })
-          .then(() => updateRegistrationNotification(reg.id, 'confirmation_email', supabase))
-          .catch((err) => console.error('Email bulk approval failed:', err));
+        });
+        await updateRegistrationNotification(reg.id, 'confirmation_email', supabase);
+        sentCount++;
+      } catch (err) {
+        console.error(`Email to ${reg.email} failed:`, err);
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      approvedCount: registrations.length,
-      registrations,
-    });
+    return NextResponse.json({ success: true, sentCount, totalEligible: withEmail.length });
   } catch (error) {
-    console.error('Error bulk approving registrations:', error);
-    return NextResponse.json(
-      { error: 'Failed to approve registrations' },
-      { status: 500 }
-    );
+    console.error('Error sending emails:', error);
+    return NextResponse.json({ error: 'Failed to send emails' }, { status: 500 });
   }
 }

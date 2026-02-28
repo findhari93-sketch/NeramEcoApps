@@ -26,23 +26,8 @@ export default function robots(): MetadataRoute.Robots {
           '/trackback/',
           '/xmlrpc.php',
           '/cgi-bin/',
-          // Old duplicate city/location URLs
+          // Old duplicate city/location URLs (catch-all pattern)
           '/*-url',
-          '/pudukkottai-url',
-          '/tamilnadu-url',
-          '/cochin-url',
-          '/aat-url',
-          '/vizag-url',
-          '/salem-url',
-          '/bangalore-url',
-          '/hyderabad-url',
-          '/delhi-url',
-          '/erode-url',
-          '/tirunelveli-url',
-          '/malapuram-url',
-          '/ooty-url',
-          '/perambur-url',
-          '/andhrapradesh-url',
           // Old paths from WordPress site
           '/test-page/*',
           '/register/*',
@@ -64,10 +49,11 @@ export default function robots(): MetadataRoute.Robots {
           '/$',
         ],
       },
-      // Search engine crawlers
-      { userAgent: 'Googlebot', allow: '/' },
-      { userAgent: 'Bingbot', allow: '/' },
       // AI Crawlers — ALLOW for AEO (AI Engine Optimization)
+      // Note: Googlebot/Bingbot inherit the '*' rules (allow: '/' + disallows).
+      // Do NOT add specific Googlebot/Bingbot rules — in robots.txt spec,
+      // user-agent-specific rules OVERRIDE the '*' rules entirely,
+      // which would make Googlebot ignore all disallow entries.
       { userAgent: 'GPTBot', allow: '/' },
       { userAgent: 'ChatGPT-User', allow: '/' },
       { userAgent: 'Google-Extended', allow: '/' },

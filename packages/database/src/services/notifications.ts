@@ -993,6 +993,7 @@ export async function notifyDemoRegistration(
     userName: string;
     phone: string;
     email?: string;
+    slotId: string;
     slotDate: string;
     slotTime: string;
     slotTitle: string;
@@ -1011,6 +1012,7 @@ export async function notifyDemoRegistration(
         user_name: data.userName,
         phone: data.phone,
         email: data.email || '',
+        slot_id: data.slotId,
         slot_date: data.slotDate,
         slot_time: data.slotTime,
         slot_title: data.slotTitle,

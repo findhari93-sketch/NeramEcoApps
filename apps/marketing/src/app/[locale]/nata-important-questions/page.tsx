@@ -14,15 +14,20 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 
-export const metadata: Metadata = {
-  title: 'NATA Important Questions 2026 - Sample Questions & Practice | Neram Classes',
-  description: 'Practice NATA 2026 important questions with solutions. Get sample questions for Mathematics, Aptitude, and Drawing sections with detailed explanations.',
-  keywords: 'NATA questions, NATA sample questions, NATA practice questions, NATA important questions 2026',
-  alternates: {
-    canonical: 'https://neramclasses.com/en/nata-important-questions',
-  },
-};
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  return {
+    title: 'NATA Important Questions 2026 - Sample Questions & Practice | Neram Classes',
+    description: 'Practice NATA 2026 important questions with solutions. Get sample questions for Mathematics, Aptitude, and Drawing sections with detailed explanations.',
+    keywords: 'NATA questions, NATA sample questions, NATA practice questions, NATA important questions 2026',
+    alternates: buildAlternates(locale, '/nata-important-questions'),
+  };
+}
 
 interface PageProps {
   params: { locale: string };
