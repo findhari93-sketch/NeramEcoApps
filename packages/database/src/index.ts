@@ -78,6 +78,7 @@ export {
   notifyScholarshipRejected,
   notifyScholarshipRevisionRequested,
   notifyNewCallback,
+  notifyDemoRegistration,
   notifyContactMessageReceived,
 } from './services/notifications';
 

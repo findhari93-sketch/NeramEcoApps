@@ -63,7 +63,7 @@ export async function getUpcomingDemoSlots(
     .from('demo_class_slots')
     .select('*')
     .in('status', status)
-    .gte('slot_date', new Date().toISOString().split('T')[0])
+    .gte('slot_date', new Date().toLocaleDateString('en-CA'))
     .order('slot_date', { ascending: true })
     .order('slot_time', { ascending: true });
 

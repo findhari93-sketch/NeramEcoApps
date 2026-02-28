@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getUpcomingDemoSlots } from '@neram/database';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const supabase = getSupabaseAdminClient();

@@ -5,7 +5,7 @@ import { Box, Container, Typography, Grid, Card, CardContent, Avatar } from '@ne
 import Hero from '@/components/Hero';
 import CourseCard from '@/components/CourseCard';
 import YouTubeSection from '@/components/YouTubeSection';
-import { AchievementsPreview, AnnouncementsSection } from '@/components/marketing-content';
+import { AnnouncementsSection } from '@/components/marketing-content';
 
 // Featured courses offered by Neram Classes
 const featuredCourses = [
@@ -89,9 +89,6 @@ export default function HomePageContent() {
     <Box>
       {/* Hero Section */}
       <Hero />
-
-      {/* Student Achievements */}
-      <AchievementsPreview />
 
       {/* Featured Courses Section */}
       <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>

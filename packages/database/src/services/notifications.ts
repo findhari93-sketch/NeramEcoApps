@@ -980,6 +980,49 @@ export async function notifyNewCallback(
 }
 
 // ============================================
+// DEMO CLASS NOTIFICATION DISPATCHERS
+// ============================================
+
+/**
+ * Notify admin team of a new demo class registration.
+ * Channels: Telegram + Admin in-app
+ */
+export async function notifyDemoRegistration(
+  data: {
+    userName: string;
+    phone: string;
+    email?: string;
+    slotDate: string;
+    slotTime: string;
+    slotTitle: string;
+    currentClass?: string;
+    interestCourse?: string;
+    registrationId: string;
+  },
+  client?: TypedSupabaseClient
+): Promise<void> {
+  await dispatchNotification(
+    {
+      type: 'demo_registration',
+      title: 'New Demo Class Registration',
+      message: `${data.userName} (${data.phone}) registered for ${data.slotTitle} on ${data.slotDate}`,
+      data: {
+        user_name: data.userName,
+        phone: data.phone,
+        email: data.email || '',
+        slot_date: data.slotDate,
+        slot_time: data.slotTime,
+        slot_title: data.slotTitle,
+        current_class: data.currentClass || '',
+        interest_course: data.interestCourse || '',
+        registration_id: data.registrationId,
+      },
+    },
+    client
+  );
+}
+
+// ============================================
 // REFUND NOTIFICATION DISPATCHERS
 // ============================================
 

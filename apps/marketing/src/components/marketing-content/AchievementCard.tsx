@@ -16,6 +16,11 @@ interface AchievementCardProps {
     college?: string | null;
     academic_year?: string;
     student_quote?: string | null;
+    image_crops?: {
+      square?: string;
+      banner?: string;
+      mobile?: string;
+    } | null;
   };
 }
 
@@ -56,7 +61,7 @@ export default function AchievementCard({ title, description, imageUrl, metadata
         {/* Header: Avatar + Name + Score */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Avatar
-            src={imageUrl || undefined}
+            src={metadata.image_crops?.square || imageUrl || undefined}
             alt={metadata.student_name}
             sx={{
               width: 56,
@@ -68,7 +73,7 @@ export default function AchievementCard({ title, description, imageUrl, metadata
               fontWeight: 700,
             }}
           >
-            {!imageUrl && initials}
+            {!imageUrl && !metadata.image_crops?.square && initials}
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="h6" component="div" fontWeight={700} noWrap>

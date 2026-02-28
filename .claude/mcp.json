@@ -4,8 +4,8 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-supabase"],
       "env": {
-        "SUPABASE_URL": "${NEXT_PUBLIC_SUPABASE_URL}",
-        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}"
+        "SUPABASE_URL": "https://zdnypksjqnhtiblwdaic.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpkbnlwa3NqcW5odGlibHdkYWljIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjE1MDE5OCwiZXhwIjoyMDgxNzI2MTk4fQ.Ud6nd2pIDLxwmR0JoV_f2wZ3YMLD-9NFPkqc9btQnFs"
       },
       "description": "Supabase database operations - schema inspection, queries, migrations"
     },

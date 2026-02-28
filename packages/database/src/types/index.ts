@@ -1322,6 +1322,12 @@ export interface FAQ extends Timestamps {
 export type MarketingContentType = 'achievement' | 'important_date' | 'announcement' | 'update';
 export type MarketingContentStatus = 'draft' | 'published' | 'archived';
 
+export interface ImageCrops {
+  square?: string;  // URL for 1:1 crop (thumbnails)
+  banner?: string;  // URL for 2.2:1 crop (desktop expanded)
+  mobile?: string;  // URL for 16:9 crop (mobile expanded)
+}
+
 export interface AchievementMetadata {
   student_name: string;
   exam: string;
@@ -1332,6 +1338,7 @@ export interface AchievementMetadata {
   academic_year: string;       // e.g. '2025-26'
   batch?: string | null;
   student_quote?: string | null;
+  image_crops?: ImageCrops | null;
 }
 
 export interface ImportantDateMetadata {

@@ -129,7 +129,7 @@ export default function DemoClassPageContent() {
       const sunday = new Date(nextSunday);
       sunday.setDate(nextSunday.getDate() + i * 7);
 
-      const dateStr = sunday.toISOString().split('T')[0];
+      const dateStr = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`;
       const displayDate = sunday.toLocaleDateString('en-IN', {
         weekday: 'long',
         month: 'short',

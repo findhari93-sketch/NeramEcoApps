@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
 import {
+  getSupabaseAdminClient,
+  notifyDemoRegistration,
   createDemoRegistration,
   getDemoSlotById,
   getRegistrationByPhone,
@@ -100,6 +101,21 @@ export async function POST(request: Request) {
       },
       supabase
     );
+
+    // Dispatch notifications (non-blocking)
+    notifyDemoRegistration({
+      userName: body.name.trim(),
+      phone,
+      email: body.email?.trim(),
+      slotDate: slot.slot_date,
+      slotTime: slot.slot_time,
+      slotTitle: slot.title,
+      currentClass: body.currentClass,
+      interestCourse: body.interestCourse,
+      registrationId: registration.id,
+    }).catch((err) => {
+      console.error('Demo registration notification dispatch failed:', err);
+    });
 
     return NextResponse.json({
       success: true,

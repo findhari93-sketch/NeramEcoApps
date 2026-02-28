@@ -8,7 +8,7 @@ import { locales } from '@/i18n';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
-import { ImportantDateBanner } from '@/components/marketing-content';
+import { ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
 import '@/styles/globals.css';
 
 // Font loading - Next.js preloads these automatically, eliminating font swap flash
@@ -144,6 +144,7 @@ export default async function RootLayout({
               <Header />
               <main>{children}</main>
               <Footer />
+              <StickyAchievementWidget locale={locale} />
             </AuthProvider>
           </ThemeRegistry>
         </NextIntlClientProvider>

@@ -24,7 +24,13 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import ClearIcon from '@mui/icons-material/Clear';
+import { Avatar, CircularProgress, LinearProgress } from '@neram/ui';
+import CropIcon from '@mui/icons-material/Crop';
 import DataTable from '@/components/DataTable';
+import ImageCropDialog from '@/components/crm/ImageCropDialog';
+import type { ImageCropsResult } from '@/components/crm/ImageCropDialog';
 
 interface MarketingContentItem {
   id: string;
@@ -139,6 +145,9 @@ export default function MarketingContentPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tabIndex, setTabIndex] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [imageCrops, setImageCrops] = useState<ImageCropsResult | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -164,6 +173,53 @@ export default function MarketingContentPage() {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate on client side
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      setSnackbar({ open: true, message: 'Invalid file type. Use JPEG, PNG, WebP, or GIF.', severity: 'error' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSnackbar({ open: true, message: 'File too large. Maximum 5MB.', severity: 'error' });
+      return;
+    }
+
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/marketing-content/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
+      }
+
+      const { url } = await res.json();
+      setForm((prev) => ({ ...prev, image_url: url }));
+      setSnackbar({ open: true, message: 'Image uploaded successfully', severity: 'success' });
+      // Auto-open crop dialog for achievements
+      if (form.type === 'achievement') {
+        setCropDialogOpen(true);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Upload failed';
+      setSnackbar({ open: true, message: msg, severity: 'error' });
+    } finally {
+      setUploading(false);
+      // Reset the input so the same file can be re-selected
+      e.target.value = '';
+    }
+  };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -224,6 +280,12 @@ export default function MarketingContentPage() {
       setForm(emptyForm);
     }
     setErrors({});
+    // Load existing image crops if editing an achievement
+    if (item && item.type === 'achievement' && item.metadata?.image_crops) {
+      setImageCrops(item.metadata.image_crops as ImageCropsResult);
+    } else {
+      setImageCrops(null);
+    }
     setDialogOpen(true);
   };
 
@@ -232,6 +294,7 @@ export default function MarketingContentPage() {
     setEditingItem(null);
     setForm(emptyForm);
     setErrors({});
+    setImageCrops(null);
   };
 
   const buildPayload = () => {
@@ -256,6 +319,7 @@ export default function MarketingContentPage() {
         batch: form.batch || null,
         student_quote: form.student_quote_en || null,
         student_quote_ta: form.student_quote_ta || null,
+        image_crops: imageCrops || null,
       };
     } else if (form.type === 'important_date') {
       metadata = {
@@ -590,14 +654,112 @@ export default function MarketingContentPage() {
               />
             </Box>
 
-            <TextField
-              label="Image URL"
-              value={form.image_url}
-              onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-              fullWidth
-              placeholder="https://example.com/photo.jpg"
-              helperText="Paste a URL to the student photo or banner image"
-            />
+            {/* Image Upload */}
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Image
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                {form.image_url ? (
+                  <Box sx={{ position: 'relative' }}>
+                    <Avatar
+                      src={form.image_url}
+                      variant="rounded"
+                      sx={{ width: 80, height: 80 }}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={() => setForm({ ...form, image_url: '' })}
+                      sx={{
+                        position: 'absolute',
+                        top: -8,
+                        right: -8,
+                        bgcolor: 'error.main',
+                        color: 'white',
+                        '&:hover': { bgcolor: 'error.dark' },
+                        width: 24,
+                        height: 24,
+                      }}
+                    >
+                      <ClearIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Box>
+                ) : null}
+                <Box sx={{ flexGrow: 1 }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={uploading ? <CircularProgress size={18} /> : <CloudUploadIcon />}
+                    disabled={uploading}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {uploading ? 'Uploading...' : form.image_url ? 'Change Image' : 'Upload Image'}
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleImageUpload}
+                    />
+                  </Button>
+                  <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.5 }}>
+                    JPEG, PNG, WebP or GIF. Max 5MB.
+                  </Typography>
+                </Box>
+              </Box>
+              {uploading && <LinearProgress sx={{ mt: 1 }} />}
+
+              {/* Crop button + previews for achievements */}
+              {form.type === 'achievement' && form.image_url && (
+                <Box sx={{ mt: 1.5 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CropIcon />}
+                    onClick={() => setCropDialogOpen(true)}
+                    sx={{ textTransform: 'none', mb: 1 }}
+                  >
+                    {imageCrops ? 'Re-crop Image' : 'Crop for Display'}
+                  </Button>
+                  {imageCrops && (
+                    <Box sx={{ display: 'flex', gap: 1.5, mt: 1 }}>
+                      {imageCrops.square && (
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Box
+                            component="img"
+                            src={imageCrops.square}
+                            alt="Square crop"
+                            sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+                          />
+                          <Typography variant="caption" display="block" color="text.secondary">1:1</Typography>
+                        </Box>
+                      )}
+                      {imageCrops.banner && (
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Box
+                            component="img"
+                            src={imageCrops.banner}
+                            alt="Banner crop"
+                            sx={{ width: 100, height: 45, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+                          />
+                          <Typography variant="caption" display="block" color="text.secondary">2.2:1</Typography>
+                        </Box>
+                      )}
+                      {imageCrops.mobile && (
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Box
+                            component="img"
+                            src={imageCrops.mobile}
+                            alt="Mobile crop"
+                            sx={{ width: 80, height: 45, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+                          />
+                          <Typography variant="caption" display="block" color="text.secondary">16:9</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
 
             <Divider sx={{ my: 0.5 }} />
 
@@ -893,6 +1055,21 @@ export default function MarketingContentPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Image Crop Dialog */}
+      {form.image_url && (
+        <ImageCropDialog
+          open={cropDialogOpen}
+          imageUrl={form.image_url}
+          existingCrops={imageCrops}
+          onSave={(crops) => {
+            setImageCrops(crops);
+            setCropDialogOpen(false);
+            setSnackbar({ open: true, message: 'Image crops saved', severity: 'success' });
+          }}
+          onClose={() => setCropDialogOpen(false)}
+        />
+      )}
 
       <Snackbar
         open={snackbar.open}
