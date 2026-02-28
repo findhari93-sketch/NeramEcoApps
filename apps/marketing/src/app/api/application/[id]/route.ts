@@ -45,8 +45,8 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string; emai
     const decodedToken = await getAuth().verifyIdToken(token);
 
     const supabase = createAdminClient();
-    const { data: user } = await supabase
-      .from('users' as any)
+    const { data: user } = await (supabase
+      .from('users') as any)
       .select('id, email')
       .eq('firebase_uid', decodedToken.uid)
       .single() as { data: { id: string; email: string | null } | null };

@@ -67,8 +67,8 @@ export async function GET(
     const allowedPaymentModes = leadProfile.allowed_payment_modes || 'full_and_installment';
 
     // Get user contact info for Razorpay prefill
-    const { data: userRecord } = await supabase
-      .from('users' as any)
+    const { data: userRecord } = await (supabase
+      .from('users') as any)
       .select('email, phone, first_name, last_name')
       .eq('id', auth.userId)
       .single();

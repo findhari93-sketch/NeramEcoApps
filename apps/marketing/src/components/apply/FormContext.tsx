@@ -835,7 +835,7 @@ export function FormProvider({ children }: FormProviderProps) {
     ) => {
       setFormData((prev) => ({
         ...prev,
-        [section]: { ...prev[section], ...data },
+        [section]: { ...(prev[section] as object), ...(data as object) },
       }));
     },
     []

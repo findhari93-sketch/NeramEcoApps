@@ -147,10 +147,10 @@ export default function ReviewStep({ onEditStep }: ReviewStepProps) {
             <ReviewItem label="School Name" value={schoolStudentData?.school_name} />
             <ReviewItem label="Board" value={schoolStudentData?.board} />
             <ReviewItem label="School Type" value={getSchoolTypeLabel()} />
-            {schoolStudentData?.previous_year_percentage && (
+            {schoolStudentData?.previous_percentage && (
               <ReviewItem
                 label="Previous Year Percentage"
-                value={`${schoolStudentData.previous_year_percentage}%`}
+                value={`${schoolStudentData.previous_percentage}%`}
               />
             )}
           </>
@@ -165,8 +165,8 @@ export default function ReviewStep({ onEditStep }: ReviewStepProps) {
               label="Completed Grade Before Diploma"
               value={diplomaStudentData?.completed_grade === '10th' ? '10th Standard' : '12th Standard'}
             />
-            {diplomaStudentData?.marks_percentage && (
-              <ReviewItem label="Marks/Percentage" value={`${diplomaStudentData.marks_percentage}%`} />
+            {diplomaStudentData?.marks && (
+              <ReviewItem label="Marks/Percentage" value={`${diplomaStudentData.marks}%`} />
             )}
           </>
         );

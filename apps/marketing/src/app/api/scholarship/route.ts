@@ -43,8 +43,8 @@ async function verifyAndGetUser(req: NextRequest) {
   const decodedToken = await getAuth().verifyIdToken(token);
   const adminClient = getSupabaseAdminClient();
 
-  const { data: user } = await adminClient
-    .from('users' as any)
+  const { data: user } = await (adminClient
+    .from('users') as any)
     .select('id, name, email, phone')
     .eq('firebase_uid', decodedToken.uid)
     .single();

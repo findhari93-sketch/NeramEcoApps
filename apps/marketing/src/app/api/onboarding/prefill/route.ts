@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     const adminClient = getSupabaseAdminClient();
 
     // Look up user
-    const { data: user } = await adminClient
-      .from('users' as any)
+    const { data: user } = await (adminClient
+      .from('users') as any)
       .select('id')
       .eq('firebase_uid', decodedToken.uid)
       .single();

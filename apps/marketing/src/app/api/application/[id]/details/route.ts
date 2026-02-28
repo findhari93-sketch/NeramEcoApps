@@ -67,8 +67,8 @@ export async function GET(
         .from('cashback_claims' as any)
         .select('*')
         .eq('lead_profile_id', id),
-      supabase
-        .from('users' as any)
+      (supabase
+        .from('users') as any)
         .select('first_name, last_name, email, phone')
         .eq('id', auth.userId)
         .single(),

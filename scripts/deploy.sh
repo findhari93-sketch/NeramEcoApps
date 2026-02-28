@@ -201,13 +201,26 @@ deploy_env() {
   local target_branch=""
   local supabase_ref=""
 
+  local db_password=""
+
   if [[ "$env_name" == "staging" ]]; then
     target_branch="$STAGING_BRANCH"
     supabase_ref="$STAGING_SUPABASE"
+    # Load staging DB password from .env.staging
+    if [[ -f ".env.staging" ]]; then
+      db_password=$(grep -E '^SUPABASE_DB_PASSWORD=' .env.staging 2>/dev/null | cut -d'=' -f2-)
+    fi
   else
     target_branch="$PRODUCTION_BRANCH"
     supabase_ref="$PRODUCTION_SUPABASE"
+    # Load production DB password from .env.production
+    if [[ -f ".env.production" ]]; then
+      db_password=$(grep -E '^SUPABASE_DB_PASSWORD=' .env.production 2>/dev/null | cut -d'=' -f2-)
+    fi
   fi
+
+  # Fall back to env var if not found in file
+  db_password="${db_password:-$SUPABASE_DB_PASSWORD}"
 
   echo -e "\n${BLUE}========================================${NC}"
   echo -e "${BLUE}  Deploying to ${env_name^^}${NC}"
@@ -217,10 +230,10 @@ deploy_env() {
   # --- Supabase Migrations ---
   if [[ "$SKIP_DB" == false ]]; then
     echo -e "\n${YELLOW}--- Supabase: Linking project ($supabase_ref) ---${NC}"
-    npx supabase link --project-ref "$supabase_ref" ${SUPABASE_DB_PASSWORD:+--password "$SUPABASE_DB_PASSWORD"}
+    npx supabase link --project-ref "$supabase_ref" ${db_password:+--password "$db_password"}
 
     echo -e "${YELLOW}--- Supabase: Pushing migrations ---${NC}"
-    if npx supabase db push ${SUPABASE_DB_PASSWORD:+--password "$SUPABASE_DB_PASSWORD"}; then
+    if npx supabase db push ${db_password:+--password "$db_password"}; then
       echo -e "${GREEN}Database migrations applied successfully${NC}"
     else
       echo -e "${YELLOW}Warning: Database migration had issues (may already be up to date)${NC}"

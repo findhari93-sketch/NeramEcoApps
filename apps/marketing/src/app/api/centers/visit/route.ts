@@ -39,8 +39,8 @@ async function tryGetUserId(request: NextRequest): Promise<string | undefined> {
     const decodedToken = await getAuth().verifyIdToken(token);
 
     const supabase = createAdminClient();
-    const { data: user } = await supabase
-      .from('users' as any)
+    const { data: user } = await (supabase
+      .from('users') as any)
       .select('id')
       .eq('firebase_uid', decodedToken.uid)
       .single();

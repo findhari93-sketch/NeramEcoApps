@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
     const adminClient = getSupabaseAdminClient();
 
     // Look up user
-    const { data: user } = await adminClient
-      .from('users' as any)
+    const { data: user } = await (adminClient
+      .from('users') as any)
       .select('id, name, email, phone')
       .eq('firebase_uid', decodedToken.uid)
       .single();

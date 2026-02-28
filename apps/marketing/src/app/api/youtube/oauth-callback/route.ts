@@ -189,8 +189,8 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
 
     // Find or create user
-    const { data: existingUser } = await supabase
-      .from('users' as any)
+    const { data: existingUser } = await (supabase
+      .from('users') as any)
       .select('*')
       .eq('email', userInfo.email)
       .single() as { data: { id: string; google_id?: string } | null };
@@ -201,15 +201,15 @@ export async function GET(request: NextRequest) {
       userId = existingUser.id;
       // Update Google ID if not set
       if (!existingUser.google_id) {
-        await supabase
-          .from('users' as any)
+        await (supabase
+          .from('users') as any)
           .update({ google_id: userInfo.id } as never)
           .eq('id', existingUser.id);
       }
     } else {
       // Create new user
-      const { data: newUser, error: createError } = await supabase
-        .from('users' as any)
+      const { data: newUser, error: createError } = await (supabase
+        .from('users') as any)
         .insert({
           email: userInfo.email,
           name: userInfo.name,

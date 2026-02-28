@@ -45,8 +45,8 @@ async function tryVerifyToken(request: NextRequest): Promise<{ userId: string } 
     const decodedToken = await getAuth().verifyIdToken(token);
 
     const supabase = createAdminClient();
-    const { data: user } = await supabase
-      .from('users' as any)
+    const { data: user } = await (supabase
+      .from('users') as any)
       .select('id')
       .eq('firebase_uid', decodedToken.uid)
       .single();

@@ -85,7 +85,7 @@ function EnrolledRefundInfo({ leadProfileId }: { leadProfileId: string }) {
 
     async function fetchData() {
       try {
-        const token = await user!.getIdToken();
+        const token = await (user!.raw as any).getIdToken();
         const res = await fetch(`/api/payment/details/${leadProfileId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });

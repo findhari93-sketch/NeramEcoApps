@@ -87,9 +87,9 @@ async function sendSubmissionEmails(
       location,
       hybridLearning: application.hybrid_learning_accepted || false,
       learningMode: application.learning_mode || 'hybrid',
-      center: application.selected_center_id ? 'Center Selected' : null,
+      center: application.selected_center_id ? 'Center Selected' : undefined,
       source: application.source || 'website_form',
-      utmSource: application.utm_source || null,
+      utmSource: application.utm_source || undefined,
       submittedAt,
       academicInfo,
     });
@@ -248,8 +248,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       if (draftApplication) {
         // Update existing draft
         try {
-          const { data, error } = await supabase
-            .from('lead_profiles' as any)
+          const { data, error } = await (supabase
+            .from('lead_profiles') as any)
             .update(applicationData)
             .eq('id', draftApplication.id)
             .select()
@@ -351,7 +351,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
 
     // Update user's first_name if provided
     if (body.first_name) {
-      await supabase.from('users' as any).update({ first_name: body.first_name }).eq('id', auth.userId);
+      await (supabase.from('users') as any).update({ first_name: body.first_name }).eq('id', auth.userId);
     }
 
     // Send confirmation emails and dispatch notifications if submitting
@@ -436,8 +436,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Applicat
     const supabase = createAdminClient();
 
     // Verify ownership
-    const { data: existing, error: fetchError } = await supabase
-      .from('lead_profiles' as any)
+    const { data: existing, error: fetchError } = await (supabase
+      .from('lead_profiles') as any)
       .select('id, user_id, status')
       .eq('id', applicationId)
       .single();
@@ -491,8 +491,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Applicat
 
     updateData.updated_at = new Date().toISOString();
 
-    const { data: updated, error: updateError } = await supabase
-      .from('lead_profiles' as any)
+    const { data: updated, error: updateError } = await (supabase
+      .from('lead_profiles') as any)
       .update(updateData)
       .eq('id', applicationId)
       .select()
@@ -508,7 +508,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Applicat
 
     // Update user's first_name if provided
     if (body.first_name) {
-      await supabase.from('users' as any).update({ first_name: body.first_name }).eq('id', auth.userId);
+      await (supabase.from('users') as any).update({ first_name: body.first_name }).eq('id', auth.userId);
     }
 
     return NextResponse.json({ success: true, data: updated });
@@ -591,8 +591,8 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Applica
     const supabase = createAdminClient();
 
     // Verify ownership
-    const { data: existing, error: fetchError } = await supabase
-      .from('lead_profiles' as any)
+    const { data: existing, error: fetchError } = await (supabase
+      .from('lead_profiles') as any)
       .select('id, user_id, status')
       .eq('id', applicationId)
       .is('deleted_at', null)
