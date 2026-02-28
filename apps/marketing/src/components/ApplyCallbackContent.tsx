@@ -233,7 +233,7 @@ export default function ApplyCallbackContent() {
               sx={{
                 p: { xs: 3, md: 5 },
                 textAlign: 'center',
-                borderRadius: 3,
+                borderRadius: 1,
                 border: '1px solid',
                 borderColor: 'success.light',
               }}

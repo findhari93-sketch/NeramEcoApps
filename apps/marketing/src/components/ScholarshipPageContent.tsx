@@ -98,8 +98,8 @@ export default function ScholarshipPageContent() {
     if (authLoading) {
       return (
         <Box sx={{ py: 6 }}>
-          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 2, mb: 2 }} />
-          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 1, mb: 2 }} />
+          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
         </Box>
       );
     }

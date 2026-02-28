@@ -51,7 +51,7 @@ export default function LoginPage() {
       elevation={3}
       sx={{
         p: { xs: 3, md: 4 },
-        borderRadius: 2,
+        borderRadius: 1.5,
       }}
     >
       {/* YouTube Subscribe Banner */}

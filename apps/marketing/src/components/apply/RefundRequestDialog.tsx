@@ -85,7 +85,7 @@ export default function RefundRequestDialog({
       <Box
         sx={{
           bgcolor: '#FFF3E0',
-          borderRadius: 2,
+          borderRadius: 1,
           p: 2,
           mb: 2.5,
           border: '1px solid',
@@ -172,13 +172,13 @@ export default function RefundRequestDialog({
         onOpen={() => {}}
         disableSwipeToOpen
         PaperProps={{
-          sx: { borderRadius: '16px 16px 0 0', maxHeight: '90vh' },
+          sx: { borderRadius: '12px 12px 0 0', maxHeight: '90vh' },
         }}
       >
         <Box sx={{ p: 2 }}>
           {/* Drag handle */}
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
-            <Box sx={{ width: 40, height: 4, bgcolor: 'grey.400', borderRadius: 2 }} />
+            <Box sx={{ width: 40, height: 4, bgcolor: 'grey.400', borderRadius: 1 }} />
           </Box>
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>

@@ -65,7 +65,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
           }}
         >
           <span>IIT/NIT Faculty</span>
-          <span>95%+ Success Rate</span>
+          <span>99.9% Success Rate</span>
           <span>Online & Offline</span>
         </div>
       </div>

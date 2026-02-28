@@ -87,7 +87,7 @@ export default function Footer() {
               Neram Classes
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, opacity: 0.9 }}>
-              India&apos;s leading NATA & JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 95%+ success rate.
+              India&apos;s leading NATA & JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 99.9% success rate.
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9 }}>
               Bangalore, Karnataka, India

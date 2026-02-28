@@ -155,7 +155,7 @@ export default function WelcomePage() {
           px: 3,
           mb: 3,
           background: 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)',
-          borderRadius: 3,
+          borderRadius: 1.5,
         }}
       >
         <Box
@@ -184,7 +184,7 @@ export default function WelcomePage() {
 
       {/* Payment Summary */}
       {info && (
-        <Paper elevation={0} sx={{ p: 2.5, mb: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+        <Paper elevation={0} sx={{ p: 2.5, mb: 3, border: '1px solid #e0e0e0', borderRadius: 1 }}>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Enrollment Details</Typography>
           <Stack spacing={0.75}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -231,7 +231,7 @@ export default function WelcomePage() {
             elevation={0}
             sx={{
               p: 2.5,
-              borderRadius: 2,
+              borderRadius: 1,
               border: '1px solid',
               borderColor: step.done ? '#C8E6C9' : '#e0e0e0',
               bgcolor: step.done ? '#F1F8E9' : 'white',
@@ -240,7 +240,7 @@ export default function WelcomePage() {
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
               <Box
                 sx={{
-                  width: 40, height: 40, borderRadius: 2,
+                  width: 40, height: 40, borderRadius: 1,
                   bgcolor: step.done ? '#E8F5E9' : `${step.color}15`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: step.done ? 'success.main' : step.color,
@@ -282,7 +282,7 @@ export default function WelcomePage() {
         variant="contained"
         fullWidth
         onClick={() => router.push('/dashboard')}
-        sx={{ mt: 3, py: 1.5, fontWeight: 600, borderRadius: 2 }}
+        sx={{ mt: 3, py: 1.5, fontWeight: 600, borderRadius: 1 }}
       >
         Go to Dashboard
       </Button>

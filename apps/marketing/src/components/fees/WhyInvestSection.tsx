@@ -81,7 +81,7 @@ export default function WhyInvestSection({ t }: WhyInvestSectionProps) {
               variant="outlined"
               sx={{
                 height: '100%',
-                borderRadius: 3,
+                borderRadius: 1,
                 transition: 'transform 0.2s, box-shadow 0.2s',
                 '&:hover': {
                   transform: 'translateY(-2px)',

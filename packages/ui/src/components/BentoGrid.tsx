@@ -58,7 +58,7 @@ const StyledBentoItem = styled(Box)<{
 }>(({ theme, span, rowSpan, featured, clickable }) => ({
   gridColumn: `span ${span}`,
   gridRow: `span ${rowSpan}`,
-  borderRadius: theme.shape.borderRadius * 2,
+  borderRadius: theme.shape.borderRadius,
   backgroundColor: m3LightScheme.surfaceContainerLow,
   border: `1px solid ${m3LightScheme.outlineVariant}`,
   padding: theme.spacing(3),

@@ -388,7 +388,7 @@ export default function LoginModal({
       TransitionComponent={isMobile ? SlideTransition : undefined}
       sx={{
         '& .MuiDialog-paper': {
-          borderRadius: isMobile ? '16px 16px 0 0' : 2,
+          borderRadius: isMobile ? '12px 12px 0 0' : 1.5,
           m: isMobile ? 0 : 2,
           position: isMobile ? 'fixed' : 'relative',
           bottom: isMobile ? 0 : 'auto',

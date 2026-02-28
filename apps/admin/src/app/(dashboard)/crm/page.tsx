@@ -154,7 +154,7 @@ export default function CRMPage() {
             sx={{
               width: 42,
               height: 42,
-              borderRadius: 2,
+              borderRadius: 1,
               bgcolor: 'primary.main',
               display: 'flex',
               alignItems: 'center',
@@ -197,7 +197,7 @@ export default function CRMPage() {
 
       {/* Error */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
           {error}
         </Alert>
       )}
@@ -216,7 +216,7 @@ export default function CRMPage() {
       <Paper
         elevation={0}
         sx={{
-          borderRadius: 2,
+          borderRadius: 1,
           border: '1px solid',
           borderColor: 'grey.200',
           overflow: 'hidden',

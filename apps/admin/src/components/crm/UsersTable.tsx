@@ -200,7 +200,7 @@ export default function UsersTable({
                 color: config?.color || '#9E9E9E',
                 fontWeight: 600,
                 fontSize: 11,
-                borderRadius: 1.5,
+                borderRadius: 0.75,
                 border: '1px solid',
                 borderColor: `${config?.color || '#9E9E9E'}30`,
                 height: 26,
@@ -244,7 +244,7 @@ export default function UsersTable({
               size="small"
               color={colorMap[status] || 'default'}
               variant="outlined"
-              sx={{ textTransform: 'capitalize', fontSize: 11, height: 24, borderRadius: 1.5 }}
+              sx={{ textTransform: 'capitalize', fontSize: 11, height: 24, borderRadius: 0.75 }}
             />
           );
         },
@@ -303,7 +303,7 @@ export default function UsersTable({
                   fontWeight: 600,
                   fontSize: 11,
                   height: 24,
-                  borderRadius: 1.5,
+                  borderRadius: 0.75,
                 }}
               />
             );
@@ -318,7 +318,7 @@ export default function UsersTable({
                 fontWeight: 600,
                 fontSize: 11,
                 height: 24,
-                borderRadius: 1.5,
+                borderRadius: 0.75,
               }}
             />
           );
@@ -481,7 +481,7 @@ export default function UsersTable({
             size="small"
             startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />}
             onClick={() => handleExportCsv(selectedRows.map((r) => r.original))}
-            sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: 13 }}
+            sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
           >
             Export CSV
           </Button>
@@ -496,7 +496,7 @@ export default function UsersTable({
                 onBulkDeleteRequest(selectedRows.map((r) => r.original));
               }
             }}
-            sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: 13 }}
+            sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
           >
             Delete
           </Button>
@@ -615,7 +615,7 @@ export default function UsersTable({
       sx: {
         minWidth: 400,
         '& .MuiOutlinedInput-root': {
-          borderRadius: 2,
+          borderRadius: 1,
           bgcolor: 'grey.50',
           fontSize: 14,
           '&:hover': { bgcolor: 'grey.100' },

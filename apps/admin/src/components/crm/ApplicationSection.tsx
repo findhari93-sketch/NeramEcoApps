@@ -194,7 +194,7 @@ export default function ApplicationSection({
 
   if (!leadProfile) {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
           <AssignmentIcon sx={{ color: 'primary.main', fontSize: 20 }} />
           <Typography variant="subtitle1" fontWeight={700}>Application</Typography>
@@ -384,7 +384,7 @@ export default function ApplicationSection({
   const statusConfig = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.draft;
 
   return (
-    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <AssignmentIcon sx={{ color: 'primary.main', fontSize: 20 }} />
         <Typography variant="subtitle1" fontWeight={700}>Application</Typography>
@@ -488,7 +488,7 @@ export default function ApplicationSection({
             <Box
               sx={{
                 p: 2,
-                borderRadius: 1.5,
+                borderRadius: 0.75,
                 bgcolor: effectiveStatus === 'enrolled' ? '#E8F5E9' : '#FFF3E0',
                 border: '1px solid',
                 borderColor: effectiveStatus === 'enrolled' ? '#C8E6C9' : '#FFE0B2',
@@ -600,7 +600,7 @@ export default function ApplicationSection({
                 color="success"
                 onClick={() => handleContactedStatus('talked')}
                 disabled={contactedLoading}
-                sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: 11, fontWeight: 600, minWidth: 0, px: 1.5 }}
+                sx={{ borderRadius: 0.75, textTransform: 'none', fontSize: 11, fontWeight: 600, minWidth: 0, px: 1.5 }}
               >
                 Talked
               </Button>
@@ -610,7 +610,7 @@ export default function ApplicationSection({
                 color="warning"
                 onClick={() => handleContactedStatus('unreachable')}
                 disabled={contactedLoading}
-                sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: 11, fontWeight: 600, minWidth: 0, px: 1.5 }}
+                sx={{ borderRadius: 0.75, textTransform: 'none', fontSize: 11, fontWeight: 600, minWidth: 0, px: 1.5 }}
               >
                 Unreachable
               </Button>
@@ -620,7 +620,7 @@ export default function ApplicationSection({
                 color="info"
                 onClick={() => handleContactedStatus('callback_scheduled')}
                 disabled={contactedLoading}
-                sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: 11, fontWeight: 600, minWidth: 0, px: 1.5 }}
+                sx={{ borderRadius: 0.75, textTransform: 'none', fontSize: 11, fontWeight: 600, minWidth: 0, px: 1.5 }}
               >
                 Callback Scheduled
               </Button>
@@ -638,7 +638,7 @@ export default function ApplicationSection({
                 size="small"
                 startIcon={<EditIcon sx={{ fontSize: 14 }} />}
                 onClick={() => setEditDialogOpen(true)}
-                sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: 11, fontWeight: 600, px: 1.5 }}
+                sx={{ borderRadius: 0.75, textTransform: 'none', fontSize: 11, fontWeight: 600, px: 1.5 }}
               >
                 Edit Application
               </Button>
@@ -649,7 +649,7 @@ export default function ApplicationSection({
                   color="error"
                   startIcon={<DeleteIcon sx={{ fontSize: 14 }} />}
                   onClick={() => setDeleteDialogOpen(true)}
-                  sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: 11, fontWeight: 600, px: 1.5, ml: 'auto' }}
+                  sx={{ borderRadius: 0.75, textTransform: 'none', fontSize: 11, fontWeight: 600, px: 1.5, ml: 'auto' }}
                 >
                   Delete
                 </Button>
@@ -671,7 +671,7 @@ export default function ApplicationSection({
             <InfoRow label="Reviewed At" value={leadProfile.reviewed_at ? formatTimestamp(leadProfile.reviewed_at) : null} />
             <InfoRow label="Admin Notes" value={leadProfile.admin_notes} />
             {leadProfile.rejection_reason && (
-              <Box sx={{ mt: 1, p: 1.5, borderRadius: 1.5, bgcolor: '#FFEBEE', border: '1px solid #FFCDD2' }}>
+              <Box sx={{ mt: 1, p: 1.5, borderRadius: 0.75, bgcolor: '#FFEBEE', border: '1px solid #FFCDD2' }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: '#C62828', fontSize: 11, letterSpacing: 0.3 }}>
                   Rejection Reason
                 </Typography>
@@ -693,7 +693,7 @@ export default function ApplicationSection({
                 Review Action
               </Typography>
             </Box>
-            {actionError && !approveDialogOpen && !rejectDialogOpen && !deleteDialogOpen && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 1.5, fontSize: 12.5 }}>{actionError}</Alert>}
+            {actionError && !approveDialogOpen && !rejectDialogOpen && !deleteDialogOpen && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 0.75, fontSize: 12.5 }}>{actionError}</Alert>}
             <Box sx={{ display: 'flex', gap: 1.5 }}>
               <Button
                 variant="contained"
@@ -702,7 +702,7 @@ export default function ApplicationSection({
                 onClick={() => setApproveDialogOpen(true)}
                 disabled={actionLoading}
                 size="small"
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 2.5, '&:hover': { boxShadow: 'none' } }}
+                sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 2.5, '&:hover': { boxShadow: 'none' } }}
               >
                 Approve
               </Button>
@@ -713,7 +713,7 @@ export default function ApplicationSection({
                 onClick={() => setRejectDialogOpen(true)}
                 disabled={actionLoading}
                 size="small"
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 2.5 }}
+                sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, px: 2.5 }}
               >
                 Reject
               </Button>
@@ -728,7 +728,7 @@ export default function ApplicationSection({
         onClose={() => { setApproveDialogOpen(false); resetApproveForm(); }}
         maxWidth="sm"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1 }}>
           Approve Application & Assign Fee
@@ -743,7 +743,7 @@ export default function ApplicationSection({
               fullWidth
               size="small"
               helperText={feeLoading ? 'Loading fee structures...' : 'Select a fee structure to auto-fill pricing'}
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             >
               <MenuItem value="">
                 <em>-- Select Fee Structure --</em>
@@ -757,7 +757,7 @@ export default function ApplicationSection({
             </TextField>
 
             {selectedFeeStructure && (
-              <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+              <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, fontSize: 13 }}>Fee Breakdown</Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12.5 }}>Full Fee</Typography>
@@ -818,7 +818,7 @@ export default function ApplicationSection({
                   ? 'Student can only pay the full amount at once'
                   : 'Student can choose between full payment or installments'
               }
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             >
               <MenuItem value="full_only">Full Payment Only</MenuItem>
               <MenuItem value="full_and_installment">Both Options (Full + Installment)</MenuItem>
@@ -826,7 +826,7 @@ export default function ApplicationSection({
 
             {/* Installment Configuration - shown when both options allowed */}
             <Collapse in={allowedPaymentModes === 'full_and_installment'}>
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: '#F5F5F5', mb: 0 }}>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 1, bgcolor: '#F5F5F5', mb: 0 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 0.75 }}>
                   <ReceiptLongIcon sx={{ fontSize: 16, color: 'primary.main' }} />
                   Installment Configuration
@@ -847,7 +847,7 @@ export default function ApplicationSection({
                       ? `Fee structure default: ${formatCurrency(selectedFeeStructure.installment_1_amount)}`
                       : 'Auto: 55% of final fee'}
                     InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                   />
                   <TextField
                     label="2nd Installment (Rs.)"
@@ -861,7 +861,7 @@ export default function ApplicationSection({
                     size="small"
                     helperText="Remainder of the final fee"
                     InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }}
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                   />
                 </Box>
                 <TextField
@@ -872,7 +872,7 @@ export default function ApplicationSection({
                   fullWidth
                   size="small"
                   helperText="Number of days after enrollment for the 2nd installment"
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                 />
               </Paper>
             </Collapse>
@@ -895,7 +895,7 @@ export default function ApplicationSection({
                 }}
                 fullWidth
                 size="small"
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
               />
               <TextField
                 label="Discount (Rs.)"
@@ -909,7 +909,7 @@ export default function ApplicationSection({
                 }}
                 fullWidth
                 size="small"
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
               />
             </Box>
 
@@ -924,7 +924,7 @@ export default function ApplicationSection({
               fullWidth
               size="small"
               helperText="This value will be saved as the student's fee"
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             />
 
             <Divider />
@@ -940,7 +940,7 @@ export default function ApplicationSection({
               fullWidth
               size="small"
               helperText="Discount given to student if they pay in full (default Rs. 5,000)"
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             />
 
             <TextField
@@ -951,7 +951,7 @@ export default function ApplicationSection({
               fullWidth
               size="small"
               helperText="Recommend full or installment to the student"
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             >
               <MenuItem value="full">Full Payment (recommended)</MenuItem>
               <MenuItem value="installment">Installment</MenuItem>
@@ -959,7 +959,7 @@ export default function ApplicationSection({
 
             {/* Inline Coupon Generation */}
             <Divider />
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: generateCoupon ? 'primary.main' : 'grey.300' }}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 1, border: '1px solid', borderColor: generateCoupon ? 'primary.main' : 'grey.300' }}>
               <FormControlLabel
                 control={
                   <Switch
@@ -981,7 +981,7 @@ export default function ApplicationSection({
               />
               <Collapse in={generateCoupon}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 0.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: '#F3E5F5', borderRadius: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, bgcolor: '#F3E5F5', borderRadius: 0.75 }}>
                     <ConfirmationNumberIcon sx={{ fontSize: 16, color: '#7B1FA2' }} />
                     <Typography variant="body2" sx={{ fontSize: 12, color: '#6A1B9A', fontWeight: 600 }}>
                       Coupon code will be auto-generated on approval
@@ -996,7 +996,7 @@ export default function ApplicationSection({
                       onChange={(e) => setCouponDiscountType(e.target.value as 'fixed' | 'percentage')}
                       fullWidth
                       size="small"
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                     >
                       <MenuItem value="fixed">Fixed Amount (Rs.)</MenuItem>
                       <MenuItem value="percentage">Percentage (%)</MenuItem>
@@ -1015,7 +1015,7 @@ export default function ApplicationSection({
                           </InputAdornment>
                         ),
                       }}
-                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                     />
                   </Box>
 
@@ -1027,7 +1027,7 @@ export default function ApplicationSection({
                     fullWidth
                     size="small"
                     helperText="Coupon expires after this many days from creation"
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                   />
 
                   <TextField
@@ -1037,11 +1037,11 @@ export default function ApplicationSection({
                     fullWidth
                     size="small"
                     placeholder="e.g., Special discount for early enrollment"
-                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                   />
 
                   {couponDiscountValue > 0 && (
-                    <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#FFF3E0', borderRadius: 1.5, border: '1px solid #FFE0B2' }}>
+                    <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#FFF3E0', borderRadius: 0.75, border: '1px solid #FFE0B2' }}>
                       <Typography variant="body2" sx={{ fontSize: 12, color: '#E65100', fontWeight: 600 }}>
                         Coupon Preview: {couponDiscountType === 'fixed'
                           ? `${formatCurrency(couponDiscountValue)} off`
@@ -1057,7 +1057,7 @@ export default function ApplicationSection({
 
             {/* Student-Facing Preview */}
             {finalFee > 0 && (
-              <Paper variant="outlined" sx={{ p: 2, bgcolor: '#E8F5E9', borderRadius: 2, border: '1px solid #C8E6C9' }}>
+              <Paper variant="outlined" sx={{ p: 2, bgcolor: '#E8F5E9', borderRadius: 1, border: '1px solid #C8E6C9' }}>
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700, fontSize: 12, color: '#1B5E20', letterSpacing: 0.5 }}>
                   STUDENT WILL SEE
                 </Typography>
@@ -1092,16 +1092,16 @@ export default function ApplicationSection({
               onChange={(e) => setApproveNotes(e.target.value)}
               fullWidth
               size="small"
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             />
 
-            {actionError && <Alert severity="error" sx={{ borderRadius: 1.5 }}>{actionError}</Alert>}
+            {actionError && <Alert severity="error" sx={{ borderRadius: 0.75 }}>{actionError}</Alert>}
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button
             onClick={() => { setApproveDialogOpen(false); resetApproveForm(); }}
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500 }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 500 }}
           >
             Cancel
           </Button>
@@ -1110,7 +1110,7 @@ export default function ApplicationSection({
             color="success"
             onClick={handleApproveSubmit}
             disabled={actionLoading}
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
           >
             {actionLoading ? 'Approving...' : 'Approve Application'}
           </Button>
@@ -1123,7 +1123,7 @@ export default function ApplicationSection({
         onClose={() => { setRejectDialogOpen(false); setRejectionReason(''); setActionError(''); }}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1, color: 'error.main' }}>
           Reject Application
@@ -1140,15 +1140,15 @@ export default function ApplicationSection({
               required
               placeholder="Explain why the application is being rejected..."
               size="small"
-              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             />
-            {actionError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: 1.5 }}>{actionError}</Alert>}
+            {actionError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: 0.75 }}>{actionError}</Alert>}
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button
             onClick={() => { setRejectDialogOpen(false); setRejectionReason(''); }}
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500 }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 500 }}
           >
             Cancel
           </Button>
@@ -1157,7 +1157,7 @@ export default function ApplicationSection({
             color="error"
             onClick={handleRejectSubmit}
             disabled={actionLoading || !rejectionReason.trim()}
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
           >
             {actionLoading ? 'Rejecting...' : 'Reject Application'}
           </Button>
@@ -1170,7 +1170,7 @@ export default function ApplicationSection({
         onClose={() => { setDeleteDialogOpen(false); setDeletionReason(''); setActionError(''); }}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1, color: 'error.main' }}>
           Delete Application
@@ -1189,14 +1189,14 @@ export default function ApplicationSection({
             required
             placeholder="Explain why this application is being deleted..."
             size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           />
-          {actionError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: 1.5 }}>{actionError}</Alert>}
+          {actionError && <Alert severity="error" sx={{ mt: 1.5, borderRadius: 0.75 }}>{actionError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button
             onClick={() => { setDeleteDialogOpen(false); setDeletionReason(''); }}
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500 }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 500 }}
           >
             Cancel
           </Button>
@@ -1205,7 +1205,7 @@ export default function ApplicationSection({
             color="error"
             onClick={handleDeleteSubmit}
             disabled={actionLoading || !deletionReason.trim()}
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
           >
             {actionLoading ? 'Deleting...' : 'Delete Application'}
           </Button>

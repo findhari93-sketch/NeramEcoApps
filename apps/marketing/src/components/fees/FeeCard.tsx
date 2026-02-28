@@ -56,7 +56,7 @@ export default function FeeCard({
         position: 'relative',
         borderColor: isHighlighted ? 'primary.main' : 'divider',
         borderWidth: isHighlighted ? 2 : 1,
-        borderRadius: 3,
+        borderRadius: 1,
         overflow: 'visible',
         transition: 'transform 0.2s, box-shadow 0.2s',
         '&:hover': {
@@ -156,7 +156,7 @@ export default function FeeCard({
                     sx={{
                       p: 1.5,
                       bgcolor: 'primary.50',
-                      borderRadius: 1.5,
+                      borderRadius: 0.75,
                       border: 1,
                       borderColor: 'primary.100',
                     }}
@@ -172,7 +172,7 @@ export default function FeeCard({
                     sx={{
                       p: 1.5,
                       bgcolor: 'grey.50',
-                      borderRadius: 1.5,
+                      borderRadius: 0.75,
                       border: 1,
                       borderColor: 'grey.200',
                     }}
@@ -249,7 +249,7 @@ export default function FeeCard({
               minHeight: 48,
               fontWeight: 600,
               fontSize: '1rem',
-              borderRadius: 2,
+              borderRadius: 1,
               bgcolor: '#2E7D32',
               '&:hover': { bgcolor: '#1B5E20' },
             }}
@@ -268,7 +268,7 @@ export default function FeeCard({
               minHeight: 48,
               fontWeight: 600,
               fontSize: '1rem',
-              borderRadius: 2,
+              borderRadius: 1,
             }}
           >
             {t('applyNow')}

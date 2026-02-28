@@ -190,7 +190,7 @@ export default function ReceiptDownload({
       onClick={generateReceipt}
       disabled={generating}
       startIcon={generating ? <CircularProgress size={16} /> : <DownloadIcon />}
-      sx={{ borderRadius: 2, fontWeight: 600 }}
+      sx={{ borderRadius: 1, fontWeight: 600 }}
     >
       {generating ? 'Generating...' : 'Download Receipt'}
     </Button>

@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!location) return {};
 
   const title = `Best NATA Coaching in ${location.cityDisplay} 2026 - Online & Offline Classes`;
-  const description = `Join the #1 NATA coaching in ${location.cityDisplay}, ${location.stateDisplay}. IIT/NIT alumni faculty, comprehensive study material, online & offline classes. 95%+ success rate. Enroll for NATA 2026!`;
+  const description = `Join the #1 NATA coaching in ${location.cityDisplay}, ${location.stateDisplay}. IIT/NIT alumni faculty, comprehensive study material, online & offline classes. 99.9% success rate. Enroll for NATA 2026!`;
 
   return {
     title,
@@ -207,7 +207,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
               { label: 'Mode', value: isGulf ? 'Online Only' : 'Online & Offline' },
               { label: 'Batch Size', value: '20-25 Students' },
               { label: 'Duration', value: '3-12 Months' },
-              { label: 'Success Rate', value: '95%+' },
+              { label: 'Success Rate', value: '99.9%' },
             ].map((item, index) => (
               <Grid item xs={6} md={3} key={index}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>

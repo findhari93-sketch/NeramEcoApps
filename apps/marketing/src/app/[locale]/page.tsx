@@ -14,7 +14,7 @@ export async function generateMetadata({
   return {
     title: 'Best NATA Coaching in India 2026 | Online & Offline Architecture Entrance Preparation',
     description:
-      "India's #1 NATA and JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 95%+ success rate, comprehensive study materials. Online and offline classes across Tamil Nadu, India & Gulf countries. Free demo class available.",
+      "India's #1 NATA and JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 99.9% success rate, comprehensive study materials. Online and offline classes across Tamil Nadu, India & Gulf countries. Free demo class available.",
     keywords:
       'NATA coaching, best NATA coaching India, NATA preparation 2026, JEE Paper 2 coaching, architecture entrance exam, online NATA classes, NATA coaching Tamil Nadu, NATA coaching online, architecture entrance coaching India, NATA drawing classes, NATA mathematics coaching',
     alternates: {

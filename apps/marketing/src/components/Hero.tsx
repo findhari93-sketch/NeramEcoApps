@@ -132,7 +132,7 @@ export default function Hero() {
               </Box>
               <Box>
                 <Typography variant="h3" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  95%
+                  99.9%
                 </Typography>
                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
                   Success Rate
@@ -157,7 +157,7 @@ export default function Hero() {
                   width: '100%',
                   height: '100%',
                   bgcolor: 'rgba(255, 255, 255, 0.1)',
-                  borderRadius: 2,
+                  borderRadius: 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

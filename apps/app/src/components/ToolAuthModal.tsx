@@ -79,7 +79,7 @@ export default function ToolAuthModal({
       maxWidth="sm"
       fullWidth
       PaperProps={{
-        sx: { borderRadius: 2 },
+        sx: { borderRadius: 1.5 },
       }}
     >
       <DialogTitle sx={{ pb: 0 }}>

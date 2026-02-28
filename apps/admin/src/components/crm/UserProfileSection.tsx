@@ -134,7 +134,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
         mb: 3,
         border: '1px solid',
         borderColor: 'grey.200',
-        borderRadius: 2,
+        borderRadius: 1,
         overflow: 'hidden',
       }}
     >

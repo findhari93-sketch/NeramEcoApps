@@ -83,7 +83,7 @@ function DocumentPreview({ label, url }: { label: string; url: string | null }) 
         alignItems: 'center',
         border: '1px solid',
         borderColor: 'grey.200',
-        borderRadius: 2,
+        borderRadius: 1,
         p: 1.5,
         mr: 1.5,
         mb: 1,
@@ -94,7 +94,7 @@ function DocumentPreview({ label, url }: { label: string; url: string | null }) 
       }}
       onClick={() => window.open(url, '_blank')}
     >
-      <Box sx={{ width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'grey.50', borderRadius: 1.5, mb: 1 }}>
+      <Box sx={{ width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'grey.50', borderRadius: 0.75, mb: 1 }}>
         {isPdf
           ? <PictureAsPdfIcon sx={{ fontSize: 24, color: '#D32F2F' }} />
           : <Box component="img" src={url} alt={label} sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1 }} />
@@ -225,15 +225,15 @@ export default function ScholarshipSection({
   // State 1: Government school, NOT yet scholarship eligible
   if (isGovernmentSchool && !scholarshipEligible && !scholarship) {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader />
         <Box sx={{ p: 2.5 }}>
-          <Box sx={{ p: 2.5, bgcolor: '#E3F2FD', borderRadius: 2, border: '1px solid #BBDEFB', mb: 2 }}>
+          <Box sx={{ p: 2.5, bgcolor: '#E3F2FD', borderRadius: 1, border: '1px solid #BBDEFB', mb: 2 }}>
             <Typography variant="body2" sx={{ color: '#1565C0', fontSize: 12.5 }}>
               This student is from a government school and may be eligible for a scholarship.
             </Typography>
           </Box>
-          {actionError && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 1.5 }}>{actionError}</Alert>}
+          {actionError && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 0.75 }}>{actionError}</Alert>}
           <Button
             variant="contained"
             color="primary"
@@ -241,7 +241,7 @@ export default function ScholarshipSection({
             onClick={handleOpenScholarship}
             disabled={actionLoading}
             size="small"
-            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 2.5, '&:hover': { boxShadow: 'none' } }}
+            sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 2.5, '&:hover': { boxShadow: 'none' } }}
           >
             {actionLoading ? 'Opening...' : 'Open Scholarship'}
           </Button>
@@ -253,10 +253,10 @@ export default function ScholarshipSection({
   // State 2: Eligible pending
   if (scholarshipStatus === 'eligible_pending') {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status="eligible_pending" />} />
         <Box sx={{ p: 2.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, p: 2, bgcolor: '#FFF3E0', borderRadius: 2, border: '1px solid #FFE0B2' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, p: 2, bgcolor: '#FFF3E0', borderRadius: 1, border: '1px solid #FFE0B2' }}>
             <HourglassEmptyIcon sx={{ fontSize: 18, color: '#E65100' }} />
             <Typography variant="body2" sx={{ color: '#E65100', fontSize: 12.5 }}>
               Waiting for student to submit documents
@@ -286,7 +286,7 @@ export default function ScholarshipSection({
     ].filter((d) => d.url);
 
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status={scholarshipStatus} />} />
         <Box sx={{ p: 2.5 }}>
           <InfoRow label="School Name" value={scholarship.school_name} />
@@ -300,7 +300,7 @@ export default function ScholarshipSection({
           {scholarshipStatus === 'revision_requested' && scholarship.revision_notes && (
             <>
               <Divider sx={{ my: 1.5 }} />
-              <Box sx={{ p: 2, bgcolor: '#FFF3E0', borderRadius: 2, border: '1px solid #FFE0B2' }}>
+              <Box sx={{ p: 2, bgcolor: '#FFF3E0', borderRadius: 1, border: '1px solid #FFE0B2' }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: '#E65100', fontSize: 11, letterSpacing: 0.3 }}>
                   Previous Revision Notes
                 </Typography>
@@ -328,7 +328,7 @@ export default function ScholarshipSection({
 
           {/* Action buttons */}
           <Divider sx={{ my: 2 }} />
-          {actionError && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 1.5 }}>{actionError}</Alert>}
+          {actionError && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 0.75 }}>{actionError}</Alert>}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
             <GavelIcon sx={{ fontSize: 14, color: 'primary.main' }} />
             <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: 1, color: 'text.secondary', fontSize: 10.5 }}>
@@ -343,7 +343,7 @@ export default function ScholarshipSection({
               onClick={() => setApproveDialogOpen(true)}
               disabled={actionLoading}
               size="small"
-              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 2.5, '&:hover': { boxShadow: 'none' } }}
+              sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 2.5, '&:hover': { boxShadow: 'none' } }}
             >
               Approve
             </Button>
@@ -354,7 +354,7 @@ export default function ScholarshipSection({
               onClick={() => setRejectDialogOpen(true)}
               disabled={actionLoading}
               size="small"
-              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 2.5 }}
+              sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, px: 2.5 }}
             >
               Reject
             </Button>
@@ -365,14 +365,14 @@ export default function ScholarshipSection({
               onClick={() => setRevisionDialogOpen(true)}
               disabled={actionLoading}
               size="small"
-              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, px: 2.5 }}
+              sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, px: 2.5 }}
             >
               Request Revision
             </Button>
           </Box>
 
           {/* Approve Dialog */}
-          <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+          <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
             <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1 }}>Approve Scholarship</DialogTitle>
             <DialogContent>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
@@ -384,7 +384,7 @@ export default function ScholarshipSection({
                   fullWidth
                   size="small"
                   helperText="Default: Rs. 5,000. Adjust as needed."
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                 />
                 <TextField
                   label="Admin Notes (optional)"
@@ -394,18 +394,18 @@ export default function ScholarshipSection({
                   onChange={(e) => setApproveNotes(e.target.value)}
                   fullWidth
                   size="small"
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                 />
               </Box>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2.5 }}>
-              <Button onClick={() => setApproveDialogOpen(false)} sx={{ borderRadius: 2, textTransform: 'none' }}>Cancel</Button>
+              <Button onClick={() => setApproveDialogOpen(false)} sx={{ borderRadius: 1, textTransform: 'none' }}>Cancel</Button>
               <Button
                 variant="contained"
                 color="success"
                 onClick={() => handleReviewAction('approve')}
                 disabled={actionLoading || approvedFee <= 0}
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+                sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
               >
                 {actionLoading ? 'Approving...' : 'Approve'}
               </Button>
@@ -413,7 +413,7 @@ export default function ScholarshipSection({
           </Dialog>
 
           {/* Reject Dialog */}
-          <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+          <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
             <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1, color: 'error.main' }}>Reject Scholarship</DialogTitle>
             <DialogContent>
               <Box sx={{ mt: 1 }}>
@@ -427,18 +427,18 @@ export default function ScholarshipSection({
                   required
                   size="small"
                   placeholder="Explain why the scholarship is being rejected..."
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                 />
               </Box>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2.5 }}>
-              <Button onClick={() => setRejectDialogOpen(false)} sx={{ borderRadius: 2, textTransform: 'none' }}>Cancel</Button>
+              <Button onClick={() => setRejectDialogOpen(false)} sx={{ borderRadius: 1, textTransform: 'none' }}>Cancel</Button>
               <Button
                 variant="contained"
                 color="error"
                 onClick={() => handleReviewAction('reject')}
                 disabled={actionLoading || !rejectionReason.trim()}
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+                sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
               >
                 {actionLoading ? 'Rejecting...' : 'Reject'}
               </Button>
@@ -446,7 +446,7 @@ export default function ScholarshipSection({
           </Dialog>
 
           {/* Revision Dialog */}
-          <Dialog open={revisionDialogOpen} onClose={() => setRevisionDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 2 } }}>
+          <Dialog open={revisionDialogOpen} onClose={() => setRevisionDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
             <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1, color: 'warning.main' }}>Request Revision</DialogTitle>
             <DialogContent>
               <Box sx={{ mt: 1 }}>
@@ -460,18 +460,18 @@ export default function ScholarshipSection({
                   required
                   size="small"
                   placeholder="What documents or information need to be revised..."
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
                 />
               </Box>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2.5 }}>
-              <Button onClick={() => setRevisionDialogOpen(false)} sx={{ borderRadius: 2, textTransform: 'none' }}>Cancel</Button>
+              <Button onClick={() => setRevisionDialogOpen(false)} sx={{ borderRadius: 1, textTransform: 'none' }}>Cancel</Button>
               <Button
                 variant="contained"
                 color="warning"
                 onClick={() => handleReviewAction('request_revision')}
                 disabled={actionLoading || !revisionNotes.trim()}
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+                sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
               >
                 {actionLoading ? 'Requesting...' : 'Request Revision'}
               </Button>
@@ -485,10 +485,10 @@ export default function ScholarshipSection({
   // State 4: Approved
   if (scholarship && scholarshipStatus === 'approved') {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status="approved" />} />
         <Box sx={{ p: 2.5 }}>
-          <Box sx={{ p: 2, bgcolor: '#E8F5E9', borderRadius: 2, border: '1px solid #C8E6C9', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ p: 2, bgcolor: '#E8F5E9', borderRadius: 1, border: '1px solid #C8E6C9', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <CheckCircleIcon sx={{ fontSize: 18, color: '#2E7D32' }} />
             <Typography variant="body2" sx={{ color: '#1B5E20', fontWeight: 600, fontSize: 12.5 }}>
               Scholarship approved
@@ -516,11 +516,11 @@ export default function ScholarshipSection({
   // State 5: Rejected
   if (scholarship && scholarshipStatus === 'rejected') {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status="rejected" />} />
         <Box sx={{ p: 2.5 }}>
           {scholarship.rejection_reason && (
-            <Box sx={{ p: 2, bgcolor: '#FFEBEE', borderRadius: 2, border: '1px solid #FFCDD2', mb: 2 }}>
+            <Box sx={{ p: 2, bgcolor: '#FFEBEE', borderRadius: 1, border: '1px solid #FFCDD2', mb: 2 }}>
               <Typography variant="caption" sx={{ fontWeight: 700, color: '#C62828', fontSize: 11, letterSpacing: 0.3 }}>
                 Rejection Reason
               </Typography>
@@ -540,7 +540,7 @@ export default function ScholarshipSection({
   // Fallback
   if (scholarship) {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={scholarshipStatus ? <StatusChip status={scholarshipStatus} /> : undefined} />
         <Box sx={{ p: 2.5, textAlign: 'center' }}>
           <SchoolIcon sx={{ fontSize: 36, color: 'grey.300', mb: 1 }} />

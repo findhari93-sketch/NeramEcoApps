@@ -29,11 +29,11 @@ export default function PaymentToggle({ value, onChange, t }: PaymentToggleProps
         }}
         sx={{
           bgcolor: 'grey.100',
-          borderRadius: 3,
+          borderRadius: 1,
           p: 0.5,
           '& .MuiToggleButton-root': {
             border: 'none',
-            borderRadius: '20px !important',
+            borderRadius: '6px !important',
             px: { xs: 2, sm: 3 },
             py: 1,
             textTransform: 'none',

@@ -134,7 +134,7 @@ export default function FeesPageContent() {
               color: 'primary.contrastText',
               px: 3,
               py: 1.5,
-              borderRadius: 2,
+              borderRadius: 1,
             }}
           >
             <PhoneOutlined />
@@ -171,7 +171,7 @@ export default function FeesPageContent() {
                 <Skeleton
                   variant="rectangular"
                   height={400}
-                  sx={{ borderRadius: 3 }}
+                  sx={{ borderRadius: 1 }}
                 />
               </Grid>
             ))}
@@ -287,7 +287,7 @@ export default function FeesPageContent() {
             py: 6,
             px: 3,
             bgcolor: 'primary.50',
-            borderRadius: 4,
+            borderRadius: 1.5,
             mb: 4,
           }}
         >
@@ -316,7 +316,7 @@ export default function FeesPageContent() {
                 px: 4,
                 fontWeight: 700,
                 fontSize: '1.05rem',
-                borderRadius: 2,
+                borderRadius: 1,
                 bgcolor: '#2E7D32',
                 '&:hover': { bgcolor: '#1B5E20' },
               }}
@@ -335,7 +335,7 @@ export default function FeesPageContent() {
                 px: 4,
                 fontWeight: 700,
                 fontSize: '1.05rem',
-                borderRadius: 2,
+                borderRadius: 1,
               }}
             >
               {t('applyNow')}

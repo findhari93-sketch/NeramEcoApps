@@ -321,7 +321,7 @@ export function Logo({
         sx={{
           width: height,
           height: height,
-          borderRadius: 1,
+          borderRadius: 0.75,
           background: color === 'white' 
             ? 'rgba(255,255,255,0.2)' 
             : `linear-gradient(135deg, ${primaryColors[500]} 0%, ${primaryColors[700]} 100%)`,
@@ -500,7 +500,7 @@ export function StatusBadge({ status, label }: StatusBadgeProps): JSX.Element {
         alignItems: 'center',
         px: 1.5,
         py: 0.5,
-        borderRadius: 1,
+        borderRadius: 0.75,
         backgroundColor: config.bg,
         color: config.color,
         fontSize: '0.75rem',

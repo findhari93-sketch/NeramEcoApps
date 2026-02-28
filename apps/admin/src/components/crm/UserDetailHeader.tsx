@@ -60,7 +60,7 @@ export default function UserDetailHeader({
         sx={{
           border: '1px solid',
           borderColor: 'grey.200',
-          borderRadius: 2,
+          borderRadius: 1,
           overflow: 'hidden',
         }}
       >
@@ -168,7 +168,7 @@ export default function UserDetailHeader({
                 startIcon={<NoteAddIcon />}
                 onClick={onAddNoteClick}
                 size="small"
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500 }}
+                sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 500 }}
               >
                 Add Note
               </Button>
@@ -178,7 +178,7 @@ export default function UserDetailHeader({
                 onClick={onEditClick}
                 size="small"
                 sx={{
-                  borderRadius: 2,
+                  borderRadius: 1,
                   textTransform: 'none',
                   fontWeight: 500,
                   boxShadow: 'none',

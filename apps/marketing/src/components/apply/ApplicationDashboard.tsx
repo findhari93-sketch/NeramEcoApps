@@ -220,7 +220,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
       variant="outlined"
       sx={{
         p: { xs: 2, sm: 2.5 },
-        borderRadius: 2,
+        borderRadius: 1,
         '&:hover': { borderColor: 'primary.main', boxShadow: 1 },
         transition: 'border-color 0.2s, box-shadow 0.2s',
       }}
@@ -262,7 +262,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
           sx={{
             mb: 1.5,
             p: 2,
-            borderRadius: 2,
+            borderRadius: 1,
             bgcolor: '#E8F5E9',
             border: '2px solid',
             borderColor: 'success.main',
@@ -323,7 +323,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
             size="large"
             onClick={() => onPayClick?.(application)}
             sx={{
-              fontWeight: 700, borderRadius: 2, py: 1.5,
+              fontWeight: 700, borderRadius: 1, py: 1.5,
               bgcolor: '#2E7D32',
               '&:hover': { bgcolor: '#1B5E20' },
             }}
@@ -339,7 +339,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
           sx={{
             mb: 1.5,
             p: 2,
-            borderRadius: 2,
+            borderRadius: 1,
             bgcolor: effectiveStatus === 'enrolled' ? '#E8F5E9' : '#FFF3E0',
             border: '1px solid',
             borderColor: effectiveStatus === 'enrolled' ? 'success.light' : '#FFE0B2',
@@ -387,7 +387,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
                 target="_blank"
                 endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
                 fullWidth
-                sx={{ fontWeight: 700, borderRadius: 2, py: 1.2 }}
+                sx={{ fontWeight: 700, borderRadius: 1, py: 1.2 }}
               >
                 Go to Student Dashboard
               </Button>
@@ -398,7 +398,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
                 onClick={() => onPayClick?.(application)}
                 fullWidth
                 sx={{
-                  fontWeight: 700, borderRadius: 2, py: 1.2,
+                  fontWeight: 700, borderRadius: 1, py: 1.2,
                   bgcolor: '#E65100', '&:hover': { bgcolor: '#BF360C' },
                 }}
               >
@@ -462,7 +462,7 @@ function PersonalSummary({ application }: { application: any }) {
   const category = CATEGORY_LABELS[application.applicant_category] || '';
 
   return (
-    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 2 }}>
+    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 1 }}>
       <Typography variant="subtitle2" fontWeight={600} mb={1.5}>
         Your Details
       </Typography>

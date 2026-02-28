@@ -165,7 +165,7 @@ export default function EditApplicationDialog({
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 2 } }}
+      PaperProps={{ sx: { borderRadius: 1.5 } }}
     >
       <DialogTitle sx={{ fontWeight: 700, fontSize: 18, pb: 1 }}>
         Edit Application
@@ -183,7 +183,7 @@ export default function EditApplicationDialog({
             onChange={(e) => handleChange('father_name', e.target.value)}
             fullWidth
             size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           />
 
           <TextField
@@ -193,7 +193,7 @@ export default function EditApplicationDialog({
             onChange={(e) => handleChange('applicant_category', e.target.value)}
             fullWidth
             size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           >
             <MenuItem value="">-- Select --</MenuItem>
             {APPLICANT_CATEGORIES.map((opt) => (
@@ -213,7 +213,7 @@ export default function EditApplicationDialog({
             onChange={(e) => handleChange('interest_course', e.target.value)}
             fullWidth
             size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           >
             {COURSE_OPTIONS.map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
@@ -227,7 +227,7 @@ export default function EditApplicationDialog({
             onChange={(e) => handleChange('learning_mode', e.target.value)}
             fullWidth
             size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           >
             {LEARNING_MODES.map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
@@ -243,7 +243,7 @@ export default function EditApplicationDialog({
                 onChange={(e) => handleChange('school_type', e.target.value)}
                 fullWidth
                 size="small"
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
               >
                 <MenuItem value="">-- Select --</MenuItem>
                 {SCHOOL_TYPES.map((opt) => (
@@ -259,7 +259,7 @@ export default function EditApplicationDialog({
                 onChange={(e) => handleChange('caste_category', e.target.value)}
                 fullWidth
                 size="small"
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
               >
                 <MenuItem value="">-- Select --</MenuItem>
                 {CASTE_CATEGORIES.map((opt) => (
@@ -277,7 +277,7 @@ export default function EditApplicationDialog({
             fullWidth
             size="small"
             placeholder="e.g. 2026"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           />
 
           <Divider sx={{ my: 0.5 }} />
@@ -293,7 +293,7 @@ export default function EditApplicationDialog({
                 onChange={(e) => handleChange('city', e.target.value)}
                 fullWidth
                 size="small"
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
               />
             </Grid>
             <Grid item xs={6}>
@@ -303,7 +303,7 @@ export default function EditApplicationDialog({
                 onChange={(e) => handleChange('state', e.target.value)}
                 fullWidth
                 size="small"
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
               />
             </Grid>
           </Grid>
@@ -314,16 +314,16 @@ export default function EditApplicationDialog({
             onChange={(e) => handleChange('pincode', e.target.value)}
             fullWidth
             size="small"
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
           />
 
-          {error && <Alert severity="error" sx={{ borderRadius: 1.5 }}>{error}</Alert>}
+          {error && <Alert severity="error" sx={{ borderRadius: 0.75 }}>{error}</Alert>}
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>
         <Button
           onClick={onClose}
-          sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500 }}
+          sx={{ borderRadius: 1.5, textTransform: 'none', fontWeight: 500 }}
         >
           Cancel
         </Button>
@@ -331,7 +331,7 @@ export default function EditApplicationDialog({
           variant="contained"
           onClick={handleSave}
           disabled={saving}
-          sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
+          sx={{ borderRadius: 1.5, textTransform: 'none', fontWeight: 600, boxShadow: 'none', px: 3, '&:hover': { boxShadow: 'none' } }}
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>

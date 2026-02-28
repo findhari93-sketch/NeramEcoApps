@@ -20,7 +20,7 @@ export default function OnboardingSection({ detail }: OnboardingSectionProps) {
   const { onboardingSession, onboardingResponses } = detail;
 
   return (
-    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <QuizIcon sx={{ color: 'primary.main', fontSize: 20 }} />
         <Typography variant="subtitle1" fontWeight={700}>Onboarding</Typography>
@@ -66,7 +66,7 @@ export default function OnboardingSection({ detail }: OnboardingSectionProps) {
               </Box>
 
               {/* Progress bar */}
-              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}>
+              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                   <Typography variant="caption" sx={{ fontWeight: 600, fontSize: 11.5, color: 'text.secondary' }}>
                     Progress
@@ -80,10 +80,10 @@ export default function OnboardingSection({ detail }: OnboardingSectionProps) {
                   value={onboardingSession.total_questions > 0 ? (onboardingSession.questions_answered / onboardingSession.total_questions) * 100 : 0}
                   sx={{
                     height: 6,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     bgcolor: 'grey.200',
                     '& .MuiLinearProgress-bar': {
-                      borderRadius: 2,
+                      borderRadius: 1,
                       bgcolor: onboardingSession.status === 'completed' ? '#2E7D32' : 'primary.main',
                     },
                   }}

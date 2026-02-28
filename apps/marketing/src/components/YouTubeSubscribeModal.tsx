@@ -191,7 +191,7 @@ export default function YouTubeSubscribeModal({
                   color: 'primary.main',
                   bgcolor: '#E3F2FD',
                   p: 1.5,
-                  borderRadius: 2,
+                  borderRadius: 1,
                   display: 'inline-block',
                   letterSpacing: 1,
                 }}
@@ -223,7 +223,7 @@ export default function YouTubeSubscribeModal({
           <Box
             sx={{
               bgcolor: '#FFF8E1',
-              borderRadius: 2,
+              borderRadius: 1,
               p: 2,
               mb: 3,
             }}
@@ -335,7 +335,7 @@ export default function YouTubeSubscribeModal({
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 3 } }}
+      PaperProps={{ sx: { borderRadius: 1.5 } }}
     >
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 0 }}>
         <span />

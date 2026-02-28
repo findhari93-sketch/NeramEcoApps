@@ -88,7 +88,7 @@ function SuccessScreen({ applicationNumber }: { applicationNumber: string }) {
           bgcolor: 'grey.100',
           py: 2,
           px: 4,
-          borderRadius: 2,
+          borderRadius: 1,
           display: 'inline-block',
           my: 2,
         }}
@@ -358,9 +358,9 @@ function FormWizardInner() {
       <Box sx={{ py: { xs: 2, md: 4 } }}>
         <Skeleton variant="text" width="60%" height={40} sx={{ mb: 1 }} />
         <Skeleton variant="text" width="80%" height={24} sx={{ mb: 3 }} />
-        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2, mb: 2 }} />
-        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2, mb: 2 }} />
-        <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1 }} />
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1, mb: 2 }} />
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1, mb: 2 }} />
+        <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 0.75 }} />
       </Box>
     );
   }

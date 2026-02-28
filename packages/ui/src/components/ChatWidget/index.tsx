@@ -232,7 +232,7 @@ export function ChatWidget({
             display: 'flex',
             flexDirection: 'column',
             zIndex: 1000,
-            borderRadius: 3,
+            borderRadius: 1.5,
             overflow: 'hidden',
           }}
         >
@@ -292,7 +292,7 @@ export function ChatWidget({
                   sx={{
                     maxWidth: '80%',
                     p: 1.5,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     bgcolor: message.type === 'user' ? 'primary.main' : 'white',
                     color: message.type === 'user' ? 'white' : 'text.primary',
                     boxShadow: 1,
@@ -308,7 +308,7 @@ export function ChatWidget({
                 <Box
                   sx={{
                     p: 1.5,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     bgcolor: 'white',
                     boxShadow: 1,
                   }}
@@ -389,7 +389,7 @@ export function ChatWidget({
                     disabled={isTyping}
                     sx={{
                       '& .MuiOutlinedInput-root': {
-                        borderRadius: 3,
+                        borderRadius: 1.5,
                       },
                     }}
                   />

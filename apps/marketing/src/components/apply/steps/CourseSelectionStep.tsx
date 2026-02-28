@@ -278,7 +278,7 @@ export default function CourseSelectionStep() {
           <Alert
             severity="info"
             icon={<InfoOutlined />}
-            sx={{ mb: 3, borderRadius: 2 }}
+            sx={{ mb: 3, borderRadius: 1 }}
           >
             <Typography variant="body2" fontWeight={600} gutterBottom>
               Scholarship Opportunity
@@ -505,11 +505,11 @@ export default function CourseSelectionStep() {
 
             {centersLoading ? (
               <Box>
-                <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1, mb: 2 }} />
+                <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 0.75, mb: 2 }} />
                 <Grid container spacing={2}>
                   {[1, 2, 3].map((i) => (
                     <Grid item xs={12} sm={6} key={i}>
-                      <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
+                      <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 0.75 }} />
                     </Grid>
                   ))}
                 </Grid>
@@ -629,7 +629,7 @@ export default function CourseSelectionStep() {
         sx={{
           p: 3,
           bgcolor: 'grey.50',
-          borderRadius: 2,
+          borderRadius: 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',

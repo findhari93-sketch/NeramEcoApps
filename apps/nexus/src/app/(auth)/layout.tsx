@@ -20,7 +20,7 @@ export default function AuthLayout({
         <Box
           sx={{
             backgroundColor: 'background.paper',
-            borderRadius: 2,
+            borderRadius: 1.5,
             boxShadow: 3,
             padding: { xs: 3, sm: 4 },
           }}

@@ -104,34 +104,34 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         {/* Left column: Data sections */}
         <Grid item xs={12} lg={7}>
           <UserProfileSection detail={detail} />
-          <Box id="crm-section-application" sx={{ borderRadius: 2 }}>
+          <Box id="crm-section-application" sx={{ borderRadius: 1 }}>
             <ApplicationSection
               detail={detail}
               adminId={adminId}
               onStatusChange={fetchDetail}
             />
           </Box>
-          <Box id="crm-section-scholarship" sx={{ borderRadius: 2 }}>
+          <Box id="crm-section-scholarship" sx={{ borderRadius: 1 }}>
             <ScholarshipSection
               detail={detail}
               adminId={adminId}
               onStatusChange={fetchDetail}
             />
           </Box>
-          <Box id="crm-section-payment" sx={{ borderRadius: 2 }}>
+          <Box id="crm-section-payment" sx={{ borderRadius: 1 }}>
             <PaymentSection detail={detail} />
           </Box>
-          <Box id="crm-section-refund" sx={{ borderRadius: 2 }}>
+          <Box id="crm-section-refund" sx={{ borderRadius: 1 }}>
             <RefundSection
               detail={detail}
               adminId={adminId}
               onStatusChange={fetchDetail}
             />
           </Box>
-          <Box id="crm-section-demo" sx={{ borderRadius: 2 }}>
+          <Box id="crm-section-demo" sx={{ borderRadius: 1 }}>
             <DemoClassSection detail={detail} />
           </Box>
-          <Box id="crm-section-onboarding" sx={{ borderRadius: 2 }}>
+          <Box id="crm-section-onboarding" sx={{ borderRadius: 1 }}>
             <OnboardingSection detail={detail} />
           </Box>
           <DocumentsSection detail={detail} />

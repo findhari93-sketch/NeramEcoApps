@@ -30,6 +30,7 @@ import SchoolIcon from '@mui/icons-material/School';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
+import CampaignIcon from '@mui/icons-material/Campaign';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -46,6 +47,7 @@ const menuItems = [
   { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },
   { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
   { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
+  { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 

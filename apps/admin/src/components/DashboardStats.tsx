@@ -41,7 +41,7 @@ function StatCard({ title, value, icon, color, trend }: StatCardProps) {
         <Box
           sx={{
             bgcolor: color,
-            borderRadius: 2,
+            borderRadius: 1,
             p: 1.5,
             display: 'flex',
             alignItems: 'center',

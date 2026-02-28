@@ -35,7 +35,7 @@ const teamMembers = [
 const stats = [
   { key: 'yearsOfExcellence', value: '15+' },
   { key: 'studentsEnrolled', value: '10,000+' },
-  { key: 'successRate', value: '95%' },
+  { key: 'successRate', value: '99.9%' },
   { key: 'expertFaculty', value: '50+' },
 ];
 

@@ -731,7 +731,7 @@ export default function MyApplicationsPage() {
               component={Link}
               href={`/payment/${app.id}`}
               startIcon={<PaymentOutlined />}
-              sx={{ fontWeight: 700, borderRadius: 2, py: 1.5, mb: 1 }}
+              sx={{ fontWeight: 700, borderRadius: 1, py: 1.5, mb: 1 }}
             >
               Complete Fee Payment
             </Button>
@@ -769,7 +769,7 @@ export default function MyApplicationsPage() {
             return (
               <Box sx={{ px: 2, pb: 1 }}>
                 <Box sx={{
-                  p: 1.5, borderRadius: 2, bgcolor: cfg.color,
+                  p: 1.5, borderRadius: 1, bgcolor: cfg.color,
                   border: '1px solid', borderColor: cfg.border,
                 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
@@ -1059,7 +1059,7 @@ export default function MyApplicationsPage() {
             const fee = Math.round((amt * REFUND_PROCESSING_FEE_PERCENT) / 100);
             const refund = amt - fee;
             return (
-              <Box sx={{ bgcolor: '#FFF3E0', borderRadius: 2, p: 2, mb: 2, border: '1px solid #FFE0B2' }}>
+              <Box sx={{ bgcolor: '#FFF3E0', borderRadius: 1, p: 2, mb: 2, border: '1px solid #FFE0B2' }}>
                 <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, color: '#E65100' }}>
                   Refund Calculation
                 </Typography>

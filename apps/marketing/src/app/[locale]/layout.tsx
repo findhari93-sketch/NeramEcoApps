@@ -8,6 +8,7 @@ import { locales } from '@/i18n';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
+import { ImportantDateBanner } from '@/components/marketing-content';
 import '@/styles/globals.css';
 
 // Font loading - Next.js preloads these automatically, eliminating font swap flash
@@ -50,7 +51,7 @@ export async function generateMetadata({
       template: '%s | Neram Classes',
     },
     description:
-      "India's top-rated NATA and JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, comprehensive study materials, 95%+ success rate. Online and offline classes across Tamil Nadu, India & Gulf countries.",
+      "India's top-rated NATA and JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, comprehensive study materials, 99.9% success rate. Online and offline classes across Tamil Nadu, India & Gulf countries.",
     keywords:
       'NATA coaching, JEE Paper 2 coaching, architecture entrance exam, NATA preparation, best NATA coaching India, online NATA classes, NATA coaching Tamil Nadu, architecture entrance coaching',
     icons: {
@@ -139,6 +140,7 @@ export default async function RootLayout({
             defaultMode="light"
           >
             <AuthProvider>
+              <ImportantDateBanner locale={locale} />
               <Header />
               <main>{children}</main>
               <Footer />

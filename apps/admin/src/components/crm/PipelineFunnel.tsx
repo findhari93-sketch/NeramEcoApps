@@ -54,7 +54,7 @@ export default function PipelineFunnel({
           <Skeleton
             key={stage}
             variant="rounded"
-            sx={{ minWidth: 148, height: 100, flexShrink: 0, borderRadius: 3 }}
+            sx={{ minWidth: 148, height: 100, flexShrink: 0, borderRadius: 1.5 }}
           />
         ))}
       </Box>
@@ -72,7 +72,7 @@ export default function PipelineFunnel({
         '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
         '&::-webkit-scrollbar-thumb': {
           bgcolor: 'grey.300',
-          borderRadius: 2,
+          borderRadius: 1,
         },
       }}
     >
@@ -93,7 +93,7 @@ export default function PipelineFunnel({
               minWidth: 148,
               flexShrink: 0,
               cursor: 'pointer',
-              borderRadius: 2,
+              borderRadius: 1,
               overflow: 'hidden',
               border: '1.5px solid',
               borderColor: isActive ? config.color : 'grey.200',
@@ -126,7 +126,7 @@ export default function PipelineFunnel({
                   sx={{
                     width: 34,
                     height: 34,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

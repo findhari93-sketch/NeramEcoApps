@@ -60,7 +60,7 @@ export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDraw
               width: 40,
               height: 4,
               bgcolor: 'grey.400',
-              borderRadius: 2,
+              borderRadius: 1,
             }}
           />
         )}
@@ -107,7 +107,7 @@ export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDraw
       disableSwipeToOpen
       PaperProps={{
         sx: {
-          borderRadius: isMobile ? '16px 16px 0 0' : 0,
+          borderRadius: isMobile ? '12px 12px 0 0' : 0,
           maxHeight: isMobile ? '85vh' : '100vh',
         },
       }}

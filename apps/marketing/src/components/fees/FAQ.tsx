@@ -62,7 +62,7 @@ export default function FAQ({ t }: FAQProps) {
             variant="outlined"
             sx={{
               mb: 1,
-              borderRadius: '12px !important',
+              borderRadius: '8px !important',
               '&:before': { display: 'none' },
               '&.Mui-expanded': {
                 borderColor: 'primary.main',

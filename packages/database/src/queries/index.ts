@@ -24,3 +24,4 @@ export * from './user-notifications';
 export * from './refund-requests';
 export * from './contact-messages';
 export * from './centers';
+export * from './marketing-content';

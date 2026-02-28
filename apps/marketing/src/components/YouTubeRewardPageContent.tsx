@@ -51,7 +51,7 @@ function YouTubeRewardInner() {
             sx={{
               p: 4,
               textAlign: 'center',
-              borderRadius: 3,
+              borderRadius: 1,
             }}
           >
             <Box
@@ -102,7 +102,7 @@ function YouTubeRewardInner() {
             sx={{
               p: 4,
               textAlign: 'center',
-              borderRadius: 3,
+              borderRadius: 1,
             }}
           >
             <Typography variant="h5" gutterBottom>
@@ -135,7 +135,7 @@ function YouTubeRewardInner() {
           sx={{
             p: { xs: 3, md: 5 },
             textAlign: 'center',
-            borderRadius: 3,
+            borderRadius: 1,
             mb: 4,
           }}
         >
@@ -180,7 +180,7 @@ function YouTubeRewardInner() {
           <Box
             sx={{
               bgcolor: 'grey.100',
-              borderRadius: 2,
+              borderRadius: 1,
               p: 3,
               mb: 3,
               border: '2px dashed',
@@ -226,7 +226,7 @@ function YouTubeRewardInner() {
           elevation={1}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 3,
+            borderRadius: 1,
             mb: 4,
           }}
         >

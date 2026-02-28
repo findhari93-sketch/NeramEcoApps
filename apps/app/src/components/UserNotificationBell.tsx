@@ -136,7 +136,7 @@ export default function UserNotificationBell() {
               width: { xs: 'calc(100vw - 16px)', sm: 360 },
               maxWidth: { xs: 'calc(100vw - 16px)', sm: 360 },
               maxHeight: { xs: '70vh', sm: 480 },
-              borderRadius: 2,
+              borderRadius: 1,
               boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
             },
           },

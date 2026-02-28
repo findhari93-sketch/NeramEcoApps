@@ -366,7 +366,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
               elevation={0}
               sx={{
                 textAlign: 'center', py: 1.5, px: 2, mb: 2.5,
-                bgcolor: '#E8F5E9', borderRadius: 2,
+                bgcolor: '#E8F5E9', borderRadius: 1,
               }}
             >
               <Typography variant="caption" color="text.secondary">Receipt Number</Typography>
@@ -377,7 +377,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
           )}
 
           {/* Payment Summary */}
-          <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, bgcolor: '#f8f9fa', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Paper elevation={0} sx={{ p: 2.5, mb: 2.5, bgcolor: '#f8f9fa', borderRadius: 1, border: '1px solid #e0e0e0' }}>
             <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>Payment Summary</Typography>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography variant="body2" color="text.secondary">Course</Typography>
@@ -405,7 +405,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
           </Paper>
 
           {/* What's Next */}
-          <Paper elevation={0} sx={{ p: 2.5, mb: 3, bgcolor: '#E3F2FD', borderRadius: 2 }}>
+          <Paper elevation={0} sx={{ p: 2.5, mb: 3, bgcolor: '#E3F2FD', borderRadius: 1 }}>
             <Typography variant="subtitle2" fontWeight={600} color="primary" sx={{ mb: 1.5 }}>What&apos;s Next?</Typography>
             {[
               'Confirmation email sent to your inbox',
@@ -428,7 +428,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
             ))}
           </Paper>
 
-          <Button variant="contained" href="/welcome" fullWidth sx={{ py: 1.5, fontWeight: 600, borderRadius: 2 }}>
+          <Button variant="contained" href="/welcome" fullWidth sx={{ py: 1.5, fontWeight: 600, borderRadius: 1 }}>
             Continue to Dashboard
           </Button>
         </Paper>
@@ -497,7 +497,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                 variant="outlined"
                 onClick={() => setSelectedScheme('full')}
                 sx={{
-                  p: 2, mb: showInstallmentOption ? 1.5 : 0, cursor: 'pointer', borderWidth: 2, borderRadius: 2,
+                  p: 2, mb: showInstallmentOption ? 1.5 : 0, cursor: 'pointer', borderWidth: 2, borderRadius: 1,
                   borderColor: selectedScheme === 'full' ? 'success.main' : 'grey.200',
                   bgcolor: selectedScheme === 'full' ? '#E8F5E9' : 'transparent',
                   transition: 'all 0.2s',
@@ -557,7 +557,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                   variant="outlined"
                   onClick={() => setSelectedScheme('installment')}
                   sx={{
-                    p: 2, cursor: 'pointer', borderWidth: 2, borderRadius: 2,
+                    p: 2, cursor: 'pointer', borderWidth: 2, borderRadius: 1,
                     borderColor: selectedScheme === 'installment' ? 'primary.main' : 'grey.200',
                     bgcolor: selectedScheme === 'installment' ? '#E3F2FD' : 'transparent',
                     transition: 'all 0.2s',
@@ -579,7 +579,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
 
               {/* Nudge banner for installment users */}
               {selectedScheme === 'installment' && details.fullPaymentDiscount > 0 && (
-                <Alert severity="success" sx={{ mt: 1.5, borderRadius: 1.5 }}>
+                <Alert severity="success" sx={{ mt: 1.5, borderRadius: 0.75 }}>
                   <Typography variant="body2" sx={{ fontSize: 12.5 }}>
                     Switch to full payment and <strong>save Rs. {details.fullPaymentDiscount.toLocaleString('en-IN')}!</strong>
                   </Typography>
@@ -653,7 +653,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                 </Box>
 
                 {selectedScheme === 'installment' && (
-                  <Alert severity="info" sx={{ borderRadius: 1.5 }}>
+                  <Alert severity="info" sx={{ borderRadius: 0.75 }}>
                     <Typography variant="body2" sx={{ fontSize: 12 }}>
                       2nd installment of <strong>Rs. {details.installment2Amount.toLocaleString('en-IN')}</strong> due in {details.installment2DueDays} days
                     </Typography>
@@ -664,7 +664,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
               {/* Coupon Code Section */}
               <Box sx={{ mt: 2.5 }}>
                 {details.hasCoupon && !couponApplied && (
-                  <Alert severity="info" sx={{ mb: 1.5, borderRadius: 1.5 }}>
+                  <Alert severity="info" sx={{ mb: 1.5, borderRadius: 0.75 }}>
                     <Typography variant="body2" sx={{ fontSize: 12.5 }}>
                       A special coupon has been generated for you! Apply it below.
                     </Typography>
@@ -707,7 +707,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
 
               {/* YouTube Subscribe & Save */}
               {!youtubeCouponApplied && (
-                <Box sx={{ mt: 2.5, p: 2, bgcolor: '#FFF3E0', borderRadius: 2, border: '1px solid #FFE0B2' }}>
+                <Box sx={{ mt: 2.5, p: 2, bgcolor: '#FFF3E0', borderRadius: 1, border: '1px solid #FFE0B2' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <YouTubeIcon sx={{ color: '#FF0000', fontSize: 22 }} />
                     <Typography variant="subtitle2" fontWeight={600} sx={{ fontSize: 13 }}>
@@ -733,7 +733,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                 </Box>
               )}
               {youtubeCouponApplied && (
-                <Box sx={{ mt: 2.5, p: 1.5, bgcolor: '#E8F5E9', borderRadius: 2 }}>
+                <Box sx={{ mt: 2.5, p: 1.5, bgcolor: '#E8F5E9', borderRadius: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CheckCircleIcon sx={{ color: 'success.main', fontSize: 18 }} />
                     <Typography variant="body2" fontWeight={600} color="success.main" sx={{ fontSize: 12.5 }}>
@@ -768,7 +768,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                 {/* Razorpay */}
                 <Paper
                   sx={{
-                    p: 2, mb: 2, border: '2px solid', borderRadius: 2,
+                    p: 2, mb: 2, border: '2px solid', borderRadius: 1,
                     borderColor: paymentMethod === 'razorpay' ? 'primary.main' : 'grey.200',
                     cursor: 'pointer',
                   }}
@@ -794,7 +794,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                 {/* Direct Payment */}
                 <Paper
                   sx={{
-                    p: 2, border: '2px solid', borderRadius: 2,
+                    p: 2, border: '2px solid', borderRadius: 1,
                     borderColor: paymentMethod === 'direct' ? 'primary.main' : 'grey.200',
                     cursor: 'pointer',
                   }}
@@ -876,7 +876,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                   onClick={paymentMethod === 'razorpay' ? handleRazorpayPayment : handleDirectPayment}
                   disabled={isProcessing || (paymentMethod === 'direct' && !directPayDetails.screenshotUrl)}
                   startIcon={isProcessing ? <CircularProgress size={20} color="inherit" /> : null}
-                  sx={{ py: 1.5, fontWeight: 700, fontSize: 16, borderRadius: 2 }}
+                  sx={{ py: 1.5, fontWeight: 700, fontSize: 16, borderRadius: 1 }}
                 >
                   {isProcessing
                     ? 'Processing...'

@@ -29,7 +29,7 @@ export default function DocumentsSection({ detail }: DocumentsSectionProps) {
   const { documents } = detail;
 
   return (
-    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <DescriptionIcon sx={{ color: 'primary.main', fontSize: 20 }} />
         <Typography variant="subtitle1" fontWeight={700}>Documents</Typography>
@@ -57,7 +57,7 @@ export default function DocumentsSection({ detail }: DocumentsSectionProps) {
                   p: 2,
                   border: '1px solid',
                   borderColor: 'grey.200',
-                  borderRadius: 2,
+                  borderRadius: 1,
                   width: 180,
                   transition: 'all 0.15s',
                   cursor: doc.file_url ? 'pointer' : 'default',
@@ -71,7 +71,7 @@ export default function DocumentsSection({ detail }: DocumentsSectionProps) {
                 onClick={() => doc.file_url && window.open(doc.file_url, '_blank')}
               >
                 {/* File icon */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5, py: 1.5, bgcolor: 'grey.50', borderRadius: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1.5, py: 1.5, bgcolor: 'grey.50', borderRadius: 0.75 }}>
                   {getFileIcon(doc.file_name, doc.document_type)}
                 </Box>
 

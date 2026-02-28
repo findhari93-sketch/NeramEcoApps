@@ -186,7 +186,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
 
   // Shape
   shape: {
-    borderRadius: 12,
+    borderRadius: 8,
   },
 
   // Breakpoints
@@ -334,7 +334,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: borderRadius.lg,
+          borderRadius: borderRadius.md,
           boxShadow: shadows.sm,
           border: `1px solid ${neutralColors.border}`,
           transition: `all ${transitions.duration.short}ms ${transitions.easing.easeInOut}`,
@@ -435,7 +435,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
     MuiChip: {
       styleOverrides: {
         root: {
-          borderRadius: borderRadius.base,
+          borderRadius: borderRadius.sm,
           fontWeight: fontWeights.medium,
         },
         filled: {
@@ -473,7 +473,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
     MuiAlert: {
       styleOverrides: {
         root: {
-          borderRadius: borderRadius.md,
+          borderRadius: borderRadius.base,
           padding: '12px 16px',
         },
         standardSuccess: {
@@ -499,7 +499,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
     MuiDialog: {
       styleOverrides: {
         paper: {
-          borderRadius: borderRadius.xl,
+          borderRadius: borderRadius.lg,
           boxShadow: shadows.xl,
         },
       },
@@ -602,7 +602,7 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
           color: neutralColors.white,
           fontSize: '0.8125rem',
           padding: '8px 12px',
-          borderRadius: borderRadius.base,
+          borderRadius: borderRadius.sm,
         },
         arrow: {
           color: neutralColors.textPrimary,

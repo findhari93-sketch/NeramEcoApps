@@ -74,7 +74,7 @@ const successStories = [
 const stats = [
   { value: '500+', label: 'Top 100 Ranks' },
   { value: '2000+', label: 'Selections in Top Colleges' },
-  { value: '95%', label: 'Success Rate' },
+  { value: '99.9%', label: 'Success Rate' },
   { value: '50+', label: 'IIT/NIT Selections' },
 ];
 

@@ -95,7 +95,7 @@ const coachingPrograms = [
 
 const stats = [
   { value: '10,000+', label: 'Students Trained' },
-  { value: '95%', label: 'Success Rate' },
+  { value: '99.9%', label: 'Success Rate' },
   { value: '500+', label: 'Top Rank Holders' },
   { value: '15+', label: 'Years Experience' },
 ];

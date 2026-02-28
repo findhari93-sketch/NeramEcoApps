@@ -49,7 +49,7 @@ export default function ClassInfoSection({ t }: ClassInfoSectionProps) {
           mb: 4,
           borderColor: 'info.main',
           bgcolor: 'info.50',
-          borderRadius: 3,
+          borderRadius: 1,
         }}
       >
         <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
@@ -110,7 +110,7 @@ export default function ClassInfoSection({ t }: ClassInfoSectionProps) {
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                   <Typography variant="subtitle2" fontWeight={600} gutterBottom>
                     {t('weekdayClasses')}
                   </Typography>
@@ -118,7 +118,7 @@ export default function ClassInfoSection({ t }: ClassInfoSectionProps) {
                     {t('weekdayClassesDesc')}
                   </Typography>
                 </Box>
-                <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                   <Typography variant="subtitle2" fontWeight={600} gutterBottom>
                     {t('weekendClasses')}
                   </Typography>

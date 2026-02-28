@@ -66,7 +66,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
   const feeDue = leadProfile?.final_fee ? Math.max(0, leadProfile.final_fee - totalPaid) : 0;
 
   return (
-    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <PaymentIcon sx={{ color: 'primary.main', fontSize: 20 }} />
         <Typography variant="subtitle1" fontWeight={700}>Payments</Typography>
@@ -81,7 +81,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
         {/* Summary Cards */}
         <Box sx={{ display: 'flex', gap: 2, mb: 2.5 }}>
           <Box sx={{
-            flex: 1, p: 2, borderRadius: 2, bgcolor: '#E8F5E9', border: '1px solid #C8E6C9',
+            flex: 1, p: 2, borderRadius: 1, bgcolor: '#E8F5E9', border: '1px solid #C8E6C9',
             display: 'flex', flexDirection: 'column', gap: 0.5,
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -97,7 +97,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
 
           {leadProfile?.final_fee ? (
             <Box sx={{
-              flex: 1, p: 2, borderRadius: 2,
+              flex: 1, p: 2, borderRadius: 1,
               bgcolor: feeDue > 0 ? '#FFF3E0' : '#E8F5E9',
               border: `1px solid ${feeDue > 0 ? '#FFE0B2' : '#C8E6C9'}`,
               display: 'flex', flexDirection: 'column', gap: 0.5,
@@ -114,7 +114,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
             </Box>
           ) : (
             <Box sx={{
-              flex: 1, p: 2, borderRadius: 2, bgcolor: 'grey.50', border: '1px solid', borderColor: 'grey.200',
+              flex: 1, p: 2, borderRadius: 1, bgcolor: 'grey.50', border: '1px solid', borderColor: 'grey.200',
               display: 'flex', flexDirection: 'column', gap: 0.5,
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -193,7 +193,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
 
         {/* Payments table */}
         {payments.length > 0 ? (
-          <TableContainer sx={{ borderRadius: 2, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
+          <TableContainer sx={{ borderRadius: 1, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
@@ -275,7 +275,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
                 Installment Schedule
               </Typography>
             </Box>
-            <TableContainer sx={{ borderRadius: 2, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
+            <TableContainer sx={{ borderRadius: 1, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'grey.50' }}>

@@ -174,7 +174,7 @@ function StatCard({
       elevation={0}
       sx={{
         p: 2.5,
-        borderRadius: 2,
+        borderRadius: 1,
         border: '1px solid',
         borderColor: 'grey.200',
         flex: 1,
@@ -198,7 +198,7 @@ function StatCard({
           sx={{
             width: 40,
             height: 40,
-            borderRadius: 2,
+            borderRadius: 1,
             bgcolor: `${color}14`,
             display: 'flex',
             alignItems: 'center',
@@ -310,7 +310,7 @@ export default function PaymentsPage() {
             sx={{
               width: 42,
               height: 42,
-              borderRadius: 2,
+              borderRadius: 1,
               bgcolor: '#1565C0',
               display: 'flex',
               alignItems: 'center',
@@ -343,7 +343,7 @@ export default function PaymentsPage() {
 
       {/* Error */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
           {error}
         </Alert>
       )}
@@ -393,7 +393,7 @@ export default function PaymentsPage() {
         sx={{
           p: 2,
           mb: 2,
-          borderRadius: 2,
+          borderRadius: 1,
           border: '1px solid',
           borderColor: 'grey.200',
           display: 'flex',
@@ -450,7 +450,7 @@ export default function PaymentsPage() {
       <Paper
         elevation={0}
         sx={{
-          borderRadius: 2,
+          borderRadius: 1,
           border: '1px solid',
           borderColor: 'grey.200',
           overflow: 'hidden',

@@ -178,7 +178,7 @@ export default function YouTubeSection() {
           sx={{
             textAlign: 'center',
             p: { xs: 3, md: 4 },
-            borderRadius: 3,
+            borderRadius: 1,
             bgcolor: 'background.paper',
             boxShadow: 2,
           }}
@@ -200,7 +200,7 @@ export default function YouTubeSection() {
               py: 1.5,
               fontSize: '1.1rem',
               fontWeight: 600,
-              borderRadius: 2,
+              borderRadius: 1,
               textTransform: 'none',
               boxShadow: '0 4px 14px rgba(255, 0, 0, 0.3)',
               '&:hover': {

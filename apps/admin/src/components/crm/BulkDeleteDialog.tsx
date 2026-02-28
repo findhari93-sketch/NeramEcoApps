@@ -128,7 +128,7 @@ export default function BulkDeleteDialog({
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 2 } }}
+      PaperProps={{ sx: { borderRadius: 1.5 } }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
         <WarningAmberIcon color="error" />
@@ -163,7 +163,7 @@ export default function BulkDeleteDialog({
         )}
 
         {summaryItems.length > 0 && (
-          <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1.5 }}>
+          <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 0.75 }}>
             <Typography variant="body2" fontWeight={600} gutterBottom>
               Related Data to be Deleted:
             </Typography>
@@ -192,7 +192,7 @@ export default function BulkDeleteDialog({
             overflowY: 'auto',
             border: '1px solid',
             borderColor: 'grey.200',
-            borderRadius: 1.5,
+            borderRadius: 0.75,
             mb: 2,
           }}
         >

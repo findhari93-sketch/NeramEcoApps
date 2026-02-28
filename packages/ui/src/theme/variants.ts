@@ -88,7 +88,7 @@ export const createMarketingTheme = (mode: 'light' | 'dark' = 'light'): Theme =>
             props: { className: 'm3-surface' },
             style: {
               backgroundColor: scheme.surfaceContainerLow,
-              borderRadius: 16,
+              borderRadius: 8,
             },
           },
         ],
@@ -99,7 +99,7 @@ export const createMarketingTheme = (mode: 'light' | 'dark' = 'light'): Theme =>
           root: {
             textTransform: 'none',
             fontWeight: 600,
-            borderRadius: 12,
+            borderRadius: 6,
             minHeight: 48, // Touch-friendly
             transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.emphasized}`,
           },
@@ -185,7 +185,7 @@ export const createMarketingTheme = (mode: 'light' | 'dark' = 'light'): Theme =>
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 16,
+            borderRadius: 8,
             boxShadow: m3Elevation.level1,
             transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
           },
@@ -305,7 +305,7 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 16,
+            borderRadius: 8,
             transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
           },
         },
@@ -350,7 +350,7 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
           root: {
             '& .MuiOutlinedInput-root': {
               backgroundColor: scheme.surfaceContainerLowest,
-              borderRadius: 12,
+              borderRadius: 6,
               minHeight: 56, // Touch-friendly
               transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
               '&.Mui-focused': {
@@ -371,7 +371,7 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
             style: {
               backgroundColor: scheme.primaryContainer,
               border: `1px solid ${scheme.outlineVariant}`,
-              borderRadius: 12,
+              borderRadius: 8,
               padding: '16px 20px',
             },
           },
@@ -379,7 +379,7 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
             props: { className: 'm3-surface' },
             style: {
               backgroundColor: scheme.surfaceContainerLow,
-              borderRadius: 16,
+              borderRadius: 8,
             },
           },
         ],
@@ -418,7 +418,7 @@ export const createToolsAppTheme = (mode: 'light' | 'dark' = 'light'): Theme => 
           root: {
             textTransform: 'none',
             fontWeight: 600,
-            borderRadius: 12,
+            borderRadius: 6,
             minHeight: 48,
             transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
           },
@@ -516,7 +516,7 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 16,
+            borderRadius: 8,
             transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
           },
         },
@@ -575,7 +575,7 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
             props: { className: 'video-container' },
             style: {
               backgroundColor: '#000000',
-              borderRadius: 16,
+              borderRadius: 8,
               overflow: 'hidden',
               aspectRatio: '16/9',
               '@media (max-width: 600px)': {
@@ -590,7 +590,7 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
             props: { className: 'm3-surface' },
             style: {
               backgroundColor: scheme.surfaceContainerLow,
-              borderRadius: 16,
+              borderRadius: 8,
             },
           },
         ],
@@ -599,7 +599,7 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiAccordion: {
         styleOverrides: {
           root: {
-            borderRadius: '12px !important',
+            borderRadius: '8px !important',
             marginBottom: 8,
             backgroundColor: scheme.surfaceContainerLow,
             border: `1px solid ${scheme.outlineVariant}`,
@@ -616,7 +616,7 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
+            borderRadius: 4,
             fontWeight: 500,
             height: 32,
           },
@@ -644,7 +644,7 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           root: {
             textTransform: 'none',
             fontWeight: 600,
-            borderRadius: 12,
+            borderRadius: 6,
             minHeight: 48,
           },
         },
@@ -766,11 +766,11 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            borderRadius: 12,
+            borderRadius: 8,
             border: `1px solid ${scheme.outlineVariant}`,
             backgroundColor: scheme.surface,
             '@media (max-width: 600px)': {
-              borderRadius: 8,
+              borderRadius: 6,
               overflowX: 'auto',
             },
           },
@@ -813,7 +813,7 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
+            borderRadius: 4,
             fontWeight: 500,
             height: 28,
           },
@@ -846,7 +846,7 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 16,
+            borderRadius: 8,
             boxShadow: m3Elevation.level1,
             transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
           },
@@ -890,7 +890,7 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           root: {
             textTransform: 'none',
             fontWeight: 600,
-            borderRadius: 12,
+            borderRadius: 6,
             minHeight: 44,
             transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
             '@media (max-width: 600px)': {
@@ -928,7 +928,7 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiListItemButton: {
         styleOverrides: {
           root: {
-            borderRadius: 12,
+            borderRadius: 6,
             margin: '2px 8px',
             minHeight: 48, // Touch-friendly
             transition: `all ${m3Motion.duration.short4}ms`,
@@ -963,9 +963,9 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiDialog: {
         styleOverrides: {
           paper: {
-            borderRadius: 28,
+            borderRadius: 12,
             '@media (max-width: 600px)': {
-              borderRadius: '28px 28px 0 0',
+              borderRadius: '12px 12px 0 0',
               margin: 0,
               maxHeight: '90vh',
               position: 'fixed',

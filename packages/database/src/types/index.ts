@@ -1316,6 +1316,68 @@ export interface FAQ extends Timestamps {
 }
 
 // ============================================
+// MARKETING CONTENT (dynamic CMS for marketing site)
+// ============================================
+
+export type MarketingContentType = 'achievement' | 'important_date' | 'announcement' | 'update';
+export type MarketingContentStatus = 'draft' | 'published' | 'archived';
+
+export interface AchievementMetadata {
+  student_name: string;
+  exam: string;
+  score?: number | null;
+  rank?: number | null;
+  percentile?: number | null;
+  college?: string | null;
+  academic_year: string;       // e.g. '2025-26'
+  batch?: string | null;
+  student_quote?: string | null;
+}
+
+export interface ImportantDateMetadata {
+  target_date: string;
+  original_date?: string | null;
+  is_extended?: boolean;
+  event_type: string;          // 'application_deadline' | 'exam_date' | 'result_date'
+}
+
+export interface AnnouncementMetadata {
+  link_url?: string | null;
+  link_text?: string | null;
+  badge_text?: string | null;
+  badge_color?: string | null; // 'error' | 'success' | 'warning' | 'info'
+}
+
+export interface UpdateMetadata {
+  category?: string | null;
+  link_url?: string | null;
+}
+
+export type MarketingContentMetadata =
+  | AchievementMetadata
+  | ImportantDateMetadata
+  | AnnouncementMetadata
+  | UpdateMetadata;
+
+export interface MarketingContent extends Timestamps {
+  id: string;
+  type: MarketingContentType;
+  title: Record<string, string>;
+  description: Record<string, string>;
+  image_url: string | null;
+  metadata: MarketingContentMetadata;
+  status: MarketingContentStatus;
+  is_pinned: boolean;
+  display_priority: number;
+  starts_at: string | null;
+  expires_at: string | null;
+  published_at: string | null;
+  created_by: string | null;
+}
+
+export type CreateMarketingContentInput = Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'>;
+
+// ============================================
 // NOTIFICATIONS & EMAILS
 // ============================================
 
@@ -2300,6 +2362,12 @@ export interface Database {
         Insert: Omit<ContactMessage, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<ContactMessage, 'id' | 'created_at'>>;
       };
+      // Marketing content (dynamic CMS)
+      marketing_content: {
+        Row: MarketingContent;
+        Insert: Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'>>;
+      };
       // CRM tables (migration 009)
       admin_user_notes: {
         Row: AdminUserNote;
@@ -2353,6 +2421,9 @@ export interface Database {
       scholarship_application_status: ScholarshipApplicationStatus;
       // Refund request enum
       refund_request_status: RefundRequestStatus;
+      // Marketing content enums
+      marketing_content_type: MarketingContentType;
+      marketing_content_status: MarketingContentStatus;
       // Center type enum (migration 20260227)
       center_type: CenterType;
     };

@@ -238,7 +238,7 @@ export default function Header() {
               size={isMobile ? 'small' : 'medium'}
               startIcon={<HelpOutlineIcon sx={{ fontSize: { xs: 16, md: 18 } }} />}
               sx={{
-                borderRadius: '20px',
+                borderRadius: '6px',
                 fontWeight: 600,
                 fontSize: { xs: '0.75rem', md: '0.875rem' },
                 px: { xs: 1.5, md: 2.5 },
@@ -262,7 +262,7 @@ export default function Header() {
               color={appStatus ? undefined : 'secondary'}
               size={isMobile ? 'small' : 'medium'}
               sx={{
-                borderRadius: '20px',
+                borderRadius: '6px',
                 fontWeight: 600,
                 fontSize: { xs: '0.75rem', md: '0.875rem' },
                 px: { xs: 1.5, md: 2.5 },
@@ -279,7 +279,7 @@ export default function Header() {
               variant={ctaConfig.variant}
               size={isMobile ? 'small' : 'medium'}
               sx={{
-                borderRadius: '20px',
+                borderRadius: '6px',
                 fontWeight: 600,
                 fontSize: { xs: '0.75rem', md: '0.875rem' },
                 px: { xs: 1.5, md: 2.5 },
@@ -435,7 +435,7 @@ export default function Header() {
                 fullWidth
                 onClick={toggleMobileMenu}
                 sx={{
-                  borderRadius: '20px',
+                  borderRadius: '6px',
                   fontWeight: 600,
                   textTransform: 'none',
                   py: 1.2,
@@ -466,7 +466,7 @@ export default function Header() {
                 variant={ctaConfig.variant}
                 fullWidth
                 sx={{
-                  borderRadius: '20px',
+                  borderRadius: '6px',
                   fontWeight: 600,
                   textTransform: 'none',
                   py: 1.2,
@@ -522,7 +522,7 @@ export default function Header() {
                   minHeight: 36,
                   px: 1.5,
                   fontSize: '0.75rem',
-                  borderRadius: '16px',
+                  borderRadius: '6px',
                 }}
               >
                 {localeLabels[loc]}

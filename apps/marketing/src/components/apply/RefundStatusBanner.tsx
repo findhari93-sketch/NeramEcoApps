@@ -43,7 +43,7 @@ export default function RefundStatusBanner({ refundRequest }: RefundStatusBanner
       sx={{
         mt: 1.5,
         p: 2,
-        borderRadius: 2,
+        borderRadius: 1,
         bgcolor: refundRequest.status === 'approved'
           ? '#E8F5E9'
           : refundRequest.status === 'rejected'

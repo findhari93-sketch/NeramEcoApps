@@ -312,7 +312,7 @@ function SectionCard({
     <Paper
       elevation={0}
       sx={{
-        borderRadius: 2,
+        borderRadius: 1,
         border: '1px solid',
         borderColor: 'grey.200',
         overflow: 'hidden',
@@ -378,13 +378,13 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
     return (
       <Box>
         <Skeleton width={300} height={32} sx={{ mb: 2 }} />
-        <Skeleton width="100%" height={200} sx={{ mb: 2, borderRadius: 2 }} />
+        <Skeleton width="100%" height={200} sx={{ mb: 2, borderRadius: 1 }} />
         <Grid container spacing={3}>
           <Grid item xs={12} md={8}>
-            <Skeleton width="100%" height={400} sx={{ borderRadius: 2 }} />
+            <Skeleton width="100%" height={400} sx={{ borderRadius: 1 }} />
           </Grid>
           <Grid item xs={12} md={4}>
-            <Skeleton width="100%" height={300} sx={{ borderRadius: 2 }} />
+            <Skeleton width="100%" height={300} sx={{ borderRadius: 1 }} />
           </Grid>
         </Grid>
       </Box>

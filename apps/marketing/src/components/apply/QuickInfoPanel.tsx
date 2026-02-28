@@ -122,7 +122,7 @@ export default function QuickInfoPanel({ hideFeesForScholarship = false }: Quick
                   p: 2,
                   border: 1,
                   borderColor: 'info.main',
-                  borderRadius: 2,
+                  borderRadius: 1,
                   bgcolor: 'info.50',
                 }}
               >
@@ -144,7 +144,7 @@ export default function QuickInfoPanel({ hideFeesForScholarship = false }: Quick
                       p: 2,
                       border: 1,
                       borderColor: 'divider',
-                      borderRadius: 2,
+                      borderRadius: 1,
                       bgcolor: 'grey.50',
                     }}
                   >

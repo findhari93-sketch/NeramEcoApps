@@ -59,7 +59,7 @@ export default function AdminNotesSection({ notes, userId, adminId, adminName, o
   };
 
   return (
-    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <StickyNote2Icon sx={{ color: 'primary.main', fontSize: 20 }} />
         <Typography variant="subtitle1" fontWeight={700}>Admin Notes</Typography>
@@ -67,18 +67,18 @@ export default function AdminNotesSection({ notes, userId, adminId, adminName, o
 
       <Box sx={{ p: 2.5 }}>
         {/* Add note form */}
-        <Box sx={{ mb: 2.5, p: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200', bgcolor: 'grey.50' }}>
+        <Box sx={{ mb: 2.5, p: 2, borderRadius: 1, border: '1px solid', borderColor: 'grey.200', bgcolor: 'grey.50' }}>
           <TextField
             fullWidth multiline rows={2} size="small"
             placeholder="Write a note about this user... (Ctrl+Enter to submit)"
             value={newNote} onChange={(e) => setNewNote(e.target.value)} onKeyDown={handleKeyDown}
-            sx={{ mb: 1.5, '& .MuiOutlinedInput-root': { bgcolor: 'background.paper', borderRadius: 1.5, fontSize: 13 } }}
+            sx={{ mb: 1.5, '& .MuiOutlinedInput-root': { bgcolor: 'background.paper', borderRadius: 0.75, fontSize: 13 } }}
           />
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               variant="contained" size="small" endIcon={<SendIcon sx={{ fontSize: 14 }} />}
               onClick={handleAddNote} disabled={!newNote.trim() || saving}
-              sx={{ borderRadius: 1.5, textTransform: 'none', fontWeight: 500, boxShadow: 'none', px: 2.5 }}
+              sx={{ borderRadius: 0.75, textTransform: 'none', fontWeight: 500, boxShadow: 'none', px: 2.5 }}
             >
               {saving ? 'Saving...' : 'Add Note'}
             </Button>
@@ -94,7 +94,7 @@ export default function AdminNotesSection({ notes, userId, adminId, adminName, o
         ) : (
           notes.map((note, index) => (
             <Box key={note.id} sx={{
-              p: 2, mb: index < notes.length - 1 ? 1.5 : 0, bgcolor: 'background.paper', borderRadius: 2,
+              p: 2, mb: index < notes.length - 1 ? 1.5 : 0, bgcolor: 'background.paper', borderRadius: 1,
               border: '1px solid', borderColor: 'grey.100', borderLeft: '3px solid', borderLeftColor: 'primary.main',
               transition: 'box-shadow 0.15s', '&:hover': { boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
             }}>

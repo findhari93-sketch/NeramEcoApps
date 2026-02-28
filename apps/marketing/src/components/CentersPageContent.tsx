@@ -230,7 +230,7 @@ export default function CentersPageContent() {
               color: 'primary.contrastText',
               px: 3,
               py: 1.5,
-              borderRadius: 2,
+              borderRadius: 1,
             }}
           >
             <PhoneOutlined />
@@ -254,7 +254,7 @@ export default function CentersPageContent() {
             mb: 4,
             borderColor: 'success.main',
             bgcolor: 'success.50',
-            borderRadius: 2,
+            borderRadius: 1,
           }}
         >
           <CardContent

@@ -128,7 +128,7 @@ function StatCard({
       elevation={0}
       sx={{
         p: 2.5,
-        borderRadius: 2,
+        borderRadius: 1,
         border: '1px solid',
         borderColor: 'grey.200',
         display: 'flex',
@@ -142,7 +142,7 @@ function StatCard({
         sx={{
           width: 48,
           height: 48,
-          borderRadius: 2,
+          borderRadius: 1,
           bgcolor: `${color}15`,
           display: 'flex',
           alignItems: 'center',
@@ -341,7 +341,7 @@ export default function StudentsPage() {
             sx={{
               width: 42,
               height: 42,
-              borderRadius: 2,
+              borderRadius: 1,
               bgcolor: 'primary.main',
               display: 'flex',
               alignItems: 'center',
@@ -370,7 +370,7 @@ export default function StudentsPage() {
 
       {/* Error Alert */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
           {error}
         </Alert>
       )}
@@ -457,7 +457,7 @@ export default function StudentsPage() {
       <Paper
         elevation={0}
         sx={{
-          borderRadius: 2,
+          borderRadius: 1,
           border: '1px solid',
           borderColor: 'grey.200',
           overflow: 'hidden',

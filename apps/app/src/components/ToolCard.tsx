@@ -38,7 +38,7 @@ export default function ToolCard({
           sx={{
             width: 56,
             height: 56,
-            borderRadius: 2,
+            borderRadius: 1,
             bgcolor: color,
             display: 'flex',
             alignItems: 'center',

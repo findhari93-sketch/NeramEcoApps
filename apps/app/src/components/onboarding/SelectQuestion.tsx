@@ -83,7 +83,7 @@ export function SelectQuestion({ options, value, multiSelect, onChange }: Select
               gap: 1.5,
               p: 2,
               minHeight: 56,
-              borderRadius: 2,
+              borderRadius: 1,
               border: '2px solid',
               borderColor: isSelected ? 'primary.main' : 'divider',
               bgcolor: isSelected ? 'primary.main' : 'background.paper',

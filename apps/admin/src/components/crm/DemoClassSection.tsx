@@ -54,7 +54,7 @@ export default function DemoClassSection({ detail }: DemoClassSectionProps) {
   const { demoRegistrations } = detail;
 
   return (
-    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <VideocamIcon sx={{ color: 'primary.main', fontSize: 20 }} />
         <Typography variant="subtitle1" fontWeight={700}>Demo Classes</Typography>
@@ -85,7 +85,7 @@ export default function DemoClassSection({ detail }: DemoClassSectionProps) {
                   p: 2,
                   mb: index < demoRegistrations.length - 1 ? 1.5 : 0,
                   bgcolor: 'background.paper',
-                  borderRadius: 2,
+                  borderRadius: 1,
                   border: '1px solid',
                   borderColor: 'grey.100',
                   borderLeft: '3px solid',
@@ -152,7 +152,7 @@ export default function DemoClassSection({ detail }: DemoClassSectionProps) {
 
                 {/* Survey results */}
                 {(reg as any).survey && (
-                  <Box sx={{ mt: 1.5, p: 2, bgcolor: '#FFFDE7', borderRadius: 1.5, border: '1px solid #FFF9C4' }}>
+                  <Box sx={{ mt: 1.5, p: 2, bgcolor: '#FFFDE7', borderRadius: 0.75, border: '1px solid #FFF9C4' }}>
                     <Typography variant="overline" sx={{ fontWeight: 700, fontSize: 10, letterSpacing: 1, color: '#F57F17', mb: 1, display: 'block' }}>
                       Survey Feedback
                     </Typography>

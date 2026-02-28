@@ -248,7 +248,7 @@ export default function ProfilePage() {
             sx={{
               mb: 1,
               '&:before': { display: 'none' },
-              borderRadius: '8px !important',
+              borderRadius: '6px !important',
               overflow: 'hidden',
             }}
           >

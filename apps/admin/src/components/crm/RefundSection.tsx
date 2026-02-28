@@ -139,7 +139,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
   return (
     <Paper
       elevation={0}
-      sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 2, overflow: 'hidden' }}
+      sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}
     >
       <Box
         sx={{
@@ -168,7 +168,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
             <CircularProgress size={24} />
           </Box>
         ) : (
-          <TableContainer sx={{ borderRadius: 2, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
+          <TableContainer sx={{ borderRadius: 1, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
@@ -333,7 +333,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
               {/* Summary */}
               <Box sx={{
                 bgcolor: actionType === 'approve' ? '#E8F5E9' : '#FFEBEE',
-                borderRadius: 2,
+                borderRadius: 1,
                 p: 2,
                 mb: 2,
                 border: '1px solid',

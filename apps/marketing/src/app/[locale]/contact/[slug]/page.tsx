@@ -125,7 +125,7 @@ function buildCenterFAQs(center: OfflineCenter) {
     },
     {
       question: `What is the success rate of Neram Classes?`,
-      answer: `Neram Classes has a 95%+ success rate in NATA and JEE Paper 2 exams. Our students consistently secure top ranks, with many getting admitted to prestigious architecture colleges like SPA Delhi, SPA Bhopal, NIT Trichy, and IIT Kharagpur.`,
+      answer: `Neram Classes has a 99.9% success rate in NATA and JEE Paper 2 exams. Our students consistently secure top ranks, with many getting admitted to prestigious architecture colleges like SPA Delhi, SPA Bhopal, NIT Trichy, and IIT Kharagpur.`,
     },
     {
       question: `Do you offer online NATA coaching from ${city}?`,

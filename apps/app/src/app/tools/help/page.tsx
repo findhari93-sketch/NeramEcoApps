@@ -110,7 +110,7 @@ export default function HelpPage() {
           mt: { xs: 4, md: 6 },
           p: { xs: 3, md: 4 },
           bgcolor: 'grey.50',
-          borderRadius: 2,
+          borderRadius: 1,
           textAlign: 'center',
         }}
       >

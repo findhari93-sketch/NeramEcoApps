@@ -50,7 +50,7 @@ export default async function Image() {
             fontSize: 24,
           }}
         >
-          <span>95%+ Success Rate</span>
+          <span>99.9% Success Rate</span>
           <span>5000+ Students</span>
           <span>150+ Cities</span>
         </div>

@@ -109,7 +109,7 @@ export default function VideoCard({ video }: VideoCardProps) {
                 width: 64,
                 height: 44,
                 bgcolor: 'rgba(255, 0, 0, 0.85)',
-                borderRadius: '12px',
+                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

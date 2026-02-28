@@ -122,7 +122,7 @@ function StatCard({
       elevation={0}
       sx={{
         p: 2.5,
-        borderRadius: 2,
+        borderRadius: 1,
         border: '1px solid',
         borderColor: 'grey.200',
         flex: 1,
@@ -146,7 +146,7 @@ function StatCard({
           sx={{
             width: 40,
             height: 40,
-            borderRadius: 2,
+            borderRadius: 1,
             bgcolor: `${color}14`,
             display: 'flex',
             alignItems: 'center',
@@ -313,7 +313,7 @@ export default function MessagesPage() {
             sx={{
               width: 42,
               height: 42,
-              borderRadius: 2,
+              borderRadius: 1,
               bgcolor: '#7B1FA2',
               display: 'flex',
               alignItems: 'center',
@@ -346,7 +346,7 @@ export default function MessagesPage() {
 
       {/* Error */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
           {error}
         </Alert>
       )}
@@ -388,7 +388,7 @@ export default function MessagesPage() {
         elevation={0}
         sx={{
           mb: 2,
-          borderRadius: 2,
+          borderRadius: 1,
           border: '1px solid',
           borderColor: 'grey.200',
         }}
@@ -419,7 +419,7 @@ export default function MessagesPage() {
       <Paper
         elevation={0}
         sx={{
-          borderRadius: 2,
+          borderRadius: 1,
           border: '1px solid',
           borderColor: 'grey.200',
           overflow: 'hidden',
@@ -540,7 +540,7 @@ export default function MessagesPage() {
         maxWidth="md"
         fullWidth
         PaperProps={{
-          sx: { borderRadius: 2 },
+          sx: { borderRadius: 1 },
         }}
       >
         {selectedMessage && (
@@ -568,7 +568,7 @@ export default function MessagesPage() {
                 sx={{
                   p: 2,
                   mb: 3,
-                  borderRadius: 2,
+                  borderRadius: 1,
                   bgcolor: 'grey.50',
                   border: '1px solid',
                   borderColor: 'grey.200',
@@ -643,7 +643,7 @@ export default function MessagesPage() {
                 elevation={0}
                 sx={{
                   p: 2.5,
-                  borderRadius: 2,
+                  borderRadius: 1,
                   border: '1px solid',
                   borderColor: 'grey.200',
                   minHeight: 100,

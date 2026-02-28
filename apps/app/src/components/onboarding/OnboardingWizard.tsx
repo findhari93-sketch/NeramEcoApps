@@ -332,7 +332,7 @@ function WelcomeScreen({
           minHeight: 52,
           px: 5,
           fontSize: '1rem',
-          borderRadius: 3,
+          borderRadius: 1.5,
         }}
       >
         Let&apos;s Go
@@ -427,7 +427,7 @@ function QuestionScreen({
             variant="contained"
             onClick={onNext}
             disabled={!hasResponse || submitting}
-            sx={{ minHeight: 48, px: 4, borderRadius: 2 }}
+            sx={{ minHeight: 48, px: 4, borderRadius: 1 }}
           >
             {submitting ? (
               <CircularProgress size={24} color="inherit" />

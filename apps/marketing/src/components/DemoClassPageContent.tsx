@@ -493,7 +493,7 @@ export default function DemoClassPageContent() {
               position: 'fixed',
               bottom: 0,
               m: 0,
-              borderRadius: '16px 16px 0 0',
+              borderRadius: '12px 12px 0 0',
               maxHeight: '90vh',
             }),
           },
