@@ -26,7 +26,7 @@ export async function getHeadquarters(
     .single();
 
   if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-  return (data as OfflineCenter) ?? null;
+  return (data as unknown as OfflineCenter) ?? null;
 }
 
 /**
@@ -65,7 +65,7 @@ export async function getCenterBySeoSlug(
     .single();
 
   if (error && error.code !== 'PGRST116') throw error;
-  return (data as OfflineCenter) ?? null;
+  return (data as unknown as OfflineCenter) ?? null;
 }
 
 /**

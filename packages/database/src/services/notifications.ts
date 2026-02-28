@@ -565,6 +565,7 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     refund_requested: 'team-refund-request', // Team gets email about new refund request
     refund_approved: null, // User gets direct email
     refund_rejected: null, // User gets direct email
+    contact_message_received: 'team-contact-message', // Team gets email about new contact message
   };
 
   return map[eventType];

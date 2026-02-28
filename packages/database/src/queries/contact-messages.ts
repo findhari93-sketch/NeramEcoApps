@@ -36,8 +36,8 @@ export async function createContactMessage(
 ): Promise<ContactMessage> {
   const supabase = client ?? getSupabaseAdminClient();
 
-  const { data, error } = await supabase
-    .from('contact_messages')
+  const { data, error } = await (supabase
+    .from('contact_messages') as any)
     .insert({
       name: input.name,
       email: input.email,
@@ -115,8 +115,8 @@ export async function markContactMessageAsRead(
 ): Promise<void> {
   const supabase = client ?? getSupabaseAdminClient();
 
-  const { error } = await supabase
-    .from('contact_messages')
+  const { error } = await (supabase
+    .from('contact_messages') as any)
     .update({ status: 'read' })
     .eq('id', id);
 
@@ -133,8 +133,8 @@ export async function markContactMessageAsReplied(
 ): Promise<void> {
   const supabase = client ?? getSupabaseAdminClient();
 
-  const { error } = await supabase
-    .from('contact_messages')
+  const { error } = await (supabase
+    .from('contact_messages') as any)
     .update({
       status: 'replied',
       replied_by: adminId,

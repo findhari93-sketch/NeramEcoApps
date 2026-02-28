@@ -15,6 +15,8 @@ const STATUS_CONFIG: Record<ApplicationStatus, { label: string; color: 'default'
   submitted: { label: 'Submitted', color: 'info' },
   under_review: { label: 'Under Review', color: 'primary' },
   approved: { label: 'Approved', color: 'success' },
+  enrolled: { label: 'Enrolled', color: 'success' },
+  partial_payment: { label: 'Partial Payment', color: 'warning' },
   rejected: { label: 'Rejected', color: 'error' },
   deleted: { label: 'Deleted', color: 'default' },
 };
