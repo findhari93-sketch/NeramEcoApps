@@ -16,7 +16,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+
+/** Pages where Tawk.to chat lives — hide widget to avoid overlap */
+const HIDDEN_PATHS = ['/contact'];
 
 interface ContentItem {
   id: string;
@@ -273,6 +276,10 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Hide on pages where Tawk.to chat widget is active (avoids overlap)
+  const isHiddenPage = HIDDEN_PATHS.some((p) => pathname.includes(p));
 
   useEffect(() => {
     async function fetchAchievements() {
@@ -324,7 +331,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
     router.push('/achievements');
   }, [router]);
 
-  if (loading || items.length === 0 || dismissed) return null;
+  if (loading || items.length === 0 || dismissed || isHiddenPage) return null;
 
   const current = items[activeIndex];
   const meta = current.metadata;
