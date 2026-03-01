@@ -12,6 +12,7 @@ import {
   getSupabaseAdminClient,
   getApprovedQuestions,
   createQuestionPost,
+  type NataQuestionCategory,
 } from '@neram/database';
 
 // ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
       .from('users')
       .select('user_type')
       .eq('id', auth.userId)
-      .single();
+      .single() as unknown as { data: { user_type: string } | null };
     const isAdmin = dbUser?.user_type === 'admin';
 
     const question = await createQuestionPost(
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
       {
         title: title.trim(),
         body: questionBody.trim(),
-        category: category.trim(),
+        category: category.trim() as NataQuestionCategory,
         exam_type: examType || 'NATA',
         exam_year: examYear || null,
         exam_session: examSession || null,

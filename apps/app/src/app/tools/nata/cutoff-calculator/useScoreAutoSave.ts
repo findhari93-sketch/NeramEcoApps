@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useFirebaseAuth } from '@neram/auth';
+import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import type { CalculationPurpose } from '@neram/database';
 
 interface UseScoreAutoSaveInput {
@@ -59,7 +59,7 @@ export function useScoreAutoSave({
     let cancelled = false;
     (async () => {
       try {
-        const idToken = await user.getIdToken();
+        const idToken = await getFirebaseAuth().currentUser?.getIdToken();
         const res = await fetch(
           `/api/score-calculations?tool=${encodeURIComponent(toolName)}&limit=1`,
           { headers: { Authorization: `Bearer ${idToken}` } }
@@ -97,7 +97,7 @@ export function useScoreAutoSave({
       setIsSaving(true);
 
       try {
-        const idToken = await user.getIdToken();
+        const idToken = await getFirebaseAuth().currentUser?.getIdToken();
         const res = await fetch('/api/score-calculations', {
           method: 'POST',
           headers: {
@@ -135,7 +135,7 @@ export function useScoreAutoSave({
       if (!savedCalcId || !user) return;
       setIsUpdatingPurpose(true);
       try {
-        const idToken = await user.getIdToken();
+        const idToken = await getFirebaseAuth().currentUser?.getIdToken();
         await fetch(`/api/score-calculations/${savedCalcId}`, {
           method: 'PATCH',
           headers: {

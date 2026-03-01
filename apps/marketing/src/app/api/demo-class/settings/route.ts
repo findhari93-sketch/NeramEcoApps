@@ -14,7 +14,7 @@ export async function GET() {
 
     if (error) throw error;
 
-    return NextResponse.json({ settings: data?.value || {} });
+    return NextResponse.json({ settings: (data as { value?: unknown } | null)?.value || {} });
   } catch {
     return NextResponse.json({ settings: {} });
   }

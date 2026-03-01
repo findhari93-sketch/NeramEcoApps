@@ -69,7 +69,7 @@ export default function ExamProfileOnboarding({
 
   const updateAttempt = (i: number, field: keyof AttemptEntry, value: string | number) => {
     const updated = [...attempts];
-    (updated[i] as Record<string, unknown>)[field] = value;
+    (updated[i] as unknown as Record<string, unknown>)[field] = value;
     setAttempts(updated);
   };
 

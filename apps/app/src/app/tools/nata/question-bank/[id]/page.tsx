@@ -330,6 +330,7 @@ export default function QuestionDetailPage() {
       {/* Improvements */}
       <ImprovementSection
         questionId={id}
+        improvementCount={question.improvement_count || 0}
         isAuthenticated={!!user}
         getAuthToken={getAuthToken}
       />
