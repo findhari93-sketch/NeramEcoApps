@@ -4,7 +4,6 @@ import { getSupabaseAdminClient } from '@neram/database';
 export async function GET() {
   try {
     const supabase = getSupabaseAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from('site_settings')
       .select('value')
@@ -25,7 +24,6 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const supabase = getSupabaseAdminClient();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from('site_settings')
       .upsert({
