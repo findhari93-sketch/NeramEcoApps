@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description:
       'Predict which architecture colleges you can get into with your NATA score. Search 5000+ colleges across India. Filter by state, category, and college type. Free tool.',
     type: 'website',
-    url: 'https://app.neramclasses.com/tools/college-predictor',
+    url: 'https://app.neramclasses.com/tools/nata/college-predictor',
   },
   twitter: {
     card: 'summary_large_image',
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
       'Predict which architecture colleges you can get into with your NATA score. Search 5000+ colleges across India.',
   },
   alternates: {
-    canonical: 'https://app.neramclasses.com/tools/college-predictor',
+    canonical: 'https://app.neramclasses.com/tools/nata/college-predictor',
   },
 };
 

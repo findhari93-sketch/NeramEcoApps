@@ -115,6 +115,25 @@ function HomePageInner() {
     );
   }
 
+  // Already authenticated — show spinner while redirecting to dashboard
+  if (user) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          gap: 2,
+        }}
+      >
+        <CircularProgress />
+        <Typography>Loading...</Typography>
+      </Box>
+    );
+  }
+
   return (
     <>
       <AppBar position="static" color="primary" elevation={1}>

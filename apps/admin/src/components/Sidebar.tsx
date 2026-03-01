@@ -31,6 +31,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
 import CampaignIcon from '@mui/icons-material/Campaign';
+import RateReviewIcon from '@mui/icons-material/RateReview';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -48,6 +49,7 @@ const menuItems = [
   { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
   { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
   { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
+  { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 

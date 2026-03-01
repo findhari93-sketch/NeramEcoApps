@@ -21,6 +21,11 @@ import {
   Button,
   LoginModal,
   useScrollDirection,
+  Collapse,
+  Chip,
+  Divider,
+  ExpandMoreIcon,
+  ExpandLessIcon,
 } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
@@ -32,22 +37,68 @@ const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost
 
 // Icons (using text fallbacks for now)
 const MenuIcon = () => <span>☰</span>;
-const DashboardIcon = () => <span>📊</span>;
-const CalculatorIcon = () => <span>🔢</span>;
-const SchoolIcon = () => <span>🏫</span>;
-const LocationIcon = () => <span>📍</span>;
-const FormIcon = () => <span>📝</span>;
-const ProfileIcon = () => <span>👤</span>;
-const ApplicationsIcon = () => <span>📄</span>;
 
-const menuItems = [
-  { title: 'Dashboard', href: '/dashboard', icon: <DashboardIcon /> },
-  { title: 'My Applications', href: '/my-applications', icon: <ApplicationsIcon /> },
-  { title: 'Cutoff Calculator', href: '/tools/cutoff-calculator', icon: <CalculatorIcon /> },
-  { title: 'College Predictor', href: '/tools/college-predictor', icon: <SchoolIcon /> },
-  { title: 'Exam Centers', href: '/tools/exam-centers', icon: <LocationIcon /> },
-  { title: 'Apply Now', href: '/apply', icon: <FormIcon /> },
-  { title: 'Profile', href: '/profile', icon: <ProfileIcon /> },
+// Navigation configuration
+interface NavItem {
+  title: string;
+  href: string;
+  icon: React.ReactNode;
+  comingSoon?: boolean;
+}
+
+interface NavSection {
+  id: string;
+  title?: string;
+  icon?: React.ReactNode;
+  collapsible: boolean;
+  items: NavItem[];
+}
+
+const navigationConfig: NavSection[] = [
+  {
+    id: 'general',
+    collapsible: false,
+    items: [
+      { title: 'Dashboard', href: '/dashboard', icon: <span>📊</span> },
+      { title: 'My Applications', href: '/my-applications', icon: <span>📄</span> },
+      { title: 'Apply Now', href: '/apply', icon: <span>📝</span> },
+    ],
+  },
+  {
+    id: 'nata',
+    title: 'NATA',
+    icon: <span>🏛️</span>,
+    collapsible: true,
+    items: [
+      { title: 'Exam Centers', href: '/tools/nata/exam-centers', icon: <span>📍</span> },
+      { title: 'Cutoff Calculator', href: '/tools/nata/cutoff-calculator', icon: <span>🔢</span> },
+      { title: 'College Predictor', href: '/tools/nata/college-predictor', icon: <span>🏫</span> },
+      { title: 'Question Bank', href: '/tools/nata/question-bank', icon: <span>📚</span> },
+      { title: 'Seat Matrix', href: '/tools/nata/seat-matrix', icon: <span>📊</span>, comingSoon: true },
+      { title: 'College Reviews', href: '/tools/nata/college-reviews', icon: <span>⭐</span>, comingSoon: true },
+      { title: 'Eligibility Checker', href: '/tools/nata/eligibility-checker', icon: <span>✅</span>, comingSoon: true },
+      { title: 'Cost Calculator', href: '/tools/nata/cost-calculator', icon: <span>💰</span>, comingSoon: true },
+    ],
+  },
+  {
+    id: 'jee',
+    title: 'JEE Paper 2',
+    icon: <span>📐</span>,
+    collapsible: true,
+    items: [
+      { title: 'Seat Matrix', href: '/tools/jee/seat-matrix', icon: <span>📊</span>, comingSoon: true },
+      { title: 'Eligibility Checker', href: '/tools/jee/eligibility-checker', icon: <span>✅</span>, comingSoon: true },
+      { title: 'Rank Predictor', href: '/tools/jee/rank-predictor', icon: <span>🎯</span>, comingSoon: true },
+    ],
+  },
+  {
+    id: 'bottom',
+    collapsible: false,
+    items: [
+      { title: 'Profile', href: '/profile', icon: <span>👤</span> },
+      { title: 'Help', href: '/tools/help', icon: <span>❓</span> },
+    ],
+  },
 ];
 
 // Supabase user type from API response
@@ -75,6 +126,16 @@ function ProtectedLayoutInner({
   const searchParams = useSearchParams();
   const { scrollDirection, isAtTop } = useScrollDirection();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    // Auto-expand section matching current path
+    const initial: Record<string, boolean> = { nata: true, jee: false };
+    for (const section of navigationConfig) {
+      if (section.collapsible && section.items.some(item => pathname.startsWith(item.href))) {
+        initial[section.id] = true;
+      }
+    }
+    return initial;
+  });
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
@@ -338,28 +399,84 @@ function ProtectedLayoutInner({
     );
   }
 
+  const isItemActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
+  const renderNavItem = (item: NavItem) => (
+    <ListItem key={item.href} disablePadding>
+      <ListItemButton
+        component={Link}
+        href={item.href}
+        selected={isItemActive(item.href)}
+        onClick={() => setMobileOpen(false)}
+        sx={{ pl: 4, minHeight: 44 }}
+      >
+        <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+        <ListItemText
+          primary={item.title}
+          primaryTypographyProps={{
+            fontSize: '0.875rem',
+            color: item.comingSoon ? 'text.disabled' : 'text.primary',
+          }}
+        />
+        {item.comingSoon && (
+          <Chip label="Soon" size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
+        )}
+      </ListItemButton>
+    </ListItem>
+  );
+
   const drawer = (
-    <Box sx={{ pt: 2 }}>
-      <Box sx={{ px: 2, mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Neram Tools
-        </Typography>
-      </Box>
-      <List>
-        {menuItems.map((item) => (
-          <ListItem key={item.href} disablePadding>
-            <ListItemButton
-              component={Link}
-              href={item.href}
-              selected={pathname === item.href}
-              onClick={() => setMobileOpen(false)}
-            >
-              <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.title} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
+    <Box sx={{ pt: 1, overflowY: 'auto' }}>
+      {navigationConfig.map((section, index) => (
+        <Box key={section.id}>
+          {/* Divider between General/NATA and JEE/Bottom */}
+          {(section.id === 'nata' || section.id === 'bottom') && <Divider sx={{ my: 0.5 }} />}
+
+          {section.collapsible ? (
+            <>
+              <ListItem disablePadding>
+                <ListItemButton
+                  onClick={() => toggleSection(section.id)}
+                  sx={{ minHeight: 48 }}
+                >
+                  {section.icon && <ListItemIcon sx={{ minWidth: 36 }}>{section.icon}</ListItemIcon>}
+                  <ListItemText
+                    primary={section.title}
+                    primaryTypographyProps={{ fontWeight: 600, fontSize: '0.9rem' }}
+                  />
+                  {expandedSections[section.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                </ListItemButton>
+              </ListItem>
+              <Collapse in={expandedSections[section.id]} timeout="auto" unmountOnExit>
+                <List disablePadding>
+                  {section.items.map(renderNavItem)}
+                </List>
+              </Collapse>
+            </>
+          ) : (
+            <List disablePadding>
+              {section.items.map((item) => (
+                <ListItem key={item.href} disablePadding>
+                  <ListItemButton
+                    component={Link}
+                    href={item.href}
+                    selected={isItemActive(item.href)}
+                    onClick={() => setMobileOpen(false)}
+                    sx={{ minHeight: 48 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                    <ListItemText primary={item.title} primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Box>
+      ))}
     </Box>
   );
 

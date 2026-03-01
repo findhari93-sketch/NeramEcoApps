@@ -91,5 +91,9 @@ export {
   getLocationsByState,
   getLocationsByRegion,
   getAllCities,
+  getSitemapLocations,
+  getHighPriorityLocations,
 } from './data/locations';
 export type { Location } from './data/locations';
+export { locationSeoContent, getLocationSeoContent } from './data/location-seo-content';
+export type { LocationSeoContent } from './data/location-seo-content';

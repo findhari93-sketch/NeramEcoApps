@@ -13,6 +13,13 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n'],
+  async redirects() {
+    return [
+      { source: '/tools/cutoff-calculator', destination: '/tools/nata/cutoff-calculator', permanent: true },
+      { source: '/tools/college-predictor', destination: '/tools/nata/college-predictor', permanent: true },
+      { source: '/tools/exam-centers', destination: '/tools/nata/exam-centers', permanent: true },
+    ];
+  },
   images: {
     remotePatterns: [
       {

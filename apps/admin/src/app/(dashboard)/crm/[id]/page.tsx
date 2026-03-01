@@ -14,6 +14,7 @@ import PaymentSection from '../../../../components/crm/PaymentSection';
 import RefundSection from '../../../../components/crm/RefundSection';
 import DemoClassSection from '../../../../components/crm/DemoClassSection';
 import OnboardingSection from '../../../../components/crm/OnboardingSection';
+import { ScoreCalculationsSection } from '../../../../components/crm/ScoreCalculationsSection';
 import DocumentsSection from '../../../../components/crm/DocumentsSection';
 import HistoryTimeline from '../../../../components/crm/HistoryTimeline';
 import AdminNotesSection from '../../../../components/crm/AdminNotesSection';
@@ -133,6 +134,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           </Box>
           <Box id="crm-section-onboarding" sx={{ borderRadius: 1 }}>
             <OnboardingSection detail={detail} />
+          </Box>
+          <Box id="crm-section-score-calculations" sx={{ borderRadius: 1 }}>
+            <ScoreCalculationsSection userId={detail.user.id} />
           </Box>
           <DocumentsSection detail={detail} />
         </Grid>

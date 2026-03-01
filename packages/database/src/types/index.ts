@@ -2158,6 +2158,283 @@ export interface AdminUserNote {
 }
 
 // ============================================
+// QUESTION SHARING (migration 20260301 + 20260302 v2)
+// ============================================
+
+export type QuestionPostStatus = 'pending' | 'approved' | 'rejected' | 'flagged';
+export type NataQuestionCategory = 'mathematics' | 'general_aptitude' | 'drawing' | 'logical_reasoning' | 'aesthetic_sensitivity' | 'other';
+export type VoteType = 'up' | 'down';
+
+export interface QuestionPost extends Timestamps {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  category: NataQuestionCategory;
+  exam_type: string;
+  exam_year: number | null;
+  exam_session: string | null;
+  image_urls: string[];
+  tags: string[];
+  session_count: number;
+  // v2: vote system (replaces like_count)
+  vote_score: number;
+  upvote_count: number;
+  downvote_count: number;
+  comment_count: number;
+  improvement_count: number;
+  // v2: confidence and admin
+  confidence_level: number; // 1-5
+  is_admin_post: boolean;
+  // Moderation
+  status: QuestionPostStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+}
+
+/** @deprecated Use QuestionVote instead */
+export interface QuestionLike {
+  id: string;
+  question_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface QuestionVote {
+  id: string;
+  question_id: string;
+  user_id: string;
+  vote: VoteType;
+  created_at: string;
+}
+
+export interface QuestionComment extends Timestamps {
+  id: string;
+  question_id: string;
+  user_id: string;
+  body: string;
+  parent_id: string | null;
+  vote_score: number; // v2: renamed from like_count
+}
+
+/** @deprecated Use CommentVote instead */
+export interface CommentLike {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface CommentVote {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  vote: VoteType;
+  created_at: string;
+}
+
+// v2: Question Improvements
+export interface QuestionImprovement extends Timestamps {
+  id: string;
+  question_id: string;
+  user_id: string;
+  body: string;
+  image_urls: string[];
+  vote_score: number;
+  upvote_count: number;
+  downvote_count: number;
+  is_accepted: boolean;
+  status: QuestionPostStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+}
+
+export interface QuestionImprovementDisplay extends QuestionImprovement {
+  author: Pick<User, 'id' | 'name' | 'avatar_url' | 'user_type'>;
+  user_vote?: VoteType | null;
+}
+
+export interface ImprovementVote {
+  id: string;
+  improvement_id: string;
+  user_id: string;
+  vote: VoteType;
+  created_at: string;
+}
+
+/** Question post with author info for display */
+export interface QuestionPostDisplay extends QuestionPost {
+  author: Pick<User, 'id' | 'name' | 'avatar_url' | 'user_type'>;
+  user_vote?: VoteType | null;
+  best_improvement?: QuestionImprovementDisplay | null;
+}
+
+/** Comment with author info for display */
+export interface QuestionCommentDisplay extends QuestionComment {
+  author: Pick<User, 'id' | 'name' | 'avatar_url' | 'user_type'>;
+  user_vote?: VoteType | null;
+  replies?: QuestionCommentDisplay[];
+}
+
+export interface CreateQuestionPostInput {
+  title: string;
+  body: string;
+  category: NataQuestionCategory;
+  exam_type?: string;
+  exam_year?: number;
+  exam_session?: string;
+  image_urls?: string[];
+  tags?: string[];
+  confidence_level?: number; // 1-5, default 3
+}
+
+export interface CreateQuestionCommentInput {
+  question_id: string;
+  body: string;
+  parent_id?: string;
+}
+
+export interface CreateImprovementInput {
+  question_id: string;
+  body: string;
+  image_urls?: string[];
+}
+
+// v2: Session Tracking (migration 20260303)
+export interface QuestionSession {
+  id: string;
+  question_id: string;
+  user_id: string;
+  exam_year: number;
+  exam_date: string | null;
+  session_label: string | null;
+  created_at: string;
+}
+
+export interface QuestionSessionDisplay extends QuestionSession {
+  author: Pick<User, 'id' | 'name' | 'avatar_url'>;
+}
+
+export interface CreateQuestionSessionInput {
+  question_id: string;
+  exam_year: number;
+  exam_date?: string;
+  session_label?: string;
+}
+
+// Phase 3: Exam Profile Onboarding (migration 20260304)
+export type NataExamStatus = 'attempted' | 'applied_waiting' | 'planning_to_apply' | 'not_interested';
+
+export interface UserExamProfile {
+  id: string;
+  user_id: string;
+  nata_status: NataExamStatus;
+  attempt_count: number;
+  next_exam_date: string | null;
+  planning_year: number | null;
+  qb_onboarding_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserExamAttempt {
+  id: string;
+  user_id: string;
+  exam_date: string | null;
+  exam_year: number;
+  session_label: string | null;
+  created_at: string;
+}
+
+export interface CreateExamProfileInput {
+  nata_status: NataExamStatus;
+  attempt_count?: number;
+  next_exam_date?: string;
+  planning_year?: number;
+  attempts?: { exam_year: number; exam_date?: string; session_label?: string }[];
+}
+
+// Phase 4: Contribution Tracking (migration 20260305)
+export interface UserQBStats {
+  id: string;
+  user_id: string;
+  questions_posted: number;
+  improvements_posted: number;
+  sessions_reported: number;
+  comments_posted: number;
+  questions_viewed: number;
+  contribution_score: number; // computed: questions*5 + improvements*3 + sessions*2 + comments*1
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Access level derived from exam profile + contributions.
+ * Used by frontend to control blur/access.
+ */
+export type QBAccessLevel =
+  | 'full'           // Free full access (planning/waiting with future date)
+  | 'blur_contribute' // Progressive blur — must contribute to unlock
+  | 'blocked';       // Hard block (no profile or not interested)
+
+export interface QBAccessInfo {
+  accessLevel: QBAccessLevel;
+  nataStatus: NataExamStatus | null;
+  stats: UserQBStats | null;
+  freeViews: number;      // How many free views remaining
+  canVote: boolean;
+  canComment: boolean;
+  canPost: boolean;
+}
+
+// ============================================
+// SCORE CALCULATIONS
+// ============================================
+
+export type CalculationPurpose =
+  | 'actual_score'  // "This is my actual score"
+  | 'prediction'    // "I'm predicting / planning"
+  | 'target'        // "Testing a target I want to achieve"
+  | 'exploring';    // "Just exploring"
+
+export interface CutoffCalculatorInputData {
+  board: string;
+  qualificationType: '10+2' | 'diploma';
+  maxMarks: number;
+  marksSecured: number;
+  attempts: Array<{ partA: number; partB: number }>;
+  hasPreviousYear: boolean;
+  previousYearScore: number;
+  attemptCount: number;
+}
+
+export interface CutoffCalculatorResultData {
+  boardConverted: number;
+  boardPercentage: number;
+  boardEligible: boolean;
+  bestNataScore: number;
+  finalCutoff: number;
+  overallEligible: boolean;
+  prevYearInvalid: boolean;
+  nataExplanation: string;
+}
+
+export interface ScoreCalculation {
+  id: string;
+  user_id: string;
+  tool_name: string;
+  input_data: CutoffCalculatorInputData | Record<string, unknown>;
+  result_data: CutoffCalculatorResultData | Record<string, unknown>;
+  purpose: CalculationPurpose | null;
+  label: string | null;
+  academic_year: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
 // DATABASE SCHEMA TYPE
 // ============================================
 
@@ -2375,11 +2652,73 @@ export interface Database {
         Insert: Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'>>;
       };
+      // Question sharing tables (migration 20260301)
+      question_posts: {
+        Row: QuestionPost;
+        Insert: Omit<QuestionPost, 'id' | 'created_at' | 'updated_at' | 'like_count' | 'comment_count'> & { id?: string };
+        Update: Partial<Omit<QuestionPost, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      question_likes: {
+        Row: QuestionLike;
+        Insert: Omit<QuestionLike, 'id' | 'created_at'> & { id?: string };
+        Update: never;
+      };
+      question_comments: {
+        Row: QuestionComment;
+        Insert: Omit<QuestionComment, 'id' | 'created_at' | 'updated_at' | 'like_count'> & { id?: string };
+        Update: Partial<Omit<QuestionComment, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      comment_likes: {
+        Row: CommentLike;
+        Insert: Omit<CommentLike, 'id' | 'created_at'> & { id?: string };
+        Update: never;
+      };
       // CRM tables (migration 009)
       admin_user_notes: {
         Row: AdminUserNote;
         Insert: Omit<AdminUserNote, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<AdminUserNote, 'id' | 'created_at'>>;
+      };
+      // Question Bank v2 (migration 20260302)
+      question_votes: {
+        Row: QuestionVote;
+        Insert: Omit<QuestionVote, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<QuestionVote, 'id' | 'created_at'>>;
+      };
+      question_improvements: {
+        Row: QuestionImprovement;
+        Insert: Omit<QuestionImprovement, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<QuestionImprovement, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      improvement_votes: {
+        Row: ImprovementVote;
+        Insert: Omit<ImprovementVote, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<ImprovementVote, 'id' | 'created_at'>>;
+      };
+      comment_votes: {
+        Row: CommentVote;
+        Insert: Omit<CommentVote, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<CommentVote, 'id' | 'created_at'>>;
+      };
+      question_sessions: {
+        Row: QuestionSession;
+        Insert: Omit<QuestionSession, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<QuestionSession, 'id' | 'created_at'>>;
+      };
+      user_exam_profiles: {
+        Row: UserExamProfile;
+        Insert: Omit<UserExamProfile, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<UserExamProfile, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      user_exam_attempts: {
+        Row: UserExamAttempt;
+        Insert: Omit<UserExamAttempt, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<UserExamAttempt, 'id' | 'created_at'>>;
+      };
+      user_qb_stats: {
+        Row: UserQBStats;
+        Insert: Omit<UserQBStats, 'id' | 'created_at' | 'updated_at' | 'contribution_score'> & { id?: string };
+        Update: Partial<Omit<UserQBStats, 'id' | 'created_at' | 'updated_at' | 'contribution_score'>>;
       };
     };
     Views: {
@@ -2433,6 +2772,10 @@ export interface Database {
       marketing_content_status: MarketingContentStatus;
       // Center type enum (migration 20260227)
       center_type: CenterType;
+      // Question sharing enums (migration 20260301 + 20260302)
+      question_post_status: QuestionPostStatus;
+      nata_question_category: NataQuestionCategory;
+      vote_type: VoteType;
     };
   };
 }

@@ -1,11 +1,11 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
 import { getAllCenterSeoSlugs } from '@neram/database/queries';
-import { locations as dbLocations } from '@neram/database';
+import { getSitemapLocations } from '@neram/database';
 
 const baseUrl = 'https://neramclasses.com';
 
-// All static pages
+// All static pages (these use i18n translations → include all locales)
 const staticPages = [
   '',
   '/about',
@@ -74,7 +74,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [];
   const currentDate = new Date();
 
-  // Add static pages for each locale
+  // ─── Static pages: all locales (these have i18n translations) ───
   for (const locale of locales) {
     for (const page of staticPages) {
       const isHomepage = page === '';
@@ -92,7 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
-    // Add course pages
+    // Course pages: all locales
     for (const slug of courseSlugs) {
       entries.push({
         url: `${baseUrl}/${locale}/courses/${slug}`,
@@ -107,25 +107,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
-    // Add location pages (synced with @neram/database to avoid sitemap-route mismatch)
-    for (const location of dbLocations) {
-      entries.push({
-        url: `${baseUrl}/${locale}/coaching/nata-coaching/nata-coaching-centers-in-${location.city}`,
-        lastModified: currentDate,
-        changeFrequency: 'yearly',
-        priority: 0.5,
-        alternates: {
-          languages: Object.fromEntries(
-            locales.map((l) => [
-              l,
-              `${baseUrl}/${l}/coaching/nata-coaching/nata-coaching-centers-in-${location.city}`,
-            ])
-          ),
-        },
-      });
-    }
-
-    // Add blog posts
+    // Blog posts: all locales
     for (const post of blogSlugs) {
       entries.push({
         url: `${baseUrl}/${locale}/blog/${post.slug}`,
@@ -141,23 +123,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  // Add center detail pages (dynamic from database)
+  // ─── Location pages: ENGLISH ONLY, high+medium priority only ───
+  // Location pages have no i18n translations (hardcoded English content).
+  // Including all 5 locales creates 1,010 duplicate-content URLs that
+  // waste crawl budget. Only include English versions of indexable cities.
+  const sitemapLocations = getSitemapLocations();
+  for (const location of sitemapLocations) {
+    entries.push({
+      url: `${baseUrl}/en/coaching/nata-coaching/nata-coaching-centers-in-${location.city}`,
+      lastModified: currentDate,
+      changeFrequency: 'monthly',
+      priority: location.sitemapPriority === 'high' ? 0.7 : 0.5,
+    });
+  }
+
+  // ─── Center detail pages: English only ───
   try {
     const centerSlugs = await getAllCenterSeoSlugs();
-    for (const locale of locales) {
-      for (const centerSlug of centerSlugs) {
-        entries.push({
-          url: `${baseUrl}/${locale}/contact/${centerSlug}`,
-          lastModified: currentDate,
-          changeFrequency: 'monthly',
-          priority: 0.8,
-          alternates: {
-            languages: Object.fromEntries(
-              locales.map((l) => [l, `${baseUrl}/${l}/contact/${centerSlug}`])
-            ),
-          },
-        });
-      }
+    for (const centerSlug of centerSlugs) {
+      entries.push({
+        url: `${baseUrl}/en/contact/${centerSlug}`,
+        lastModified: currentDate,
+        changeFrequency: 'monthly',
+        priority: 0.8,
+      });
     }
   } catch (err) {
     console.error('Failed to fetch center slugs for sitemap:', err);

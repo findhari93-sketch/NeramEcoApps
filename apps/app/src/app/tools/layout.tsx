@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const toolLinks = [
-  { title: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
-  { title: 'College Predictor', href: '/tools/college-predictor' },
-  { title: 'Exam Centers', href: '/tools/exam-centers' },
+  { title: 'Cutoff Calculator', href: '/tools/nata/cutoff-calculator' },
+  { title: 'College Predictor', href: '/tools/nata/college-predictor' },
+  { title: 'Exam Centers', href: '/tools/nata/exam-centers' },
+  { title: 'Question Bank', href: '/tools/nata/question-bank' },
   { title: 'Help', href: '/tools/help' },
 ];
 
@@ -43,7 +44,7 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
               mr: 4,
             }}
           >
-            NATA Tools
+            Neram Tools
           </Typography>
 
           {/* Desktop Navigation */}
@@ -53,8 +54,8 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
                 key={link.href}
                 component={Link}
                 href={link.href}
-                color={pathname === link.href ? 'primary' : 'inherit'}
-                variant={pathname === link.href ? 'contained' : 'text'}
+                color={pathname.startsWith(link.href) ? 'primary' : 'inherit'}
+                variant={pathname.startsWith(link.href) ? 'contained' : 'text'}
                 size="small"
               >
                 {link.title}

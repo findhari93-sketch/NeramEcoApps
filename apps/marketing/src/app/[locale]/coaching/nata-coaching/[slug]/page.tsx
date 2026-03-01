@@ -15,9 +15,15 @@ import {
   ListItemIcon,
   ListItemText,
   Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@neram/ui';
 import Link from 'next/link';
-import { locations, getLocationByCity, getLocationsByState, getLocationsByRegion, type Location } from '@neram/database';
+import { locations, getLocationByCity, getLocationsByState, getLocationsByRegion, getLocationSeoContent, type Location } from '@neram/database';
 import { locales } from '@/i18n';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
@@ -61,6 +67,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const title = `Best NATA Coaching in ${location.cityDisplay} 2026 - Online & Offline Classes`;
   const description = `Join the #1 NATA coaching in ${location.cityDisplay}, ${location.stateDisplay}. IIT/NIT alumni faculty, comprehensive study material, online & offline classes. 99.9% success rate. Enroll for NATA 2026!`;
 
+  // Only index English pages for high/medium priority cities.
+  // Non-English locale pages have no translations (identical English text = duplicate content).
+  // Low-priority cities have thin template content.
+  const shouldIndex = params.locale === 'en' && location.sitemapPriority !== 'low';
+
   return {
     title,
     description,
@@ -71,6 +82,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description,
       type: 'website',
     },
+    ...(shouldIndex ? {} : { robots: { index: false, follow: true } }),
   };
 }
 
@@ -121,6 +133,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
 
   const isGulf = location.region === 'gulf';
   const baseUrl = 'https://neramclasses.com';
+  const seoContent = getLocationSeoContent(city);
 
   const faqs = [
     { question: `What is the fee for NATA coaching in ${location.cityDisplay}?`, answer: 'Our course fees range from ₹15,000 to ₹75,000 depending on the course duration and mode. Contact us for detailed fee structure and scholarship options.' },
@@ -172,7 +185,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
             Best NATA Coaching in {location.cityDisplay}
           </Typography>
           <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
-            Join {location.cityDisplay}'s top-rated NATA coaching institute. Expert faculty, proven results,
+            Join {location.cityDisplay}&apos;s top-rated NATA coaching institute. Expert faculty, proven results,
             and comprehensive preparation for NATA 2026.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -219,8 +232,37 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
         </Container>
       </Box>
 
+      {/* City-Specific Context (unique per city — SEO differentiator) */}
+      {seoContent && (
+        <Box sx={{ py: { xs: 6, md: 10 } }}>
+          <Container maxWidth="lg">
+            <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
+              NATA Coaching in {location.cityDisplay} — Why Here?
+            </Typography>
+            <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.8 }}>
+              {seoContent.localContext}
+            </Typography>
+
+            {/* City-specific highlights */}
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mt: 4 }}>
+              What Makes Our {location.cityDisplay} Program Special
+            </Typography>
+            <List>
+              {seoContent.uniqueHighlights.map((highlight, idx) => (
+                <ListItem key={idx} sx={{ px: 0 }}>
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    <Typography color="success.main">✓</Typography>
+                  </ListItemIcon>
+                  <ListItemText primary={highlight} />
+                </ListItem>
+              ))}
+            </List>
+          </Container>
+        </Box>
+      )}
+
       {/* About Section */}
-      <Box sx={{ py: { xs: 6, md: 10 } }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: seoContent ? 'grey.50' : 'inherit' }}>
         <Container maxWidth="lg">
           <Grid container spacing={6}>
             <Grid item xs={12} md={6}>
@@ -264,6 +306,59 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
           </Grid>
         </Container>
       </Box>
+
+      {/* Architecture Colleges Near City (unique per city — SEO differentiator) */}
+      {seoContent && seoContent.nearbyColleges.length > 0 && (
+        <Box sx={{ py: { xs: 6, md: 10 } }}>
+          <Container maxWidth="lg">
+            <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
+              Top Architecture Colleges Near {location.cityDisplay}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+              After clearing NATA, students from {location.cityDisplay} can pursue B.Arch at these CoA-approved colleges:
+            </Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    <TableCell sx={{ fontWeight: 600 }}>College Name</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {seoContent.nearbyColleges.map((college, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>{college.name}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={college.type === 'government' ? 'Govt.' : college.type === 'deemed' ? 'Deemed' : 'Private'}
+                          size="small"
+                          color={college.type === 'government' ? 'success' : college.type === 'deemed' ? 'info' : 'default'}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* NATA Exam Centers */}
+            {seoContent.examCenters.length > 0 && (
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+                  NATA Exam Centers Near {location.cityDisplay}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {seoContent.examCenters.map((center, idx) => (
+                    <Chip key={idx} label={center} variant="outlined" />
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </Container>
+        </Box>
+      )}
 
       {/* Course Plans */}
       <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
@@ -327,22 +422,17 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
                 Why {location.cityDisplay} Students Choose Us
               </Typography>
               <List>
-                <ListItem sx={{ px: 0 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}><Typography color="primary">•</Typography></ListItemIcon>
-                  <ListItemText primary={`Proven track record in ${location.stateDisplay}`} />
-                </ListItem>
-                <ListItem sx={{ px: 0 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}><Typography color="primary">•</Typography></ListItemIcon>
-                  <ListItemText primary="Flexible timings for school/college students" />
-                </ListItem>
-                <ListItem sx={{ px: 0 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}><Typography color="primary">•</Typography></ListItemIcon>
-                  <ListItemText primary={isGulf ? "Classes timed for Gulf timezone" : "Weekend and evening batches available"} />
-                </ListItem>
-                <ListItem sx={{ px: 0 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}><Typography color="primary">•</Typography></ListItemIcon>
-                  <ListItemText primary="Personalized attention with small batch sizes" />
-                </ListItem>
+                {(seoContent?.uniqueHighlights || [
+                  `Proven track record in ${location.stateDisplay}`,
+                  'Flexible timings for school/college students',
+                  isGulf ? 'Classes timed for Gulf timezone' : 'Weekend and evening batches available',
+                  'Personalized attention with small batch sizes',
+                ]).map((item, idx) => (
+                  <ListItem key={idx} sx={{ px: 0 }}>
+                    <ListItemIcon sx={{ minWidth: 32 }}><Typography color="primary">•</Typography></ListItemIcon>
+                    <ListItemText primary={item} />
+                  </ListItem>
+                ))}
               </List>
             </Grid>
             <Grid item xs={12} md={4}>

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     description:
       'Find NATA exam centers near your location. Search by state, city, or pincode. Get directions, address, and capacity details for all exam centers across India.',
     type: 'website',
-    url: 'https://app.neramclasses.com/tools/exam-centers',
+    url: 'https://app.neramclasses.com/tools/nata/exam-centers',
   },
   twitter: {
     card: 'summary_large_image',
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
       'Find NATA exam centers near your location. Search by state, city, or pincode. Get directions and capacity details.',
   },
   alternates: {
-    canonical: 'https://app.neramclasses.com/tools/exam-centers',
+    canonical: 'https://app.neramclasses.com/tools/nata/exam-centers',
   },
 };
 
