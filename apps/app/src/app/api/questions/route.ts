@@ -12,6 +12,7 @@ import {
   getSupabaseAdminClient,
   getApprovedQuestions,
   createQuestionPost,
+  dispatchNotification,
   type NataQuestionCategory,
 } from '@neram/database';
 
@@ -163,6 +164,31 @@ export async function POST(req: NextRequest) {
       isAdmin,
       adminClient,
     );
+
+    // Dispatch notification for non-admin posts
+    if (!isAdmin) {
+      const { data: authorUser } = await adminClient
+        .from('users')
+        .select('name')
+        .eq('id', auth.userId)
+        .single() as unknown as { data: { name: string } | null };
+
+      dispatchNotification(
+        {
+          type: 'question_submitted',
+          title: 'New Question Submitted',
+          message: `${authorUser?.name || 'A user'} submitted: "${title.trim().substring(0, 50)}${title.trim().length > 50 ? '...' : ''}"`,
+          data: {
+            question_id: question.id,
+            question_title: title.trim(),
+            category,
+            user_id: auth.userId,
+            user_name: authorUser?.name || 'Unknown',
+          },
+        },
+        adminClient,
+      ).catch((err: unknown) => console.error('Notification dispatch error:', err));
+    }
 
     return NextResponse.json({ data: question }, { status: 201 });
   } catch (error) {

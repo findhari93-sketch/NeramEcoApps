@@ -86,18 +86,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ContactRe
       supabase
     );
 
-    // Dispatch notifications (non-blocking)
-    notifyContactMessageReceived({
-      name: body.name.trim(),
-      email: body.email.trim().toLowerCase(),
-      phone: body.phone?.trim(),
-      subject: body.subject.trim(),
-      message: body.message.trim(),
-      source: body.source || 'contact_page',
-      centerId: body.center_id || undefined,
-    }).catch((err) => {
+    // Dispatch notifications
+    try {
+      await notifyContactMessageReceived({
+        name: body.name.trim(),
+        email: body.email.trim().toLowerCase(),
+        phone: body.phone?.trim(),
+        subject: body.subject.trim(),
+        message: body.message.trim(),
+        source: body.source || 'contact_page',
+        centerId: body.center_id || undefined,
+      });
+    } catch (err) {
       console.error('Contact message notification dispatch failed:', err);
-    });
+    }
 
     return NextResponse.json(
       { success: true, data: contactMessage },

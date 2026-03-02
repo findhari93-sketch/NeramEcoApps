@@ -61,20 +61,22 @@ export async function POST(
     if (user) {
       const userName = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Student';
 
-      // Dispatch notifications (non-blocking)
-      notifyRefundRejected({
-        userId: user.id,
-        userName,
-        phone: user.phone || '',
-        email: user.email || '',
-        refundAmount: Number(updated.refund_amount),
-        paymentAmount: Number(updated.payment_amount),
-        adminNotes: adminNotes.trim(),
-        paymentId: updated.payment_id,
-        leadProfileId: updated.lead_profile_id || undefined,
-      }, supabase).catch((err) => {
+      // Dispatch notifications
+      try {
+        await notifyRefundRejected({
+          userId: user.id,
+          userName,
+          phone: user.phone || '',
+          email: user.email || '',
+          refundAmount: Number(updated.refund_amount),
+          paymentAmount: Number(updated.payment_amount),
+          adminNotes: adminNotes.trim(),
+          paymentId: updated.payment_id,
+          leadProfileId: updated.lead_profile_id || undefined,
+        }, supabase);
+      } catch (err) {
         console.error('Failed to send refund rejected notifications:', err);
-      });
+      }
     }
 
     return NextResponse.json({ success: true, refundRequest: updated });

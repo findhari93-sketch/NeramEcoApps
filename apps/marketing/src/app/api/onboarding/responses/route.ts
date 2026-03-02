@@ -64,13 +64,17 @@ export async function POST(req: NextRequest) {
       adminClient
     );
 
-    // Fire notifications (non-blocking)
-    notifyOnboardingCompleted({
-      userId: user.id,
-      userName: user.name || user.email || 'Unknown',
-      phone: user.phone || '',
-      sourceApp: source_app || 'marketing',
-    }, adminClient).catch(err => console.error('Notification error:', err));
+    // Fire notifications
+    try {
+      await notifyOnboardingCompleted({
+        userId: user.id,
+        userName: user.name || user.email || 'Unknown',
+        phone: user.phone || '',
+        sourceApp: source_app || 'marketing',
+      }, adminClient);
+    } catch (err) {
+      console.error('Notification error:', err);
+    }
 
     return NextResponse.json({ success: true, session: result.session });
   } catch (error) {

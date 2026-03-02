@@ -39,6 +39,9 @@ export default function CRMPage() {
   const [activeStage, setActiveStage] = useState<PipelineStage | null>(
     (searchParams.get('stage') as PipelineStage) || null
   );
+  const [showDeadLeads, setShowDeadLeads] = useState(
+    searchParams.get('dead_leads') === 'true'
+  );
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -63,6 +66,7 @@ export default function CRMPage() {
       params.set('offset', String(pagination.pageIndex * pagination.pageSize));
 
       if (activeStage) params.set('pipeline_stage', activeStage);
+      if (showDeadLeads) params.set('is_dead_lead', 'true');
       if (globalFilter) params.set('search', globalFilter);
 
       if (sorting.length > 0) {
@@ -82,7 +86,7 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter]);
+  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads]);
 
   useEffect(() => {
     fetchUsers();
@@ -97,6 +101,21 @@ export default function CRMPage() {
       params.set('stage', stage);
     } else {
       params.delete('stage');
+    }
+    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    window.history.replaceState(null, '', newUrl);
+  };
+
+  const handleToggleDeadLeads = () => {
+    const next = !showDeadLeads;
+    setShowDeadLeads(next);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+    const params = new URLSearchParams(window.location.search);
+    if (next) {
+      params.set('dead_leads', 'true');
+    } else {
+      params.delete('dead_leads');
     }
     const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
     window.history.replaceState(null, '', newUrl);
@@ -175,6 +194,22 @@ export default function CRMPage() {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Chip
+            label="Dead Leads"
+            onClick={handleToggleDeadLeads}
+            onDelete={showDeadLeads ? handleToggleDeadLeads : undefined}
+            variant={showDeadLeads ? 'filled' : 'outlined'}
+            size="small"
+            sx={{
+              fontWeight: 500,
+              bgcolor: showDeadLeads ? 'grey.700' : undefined,
+              color: showDeadLeads ? 'common.white' : 'text.secondary',
+              borderColor: showDeadLeads ? 'grey.700' : 'grey.300',
+              '&:hover': {
+                bgcolor: showDeadLeads ? 'grey.800' : 'grey.100',
+              },
+            }}
+          />
           {activeStage && (
             <Chip
               label={`Filtered: ${activeStageConfig?.label}`}

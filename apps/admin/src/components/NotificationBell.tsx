@@ -37,6 +37,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   payment_received: '#9c27b0',
   demo_registration: '#00bcd4',
   application_approved: '#4caf50',
+  question_submitted: '#ff5722',
+  question_edit_requested: '#795548',
+  question_delete_requested: '#f44336',
+  callback_reminder: '#ff9800',
 };
 
 const EVENT_SECTION_MAP: Record<string, string> = {
@@ -51,6 +55,7 @@ const EVENT_SECTION_MAP: Record<string, string> = {
   scholarship_submitted: 'scholarship',
   scholarship_approved: 'scholarship',
   scholarship_rejected: 'scholarship',
+  callback_reminder: 'callbacks',
 };
 
 function getNavigationUrl(notification: AdminNotification): string | null {
@@ -59,6 +64,11 @@ function getNavigationUrl(notification: AdminNotification): string | null {
     const slotId = notification.metadata?.slot_id as string;
     if (slotId) return `/demo-classes/${slotId}`;
     return '/demo-classes';
+  }
+
+  // Question moderation events navigate to the moderation page
+  if (['question_submitted', 'question_edit_requested', 'question_delete_requested'].includes(notification.event_type)) {
+    return '/question-moderation';
   }
 
   const userId = notification.metadata?.user_id as string;

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Box, CircularProgress, Alert, Grid } from '@neram/ui';
+import { Box, CircularProgress, Alert, Grid, Button } from '@neram/ui';
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import type { UserJourneyDetail } from '@neram/database';
 
@@ -13,12 +14,15 @@ import ScholarshipSection from '../../../../components/crm/ScholarshipSection';
 import PaymentSection from '../../../../components/crm/PaymentSection';
 import RefundSection from '../../../../components/crm/RefundSection';
 import DemoClassSection from '../../../../components/crm/DemoClassSection';
+import CallbackSection from '../../../../components/crm/CallbackSection';
 import OnboardingSection from '../../../../components/crm/OnboardingSection';
 import { ScoreCalculationsSection } from '../../../../components/crm/ScoreCalculationsSection';
 import DocumentsSection from '../../../../components/crm/DocumentsSection';
 import HistoryTimeline from '../../../../components/crm/HistoryTimeline';
 import AdminNotesSection from '../../../../components/crm/AdminNotesSection';
 import EditUserDialog from '../../../../components/crm/EditUserDialog';
+import GenerateLinkDialog from '../../../../components/direct-enrollment/GenerateLinkDialog';
+import ShareLinkPanel from '../../../../components/direct-enrollment/ShareLinkPanel';
 
 export default function UserDetailPage({ params }: { params: { id: string } }) {
   const { supabaseUserId, supabaseName } = useAdminProfile();
@@ -27,6 +31,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editOpen, setEditOpen] = useState(false);
+  const [directEnrollOpen, setDirectEnrollOpen] = useState(false);
+  const [shareLink, setShareLink] = useState<any>(null);
 
   const adminId = supabaseUserId || 'unknown';
   const adminName = supabaseName || 'Admin';
@@ -112,6 +118,21 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               onStatusChange={fetchDetail}
             />
           </Box>
+          {/* Direct Enrollment Quick Action */}
+          {detail.user.user_type === 'lead' && (
+            <Box sx={{ mb: 2 }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                fullWidth
+                onClick={() => setDirectEnrollOpen(true)}
+                sx={{ borderRadius: 1, py: 1.2, fontWeight: 600, textTransform: 'none' }}
+                startIcon={<PersonAddAlt1Icon />}
+              >
+                Generate Direct Enrollment Link
+              </Button>
+            </Box>
+          )}
           <Box id="crm-section-scholarship" sx={{ borderRadius: 1 }}>
             <ScholarshipSection
               detail={detail}
@@ -131,6 +152,14 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           </Box>
           <Box id="crm-section-demo" sx={{ borderRadius: 1 }}>
             <DemoClassSection detail={detail} />
+          </Box>
+          <Box id="crm-section-callbacks" sx={{ borderRadius: 1 }}>
+            <CallbackSection
+              detail={detail}
+              adminId={adminId}
+              adminName={adminName}
+              onStatusChange={fetchDetail}
+            />
           </Box>
           <Box id="crm-section-onboarding" sx={{ borderRadius: 1 }}>
             <OnboardingSection detail={detail} />
@@ -164,6 +193,30 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         adminId={adminId}
         onSaved={fetchDetail}
       />
+
+      {/* Direct Enrollment dialogs */}
+      <GenerateLinkDialog
+        open={directEnrollOpen}
+        onClose={() => setDirectEnrollOpen(false)}
+        onSuccess={(link: any) => {
+          setDirectEnrollOpen(false);
+          setShareLink(link);
+        }}
+        adminId={adminId}
+        prefillData={{
+          studentName: detail.user.name || detail.user.first_name || '',
+          studentPhone: detail.user.phone || '',
+          studentEmail: detail.user.email || '',
+          interestCourse: detail.leadProfile?.interest_course || '',
+        }}
+      />
+      {shareLink && (
+        <ShareLinkPanel
+          open={!!shareLink}
+          onClose={() => setShareLink(null)}
+          link={shareLink}
+        />
+      )}
     </Box>
   );
 }

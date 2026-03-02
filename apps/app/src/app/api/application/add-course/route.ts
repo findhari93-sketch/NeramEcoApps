@@ -164,16 +164,20 @@ export async function POST(request: NextRequest) {
     let application = await createApplication(supabase, applicationData);
     application = await submitApplication(supabase, application.id);
 
-    // Dispatch notifications (non-blocking)
-    notifyNewApplication({
-      userId: auth.userId,
-      userName: auth.userName,
-      phone: auth.phone,
-      course: COURSE_LABELS[body.interest_course] || body.interest_course,
-      applicationNumber: application.application_number || undefined,
-      city: existing.city || undefined,
-      state: existing.state || undefined,
-    }).catch((err) => console.error('Notification dispatch failed:', err));
+    // Dispatch notifications
+    try {
+      await notifyNewApplication({
+        userId: auth.userId,
+        userName: auth.userName,
+        phone: auth.phone,
+        course: COURSE_LABELS[body.interest_course] || body.interest_course,
+        applicationNumber: application.application_number || undefined,
+        city: existing.city || undefined,
+        state: existing.state || undefined,
+      });
+    } catch (err) {
+      console.error('Notification dispatch failed:', err);
+    }
 
     return NextResponse.json(
       { success: true, data: application },

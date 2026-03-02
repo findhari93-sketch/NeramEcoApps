@@ -199,14 +199,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Notify team (non-blocking)
-    notifyScholarshipSubmitted({
-      userId: user.id,
-      userName: user.name || user.email || 'Student',
-      phone: user.phone || 'N/A',
-      schoolName: body.school_name || (submittedApplication.academic_data as any)?.school_name,
-      applicationNumber: submittedApplication.application_number || undefined,
-    }).catch((err) => console.error('Scholarship notification failed:', err));
+    // Notify team
+    try {
+      await notifyScholarshipSubmitted({
+        userId: user.id,
+        userName: user.name || user.email || 'Student',
+        phone: user.phone || 'N/A',
+        schoolName: body.school_name || (submittedApplication.academic_data as any)?.school_name,
+        applicationNumber: submittedApplication.application_number || undefined,
+      });
+    } catch (err) {
+      console.error('Scholarship notification failed:', err);
+    }
 
     return NextResponse.json({ success: true, scholarship });
   } catch (error) {

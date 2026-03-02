@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Stack, Chip, Avatar, CircularProgress, Button, Divider, Card, CardContent,
+  IconButton, EditIcon, DeleteIcon,
 } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { QuestionPostDisplay, QuestionCommentDisplay, VoteType, QBAccessInfo } from '@neram/database';
+import type { QuestionPostDisplay, QuestionCommentDisplay, VoteType, QBAccessInfo, QuestionChangeRequest } from '@neram/database';
 import VoteButton from '@/components/question-bank/VoteButton';
 import ConfidenceIndicator from '@/components/question-bank/ConfidenceIndicator';
 import AdminBadge from '@/components/question-bank/AdminBadge';
@@ -16,6 +17,9 @@ import SessionTracker from '@/components/question-bank/SessionTracker';
 import BlurredContent from '@/components/question-bank/BlurredContent';
 import ContributionPrompt from '@/components/question-bank/ContributionPrompt';
 import CommentSection from '@/components/question-bank/CommentSection';
+import EditQuestionDialog from '@/components/question-bank/EditQuestionDialog';
+import DeleteQuestionDialog from '@/components/question-bank/DeleteQuestionDialog';
+import ChangeRequestStatus from '@/components/question-bank/ChangeRequestStatus';
 
 const CATEGORY_LABELS: Record<string, string> = {
   mathematics: 'Mathematics',
@@ -48,6 +52,10 @@ export default function QuestionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [accessInfo, setAccessInfo] = useState<QBAccessInfo | null>(null);
+  const [userDbId, setUserDbId] = useState<string | null>(null);
+  const [changeRequests, setChangeRequests] = useState<QuestionChangeRequest[]>([]);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const getAuthToken = useCallback(async (): Promise<string | null> => {
     try {
@@ -102,6 +110,31 @@ export default function QuestionDetailPage() {
           const statsData = await statsRes.json();
           setAccessInfo(statsData.data);
         }
+
+        // Fetch user DB ID and pending change requests if authenticated
+        if (authHeader) {
+          // Get user DB ID from /api/auth/me or extract from question context
+          try {
+            const meRes = await fetch('/api/auth/me', { headers });
+            if (meRes.ok) {
+              const meData = await meRes.json();
+              setUserDbId(meData.data?.id || meData.id || null);
+            }
+          } catch {
+            // Non-critical - user DB ID just used for author check
+          }
+
+          // Fetch pending change requests for this question
+          try {
+            const crRes = await fetch(`/api/questions/${id}/edit-request`, { headers });
+            if (crRes.ok) {
+              const crData = await crRes.json();
+              setChangeRequests(crData.data || []);
+            }
+          } catch {
+            // Non-critical
+          }
+        }
       } catch (error) {
         console.error('Error fetching question:', error);
         setNotFound(true);
@@ -112,6 +145,30 @@ export default function QuestionDetailPage() {
 
     if (id) fetchData();
   }, [id, user, getAuthToken]);
+
+  const refetchAfterChangeRequest = useCallback(async () => {
+    try {
+      const token = await getAuthToken();
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const [questionRes, crRes] = await Promise.all([
+        fetch(`/api/questions/${id}`, { headers }),
+        fetch(`/api/questions/${id}/edit-request`, { headers }),
+      ]);
+
+      if (questionRes.ok) {
+        const questionData = await questionRes.json();
+        setQuestion(questionData.data);
+      }
+      if (crRes.ok) {
+        const crData = await crRes.json();
+        setChangeRequests(crData.data || []);
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [id, getAuthToken]);
 
   const handleVote = async (vote: VoteType): Promise<{ vote: VoteType | null; voteScore: number }> => {
     const token = await getAuthToken();
@@ -219,10 +276,35 @@ export default function QuestionDetailPage() {
                 </Box>
               </Stack>
 
-              {/* Title */}
-              <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, lineHeight: 1.3 }}>
-                {question.title}
-              </Typography>
+              {/* Title with Edit/Delete actions */}
+              <Stack direction="row" alignItems="flex-start" spacing={1}>
+                <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5, lineHeight: 1.3, flex: 1 }}>
+                  {question.title}
+                </Typography>
+                {user && userDbId && question.user_id === userDbId && (
+                  <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setEditDialogOpen(true)}
+                      aria-label="Edit question"
+                      sx={{ color: 'text.secondary' }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => setDeleteDialogOpen(true)}
+                      aria-label="Delete question"
+                      sx={{ color: 'error.main' }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                )}
+              </Stack>
+
+              {/* Change request status */}
+              <ChangeRequestStatus requests={changeRequests} />
 
               {/* Tags */}
               <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
@@ -342,6 +424,24 @@ export default function QuestionDetailPage() {
         isAuthenticated={!!user}
         getAuthToken={getAuthToken}
       />
+
+      {/* Edit/Delete dialogs */}
+      {question && (
+        <>
+          <EditQuestionDialog
+            open={editDialogOpen}
+            onClose={() => setEditDialogOpen(false)}
+            question={question}
+            onSubmitted={refetchAfterChangeRequest}
+          />
+          <DeleteQuestionDialog
+            open={deleteDialogOpen}
+            onClose={() => setDeleteDialogOpen(false)}
+            question={question}
+            onSubmitted={refetchAfterChangeRequest}
+          />
+        </>
+      )}
     </Box>
   );
 }

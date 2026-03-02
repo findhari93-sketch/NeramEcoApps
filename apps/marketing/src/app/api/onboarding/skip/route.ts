@@ -51,11 +51,15 @@ export async function POST(req: NextRequest) {
 
     const session = await skipOnboarding(user.id, source_app || 'marketing', adminClient);
 
-    notifyOnboardingSkipped({
-      userId: user.id,
-      userName: user.name || user.email || 'Unknown',
-      phone: user.phone || '',
-    }, adminClient).catch(err => console.error('Skip notification error:', err));
+    try {
+      await notifyOnboardingSkipped({
+        userId: user.id,
+        userName: user.name || user.email || 'Unknown',
+        phone: user.phone || '',
+      }, adminClient);
+    } catch (err) {
+      console.error('Skip notification error:', err);
+    }
 
     return NextResponse.json({ success: true, session });
   } catch (error) {

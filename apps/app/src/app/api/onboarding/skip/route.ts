@@ -33,12 +33,16 @@ export async function POST(req: NextRequest) {
 
     const session = await skipOnboarding(user.id, source_app || 'app', adminClient);
 
-    // Fire skip notification (non-blocking)
-    notifyOnboardingSkipped({
-      userId: user.id,
-      userName: user.name || user.email || 'Unknown',
-      phone: user.phone || '',
-    }, adminClient).catch(err => console.error('Skip notification error:', err));
+    // Fire skip notification
+    try {
+      await notifyOnboardingSkipped({
+        userId: user.id,
+        userName: user.name || user.email || 'Unknown',
+        phone: user.phone || '',
+      }, adminClient);
+    } catch (err) {
+      console.error('Skip notification error:', err);
+    }
 
     return NextResponse.json({
       success: true,

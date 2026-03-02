@@ -53,13 +53,17 @@ export async function POST(req: NextRequest) {
       responses.map((r: { question_id: string; response: any }) => [r.question_id, r.response])
     );
 
-    // Fire notifications (non-blocking)
-    notifyOnboardingCompleted({
-      userId: user.id,
-      userName: user.name || user.email || 'Unknown',
-      phone: user.phone || '',
-      sourceApp: source_app || 'app',
-    }, adminClient).catch(err => console.error('Notification error:', err));
+    // Fire notifications
+    try {
+      await notifyOnboardingCompleted({
+        userId: user.id,
+        userName: user.name || user.email || 'Unknown',
+        phone: user.phone || '',
+        sourceApp: source_app || 'app',
+      }, adminClient);
+    } catch (err) {
+      console.error('Notification error:', err);
+    }
 
     return NextResponse.json({
       success: true,

@@ -152,6 +152,21 @@ export default function UsersTable({
               >
                 {row.original.email || row.original.phone || 'No contact'}
               </Typography>
+              {row.original.contacted_status === 'dead_lead' && (
+                <Chip
+                  label="Dead Lead"
+                  size="small"
+                  sx={{
+                    height: 18,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    bgcolor: '#9E9E9E14',
+                    color: '#757575',
+                    borderRadius: 0.75,
+                    mt: 0.25,
+                  }}
+                />
+              )}
             </Box>
           </Box>
         ),
@@ -578,28 +593,36 @@ export default function UsersTable({
       },
     },
 
-    muiTableBodyRowProps: ({ row }) => ({
-      onClick: (e: React.MouseEvent) => {
-        const target = e.target as HTMLElement;
-        if (
-          target.closest('.MuiCheckbox-root') ||
-          target.closest('[data-bulk-action]')
-        ) {
-          return;
-        }
-        onRowClick(row.original.id);
-      },
-      sx: {
-        cursor: 'pointer',
-        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-        '&:hover': {
-          bgcolor: 'primary.50',
+    muiTableBodyRowProps: ({ row }) => {
+      const isDeadLead = row.original.contacted_status === 'dead_lead';
+      return {
+        onClick: (e: React.MouseEvent) => {
+          const target = e.target as HTMLElement;
+          if (
+            target.closest('.MuiCheckbox-root') ||
+            target.closest('[data-bulk-action]')
+          ) {
+            return;
+          }
+          onRowClick(row.original.id);
         },
-        '&:hover td': {
-          bgcolor: 'transparent',
+        sx: {
+          cursor: 'pointer',
+          transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+          ...(isDeadLead && {
+            opacity: 0.5,
+            bgcolor: 'grey.50',
+          }),
+          '&:hover': {
+            bgcolor: isDeadLead ? 'grey.100' : 'primary.50',
+            opacity: isDeadLead ? 0.7 : 1,
+          },
+          '&:hover td': {
+            bgcolor: 'transparent',
+          },
         },
-      },
-    }),
+      };
+    },
 
     positionGlobalFilter: 'left',
     muiSearchTextFieldProps: {

@@ -584,11 +584,11 @@ export default function ApplicationSection({
               </Typography>
               {leadProfile.contacted_status && (
                 <Chip
-                  label={leadProfile.contacted_status === 'talked' ? 'Talked' : leadProfile.contacted_status === 'unreachable' ? 'Unreachable' : 'Callback Scheduled'}
+                  label={leadProfile.contacted_status === 'talked' ? 'Talked' : leadProfile.contacted_status === 'unreachable' ? 'Unreachable' : leadProfile.contacted_status === 'dead_lead' ? 'Dead Lead' : 'Callback Scheduled'}
                   size="small"
                   sx={{ height: 20, fontSize: 10, fontWeight: 600, borderRadius: 1, ml: 'auto',
-                    bgcolor: leadProfile.contacted_status === 'talked' ? '#E8F5E9' : leadProfile.contacted_status === 'unreachable' ? '#FFF3E0' : '#E3F2FD',
-                    color: leadProfile.contacted_status === 'talked' ? '#2E7D32' : leadProfile.contacted_status === 'unreachable' ? '#E65100' : '#1565C0',
+                    bgcolor: leadProfile.contacted_status === 'talked' ? '#E8F5E9' : leadProfile.contacted_status === 'unreachable' ? '#FFF3E0' : leadProfile.contacted_status === 'dead_lead' ? '#FAFAFA' : '#E3F2FD',
+                    color: leadProfile.contacted_status === 'talked' ? '#2E7D32' : leadProfile.contacted_status === 'unreachable' ? '#E65100' : leadProfile.contacted_status === 'dead_lead' ? '#9E9E9E' : '#1565C0',
                   }}
                 />
               )}

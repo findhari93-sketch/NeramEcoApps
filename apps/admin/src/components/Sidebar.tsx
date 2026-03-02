@@ -32,6 +32,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import RateReviewIcon from '@mui/icons-material/RateReview';
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -43,6 +44,7 @@ const menuItems = [
   { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
   { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
   { text: 'Students', icon: SchoolIcon, path: '/students' },
+  { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
   { text: 'Payments', icon: PaymentIcon, path: '/payments' },
   { text: 'Courses', icon: BookIcon, path: '/courses' },
   { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },

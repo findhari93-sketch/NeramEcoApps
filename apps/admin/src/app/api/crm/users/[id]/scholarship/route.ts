@@ -75,14 +75,18 @@ export async function POST(
       .eq('id', params.id)
       .single();
 
-    // Send notification (non-blocking)
+    // Send notification
     if (user) {
-      notifyScholarshipOpened({
-        userId: user.id,
-        userName: user.name || 'Student',
-        phone: user.phone || '',
-        applicationNumber: result.leadProfile?.application_number,
-      }).catch((err) => console.error('Scholarship opened notification error:', err));
+      try {
+        await notifyScholarshipOpened({
+          userId: user.id,
+          userName: user.name || 'Student',
+          phone: user.phone || '',
+          applicationNumber: result.leadProfile?.application_number,
+        });
+      } catch (err) {
+        console.error('Scholarship opened notification error:', err);
+      }
     }
 
     // Record in profile history
@@ -161,7 +165,7 @@ export async function PATCH(
       .limit(1)
       .single();
 
-    // Send appropriate notification (non-blocking)
+    // Send appropriate notification
     if (user) {
       const notificationData = {
         userId: user.id,
@@ -170,25 +174,29 @@ export async function PATCH(
         applicationNumber: leadProfile?.application_number || undefined,
       };
 
-      switch (action) {
-        case 'approve':
-          notifyScholarshipApproved({
-            ...notificationData,
-            approvedFee: result.approved_fee || approved_fee || 5000,
-          }).catch((err) => console.error('Scholarship approved notification error:', err));
-          break;
-        case 'reject':
-          notifyScholarshipRejected({
-            ...notificationData,
-            rejectionReason: rejection_reason || undefined,
-          }).catch((err) => console.error('Scholarship rejected notification error:', err));
-          break;
-        case 'request_revision':
-          notifyScholarshipRevisionRequested({
-            ...notificationData,
-            revisionNotes: revision_notes || undefined,
-          }).catch((err) => console.error('Scholarship revision notification error:', err));
-          break;
+      try {
+        switch (action) {
+          case 'approve':
+            await notifyScholarshipApproved({
+              ...notificationData,
+              approvedFee: result.approved_fee || approved_fee || 5000,
+            });
+            break;
+          case 'reject':
+            await notifyScholarshipRejected({
+              ...notificationData,
+              rejectionReason: rejection_reason || undefined,
+            });
+            break;
+          case 'request_revision':
+            await notifyScholarshipRevisionRequested({
+              ...notificationData,
+              revisionNotes: revision_notes || undefined,
+            });
+            break;
+        }
+      } catch (err) {
+        console.error('Scholarship notification error:', err);
       }
     }
 

@@ -29,3 +29,4 @@ export * from './question-bank';
 export * from './exam-profile';
 export * from './qb-stats';
 export * from './score-calculations';
+export * from './direct-enrollment';

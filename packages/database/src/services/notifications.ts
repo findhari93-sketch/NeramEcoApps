@@ -540,6 +540,48 @@ function formatTelegramMessage(event: NotificationEvent): string | null {
         source: (data.source) as string | undefined,
       } satisfies ContactMessageNotificationData);
 
+    case 'question_submitted':
+      return [
+        '<b>📝 New Question Submitted</b>',
+        '',
+        `<b>Title:</b> ${data.question_title || 'Untitled'}`,
+        `<b>Category:</b> ${data.category || 'General'}`,
+        `<b>User:</b> ${data.user_name || 'Unknown'}`,
+        '',
+        'Review in Question Moderation.',
+      ].join('\n');
+
+    case 'question_edit_requested':
+      return [
+        '<b>✏️ Question Edit Requested</b>',
+        '',
+        `<b>Question:</b> ${data.question_title || 'Untitled'}`,
+        `<b>User:</b> ${data.user_name || 'Unknown'}`,
+        '',
+        'Review the edit request in Question Moderation.',
+      ].join('\n');
+
+    case 'question_delete_requested':
+      return [
+        '<b>🗑️ Question Delete Requested</b>',
+        '',
+        `<b>Question:</b> ${data.question_title || 'Untitled'}`,
+        `<b>User:</b> ${data.user_name || 'Unknown'}`,
+        `<b>Reason:</b> ${data.reason || 'No reason provided'}`,
+        '',
+        'Review the delete request in Question Moderation.',
+      ].join('\n');
+
+    case 'callback_reminder':
+      return [
+        '<b>📞 Callback Reminder</b>',
+        '',
+        `<b>User:</b> ${data.user_name || 'Unknown'}`,
+        `<b>Phone:</b> ${data.phone || 'N/A'}`,
+        '',
+        'Scheduled callback is due now. Contact this enquiry.',
+      ].join('\n');
+
     default:
       return null;
   }
@@ -566,6 +608,10 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     refund_approved: null, // User gets direct email
     refund_rejected: null, // User gets direct email
     contact_message_received: 'team-contact-message', // Team gets email about new contact message
+    question_submitted: null, // In-app + Telegram only
+    question_edit_requested: null,
+    question_delete_requested: null,
+    callback_reminder: null, // In-app + Telegram only
   };
 
   return map[eventType];

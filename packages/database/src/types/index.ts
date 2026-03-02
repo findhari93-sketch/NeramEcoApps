@@ -15,7 +15,7 @@
 export type UserType = 'lead' | 'student' | 'teacher' | 'admin';
 export type UserStatus = 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
-export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual';
+export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual' | 'direct_link';
 export type CourseType = 'nata' | 'jee_paper2' | 'both' | 'not_sure';
 export type ExamType = 'NATA' | 'JEE_PAPER_2' | 'BOTH';
 
@@ -39,7 +39,7 @@ export type ProfileChangeSource = 'user' | 'admin' | 'system';
 export type ApplicantCategory = 'school_student' | 'diploma_student' | 'college_student' | 'working_professional';
 export type ApplicationStatus = 'draft' | 'pending_verification' | 'submitted' | 'under_review' | 'approved' | 'enrolled' | 'partial_payment' | 'rejected' | 'deleted';
 export type LocationSource = 'geolocation' | 'pincode' | 'manual';
-export type CallbackStatus = 'pending' | 'scheduled' | 'attempted' | 'completed' | 'cancelled';
+export type CallbackStatus = 'pending' | 'scheduled' | 'attempted' | 'completed' | 'cancelled' | 'dead_lead';
 export type CallbackSlot = 'morning' | 'afternoon' | 'evening';
 export type VisitBookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 export type DeletionType = 'user_requested' | 'admin_deleted' | 'duplicate' | 'spam' | 'test_data';
@@ -58,7 +58,7 @@ export type LearningMode = 'hybrid' | 'online_only';
 export type SchoolType = 'private_school' | 'government_aided' | 'government_school';
 
 // Admin application management (migration 015)
-export type ContactedStatus = 'talked' | 'unreachable' | 'callback_scheduled';
+export type ContactedStatus = 'talked' | 'unreachable' | 'callback_scheduled' | 'dead_lead';
 export type PaymentRecommendation = 'full' | 'installment';
 
 // Scholarship application status enum (migration 010)
@@ -587,9 +587,70 @@ export interface PostEnrollmentDetails extends Timestamps {
   nexus_created_at: string | null;
   nexus_created_by: string | null;
 
+  // Passport photo (migration 20260308)
+  passport_photo_url: string | null;
+
   // Form completion
   form_completed: boolean;
   form_completed_at: string | null;
+}
+
+// ============================================
+// DIRECT ENROLLMENT LINKS (migration 20260308)
+// ============================================
+
+export type DirectEnrollmentLinkStatus = 'active' | 'used' | 'expired' | 'cancelled';
+
+/**
+ * Direct enrollment links - admin-generated links for students who paid directly
+ */
+export interface DirectEnrollmentLink extends Timestamps {
+  id: string;
+
+  // Unique token for the shareable link
+  token: string;
+
+  // Admin who created this link
+  created_by: string;
+
+  // Link status and expiry
+  status: DirectEnrollmentLinkStatus;
+  expires_at: string;
+
+  // Student reference info (for admin tracking)
+  student_name: string;
+  student_phone: string | null;
+  student_email: string | null;
+
+  // Pre-selected course details
+  course_id: string | null;
+  batch_id: string | null;
+  center_id: string | null;
+  interest_course: CourseType;
+  learning_mode: LearningMode;
+
+  // Fee details
+  total_fee: number;
+  discount_amount: number;
+  final_fee: number;
+
+  // Payment confirmation (already paid by student)
+  amount_paid: number;
+  payment_method: string;
+  transaction_reference: string | null;
+  payment_date: string | null;
+
+  // Admin notes
+  admin_notes: string | null;
+
+  // Payment proof attachment
+  payment_proof_url: string | null;
+
+  // Usage tracking (filled when student completes enrollment)
+  used_by: string | null;
+  used_at: string | null;
+  lead_profile_id: string | null;
+  student_profile_id: string | null;
 }
 
 // ============================================
@@ -759,6 +820,29 @@ export interface CallbackRequest extends Timestamps {
 
   // Link to lead if form submitted later
   lead_profile_id: string | null;
+
+  // Callback rescheduling (migration 20260307)
+  scheduled_callback_at: string | null;
+  is_dead_lead: boolean;
+}
+
+// ============================================
+// CALLBACK ATTEMPTS (migration 20260307)
+// ============================================
+
+export type CallbackOutcome = 'talked' | 'not_picked_up' | 'not_reachable' | 'rescheduled' | 'dead_lead';
+
+export interface CallbackAttempt {
+  id: string;
+  callback_request_id: string;
+  user_id: string;
+  admin_id: string;
+  admin_name: string;
+  outcome: CallbackOutcome;
+  comments: string | null;
+  rescheduled_to: string | null;
+  attempted_at: string;
+  created_at: string;
 }
 
 // ============================================
@@ -1742,7 +1826,11 @@ export type NotificationEventType =
   | 'refund_requested'
   | 'refund_approved'
   | 'refund_rejected'
-  | 'contact_message_received';
+  | 'contact_message_received'
+  | 'question_submitted'
+  | 'question_edit_requested'
+  | 'question_delete_requested'
+  | 'callback_reminder';
 
 // Refund request enums & constants
 export type RefundRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -1874,6 +1962,11 @@ export interface NotificationPreferences {
   refund_rejected: boolean;
   // Contact messages
   contact_message_received: boolean;
+  // Question moderation (migration 20260307)
+  question_submitted: boolean;
+  question_edit_requested: boolean;
+  question_delete_requested: boolean;
+  callback_reminder: boolean;
 }
 
 /**
@@ -2066,6 +2159,9 @@ export interface UserJourney {
   full_payment_discount: number | null;
   coupon_code: string | null;
 
+  // Contact status
+  contacted_status: ContactedStatus | null;
+
   // Demo class summary
   has_demo_registration: boolean;
   demo_registration_count: number;
@@ -2102,6 +2198,8 @@ export interface UserJourneyListOptions {
   applicationStatus?: ApplicationStatus;
   interestCourse?: CourseType;
   hasDemoRegistration?: boolean;
+  contactedStatus?: ContactedStatus;
+  isDeadLead?: boolean;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -2143,6 +2241,9 @@ export interface UserJourneyDetail {
   profileHistory: (UserProfileHistory & { changed_by_user?: Pick<User, 'id' | 'name' | 'email'> })[];
   adminNotes: AdminUserNote[];
   pipelineStage: PipelineStage;
+  // Callback rescheduling (migration 20260307)
+  callbackRequests: CallbackRequest[];
+  callbackAttempts: CallbackAttempt[];
 }
 
 /**
@@ -2322,6 +2423,38 @@ export interface CreateQuestionSessionInput {
   exam_year: number;
   exam_date?: string;
   session_label?: string;
+}
+
+// Question Change Requests (migration 20260307)
+export type QuestionChangeRequestType = 'edit' | 'delete';
+export type QuestionChangeRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface QuestionChangeRequest {
+  id: string;
+  question_id: string;
+  user_id: string;
+  request_type: QuestionChangeRequestType;
+  // Edit fields (null for delete requests)
+  proposed_title: string | null;
+  proposed_body: string | null;
+  proposed_category: NataQuestionCategory | null;
+  proposed_image_urls: string[];
+  proposed_tags: string[];
+  // Delete field
+  reason: string | null;
+  // Admin moderation
+  status: QuestionChangeRequestStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  // Timestamps
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuestionChangeRequestDisplay extends QuestionChangeRequest {
+  author: Pick<User, 'id' | 'name' | 'avatar_url' | 'user_type'>;
+  question: Pick<QuestionPost, 'id' | 'title' | 'body' | 'category' | 'status'>;
 }
 
 // Phase 3: Exam Profile Onboarding (migration 20260304)
@@ -2720,6 +2853,24 @@ export interface Database {
         Insert: Omit<UserQBStats, 'id' | 'created_at' | 'updated_at' | 'contribution_score'> & { id?: string };
         Update: Partial<Omit<UserQBStats, 'id' | 'created_at' | 'updated_at' | 'contribution_score'>>;
       };
+      // Callback attempts (migration 20260307)
+      callback_attempts: {
+        Row: CallbackAttempt;
+        Insert: Omit<CallbackAttempt, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<CallbackAttempt, 'id' | 'created_at'>>;
+      };
+      // Question change requests (migration 20260307)
+      question_change_requests: {
+        Row: QuestionChangeRequest;
+        Insert: Omit<QuestionChangeRequest, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<QuestionChangeRequest, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      // Direct enrollment links (migration 20260308)
+      direct_enrollment_links: {
+        Row: DirectEnrollmentLink;
+        Insert: Omit<DirectEnrollmentLink, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<DirectEnrollmentLink, 'id' | 'created_at' | 'updated_at'>>;
+      };
     };
     Views: {
       user_journey_view: {
@@ -2776,6 +2927,12 @@ export interface Database {
       question_post_status: QuestionPostStatus;
       nata_question_category: NataQuestionCategory;
       vote_type: VoteType;
+      // Callback & change request enums (migration 20260307)
+      callback_outcome: CallbackOutcome;
+      question_change_request_type: QuestionChangeRequestType;
+      question_change_request_status: QuestionChangeRequestStatus;
+      // Direct enrollment link enums (migration 20260308)
+      direct_enrollment_link_status: DirectEnrollmentLinkStatus;
     };
   };
 }

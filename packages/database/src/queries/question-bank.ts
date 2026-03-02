@@ -23,6 +23,10 @@ import type {
   QuestionSessionDisplay,
   CreateQuestionSessionInput,
   VoteType,
+  QuestionChangeRequest,
+  QuestionChangeRequestDisplay,
+  QuestionChangeRequestStatus,
+  QuestionChangeRequestType,
 } from '../types';
 
 // ============================================
@@ -868,6 +872,382 @@ export async function deleteQuestionSession(
   if (error) {
     throw new Error(`Failed to delete session: ${error.message}`);
   }
+}
+
+// ============================================
+// QUESTION CHANGE REQUESTS (migration 20260307)
+// ============================================
+
+/**
+ * Create an edit request for a question (user must be the author).
+ * Fails if there's already a pending request for this question.
+ */
+export async function createEditRequest(
+  userId: string,
+  questionId: string,
+  input: {
+    proposed_title: string;
+    proposed_body: string;
+    proposed_category?: NataQuestionCategory;
+    proposed_image_urls?: string[];
+    proposed_tags?: string[];
+  },
+  client?: TypedSupabaseClient
+): Promise<QuestionChangeRequest> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Verify user owns the question
+  const { data: question, error: qErr } = await supabase
+    .from('question_posts')
+    .select('id, user_id')
+    .eq('id', questionId)
+    .single();
+
+  if (qErr || !question) throw new Error('Question not found');
+  if (question.user_id !== userId) throw new Error('You can only edit your own questions');
+
+  // Check for existing pending request
+  const { data: existing } = await supabase
+    .from('question_change_requests')
+    .select('id')
+    .eq('question_id', questionId)
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    throw new Error('You already have a pending change request for this question');
+  }
+
+  const { data, error } = await (supabase as any)
+    .from('question_change_requests')
+    .insert({
+      question_id: questionId,
+      user_id: userId,
+      request_type: 'edit',
+      proposed_title: input.proposed_title,
+      proposed_body: input.proposed_body,
+      proposed_category: input.proposed_category || null,
+      proposed_image_urls: input.proposed_image_urls || [],
+      proposed_tags: input.proposed_tags || [],
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to create edit request: ${error.message}`);
+  return data as QuestionChangeRequest;
+}
+
+/**
+ * Create a delete request for a question (user must be the author).
+ */
+export async function createDeleteRequest(
+  userId: string,
+  questionId: string,
+  reason: string,
+  client?: TypedSupabaseClient
+): Promise<QuestionChangeRequest> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Verify user owns the question
+  const { data: question, error: qErr } = await supabase
+    .from('question_posts')
+    .select('id, user_id')
+    .eq('id', questionId)
+    .single();
+
+  if (qErr || !question) throw new Error('Question not found');
+  if (question.user_id !== userId) throw new Error('You can only delete your own questions');
+
+  // Check for existing pending request
+  const { data: existing } = await supabase
+    .from('question_change_requests')
+    .select('id')
+    .eq('question_id', questionId)
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    throw new Error('You already have a pending change request for this question');
+  }
+
+  const { data, error } = await (supabase as any)
+    .from('question_change_requests')
+    .insert({
+      question_id: questionId,
+      user_id: userId,
+      request_type: 'delete',
+      reason,
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to create delete request: ${error.message}`);
+  return data as QuestionChangeRequest;
+}
+
+/**
+ * Get user's pending change requests for a specific question (or all questions).
+ */
+export async function getUserPendingRequests(
+  userId: string,
+  questionId?: string,
+  client?: TypedSupabaseClient
+): Promise<QuestionChangeRequest[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let query = supabase
+    .from('question_change_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (questionId) {
+    query = query.eq('question_id', questionId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Error fetching user pending requests:', error);
+    return [];
+  }
+  return (data || []) as QuestionChangeRequest[];
+}
+
+/**
+ * Get all user's change requests (any status) for "My Questions" page.
+ */
+export async function getUserChangeRequests(
+  userId: string,
+  client?: TypedSupabaseClient
+): Promise<QuestionChangeRequest[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('question_change_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching user change requests:', error);
+    return [];
+  }
+  return (data || []) as QuestionChangeRequest[];
+}
+
+/**
+ * Get change requests by status (admin moderation).
+ */
+export async function getChangeRequestsByStatus(
+  status: QuestionChangeRequestStatus,
+  requestType?: QuestionChangeRequestType,
+  page: number = 1,
+  limit: number = 25,
+  client?: TypedSupabaseClient
+): Promise<{ data: QuestionChangeRequestDisplay[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  const supabase = client || getSupabaseAdminClient();
+  const offset = (page - 1) * limit;
+
+  let query = supabase
+    .from('question_change_requests')
+    .select(
+      '*, users!question_change_requests_user_id_fkey(id, name, avatar_url, user_type), question_posts!question_change_requests_question_id_fkey(id, title, body, category, status)',
+      { count: 'exact' }
+    )
+    .eq('status', status)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (requestType) {
+    query = query.eq('request_type', requestType);
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    console.error('Error fetching change requests by status:', error);
+    return { data: [], pagination: { page, limit, total: 0, totalPages: 0 } };
+  }
+
+  const total = count || 0;
+  return {
+    data: (data || []).map((cr: Record<string, unknown>) => ({
+      ...cr,
+      author: cr.users || { id: cr.user_id, name: 'Unknown', avatar_url: null, user_type: 'student' },
+      question: cr.question_posts || { id: cr.question_id, title: 'Unknown', body: '', category: 'other', status: 'pending' },
+    })) as QuestionChangeRequestDisplay[],
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  };
+}
+
+/**
+ * Approve an edit request - applies the proposed changes to the question.
+ */
+export async function approveEditRequest(
+  requestId: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get the change request
+  const { data: cr, error: crErr } = await supabase
+    .from('question_change_requests')
+    .select('*')
+    .eq('id', requestId)
+    .eq('request_type', 'edit')
+    .eq('status', 'pending')
+    .single();
+
+  if (crErr || !cr) throw new Error('Edit request not found or already processed');
+
+  // Update the request status
+  const { error: updateErr } = await (supabase as any)
+    .from('question_change_requests')
+    .update({
+      status: 'approved',
+      reviewed_by: adminId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', requestId);
+
+  if (updateErr) throw new Error(`Failed to approve edit request: ${updateErr.message}`);
+
+  // Apply the edit to the question
+  const updateData: Record<string, unknown> = {};
+  if (cr.proposed_title) updateData.title = cr.proposed_title;
+  if (cr.proposed_body) updateData.body = cr.proposed_body;
+  if (cr.proposed_category) updateData.category = cr.proposed_category;
+  if (cr.proposed_image_urls && cr.proposed_image_urls.length > 0) updateData.image_urls = cr.proposed_image_urls;
+  if (cr.proposed_tags && cr.proposed_tags.length > 0) updateData.tags = cr.proposed_tags;
+
+  if (Object.keys(updateData).length > 0) {
+    const { error: qErr } = await (supabase as any)
+      .from('question_posts')
+      .update(updateData)
+      .eq('id', cr.question_id);
+
+    if (qErr) throw new Error(`Failed to apply edit to question: ${qErr.message}`);
+  }
+}
+
+/**
+ * Approve a delete request - sets question status to 'flagged' (soft delete).
+ */
+export async function approveDeleteRequest(
+  requestId: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get the change request
+  const { data: cr, error: crErr } = await supabase
+    .from('question_change_requests')
+    .select('*')
+    .eq('id', requestId)
+    .eq('request_type', 'delete')
+    .eq('status', 'pending')
+    .single();
+
+  if (crErr || !cr) throw new Error('Delete request not found or already processed');
+
+  // Update the request status
+  const { error: updateErr } = await (supabase as any)
+    .from('question_change_requests')
+    .update({
+      status: 'approved',
+      reviewed_by: adminId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', requestId);
+
+  if (updateErr) throw new Error(`Failed to approve delete request: ${updateErr.message}`);
+
+  // Soft-delete the question by setting status to 'flagged'
+  const { error: qErr } = await (supabase as any)
+    .from('question_posts')
+    .update({ status: 'flagged' })
+    .eq('id', cr.question_id);
+
+  if (qErr) throw new Error(`Failed to delete question: ${qErr.message}`);
+}
+
+/**
+ * Reject a change request with reason.
+ */
+export async function rejectChangeRequest(
+  requestId: string,
+  reason: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { error } = await (supabase as any)
+    .from('question_change_requests')
+    .update({
+      status: 'rejected',
+      reviewed_by: adminId,
+      reviewed_at: new Date().toISOString(),
+      rejection_reason: reason,
+    })
+    .eq('id', requestId)
+    .eq('status', 'pending');
+
+  if (error) throw new Error(`Failed to reject change request: ${error.message}`);
+}
+
+/**
+ * Get change request moderation stats.
+ */
+export async function getChangeRequestStats(
+  client?: TypedSupabaseClient
+): Promise<{ pending_edits: number; pending_deletes: number; total_pending: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const [edits, deletes] = await Promise.all([
+    supabase.from('question_change_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'edit'),
+    supabase.from('question_change_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('request_type', 'delete'),
+  ]);
+
+  const pending_edits = edits.count || 0;
+  const pending_deletes = deletes.count || 0;
+  return { pending_edits, pending_deletes, total_pending: pending_edits + pending_deletes };
+}
+
+/**
+ * Get full change history for a question (admin audit trail).
+ */
+export async function getQuestionChangeHistory(
+  questionId: string,
+  client?: TypedSupabaseClient
+): Promise<QuestionChangeRequestDisplay[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('question_change_requests')
+    .select(
+      '*, users!question_change_requests_user_id_fkey(id, name, avatar_url, user_type), question_posts!question_change_requests_question_id_fkey(id, title, body, category, status)'
+    )
+    .eq('question_id', questionId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching question change history:', error);
+    return [];
+  }
+
+  return (data || []).map((cr: Record<string, unknown>) => ({
+    ...cr,
+    author: cr.users || { id: cr.user_id, name: 'Unknown', avatar_url: null, user_type: 'student' },
+    question: cr.question_posts || { id: cr.question_id, title: 'Unknown', body: '', category: 'other', status: 'pending' },
+  })) as QuestionChangeRequestDisplay[];
 }
 
 // ============================================

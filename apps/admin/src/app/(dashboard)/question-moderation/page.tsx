@@ -6,7 +6,11 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Tabs, Tab, ToggleButton, ToggleButtonGroup,
 } from '@neram/ui';
-import type { QuestionPostDisplay, QuestionPostStatus } from '@neram/database';
+import type {
+  QuestionPostDisplay,
+  QuestionPostStatus,
+  QuestionChangeRequestDisplay,
+} from '@neram/database';
 
 const CATEGORY_LABELS: Record<string, string> = {
   mathematics: 'Mathematics',
@@ -42,13 +46,15 @@ const STATUS_TABS: { value: QuestionPostStatus; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
 ];
 
-type ContentType = 'questions' | 'improvements';
+type ContentType = 'questions' | 'improvements' | 'change_requests';
 
 export default function QuestionModerationPage() {
   const [contentType, setContentType] = useState<ContentType>('questions');
   const [status, setStatus] = useState<QuestionPostStatus>('pending');
   const [questions, setQuestions] = useState<QuestionPostDisplay[]>([]);
   const [improvements, setImprovements] = useState<any[]>([]);
+  const [changeRequests, setChangeRequests] = useState<QuestionChangeRequestDisplay[]>([]);
+  const [crStats, setCrStats] = useState<{ pending_edits: number; pending_deletes: number; total_pending: number }>({ pending_edits: 0, pending_deletes: 0, total_pending: 0 });
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -83,13 +89,21 @@ export default function QuestionModerationPage() {
           setTotalPages(data.pagination?.totalPages || 1);
           setStats(data.stats || {});
         }
-      } else {
+      } else if (contentType === 'improvements') {
         params.set('type', 'improvements');
         const res = await fetch(`/api/questions?${params}`);
         if (res.ok) {
           const data = await res.json();
           setImprovements(data.data || []);
           setTotalPages(data.pagination?.totalPages || 1);
+        }
+      } else if (contentType === 'change_requests') {
+        const res = await fetch(`/api/questions/change-requests?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setChangeRequests(data.data || []);
+          setTotalPages(data.pagination?.totalPages || 1);
+          setCrStats(data.stats || { pending_edits: 0, pending_deletes: 0, total_pending: 0 });
         }
       }
     } catch (error) {
@@ -106,17 +120,29 @@ export default function QuestionModerationPage() {
   const handleApprove = async (itemId: string) => {
     setActionLoading(itemId);
     try {
-      const endpoint = contentType === 'questions'
-        ? `/api/questions/${itemId}/approve`
-        : `/api/questions/improvements/${itemId}/approve`;
-      const res = await fetch(endpoint, { method: 'POST' });
+      let endpoint: string;
+      if (contentType === 'questions') {
+        endpoint = `/api/questions/${itemId}/approve`;
+      } else if (contentType === 'improvements') {
+        endpoint = `/api/questions/improvements/${itemId}/approve`;
+      } else {
+        endpoint = `/api/questions/change-requests/${itemId}/approve`;
+      }
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
       if (res.ok) {
         if (contentType === 'questions') {
           setQuestions((prev) => prev.filter((q) => q.id !== itemId));
-        } else {
+        } else if (contentType === 'improvements') {
           setImprovements((prev) => prev.filter((i) => i.id !== itemId));
+        } else {
+          setChangeRequests((prev) => prev.filter((cr) => cr.id !== itemId));
         }
-        setSuccessMsg(`${contentType === 'questions' ? 'Question' : 'Improvement'} approved`);
+        const label = contentType === 'questions' ? 'Question' : contentType === 'improvements' ? 'Improvement' : 'Change request';
+        setSuccessMsg(`${label} approved`);
         setTimeout(() => setSuccessMsg(''), 3000);
       }
     } catch (error) {
@@ -144,9 +170,14 @@ export default function QuestionModerationPage() {
     setActionLoading(rejectItemId);
     setRejectDialogOpen(false);
     try {
-      const endpoint = contentType === 'questions'
-        ? `/api/questions/${rejectItemId}/reject`
-        : `/api/questions/improvements/${rejectItemId}/reject`;
+      let endpoint: string;
+      if (contentType === 'questions') {
+        endpoint = `/api/questions/${rejectItemId}/reject`;
+      } else if (contentType === 'improvements') {
+        endpoint = `/api/questions/improvements/${rejectItemId}/reject`;
+      } else {
+        endpoint = `/api/questions/change-requests/${rejectItemId}/reject`;
+      }
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,10 +186,13 @@ export default function QuestionModerationPage() {
       if (res.ok) {
         if (contentType === 'questions') {
           setQuestions((prev) => prev.filter((q) => q.id !== rejectItemId));
-        } else {
+        } else if (contentType === 'improvements') {
           setImprovements((prev) => prev.filter((i) => i.id !== rejectItemId));
+        } else {
+          setChangeRequests((prev) => prev.filter((cr) => cr.id !== rejectItemId));
         }
-        setSuccessMsg(`${contentType === 'questions' ? 'Question' : 'Improvement'} rejected`);
+        const label = contentType === 'questions' ? 'Question' : contentType === 'improvements' ? 'Improvement' : 'Change request';
+        setSuccessMsg(`${label} rejected`);
         setTimeout(() => setSuccessMsg(''), 3000);
       }
     } catch (error) {
@@ -177,7 +211,7 @@ export default function QuestionModerationPage() {
     });
   };
 
-  const items = contentType === 'questions' ? questions : improvements;
+  const items = contentType === 'questions' ? questions : contentType === 'improvements' ? improvements : [];
 
   return (
     <Box>
@@ -199,12 +233,13 @@ export default function QuestionModerationPage() {
       <ToggleButtonGroup
         value={contentType}
         exclusive
-        onChange={(_, v) => { if (v) { setContentType(v); setPage(1); setSelected(new Set()); } }}
+        onChange={(_, v) => { if (v) { setContentType(v); setPage(1); setSelected(new Set()); setStatus('pending' as any); } }}
         size="small"
         sx={{ mb: 2 }}
       >
         <ToggleButton value="questions">Questions</ToggleButton>
         <ToggleButton value="improvements">Improvements</ToggleButton>
+        <ToggleButton value="change_requests">Change Requests</ToggleButton>
       </ToggleButtonGroup>
 
       {/* Stats (questions only) */}
@@ -228,6 +263,30 @@ export default function QuestionModerationPage() {
               </Typography>
             </Paper>
           ))}
+        </Stack>
+      )}
+
+      {/* Stats (change requests) */}
+      {contentType === 'change_requests' && (
+        <Stack direction="row" spacing={2} sx={{ mb: 3 }} flexWrap="wrap" useFlexGap>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center' }}>
+            <Typography variant="h5" fontWeight={700} color="warning.main">
+              {crStats.total_pending}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">Total Pending</Typography>
+          </Paper>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center' }}>
+            <Typography variant="h5" fontWeight={700} color="info.main">
+              {crStats.pending_edits}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">Pending Edits</Typography>
+          </Paper>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center' }}>
+            <Typography variant="h5" fontWeight={700} color="error.main">
+              {crStats.pending_deletes}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">Pending Deletes</Typography>
+          </Paper>
         </Stack>
       )}
 
@@ -264,158 +323,318 @@ export default function QuestionModerationPage() {
         </Stack>
       )}
 
-      {/* List */}
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : items.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">
-            No {status} {contentType}.
-          </Typography>
-        </Paper>
-      ) : (
-        <Stack spacing={1.5}>
-          {items.map((item) => (
-            <Paper
-              key={item.id}
-              sx={{
-                p: 2,
-                borderLeft: selected.has(item.id) ? '3px solid' : 'none',
-                borderColor: 'primary.main',
-              }}
-            >
-              <Stack direction="row" alignItems="flex-start" spacing={2}>
-                {/* Select checkbox area (for pending) */}
-                {status === 'pending' && (
-                  <Box
-                    onClick={() => toggleSelect(item.id)}
-                    sx={{
-                      width: 24, height: 24, borderRadius: 0.5,
-                      border: '2px solid', borderColor: selected.has(item.id) ? 'primary.main' : 'divider',
-                      bgcolor: selected.has(item.id) ? 'primary.main' : 'transparent',
-                      cursor: 'pointer', flexShrink: 0, mt: 0.5,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: 'white', fontSize: '0.8rem',
-                    }}
-                  >
-                    {selected.has(item.id) ? '✓' : ''}
-                  </Box>
-                )}
-
-                {/* Content */}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                    <Avatar
-                      src={item.author?.avatar_url || undefined}
-                      sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
+      {/* List - Questions & Improvements */}
+      {contentType !== 'change_requests' && (
+        loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : items.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center' }}>
+            <Typography color="text.secondary">
+              No {status} {contentType}.
+            </Typography>
+          </Paper>
+        ) : (
+          <Stack spacing={1.5}>
+            {items.map((item) => (
+              <Paper
+                key={item.id}
+                sx={{
+                  p: 2,
+                  borderLeft: selected.has(item.id) ? '3px solid' : 'none',
+                  borderColor: 'primary.main',
+                }}
+              >
+                <Stack direction="row" alignItems="flex-start" spacing={2}>
+                  {/* Select checkbox area (for pending) */}
+                  {status === 'pending' && (
+                    <Box
+                      onClick={() => toggleSelect(item.id)}
+                      sx={{
+                        width: 24, height: 24, borderRadius: 0.5,
+                        border: '2px solid', borderColor: selected.has(item.id) ? 'primary.main' : 'divider',
+                        bgcolor: selected.has(item.id) ? 'primary.main' : 'transparent',
+                        cursor: 'pointer', flexShrink: 0, mt: 0.5,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontSize: '0.8rem',
+                      }}
                     >
-                      {(item.author?.name || 'U')[0]}
-                    </Avatar>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                      {item.author?.name || 'Anonymous'}
-                    </Typography>
-                    {item.is_admin_post && (
-                      <Chip label="Official" size="small" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />
-                    )}
-                    <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
-                      {timeAgo(item.created_at)}
-                    </Typography>
-                    <Chip
-                      label={item.status}
-                      size="small"
-                      color={STATUS_COLORS[item.status] || 'default'}
-                      sx={{ height: 20, fontSize: '0.7rem' }}
-                    />
-                  </Stack>
+                      {selected.has(item.id) ? '✓' : ''}
+                    </Box>
+                  )}
 
-                  <Typography
-                    variant="subtitle1"
-                    fontWeight={600}
-                    sx={{
-                      mb: 0.5, cursor: 'pointer', '&:hover': { textDecoration: 'underline' },
-                    }}
-                    onClick={() => contentType === 'questions' && setViewQuestion(item)}
-                  >
-                    {item.title || `Improvement for: ${item.question_posts?.title || 'Question'}`}
-                  </Typography>
-
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      mb: 1,
-                    }}
-                  >
-                    {item.body}
-                  </Typography>
-
-                  {contentType === 'questions' && (
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                      <Chip
-                        label={CATEGORY_LABELS[item.category] || item.category}
-                        size="small"
-                        variant="outlined"
-                        sx={{ height: 22, fontSize: '0.7rem' }}
-                      />
-                      {item.exam_year && (
-                        <Chip label={`NATA ${item.exam_year}`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
-                      )}
-                      {item.confidence_level && item.confidence_level !== 3 && (
-                        <Chip label={`Confidence: ${item.confidence_level}/5`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
-                      )}
-                      <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                        {item.vote_score} votes | {item.comment_count} comments | {item.improvement_count} improvements
+                  {/* Content */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                      <Avatar
+                        src={item.author?.avatar_url || undefined}
+                        sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
+                      >
+                        {(item.author?.name || 'U')[0]}
+                      </Avatar>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                        {item.author?.name || 'Anonymous'}
                       </Typography>
+                      {item.is_admin_post && (
+                        <Chip label="Official" size="small" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />
+                      )}
+                      <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
+                        {timeAgo(item.created_at)}
+                      </Typography>
+                      <Chip
+                        label={item.status}
+                        size="small"
+                        color={STATUS_COLORS[item.status] || 'default'}
+                        sx={{ height: 20, fontSize: '0.7rem' }}
+                      />
+                    </Stack>
+
+                    <Typography
+                      variant="subtitle1"
+                      fontWeight={600}
+                      sx={{
+                        mb: 0.5, cursor: 'pointer', '&:hover': { textDecoration: 'underline' },
+                      }}
+                      onClick={() => contentType === 'questions' && setViewQuestion(item)}
+                    >
+                      {item.title || `Improvement for: ${item.question_posts?.title || 'Question'}`}
+                    </Typography>
+
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        mb: 1,
+                      }}
+                    >
+                      {item.body}
+                    </Typography>
+
+                    {contentType === 'questions' && (
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip
+                          label={CATEGORY_LABELS[item.category] || item.category}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 22, fontSize: '0.7rem' }}
+                        />
+                        {item.exam_year && (
+                          <Chip label={`NATA ${item.exam_year}`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
+                        )}
+                        {item.confidence_level && item.confidence_level !== 3 && (
+                          <Chip label={`Confidence: ${item.confidence_level}/5`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
+                        )}
+                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                          {item.vote_score} votes | {item.comment_count} comments | {item.improvement_count} improvements
+                        </Typography>
+                      </Stack>
+                    )}
+                  </Box>
+
+                  {/* Actions */}
+                  {status === 'pending' && (
+                    <Stack spacing={1} sx={{ flexShrink: 0 }}>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        disabled={actionLoading === item.id}
+                        onClick={() => handleApprove(item.id)}
+                        sx={{ minWidth: 90 }}
+                      >
+                        {actionLoading === item.id ? <CircularProgress size={16} /> : 'Approve'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        disabled={actionLoading === item.id}
+                        onClick={() => openRejectDialog(item.id)}
+                        sx={{ minWidth: 90 }}
+                      >
+                        Reject
+                      </Button>
+                      {contentType === 'questions' && (
+                        <Button variant="text" size="small" onClick={() => setViewQuestion(item)}>
+                          View
+                        </Button>
+                      )}
                     </Stack>
                   )}
-                </Box>
 
-                {/* Actions */}
-                {status === 'pending' && (
-                  <Stack spacing={1} sx={{ flexShrink: 0 }}>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      size="small"
-                      disabled={actionLoading === item.id}
-                      onClick={() => handleApprove(item.id)}
-                      sx={{ minWidth: 90 }}
-                    >
-                      {actionLoading === item.id ? <CircularProgress size={16} /> : 'Approve'}
+                  {status !== 'pending' && contentType === 'questions' && (
+                    <Button variant="text" size="small" onClick={() => setViewQuestion(item)}>
+                      View
                     </Button>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      size="small"
-                      disabled={actionLoading === item.id}
-                      onClick={() => openRejectDialog(item.id)}
-                      sx={{ minWidth: 90 }}
-                    >
-                      Reject
-                    </Button>
-                    {contentType === 'questions' && (
-                      <Button variant="text" size="small" onClick={() => setViewQuestion(item)}>
-                        View
-                      </Button>
+                  )}
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        )
+      )}
+
+      {/* List - Change Requests */}
+      {contentType === 'change_requests' && (
+        loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : changeRequests.length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center' }}>
+            <Typography color="text.secondary">
+              No {status} change requests.
+            </Typography>
+          </Paper>
+        ) : (
+          <Stack spacing={1.5}>
+            {changeRequests.map((cr) => (
+              <Paper
+                key={cr.id}
+                sx={{
+                  p: 2,
+                  borderLeft: cr.request_type === 'delete' ? '3px solid' : '3px solid',
+                  borderColor: cr.request_type === 'delete' ? 'error.main' : 'info.main',
+                }}
+              >
+                <Stack direction="row" alignItems="flex-start" spacing={2}>
+                  {/* Content */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* Author + metadata row */}
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }} flexWrap="wrap" useFlexGap>
+                      <Avatar
+                        src={cr.author?.avatar_url || undefined}
+                        sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
+                      >
+                        {(cr.author?.name || 'U')[0]}
+                      </Avatar>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                        {cr.author?.name || 'Anonymous'}
+                      </Typography>
+                      <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
+                        {timeAgo(cr.created_at)}
+                      </Typography>
+                      <Chip
+                        label={cr.request_type === 'edit' ? 'Edit Request' : 'Delete Request'}
+                        size="small"
+                        color={cr.request_type === 'edit' ? 'info' : 'error'}
+                        sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
+                      />
+                      <Chip
+                        label={cr.status}
+                        size="small"
+                        color={STATUS_COLORS[cr.status] || 'default'}
+                        sx={{ height: 20, fontSize: '0.7rem' }}
+                      />
+                    </Stack>
+
+                    {/* Question title */}
+                    <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
+                      {cr.question?.title || 'Unknown Question'}
+                    </Typography>
+
+                    {/* For edit requests: show proposed changes */}
+                    {cr.request_type === 'edit' && (
+                      <Box sx={{ mb: 1 }}>
+                        {cr.proposed_title && cr.proposed_title !== cr.question?.title && (
+                          <Box sx={{ mb: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                              Proposed title:
+                            </Typography>
+                            <Typography variant="body2" sx={{ bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 0.5, mt: 0.25 }}>
+                              {cr.proposed_title}
+                            </Typography>
+                          </Box>
+                        )}
+                        {cr.proposed_body && (
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                              Proposed body:
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                bgcolor: 'action.hover', px: 1, py: 0.5, borderRadius: 0.5, mt: 0.25,
+                                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {cr.proposed_body}
+                            </Typography>
+                          </Box>
+                        )}
+                        {cr.proposed_category && (
+                          <Box sx={{ mt: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                              Proposed category:
+                            </Typography>
+                            <Chip
+                              label={CATEGORY_LABELS[cr.proposed_category] || cr.proposed_category}
+                              size="small"
+                              variant="outlined"
+                              sx={{ ml: 0.5, height: 20, fontSize: '0.7rem' }}
+                            />
+                          </Box>
+                        )}
+                      </Box>
                     )}
-                  </Stack>
-                )}
 
-                {status !== 'pending' && contentType === 'questions' && (
-                  <Button variant="text" size="small" onClick={() => setViewQuestion(item)}>
-                    View
-                  </Button>
-                )}
-              </Stack>
-            </Paper>
-          ))}
-        </Stack>
+                    {/* For delete requests: show reason */}
+                    {cr.request_type === 'delete' && cr.reason && (
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                          Reason:
+                        </Typography>
+                        <Typography variant="body2" color="error.main" sx={{ mt: 0.25 }}>
+                          {cr.reason}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {/* Rejection reason (if rejected) */}
+                    {cr.status === 'rejected' && cr.rejection_reason && (
+                      <Alert severity="error" sx={{ mt: 1, py: 0 }} variant="outlined">
+                        <Typography variant="caption" fontWeight={600}>Rejection reason:</Typography>
+                        <Typography variant="body2">{cr.rejection_reason}</Typography>
+                      </Alert>
+                    )}
+                  </Box>
+
+                  {/* Actions (only for pending) */}
+                  {cr.status === 'pending' && (
+                    <Stack spacing={1} sx={{ flexShrink: 0 }}>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        disabled={actionLoading === cr.id}
+                        onClick={() => handleApprove(cr.id)}
+                        sx={{ minWidth: 90 }}
+                      >
+                        {actionLoading === cr.id ? <CircularProgress size={16} /> : 'Approve'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        disabled={actionLoading === cr.id}
+                        onClick={() => openRejectDialog(cr.id)}
+                        sx={{ minWidth: 90 }}
+                      >
+                        Reject
+                      </Button>
+                    </Stack>
+                  )}
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        )
       )}
 
       {/* Pagination */}
@@ -435,7 +654,7 @@ export default function QuestionModerationPage() {
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Reject {contentType === 'questions' ? 'Question' : 'Improvement'}</DialogTitle>
+        <DialogTitle>Reject {contentType === 'questions' ? 'Question' : contentType === 'improvements' ? 'Improvement' : 'Change Request'}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Provide a reason for rejection. The author will be able to see this reason.

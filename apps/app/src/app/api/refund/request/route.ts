@@ -75,21 +75,23 @@ export async function POST(request: NextRequest) {
       supabase
     );
 
-    // Dispatch notifications (non-blocking)
-    notifyRefundRequested({
-      userId: auth.userId,
-      userName: auth.name || auth.email || 'Unknown',
-      phone: auth.phone || '',
-      email: auth.email || '',
-      paymentAmount: Number(refundRequest.payment_amount),
-      refundAmount: Number(refundRequest.refund_amount),
-      processingFee: Number(refundRequest.processing_fee),
-      reasonForDiscontinuing: reason_for_discontinuing.trim(),
-      paymentId: payment_id,
-      leadProfileId: refundRequest.lead_profile_id || undefined,
-    }, supabase).catch((err) => {
+    // Dispatch notifications
+    try {
+      await notifyRefundRequested({
+        userId: auth.userId,
+        userName: auth.name || auth.email || 'Unknown',
+        phone: auth.phone || '',
+        email: auth.email || '',
+        paymentAmount: Number(refundRequest.payment_amount),
+        refundAmount: Number(refundRequest.refund_amount),
+        processingFee: Number(refundRequest.processing_fee),
+        reasonForDiscontinuing: reason_for_discontinuing.trim(),
+        paymentId: payment_id,
+        leadProfileId: refundRequest.lead_profile_id || undefined,
+      }, supabase);
+    } catch (err) {
       console.error('Failed to send refund request notifications:', err);
-    });
+    }
 
     return NextResponse.json({ success: true, refundRequest });
   } catch (error) {

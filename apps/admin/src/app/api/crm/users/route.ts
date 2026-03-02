@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
       hasDemoRegistration: searchParams.has('has_demo')
         ? searchParams.get('has_demo') === 'true'
         : undefined,
+      isDeadLead: searchParams.get('is_dead_lead') === 'true' || undefined,
       dateFrom: searchParams.get('date_from') || undefined,
       dateTo: searchParams.get('date_to') || undefined,
       limit: parseInt(searchParams.get('limit') || '25', 10),

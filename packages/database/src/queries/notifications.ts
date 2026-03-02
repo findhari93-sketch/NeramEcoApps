@@ -112,6 +112,20 @@ export async function createNotificationRecipient(
     demo_registration: true,
     new_callback: true,
     daily_summary: true,
+    scholarship_opened: true,
+    scholarship_submitted: true,
+    scholarship_approved: true,
+    scholarship_rejected: true,
+    scholarship_revision_requested: true,
+    application_approved: true,
+    refund_requested: true,
+    refund_approved: true,
+    refund_rejected: true,
+    contact_message_received: true,
+    question_submitted: true,
+    question_edit_requested: true,
+    question_delete_requested: true,
+    callback_reminder: true,
   };
 
   const { data, error } = await (supabase as any)

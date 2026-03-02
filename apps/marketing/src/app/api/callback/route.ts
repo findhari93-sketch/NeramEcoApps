@@ -175,19 +175,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
 
     const callback = await createCallbackRequest(supabase, callbackData);
 
-    // Notify admin via Telegram, email, and in-app bell (non-blocking)
-    notifyNewCallback({
-      userId: auth?.userId,
-      userName: callbackData.name,
-      phone: callbackData.phone,
-      preferredSlot: callbackData.preferred_slot,
-      preferredDate: callbackData.preferred_date,
-      courseInterest: callbackData.course_interest,
-      queryType: callbackData.query_type,
-      notes: callbackData.notes,
-    }).catch((err) => {
+    // Notify admin via Telegram, email, and in-app bell
+    try {
+      await notifyNewCallback({
+        userId: auth?.userId,
+        userName: callbackData.name,
+        phone: callbackData.phone,
+        preferredSlot: callbackData.preferred_slot,
+        preferredDate: callbackData.preferred_date,
+        courseInterest: callbackData.course_interest,
+        queryType: callbackData.query_type,
+        notes: callbackData.notes,
+      });
+    } catch (err) {
       console.error('Callback notification dispatch failed:', err);
-    });
+    }
 
     return NextResponse.json(
       { success: true, data: callback },

@@ -112,21 +112,23 @@ export async function POST(request: Request) {
       supabase
     );
 
-    // Dispatch notifications (non-blocking)
-    notifyDemoRegistration({
-      userName: body.name.trim(),
-      phone,
-      email: body.email?.trim(),
-      slotId: body.slotId,
-      slotDate: slot.slot_date,
-      slotTime: slot.slot_time,
-      slotTitle: slot.title,
-      currentClass: body.currentClass,
-      interestCourse: body.interestCourse,
-      registrationId: registration.id,
-    }).catch((err) => {
+    // Dispatch notifications
+    try {
+      await notifyDemoRegistration({
+        userName: body.name.trim(),
+        phone,
+        email: body.email?.trim(),
+        slotId: body.slotId,
+        slotDate: slot.slot_date,
+        slotTime: slot.slot_time,
+        slotTitle: slot.title,
+        currentClass: body.currentClass,
+        interestCourse: body.interestCourse,
+        registrationId: registration.id,
+      });
+    } catch (err) {
       console.error('Demo registration notification dispatch failed:', err);
-    });
+    }
 
     return NextResponse.json({
       success: true,

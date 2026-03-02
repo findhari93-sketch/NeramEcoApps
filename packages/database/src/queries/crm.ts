@@ -16,6 +16,9 @@ import type {
   User,
   LeadProfile,
   ProfileChangeSource,
+  CallbackRequest,
+  CallbackAttempt,
+  CallbackOutcome,
 } from '../types';
 
 // ============================================
@@ -38,6 +41,8 @@ export async function listUserJourneys(
     applicationStatus,
     interestCourse,
     hasDemoRegistration,
+    contactedStatus,
+    isDeadLead,
     dateFrom,
     dateTo,
     limit = 25,
@@ -79,6 +84,14 @@ export async function listUserJourneys(
 
   if (hasDemoRegistration !== undefined) {
     query = query.eq('has_demo_registration', hasDemoRegistration);
+  }
+
+  if (contactedStatus) {
+    query = query.eq('contacted_status', contactedStatus);
+  }
+
+  if (isDeadLead) {
+    query = query.eq('contacted_status', 'dead_lead');
   }
 
   if (dateFrom) {
@@ -193,6 +206,8 @@ export async function getUserJourneyDetail(
     cashbackResult,
     historyResult,
     notesResult,
+    callbackRequestsResult,
+    callbackAttemptsResult,
   ] = await Promise.all([
     // Lead profile (most recent non-deleted)
     supabase
@@ -280,6 +295,20 @@ export async function getUserJourneyDetail(
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
+
+    // Callback requests
+    supabase
+      .from('callback_requests')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false }),
+
+    // Callback attempts
+    supabase
+      .from('callback_attempts')
+      .select('*')
+      .eq('user_id', userId)
+      .order('attempted_at', { ascending: false }),
   ]);
 
   const leadProfile = leadProfileResult.data as LeadProfile | null;
@@ -322,6 +351,8 @@ export async function getUserJourneyDetail(
     profileHistory: (historyResult.data || []) as any[],
     adminNotes: (notesResult.data || []) as AdminUserNote[],
     pipelineStage,
+    callbackRequests: (callbackRequestsResult.data || []) as CallbackRequest[],
+    callbackAttempts: (callbackAttemptsResult.data || []) as CallbackAttempt[],
   };
 }
 
@@ -599,4 +630,253 @@ export async function adminBulkDeleteUsers(
     deletedAdminNotes: result.deleted_admin_notes,
     deletedProfileHistory: result.deleted_profile_history,
   };
+}
+
+// ============================================
+// CALLBACK MANAGEMENT (migration 20260307)
+// ============================================
+
+/**
+ * Schedule a callback for a user at a specific date/time.
+ */
+export async function scheduleCallback(
+  userId: string,
+  adminId: string,
+  scheduledAt: string,
+  notes?: string,
+  client?: TypedSupabaseClient
+): Promise<CallbackRequest> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get user info for the callback
+  const { data: user } = await supabase
+    .from('users')
+    .select('name, phone, email')
+    .eq('id', userId)
+    .single();
+
+  if (!user) throw new Error('User not found');
+
+  // Create or update callback request
+  const { data, error } = await (supabase as any)
+    .from('callback_requests')
+    .insert({
+      user_id: userId,
+      name: user.name || 'Unknown',
+      phone: user.phone || '',
+      email: user.email,
+      status: 'scheduled',
+      assigned_to: adminId,
+      scheduled_at: scheduledAt,
+      scheduled_callback_at: scheduledAt,
+      notes: notes || null,
+      timezone: 'Asia/Kolkata',
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to schedule callback: ${error.message}`);
+
+  // Update lead profile contacted_status
+  await (supabase as any)
+    .from('lead_profiles')
+    .update({
+      contacted_status: 'callback_scheduled',
+      contacted_at: new Date().toISOString(),
+      contacted_by: adminId,
+    })
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+
+  return data as CallbackRequest;
+}
+
+/**
+ * Record a callback attempt with outcome.
+ */
+export async function recordCallbackAttempt(
+  callbackRequestId: string,
+  adminId: string,
+  adminName: string,
+  outcome: CallbackOutcome,
+  comments?: string,
+  rescheduledTo?: string,
+  client?: TypedSupabaseClient
+): Promise<CallbackAttempt> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get the callback request to find user_id
+  const { data: cbReq, error: cbErr } = await supabase
+    .from('callback_requests')
+    .select('id, user_id')
+    .eq('id', callbackRequestId)
+    .single();
+
+  if (cbErr || !cbReq) throw new Error('Callback request not found');
+
+  // Insert the attempt
+  const { data: attempt, error: attemptErr } = await (supabase as any)
+    .from('callback_attempts')
+    .insert({
+      callback_request_id: callbackRequestId,
+      user_id: cbReq.user_id,
+      admin_id: adminId,
+      admin_name: adminName,
+      outcome,
+      comments: comments || null,
+      rescheduled_to: rescheduledTo || null,
+    })
+    .select()
+    .single();
+
+  if (attemptErr) throw new Error(`Failed to record attempt: ${attemptErr.message}`);
+
+  // Update callback_request based on outcome
+  const updates: Record<string, unknown> = {
+    attempt_count: undefined, // Will use RPC or raw increment
+    last_attempt_at: new Date().toISOString(),
+  };
+
+  if (outcome === 'talked') {
+    updates.status = 'completed';
+    updates.completed_at = new Date().toISOString();
+    updates.call_outcome = 'talked';
+  } else if (outcome === 'rescheduled' && rescheduledTo) {
+    updates.status = 'scheduled';
+    updates.scheduled_callback_at = rescheduledTo;
+    updates.call_outcome = 'rescheduled';
+  } else if (outcome === 'dead_lead') {
+    updates.status = 'dead_lead';
+    updates.is_dead_lead = true;
+    updates.call_outcome = 'dead_lead';
+  } else {
+    updates.status = 'attempted';
+    updates.call_outcome = outcome;
+  }
+
+  if (comments) {
+    updates.call_notes = comments;
+  }
+
+  // Remove undefined attempt_count and increment manually
+  delete updates.attempt_count;
+  const { error: updateErr } = await (supabase as any)
+    .from('callback_requests')
+    .update(updates)
+    .eq('id', callbackRequestId);
+
+  if (updateErr) console.error('Error updating callback request:', updateErr);
+
+  // Increment attempt_count via raw query
+  await supabase.rpc('increment_callback_attempt_count' as any, { req_id: callbackRequestId }).catch(() => {
+    // Fallback: just log, not critical
+    console.warn('Could not increment attempt_count, RPC may not exist');
+  });
+
+  // Update lead_profiles contacted_status
+  const contactedStatus = outcome === 'talked' ? 'talked'
+    : outcome === 'dead_lead' ? 'dead_lead'
+    : outcome === 'rescheduled' ? 'callback_scheduled'
+    : 'unreachable';
+
+  await (supabase as any)
+    .from('lead_profiles')
+    .update({
+      contacted_status: contactedStatus,
+      contacted_at: new Date().toISOString(),
+      contacted_by: adminId,
+    })
+    .eq('user_id', cbReq.user_id)
+    .is('deleted_at', null);
+
+  return attempt as CallbackAttempt;
+}
+
+/**
+ * Get callback attempts for a user (timeline history).
+ */
+export async function getCallbackAttempts(
+  userId: string,
+  client?: TypedSupabaseClient
+): Promise<CallbackAttempt[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('callback_attempts')
+    .select('*')
+    .eq('user_id', userId)
+    .order('attempted_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching callback attempts:', error);
+    return [];
+  }
+  return (data || []) as CallbackAttempt[];
+}
+
+/**
+ * Mark user as dead lead.
+ */
+export async function markUserAsDeadLead(
+  userId: string,
+  adminId: string,
+  reason: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Update lead_profiles
+  await (supabase as any)
+    .from('lead_profiles')
+    .update({
+      contacted_status: 'dead_lead',
+      contacted_at: new Date().toISOString(),
+      contacted_by: adminId,
+    })
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+
+  // Update all open callback_requests for this user
+  await (supabase as any)
+    .from('callback_requests')
+    .update({
+      status: 'dead_lead',
+      is_dead_lead: true,
+      call_notes: reason,
+    })
+    .eq('user_id', userId)
+    .in('status', ['pending', 'scheduled', 'attempted']);
+}
+
+/**
+ * Get callbacks due for reminder (scheduled_callback_at within next N minutes).
+ * Used by cron endpoint.
+ */
+export async function getDueCallbackReminders(
+  withinMinutes: number = 5,
+  client?: TypedSupabaseClient
+): Promise<(CallbackRequest & { user_name: string; user_phone: string })[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const now = new Date();
+  const windowEnd = new Date(now.getTime() + withinMinutes * 60 * 1000);
+
+  const { data, error } = await supabase
+    .from('callback_requests')
+    .select('*, users!callback_requests_user_id_fkey(name, phone)')
+    .eq('status', 'scheduled')
+    .eq('is_dead_lead', false)
+    .not('scheduled_callback_at', 'is', null)
+    .lte('scheduled_callback_at', windowEnd.toISOString())
+    .gte('scheduled_callback_at', now.toISOString());
+
+  if (error) {
+    console.error('Error fetching due callback reminders:', error);
+    return [];
+  }
+
+  return (data || []).map((cb: any) => ({
+    ...cb,
+    user_name: cb.users?.name || cb.name || 'Unknown',
+    user_phone: cb.users?.phone || cb.phone || '',
+  })) as (CallbackRequest & { user_name: string; user_phone: string })[];
 }

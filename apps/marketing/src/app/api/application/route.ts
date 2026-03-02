@@ -367,16 +367,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
         ).catch((err) => console.error('Email sending failed:', err));
       }
 
-      // Dispatch notifications to Telegram + team emails + admin bell (non-blocking)
-      notifyNewApplication({
-        userName,
-        phone: auth.phone || body.phone || 'N/A',
-        course: application.interest_course || body.interest_course || '',
-        schoolName: body.academic_data?.school_name || body.academic_data?.college_name,
-        city: body.city,
-        state: body.state,
-        applicationNumber: application.application_number || undefined,
-      }).catch((err) => console.error('Notification dispatch failed:', err));
+      // Dispatch notifications to Telegram + team emails + admin bell
+      try {
+        await notifyNewApplication({
+          userName,
+          phone: auth.phone || body.phone || 'N/A',
+          course: application.interest_course || body.interest_course || '',
+          schoolName: body.academic_data?.school_name || body.academic_data?.college_name,
+          city: body.city,
+          state: body.state,
+          applicationNumber: application.application_number || undefined,
+        });
+      } catch (err) {
+        console.error('Notification dispatch failed:', err);
+      }
     }
 
     return NextResponse.json(
