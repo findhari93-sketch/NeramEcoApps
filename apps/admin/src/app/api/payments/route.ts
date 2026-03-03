@@ -1,6 +1,6 @@
+// @ts-nocheck
 export const dynamic = 'force-dynamic';
 
-// @ts-nocheck - Supabase types not generated
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import type { PaymentStatus } from '@neram/database';

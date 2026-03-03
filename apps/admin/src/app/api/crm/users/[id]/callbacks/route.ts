@@ -1,6 +1,6 @@
+// @ts-nocheck
 export const dynamic = 'force-dynamic';
 
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, scheduleCallback } from '@neram/database';
 
