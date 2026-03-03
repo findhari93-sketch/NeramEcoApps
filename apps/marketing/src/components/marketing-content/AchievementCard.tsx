@@ -1,7 +1,8 @@
 'use client';
 
-import { Box, Typography, Avatar, Chip, Card, CardContent } from '@neram/ui';
+import { Box, Typography, Chip, Card, CardContent } from '@neram/ui';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import Image from 'next/image';
 
 interface AchievementCardProps {
   title: string;
@@ -60,21 +61,35 @@ export default function AchievementCard({ title, description, imageUrl, metadata
       <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, sm: 3 } }}>
         {/* Header: Avatar + Name + Score */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar
-            src={metadata.image_crops?.square || imageUrl || undefined}
-            alt={metadata.student_name}
+          <Box
             sx={{
               width: 56,
               height: 56,
               mr: 2,
+              borderRadius: '50%',
+              overflow: 'hidden',
               bgcolor: 'warning.light',
-              color: 'warning.contrastText',
-              fontSize: 18,
-              fontWeight: 700,
+              position: 'relative',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            {!imageUrl && !metadata.image_crops?.square && initials}
-          </Avatar>
+            {(metadata.image_crops?.square || imageUrl) ? (
+              <Image
+                src={metadata.image_crops?.square || imageUrl!}
+                alt={metadata.student_name}
+                fill
+                sizes="56px"
+                style={{ objectFit: 'cover' }}
+              />
+            ) : (
+              <Typography sx={{ fontSize: 18, fontWeight: 700, color: 'warning.contrastText' }}>
+                {initials}
+              </Typography>
+            )}
+          </Box>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Typography variant="h6" component="div" fontWeight={700} noWrap>
               {metadata.student_name}

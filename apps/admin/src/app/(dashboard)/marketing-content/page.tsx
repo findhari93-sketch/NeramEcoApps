@@ -28,6 +28,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ClearIcon from '@mui/icons-material/Clear';
 import { Avatar, CircularProgress, LinearProgress } from '@neram/ui';
 import CropIcon from '@mui/icons-material/Crop';
+import Image from 'next/image';
 import DataTable from '@/components/DataTable';
 import ImageCropDialog from '@/components/crm/ImageCropDialog';
 import type { ImageCropsResult } from '@/components/crm/ImageCropDialog';
@@ -590,7 +591,7 @@ export default function MarketingContentPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
             Marketing Content
@@ -688,11 +689,9 @@ export default function MarketingContentPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 {form.image_url ? (
                   <Box sx={{ position: 'relative' }}>
-                    <Avatar
-                      src={form.image_url}
-                      variant="rounded"
-                      sx={{ width: 80, height: 80 }}
-                    />
+                    <Box sx={{ width: 80, height: 80, borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
+                      <Image src={form.image_url} alt="Content image" fill sizes="80px" style={{ objectFit: 'cover' }} />
+                    </Box>
                     <IconButton
                       size="small"
                       onClick={() => setForm({ ...form, image_url: '' })}
@@ -750,34 +749,25 @@ export default function MarketingContentPage() {
                     <Box sx={{ display: 'flex', gap: 1.5, mt: 1 }}>
                       {imageCrops.square && (
                         <Box sx={{ textAlign: 'center' }}>
-                          <Box
-                            component="img"
-                            src={imageCrops.square}
-                            alt="Square crop"
-                            sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-                          />
+                          <Box sx={{ width: 48, height: 48, position: 'relative', borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                            <Image src={imageCrops.square} alt="Square crop" fill sizes="48px" style={{ objectFit: 'cover' }} />
+                          </Box>
                           <Typography variant="caption" display="block" color="text.secondary">1:1</Typography>
                         </Box>
                       )}
                       {imageCrops.banner && (
                         <Box sx={{ textAlign: 'center' }}>
-                          <Box
-                            component="img"
-                            src={imageCrops.banner}
-                            alt="Banner crop"
-                            sx={{ width: 100, height: 45, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-                          />
+                          <Box sx={{ width: 100, height: 45, position: 'relative', borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                            <Image src={imageCrops.banner} alt="Banner crop" fill sizes="100px" style={{ objectFit: 'cover' }} />
+                          </Box>
                           <Typography variant="caption" display="block" color="text.secondary">2.2:1</Typography>
                         </Box>
                       )}
                       {imageCrops.mobile && (
                         <Box sx={{ textAlign: 'center' }}>
-                          <Box
-                            component="img"
-                            src={imageCrops.mobile}
-                            alt="Mobile crop"
-                            sx={{ width: 80, height: 45, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-                          />
+                          <Box sx={{ width: 80, height: 45, position: 'relative', borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+                            <Image src={imageCrops.mobile} alt="Mobile crop" fill sizes="80px" style={{ objectFit: 'cover' }} />
+                          </Box>
                           <Typography variant="caption" display="block" color="text.secondary">16:9</Typography>
                         </Box>
                       )}

@@ -8,8 +8,8 @@ interface SidebarContextValue {
   sidebarWidth: number;
 }
 
-const EXPANDED_WIDTH = 260;
-const COLLAPSED_WIDTH = 64;
+const EXPANDED_WIDTH = 200;
+const COLLAPSED_WIDTH = 48;
 const STORAGE_KEY = 'neram-admin-sidebar-collapsed';
 
 const SidebarContext = createContext<SidebarContextValue>({

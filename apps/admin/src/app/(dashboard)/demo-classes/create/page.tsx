@@ -134,7 +134,7 @@ export default function CreateDemoSlotPage() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => router.back()}
@@ -152,19 +152,19 @@ export default function CreateDemoSlotPage() {
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
 
       {success && (
-        <Alert severity="success" sx={{ mb: 3 }}>
+        <Alert severity="success" sx={{ mb: 2 }}>
           Demo slot created successfully! Redirecting...
         </Alert>
       )}
 
       <form onSubmit={handleSubmit}>
-        <Grid container spacing={3}>
+        <Grid container spacing={2}>
           {/* Left Column - Main Form */}
           <Grid item xs={12} md={8}>
             <Card>
@@ -290,7 +290,7 @@ export default function CreateDemoSlotPage() {
 
           {/* Right Column - Settings */}
           <Grid item xs={12} md={4}>
-            <Card sx={{ mb: 3 }}>
+            <Card sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Mode
@@ -311,7 +311,7 @@ export default function CreateDemoSlotPage() {
               </CardContent>
             </Card>
 
-            <Card sx={{ mb: 3 }}>
+            <Card sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Instructor

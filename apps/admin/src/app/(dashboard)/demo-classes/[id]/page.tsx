@@ -382,7 +382,7 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <Button startIcon={<ArrowBackIcon />} onClick={() => router.back()}>
           Back
         </Button>
@@ -398,13 +398,13 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
       {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={2} sx={{ mb: 2.5 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card>
             <CardContent>
@@ -463,7 +463,7 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
       </Grid>
 
       {/* Action Buttons */}
-      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
         {slot.status === 'scheduled' && slot.current_registrations >= slot.min_registrations && (
           <Button
             variant="contained"
@@ -530,7 +530,7 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
 
       <TabPanel value={tabValue} index={2}>
         {stats && stats.survey_count > 0 ? (
-          <Grid container spacing={3}>
+          <Grid container spacing={2}>
             <Grid item xs={12} md={4}>
               <Card>
                 <CardContent>
@@ -592,7 +592,7 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
       <TabPanel value={tabValue} index={3}>
         <Card>
           <CardContent>
-            <Grid container spacing={3}>
+            <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle2" color="text.secondary">Mode</Typography>
                 <Typography variant="body1">{slot.demo_mode}</Typography>

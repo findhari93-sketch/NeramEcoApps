@@ -57,7 +57,7 @@ export default function LeadReviewForm({
 
   return (
     <Box>
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6">Lead Information</Typography>
         <Chip
           label={lead.status}
@@ -71,9 +71,9 @@ export default function LeadReviewForm({
         />
       </Box>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 2 }} />
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
           <Typography variant="body2" color="text.secondary" gutterBottom>
             Student Name

@@ -129,12 +129,12 @@ export default function FeeCalculator({
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 2 }}>
       <Typography variant="h6" gutterBottom>
         Fee Calculator
       </Typography>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         {/* Base Fee */}
         <Grid item xs={12} sm={6}>
           <TextField

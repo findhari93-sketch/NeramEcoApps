@@ -38,7 +38,7 @@ export default function UserDetailHeader({
   const stageConfig = PIPELINE_STAGE_CONFIG[pipelineStage];
 
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box sx={{ mb: 2 }}>
       {/* Back navigation */}
       <Button
         startIcon={<ArrowBackIcon />}
@@ -72,7 +72,7 @@ export default function UserDetailHeader({
           }}
         />
 
-        <Box sx={{ p: 3 }}>
+        <Box sx={{ p: 2 }}>
           <Box
             sx={{
               display: 'flex',
@@ -83,7 +83,7 @@ export default function UserDetailHeader({
             }}
           >
             {/* Left: Avatar + Info */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Avatar
                 src={user.avatar_url || undefined}
                 sx={{

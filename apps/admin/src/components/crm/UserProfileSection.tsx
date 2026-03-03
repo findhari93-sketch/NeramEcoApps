@@ -131,7 +131,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
     <Paper
       elevation={0}
       sx={{
-        mb: 3,
+        mb: 2,
         border: '1px solid',
         borderColor: 'grey.200',
         borderRadius: 1,
@@ -149,7 +149,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
         <Typography variant="subtitle1" fontWeight={700}>Profile Information</Typography>
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
+      <Box sx={{ p: 1.5 }}>
         <SectionLabel icon={PersonIcon} label="Personal Details" />
         <InfoRow label="Full Name" value={user.name} />
         <InfoRow label="First Name" value={user.first_name} />

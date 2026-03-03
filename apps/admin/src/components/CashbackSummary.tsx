@@ -104,7 +104,7 @@ export default function CashbackSummary({
 
   if (claims.length === 0) {
     return (
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 2 }}>
         <Typography variant="h6" gutterBottom>
           Cashback Claims
         </Typography>
@@ -116,7 +116,7 @@ export default function CashbackSummary({
   }
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">
           Cashback Claims
@@ -128,7 +128,7 @@ export default function CashbackSummary({
         />
       </Box>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 2 }} />
 
       <Stack spacing={2}>
         {claims.map((claim) => (

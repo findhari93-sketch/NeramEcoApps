@@ -219,7 +219,7 @@ export default function QuestionModerationPage() {
       <Typography variant="h4" fontWeight={700} sx={{ mb: 1 }}>
         Question Moderation
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Review and moderate community-submitted questions and improvements.
       </Typography>
 
@@ -244,7 +244,7 @@ export default function QuestionModerationPage() {
 
       {/* Stats (questions only) */}
       {contentType === 'questions' && (
-        <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
           {STATUS_TABS.map((tab) => (
             <Paper
               key={tab.value}
@@ -268,7 +268,7 @@ export default function QuestionModerationPage() {
 
       {/* Stats (change requests) */}
       {contentType === 'change_requests' && (
-        <Stack direction="row" spacing={2} sx={{ mb: 3 }} flexWrap="wrap" useFlexGap>
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
           <Paper sx={{ px: 3, py: 1.5, textAlign: 'center' }}>
             <Typography variant="h5" fontWeight={700} color="warning.main">
               {crStats.total_pending}
