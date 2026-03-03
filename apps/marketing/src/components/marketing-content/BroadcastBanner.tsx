@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, IconButton } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import CampaignIcon from '@mui/icons-material/Campaign';
@@ -23,10 +23,21 @@ const styleColors: Record<string, string> = {
   urgent: 'error.main',
 };
 
+const CSS_VAR = '--broadcast-banner-height';
+
+function setBannerHeight(height: number) {
+  document.documentElement.style.setProperty(CSS_VAR, `${height}px`);
+}
+
+function clearBannerHeight() {
+  document.documentElement.style.setProperty(CSS_VAR, '0px');
+}
+
 export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) {
   const [broadcast, setBroadcast] = useState<BroadcastItem | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function fetchBroadcast() {
@@ -46,6 +57,30 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
     fetchBroadcast();
   }, []);
 
+  // Measure banner height and set CSS variable so the Header can offset itself
+  useEffect(() => {
+    if (!bannerRef.current) {
+      clearBannerHeight();
+      return;
+    }
+    const el = bannerRef.current;
+    const observer = new ResizeObserver(([entry]) => {
+      setBannerHeight(entry.contentRect.height);
+    });
+    // Set initial height
+    setBannerHeight(el.offsetHeight);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      clearBannerHeight();
+    };
+  }, [broadcast, dismissed]);
+
+  const handleDismiss = useCallback(() => {
+    clearBannerHeight();
+    setDismissed(true);
+  }, []);
+
   if (!loaded || !broadcast || dismissed) return null;
 
   const title = broadcast.title?.[locale] || broadcast.title?.en || '';
@@ -56,6 +91,7 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
 
   return (
     <Box
+      ref={bannerRef}
       sx={{
         bgcolor,
         color: 'white',
@@ -107,7 +143,7 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
 
       <IconButton
         size="small"
-        onClick={() => setDismissed(true)}
+        onClick={handleDismiss}
         aria-label="Dismiss banner"
         sx={{
           color: 'white',
