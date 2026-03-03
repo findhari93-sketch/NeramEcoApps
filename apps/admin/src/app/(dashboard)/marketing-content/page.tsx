@@ -55,6 +55,14 @@ const CONTENT_TYPES = [
   { value: 'important_date', label: 'Important Date' },
   { value: 'announcement', label: 'Announcement' },
   { value: 'update', label: 'Update' },
+  { value: 'broadcast', label: 'Broadcast Banner' },
+];
+
+const BROADCAST_STYLE_OPTIONS = [
+  { value: 'info', label: 'Blue (Info)' },
+  { value: 'success', label: 'Green (Success)' },
+  { value: 'warning', label: 'Orange (Warning)' },
+  { value: 'urgent', label: 'Red (Urgent)' },
 ];
 
 const STATUS_OPTIONS = [
@@ -131,10 +139,12 @@ const emptyForm = {
   badge_color: 'info',
   // Update metadata
   category: '',
+  // Broadcast metadata
+  broadcast_style: 'info',
 };
 
-const TAB_FILTERS = ['all', 'achievement', 'important_date', 'announcement', 'update'] as const;
-const TAB_LABELS = ['All', 'Achievements', 'Important Dates', 'Announcements', 'Updates'];
+const TAB_FILTERS = ['all', 'achievement', 'important_date', 'announcement', 'update', 'broadcast'] as const;
+const TAB_LABELS = ['All', 'Achievements', 'Important Dates', 'Announcements', 'Updates', 'Broadcasts'];
 
 export default function MarketingContentPage() {
   const [items, setItems] = useState<MarketingContentItem[]>([]);
@@ -274,6 +284,8 @@ export default function MarketingContentPage() {
         badge_color: (meta.badge_color as string) || 'info',
         // Update
         category: (meta.category as string) || '',
+        // Broadcast
+        broadcast_style: (meta.style as string) || 'info',
       });
     } else {
       setEditingItem(null);
@@ -339,6 +351,12 @@ export default function MarketingContentPage() {
       metadata = {
         category: form.category || null,
         link_url: form.link_url || null,
+      };
+    } else if (form.type === 'broadcast') {
+      metadata = {
+        link_url: form.link_url || null,
+        link_text: form.link_text || null,
+        style: form.broadcast_style || 'info',
       };
     }
 
@@ -432,6 +450,7 @@ export default function MarketingContentPage() {
       case 'important_date': return 'error';
       case 'announcement': return 'info';
       case 'update': return 'default';
+      case 'broadcast': return 'secondary';
       default: return 'default';
     }
   };
@@ -518,6 +537,13 @@ export default function MarketingContentPage() {
             </Typography>
           );
         }
+        if (row.type === 'broadcast') {
+          return (
+            <Typography variant="body2" noWrap>
+              Style: {(meta.style as string) || 'info'} {(meta.link_url as string) ? '(has link)' : ''}
+            </Typography>
+          );
+        }
         return null;
       },
     },
@@ -570,7 +596,7 @@ export default function MarketingContentPage() {
             Marketing Content
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Manage achievements, important dates, announcements, and updates for the marketing site
+            Manage achievements, important dates, announcements, updates, and broadcast banners for the marketing site
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
@@ -986,6 +1012,48 @@ export default function MarketingContentPage() {
                     placeholder="https://..."
                   />
                 </Box>
+              </>
+            )}
+
+            {/* Broadcast Banner fields */}
+            {form.type === 'broadcast' && (
+              <>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Broadcast Banner Details
+                </Typography>
+                <TextField
+                  select
+                  label="Banner Style"
+                  value={form.broadcast_style}
+                  onChange={(e) => setForm({ ...form, broadcast_style: e.target.value })}
+                  fullWidth
+                  helperText="Sets the background color of the banner"
+                >
+                  {BROADCAST_STYLE_OPTIONS.map((o) => (
+                    <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+                  ))}
+                </TextField>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    label="Link URL (optional)"
+                    value={form.link_url}
+                    onChange={(e) => setForm({ ...form, link_url: e.target.value })}
+                    fullWidth
+                    placeholder="https://..."
+                    helperText="Optional clickable link in the banner"
+                  />
+                  <TextField
+                    label="Link Text"
+                    value={form.link_text}
+                    onChange={(e) => setForm({ ...form, link_text: e.target.value })}
+                    fullWidth
+                    placeholder="e.g., Click here, Learn more"
+                    helperText="Displayed as the clickable text"
+                  />
+                </Box>
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  The broadcast banner appears at the very top of the marketing website for all visitors. Use the Title field for the main message. Only one broadcast is shown at a time (highest priority).
+                </Alert>
               </>
             )}
 

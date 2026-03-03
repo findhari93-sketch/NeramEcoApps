@@ -1403,7 +1403,7 @@ export interface FAQ extends Timestamps {
 // MARKETING CONTENT (dynamic CMS for marketing site)
 // ============================================
 
-export type MarketingContentType = 'achievement' | 'important_date' | 'announcement' | 'update';
+export type MarketingContentType = 'achievement' | 'important_date' | 'announcement' | 'update' | 'broadcast';
 export type MarketingContentStatus = 'draft' | 'published' | 'archived';
 
 export interface ImageCrops {
@@ -1444,11 +1444,18 @@ export interface UpdateMetadata {
   link_url?: string | null;
 }
 
+export interface BroadcastMetadata {
+  link_url?: string | null;
+  link_text?: string | null;
+  style?: 'info' | 'success' | 'warning' | 'urgent' | null;
+}
+
 export type MarketingContentMetadata =
   | AchievementMetadata
   | ImportantDateMetadata
   | AnnouncementMetadata
-  | UpdateMetadata;
+  | UpdateMetadata
+  | BroadcastMetadata;
 
 export interface MarketingContent extends Timestamps {
   id: string;

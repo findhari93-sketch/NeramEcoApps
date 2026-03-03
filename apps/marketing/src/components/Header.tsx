@@ -151,10 +151,11 @@ export default function Header() {
       position="fixed"
       elevation={1}
       sx={{
+        top: 'var(--broadcast-banner-height, 0px)',
         transform: scrollDirection === 'down' && !isAtTop && !mobileMenuOpen
           ? 'translateY(-100%)'
           : 'translateY(0)',
-        transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms ease',
         '@media (prefers-reduced-motion: reduce)': {
           transition: 'none',
         },
@@ -532,8 +533,8 @@ export default function Header() {
         </Box>
       </SwipeableDrawer>
     </AppBar>
-    {/* Spacer to prevent content from sliding under fixed AppBar */}
-    <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 } }} />
+    {/* Spacer to prevent content from sliding under fixed AppBar + broadcast banner */}
+    <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }} />
     </>
   );
 }
