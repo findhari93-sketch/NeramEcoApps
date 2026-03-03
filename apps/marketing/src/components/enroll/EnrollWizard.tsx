@@ -18,7 +18,8 @@ import {
   Skeleton,
 } from '@neram/ui';
 import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google } from '@mui/icons-material';
-import { useFirebaseAuth, LoginModal } from '@neram/auth';
+import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
+import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
 import PersonalDetailsStep from './PersonalDetailsStep';
 import AcademicDetailsStep from './AcademicDetailsStep';
@@ -97,9 +98,9 @@ export default function EnrollWizard() {
         ...prev,
         personal: {
           ...prev.personal,
-          firstName: prev.personal.firstName || user.displayName?.split(' ')[0] || '',
+          firstName: prev.personal.firstName || user.name?.split(' ')[0] || '',
           email: user.email || prev.personal.email,
-          phone: user.phoneNumber || prev.personal.phone,
+          phone: user.phone || prev.personal.phone,
         },
       }));
     }
@@ -179,7 +180,8 @@ export default function EnrollWizard() {
     setSubmitError(null);
 
     try {
-      const idToken = await user.getIdToken();
+      const firebaseUser = getCurrentUser();
+      const idToken = await firebaseUser?.getIdToken();
 
       const res = await fetch('/api/enroll/complete', {
         method: 'POST',
@@ -508,8 +510,9 @@ export default function EnrollWizard() {
         <LoginModal
           open={showPhoneModal}
           onClose={() => setShowPhoneModal(false)}
-          mode="phone"
-          onSuccess={() => {
+          phoneOnly
+          apiBaseUrl=""
+          onAuthenticated={() => {
             setPhoneVerified(true);
             setPhoneVerifiedAt(new Date().toISOString());
             setShowPhoneModal(false);
