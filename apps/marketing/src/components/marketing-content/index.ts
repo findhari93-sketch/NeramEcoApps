@@ -1,3 +1,4 @@
+export { default as BroadcastBanner } from './BroadcastBanner';
 export { default as ImportantDateBanner } from './ImportantDateBanner';
 export { default as AchievementCard } from './AchievementCard';
 export { default as AchievementsPreview } from './AchievementsPreview';
