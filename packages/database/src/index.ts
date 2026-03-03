@@ -84,6 +84,9 @@ export {
   notifyContactMessageReceived,
 } from './services/notifications';
 
+// Utils
+export { rewriteStorageUrl } from './utils/storage-url';
+
 // Data
 export {
   locations,

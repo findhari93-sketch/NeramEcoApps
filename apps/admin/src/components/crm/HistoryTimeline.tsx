@@ -36,7 +36,7 @@ export default function HistoryTimeline({ history }: HistoryTimelineProps) {
   return (
     <Paper
       elevation={0}
-      sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}
+      sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}
     >
       <Box sx={{ px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
         <HistoryIcon sx={{ color: 'primary.main', fontSize: 20 }} />
@@ -44,7 +44,7 @@ export default function HistoryTimeline({ history }: HistoryTimelineProps) {
         <Chip label={history.length} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 700, bgcolor: 'grey.200', color: 'text.secondary', borderRadius: 1, ml: 0.5 }} />
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
+      <Box sx={{ p: 1.5 }}>
         {history.length === 0 ? (
           <Box sx={{ py: 3, textAlign: 'center' }}>
             <HistoryIcon sx={{ fontSize: 32, color: 'grey.300', mb: 1 }} />

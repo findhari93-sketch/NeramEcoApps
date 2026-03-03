@@ -236,7 +236,7 @@ export default function CallbackSection({
     <Paper
       elevation={0}
       sx={{
-        mb: 3,
+        mb: 2,
         border: '1px solid',
         borderColor: 'grey.200',
         borderRadius: 1,
@@ -294,7 +294,7 @@ export default function CallbackSection({
         )}
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
+      <Box sx={{ p: 1.5 }}>
         {/* Error alert */}
         {error && (
           <Alert severity="error" sx={{ mb: 2, borderRadius: 0.75 }} onClose={() => setError('')}>

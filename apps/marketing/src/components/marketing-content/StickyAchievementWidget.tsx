@@ -9,6 +9,7 @@ import {
   Drawer,
   Button,
   Slide,
+  Dialog,
 } from '@neram/ui';
 import { useTheme, useMediaQuery } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -17,6 +18,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useRouter, usePathname } from 'next/navigation';
+import Image from 'next/image';
 
 /** Pages where Tawk.to chat lives — hide widget to avoid overlap */
 const HIDDEN_PATHS = ['/contact'];
@@ -94,16 +96,12 @@ function PhotoBanner({
       }}
     >
       {imageUrl ? (
-        <Box
-          component="img"
+        <Image
           src={imageUrl}
           alt={name}
-          sx={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-          }}
+          fill
+          sizes="400px"
+          style={{ objectFit: 'cover' }}
         />
       ) : (
         <Box
@@ -268,7 +266,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [visible, setVisible] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -336,64 +334,51 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
   const current = items[activeIndex];
   const meta = current.metadata;
 
-  // M3 emphasized easing for smooth, natural transitions
-  const smoothEasing = 'cubic-bezier(0.4, 0, 0.2, 1)';
-
   // ─── DESKTOP ────────────────────────────────────────
   if (isDesktop) {
     return (
-      <Slide direction="up" in={visible} mountOnEnter unmountOnExit>
-        <Box
-          onMouseEnter={() => setExpanded(true)}
-          onMouseLeave={() => setExpanded(false)}
-          sx={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            zIndex: 1050,
-            width: expanded ? 400 : 360,
-            borderRadius: 3,
-            overflow: 'hidden',
-            bgcolor: 'background.paper',
-            boxShadow: expanded
-              ? '0 16px 48px rgba(0,0,0,0.22)'
-              : '0 8px 32px rgba(0,0,0,0.18)',
-            border: '2px solid',
-            borderColor: 'warning.main',
-            animation: 'goldBorderPulse 3s ease-in-out 1',
-            transition: `all 0.45s ${smoothEasing}`,
-          }}
-        >
-          {/* Dismiss button */}
-          <IconButton
-            size="small"
-            onClick={handleDismiss}
-            sx={{
-              position: 'absolute',
-              top: 6,
-              right: 6,
-              zIndex: 10,
-              bgcolor: 'rgba(0,0,0,0.5)',
-              color: '#fff',
-              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-              width: 28,
-              height: 28,
-            }}
-          >
-            <CloseIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-
-          {/* ─── COLLAPSED VIEW (fades out when expanded) ─── */}
+      <>
+        <Slide direction="up" in={visible} mountOnEnter unmountOnExit>
           <Box
             sx={{
-              opacity: expanded ? 0 : 1,
-              maxHeight: expanded ? 0 : 120,
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 1050,
+              width: 360,
+              borderRadius: 3,
               overflow: 'hidden',
-              transition: `opacity 0.3s ${smoothEasing}, max-height 0.45s ${smoothEasing}`,
-              pointerEvents: expanded ? 'none' : 'auto',
+              bgcolor: 'background.paper',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+              border: '2px solid',
+              borderColor: 'warning.main',
+              animation: 'goldBorderPulse 3s ease-in-out 1',
+              transition: 'box-shadow 0.2s ease',
+              '&:hover': { boxShadow: '0 12px 40px rgba(0,0,0,0.22)' },
             }}
           >
+            {/* Dismiss button */}
+            <IconButton
+              size="small"
+              onClick={handleDismiss}
+              sx={{
+                position: 'absolute',
+                top: 6,
+                right: 6,
+                zIndex: 10,
+                bgcolor: 'rgba(0,0,0,0.5)',
+                color: '#fff',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
+                width: 28,
+                height: 28,
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+
+            {/* Compact card — click to open detail dialog */}
             <Box
+              onClick={() => setDialogOpen(true)}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -411,19 +396,16 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
                   overflow: 'hidden',
                   flexShrink: 0,
                   bgcolor: 'warning.light',
+                  position: 'relative',
                 }}
               >
                 {(meta.image_crops?.square || current.image_url) ? (
-                  <Box
-                    component="img"
+                  <Image
                     src={meta.image_crops?.square || current.image_url!}
                     alt={meta.student_name}
-                    sx={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
+                    fill
+                    sizes="80px"
+                    style={{ objectFit: 'cover' }}
                   />
                 ) : (
                   <Box
@@ -487,54 +469,81 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
               </Box>
             </Box>
           </Box>
+        </Slide>
 
-          {/* ─── EXPANDED VIEW (fades in with slight delay) ─── */}
-          <Box
-            sx={{
-              opacity: expanded ? 1 : 0,
-              maxHeight: expanded ? 600 : 0,
+        {/* ─── DESKTOP DETAIL DIALOG ─── */}
+        <Dialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
               overflow: 'hidden',
-              transition: `opacity 0.35s ${smoothEasing} ${expanded ? '0.1s' : '0s'}, max-height 0.45s ${smoothEasing}`,
-              pointerEvents: expanded ? 'auto' : 'none',
+              border: '2px solid',
+              borderColor: 'warning.main',
+            },
+          }}
+        >
+          {/* Close button */}
+          <IconButton
+            onClick={() => setDialogOpen(false)}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 10,
+              bgcolor: 'rgba(0,0,0,0.5)',
+              color: '#fff',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
             }}
           >
-            <PhotoBanner
-              imageUrl={meta.image_crops?.banner || current.image_url}
-              name={meta.student_name}
-              height={180}
-              roundedTop
-            />
-            <AchievementDetail item={current} locale={locale} />
+            <CloseIcon />
+          </IconButton>
 
-            {/* Navigation + View All */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                px: 2,
-                pb: 2,
+          {/* Photo banner */}
+          <PhotoBanner
+            imageUrl={meta.image_crops?.banner || current.image_url}
+            name={meta.student_name}
+            height={220}
+            roundedTop
+          />
+
+          {/* Achievement details */}
+          <AchievementDetail item={current} locale={locale} />
+
+          {/* Navigation + View All */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              px: 2,
+              pb: 2,
+            }}
+          >
+            <ItemNavigation
+              count={items.length}
+              activeIndex={activeIndex}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              onSelect={setActiveIndex}
+            />
+            <Button
+              size="small"
+              endIcon={<ArrowForwardIcon />}
+              onClick={() => {
+                setDialogOpen(false);
+                handleViewAll();
               }}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
             >
-              <ItemNavigation
-                count={items.length}
-                activeIndex={activeIndex}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onSelect={setActiveIndex}
-              />
-              <Button
-                size="small"
-                endIcon={<ArrowForwardIcon />}
-                onClick={handleViewAll}
-                sx={{ textTransform: 'none', fontWeight: 600 }}
-              >
-                View All
-              </Button>
-            </Box>
+              View All
+            </Button>
           </Box>
-        </Box>
-      </Slide>
+        </Dialog>
+      </>
     );
   }
 
@@ -572,19 +581,16 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
               overflow: 'hidden',
               flexShrink: 0,
               bgcolor: 'warning.light',
+              position: 'relative',
             }}
           >
             {(meta.image_crops?.square || current.image_url) ? (
-              <Box
-                component="img"
+              <Image
                 src={meta.image_crops?.square || current.image_url!}
                 alt={meta.student_name}
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                }}
+                fill
+                sizes="48px"
+                style={{ objectFit: 'cover' }}
               />
             ) : (
               <Box

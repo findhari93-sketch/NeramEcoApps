@@ -1,0 +1,20 @@
+name = "neram-supabase-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+account_id = "2ded5f54d55033ec99a15cf99bccc972"
+
+# Production: db.neramclasses.com → zdnypksjqnhtiblwdaic.supabase.co
+[env.production]
+name = "neram-supabase-proxy-prod"
+vars = { SUPABASE_HOST = "zdnypksjqnhtiblwdaic.supabase.co" }
+routes = [
+  { pattern = "db.neramclasses.com/*", zone_id = "c8d99edfbd0d36b58a247ea7c4f49a63" }
+]
+
+# Staging: db-staging.neramclasses.com → hgxjavrsrvpihqrpezdh.supabase.co
+[env.staging]
+name = "neram-supabase-proxy-staging"
+vars = { SUPABASE_HOST = "hgxjavrsrvpihqrpezdh.supabase.co" }
+routes = [
+  { pattern = "db-staging.neramclasses.com/*", zone_id = "c8d99edfbd0d36b58a247ea7c4f49a63" }
+]

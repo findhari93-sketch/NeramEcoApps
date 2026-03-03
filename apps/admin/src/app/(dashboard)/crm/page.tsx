@@ -167,7 +167,7 @@ export default function CRMPage() {
   return (
     <Box>
       {/* Page header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
             sx={{
@@ -238,7 +238,7 @@ export default function CRMPage() {
       )}
 
       {/* Pipeline funnel */}
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
         <PipelineFunnel
           counts={pipelineCounts}
           activeStage={activeStage}

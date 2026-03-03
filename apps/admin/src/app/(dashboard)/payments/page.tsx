@@ -173,7 +173,7 @@ function StatCard({
     <Paper
       elevation={0}
       sx={{
-        p: 2.5,
+        p: 1.5,
         borderRadius: 1,
         border: '1px solid',
         borderColor: 'grey.200',
@@ -196,8 +196,8 @@ function StatCard({
         </Box>
         <Box
           sx={{
-            width: 40,
-            height: 40,
+            width: 32,
+            height: 32,
             borderRadius: 1,
             bgcolor: `${color}14`,
             display: 'flex',
@@ -304,7 +304,7 @@ export default function PaymentsPage() {
   return (
     <Box>
       {/* Page Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
             sx={{
@@ -353,7 +353,7 @@ export default function PaymentsPage() {
         sx={{
           display: 'flex',
           gap: 2,
-          mb: 3,
+          mb: 2,
           flexWrap: 'wrap',
         }}
       >

@@ -37,7 +37,7 @@ export default function ScholarshipReview({
 }: ScholarshipReviewProps) {
   if (!scholarship) {
     return (
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 2 }}>
         <Typography variant="h6" gutterBottom>
           Scholarship Eligibility
         </Typography>
@@ -60,7 +60,7 @@ export default function ScholarshipReview({
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">
           Scholarship Review
@@ -72,7 +72,7 @@ export default function ScholarshipReview({
         />
       </Box>
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 2 }} />
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
@@ -118,7 +118,7 @@ export default function ScholarshipReview({
         Uploaded Documents
       </Typography>
 
-      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
         {scholarship.schoolIdCardUrl ? (
           <Button
             variant="outlined"
@@ -147,7 +147,7 @@ export default function ScholarshipReview({
       </Stack>
 
       {/* Scholarship Criteria Check */}
-      <Paper sx={{ p: 2, bgcolor: 'grey.50', mb: 3 }}>
+      <Paper sx={{ p: 2, bgcolor: 'grey.50', mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>
           Eligibility Criteria Check
         </Typography>

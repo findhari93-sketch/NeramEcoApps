@@ -139,7 +139,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
   return (
     <Paper
       elevation={0}
-      sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}
+      sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}
     >
       <Box
         sx={{
@@ -162,7 +162,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
         />
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
+      <Box sx={{ p: 1.5 }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
             <CircularProgress size={24} />

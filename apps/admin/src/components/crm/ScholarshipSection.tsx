@@ -225,9 +225,9 @@ export default function ScholarshipSection({
   // State 1: Government school, NOT yet scholarship eligible
   if (isGovernmentSchool && !scholarshipEligible && !scholarship) {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader />
-        <Box sx={{ p: 2.5 }}>
+        <Box sx={{ p: 1.5 }}>
           <Box sx={{ p: 2.5, bgcolor: '#E3F2FD', borderRadius: 1, border: '1px solid #BBDEFB', mb: 2 }}>
             <Typography variant="body2" sx={{ color: '#1565C0', fontSize: 12.5 }}>
               This student is from a government school and may be eligible for a scholarship.
@@ -253,9 +253,9 @@ export default function ScholarshipSection({
   // State 2: Eligible pending
   if (scholarshipStatus === 'eligible_pending') {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status="eligible_pending" />} />
-        <Box sx={{ p: 2.5 }}>
+        <Box sx={{ p: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, p: 2, bgcolor: '#FFF3E0', borderRadius: 1, border: '1px solid #FFE0B2' }}>
             <HourglassEmptyIcon sx={{ fontSize: 18, color: '#E65100' }} />
             <Typography variant="body2" sx={{ color: '#E65100', fontSize: 12.5 }}>
@@ -286,9 +286,9 @@ export default function ScholarshipSection({
     ].filter((d) => d.url);
 
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status={scholarshipStatus} />} />
-        <Box sx={{ p: 2.5 }}>
+        <Box sx={{ p: 1.5 }}>
           <InfoRow label="School Name" value={scholarship.school_name} />
           <InfoRow label="Income Range" value={scholarship.annual_income_range} />
           <InfoRow label="Gov. School Years" value={scholarship.government_school_years ? `${scholarship.government_school_years} years` : null} />
@@ -485,9 +485,9 @@ export default function ScholarshipSection({
   // State 4: Approved
   if (scholarship && scholarshipStatus === 'approved') {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status="approved" />} />
-        <Box sx={{ p: 2.5 }}>
+        <Box sx={{ p: 1.5 }}>
           <Box sx={{ p: 2, bgcolor: '#E8F5E9', borderRadius: 1, border: '1px solid #C8E6C9', mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <CheckCircleIcon sx={{ fontSize: 18, color: '#2E7D32' }} />
             <Typography variant="body2" sx={{ color: '#1B5E20', fontWeight: 600, fontSize: 12.5 }}>
@@ -516,9 +516,9 @@ export default function ScholarshipSection({
   // State 5: Rejected
   if (scholarship && scholarshipStatus === 'rejected') {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={<StatusChip status="rejected" />} />
-        <Box sx={{ p: 2.5 }}>
+        <Box sx={{ p: 1.5 }}>
           {scholarship.rejection_reason && (
             <Box sx={{ p: 2, bgcolor: '#FFEBEE', borderRadius: 1, border: '1px solid #FFCDD2', mb: 2 }}>
               <Typography variant="caption" sx={{ fontWeight: 700, color: '#C62828', fontSize: 11, letterSpacing: 0.3 }}>
@@ -540,7 +540,7 @@ export default function ScholarshipSection({
   // Fallback
   if (scholarship) {
     return (
-      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
+      <Paper elevation={0} sx={{ mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
         <SectionHeader statusChip={scholarshipStatus ? <StatusChip status={scholarshipStatus} /> : undefined} />
         <Box sx={{ p: 2.5, textAlign: 'center' }}>
           <SchoolIcon sx={{ fontSize: 36, color: 'grey.300', mb: 1 }} />

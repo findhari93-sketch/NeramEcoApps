@@ -67,7 +67,7 @@ export default function DocumentViewer({
 
   if (documents.length === 0) {
     return (
-      <Paper sx={{ p: 3, textAlign: 'center' }}>
+      <Paper sx={{ p: 2, textAlign: 'center' }}>
         <Typography color="text.secondary">No documents uploaded</Typography>
       </Paper>
     );

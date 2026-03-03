@@ -216,7 +216,7 @@ export default function DemoClassesPage() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
             Demo Classes
@@ -235,7 +235,7 @@ export default function DemoClassesPage() {
       </Box>
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={2} sx={{ mb: 2.5 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card>
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -299,7 +299,7 @@ export default function DemoClassesPage() {
       </Grid>
 
       {/* YouTube Video Setting */}
-      <Card sx={{ mb: 4 }}>
+      <Card sx={{ mb: 2.5 }}>
         <CardContent>
           <Typography variant="subtitle2" gutterBottom>
             Sample YouTube Video (shown on demo class booking page)

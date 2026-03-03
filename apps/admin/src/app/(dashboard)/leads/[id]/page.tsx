@@ -264,14 +264,14 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
       <Button
         onClick={() => router.back()}
         startIcon={<ArrowBackIcon />}
-        sx={{ mb: 3 }}
+        sx={{ mb: 2 }}
         variant="outlined"
       >
         Back to Leads
       </Button>
 
       {/* Header */}
-      <Paper sx={{ p: 3, mb: 3 }}>
+      <Paper sx={{ p: 2, mb: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
             <Typography variant="h4" fontWeight={600} gutterBottom>
@@ -304,7 +304,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
       </Paper>
 
       {/* Tabs */}
-      <Paper sx={{ mb: 3 }}>
+      <Paper sx={{ mb: 2 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab icon={<PersonIcon />} iconPosition="start" label="Profile" />
           <Tab icon={<SchoolIcon />} iconPosition="start" label="Scholarship" />
@@ -315,9 +315,9 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
 
       {/* Profile Tab */}
       <TabPanel value={activeTab} index={0}>
-        <Grid container spacing={3}>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Personal Information
               </Typography>
@@ -356,7 +356,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Education & Course
               </Typography>
@@ -389,7 +389,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
               </Grid>
             </Paper>
 
-            <Paper sx={{ p: 3, mt: 3 }}>
+            <Paper sx={{ p: 2, mt: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Source
               </Typography>
@@ -411,7 +411,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
 
       {/* Scholarship Tab */}
       <TabPanel value={activeTab} index={1}>
-        <Grid container spacing={3}>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <ScholarshipReview
               scholarship={lead.scholarship}
@@ -439,7 +439,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
 
       {/* Fee & Payment Tab */}
       <TabPanel value={activeTab} index={3}>
-        <Grid container spacing={3}>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <FeeCalculator
               baseFee={baseFees[lead.courseInterest] || 25000}
@@ -460,7 +460,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
               onGenerate={handleCouponGenerate}
             />
 
-            <Paper sx={{ p: 3, mt: 3 }}>
+            <Paper sx={{ p: 2, mt: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Payment Deadline
               </Typography>
@@ -478,7 +478,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
       </TabPanel>
 
       {/* Admin Notes & Actions */}
-      <Paper sx={{ p: 3, mt: 3 }}>
+      <Paper sx={{ p: 2, mt: 2 }}>
         <Typography variant="h6" gutterBottom>
           Admin Notes & Actions
         </Typography>
@@ -492,7 +492,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
           value={adminNotes}
           onChange={(e) => setAdminNotes(e.target.value)}
           placeholder="Add notes about this lead..."
-          sx={{ mb: 3 }}
+          sx={{ mb: 2 }}
         />
 
         <Stack direction="row" spacing={2} flexWrap="wrap">

@@ -714,8 +714,20 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
         paper: scheme.surface,
       },
     },
+    // Compact typography for desktop-only admin
+    typography: {
+      h4: { fontSize: '1.125rem', lineHeight: 1.3 },
+      h5: { fontSize: '1rem', lineHeight: 1.35 },
+      h6: { fontSize: '0.875rem', lineHeight: 1.35 },
+      body1: { fontSize: '0.875rem', lineHeight: 1.5 },
+      body2: { fontSize: '0.8125rem', lineHeight: 1.45 },
+      caption: { fontSize: '0.6875rem', lineHeight: 1.4 },
+      button: { fontSize: '0.8125rem', lineHeight: 1.4 },
+      subtitle1: { fontSize: '0.875rem', lineHeight: 1.45 },
+      subtitle2: { fontSize: '0.8125rem', lineHeight: 1.4 },
+    },
     components: {
-      // M3 Admin sidebar with mobile drawer
+      // Admin sidebar
       MuiDrawer: {
         styleOverrides: {
           paper: {
@@ -730,20 +742,13 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
               '& .MuiDrawer-paper': {
                 backgroundColor: scheme.surfaceContainer,
                 color: scheme.onSurface,
-                width: 260,
-                '@media (max-width: 900px)': {
-                  width: 240,
-                },
-                '@media (max-width: 600px)': {
-                  width: '85vw',
-                  maxWidth: 300,
-                },
+                width: 200,
               },
             },
           },
         ],
       },
-      // M3 Admin header
+      // Admin header
       MuiAppBar: {
         styleOverrides: {
           root: {
@@ -762,17 +767,13 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         ],
       },
-      // M3 Data tables - responsive
+      // Compact data tables
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
+            borderRadius: 6,
             border: `1px solid ${scheme.outlineVariant}`,
             backgroundColor: scheme.surface,
-            '@media (max-width: 600px)': {
-              borderRadius: 6,
-              overflowX: 'auto',
-            },
           },
         },
       },
@@ -782,7 +783,10 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
             backgroundColor: scheme.surfaceContainerLow,
             '& .MuiTableCell-root': {
               fontWeight: 600,
+              fontSize: '0.75rem',
               color: scheme.onSurface,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
             },
           },
         },
@@ -801,21 +805,35 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
         styleOverrides: {
           root: {
             borderColor: scheme.outlineVariant,
-            padding: '16px',
-            '@media (max-width: 600px)': {
-              padding: '12px 8px',
-              fontSize: '0.875rem',
-            },
+            padding: '8px 12px',
+            fontSize: '0.8125rem',
           },
         },
       },
-      // M3 Status chips
+      MuiTablePagination: {
+        styleOverrides: {
+          root: {
+            fontSize: '0.8125rem',
+          },
+          selectLabel: {
+            fontSize: '0.8125rem',
+          },
+          displayedRows: {
+            fontSize: '0.8125rem',
+          },
+          toolbar: {
+            minHeight: 40,
+          },
+        },
+      },
+      // Compact status chips
       MuiChip: {
         styleOverrides: {
           root: {
             borderRadius: 4,
             fontWeight: 500,
-            height: 28,
+            height: 22,
+            fontSize: '0.75rem',
           },
         },
         variants: [
@@ -842,11 +860,11 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         ],
       },
-      // M3 Stat cards - responsive
+      // Compact stat cards
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 8,
+            borderRadius: 6,
             boxShadow: m3Elevation.level1,
             transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
           },
@@ -855,10 +873,7 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           {
             props: { className: 'stat-card' },
             style: {
-              padding: '20px',
-              '@media (min-width: 600px)': {
-                padding: '24px',
-              },
+              padding: '12px',
             },
           },
           {
@@ -884,19 +899,27 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         ],
       },
-      // M3 Action buttons - touch-friendly
+      MuiCardContent: {
+        styleOverrides: {
+          root: {
+            padding: '12px 16px',
+            '&:last-child': {
+              paddingBottom: '12px',
+            },
+          },
+        },
+      },
+      // Compact buttons (desktop-only)
       MuiButton: {
         styleOverrides: {
           root: {
             textTransform: 'none',
             fontWeight: 600,
             borderRadius: 6,
-            minHeight: 44,
+            minHeight: 32,
+            padding: '6px 12px',
+            fontSize: '0.8125rem',
             transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
-            '@media (max-width: 600px)': {
-              minHeight: 48,
-              fontSize: '1rem',
-            },
           },
         },
         variants: [
@@ -924,13 +947,15 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         ],
       },
-      // M3 Sidebar navigation
+      // Compact sidebar navigation
       MuiListItemButton: {
         styleOverrides: {
           root: {
             borderRadius: 6,
-            margin: '2px 8px',
-            minHeight: 48, // Touch-friendly
+            margin: '1px 4px',
+            minHeight: 36,
+            paddingTop: 4,
+            paddingBottom: 4,
             transition: `all ${m3Motion.duration.short4}ms`,
             '&.Mui-selected': {
               backgroundColor: scheme.secondaryContainer,
@@ -945,7 +970,92 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         },
       },
-      // Mobile FAB for quick actions
+      // Compact tabs
+      MuiTabs: {
+        styleOverrides: {
+          root: {
+            minHeight: 36,
+          },
+          indicator: {
+            height: 2,
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            minHeight: 36,
+            padding: '6px 16px',
+            fontSize: '0.8125rem',
+          },
+        },
+      },
+      // Compact inputs (desktop-only)
+      MuiInputBase: {
+        styleOverrides: {
+          root: {
+            fontSize: '0.8125rem',
+          },
+          input: {
+            padding: '8px 12px',
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            borderRadius: 6,
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            fontSize: '0.8125rem',
+          },
+        },
+      },
+      // Compact dialogs
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiDialogTitle: {
+        styleOverrides: {
+          root: {
+            fontSize: '1rem',
+            padding: '16px 20px 12px',
+          },
+        },
+      },
+      MuiDialogContent: {
+        styleOverrides: {
+          root: {
+            padding: '12px 20px',
+          },
+        },
+      },
+      MuiDialogActions: {
+        styleOverrides: {
+          root: {
+            padding: '12px 20px 16px',
+            gap: 8,
+          },
+        },
+      },
+      // Compact alerts
+      MuiAlert: {
+        styleOverrides: {
+          root: {
+            padding: '6px 12px',
+            fontSize: '0.8125rem',
+          },
+        },
+      },
+      // FAB
       MuiFab: {
         styleOverrides: {
           root: {
@@ -955,23 +1065,6 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
             '&:hover': {
               backgroundColor: scheme.primaryContainer,
               boxShadow: m3Elevation.level4,
-            },
-          },
-        },
-      },
-      // Responsive dialogs
-      MuiDialog: {
-        styleOverrides: {
-          paper: {
-            borderRadius: 12,
-            '@media (max-width: 600px)': {
-              borderRadius: '12px 12px 0 0',
-              margin: 0,
-              maxHeight: '90vh',
-              position: 'fixed',
-              bottom: 0,
-              width: '100%',
-              maxWidth: '100%',
             },
           },
         },

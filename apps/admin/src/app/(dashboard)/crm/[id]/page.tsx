@@ -107,7 +107,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         }}
       />
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         {/* Left column: Data sections */}
         <Grid item xs={12} lg={7}>
           <UserProfileSection detail={detail} />

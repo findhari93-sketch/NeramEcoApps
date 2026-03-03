@@ -18,7 +18,7 @@ function StatCard({ title, value, icon, color, trend }: StatCardProps) {
   return (
     <Paper
       sx={{
-        p: 3,
+        p: 2,
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -42,7 +42,7 @@ function StatCard({ title, value, icon, color, trend }: StatCardProps) {
           sx={{
             bgcolor: color,
             borderRadius: 1,
-            p: 1.5,
+            p: 0.75,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -88,7 +88,7 @@ export default function DashboardStats() {
   ];
 
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={2}>
       {stats.map((stat) => (
         <Grid item xs={12} sm={6} md={3} key={stat.title}>
           <StatCard {...stat} />

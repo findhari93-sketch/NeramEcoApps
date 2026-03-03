@@ -11,7 +11,6 @@ import {
   ListItemIcon,
   ListItemText,
   Typography,
-  Divider,
   Avatar,
   Tooltip,
   IconButton,
@@ -77,7 +76,6 @@ export default function Sidebar() {
 
   useEffect(() => {
     fetchMessageUnreadCount();
-    // Poll every 60 seconds
     messageIntervalRef.current = setInterval(fetchMessageUnreadCount, 60000);
     return () => {
       if (messageIntervalRef.current) {
@@ -108,66 +106,56 @@ export default function Sidebar() {
         },
       }}
     >
-      {/* Header */}
+      {/* Compact header row — logo + bell + collapse chevron */}
       <Box
         sx={{
-          p: collapsed ? 1.5 : 3,
-          pb: collapsed ? 1 : 2,
-          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          px: collapsed ? 0.5 : 1.5,
+          py: 1,
+          minHeight: 40,
           transition: TRANSITION,
         }}
       >
         {!collapsed ? (
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Box>
-              <Typography variant="h5" component="h1" fontWeight="bold" color="primary">
-                Neram Classes
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Admin Panel
-              </Typography>
-            </Box>
-            <NotificationBell />
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+          <>
             <Typography
-              variant="h6"
-              fontWeight="bold"
+              variant="body2"
+              component="h1"
+              fontWeight={700}
               color="primary"
-              sx={{ fontSize: 20, lineHeight: 1.2 }}
+              noWrap
+              sx={{ fontSize: 13 }}
             >
-              N
+              Neram Classes
             </Typography>
-            <NotificationBell />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+              <NotificationBell />
+              <IconButton
+                onClick={toggleSidebar}
+                size="small"
+                sx={{ width: 22, height: 22 }}
+              >
+                <ChevronLeftIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Box>
+          </>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+            <IconButton
+              onClick={toggleSidebar}
+              size="small"
+              sx={{ width: 22, height: 22 }}
+            >
+              <ChevronRightIcon sx={{ fontSize: 14 }} />
+            </IconButton>
           </Box>
         )}
       </Box>
 
-      <Divider />
-
-      {/* Toggle button */}
-      <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', px: 1, py: 0.5 }}>
-        <IconButton
-          onClick={toggleSidebar}
-          size="small"
-          sx={{
-            width: 28,
-            height: 28,
-            bgcolor: 'grey.100',
-            '&:hover': { bgcolor: 'grey.200' },
-          }}
-        >
-          {collapsed ? (
-            <ChevronRightIcon sx={{ fontSize: 18 }} />
-          ) : (
-            <ChevronLeftIcon sx={{ fontSize: 18 }} />
-          )}
-        </IconButton>
-      </Box>
-
-      {/* Navigation */}
-      <List sx={{ px: collapsed ? 1 : 2, py: 1, flexGrow: 1 }}>
+      {/* Navigation — no dividers, tight items */}
+      <List sx={{ px: collapsed ? 0.25 : 0.5, py: 0.25, flexGrow: 1 }}>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive =
@@ -181,8 +169,7 @@ export default function Sidebar() {
               sx={{
                 borderRadius: 1,
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                px: collapsed ? 1.5 : 2,
-                minHeight: 44,
+                px: collapsed ? 0.75 : 1,
                 transition: TRANSITION,
                 '&.Mui-selected': {
                   bgcolor: 'primary.main',
@@ -198,29 +185,29 @@ export default function Sidebar() {
             >
               <ListItemIcon
                 sx={{
-                  minWidth: collapsed ? 'auto' : 40,
+                  minWidth: collapsed ? 'auto' : 28,
                   justifyContent: 'center',
                 }}
               >
                 {item.hasBadge && messageUnreadCount > 0 ? (
                   <Badge badgeContent={messageUnreadCount} color="error" max={99}>
-                    <Icon sx={{ fontSize: 22 }} />
+                    <Icon sx={{ fontSize: 16 }} />
                   </Badge>
                 ) : (
-                  <Icon sx={{ fontSize: 22 }} />
+                  <Icon sx={{ fontSize: 16 }} />
                 )}
               </ListItemIcon>
               {!collapsed && (
                 <ListItemText
                   primary={item.text}
-                  primaryTypographyProps={{ fontSize: 14 }}
+                  primaryTypographyProps={{ fontSize: 13 }}
                 />
               )}
             </ListItemButton>
           );
 
           return (
-            <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItem key={item.text} disablePadding>
               {collapsed ? (
                 <Tooltip title={item.text} placement="right" arrow>
                   {button}
@@ -233,52 +220,44 @@ export default function Sidebar() {
         })}
       </List>
 
-      <Divider />
-
-      {/* User profile & logout */}
-      <Box sx={{ p: collapsed ? 1 : 2, transition: TRANSITION }}>
+      {/* Compact user row at bottom — Vercel style */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          px: collapsed ? 0.5 : 1.5,
+          py: 0.75,
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          minHeight: 36,
+          transition: TRANSITION,
+        }}
+      >
         {!collapsed ? (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, px: 1 }}>
-              <Avatar sx={{ width: 40, height: 40, mr: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
+              <Avatar sx={{ width: 24, height: 24, fontSize: 11 }}>
                 {user?.name?.charAt(0) || 'A'}
               </Avatar>
-              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight="medium" noWrap>
-                  {user?.name || 'Admin User'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {user?.email || 'admin@neramclasses.com'}
-                </Typography>
-              </Box>
+              <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0 }}>
+                {user?.name || 'Admin'}
+              </Typography>
             </Box>
-
-            <ListItemButton
-              onClick={handleLogout}
-              sx={{
-                borderRadius: 1,
-                color: 'error.main',
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <LogoutIcon color="error" />
-              </ListItemIcon>
-              <ListItemText primary="Logout" />
-            </ListItemButton>
-          </>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center' }}>
-            <Tooltip title={user?.name || 'Admin'} placement="right" arrow>
-              <Avatar sx={{ width: 36, height: 36, fontSize: 14 }}>
-                {user?.name?.charAt(0) || 'A'}
-              </Avatar>
-            </Tooltip>
-            <Tooltip title="Logout" placement="right" arrow>
-              <IconButton onClick={handleLogout} size="small" color="error">
-                <LogoutIcon sx={{ fontSize: 20 }} />
+            <Tooltip title="Logout" placement="top" arrow>
+              <IconButton onClick={handleLogout} size="small" sx={{ width: 22, height: 22, color: 'text.secondary' }}>
+                <LogoutIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Tooltip>
-          </Box>
+          </>
+        ) : (
+          <Tooltip title={`${user?.name || 'Admin'} — Logout`} placement="right" arrow>
+            <IconButton onClick={handleLogout} size="small" sx={{ width: 28, height: 28 }}>
+              <Avatar sx={{ width: 24, height: 24, fontSize: 11 }}>
+                {user?.name?.charAt(0) || 'A'}
+              </Avatar>
+            </IconButton>
+          </Tooltip>
         )}
       </Box>
     </Drawer>

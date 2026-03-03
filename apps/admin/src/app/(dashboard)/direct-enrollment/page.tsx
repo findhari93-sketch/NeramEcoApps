@@ -127,7 +127,7 @@ function StatCard({
     <Paper
       elevation={0}
       sx={{
-        p: 2.5,
+        p: 1.5,
         borderRadius: 1,
         border: '1px solid',
         borderColor: 'grey.200',
@@ -140,8 +140,8 @@ function StatCard({
     >
       <Box
         sx={{
-          width: 48,
-          height: 48,
+          width: 36,
+          height: 36,
           borderRadius: 1,
           bgcolor: `${color}15`,
           display: 'flex',
@@ -331,7 +331,7 @@ export default function DirectEnrollmentPage() {
   return (
     <Box>
       {/* Page Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
             sx={{
@@ -382,7 +382,7 @@ export default function DirectEnrollmentPage() {
       )}
 
       {/* Stats Cards */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <StatCard
           title="Total Links"
           value={stats.total}

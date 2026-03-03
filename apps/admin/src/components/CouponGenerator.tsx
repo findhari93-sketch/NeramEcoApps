@@ -76,15 +76,15 @@ export default function CouponGenerator({
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 2 }}>
       <Typography variant="h6" gutterBottom>
         Generate Coupon Code
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Create a unique coupon code for this student to use at payment
       </Typography>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         <Grid item xs={12}>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <TextField

@@ -37,13 +37,13 @@ export default function SettingsPage() {
       <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
         Settings
       </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 2.5 }}>
         Manage application settings and preferences
       </Typography>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3, mb: 3 }}>
+          <Paper sx={{ p: 2, mb: 2 }}>
             <Typography variant="h6" gutterBottom>
               General Settings
             </Typography>
@@ -96,7 +96,7 @@ export default function SettingsPage() {
             </Grid>
           </Paper>
 
-          <Paper sx={{ p: 3 }}>
+          <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Notification Settings
             </Typography>
@@ -146,7 +146,7 @@ export default function SettingsPage() {
             </Button>
           </Paper>
 
-          <Paper sx={{ p: 3, mt: 3 }}>
+          <Paper sx={{ p: 2, mt: 2 }}>
             <Typography variant="h6" gutterBottom>
               Application Settings
             </Typography>
@@ -179,7 +179,7 @@ export default function SettingsPage() {
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
+          <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Quick Info
             </Typography>

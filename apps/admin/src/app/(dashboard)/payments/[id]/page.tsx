@@ -323,7 +323,7 @@ function SectionCard({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          px: 2.5,
+          px: 2,
           py: 1.5,
           borderBottom: '1px solid',
           borderColor: 'grey.100',
@@ -338,7 +338,7 @@ function SectionCard({
         </Box>
         {headerAction}
       </Box>
-      <Box sx={{ p: 2.5 }}>{children}</Box>
+      <Box sx={{ p: 1.5 }}>{children}</Box>
     </Paper>
   );
 }
@@ -379,7 +379,7 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
       <Box>
         <Skeleton width={300} height={32} sx={{ mb: 2 }} />
         <Skeleton width="100%" height={200} sx={{ mb: 2, borderRadius: 1 }} />
-        <Grid container spacing={3}>
+        <Grid container spacing={2}>
           <Grid item xs={12} md={8}>
             <Skeleton width="100%" height={400} sx={{ borderRadius: 1 }} />
           </Grid>
@@ -475,7 +475,7 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
       </Breadcrumbs>
 
       {/* Back button + header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             variant="outlined"
@@ -508,7 +508,7 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
       </Box>
 
       {/* Main content */}
-      <Grid container spacing={3}>
+      <Grid container spacing={2}>
         {/* Left column - Payment details */}
         <Grid item xs={12} md={8}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
