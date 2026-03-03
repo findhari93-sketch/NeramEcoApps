@@ -1,35 +1,46 @@
 {
   "mcpServers": {
-    "supabase": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-supabase"],
-      "env": {
-        "SUPABASE_URL": "https://zdnypksjqnhtiblwdaic.supabase.co",
-        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpkbnlwa3NqcW5odGlibHdkYWljIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjE1MDE5OCwiZXhwIjoyMDgxNzI2MTk4fQ.Ud6nd2pIDLxwmR0JoV_f2wZ3YMLD-9NFPkqc9btQnFs"
-      },
-      "description": "Supabase database operations - schema inspection, queries, migrations"
+    "supabase-prod": {
+      "command": "C:\\Users\\Haribabu\\AppData\\Roaming\\npm\\mcp-server-supabase.cmd",
+      "args": [
+        "--access-token",
+        "sbp_17eb05acab06227bde573d9ba3fbe232600da27e",
+        "--project-ref",
+        "zdnypksjqnhtiblwdaic"
+      ],
+      "description": "Supabase PRODUCTION database (zdnypksjqnhtiblwdaic)"
+    },
+    "supabase-staging": {
+      "command": "C:\\Users\\Haribabu\\AppData\\Roaming\\npm\\mcp-server-supabase.cmd",
+      "args": [
+        "--access-token",
+        "sbp_17eb05acab06227bde573d9ba3fbe232600da27e",
+        "--project-ref",
+        "hgxjavrsrvpihqrpezdh"
+      ],
+      "description": "Supabase STAGING database (hgxjavrsrvpihqrpezdh)"
     },
     "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--headless"],
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@playwright/mcp@latest", "--headless"],
       "description": "E2E testing with Playwright - browser automation and testing"
     },
     "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "."],
       "description": "File system access for the monorepo"
     },
     "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-github"],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"
       },
       "description": "GitHub operations - issues, PRs, code search, repository management"
     },
     "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-memory"],
       "description": "Persistent memory for context retention across sessions"
     }
   }

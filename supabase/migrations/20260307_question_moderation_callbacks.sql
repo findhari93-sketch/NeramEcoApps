@@ -26,8 +26,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- Extend callback_status enum
-ALTER TYPE callback_status ADD VALUE IF NOT EXISTS 'dead_lead';
+-- Extend callback_requests.status CHECK constraint to include 'dead_lead'
+-- (status is TEXT with CHECK, not an enum)
+ALTER TABLE callback_requests DROP CONSTRAINT IF EXISTS callback_requests_status_check;
+ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_status_check
+  CHECK (status IN ('pending', 'scheduled', 'attempted', 'completed', 'cancelled', 'dead_lead'));
 
 -- Add new columns to callback_requests
 ALTER TABLE callback_requests ADD COLUMN IF NOT EXISTS scheduled_callback_at TIMESTAMPTZ;

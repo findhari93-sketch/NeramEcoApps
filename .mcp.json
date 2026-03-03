@@ -1,8 +1,26 @@
 {
   "mcpServers": {
-    "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp"
+    "supabase-prod": {
+      "type": "stdio",
+      "command": "C:\\Users\\Haribabu\\AppData\\Roaming\\npm\\mcp-server-supabase.cmd",
+      "args": [
+        "--access-token",
+        "sbp_17eb05acab06227bde573d9ba3fbe232600da27e",
+        "--project-ref",
+        "zdnypksjqnhtiblwdaic"
+      ],
+      "env": {}
+    },
+    "supabase-staging": {
+      "type": "stdio",
+      "command": "C:\\Users\\Haribabu\\AppData\\Roaming\\npm\\mcp-server-supabase.cmd",
+      "args": [
+        "--access-token",
+        "sbp_17eb05acab06227bde573d9ba3fbe232600da27e",
+        "--project-ref",
+        "hgxjavrsrvpihqrpezdh"
+      ],
+      "env": {}
     }
   }
 }
