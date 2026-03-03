@@ -66,8 +66,11 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
         justifyContent: 'center',
         gap: { xs: 1, sm: 2 },
         flexWrap: 'wrap',
-        position: 'relative',
-        zIndex: 1100,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1400,
       }}
     >
       <CampaignIcon sx={{ fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
