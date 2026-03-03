@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/onboarding/responses
  * Save onboarding responses for authenticated user

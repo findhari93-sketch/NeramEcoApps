@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/scholarship - Get scholarship status for authenticated user
  * POST /api/scholarship - Submit scholarship application with document URLs

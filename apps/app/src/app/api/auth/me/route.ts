@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Auth API - Get Current User
  *

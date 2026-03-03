@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Full Profile API
  *

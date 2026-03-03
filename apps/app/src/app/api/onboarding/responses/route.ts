@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/onboarding/responses
  * Save batch onboarding responses and mark session as complete

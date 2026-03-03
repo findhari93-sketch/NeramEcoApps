@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/onboarding/prefill
  * Get pre-fill data from user's onboarding responses mapped to application form fields

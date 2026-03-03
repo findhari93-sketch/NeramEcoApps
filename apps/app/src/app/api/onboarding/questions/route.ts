@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/onboarding/questions
  * Returns active onboarding questions ordered by display_order

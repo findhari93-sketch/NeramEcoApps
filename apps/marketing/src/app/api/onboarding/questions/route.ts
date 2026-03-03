@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/onboarding/questions
  * Returns active onboarding questions for the wizard

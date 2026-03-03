@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * Question Bank API - User Stats & Access Level
  *

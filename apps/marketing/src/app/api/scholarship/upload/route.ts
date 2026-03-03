@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/scholarship/upload
  * Upload a document for scholarship application to Supabase storage.

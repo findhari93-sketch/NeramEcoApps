@@ -1,4 +1,6 @@
 // @ts-nocheck
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/coupon/validate
  *

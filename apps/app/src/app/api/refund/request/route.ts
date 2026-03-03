@@ -1,4 +1,6 @@
 // @ts-nocheck
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createRefundRequest, notifyRefundRequested } from '@neram/database';
 import { getAuth } from 'firebase-admin/auth';

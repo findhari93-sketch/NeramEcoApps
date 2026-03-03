@@ -1,4 +1,6 @@
-// @ts-nocheck - Supabase types not generated
+// @ts-nocheck
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@neram/database';
 import crypto from 'crypto';

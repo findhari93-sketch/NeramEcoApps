@@ -1,4 +1,6 @@
 // @ts-nocheck
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/profile/documents
  * Upload Aadhar card and passport photo for post-enrollment profile completion

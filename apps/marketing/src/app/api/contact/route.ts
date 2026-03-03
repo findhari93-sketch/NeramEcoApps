@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, notifyContactMessageReceived } from '@neram/database';
 import { createContactMessage } from '@neram/database/queries';
