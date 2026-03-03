@@ -64,8 +64,9 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
       return;
     }
     const el = bannerRef.current;
-    const observer = new ResizeObserver(([entry]) => {
-      setBannerHeight(entry.contentRect.height);
+    const observer = new ResizeObserver(() => {
+      // Use offsetHeight (includes padding + border) instead of contentRect.height (excludes padding)
+      setBannerHeight(el.offsetHeight);
     });
     // Set initial height
     setBannerHeight(el.offsetHeight);
