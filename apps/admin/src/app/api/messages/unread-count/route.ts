@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // @ts-nocheck - Supabase types not generated
 import { NextResponse } from 'next/server';
 import { getUnreadContactMessageCount } from '@neram/database';

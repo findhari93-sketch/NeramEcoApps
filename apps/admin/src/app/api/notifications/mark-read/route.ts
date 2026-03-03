@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // @ts-nocheck - Supabase types not generated
 import { NextRequest, NextResponse } from 'next/server';
 import { markNotificationRead, markAllNotificationsRead } from '@neram/database';

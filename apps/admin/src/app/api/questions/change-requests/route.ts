@@ -5,6 +5,8 @@
  *   Query params: status (pending/approved/rejected), type (edit/delete), page, limit
  */
 
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getChangeRequestsByStatus,

@@ -1,4 +1,6 @@
 // @ts-nocheck - Supabase types not generated
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getContactMessages } from '@neram/database';
 import type { ContactMessageFilters } from '@neram/database';

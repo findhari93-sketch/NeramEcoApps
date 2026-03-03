@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, notifyApplicationApproved, createUserSpecificCoupon } from '@neram/database';

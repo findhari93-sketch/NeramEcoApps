@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { listUserJourneys, getPipelineStageCounts } from '@neram/database';
 import type { UserJourneyListOptions, PipelineStage } from '@neram/database';
