@@ -23,8 +23,9 @@ export async function GET(
   }
 
   // Group by session for better display
-  const sessions: Record<string, Record<string, unknown>[]> = {};
-  for (const msg of (data || []) as Record<string, unknown>[]) {
+  const rows = (data || []) as { session_id: string; [key: string]: unknown }[];
+  const sessions: Record<string, typeof rows> = {};
+  for (const msg of rows) {
     const sid = msg.session_id;
     if (!sessions[sid]) sessions[sid] = [];
     sessions[sid].push(msg);
