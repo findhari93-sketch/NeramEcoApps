@@ -23,9 +23,8 @@ export async function GET(
   }
 
   // Group by session for better display
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sessions: Record<string, any[]> = {};
-  for (const msg of (data || []) as any[]) {
+  const sessions: Record<string, Record<string, unknown>[]> = {};
+  for (const msg of (data || []) as Record<string, unknown>[]) {
     const sid = msg.session_id;
     if (!sessions[sid]) sessions[sid] = [];
     sessions[sid].push(msg);
