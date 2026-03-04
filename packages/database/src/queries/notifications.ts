@@ -126,6 +126,10 @@ export async function createNotificationRecipient(
     question_edit_requested: true,
     question_delete_requested: true,
     callback_reminder: true,
+    direct_enrollment_completed: true,
+    ticket_created: true,
+    ticket_resolved: false,
+    link_regeneration_requested: true,
   };
 
   const { data, error } = await (supabase as any)

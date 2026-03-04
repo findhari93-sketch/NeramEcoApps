@@ -32,6 +32,7 @@ import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -51,6 +52,7 @@ const menuItems = [
   { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
   { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
   { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
+  { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 

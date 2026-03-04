@@ -21,7 +21,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 
 /** Pages where Tawk.to chat lives — hide widget to avoid overlap */
-const HIDDEN_PATHS = ['/contact'];
+const HIDDEN_PATHS = ['/contact', '/enroll'];
 
 interface ContentItem {
   id: string;

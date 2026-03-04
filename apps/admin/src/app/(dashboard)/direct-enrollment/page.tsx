@@ -1,7 +1,8 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -31,6 +32,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CancelIcon from '@mui/icons-material/Cancel';
+import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TimerIcon from '@mui/icons-material/Timer';
@@ -40,8 +42,9 @@ import type { DirectEnrollmentLink, DirectEnrollmentLinkStatus } from '@neram/da
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
 import ShareLinkPanel from '@/components/direct-enrollment/ShareLinkPanel';
+import ConfirmDialog from '@/components/direct-enrollment/ConfirmDialog';
 
-const ENROLLMENT_URL_BASE = 'https://neramclasses.com/en/enroll?token=';
+const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?token=`;
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -195,6 +198,17 @@ export default function DirectEnrollmentPage() {
   // Snackbar
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
 
+  // URL params for highlight
+  const searchParams = useSearchParams();
+  const highlightLinkId = searchParams.get('highlight');
+  const highlightHandled = useRef(false);
+
+  // Cancel/Delete confirmation dialogs
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [actionTargetId, setActionTargetId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
   const fetchLinks = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -257,6 +271,31 @@ export default function DirectEnrollmentPage() {
     fetchStats();
   }, [fetchStats]);
 
+  // Auto-open ShareLinkPanel when ?highlight={linkId} is present
+  useEffect(() => {
+    if (highlightLinkId && !highlightHandled.current && !loading && links.length > 0) {
+      highlightHandled.current = true;
+      const found = links.find((l) => l.id === highlightLinkId);
+      if (found) {
+        handleRowClick(found);
+      } else {
+        // Link not in current page, fetch it directly
+        (async () => {
+          try {
+            const res = await fetch(`/api/direct-enrollment/${highlightLinkId}`);
+            if (res.ok) {
+              const data = await res.json();
+              setSelectedLink(data.data);
+              setSharePanelOpen(true);
+            }
+          } catch {
+            // Silent fail
+          }
+        })();
+      }
+    }
+  }, [highlightLinkId, loading, links]);
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     if (searchDebounce) clearTimeout(searchDebounce);
@@ -301,22 +340,60 @@ export default function DirectEnrollmentPage() {
     setSnackbar({ open: true, message: 'Link copied to clipboard!' });
   };
 
-  const handleCancelLink = async (e: React.MouseEvent, linkId: string) => {
+  const handleCancelLink = (e: React.MouseEvent, linkId: string) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to cancel this enrollment link?')) return;
+    setActionTargetId(linkId);
+    setCancelDialogOpen(true);
+  };
 
+  const confirmCancel = async () => {
+    if (!actionTargetId) return;
+    setActionLoading(true);
     try {
-      const res = await fetch(`/api/direct-enrollment/${linkId}`, {
+      const res = await fetch(`/api/direct-enrollment/${actionTargetId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'cancelled' }),
       });
       if (!res.ok) throw new Error('Failed to cancel link');
       setSnackbar({ open: true, message: 'Link cancelled successfully' });
+      setCancelDialogOpen(false);
+      setActionTargetId(null);
       fetchLinks();
       fetchStats();
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message || 'Failed to cancel link' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteLink = (e: React.MouseEvent, linkId: string) => {
+    e.stopPropagation();
+    setActionTargetId(linkId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!actionTargetId) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/direct-enrollment/${actionTargetId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to delete link');
+      }
+      setSnackbar({ open: true, message: 'Link deleted permanently' });
+      setDeleteDialogOpen(false);
+      setActionTargetId(null);
+      fetchLinks();
+      fetchStats();
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to delete link' });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -326,6 +403,41 @@ export default function DirectEnrollmentPage() {
     setSharePanelOpen(true);
     fetchLinks();
     fetchStats();
+  };
+
+  const handleRegenerated = (newLink: DirectEnrollmentLink & { course_name?: string; batch_name?: string }) => {
+    // Close current panel, refresh list, then open panel with new link
+    setSharePanelOpen(false);
+    setSelectedLink(null);
+    fetchLinks();
+    fetchStats();
+    // Open the new link's ShareLinkPanel after a short delay to allow state reset
+    setTimeout(() => {
+      setSelectedLink(newLink);
+      setSharePanelOpen(true);
+    }, 100);
+  };
+
+  const handleRegenerateFromTable = async (e: React.MouseEvent, link: DirectEnrollmentLink) => {
+    e.stopPropagation();
+    if (!supabaseUserId) return;
+    try {
+      const res = await fetch(`/api/direct-enrollment/${link.id}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminId: supabaseUserId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to regenerate link');
+      setSnackbar({ open: true, message: 'New link generated successfully!' });
+      fetchLinks();
+      fetchStats();
+      // Open the new link in ShareLinkPanel
+      setSelectedLink(data.data);
+      setSharePanelOpen(true);
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to regenerate link' });
+    }
   };
 
   return (
@@ -576,6 +688,20 @@ export default function DirectEnrollmentPage() {
                               </Tooltip>
                             </>
                           )}
+                          {(link.status === 'cancelled' || link.status === 'expired') && (
+                            <>
+                              <Tooltip title="Regenerate Link">
+                                <IconButton size="small" color="primary" onClick={(e) => handleRegenerateFromTable(e, link)}>
+                                  <RefreshIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete Permanently">
+                                <IconButton size="small" color="error" onClick={(e) => handleDeleteLink(e, link.id)}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -610,8 +736,32 @@ export default function DirectEnrollmentPage() {
           open={sharePanelOpen}
           onClose={() => { setSharePanelOpen(false); setSelectedLink(null); }}
           link={selectedLink}
+          adminId={supabaseUserId || ''}
+          onRegenerated={handleRegenerated}
         />
       )}
+
+      {/* Cancel Confirmation Dialog */}
+      <ConfirmDialog
+        open={cancelDialogOpen}
+        onClose={() => { setCancelDialogOpen(false); setActionTargetId(null); }}
+        onConfirm={confirmCancel}
+        title="Cancel Enrollment Link"
+        message="Are you sure you want to cancel this enrollment link? The student will no longer be able to use it to enroll."
+        confirmLabel="Cancel Link"
+        loading={actionLoading}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => { setDeleteDialogOpen(false); setActionTargetId(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Enrollment Link"
+        message="This will permanently delete the enrollment link record from the database. This action cannot be undone."
+        confirmLabel="Delete Permanently"
+        loading={actionLoading}
+      />
 
       {/* Snackbar */}
       <Snackbar

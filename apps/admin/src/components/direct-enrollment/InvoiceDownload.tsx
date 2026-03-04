@@ -25,7 +25,7 @@ interface InvoiceDownloadProps {
   size?: 'small' | 'medium' | 'large';
 }
 
-const ENROLLMENT_URL_BASE = 'https://neramclasses.com/en/enroll?token=';
+const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?token=`;
 
 function formatCurrencyPDF(amount: number): string {
   return `Rs. ${Number(amount).toLocaleString('en-IN')}`;

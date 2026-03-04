@@ -41,6 +41,9 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   question_edit_requested: '#795548',
   question_delete_requested: '#f44336',
   callback_reminder: '#ff9800',
+  link_regeneration_requested: '#e91e63',
+  ticket_created: '#ff9800',
+  direct_enrollment_completed: '#4caf50',
 };
 
 const EVENT_SECTION_MAP: Record<string, string> = {
@@ -69,6 +72,25 @@ function getNavigationUrl(notification: AdminNotification): string | null {
   // Question moderation events navigate to the moderation page
   if (['question_submitted', 'question_edit_requested', 'question_delete_requested'].includes(notification.event_type)) {
     return '/question-moderation';
+  }
+
+  // Link regeneration requests navigate to direct enrollment with highlight
+  if (notification.event_type === 'link_regeneration_requested') {
+    const enrollmentLinkId = notification.metadata?.enrollment_link_id as string;
+    if (enrollmentLinkId) return `/direct-enrollment?highlight=${enrollmentLinkId}`;
+    return '/direct-enrollment';
+  }
+
+  // Support tickets navigate to the ticket management page
+  if (notification.event_type === 'ticket_created') {
+    const ticketId = notification.metadata?.ticket_id as string;
+    if (ticketId) return `/support-tickets?highlight=${ticketId}`;
+    return '/support-tickets';
+  }
+
+  // Direct enrollment completed
+  if (notification.event_type === 'direct_enrollment_completed') {
+    return '/direct-enrollment';
   }
 
   const userId = notification.metadata?.user_id as string;

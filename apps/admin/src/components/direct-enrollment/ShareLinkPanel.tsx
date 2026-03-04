@@ -15,16 +15,20 @@ import {
   Divider,
   Snackbar,
   Paper,
+  CircularProgress,
+  Alert,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { IconButton, InputAdornment } from '@neram/ui';
 import type { DirectEnrollmentLink } from '@neram/database';
 import InvoiceDownload from './InvoiceDownload';
+import ConfirmDialog from './ConfirmDialog';
 
-const ENROLLMENT_URL_BASE = 'https://neramclasses.com/en/enroll?token=';
+const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?token=`;
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
@@ -70,13 +74,20 @@ interface ShareLinkPanelProps {
   open: boolean;
   onClose: () => void;
   link: DirectEnrollmentLink & { course_name?: string; batch_name?: string };
+  adminId?: string;
+  onRegenerated?: (newLink: DirectEnrollmentLink & { course_name?: string; batch_name?: string }) => void;
 }
 
-export default function ShareLinkPanel({ open, onClose, link }: ShareLinkPanelProps) {
+export default function ShareLinkPanel({ open, onClose, link, adminId, onRegenerated }: ShareLinkPanelProps) {
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+  const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const enrollmentUrl = `${ENROLLMENT_URL_BASE}${link.token}`;
   const courseLabel = COURSE_LABELS[link.interest_course] || link.interest_course || 'Course';
+
+  const canRegenerate = link.status === 'expired' || link.status === 'cancelled' || link.status === 'active';
+  const showRegenerateButton = link.status !== 'used';
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(enrollmentUrl);
@@ -95,6 +106,36 @@ export default function ShareLinkPanel({ open, onClose, link }: ShareLinkPanelPr
       : `https://wa.me/?text=${encodedMessage}`;
 
     window.open(waUrl, '_blank');
+  };
+
+  const handleRegenerate = async () => {
+    if (!adminId) return;
+
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/direct-enrollment/${link.id}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to regenerate link');
+      }
+
+      setSnackbar({ open: true, message: 'New link generated successfully!' });
+      setRegenerateDialogOpen(false);
+
+      if (onRegenerated) {
+        onRegenerated(data.data);
+      }
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to regenerate link' });
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   const balanceDue = Math.max(0, link.final_fee - link.amount_paid);
@@ -153,6 +194,31 @@ export default function ShareLinkPanel({ open, onClose, link }: ShareLinkPanelPr
                 )}
               </Box>
             </Paper>
+          )}
+
+          {/* Expired/cancelled banner with regenerate option */}
+          {(link.status === 'expired' || link.status === 'cancelled') && (
+            <Alert
+              severity={link.status === 'expired' ? 'warning' : 'error'}
+              sx={{ mb: 2 }}
+              action={
+                showRegenerateButton && adminId ? (
+                  <Button
+                    color="inherit"
+                    size="small"
+                    startIcon={<RefreshIcon />}
+                    onClick={() => setRegenerateDialogOpen(true)}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Regenerate
+                  </Button>
+                ) : undefined
+              }
+            >
+              {link.status === 'expired'
+                ? 'This link has expired. You can regenerate a new link with the same enrollment data.'
+                : 'This link has been cancelled. You can regenerate a new link with the same enrollment data.'}
+            </Alert>
           )}
 
           {/* Enrollment Link URL */}
@@ -318,7 +384,19 @@ export default function ShareLinkPanel({ open, onClose, link }: ShareLinkPanelPr
           )}
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, py: 2 }}>
+        <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between' }}>
+          {showRegenerateButton && adminId ? (
+            <Button
+              startIcon={<RefreshIcon />}
+              onClick={() => setRegenerateDialogOpen(true)}
+              disabled={regenerating}
+              sx={{ borderRadius: 1, textTransform: 'none' }}
+            >
+              Regenerate Link
+            </Button>
+          ) : (
+            <Box />
+          )}
           <Button
             onClick={onClose}
             sx={{ borderRadius: 1, textTransform: 'none' }}
@@ -327,6 +405,18 @@ export default function ShareLinkPanel({ open, onClose, link }: ShareLinkPanelPr
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Regenerate Confirmation Dialog */}
+      <ConfirmDialog
+        open={regenerateDialogOpen}
+        onClose={() => setRegenerateDialogOpen(false)}
+        onConfirm={handleRegenerate}
+        title="Regenerate Enrollment Link"
+        message={`This will cancel the current link and create a new one with the same enrollment data for ${link.student_name}. The new link will be valid for 7 days.`}
+        confirmLabel={regenerating ? 'Regenerating...' : 'Regenerate'}
+        confirmColor="primary"
+        loading={regenerating}
+      />
 
       <Snackbar
         open={snackbar.open}

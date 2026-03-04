@@ -31,6 +31,7 @@ import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
 import { OnboardingWizard } from '@/components/onboarding';
 import UserNotificationBell from '@/components/UserNotificationBell';
+import PendingEnrollmentBanner from '@/components/PendingEnrollmentBanner';
 import Link from 'next/link';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
@@ -95,6 +96,7 @@ const navigationConfig: NavSection[] = [
     id: 'bottom',
     collapsible: false,
     items: [
+      { title: 'Support', href: '/support', icon: <span>🎫</span> },
       { title: 'Profile', href: '/profile', icon: <span>👤</span> },
       { title: 'Help', href: '/tools/help', icon: <span>❓</span> },
     ],
@@ -583,6 +585,7 @@ function ProtectedLayoutInner({
         }}
       >
         <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
+          {phoneVerified && onboardingCompleted && <PendingEnrollmentBanner />}
           {children}
         </Container>
       </Box>

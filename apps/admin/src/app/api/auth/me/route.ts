@@ -28,11 +28,19 @@ export async function GET(request: NextRequest) {
 
     // Try ms_oid lookup first (primary identifier for Microsoft users)
     if (msOid) {
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from('users')
         .select('id, name, first_name, last_name, email, ms_oid, user_type')
         .eq('ms_oid', msOid)
         .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Supabase error looking up user by ms_oid:', error);
+        return NextResponse.json(
+          { error: 'Database connection error' },
+          { status: 500 }
+        );
+      }
 
       if (data) {
         return NextResponse.json({
@@ -47,11 +55,19 @@ export async function GET(request: NextRequest) {
 
     // Fallback to email lookup
     if (email) {
-      const { data } = await (supabase as any)
+      const { data, error: emailError } = await (supabase as any)
         .from('users')
         .select('id, name, first_name, last_name, email, ms_oid, user_type')
         .eq('email', email)
         .single();
+
+      if (emailError && emailError.code !== 'PGRST116') {
+        console.error('Supabase error looking up user by email:', emailError);
+        return NextResponse.json(
+          { error: 'Database connection error' },
+          { status: 500 }
+        );
+      }
 
       if (data) {
         // If found by email but ms_oid not set, update it for future lookups
@@ -90,8 +106,8 @@ export async function GET(request: NextRequest) {
       if (createError) {
         console.error('Failed to auto-create admin user:', createError);
         return NextResponse.json(
-          { error: 'Admin user not found and could not be created' },
-          { status: 404 }
+          { error: 'Failed to create admin user', details: createError.message },
+          { status: 500 }
         );
       }
 

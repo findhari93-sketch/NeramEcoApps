@@ -612,6 +612,10 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     question_edit_requested: null,
     question_delete_requested: null,
     callback_reminder: null, // In-app + Telegram only
+    direct_enrollment_completed: null, // In-app only
+    ticket_created: null, // In-app + Telegram only
+    ticket_resolved: null, // In-app only (user notification)
+    link_regeneration_requested: null, // In-app + Telegram only
   };
 
   return map[eventType];

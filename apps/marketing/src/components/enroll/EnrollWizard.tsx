@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Container,
@@ -16,8 +16,13 @@ import {
   MobileStepper,
   Paper,
   Skeleton,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@neram/ui';
-import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google } from '@mui/icons-material';
+import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent } from '@mui/icons-material';
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
@@ -25,6 +30,7 @@ import PersonalDetailsStep from './PersonalDetailsStep';
 import AcademicDetailsStep from './AcademicDetailsStep';
 import ReviewStep from './ReviewStep';
 import SuccessScreen from './SuccessScreen';
+import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
 import type {
   PersonalInfoData,
   LocationData,
@@ -61,12 +67,16 @@ export default function EnrollWizard() {
 
   const { user, loading: authLoading, signInWithGoogle } = useFirebaseAuth();
 
+  // Session persistence
+  const { restoredState, isResuming, saveProgress, clearProgress, dismissResume } = useEnrollmentProgress(token);
+  const initializedFromRestore = useRef(false);
+
   // Token validation state
   const [tokenStatus, setTokenStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used'>('loading');
   const [tokenError, setTokenError] = useState<string>('');
   const [linkData, setLinkData] = useState<LinkData | null>(null);
 
-  // Form state
+  // Form state - initialize from restored state if available
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
   const [submitting, setSubmitting] = useState(false);
@@ -81,6 +91,42 @@ export default function EnrollWizard() {
   // Terms
   const [termsAccepted, setTermsAccepted] = useState(false);
 
+  // Error page state
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
+  const [showTicketDialog, setShowTicketDialog] = useState(false);
+  const [requestName, setRequestName] = useState('');
+  const [requestEmail, setRequestEmail] = useState('');
+  const [requestPhone, setRequestPhone] = useState('');
+  const [ticketDescription, setTicketDescription] = useState('');
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [requestResult, setRequestResult] = useState<{ ticketNumber: string; message: string } | null>(null);
+  const [ticketResult, setTicketResult] = useState<{ ticketNumber: string } | null>(null);
+
+  // Restore state from localStorage when available
+  useEffect(() => {
+    if (restoredState && !initializedFromRestore.current) {
+      initializedFromRestore.current = true;
+      setCurrentStep(restoredState.currentStep);
+      setFormData(restoredState.formData as unknown as typeof DEFAULT_FORM_DATA);
+      setPhoneVerified(restoredState.phoneVerified);
+      setPhoneVerifiedAt(restoredState.phoneVerifiedAt || null);
+      setTermsAccepted(restoredState.termsAccepted);
+    }
+  }, [restoredState]);
+
+  // Save progress whenever form state changes
+  useEffect(() => {
+    if (tokenStatus === 'valid' && currentStep < 3) {
+      saveProgress({
+        currentStep,
+        formData: formData as unknown as Record<string, unknown>,
+        phoneVerified,
+        phoneVerifiedAt,
+        termsAccepted,
+      });
+    }
+  }, [currentStep, formData, phoneVerified, phoneVerifiedAt, termsAccepted, tokenStatus, saveProgress]);
+
   // Validate token on mount
   useEffect(() => {
     if (!token) {
@@ -91,7 +137,7 @@ export default function EnrollWizard() {
     validateToken(token);
   }, [token]);
 
-  // Auto-fill from Google login
+  // Auto-fill from Google login (skip fields already filled from restore)
   useEffect(() => {
     if (user && linkData) {
       setFormData((prev) => ({
@@ -122,6 +168,7 @@ export default function EnrollWizard() {
           setTokenStatus('invalid');
         }
         setTokenError(data.error || 'Invalid link');
+        clearProgress();
         return;
       }
 
@@ -217,12 +264,88 @@ export default function EnrollWizard() {
         throw new Error(data.error || 'Failed to complete enrollment');
       }
 
+      // Clear saved progress on success
+      clearProgress();
+
       setApplicationNumber(data.data.applicationNumber);
       setCurrentStep(3); // Success
     } catch (err: any) {
       setSubmitError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Request link regeneration
+  const handleRequestRegeneration = async () => {
+    if (!token || !requestName) return;
+
+    setRequestLoading(true);
+    try {
+      const res = await fetch('/api/enroll/request-regeneration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          studentName: requestName,
+          studentEmail: requestEmail,
+          studentPhone: requestPhone,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit request');
+      }
+
+      setRequestResult({
+        ticketNumber: data.ticketNumber,
+        message: data.message || 'Your request has been sent to the admin.',
+      });
+    } catch (err: any) {
+      setRequestResult({
+        ticketNumber: '',
+        message: err.message || 'Something went wrong. Please try again.',
+      });
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
+  // Raise a support ticket
+  const handleRaiseTicket = async () => {
+    if (!requestName || !ticketDescription) return;
+
+    setRequestLoading(true);
+    try {
+      const res = await fetch('/api/support-tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userName: requestName,
+          userEmail: requestEmail,
+          userPhone: requestPhone,
+          category: 'enrollment_issue',
+          subject: `Enrollment Link Issue${token ? ` - Token: ${token.slice(0, 8)}...` : ''}`,
+          description: ticketDescription,
+          pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+          sourceApp: 'marketing',
+          enrollmentLinkToken: token,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit ticket');
+      }
+
+      setTicketResult({ ticketNumber: data.ticketNumber });
+    } catch (err: any) {
+      setTicketResult({ ticketNumber: '' });
+    } finally {
+      setRequestLoading(false);
     }
   };
 
@@ -251,9 +374,34 @@ export default function EnrollWizard() {
         <Typography color="text.secondary" mb={3}>
           {tokenError}
         </Typography>
-        <Alert severity="info">
-          If you believe this is an error, please contact your admin or reach out to us at support@neramclasses.com
+        <Alert severity="info" sx={{ mb: 3, textAlign: 'left' }}>
+          The link may be incorrect or no longer available. You can raise a support ticket and our team will help you.
         </Alert>
+        <Button
+          variant="outlined"
+          startIcon={<SupportAgent />}
+          onClick={() => setShowTicketDialog(true)}
+          sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600 }}
+        >
+          Raise a Ticket
+        </Button>
+
+        {/* Ticket Dialog */}
+        <TicketDialog
+          open={showTicketDialog}
+          onClose={() => setShowTicketDialog(false)}
+          requestName={requestName}
+          setRequestName={setRequestName}
+          requestEmail={requestEmail}
+          setRequestEmail={setRequestEmail}
+          requestPhone={requestPhone}
+          setRequestPhone={setRequestPhone}
+          ticketDescription={ticketDescription}
+          setTicketDescription={setTicketDescription}
+          onSubmit={handleRaiseTicket}
+          loading={requestLoading}
+          result={ticketResult}
+        />
       </Container>
     );
   }
@@ -268,9 +416,59 @@ export default function EnrollWizard() {
         <Typography color="text.secondary" mb={3}>
           {tokenError}
         </Typography>
-        <Alert severity="warning">
-          Please contact your admin to get a new enrollment link.
+        <Alert severity="warning" sx={{ mb: 3, textAlign: 'left' }}>
+          This enrollment link has expired. You can request a new link from your admin or raise a support ticket.
         </Alert>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
+          <Button
+            variant="contained"
+            startIcon={<Refresh />}
+            onClick={() => setShowRequestDialog(true)}
+            sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
+          >
+            Request New Link
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<SupportAgent />}
+            onClick={() => setShowTicketDialog(true)}
+            sx={{ borderRadius: 1, textTransform: 'none' }}
+          >
+            Raise a Ticket
+          </Button>
+        </Box>
+
+        {/* Request New Link Dialog */}
+        <RequestRegenerationDialog
+          open={showRequestDialog}
+          onClose={() => setShowRequestDialog(false)}
+          requestName={requestName}
+          setRequestName={setRequestName}
+          requestEmail={requestEmail}
+          setRequestEmail={setRequestEmail}
+          requestPhone={requestPhone}
+          setRequestPhone={setRequestPhone}
+          onSubmit={handleRequestRegeneration}
+          loading={requestLoading}
+          result={requestResult}
+        />
+
+        {/* Ticket Dialog */}
+        <TicketDialog
+          open={showTicketDialog}
+          onClose={() => setShowTicketDialog(false)}
+          requestName={requestName}
+          setRequestName={setRequestName}
+          requestEmail={requestEmail}
+          setRequestEmail={setRequestEmail}
+          requestPhone={requestPhone}
+          setRequestPhone={setRequestPhone}
+          ticketDescription={ticketDescription}
+          setTicketDescription={setTicketDescription}
+          onSubmit={handleRaiseTicket}
+          loading={requestLoading}
+          result={ticketResult}
+        />
       </Container>
     );
   }
@@ -287,7 +485,7 @@ export default function EnrollWizard() {
         </Typography>
         <Button
           variant="contained"
-          href="https://app.neramclasses.com"
+          href={process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com'}
           size="large"
           sx={{ borderRadius: 1, fontWeight: 600, mt: 2 }}
         >
@@ -407,6 +605,34 @@ export default function EnrollWizard() {
         </Typography>
       </Box>
 
+      {/* Resume banner */}
+      {isResuming && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                clearProgress();
+                setCurrentStep(0);
+                setFormData(DEFAULT_FORM_DATA);
+                setPhoneVerified(false);
+                setPhoneVerifiedAt(null);
+                setTermsAccepted(false);
+                dismissResume();
+              }}
+            >
+              Start Fresh
+            </Button>
+          }
+          onClose={dismissResume}
+        >
+          Resuming from Step {(restoredState?.currentStep ?? 0) + 1}: {STEP_LABELS[restoredState?.currentStep ?? 0]}. Your previous progress has been restored.
+        </Alert>
+      )}
+
       {/* Stepper */}
       {isMobile ? (
         <MobileStepper
@@ -520,5 +746,235 @@ export default function EnrollWizard() {
         />
       )}
     </Container>
+  );
+}
+
+// ============================================
+// REQUEST REGENERATION DIALOG
+// ============================================
+
+function RequestRegenerationDialog({
+  open,
+  onClose,
+  requestName,
+  setRequestName,
+  requestEmail,
+  setRequestEmail,
+  requestPhone,
+  setRequestPhone,
+  onSubmit,
+  loading,
+  result,
+}: {
+  open: boolean;
+  onClose: () => void;
+  requestName: string;
+  setRequestName: (v: string) => void;
+  requestEmail: string;
+  setRequestEmail: (v: string) => void;
+  requestPhone: string;
+  setRequestPhone: (v: string) => void;
+  onSubmit: () => void;
+  loading: boolean;
+  result: { ticketNumber: string; message: string } | null;
+}) {
+  if (result) {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Request Submitted</DialogTitle>
+        <DialogContent>
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            <CheckCircleOutlined sx={{ fontSize: 48, color: 'success.main', mb: 2 }} />
+            <Typography variant="body1" mb={1}>
+              {result.message}
+            </Typography>
+            {result.ticketNumber && (
+              <Typography variant="body2" color="text.secondary">
+                Reference: <strong>{result.ticketNumber}</strong>
+              </Typography>
+            )}
+            <Typography variant="body2" color="text.secondary" mt={2}>
+              The admin will share a new link with you shortly via WhatsApp or email.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ borderRadius: 1, textTransform: 'none' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Request New Enrollment Link</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Enter your details and we&apos;ll notify the admin to generate a new link for you.
+        </Typography>
+        <TextField
+          label="Your Name"
+          value={requestName}
+          onChange={(e) => setRequestName(e.target.value)}
+          fullWidth
+          required
+          size="small"
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          label="Email"
+          type="email"
+          value={requestEmail}
+          onChange={(e) => setRequestEmail(e.target.value)}
+          fullWidth
+          size="small"
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          label="Phone Number"
+          value={requestPhone}
+          onChange={(e) => setRequestPhone(e.target.value)}
+          fullWidth
+          size="small"
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={loading} sx={{ textTransform: 'none' }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={onSubmit}
+          variant="contained"
+          disabled={!requestName || loading}
+          sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600 }}
+        >
+          {loading ? <CircularProgress size={20} /> : 'Submit Request'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ============================================
+// TICKET DIALOG
+// ============================================
+
+function TicketDialog({
+  open,
+  onClose,
+  requestName,
+  setRequestName,
+  requestEmail,
+  setRequestEmail,
+  requestPhone,
+  setRequestPhone,
+  ticketDescription,
+  setTicketDescription,
+  onSubmit,
+  loading,
+  result,
+}: {
+  open: boolean;
+  onClose: () => void;
+  requestName: string;
+  setRequestName: (v: string) => void;
+  requestEmail: string;
+  setRequestEmail: (v: string) => void;
+  requestPhone: string;
+  setRequestPhone: (v: string) => void;
+  ticketDescription: string;
+  setTicketDescription: (v: string) => void;
+  onSubmit: () => void;
+  loading: boolean;
+  result: { ticketNumber: string } | null;
+}) {
+  if (result?.ticketNumber) {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Ticket Submitted</DialogTitle>
+        <DialogContent>
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            <CheckCircleOutlined sx={{ fontSize: 48, color: 'success.main', mb: 2 }} />
+            <Typography variant="body1" mb={1}>
+              Your support ticket has been created.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Ticket ID: <strong>{result.ticketNumber}</strong>
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mt={2}>
+              We&apos;ll get back to you as soon as possible.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} sx={{ borderRadius: 1, textTransform: 'none' }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Raise a Support Ticket</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Describe the issue you&apos;re facing and our team will help you.
+        </Typography>
+        <TextField
+          label="Your Name"
+          value={requestName}
+          onChange={(e) => setRequestName(e.target.value)}
+          fullWidth
+          required
+          size="small"
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          label="Email"
+          type="email"
+          value={requestEmail}
+          onChange={(e) => setRequestEmail(e.target.value)}
+          fullWidth
+          size="small"
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          label="Phone Number"
+          value={requestPhone}
+          onChange={(e) => setRequestPhone(e.target.value)}
+          fullWidth
+          size="small"
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          label="Describe the issue"
+          value={ticketDescription}
+          onChange={(e) => setTicketDescription(e.target.value)}
+          fullWidth
+          required
+          multiline
+          rows={4}
+          size="small"
+          placeholder="What happened? What were you trying to do?"
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={loading} sx={{ textTransform: 'none' }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={onSubmit}
+          variant="contained"
+          disabled={!requestName || !ticketDescription || loading}
+          sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600 }}
+        >
+          {loading ? <CircularProgress size={20} /> : 'Submit Ticket'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

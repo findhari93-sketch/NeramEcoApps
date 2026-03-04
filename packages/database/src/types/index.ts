@@ -651,6 +651,10 @@ export interface DirectEnrollmentLink extends Timestamps {
   used_at: string | null;
   lead_profile_id: string | null;
   student_profile_id: string | null;
+
+  // Regeneration tracking
+  regenerated_from: string | null;
+  regenerated_to: string | null;
 }
 
 // ============================================
@@ -1837,7 +1841,11 @@ export type NotificationEventType =
   | 'question_submitted'
   | 'question_edit_requested'
   | 'question_delete_requested'
-  | 'callback_reminder';
+  | 'callback_reminder'
+  | 'direct_enrollment_completed'
+  | 'ticket_created'
+  | 'ticket_resolved'
+  | 'link_regeneration_requested';
 
 // Refund request enums & constants
 export type RefundRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -1974,6 +1982,11 @@ export interface NotificationPreferences {
   question_edit_requested: boolean;
   question_delete_requested: boolean;
   callback_reminder: boolean;
+  // Direct enrollment & support tickets (migration 20260310)
+  direct_enrollment_completed: boolean;
+  ticket_created: boolean;
+  ticket_resolved: boolean;
+  link_regeneration_requested: boolean;
 }
 
 /**
@@ -2006,6 +2019,86 @@ export interface UserNotification {
   is_read: boolean;
   read_at: string | null;
   created_at: string;
+}
+
+// ============================================
+// SUPPORT TICKETS (migration 20260310)
+// ============================================
+
+export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type SupportTicketPriority = 'low' | 'medium' | 'high';
+export type SupportTicketCategory =
+  | 'enrollment_issue'
+  | 'payment_issue'
+  | 'technical_issue'
+  | 'account_issue'
+  | 'course_question'
+  | 'other';
+
+export interface SupportTicket extends Timestamps {
+  id: string;
+  ticket_number: string;
+  user_id: string | null;
+  user_name: string;
+  user_email: string | null;
+  user_phone: string | null;
+  category: SupportTicketCategory;
+  subject: string;
+  description: string;
+  page_url: string | null;
+  source_app: string | null;
+  enrollment_link_id: string | null;
+  screenshot_urls: string[];
+  status: SupportTicketStatus;
+  priority: SupportTicketPriority;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  resolution_notes: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+}
+
+export interface SupportTicketComment {
+  id: string;
+  ticket_id: string;
+  user_id: string | null;
+  user_name: string;
+  is_admin: boolean;
+  content: string;
+  created_at: string;
+}
+
+export interface CreateSupportTicketInput {
+  user_id?: string;
+  user_name: string;
+  user_email?: string;
+  user_phone?: string;
+  category: SupportTicketCategory;
+  subject: string;
+  description: string;
+  page_url?: string;
+  source_app?: string;
+  enrollment_link_id?: string;
+  screenshot_urls?: string[];
+}
+
+export interface UpdateSupportTicketInput {
+  status?: SupportTicketStatus;
+  priority?: SupportTicketPriority;
+  assigned_to?: string;
+  assigned_at?: string;
+  resolution_notes?: string;
+  resolved_by?: string;
+  resolved_at?: string;
+}
+
+export interface ListSupportTicketsFilters {
+  status?: SupportTicketStatus;
+  category?: SupportTicketCategory;
+  userId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
 }
 
 /**

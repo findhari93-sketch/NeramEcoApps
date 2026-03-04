@@ -6,6 +6,7 @@ import {
   getSupabaseAdminClient,
   getDirectEnrollmentLinkById,
   updateDirectEnrollmentLink,
+  deleteDirectEnrollmentLink,
 } from '@neram/database';
 
 // GET /api/direct-enrollment/[id] - Get link details
@@ -70,6 +71,42 @@ export async function GET(
     console.error('Error fetching direct enrollment link:', error);
     return NextResponse.json(
       { error: 'Failed to fetch direct enrollment link' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/direct-enrollment/[id] - Delete a cancelled/expired link
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = getSupabaseAdminClient();
+
+    const existing = await getDirectEnrollmentLinkById(id, supabase);
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Direct enrollment link not found' },
+        { status: 404 }
+      );
+    }
+
+    if (existing.status !== 'cancelled' && existing.status !== 'expired') {
+      return NextResponse.json(
+        { error: 'Only cancelled or expired links can be deleted' },
+        { status: 400 }
+      );
+    }
+
+    await deleteDirectEnrollmentLink(id, supabase);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting direct enrollment link:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete direct enrollment link' },
       { status: 500 }
     );
   }
