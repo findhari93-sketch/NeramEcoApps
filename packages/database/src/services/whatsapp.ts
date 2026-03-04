@@ -44,6 +44,8 @@ export function isWhatsAppConfigured(): boolean {
 
 interface TemplateComponent {
   type: 'header' | 'body' | 'button';
+  sub_type?: 'url' | 'quick_reply';
+  index?: string;
   parameters: Array<{
     type: 'text' | 'currency' | 'date_time' | 'image' | 'document';
     text?: string;
@@ -318,7 +320,10 @@ export async function sendRefundRejectedNotification(
  * Send ticket confirmation notification to user
  *
  * Template: support_ticket_confirmation
+ * Header: static text "Neram Classes Support" (no variables)
  * Body parameters: {{1}} = userName, {{2}} = ticketNumber, {{3}} = subject
+ * Footer: static text (no variables)
+ * Button[0]: URL with dynamic suffix {{1}} = ticketNumber
  */
 export async function sendTicketConfirmation(
   phone: string,
@@ -335,6 +340,14 @@ export async function sendTicketConfirmation(
         { type: 'text', text: data.userName },
         { type: 'text', text: data.ticketNumber },
         { type: 'text', text: data.subject },
+      ],
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [
+        { type: 'text', text: data.ticketNumber },
       ],
     },
   ]);
