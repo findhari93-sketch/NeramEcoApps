@@ -11,8 +11,8 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
 
-  const { data, error } = await supabase
-    .from('chatbot_conversations')
+  const { data, error } = await (supabase
+    .from('chatbot_conversations') as ReturnType<typeof supabase.from>)
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -23,8 +23,9 @@ export async function GET(
   }
 
   // Group by session for better display
-  const sessions: Record<string, typeof data> = {};
-  for (const msg of data || []) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sessions: Record<string, any[]> = {};
+  for (const msg of (data || []) as any[]) {
     const sid = msg.session_id;
     if (!sessions[sid]) sessions[sid] = [];
     sessions[sid].push(msg);
