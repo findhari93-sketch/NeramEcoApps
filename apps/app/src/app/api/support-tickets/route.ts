@@ -15,6 +15,9 @@ import {
   createSupportTicket,
   listUserTickets,
   createAdminNotification,
+  sendTemplateEmail,
+  isWhatsAppConfigured,
+  sendWhatsAppTicketConfirmation,
 } from '@neram/database';
 import type { SupportTicketCategory } from '@neram/database';
 
@@ -108,6 +111,34 @@ export async function POST(req: NextRequest) {
     } catch (notifError) {
       // Non-blocking: log but don't fail the request
       console.error('Failed to create admin notification for ticket:', notifError);
+    }
+
+    // Send email confirmation to user (non-blocking)
+    if (auth.userEmail) {
+      const CATEGORY_LABELS: Record<string, string> = {
+        enrollment_issue: 'Enrollment Issue',
+        payment_issue: 'Payment Issue',
+        technical_issue: 'Technical Issue',
+        account_issue: 'Account Issue',
+        course_question: 'Course Question',
+        other: 'Other',
+      };
+      sendTemplateEmail(auth.userEmail, 'ticket-confirmation', {
+        userName: auth.userName,
+        ticketNumber: ticket.ticket_number,
+        subject: subject.trim(),
+        category: CATEGORY_LABELS[category] || category,
+        description: description.trim(),
+      }).catch((err) => console.error('Failed to send ticket confirmation email:', err));
+    }
+
+    // Send WhatsApp confirmation to user (non-blocking)
+    if (auth.userPhone && isWhatsAppConfigured()) {
+      sendWhatsAppTicketConfirmation(auth.userPhone, {
+        userName: auth.userName,
+        ticketNumber: ticket.ticket_number,
+        subject: subject.trim(),
+      }).catch((err) => console.error('Failed to send ticket WhatsApp notification:', err));
     }
 
     return NextResponse.json(
