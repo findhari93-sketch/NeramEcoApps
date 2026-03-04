@@ -26,6 +26,7 @@ import {
   generateSoftwareApplicationSchema,
 } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { APP_URL } from '@/lib/seo/constants';
 
 export async function generateMetadata({
   params: { locale },
@@ -692,7 +693,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
                   variant="contained"
                   size="large"
                   component={Link}
-                  href="https://app.neramclasses.com"
+                  href={APP_URL}
                   sx={{ fontWeight: 600 }}
                 >
                   Try Free NATA App

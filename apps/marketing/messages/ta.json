@@ -5,7 +5,8 @@
     "courses": "பாடநெறிகள்",
     "fees": "கட்டணம்",
     "contact": "தொடர்பு",
-    "apply": "விண்ணப்பிக்கவும்"
+    "apply": "விண்ணப்பிக்கவும்",
+    "nata2026": "NATA 2026"
   },
   "home": {
     "title": "நேரம் வகுப்புகளுக்கு வரவேற்கிறோம்",
@@ -558,5 +559,21 @@
         "content": "இந்த பணத்திரும்பக் கொள்கை தொடர்பான ஏதேனும் கேள்விகள் அல்லது உங்கள் குறிப்பிட்ட நிலை பற்றி விவாதிக்க, தயவுசெய்து எங்களைத் தொடர்புகொள்ளவும்: மின்னஞ்சல்: support@neramclasses.com. தொலைபேசி: வணிக நேரங்களில் கிடைக்கும் (காலை 9 - இரவு 8 IST). இணையதளம்: www.neramclasses.com/contact. பணத்திரும்பல் தொடர்பான அனைத்து தொடர்புகளிலும் உங்கள் கட்டண எண் மற்றும் விண்ணப்ப எண்ணைக் குறிப்பிடவும்."
       }
     }
+  },
+  "NATA2026": {
+    "hubTitle": "NATA 2026 — Complete Exam Guide",
+    "hubSubtitle": "Everything you need to know about the National Aptitude Test in Architecture",
+    "whatIsNata": "What is NATA?",
+    "atAGlance": "NATA 2026 at a Glance",
+    "freeTools": "Free NATA Tools",
+    "brochureDownload": "Download Official Brochure",
+    "needHelp": "Need Help Applying?",
+    "faqs": "Frequently Asked Questions",
+    "contactUs": "Contact & Help",
+    "ctaTitle": "Prepare for NATA 2026",
+    "ctaSubtitle": "India's First AI-Enabled Learning Platform",
+    "alsoRead": "Also Read",
+    "tryNow": "Try Now",
+    "viewAll": "View All"
   }
 }

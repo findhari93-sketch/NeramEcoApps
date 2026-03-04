@@ -978,6 +978,80 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
         </html>
       `,
     },
+
+    // ============================================
+    // SUPPORT TICKET EMAIL TEMPLATES
+    // ============================================
+
+    'ticket-confirmation': {
+      subject: `Support Ticket Created - ${data.ticketNumber}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+            .container { max-width: 600px; margin: 0 auto; }
+            .header { background: linear-gradient(135deg, #1565C0, #0D47A1); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .header h1 { margin: 0; font-size: 24px; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .ticket-box { background: #E3F2FD; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+            .ticket-label { color: #666; font-size: 14px; margin-bottom: 5px; }
+            .ticket-number { font-family: 'Courier New', monospace; font-size: 22px; font-weight: bold; color: #1565C0; letter-spacing: 1px; }
+            .detail-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #ddd; }
+            .detail-row { padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+            .detail-label { font-weight: 600; color: #666; font-size: 13px; }
+            .detail-value { margin-top: 2px; }
+            .note { background: #FFF3E0; padding: 15px; border-radius: 8px; border-left: 4px solid #FF9800; margin: 20px 0; font-size: 14px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Support Ticket Created</h1>
+            </div>
+            <div class="content">
+              <p>Dear <strong>${data.userName}</strong>,</p>
+              <p>Your support ticket has been created successfully. Our team will review it and get back to you as soon as possible.</p>
+
+              <div class="ticket-box">
+                <div class="ticket-label">Your Ticket Number</div>
+                <div class="ticket-number">${data.ticketNumber}</div>
+              </div>
+
+              <div class="detail-box">
+                <div class="detail-row">
+                  <div class="detail-label">Subject</div>
+                  <div class="detail-value">${data.subject}</div>
+                </div>
+                <div class="detail-row">
+                  <div class="detail-label">Category</div>
+                  <div class="detail-value">${data.category}</div>
+                </div>
+                <div class="detail-row">
+                  <div class="detail-label">Description</div>
+                  <div class="detail-value">${data.description}</div>
+                </div>
+              </div>
+
+              <div class="note">
+                <strong>Please save your ticket number:</strong> ${data.ticketNumber}<br>
+                You can reference this number if you need to follow up with our team.
+              </div>
+
+              <p>If you need further assistance, reply to this email or contact us at <strong>+91 9176137043</strong>.</p>
+            </div>
+            <div class="footer">
+              <p>Neram Classes - Architecture Entrance Coaching</p>
+              <p>Bangalore, Karnataka | www.neramclasses.com</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    },
   };
 
   return templates[name] || null;

@@ -49,10 +49,17 @@ const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
   { value: 'active', label: 'Active' },
-  { value: 'used', label: 'Used' },
+  { value: 'used', label: 'Completed' },
   { value: 'expired', label: 'Expired' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
+
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Active',
+  used: 'Completed',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+};
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
@@ -510,7 +517,7 @@ export default function DirectEnrollmentPage() {
           loading={loading && stats.total === 0}
         />
         <StatCard
-          title="Used"
+          title="Completed"
           value={stats.used}
           icon={<CheckCircleIcon sx={{ color: '#0288D1', fontSize: 24 }} />}
           color="#0288D1"
@@ -651,7 +658,7 @@ export default function DirectEnrollmentPage() {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={link.status.charAt(0).toUpperCase() + link.status.slice(1)}
+                          label={STATUS_LABELS[link.status] || link.status}
                           size="small"
                           color={getStatusColor(link.status)}
                           sx={{ fontWeight: 500 }}

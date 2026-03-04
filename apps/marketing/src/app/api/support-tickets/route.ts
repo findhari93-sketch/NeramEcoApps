@@ -6,6 +6,9 @@ import {
   createSupportTicket,
   createAdminNotification,
   getDirectEnrollmentLinkByToken,
+  sendTemplateEmail,
+  isWhatsAppConfigured,
+  sendWhatsAppTicketConfirmation,
 } from '@neram/database';
 
 // POST /api/support-tickets - Create a ticket (no auth required for marketing app)
@@ -73,6 +76,32 @@ export async function POST(request: NextRequest) {
       },
       supabase
     );
+
+    // Send email confirmation to user (non-blocking)
+    if (userEmail) {
+      const CATEGORY_LABELS: Record<string, string> = {
+        enrollment_issue: 'Enrollment Issue',
+        payment_issue: 'Payment Issue',
+        technical_issue: 'Technical Issue',
+        other: 'Other',
+      };
+      sendTemplateEmail(userEmail, 'ticket-confirmation', {
+        userName,
+        ticketNumber: ticket.ticket_number,
+        subject,
+        category: CATEGORY_LABELS[category || 'other'] || category || 'Other',
+        description,
+      }).catch((err) => console.error('Failed to send ticket confirmation email:', err));
+    }
+
+    // Send WhatsApp confirmation to user (non-blocking)
+    if (userPhone && isWhatsAppConfigured()) {
+      sendWhatsAppTicketConfirmation(userPhone, {
+        userName,
+        ticketNumber: ticket.ticket_number,
+        subject,
+      }).catch((err) => console.error('Failed to send ticket WhatsApp notification:', err));
+    }
 
     return NextResponse.json({
       success: true,

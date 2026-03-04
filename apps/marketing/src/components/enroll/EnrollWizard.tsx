@@ -86,6 +86,7 @@ export default function EnrollWizard() {
   // Phone verification
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneVerifiedAt, setPhoneVerifiedAt] = useState<string | null>(null);
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
 
   // Terms
@@ -110,6 +111,7 @@ export default function EnrollWizard() {
       setFormData(restoredState.formData as unknown as typeof DEFAULT_FORM_DATA);
       setPhoneVerified(restoredState.phoneVerified);
       setPhoneVerifiedAt(restoredState.phoneVerifiedAt || null);
+      setVerifiedPhone(restoredState.verifiedPhone || null);
       setTermsAccepted(restoredState.termsAccepted);
     }
   }, [restoredState]);
@@ -122,10 +124,11 @@ export default function EnrollWizard() {
         formData: formData as unknown as Record<string, unknown>,
         phoneVerified,
         phoneVerifiedAt,
+        verifiedPhone,
         termsAccepted,
       });
     }
-  }, [currentStep, formData, phoneVerified, phoneVerifiedAt, termsAccepted, tokenStatus, saveProgress]);
+  }, [currentStep, formData, phoneVerified, phoneVerifiedAt, verifiedPhone, termsAccepted, tokenStatus, saveProgress]);
 
   // Validate token on mount
   useEffect(() => {
@@ -152,6 +155,21 @@ export default function EnrollWizard() {
     }
   }, [user, linkData]);
 
+  // Auto-detect phone verified from Firebase (Fix 2)
+  useEffect(() => {
+    if (user && linkData && !phoneVerified) {
+      if (user.phoneVerified && user.phone) {
+        const phone = user.phone.startsWith('+') ? user.phone : `+91${user.phone}`;
+        setPhoneVerified(true);
+        setPhoneVerifiedAt(new Date().toISOString());
+        setVerifiedPhone(phone);
+      }
+    }
+  }, [user, linkData, phoneVerified]);
+
+  // Derive whether phone is currently verified (resets when user edits number)
+  const isPhoneCurrentlyVerified = phoneVerified && !!verifiedPhone && verifiedPhone === formData.personal.phone;
+
   const validateToken = async (t: string) => {
     try {
       setTokenStatus('loading');
@@ -162,6 +180,9 @@ export default function EnrollWizard() {
         const code = data.code || '';
         if (code === 'ALREADY_USED') {
           setTokenStatus('used');
+          if (data.data?.applicationNumber) {
+            setApplicationNumber(data.data.applicationNumber);
+          }
         } else if (code === 'EXPIRED' || code === 'CANCELLED') {
           setTokenStatus('expired');
         } else {
@@ -253,6 +274,7 @@ export default function EnrollWizard() {
           casteCategory: formData.academic.casteCategory,
           targetExamYear: formData.academic.targetExamYear,
           schoolType: formData.academic.schoolType,
+          parentPhone: formData.personal.parentPhone,
           phoneVerified,
           phoneVerifiedAt,
         }),
@@ -474,18 +496,23 @@ export default function EnrollWizard() {
   }
 
   if (tokenStatus === 'used') {
+    if (applicationNumber) {
+      return <SuccessScreen applicationNumber={applicationNumber} />;
+    }
     return (
       <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
-        <CheckCircleOutlined sx={{ fontSize: 64, color: 'info.main', mb: 2 }} />
+        <CheckCircleOutlined sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
         <Typography variant="h5" fontWeight={700} gutterBottom>
           Already Enrolled
         </Typography>
         <Typography color="text.secondary" mb={3}>
-          This enrollment link has already been used.
+          This enrollment link has already been used. Your enrollment is complete!
         </Typography>
         <Button
           variant="contained"
           href={process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com'}
+          target="_blank"
+          rel="noopener noreferrer"
           size="large"
           sx={{ borderRadius: 1, fontWeight: 600, mt: 2 }}
         >
@@ -614,14 +641,19 @@ export default function EnrollWizard() {
             <Button
               color="inherit"
               size="small"
-              onClick={() => {
+              onClick={async () => {
                 clearProgress();
                 setCurrentStep(0);
                 setFormData(DEFAULT_FORM_DATA);
                 setPhoneVerified(false);
                 setPhoneVerifiedAt(null);
+                setVerifiedPhone(null);
                 setTermsAccepted(false);
                 dismissResume();
+                try {
+                  const { getFirebaseAuth } = await import('@neram/auth');
+                  await getFirebaseAuth().signOut();
+                } catch { /* ignore */ }
               }}
             >
               Start Fresh
@@ -641,13 +673,27 @@ export default function EnrollWizard() {
           position="static"
           activeStep={currentStep}
           sx={{ mb: 2, borderRadius: 1, bgcolor: 'grey.50' }}
-          backButton={null}
+          backButton={
+            <Button size="small" onClick={handleBack} disabled={currentStep === 0}>
+              <KeyboardArrowLeft /> Back
+            </Button>
+          }
           nextButton={null}
         />
       ) : (
         <Stepper activeStep={currentStep} sx={{ mb: 4 }}>
-          {STEP_LABELS.map((label) => (
-            <Step key={label}>
+          {STEP_LABELS.map((label, index) => (
+            <Step
+              key={label}
+              completed={index < currentStep}
+              sx={{ cursor: index < currentStep ? 'pointer' : 'default' }}
+              onClick={() => {
+                if (index < currentStep) {
+                  setCurrentStep(index);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+            >
               <StepLabel>{label}</StepLabel>
             </Step>
           ))}
@@ -685,7 +731,7 @@ export default function EnrollWizard() {
             location={formData.location}
             updatePersonal={updatePersonalData}
             updateLocation={updateLocationData}
-            phoneVerified={phoneVerified}
+            phoneVerified={isPhoneCurrentlyVerified}
             onVerifyPhone={() => setShowPhoneModal(true)}
           />
         )}
@@ -699,7 +745,7 @@ export default function EnrollWizard() {
           <ReviewStep
             formData={formData}
             linkData={linkData!}
-            phoneVerified={phoneVerified}
+            phoneVerified={isPhoneCurrentlyVerified}
             termsAccepted={termsAccepted}
             setTermsAccepted={setTermsAccepted}
             onSubmit={handleSubmit}
@@ -708,28 +754,36 @@ export default function EnrollWizard() {
         )}
       </Paper>
 
+      {/* Phone verification warning on Step 1 */}
+      {currentStep === 0 && !isPhoneCurrentlyVerified && (
+        <Alert severity="warning" sx={{ mb: 1 }}>
+          Please verify your phone number before continuing.
+        </Alert>
+      )}
+
       {/* Navigation buttons */}
-      {currentStep < 2 && (
-        <Box display="flex" justifyContent="space-between" gap={2}>
-          <Button
-            variant="outlined"
-            onClick={handleBack}
-            disabled={currentStep === 0}
-            startIcon={<KeyboardArrowLeft />}
-            sx={{ borderRadius: 1 }}
-          >
-            Back
-          </Button>
+      <Box display="flex" justifyContent="space-between" gap={2}>
+        <Button
+          variant="outlined"
+          onClick={handleBack}
+          disabled={currentStep === 0}
+          startIcon={<KeyboardArrowLeft />}
+          sx={{ borderRadius: 1 }}
+        >
+          Back
+        </Button>
+        {currentStep < 2 && (
           <Button
             variant="contained"
             onClick={handleNext}
+            disabled={currentStep === 0 && !isPhoneCurrentlyVerified}
             endIcon={<KeyboardArrowRight />}
             sx={{ borderRadius: 1, fontWeight: 600 }}
           >
             Continue
           </Button>
-        </Box>
-      )}
+        )}
+      </Box>
 
       {/* Phone verification modal */}
       {showPhoneModal && (
@@ -738,10 +792,19 @@ export default function EnrollWizard() {
           onClose={() => setShowPhoneModal(false)}
           phoneOnly
           apiBaseUrl=""
-          onAuthenticated={() => {
+          initialPhone={formData.personal.phone?.replace(/^\+91/, '')}
+          onAuthenticated={(verifiedPhoneNumber) => {
             setPhoneVerified(true);
             setPhoneVerifiedAt(new Date().toISOString());
             setShowPhoneModal(false);
+            if (verifiedPhoneNumber) {
+              const fullPhone = verifiedPhoneNumber.startsWith('+') ? verifiedPhoneNumber : `+91${verifiedPhoneNumber}`;
+              setVerifiedPhone(fullPhone);
+              setFormData(prev => ({
+                ...prev,
+                personal: { ...prev.personal, phone: fullPhone },
+              }));
+            }
           }}
         />
       )}

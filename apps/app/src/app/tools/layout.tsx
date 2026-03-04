@@ -9,6 +9,9 @@ const toolLinks = [
   { title: 'College Predictor', href: '/tools/nata/college-predictor' },
   { title: 'Exam Centers', href: '/tools/nata/exam-centers' },
   { title: 'Question Bank', href: '/tools/nata/question-bank' },
+  { title: 'Eligibility', href: '/tools/nata/eligibility-checker' },
+  { title: 'Cost Calculator', href: '/tools/nata/cost-calculator' },
+  { title: 'Image Crop', href: '/tools/nata/image-crop' },
   { title: 'Help', href: '/tools/help' },
 ];
 

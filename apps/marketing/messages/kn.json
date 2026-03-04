@@ -5,7 +5,8 @@
     "courses": "ಕೋರ್ಸ್‌ಗಳು",
     "fees": "ಶುಲ್ಕ",
     "contact": "ಸಂಪರ್ಕ",
-    "apply": "ಅರ್ಜಿ ಸಲ್ಲಿಸಿ"
+    "apply": "ಅರ್ಜಿ ಸಲ್ಲಿಸಿ",
+    "nata2026": "NATA 2026"
   },
   "home": {
     "title": "ನೇರಂ ತರಗತಿಗಳಿಗೆ ಸ್ವಾಗತ",
@@ -486,5 +487,21 @@
         "content": "ಮರುಪಾವತಿ ಸಂಬಂಧಿತ ಪ್ರಶ್ನೆಗಳಿಗಾಗಿ, ದಯವಿಟ್ಟು support@neramclasses.com ನಲ್ಲಿ ನಮ್ಮ ಬೆಂಬಲ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ. ನಿಮ್ಮ ಪಾವತಿ ಉಲ್ಲೇಖ ಸಂಖ್ಯೆ ಮತ್ತು ಖಾತೆ ವಿವರಗಳನ್ನು ದಯವಿಟ್ಟು ಒದಗಿಸಿ."
       }
     }
+  },
+  "NATA2026": {
+    "hubTitle": "NATA 2026 — Complete Exam Guide",
+    "hubSubtitle": "Everything you need to know about the National Aptitude Test in Architecture",
+    "whatIsNata": "What is NATA?",
+    "atAGlance": "NATA 2026 at a Glance",
+    "freeTools": "Free NATA Tools",
+    "brochureDownload": "Download Official Brochure",
+    "needHelp": "Need Help Applying?",
+    "faqs": "Frequently Asked Questions",
+    "contactUs": "Contact & Help",
+    "ctaTitle": "Prepare for NATA 2026",
+    "ctaSubtitle": "India's First AI-Enabled Learning Platform",
+    "alsoRead": "Also Read",
+    "tryNow": "Try Now",
+    "viewAll": "View All"
   }
 }

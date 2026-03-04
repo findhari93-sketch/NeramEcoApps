@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { APP_URL } from '@/lib/seo/constants';
 
 export async function generateMetadata({
   params: { locale },
@@ -84,14 +85,14 @@ const tools = [
     title: 'College Predictor',
     description: 'Find colleges based on your expected rank',
     icon: '🎓',
-    link: 'https://app.neramclasses.com/tools/college-predictor',
+    link: `${APP_URL}/tools/college-predictor`,
     external: true,
   },
   {
     title: 'Exam Center Locator',
     description: 'Find NATA exam centers near you',
     icon: '📍',
-    link: 'https://app.neramclasses.com/tools/exam-centers',
+    link: `${APP_URL}/tools/exam-centers`,
     external: true,
   },
 ];
@@ -221,7 +222,7 @@ export default function FreeResourcesPage({ params: { locale } }: PageProps) {
                         variant="outlined"
                         fullWidth
                         size="small"
-                        href="https://app.neramclasses.com/tools"
+                        href={`${APP_URL}/tools`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >

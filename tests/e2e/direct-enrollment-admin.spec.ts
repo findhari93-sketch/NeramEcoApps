@@ -352,6 +352,124 @@ test.describe('Direct Enrollment Page - UI Smoke Tests', () => {
   });
 });
 
+test.describe('Direct Enrollment API - Link Regeneration', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.use({ baseURL: 'http://localhost:3013' });
+
+  let originalLinkId: string;
+  let originalToken: string;
+  let regeneratedLinkId: string;
+
+  test('should create a link for regeneration testing', async ({ request }) => {
+    const adminId = await getAdminUserId(request);
+
+    const response = await request.post('/api/direct-enrollment', {
+      data: {
+        adminId,
+        studentName: 'E2E Regeneration Test',
+        studentPhone: '9000000050',
+        interestCourse: 'nata',
+        learningMode: 'hybrid',
+        totalFee: 20000,
+        finalFee: 20000,
+        amountPaid: 20000,
+        paymentMethod: 'bank_transfer',
+        adminNotes: 'E2E regeneration test - safe to delete',
+      },
+    });
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    originalLinkId = body.data.id;
+    originalToken = body.data.token;
+  });
+
+  test('POST /api/direct-enrollment/:id/regenerate should create new link', async ({ request }) => {
+    if (!originalLinkId) {
+      test.skip();
+      return;
+    }
+
+    const adminId = await getAdminUserId(request);
+
+    const response = await request.post(`/api/direct-enrollment/${originalLinkId}/regenerate`, {
+      data: { adminId },
+    });
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data).toBeDefined();
+    expect(body.data.id).toBeDefined();
+    expect(body.data.token).toBeDefined();
+    // New link should have a different token
+    expect(body.data.token).not.toBe(originalToken);
+    // Should preserve student info
+    expect(body.data.student_name).toBe('E2E Regeneration Test');
+    expect(body.data.status).toBe('active');
+
+    regeneratedLinkId = body.data.id;
+  });
+
+  test('original link should be cancelled after regeneration', async ({ request }) => {
+    if (!originalLinkId) {
+      test.skip();
+      return;
+    }
+
+    const response = await request.get(`/api/direct-enrollment/${originalLinkId}`);
+    expect(response.status()).toBe(200);
+
+    const body = await response.json();
+    expect(body.data.status).toBe('cancelled');
+  });
+
+  test('POST /api/direct-enrollment/:id/regenerate should require adminId', async ({ request }) => {
+    if (!regeneratedLinkId) {
+      test.skip();
+      return;
+    }
+
+    const response = await request.post(`/api/direct-enrollment/${regeneratedLinkId}/regenerate`, {
+      data: {},
+      failOnStatusCode: false,
+    });
+    expect(response.status()).toBe(400);
+
+    const body = await response.json();
+    expect(body.error).toContain('Admin ID');
+  });
+
+  test('POST /api/direct-enrollment/:id/regenerate should return 404 for non-existent link', async ({ request }) => {
+    const adminId = await getAdminUserId(request);
+
+    const response = await request.post(
+      '/api/direct-enrollment/00000000-0000-0000-0000-000000000000/regenerate',
+      {
+        data: { adminId },
+        failOnStatusCode: false,
+      }
+    );
+    expect(response.status()).toBe(404);
+  });
+
+  test.afterAll(async ({ request }) => {
+    // Cleanup both links
+    for (const linkId of [originalLinkId, regeneratedLinkId]) {
+      if (linkId) {
+        await request.patch(`/api/direct-enrollment/${linkId}`, {
+          data: { status: 'cancelled' },
+          failOnStatusCode: false,
+        });
+        await request.delete(`/api/direct-enrollment/${linkId}`, {
+          failOnStatusCode: false,
+        });
+      }
+    }
+  });
+});
+
 test.describe('Direct Enrollment - Full Flow (Create & Verify)', () => {
   test.use({ baseURL: 'http://localhost:3013' });
 

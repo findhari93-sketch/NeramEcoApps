@@ -32,8 +32,27 @@ export async function GET(request: NextRequest) {
     }
 
     if (link.status === 'used') {
+      // Fetch application number from lead_profiles so the frontend can show it
+      let applicationNumber = null;
+      if (link.lead_profile_id) {
+        try {
+          const { data: leadProfile } = await (supabase
+            .from('lead_profiles') as any)
+            .select('application_number')
+            .eq('id', link.lead_profile_id)
+            .maybeSingle();
+          applicationNumber = leadProfile?.application_number || null;
+        } catch {
+          // Ignore lookup error - applicationNumber stays null
+        }
+      }
+
       return NextResponse.json(
-        { error: 'This enrollment link has already been used', code: 'ALREADY_USED' },
+        {
+          error: 'This enrollment link has already been used',
+          code: 'ALREADY_USED',
+          data: { applicationNumber },
+        },
         { status: 410 }
       );
     }

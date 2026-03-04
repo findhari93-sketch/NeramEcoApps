@@ -24,6 +24,8 @@ const styleColors: Record<string, string> = {
 };
 
 const CSS_VAR = '--broadcast-banner-height';
+const DISMISS_STORAGE_KEY = 'neram_broadcast_dismissed';
+const DISMISS_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function setBannerHeight(height: number) {
   document.documentElement.style.setProperty(CSS_VAR, `${height}px`);
@@ -31,6 +33,31 @@ function setBannerHeight(height: number) {
 
 function clearBannerHeight() {
   document.documentElement.style.setProperty(CSS_VAR, '0px');
+}
+
+/** Check if a specific broadcast was dismissed within the last 24 hours */
+function isDismissed(broadcastId: string): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw) as { id: string; at: number };
+    // Same broadcast ID and within 24h window
+    if (data.id === broadcastId && Date.now() - data.at < DISMISS_DURATION_MS) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Mark a broadcast as dismissed with timestamp */
+function markDismissed(broadcastId: string) {
+  try {
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify({ id: broadcastId, at: Date.now() }));
+  } catch {
+    // localStorage not available
+  }
 }
 
 export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) {
@@ -46,7 +73,12 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
         const json = await res.json();
         const items = json.content || [];
         if (items.length > 0) {
-          setBroadcast(items[0]);
+          const item = items[0] as BroadcastItem;
+          // Check if this specific broadcast was already dismissed (within 24h)
+          if (isDismissed(item.id)) {
+            setDismissed(true);
+          }
+          setBroadcast(item);
         }
       } catch {
         // Silently fail - banner is non-critical
@@ -65,10 +97,8 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
     }
     const el = bannerRef.current;
     const observer = new ResizeObserver(() => {
-      // Use offsetHeight (includes padding + border) instead of contentRect.height (excludes padding)
       setBannerHeight(el.offsetHeight);
     });
-    // Set initial height
     setBannerHeight(el.offsetHeight);
     observer.observe(el);
     return () => {
@@ -80,7 +110,11 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
   const handleDismiss = useCallback(() => {
     clearBannerHeight();
     setDismissed(true);
-  }, []);
+    // Persist dismissal in localStorage keyed by broadcast ID
+    if (broadcast) {
+      markDismissed(broadcast.id);
+    }
+  }, [broadcast]);
 
   if (!loaded || !broadcast || dismissed) return null;
 

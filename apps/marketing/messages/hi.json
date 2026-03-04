@@ -5,7 +5,8 @@
     "courses": "पाठ्यक्रम",
     "fees": "शुल्क",
     "contact": "संपर्क",
-    "apply": "आवेदन करें"
+    "apply": "आवेदन करें",
+    "nata2026": "NATA 2026"
   },
   "home": {
     "title": "नेरम क्लासेस में आपका स्वागत है",
@@ -486,5 +487,21 @@
         "content": "धनवापसी संबंधी किसी भी प्रश्न के लिए, कृपया हमसे संपर्क करें: ईमेल: support@neramclasses.com, वेबसाइट: https://neramclasses.com, या हमारे संपर्क पृष्ठ के माध्यम से। हमारी सहायता टीम कार्य दिवसों पर सुबह 9 बजे से रात 8 बजे (IST) तक उपलब्ध है।"
       }
     }
+  },
+  "NATA2026": {
+    "hubTitle": "NATA 2026 — Complete Exam Guide",
+    "hubSubtitle": "Everything you need to know about the National Aptitude Test in Architecture",
+    "whatIsNata": "What is NATA?",
+    "atAGlance": "NATA 2026 at a Glance",
+    "freeTools": "Free NATA Tools",
+    "brochureDownload": "Download Official Brochure",
+    "needHelp": "Need Help Applying?",
+    "faqs": "Frequently Asked Questions",
+    "contactUs": "Contact & Help",
+    "ctaTitle": "Prepare for NATA 2026",
+    "ctaSubtitle": "India's First AI-Enabled Learning Platform",
+    "alsoRead": "Also Read",
+    "tryNow": "Try Now",
+    "viewAll": "View All"
   }
 }

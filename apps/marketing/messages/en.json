@@ -5,7 +5,8 @@
     "courses": "Courses",
     "fees": "Fees",
     "contact": "Contact",
-    "apply": "Apply"
+    "apply": "Apply",
+    "nata2026": "NATA 2026"
   },
   "home": {
     "title": "Welcome to Neram Classes",
@@ -558,5 +559,21 @@
         "content": "For any questions regarding this Refund Policy or to discuss your specific situation, please contact us at: Email: support@neramclasses.com. Phone: Available during business hours (9 AM - 8 PM IST). Website: www.neramclasses.com/contact. All communications regarding refunds should reference your payment ID and application number."
       }
     }
+  },
+  "NATA2026": {
+    "hubTitle": "NATA 2026 — Complete Exam Guide",
+    "hubSubtitle": "Everything you need to know about the National Aptitude Test in Architecture",
+    "whatIsNata": "What is NATA?",
+    "atAGlance": "NATA 2026 at a Glance",
+    "freeTools": "Free NATA Tools",
+    "brochureDownload": "Download Official Brochure",
+    "needHelp": "Need Help Applying?",
+    "faqs": "Frequently Asked Questions",
+    "contactUs": "Contact & Help",
+    "ctaTitle": "Prepare for NATA 2026",
+    "ctaSubtitle": "India's First AI-Enabled Learning Platform",
+    "alsoRead": "Also Read",
+    "tryNow": "Try Now",
+    "viewAll": "View All"
   }
 }

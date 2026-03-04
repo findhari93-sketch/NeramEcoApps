@@ -30,14 +30,16 @@ export interface LoginModalProps {
   onClose?: () => void;
   /** Can user dismiss the modal? Default: true */
   allowClose?: boolean;
-  /** Called after login + phone verification complete */
-  onAuthenticated?: () => void;
+  /** Called after login + phone verification complete. Passes verified phone number if available. */
+  onAuthenticated?: (phoneNumber?: string) => void;
   /** Base URL for API calls. Empty string for same-origin, full URL for cross-origin */
   apiBaseUrl: string;
   /** Skip phone verification step (for already-verified users) */
   skipPhoneVerification?: boolean;
   /** Start directly at phone verification step */
   phoneOnly?: boolean;
+  /** Pre-fill the phone number input */
+  initialPhone?: string;
 }
 
 type ModalStep = 'login' | 'phone' | 'otp';
@@ -103,6 +105,7 @@ export default function LoginModal({
   apiBaseUrl,
   skipPhoneVerification = false,
   phoneOnly = false,
+  initialPhone = '',
 }: LoginModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -118,7 +121,7 @@ export default function LoginModal({
   const [loginError, setLoginError] = useState('');
 
   // Phone state
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState(initialPhone);
   const [otp, setOtp] = useState('');
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
@@ -133,12 +136,12 @@ export default function LoginModal({
       setPhoneError('');
       setEmail('');
       setPassword('');
-      setPhoneNumber('');
+      setPhoneNumber(initialPhone);
       setOtp('');
       setIsSignUp(false);
       setResendTimer(0);
     }
-  }, [open, phoneOnly]);
+  }, [open, phoneOnly, initialPhone]);
 
   // Initialize reCAPTCHA when entering phone step
   useEffect(() => {
@@ -326,7 +329,7 @@ export default function LoginModal({
         await verifyPhone(idToken, `+91${phoneNumber}`);
       }
 
-      onAuthenticated?.();
+      onAuthenticated?.(phoneNumber);
     } catch (err: any) {
       // Check if this is a duplicate phone error from our API
       const errMsg = err?.message || '';

@@ -11,6 +11,7 @@ export interface EnrollmentProgress {
   formData: Record<string, unknown>;
   phoneVerified: boolean;
   phoneVerifiedAt: string | null;
+  verifiedPhone?: string | null;
   termsAccepted: boolean;
   savedAt: string;
 }

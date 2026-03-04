@@ -40,7 +40,7 @@ export default function ConfirmDialog({
       fullWidth
       PaperProps={{ sx: { borderRadius: 1.5 } }}
     >
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+      <DialogTitle component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
         <WarningAmberIcon color="error" />
         <Typography variant="h6" fontWeight={700}>
           {title}

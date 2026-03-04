@@ -397,7 +397,7 @@ export default function AcademicDetailsStep({
             label="Target Exam Year"
             fullWidth
             value={academic.targetExamYear || ''}
-            onChange={(e) => updateAcademic({ targetExamYear: Number(e.target.value) })}
+            onChange={(e) => updateAcademic({ targetExamYear: e.target.value })}
             size="medium"
           >
             {examYearOptions.map((opt) => (

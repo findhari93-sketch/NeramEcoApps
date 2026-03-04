@@ -6,6 +6,7 @@ import Hero from '@/components/Hero';
 import CourseCard from '@/components/CourseCard';
 import YouTubeSection from '@/components/YouTubeSection';
 import { AnnouncementsSection } from '@/components/marketing-content';
+import { APP_URL } from '@/lib/seo/constants';
 
 // Featured courses offered by Neram Classes
 const featuredCourses = [
@@ -44,19 +45,19 @@ const tools = [
     name: 'Cutoff Calculator',
     description: 'Calculate your expected NATA cutoff rank based on score',
     icon: '🧮',
-    link: 'https://app.neramclasses.com/tools/cutoff-calculator',
+    link: `${APP_URL}/tools/cutoff-calculator`,
   },
   {
     name: 'College Predictor',
     description: 'Find architecture colleges based on your expected rank',
     icon: '🎓',
-    link: 'https://app.neramclasses.com/tools/college-predictor',
+    link: `${APP_URL}/tools/college-predictor`,
   },
   {
     name: 'Exam Center Locator',
     description: 'Find NATA exam centers near you',
     icon: '📍',
-    link: 'https://app.neramclasses.com/tools/exam-centers',
+    link: `${APP_URL}/tools/exam-centers`,
   },
 ];
 
@@ -178,7 +179,7 @@ export default function HomePageContent() {
             <Button
               variant="contained"
               size="large"
-              href="https://app.neramclasses.com"
+              href={APP_URL}
               target="_blank"
               rel="noopener noreferrer"
               sx={{ px: 4 }}

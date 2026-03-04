@@ -529,7 +529,7 @@ export default function AcademicDetailsStep() {
               <Select
                 value={academic.targetExamYear || ''}
                 onChange={(e) =>
-                  updateFormData('academic', { targetExamYear: Number(e.target.value) })
+                  updateFormData('academic', { targetExamYear: e.target.value as string })
                 }
                 label="Planning to Write Exam In"
               >

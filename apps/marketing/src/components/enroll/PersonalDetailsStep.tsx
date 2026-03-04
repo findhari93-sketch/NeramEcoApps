@@ -61,7 +61,7 @@ export default function PersonalDetailsStep({
     if (pincode.length === 6) {
       setIsPincodeLooking(true);
       try {
-        const res = await fetch(`/api/pincode?pincode=${pincode}`);
+        const res = await fetch(`/api/pincode/${pincode}`);
         const data = await res.json();
         if (data.success && data.data) {
           updateLocation({
@@ -149,6 +149,19 @@ export default function PersonalDetailsStep({
                 </InputAdornment>
               ),
             }}
+          />
+        </Grid>
+
+        {/* Parent's Phone Number */}
+        <Grid item xs={12} sm={6}>
+          <TextField
+            label="Parent's Phone Number"
+            fullWidth
+            value={personal.parentPhone}
+            onChange={(e) => updatePersonal({ parentPhone: e.target.value })}
+            size="medium"
+            placeholder="+91 9876543210"
+            helperText="Parent or guardian contact number"
           />
         </Grid>
 

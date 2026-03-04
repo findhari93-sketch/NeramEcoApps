@@ -42,6 +42,13 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: 'Cash',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  active: 'Active',
+  used: 'Completed',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+};
+
 function getStatusColor(status: string): 'success' | 'info' | 'warning' | 'error' | 'default' {
   switch (status) {
     case 'active':
@@ -155,7 +162,7 @@ export default function ShareLinkPanel({ open, onClose, link, adminId, onRegener
               Enrollment Link
             </Typography>
             <Chip
-              label={link.status.charAt(0).toUpperCase() + link.status.slice(1)}
+              label={STATUS_LABELS[link.status] || link.status}
               size="small"
               color={getStatusColor(link.status)}
               sx={{ fontWeight: 500 }}
@@ -332,7 +339,7 @@ export default function ShareLinkPanel({ open, onClose, link, adminId, onRegener
             <DetailRow label="Payment Date" value={link.payment_date ? formatDate(link.payment_date) : '-'} />
             <DetailRow label="Created" value={formatDate(link.created_at)} />
             <DetailRow label="Expires" value={formatDate(link.expires_at)} />
-            <DetailRow label="Status" value={link.status.charAt(0).toUpperCase() + link.status.slice(1)} />
+            <DetailRow label="Status" value={STATUS_LABELS[link.status] || link.status} />
           </Box>
 
           {link.payment_proof_url && (

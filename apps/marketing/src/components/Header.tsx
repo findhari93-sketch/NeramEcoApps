@@ -26,7 +26,9 @@ import {
   LanguageIcon,
   HelpOutlineIcon,
   useScrollDirection,
+  ListItemIcon,
 } from '@neram/ui';
+import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
@@ -103,9 +105,9 @@ function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslat
 }
 
 const navigationLinks = [
-  { labelKey: 'home' as const, href: '/' as const },
   { labelKey: 'about' as const, href: '/about' as const },
   { labelKey: 'courses' as const, href: '/courses' as const },
+  { labelKey: 'nata2026' as const, href: '/nata-2026' as const, badge: 'NEW' as const },
   { labelKey: 'fees' as const, href: '/fees' as const },
   { labelKey: 'contact' as const, href: '/contact' as const },
 ];
@@ -200,8 +202,32 @@ export default function Header() {
 
           {/* Desktop Navigation Links */}
           {!isMobile && (
-            <Box sx={{ flexGrow: 1, display: 'flex', gap: 0.5 }}>
-              {navigationLinks.map((link) => (
+            <Box sx={{ flexGrow: 1, display: 'flex', gap: 0.5, alignItems: 'center' }}>
+              {pathname !== '/' && (
+                <Tooltip title={t('nav.home')} arrow>
+                  <IconButton
+                    component={Link}
+                    href={'/'}
+                    color="inherit"
+                    size="small"
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderBottom: '2px solid transparent',
+                      borderRadius: 0,
+                      '&:hover': {
+                        bgcolor: 'rgba(255,255,255,0.08)',
+                        borderBottom: '2px solid rgba(255,255,255,0.6)',
+                      },
+                    }}
+                  >
+                    <HomeRoundedIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {navigationLinks.map((link) => {
+                const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+                return (
                 <Button
                   key={link.href}
                   component={Link}
@@ -210,11 +236,13 @@ export default function Header() {
                     color: 'inherit',
                     minWidth: 0,
                     px: 1.5,
-                    borderBottom: pathname === link.href
+                    fontWeight: isActive ? 700 : 400,
+                    bgcolor: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                    borderBottom: isActive
                       ? '2px solid white'
                       : '2px solid transparent',
                     borderRadius: 0,
-                    transition: 'border-color 0.2s',
+                    transition: 'border-color 0.2s, background-color 0.2s',
                     '&:hover': {
                       bgcolor: 'rgba(255,255,255,0.08)',
                       borderBottom: '2px solid rgba(255,255,255,0.6)',
@@ -222,8 +250,36 @@ export default function Header() {
                   }}
                 >
                   {t(`nav.${link.labelKey}`)}
+                  {'badge' in link && link.badge && (
+                    <Box
+                      component="span"
+                      sx={{
+                        ml: 0.5,
+                        position: 'relative',
+                        top: -8,
+                        display: 'inline-block',
+                        fontSize: '0.55rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.05em',
+                        lineHeight: 1,
+                        color: '#fff',
+                        bgcolor: '#FF6B35',
+                        px: 0.5,
+                        py: 0.25,
+                        borderRadius: '4px',
+                        animation: 'badgePulse 2s ease-in-out infinite',
+                        '@keyframes badgePulse': {
+                          '0%, 100%': { boxShadow: '0 0 0 0 rgba(255,107,53,0.5)' },
+                          '50%': { boxShadow: '0 0 0 4px rgba(255,107,53,0)' },
+                        },
+                      }}
+                    >
+                      {link.badge}
+                    </Box>
+                  )}
                 </Button>
-              ))}
+                );
+              })}
             </Box>
           )}
 
@@ -397,31 +453,70 @@ export default function Header() {
 
         {/* Navigation Links */}
         <List sx={{ flexGrow: 1, py: 1 }}>
-          {navigationLinks.map((link) => (
+          {pathname !== '/' && (
             <ListItemButton
-              key={link.href}
               component={Link}
-              href={link.href}
-              selected={pathname === link.href}
+              href={'/'}
               onClick={toggleMobileMenu}
-              sx={{
-                py: 1.5,
-                '&.Mui-selected': {
-                  color: 'primary.main',
-                  borderLeft: '3px solid',
-                  borderColor: 'primary.main',
-                  bgcolor: 'primary.50',
-                },
-              }}
+              sx={{ py: 1.5 }}
             >
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                <HomeRoundedIcon sx={{ fontSize: 20 }} />
+              </ListItemIcon>
               <ListItemText
-                primary={t(`nav.${link.labelKey}`)}
-                primaryTypographyProps={{
-                  fontWeight: pathname === link.href ? 600 : 400,
-                }}
+                primary={t('nav.home')}
+                primaryTypographyProps={{ fontWeight: 400 }}
               />
             </ListItemButton>
-          ))}
+          )}
+          {navigationLinks.map((link) => {
+            const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+            return (
+              <ListItemButton
+                key={link.href}
+                component={Link}
+                href={link.href}
+                selected={isActive}
+                onClick={toggleMobileMenu}
+                sx={{
+                  py: 1.5,
+                  '&.Mui-selected': {
+                    color: 'primary.main',
+                    borderLeft: '3px solid',
+                    borderColor: 'primary.main',
+                    bgcolor: 'primary.50',
+                  },
+                }}
+              >
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {t(`nav.${link.labelKey}`)}
+                      {'badge' in link && link.badge && (
+                        <Chip
+                          label={link.badge}
+                          size="small"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.6rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.05em',
+                            bgcolor: '#FF6B35',
+                            color: '#fff',
+                            '& .MuiChip-label': { px: 0.75, py: 0 },
+                          }}
+                        />
+                      )}
+                    </Box>
+                  }
+                  primaryTypographyProps={{
+                    fontWeight: isActive ? 600 : 400,
+                    component: 'div',
+                  }}
+                />
+              </ListItemButton>
+            );
+          })}
         </List>
 
         {/* Mobile CTA Button */}

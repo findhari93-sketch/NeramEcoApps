@@ -77,8 +77,9 @@ const navigationConfig: NavSection[] = [
       { title: 'Question Bank', href: '/tools/nata/question-bank', icon: <span>📚</span> },
       { title: 'Seat Matrix', href: '/tools/nata/seat-matrix', icon: <span>📊</span>, comingSoon: true },
       { title: 'College Reviews', href: '/tools/nata/college-reviews', icon: <span>⭐</span>, comingSoon: true },
-      { title: 'Eligibility Checker', href: '/tools/nata/eligibility-checker', icon: <span>✅</span>, comingSoon: true },
-      { title: 'Cost Calculator', href: '/tools/nata/cost-calculator', icon: <span>💰</span>, comingSoon: true },
+      { title: 'Eligibility Checker', href: '/tools/nata/eligibility-checker', icon: <span>✅</span> },
+      { title: 'Cost Calculator', href: '/tools/nata/cost-calculator', icon: <span>💰</span> },
+      { title: 'Image Crop', href: '/tools/nata/image-crop', icon: <span>🖼️</span> },
     ],
   },
   {

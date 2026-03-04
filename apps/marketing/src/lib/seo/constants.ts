@@ -1,7 +1,7 @@
 export const ORG_NAME = 'Neram Classes';
 export const ORG_ALTERNATE_NAME = 'Neram NATA Coaching';
 export const BASE_URL = 'https://neramclasses.com';
-export const APP_URL = 'https://app.neramclasses.com';
+export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
 export const ORG_LOGO = `${BASE_URL}/logo.png`;
 export const ORG_PHONE = '+91-9176137043';
 export const ORG_EMAIL = 'info@neramclasses.com';

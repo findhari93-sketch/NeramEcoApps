@@ -214,12 +214,25 @@ export async function expireOldDirectEnrollmentLinks(
 }
 
 /**
- * Delete a direct enrollment link permanently
+ * Delete a direct enrollment link permanently.
+ * Clears self-referencing FK columns (regenerated_from/regenerated_to) first.
  */
 export async function deleteDirectEnrollmentLink(
   id: string,
   supabase: SupabaseClient
 ): Promise<void> {
+  // Clear regenerated_from on any link that was regenerated FROM this one
+  await supabase
+    .from('direct_enrollment_links')
+    .update({ regenerated_from: null })
+    .eq('regenerated_from', id);
+
+  // Clear regenerated_to on any link that was regenerated TO this one
+  await supabase
+    .from('direct_enrollment_links')
+    .update({ regenerated_to: null })
+    .eq('regenerated_to', id);
+
   const { error } = await supabase
     .from('direct_enrollment_links')
     .delete()

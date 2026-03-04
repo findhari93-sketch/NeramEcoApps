@@ -311,6 +311,36 @@ export async function sendRefundRejectedNotification(
 }
 
 // ============================================
+// SUPPORT TICKETS
+// ============================================
+
+/**
+ * Send ticket confirmation notification to user
+ *
+ * Template: support_ticket_confirmation
+ * Body parameters: {{1}} = userName, {{2}} = ticketNumber, {{3}} = subject
+ */
+export async function sendTicketConfirmation(
+  phone: string,
+  data: {
+    userName: string;
+    ticketNumber: string;
+    subject: string;
+  }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'support_ticket_confirmation', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+        { type: 'text', text: data.ticketNumber },
+        { type: 'text', text: data.subject },
+      ],
+    },
+  ]);
+}
+
+// ============================================
 // DEMO CLASS
 // ============================================
 

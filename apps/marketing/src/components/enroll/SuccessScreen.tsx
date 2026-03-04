@@ -89,6 +89,8 @@ export default function SuccessScreen({ applicationNumber }: SuccessScreenProps)
           size="large"
           fullWidth
           href={APP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           endIcon={<ArrowForward />}
           sx={{
             py: 1.5,

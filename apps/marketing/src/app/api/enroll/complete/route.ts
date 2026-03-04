@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       targetExamYear,
       schoolType,
       // Phone
+      parentPhone,
       phoneVerified,
       phoneVerifiedAt,
     } = body;
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
         status: 'enrolled',
         // Personal
         father_name: fatherName || null,
+        parent_phone: parentPhone || null,
         // Location
         country: country || 'India',
         state: state || null,
@@ -171,7 +173,7 @@ export async function POST(request: NextRequest) {
       assignments_completed: 0,
       total_watch_time: 0,
       last_activity_at: null,
-      parent_contact: null,
+      parent_contact: parentPhone || null,
       emergency_contact: null,
       notes: `Direct enrollment. Application: ${applicationNumber}`,
     }, supabase);

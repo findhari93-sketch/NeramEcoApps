@@ -66,6 +66,10 @@ const nextConfig = {
       { source: '/askSeniors', destination: '/en/alumni', permanent: true },
       { source: '/settings', destination: 'https://app.neramclasses.com/settings', permanent: true },
 
+      // NATA 2026 spoke page short-URL redirects
+      { source: '/:locale/nata-2026/photo-signature', destination: '/:locale/nata-2026/photo-signature-requirements', permanent: true },
+      { source: '/:locale/nata-2026/scoring', destination: '/:locale/nata-2026/scoring-and-results', permanent: true },
+
       // Study guide pages
       { source: '/nata-syllabus-subjects', destination: '/en/nata-syllabus', permanent: true },
       { source: '/nata-preparation-guide', destination: '/en/nata-preparation-guide', permanent: true },

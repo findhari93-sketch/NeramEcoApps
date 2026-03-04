@@ -2668,6 +2668,107 @@ export interface ScoreCalculation {
 }
 
 // ============================================
+// NATA 2026 CONTENT TABLES
+// ============================================
+
+export interface NataBrochure extends Timestamps {
+  id: string;
+  version: string;
+  release_date: string;
+  year: number;
+  file_url: string;
+  file_size_bytes: number | null;
+  changelog: string | null;
+  is_current: boolean;
+  download_count: number;
+  is_active: boolean;
+  display_order: number;
+  uploaded_by: string | null;
+}
+
+export interface NataFaq extends Timestamps {
+  id: string;
+  question: Record<string, string>;
+  answer: Record<string, string>;
+  category: string;
+  page_slug: string | null;
+  year: number;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface NataAnnouncement extends Timestamps {
+  id: string;
+  text: Record<string, string>;
+  link: string | null;
+  bg_color: string;
+  text_color: string;
+  severity: 'info' | 'warning' | 'urgent';
+  year: number;
+  is_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  priority: number;
+}
+
+export interface NataBanner extends Timestamps {
+  id: string;
+  spot: string;
+  heading: Record<string, string>;
+  subtext: Record<string, string>;
+  image_url: string | null;
+  mobile_image_url: string | null;
+  cta_text: Record<string, string>;
+  cta_link: string | null;
+  is_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  display_order: number;
+}
+
+export type NataAssistanceStatus = 'pending' | 'contacted' | 'resolved' | 'closed';
+
+export interface NataAssistanceRequest extends Timestamps {
+  id: string;
+  student_name: string;
+  phone: string;
+  district: string | null;
+  school_name: string | null;
+  category: string;
+  status: NataAssistanceStatus;
+  assigned_to: string | null;
+  notes: string | null;
+}
+
+export interface CreateNataAssistanceRequestInput {
+  student_name: string;
+  phone: string;
+  district?: string;
+  school_name?: string;
+  category?: string;
+}
+
+// ============================================
+// CHATBOT CONVERSATIONS
+// ============================================
+
+export interface ChatbotConversation {
+  id: string;
+  user_id: string | null;
+  session_id: string;
+  user_message: string;
+  ai_response: string | null;
+  page_url: string | null;
+  source: string;
+  lead_name: string | null;
+  lead_phone: string | null;
+  model_used: string | null;
+  response_time_ms: number | null;
+  error: string | null;
+  created_at: string;
+}
+
+// ============================================
 // DATABASE SCHEMA TYPE
 // ============================================
 
@@ -2970,6 +3071,37 @@ export interface Database {
         Row: DirectEnrollmentLink;
         Insert: Omit<DirectEnrollmentLink, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<DirectEnrollmentLink, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      // NATA 2026 content tables (migration 20260311)
+      nata_brochures: {
+        Row: NataBrochure;
+        Insert: Omit<NataBrochure, 'id' | 'created_at' | 'updated_at' | 'download_count'> & { id?: string };
+        Update: Partial<Omit<NataBrochure, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      nata_faqs: {
+        Row: NataFaq;
+        Insert: Omit<NataFaq, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<NataFaq, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      nata_announcements: {
+        Row: NataAnnouncement;
+        Insert: Omit<NataAnnouncement, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<NataAnnouncement, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      nata_banners: {
+        Row: NataBanner;
+        Insert: Omit<NataBanner, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<NataBanner, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      nata_assistance_requests: {
+        Row: NataAssistanceRequest;
+        Insert: Omit<NataAssistanceRequest, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<NataAssistanceRequest, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      chatbot_conversations: {
+        Row: ChatbotConversation;
+        Insert: Omit<ChatbotConversation, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<ChatbotConversation, 'id' | 'created_at'>>;
       };
     };
     Views: {

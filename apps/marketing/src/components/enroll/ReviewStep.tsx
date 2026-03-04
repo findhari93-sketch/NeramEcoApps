@@ -148,6 +148,7 @@ export default function ReviewStep({
         <DetailRow label="Father's Name" value={formData.personal.fatherName} />
         <DetailRow label="Email" value={formData.personal.email} />
         <DetailRow label="Phone" value={formData.personal.phone} />
+        <DetailRow label="Parent's Phone" value={formData.personal.parentPhone} />
         <DetailRow label="Date of Birth" value={formData.personal.dateOfBirth} />
         <DetailRow label="Gender" value={formData.personal.gender} />
       </Paper>

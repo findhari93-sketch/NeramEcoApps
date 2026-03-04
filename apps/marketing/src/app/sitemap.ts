@@ -37,6 +37,19 @@ const staticPages = [
   '/privacy',
   '/terms',
   '/refund-policy',
+  // NATA 2026 hub + spoke pages
+  '/nata-2026',
+  '/nata-2026/how-to-apply',
+  '/nata-2026/eligibility',
+  '/nata-2026/syllabus',
+  '/nata-2026/exam-centers',
+  '/nata-2026/fee-structure',
+  '/nata-2026/exam-pattern',
+  '/nata-2026/photo-signature-requirements',
+  '/nata-2026/important-dates',
+  '/nata-2026/scoring-and-results',
+  '/nata-2026/dos-and-donts',
+  '/nata-2026/cutoff-calculator',
 ];
 
 // Course slugs
