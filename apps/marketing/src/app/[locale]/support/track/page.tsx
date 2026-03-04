@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
@@ -43,7 +44,9 @@ export default function TicketTrackPage({
           { name: 'Track Ticket', url: `${baseUrl}/en/support/track` },
         ])}
       />
-      <TicketTrackContent />
+      <Suspense>
+        <TicketTrackContent />
+      </Suspense>
     </>
   );
 }
