@@ -226,7 +226,7 @@ export default function Header() {
                 </Tooltip>
               )}
               {navigationLinks.map((link) => {
-                const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+                const isActive = pathname === link.href || (link.href as string !== '/' && pathname.startsWith(link.href));
                 return (
                 <Button
                   key={link.href}
@@ -470,7 +470,7 @@ export default function Header() {
             </ListItemButton>
           )}
           {navigationLinks.map((link) => {
-            const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+            const isActive = pathname === link.href || (link.href as string !== '/' && pathname.startsWith(link.href));
             return (
               <ListItemButton
                 key={link.href}
