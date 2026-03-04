@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neram Classes – AiNata | India's First AI-Enabled NATA Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --navy: #060d1f;
+    --navy2: #0b1629;
+    --gold: #e8a020;
+    --gold-light: #f4bf5a;
+    --blue: #1a8fff;
+    --blue-bright: #3eb8ff;
+    --white: #f5f0e8;
+    --muted: rgba(245,240,232,0.45);
+    --grid: rgba(255,255,255,0.035);
+    --grid2: rgba(232,160,32,0.06);
+  }
+
+  html, body { height: 100%; overflow-x: hidden; background: var(--navy); }
+
+  /* ── BACKGROUND LAYERS ── */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--navy);
+  }
+
+  /* Blueprint grid */
+  .bg-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      linear-gradient(var(--grid2) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid2) 1px, transparent 1px);
+    background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+    animation: gridShift 60s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes gridShift {
+    from { background-position: 0 0, 0 0, 0 0, 0 0; }
+    to { background-position: 40px 40px, 40px 40px, 200px 200px, 200px 200px; }
+  }
+
+  /* Radial glow from clock center */
+  .bg-glow {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 600px at 72% 50%, rgba(232,160,32,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 800px 500px at 20% 80%, rgba(26,143,255,0.05) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 300px at 80% 10%, rgba(62,184,255,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Subtle noise texture */
+  .bg-noise {
+    position: absolute; inset: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 256px;
+    pointer-events: none;
+  }
+
+  /* Floating arch lines */
+  .arch-lines {
+    position: absolute; right: 0; top: 0;
+    width: 55%; height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 64px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 700; color: var(--white);
+    letter-spacing: 0.01em;
+  }
+  .logo span { color: var(--gold); }
+  .logo-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--gold);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { transform: scale(1); opacity:1; }
+    50% { transform: scale(1.5); opacity:0.6; }
+  }
+  .nav-links { display: flex; gap: 32px; }
+  .nav-links a {
+    font-family: 'DM Sans', sans-serif; font-size: 13px;
+    font-weight: 500; color: var(--muted); text-decoration: none;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    transition: color 0.3s;
+  }
+  .nav-links a:hover { color: var(--white); }
+  .nav-cta {
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+    color: var(--navy); background: var(--gold);
+    padding: 10px 24px; border-radius: 4px;
+    text-decoration: none; letter-spacing: 0.04em;
+    transition: background 0.3s, transform 0.2s;
+  }
+  .nav-cta:hover { background: var(--gold-light); transform: translateY(-1px); }
+
+  /* ── MAIN CONTENT ── */
+  .hero-inner {
+    position: relative; z-index: 10;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    min-height: 100vh;
+    padding: 120px 64px 80px;
+    gap: 40px;
+  }
+
+  /* LEFT: Text content */
+  .hero-left { display: flex; flex-direction: column; gap: 0; }
+
+  /* Announcement badge */
+  .announce-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(232,160,32,0.1);
+    border: 1px solid rgba(232,160,32,0.3);
+    border-radius: 100px;
+    padding: 6px 14px 6px 8px;
+    width: fit-content;
+    margin-bottom: 32px;
+    animation: fadeUp 0.8s ease forwards;
+    opacity: 0; transform: translateY(16px);
+    animation-delay: 0.2s;
+  }
+  .badge-icon {
+    background: var(--gold);
+    color: var(--navy);
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; font-weight: 700;
+    padding: 3px 7px; border-radius: 100px;
+    letter-spacing: 0.05em;
+  }
+  .badge-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 500;
+    color: var(--gold-light);
+    letter-spacing: 0.03em;
+  }
+
+  /* Tamil subtitle */
+  .tamil-tag {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; font-weight: 400;
+    color: var(--muted); letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    animation: fadeUp 0.8s ease forwards;
+    opacity: 0; transform: translateY(16px);
+    animation-delay: 0.3s;
+  }
+
+  /* Main headline */
+  .headline {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(48px, 5.5vw, 76px);
+    font-weight: 600;
+    line-height: 1.05;
+    color: var(--white);
+    margin-bottom: 10px;
+    animation: fadeUp 0.9s ease forwards;
+    opacity: 0; transform: translateY(20px);
+    animation-delay: 0.45s;
+  }
+  .headline em {
+    font-style: italic;
+    color: var(--gold);
+    display: block;
+  }
+  .headline .ai-word {
+    position: relative;
+    display: inline-block;
+  }
+  .headline .ai-word::after {
+    content: '';
+    position: absolute; bottom: 2px; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--blue), var(--gold));
+    border-radius: 2px;
+    animation: lineGrow 1.2s ease forwards;
+    animation-delay: 1.4s;
+    transform-origin: left;
+    transform: scaleX(0);
+  }
+  @keyframes lineGrow { to { transform: scaleX(1); } }
+
+  .subhead {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px; font-weight: 300;
+    color: var(--muted); line-height: 1.7;
+    max-width: 480px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.9s ease forwards;
+    opacity: 0; transform: translateY(16px);
+    animation-delay: 0.65s;
+  }
+  .subhead strong { color: var(--white); font-weight: 500; }
+
+  /* Rank proof bar */
+  .rank-bar {
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 40px;
+    animation: fadeUp 0.9s ease forwards;
+    opacity: 0; transform: translateY(16px);
+    animation-delay: 0.8s;
+  }
+  .rank-item {
+    display: flex; flex-direction: column;
+    padding: 14px 20px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-right: none;
+    background: rgba(255,255,255,0.025);
+    backdrop-filter: blur(8px);
+  }
+  .rank-item:first-child { border-radius: 6px 0 0 6px; }
+  .rank-item:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 6px 6px 0; }
+  .rank-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px; font-weight: 700;
+    color: var(--gold); line-height: 1;
+  }
+  .rank-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px; font-weight: 400;
+    color: var(--muted); margin-top: 4px;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .rank-divider {
+    width: 1px; height: 52px;
+    background: rgba(255,255,255,0.07);
+  }
+
+  /* CTA row */
+  .cta-row {
+    display: flex; align-items: center; gap: 16px;
+    animation: fadeUp 0.9s ease forwards;
+    opacity: 0; transform: translateY(16px);
+    animation-delay: 1.0s;
+    flex-wrap: wrap;
+  }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--gold);
+    color: var(--navy);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 700;
+    padding: 14px 28px; border-radius: 6px;
+    text-decoration: none; letter-spacing: 0.02em;
+    transition: all 0.3s;
+    position: relative; overflow: hidden;
+  }
+  .btn-primary::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(232,160,32,0.35); }
+  .btn-primary:hover::before { opacity: 1; }
+  .btn-arrow { font-size: 18px; transition: transform 0.3s; }
+  .btn-primary:hover .btn-arrow { transform: translateX(4px); }
+
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 500;
+    text-decoration: none;
+    padding: 14px 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    transition: all 0.3s;
+  }
+  .btn-secondary:hover { color: var(--gold); border-bottom-color: var(--gold); }
+
+  /* Microsoft badge */
+  .ms-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 24px;
+    animation: fadeUp 0.9s ease forwards;
+    opacity: 0; transform: translateY(12px);
+    animation-delay: 1.15s;
+  }
+  .ms-badge-inner {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 100px;
+    padding: 6px 14px 6px 10px;
+  }
+  .ms-logo {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+    width: 16px; height: 16px;
+  }
+  .ms-logo span {
+    display: block; border-radius: 1px;
+  }
+  .ms-logo span:nth-child(1) { background: #f25022; }
+  .ms-logo span:nth-child(2) { background: #7fba00; }
+  .ms-logo span:nth-child(3) { background: #00a4ef; }
+  .ms-logo span:nth-child(4) { background: #ffb900; }
+  .ms-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; font-weight: 400;
+    color: var(--muted); letter-spacing: 0.04em;
+  }
+  .ms-text strong { color: rgba(255,255,255,0.7); font-weight: 500; }
+
+  /* ── RIGHT: CLOCK CANVAS ── */
+  .hero-right {
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    animation: fadeIn 1.2s ease forwards;
+    opacity: 0; animation-delay: 0.5s;
+  }
+
+  #clockCanvas {
+    display: block;
+    filter: drop-shadow(0 0 60px rgba(232,160,32,0.15));
+  }
+
+  /* Floating tool badges */
+  .tool-badge {
+    position: absolute;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(11,22,41,0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px; font-weight: 500; color: var(--white);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    white-space: nowrap;
+  }
+  .tool-icon { font-size: 18px; }
+  .tool-badge.t1 { top: 12%; left: -10%; animation: floatA 6s ease-in-out infinite; }
+  .tool-badge.t2 { top: 38%; right: -8%; animation: floatB 7s ease-in-out infinite; animation-delay: -2s; }
+  .tool-badge.t3 { bottom: 18%; left: -5%; animation: floatA 8s ease-in-out infinite; animation-delay: -4s; }
+
+  @keyframes floatA {
+    0%,100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes floatB {
+    0%,100% { transform: translateY(0px) translateX(0px); }
+    50% { transform: translateY(-8px) translateX(-4px); }
+  }
+
+  /* ── BOTTOM STRIP ── */
+  .bottom-strip {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    z-index: 10;
+    padding: 20px 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    background: rgba(6,13,31,0.6);
+    backdrop-filter: blur(20px);
+  }
+  .strip-scroll {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--muted);
+    letter-spacing: 0.1em;
+    display: flex; align-items: center; gap: 10px;
+    animation: fadeUp 1s ease forwards; opacity: 0;
+    animation-delay: 1.4s;
+  }
+  .scroll-line { width: 40px; height: 1px; background: rgba(255,255,255,0.15); }
+  .strip-right {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--muted);
+    letter-spacing: 0.08em;
+    animation: fadeUp 1s ease forwards; opacity: 0;
+    animation-delay: 1.5s;
+  }
+  .strip-right span { color: var(--gold); }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  /* Architectural accent lines */
+  .arch-accent {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0.25;
+  }
+
+  /* AiNata tag on right */
+  .ainata-pill {
+    position: absolute;
+    top: 8%;
+    right: 2%;
+    z-index: 20;
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, rgba(26,143,255,0.15), rgba(232,160,32,0.1));
+    border: 1px solid rgba(26,143,255,0.35);
+    border-radius: 100px;
+    padding: 8px 18px 8px 12px;
+    animation: fadeUp 1s ease forwards; opacity: 0;
+    animation-delay: 1.2s;
+  }
+  .ainata-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--blue-bright);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .ainata-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; font-weight: 700;
+    color: var(--blue-bright);
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <!-- Background layers -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+  <div class="bg-noise"></div>
+
+  <!-- Architectural SVG lines on right -->
+  <div class="arch-lines">
+    <svg width="100%" height="100%" viewBox="0 0 700 800" preserveAspectRatio="xMidYMid slice" fill="none" xmlns="http://www.w3.org/2000/svg" class="arch-accent" style="opacity:0.18; position:absolute; inset:0;">
+      <!-- Floor plan style lines -->
+      <rect x="200" y="150" width="320" height="220" stroke="#e8a020" stroke-width="0.8" stroke-dasharray="4 8"/>
+      <rect x="240" y="190" width="100" height="80" stroke="#e8a020" stroke-width="0.5"/>
+      <rect x="370" y="190" width="110" height="80" stroke="#e8a020" stroke-width="0.5"/>
+      <line x1="200" y1="310" x2="520" y2="310" stroke="#e8a020" stroke-width="0.5"/>
+      <!-- Compass rose -->
+      <circle cx="580" cy="600" r="80" stroke="#1a8fff" stroke-width="0.5" stroke-dasharray="3 6"/>
+      <circle cx="580" cy="600" r="50" stroke="#1a8fff" stroke-width="0.3"/>
+      <line x1="580" y1="520" x2="580" y2="680" stroke="#1a8fff" stroke-width="0.6"/>
+      <line x1="500" y1="600" x2="660" y2="600" stroke="#1a8fff" stroke-width="0.6"/>
+      <line x1="523" y1="543" x2="637" y2="657" stroke="#1a8fff" stroke-width="0.3" stroke-dasharray="2 4"/>
+      <line x1="637" y1="543" x2="523" y2="657" stroke="#1a8fff" stroke-width="0.3" stroke-dasharray="2 4"/>
+      <!-- Dimension arrows -->
+      <line x1="200" y1="420" x2="520" y2="420" stroke="#e8a020" stroke-width="0.4" stroke-dasharray="2 6"/>
+      <text x="350" y="416" fill="#e8a020" font-size="8" text-anchor="middle" font-family="Space Mono">3200mm</text>
+      <!-- Section lines -->
+      <line x1="150" y1="100" x2="150" y2="750" stroke="#1a8fff" stroke-width="0.4" stroke-dasharray="8 4"/>
+      <line x1="600" y1="100" x2="600" y2="200" stroke="#e8a020" stroke-width="0.4" stroke-dasharray="8 4"/>
+    </svg>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      Neram<span>Classes</span>
+    </div>
+    <div class="nav-links">
+      <a href="#">Courses</a>
+      <a href="#">AiNata Tools</a>
+      <a href="#">Rankers</a>
+      <a href="#">About</a>
+    </div>
+    <a href="#" class="nav-cta">Apply Now</a>
+  </nav>
+
+  <!-- AiNata Pill top-right -->
+  <div class="ainata-pill">
+    <div class="ainata-dot"></div>
+    <span class="ainata-text">Introducing AiNata ✦ Free</span>
+  </div>
+
+  <!-- Main grid -->
+  <div class="hero-inner">
+
+    <!-- LEFT -->
+    <div class="hero-left">
+
+      <div class="announce-badge">
+        <span class="badge-icon">NEW</span>
+        <span class="badge-text">India's First AI-Enabled NATA Learning Platform</span>
+      </div>
+
+      <div class="tamil-tag">நேரம் கிளாஸஸ் · Neram = Time · Est. 2009</div>
+
+      <h1 class="headline">
+        Your Time to<br>
+        Master <em>Architecture</em><br>
+        with <span class="ai-word">AI</span>
+      </h1>
+
+      <p class="subhead">
+        Live classes. Intelligent tools. Real results.<br>
+        <strong>AiNata</strong> — an AI-powered NATA prep companion trusted by
+        AIR toppers across JEE Paper 2 & NATA nationwide.
+      </p>
+
+      <!-- Rank proof -->
+      <div class="rank-bar">
+        <div class="rank-item">
+          <span class="rank-num">AIR 1&2</span>
+          <span class="rank-label">JEE Paper 2 · 2024&amp;25</span>
+        </div>
+        <div class="rank-item">
+          <span class="rank-num">AIR 1&2</span>
+          <span class="rank-label">NATA · 2024&amp;25</span>
+        </div>
+        <div class="rank-item">
+          <span class="rank-num">189+</span>
+          <span class="rank-label">Nata Rankers</span>
+        </div>
+        <div class="rank-item">
+          <span class="rank-num">15+</span>
+          <span class="rank-label">Years · Pudukkottai</span>
+        </div>
+      </div>
+
+      <!-- CTAs -->
+      <div class="cta-row">
+        <a href="#" class="btn-primary">
+          Explore AiNata Free Tools
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="#" class="btn-secondary">
+          Watch How It Works ↗
+        </a>
+      </div>
+
+      <!-- Microsoft badge -->
+      <div class="ms-badge">
+        <div class="ms-badge-inner">
+          <div class="ms-logo">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <span class="ms-text">Supported by <strong>Microsoft Education</strong></span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Clock Canvas + floating badges -->
+    <div class="hero-right">
+      <canvas id="clockCanvas" width="460" height="460"></canvas>
+
+      <!-- Floating tool badges -->
+      <div class="tool-badge t1">
+        <span class="tool-icon">✏️</span>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">AiNata Tool</div>
+          <div>Drawing Evaluator</div>
+        </div>
+      </div>
+      <div class="tool-badge t2">
+        <span class="tool-icon">📐</span>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">AiNata Tool</div>
+          <div>Aptitude Trainer</div>
+        </div>
+      </div>
+      <div class="tool-badge t3">
+        <span class="tool-icon">🏛️</span>
+        <div>
+          <div style="font-size:11px;color:var(--muted)">AiNata Tool</div>
+          <div>Mock NATA Exam</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom strip -->
+  <div class="bottom-strip">
+    <div class="strip-scroll">
+      <div class="scroll-line"></div>
+      SCROLL TO EXPLORE
+    </div>
+    <div class="strip-right">
+      <span>neramclasses.com</span> · NATA · JEE Paper 2 · B.Arch
+    </div>
+  </div>
+</section>
+
+<script>
+// ── ARCHITECTURAL CLOCK CANVAS ──
+const canvas = document.getElementById('clockCanvas');
+const ctx = canvas.getContext('2d');
+const CX = canvas.width / 2;
+const CY = canvas.height / 2;
+const R = 190;
+
+// Color palette
+const GOLD = '#e8a020';
+const GOLD_L = '#f4bf5a';
+const BLUE = '#1a8fff';
+const WHITE = 'rgba(245,240,232,0.9)';
+const DIM = 'rgba(245,240,232,0.2)';
+const NAVY = '#060d1f';
+
+// ── Blueprint rotating ring ──
+let ringAngle = 0;
+
+function drawBlueprintRing() {
+  // Outer dashed ring
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(ringAngle);
+  ctx.beginPath();
+  ctx.arc(0, 0, R + 22, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(26,143,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 14]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // Tick marks (architectural style)
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2;
+    const len = i % 6 === 0 ? 12 : i % 3 === 0 ? 7 : 4;
+    const r1 = R + 28;
+    const r2 = r1 + len;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+    ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+    ctx.strokeStyle = i % 6 === 0 ? 'rgba(232,160,32,0.6)' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = i % 6 === 0 ? 1.5 : 0.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCompassPoints() {
+  ctx.save();
+  ctx.translate(CX, CY);
+  const dirs = ['N', 'E', 'S', 'W'];
+  dirs.forEach((d, i) => {
+    const a = (i / 4) * Math.PI * 2 - Math.PI/2;
+    const rr = R + 50;
+    ctx.font = '700 11px "Space Mono", monospace';
+    ctx.fillStyle = d === 'N' ? GOLD : 'rgba(245,240,232,0.35)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(d, Math.cos(a) * rr, Math.sin(a) * rr);
+  });
+  ctx.restore();
+}
+
+function drawFaceDetails() {
+  // Subtle concentric circles
+  [R * 0.85, R * 0.55, R * 0.3].forEach((r, i) => {
+    ctx.beginPath();
+    ctx.arc(CX, CY, r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,255,255,0.04)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // Hour markers
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    const inner = R * 0.82;
+    const outer = R * 0.92;
+    ctx.save();
+    ctx.translate(CX, CY);
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+    ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+    ctx.strokeStyle = i === 0 ? GOLD : 'rgba(245,240,232,0.35)';
+    ctx.lineWidth = i % 3 === 0 ? 2.5 : 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Minute dots
+  for (let i = 0; i < 60; i++) {
+    if (i % 5 === 0) continue;
+    const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
+    const rr = R * 0.87;
+    ctx.beginPath();
+    ctx.arc(CX + Math.cos(a) * rr, CY + Math.sin(a) * rr, 1, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fill();
+  }
+
+  // Center NERAM text
+  ctx.font = '700 11px "Space Mono", monospace';
+  ctx.fillStyle = GOLD;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('NERAM', CX, CY - 38);
+
+  ctx.font = '300 9px "DM Sans", sans-serif';
+  ctx.fillStyle = 'rgba(245,240,232,0.3)';
+  ctx.fillText('நேரம்  ·  TIME', CX, CY + 44);
+}
+
+function drawHand(angle, length, width, color, hasCap = false) {
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(angle);
+  
+  // Architectural hand: rectangular with notch
+  const w = width;
+  const l = length;
+  const tail = length * 0.2;
+  
+  ctx.beginPath();
+  ctx.moveTo(-w/2, tail);
+  ctx.lineTo(-w/2, -l * 0.7);
+  ctx.lineTo(0, -l);
+  ctx.lineTo(w/2, -l * 0.7);
+  ctx.lineTo(w/2, tail);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  
+  if (hasCap) {
+    // Decorative notch on hour hand
+    ctx.beginPath();
+    ctx.arc(0, -l * 0.55, w/2 + 2, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(6,13,31,0.8)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, -l * 0.55, 2, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  
+  ctx.restore();
+}
+
+function drawSecondHand(angle) {
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(angle);
+  
+  // Thin architectural second hand
+  ctx.beginPath();
+  ctx.moveTo(0, R * 0.25);
+  ctx.lineTo(0, -R * 0.85);
+  ctx.strokeStyle = BLUE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  
+  // Counterbalance circle
+  ctx.beginPath();
+  ctx.arc(0, R * 0.15, 4, 0, Math.PI*2);
+  ctx.fillStyle = BLUE;
+  ctx.fill();
+  
+  ctx.restore();
+}
+
+function drawCenter() {
+  // Outer ring
+  ctx.beginPath();
+  ctx.arc(CX, CY, 10, 0, Math.PI*2);
+  ctx.fillStyle = GOLD;
+  ctx.fill();
+  
+  // Inner dot
+  ctx.beginPath();
+  ctx.arc(CX, CY, 4, 0, Math.PI*2);
+  ctx.fillStyle = NAVY;
+  ctx.fill();
+  
+  ctx.beginPath();
+  ctx.arc(CX, CY, 2, 0, Math.PI*2);
+  ctx.fillStyle = GOLD;
+  ctx.fill();
+}
+
+// Glow effect
+function drawGlow(x, y, r, color, alpha) {
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+  grad.addColorStop(0, color.replace(')', `,${alpha})`).replace('rgb', 'rgba'));
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawAiNataIndicator() {
+  // Inner "AI" arc indicator at 12 o'clock
+  ctx.save();
+  ctx.translate(CX, CY);
+  
+  // Small AI progress arc
+  const now = new Date();
+  const aiProgress = (now.getSeconds() + now.getMilliseconds()/1000) / 60;
+  
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.42, -Math.PI/2, -Math.PI/2 + aiProgress * Math.PI * 2);
+  ctx.strokeStyle = 'rgba(26,143,255,0.5)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  
+  // AI label
+  ctx.font = '600 10px "DM Sans", sans-serif';
+  ctx.fillStyle = 'rgba(62,184,255,0.6)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('AiNata', 0, 0);
+  
+  ctx.restore();
+}
+
+function tick() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const now = new Date();
+  const ms = now.getMilliseconds();
+  const sec = now.getSeconds() + ms / 1000;
+  const min = now.getMinutes() + sec / 60;
+  const hr  = (now.getHours() % 12) + min / 60;
+
+  const secAngle = (sec / 60) * Math.PI * 2 - Math.PI / 2;
+  const minAngle = (min / 60) * Math.PI * 2 - Math.PI / 2;
+  const hrAngle  = (hr  / 12) * Math.PI * 2 - Math.PI / 2;
+
+  // Ambient glow behind clock
+  drawGlow(CX, CY, R + 60, 'rgb(232,160,32)', 0.06);
+
+  // Blueprint rotating ring
+  ringAngle += 0.0008;
+  drawBlueprintRing();
+  
+  // Clock face
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(6,13,31,0.75)';
+  ctx.fill();
+  
+  // Face border
+  ctx.beginPath();
+  ctx.arc(CX, CY, R, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(232,160,32,0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  drawFaceDetails();
+  drawCompassPoints();
+  drawAiNataIndicator();
+  
+  // Hands
+  drawHand(hrAngle, R * 0.52, 7, WHITE, true);
+  drawHand(minAngle, R * 0.72, 4.5, WHITE, false);
+  drawSecondHand(secAngle);
+  drawCenter();
+
+  requestAnimationFrame(tick);
+}
+
+tick();
+</script>
+</body>
+</html>

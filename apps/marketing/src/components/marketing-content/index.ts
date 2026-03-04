@@ -6,3 +6,4 @@ export { default as AnnouncementCard } from './AnnouncementCard';
 export { default as AnnouncementsSection } from './AnnouncementsSection';
 export { default as CountdownCard } from './CountdownCard';
 export { default as StickyAchievementWidget } from './StickyAchievementWidget';
+export { useDismiss } from './useDismiss';

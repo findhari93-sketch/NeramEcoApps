@@ -8,13 +8,61 @@ import {
   TextField,
   Paper,
   Fab,
-  Badge,
   CircularProgress,
 } from '@neram/ui';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import MinimizeIcon from '@mui/icons-material/Minimize';
+import Image from 'next/image';
+
+const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
+
+/** Avatar with image and SmartToy icon fallback */
+function BotAvatar({ size = 40 }: { size?: number }) {
+  const [imgError, setImgError] = useState(false);
+
+  if (imgError) {
+    return (
+      <Box
+        sx={{
+          width: size,
+          height: size,
+          borderRadius: '50%',
+          bgcolor: 'primary.main',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <SmartToyIcon sx={{ fontSize: size * 0.55, color: 'white' }} />
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        overflow: 'hidden',
+        flexShrink: 0,
+        position: 'relative',
+      }}
+    >
+      <Image
+        src={ASSISTANT_IMG}
+        alt="NATA AI Assistant"
+        width={size}
+        height={size}
+        style={{ objectFit: 'cover' }}
+        onError={() => setImgError(true)}
+      />
+    </Box>
+  );
+}
 
 interface ChatMessage {
   role: 'user' | 'model';
@@ -39,6 +87,11 @@ function generateSessionId() {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Default bottom offset for the FAB */
+const FAB_BOTTOM = 24;
+/** Extra offset when achievement widget is visible (card height + gap) */
+const FAB_BOTTOM_SHIFTED = 120;
+
 export default function NataChatbot({ userId }: NataChatbotProps = {}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -50,6 +103,7 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
   const [leadName, setLeadName] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
   const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [achievementVisible, setAchievementVisible] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const sessionId = useMemo(() => generateSessionId(), []);
@@ -61,6 +115,16 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Listen for achievement widget visibility changes to shift FAB position
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ visible: boolean }>).detail;
+      setAchievementVisible(detail.visible);
+    };
+    window.addEventListener('achievement-widget-visibility', handler);
+    return () => window.removeEventListener('achievement-widget-visibility', handler);
+  }, []);
 
   useEffect(() => {
     if (open && inputRef.current) {
@@ -155,24 +219,60 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
 
   if (!open) {
     return (
-      <Box sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1300 }}>
-        <Badge
-          badgeContent="AI"
-          color="secondary"
-          sx={{ '& .MuiBadge-badge': { fontSize: 10, fontWeight: 700 } }}
-        >
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: achievementVisible
+            ? { xs: 60, md: FAB_BOTTOM }
+            : FAB_BOTTOM,
+          right: 24,
+          zIndex: 1300,
+          transition: { xs: 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)', md: 'none' },
+        }}
+      >
+        {/* FAB with online indicator */}
+        <Box sx={{ position: 'relative', width: 56, height: 56 }}>
           <Fab
-            color="primary"
             onClick={() => setOpen(true)}
             sx={{
               width: 56,
               height: 56,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+              p: 0,
+              overflow: 'hidden',
+              bgcolor: '#f5f5f5',
+              border: '2px solid',
+              borderColor: 'rgba(0,0,0,0.08)',
+              '&:hover': {
+                bgcolor: '#ebebeb',
+                boxShadow: '0 6px 24px rgba(0,0,0,0.28)',
+              },
             }}
           >
-            <SmartToyIcon />
+            <BotAvatar size={56} />
           </Fab>
-        </Badge>
+          {/* Online dot */}
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              bgcolor: '#44b700',
+              border: '2.5px solid white',
+              boxShadow: '0 0 0 0 rgba(68,183,0,0.4)',
+              zIndex: 1200,
+              '@keyframes onlinePulse': {
+                '0%': { boxShadow: '0 0 0 0 rgba(68,183,0,0.45)' },
+                '70%': { boxShadow: '0 0 0 7px rgba(68,183,0,0)' },
+                '100%': { boxShadow: '0 0 0 0 rgba(68,183,0,0)' },
+              },
+              animation: 'onlinePulse 2s ease-out infinite',
+            }}
+          />
+        </Box>
       </Box>
     );
   }
@@ -207,14 +307,17 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SmartToyIcon sx={{ fontSize: 20 }} />
+          <BotAvatar size={32} />
           <Box>
             <Typography variant="subtitle2" fontWeight={600} sx={{ lineHeight: 1.2 }}>
-              NATA 2026 Assistant
+              Sherine
             </Typography>
-            <Typography variant="caption" sx={{ opacity: 0.8 }}>
-              by Neram Classes
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#44b700' }} />
+              <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.65rem' }}>
+                Online
+              </Typography>
+            </Box>
           </Box>
         </Box>
         <Box>
@@ -242,9 +345,17 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
       >
         {messages.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 3 }}>
-            <SmartToyIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+              <BotAvatar size={56} />
+            </Box>
+            <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+              Sherine
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              NATA 2026 Exam Assistant
+            </Typography>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Hi! I can answer your questions about NATA 2026 - eligibility, exam pattern, fees, dates, and more.
+              Hi! I can answer your questions about NATA 2026 — eligibility, exam pattern, fees, dates, and more.
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center', mt: 2 }}>
               {SUGGESTED_QUESTIONS.map((q) => (
@@ -277,8 +388,12 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
             sx={{
               alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: '85%',
+              display: 'flex',
+              gap: 1,
+              alignItems: 'flex-start',
             }}
           >
+            {msg.role === 'model' && <BotAvatar size={24} />}
             <Box
               sx={{
                 px: 1.5,

@@ -19,6 +19,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { useDismiss } from './useDismiss';
 
 /** Pages where Tawk.to chat lives — hide widget to avoid overlap */
 const HIDDEN_PATHS = ['/contact', '/enroll'];
@@ -265,7 +266,6 @@ function ItemNavigation({
 export default function StickyAchievementWidget({ locale = 'en' }: { locale?: string }) {
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dismissed, setDismissed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -275,6 +275,10 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const router = useRouter();
   const pathname = usePathname();
+
+  // Persistent 24-hour dismissal — keyed by the first (latest) achievement ID
+  const latestId = items.length > 0 ? items[0].id : null;
+  const [dismissed, dismiss] = useDismiss('achievement', latestId);
 
   // Hide on pages where Tawk.to chat widget is active (avoids overlap)
   const isHiddenPage = HIDDEN_PATHS.some((p) => pathname.includes(p));
@@ -302,12 +306,25 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
     }
   }, [loading, items.length, dismissed]);
 
+  // Broadcast visibility so other floating widgets (e.g. chatbot) can adjust position
+  useEffect(() => {
+    const shouldShow = visible && !dismissed && !isHiddenPage;
+    window.dispatchEvent(
+      new CustomEvent('achievement-widget-visibility', { detail: { visible: shouldShow } }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent('achievement-widget-visibility', { detail: { visible: false } }),
+      );
+    };
+  }, [visible, dismissed, isHiddenPage]);
+
   const handleDismiss = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    setDismissed(true);
+    dismiss();
     setVisible(false);
     setMobileOpen(false);
-  }, []);
+  }, [dismiss]);
 
   const handlePrev = useCallback(
     (e: React.MouseEvent) => {

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Box, Typography, Chip, IconButton } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import { useDismiss } from './useDismiss';
 
 interface DateItem {
   id: string;
@@ -31,8 +32,10 @@ function calculateTimeLeft(targetDate: string) {
 export default function ImportantDateBanner({ locale = 'en' }: { locale?: string }) {
   const [dateItem, setDateItem] = useState<DateItem | null>(null);
   const [timeLeft, setTimeLeft] = useState<ReturnType<typeof calculateTimeLeft>>(null);
-  const [dismissed, setDismissed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+
+  // Persistent 24-hour dismissal
+  const [dismissed, dismiss] = useDismiss('important_date', dateItem?.id ?? null);
 
   useEffect(() => {
     async function fetchDate() {
@@ -139,7 +142,7 @@ export default function ImportantDateBanner({ locale = 'en' }: { locale?: string
       {/* Dismiss button */}
       <IconButton
         size="small"
-        onClick={() => setDismissed(true)}
+        onClick={() => dismiss()}
         sx={{
           color: 'white',
           position: { xs: 'absolute', sm: 'static' },
