@@ -28,7 +28,7 @@ import type { DirectEnrollmentLink } from '@neram/database';
 import InvoiceDownload from './InvoiceDownload';
 import ConfirmDialog from './ConfirmDialog';
 
-const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?token=`;
+const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com'}/en/enroll?token=`;
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
