@@ -65,7 +65,6 @@ export default function YouTubeSection() {
 
   const handleSubscribeSuccess = ({ couponCode }: { couponCode: string; discount: number }) => {
     setSubscribeModalOpen(false);
-    // Navigate to the reward page to show the coupon
     router.push(`/en/youtube-reward?coupon=${couponCode}`);
   };
 
@@ -74,21 +73,20 @@ export default function YouTubeSection() {
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          bgcolor: 'grey.50',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
           minHeight: 400,
         }}
       >
-        <CircularProgress />
+        <CircularProgress sx={{ color: 'primary.main' }} />
       </Box>
     );
   }
 
   if (error && !stats) {
     return (
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Alert severity="error">{error}</Alert>
         </Container>
@@ -97,8 +95,21 @@ export default function YouTubeSection() {
   }
 
   return (
-    <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-      <Container maxWidth="lg">
+    <Box
+      sx={{
+        py: { xs: 6, md: 10 },
+        position: 'relative',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          background:
+            'radial-gradient(ellipse at 80% 20%, rgba(26,143,255,0.05) 0%, transparent 50%)',
+          pointerEvents: 'none',
+        },
+      }}
+    >
+      <Container maxWidth="lg" sx={{ position: 'relative' }}>
         {/* Section Header */}
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           {/* YouTube Logo */}
@@ -129,7 +140,7 @@ export default function YouTubeSection() {
           </Typography>
 
           <Typography
-            variant="h6"
+            variant="body1"
             color="text.secondary"
             sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}
           >
@@ -141,12 +152,14 @@ export default function YouTubeSection() {
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap', mb: 4 }}>
               <Chip
                 label={`${stats.subscriberCount} ${t('subscribers')}`}
-                color="error"
                 sx={{
                   fontSize: '1rem',
                   py: 2.5,
                   px: 1,
                   fontWeight: 600,
+                  bgcolor: 'rgba(255,0,0,0.15)',
+                  color: '#FF4444',
+                  border: '1px solid rgba(255,0,0,0.3)',
                 }}
               />
               <Chip
@@ -156,6 +169,8 @@ export default function YouTubeSection() {
                   fontSize: '1rem',
                   py: 2.5,
                   px: 1,
+                  borderColor: 'rgba(232,160,32,0.4)',
+                  color: '#e8a020',
                 }}
               />
             </Box>
@@ -178,9 +193,10 @@ export default function YouTubeSection() {
           sx={{
             textAlign: 'center',
             p: { xs: 3, md: 4 },
-            borderRadius: 1,
-            bgcolor: 'background.paper',
-            boxShadow: 2,
+            borderRadius: 2,
+            bgcolor: 'rgba(11,22,41,0.75)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.08)',
           }}
         >
           <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
@@ -202,8 +218,10 @@ export default function YouTubeSection() {
               fontWeight: 600,
               borderRadius: 1,
               textTransform: 'none',
+              bgcolor: '#CC0000',
               boxShadow: '0 4px 14px rgba(255, 0, 0, 0.3)',
               '&:hover': {
+                bgcolor: '#FF0000',
                 boxShadow: '0 6px 20px rgba(255, 0, 0, 0.4)',
               },
             }}
@@ -236,7 +254,7 @@ export default function YouTubeSection() {
             href={YOUTUBE_CHANNEL_URL}
             target="_blank"
             rel="noopener noreferrer"
-            sx={{ textTransform: 'none' }}
+            sx={{ textTransform: 'none', color: 'primary.main' }}
           >
             {t('viewChannel')}
           </Button>

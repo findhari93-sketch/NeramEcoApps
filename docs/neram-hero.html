@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Neram Classes – AiNata | India's First AI-Enabled NATA Platform</title>
+<title>Neram Classes – aiArchitek | India's First AI-Enabled NATA Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -407,8 +407,8 @@
     opacity: 0.25;
   }
 
-  /* AiNata tag on right */
-  .ainata-pill {
+  /* aiArchitek tag on right */
+  .aiArchitek-pill {
     position: absolute;
     top: 8%;
     right: 2%;
@@ -421,12 +421,12 @@
     animation: fadeUp 1s ease forwards; opacity: 0;
     animation-delay: 1.2s;
   }
-  .ainata-dot {
+  .aiArchitek-dot {
     width: 6px; height: 6px; border-radius: 50%;
     background: var(--blue-bright);
     animation: pulse 1.5s ease-in-out infinite;
   }
-  .ainata-text {
+  .aiArchitek-text {
     font-family: 'Space Mono', monospace;
     font-size: 11px; font-weight: 700;
     color: var(--blue-bright);
@@ -474,17 +474,17 @@
     </div>
     <div class="nav-links">
       <a href="#">Courses</a>
-      <a href="#">AiNata Tools</a>
+      <a href="#">aiArchitek Tools</a>
       <a href="#">Rankers</a>
       <a href="#">About</a>
     </div>
     <a href="#" class="nav-cta">Apply Now</a>
   </nav>
 
-  <!-- AiNata Pill top-right -->
-  <div class="ainata-pill">
-    <div class="ainata-dot"></div>
-    <span class="ainata-text">Introducing AiNata ✦ Free</span>
+  <!-- aiArchitek Pill top-right -->
+  <div class="aiArchitek-pill">
+    <div class="aiArchitek-dot"></div>
+    <span class="aiArchitek-text">Introducing aiArchitek ✦ Free</span>
   </div>
 
   <!-- Main grid -->
@@ -508,7 +508,7 @@
 
       <p class="subhead">
         Live classes. Intelligent tools. Real results.<br>
-        <strong>AiNata</strong> — an AI-powered NATA prep companion trusted by
+        <strong>aiArchitek</strong> — an AI-powered NATA prep companion trusted by
         AIR toppers across JEE Paper 2 & NATA nationwide.
       </p>
 
@@ -535,7 +535,7 @@
       <!-- CTAs -->
       <div class="cta-row">
         <a href="#" class="btn-primary">
-          Explore AiNata Free Tools
+          Explore aiArchitek Free Tools
           <span class="btn-arrow">→</span>
         </a>
         <a href="#" class="btn-secondary">
@@ -563,21 +563,21 @@
       <div class="tool-badge t1">
         <span class="tool-icon">✏️</span>
         <div>
-          <div style="font-size:11px;color:var(--muted)">AiNata Tool</div>
+          <div style="font-size:11px;color:var(--muted)">aiArchitek Tool</div>
           <div>Drawing Evaluator</div>
         </div>
       </div>
       <div class="tool-badge t2">
         <span class="tool-icon">📐</span>
         <div>
-          <div style="font-size:11px;color:var(--muted)">AiNata Tool</div>
+          <div style="font-size:11px;color:var(--muted)">aiArchitek Tool</div>
           <div>Aptitude Trainer</div>
         </div>
       </div>
       <div class="tool-badge t3">
         <span class="tool-icon">🏛️</span>
         <div>
-          <div style="font-size:11px;color:var(--muted)">AiNata Tool</div>
+          <div style="font-size:11px;color:var(--muted)">aiArchitek Tool</div>
           <div>Mock NATA Exam</div>
         </div>
       </div>
@@ -797,7 +797,7 @@ function drawGlow(x, y, r, color, alpha) {
   ctx.fill();
 }
 
-function drawAiNataIndicator() {
+function drawaiArchitekIndicator() {
   // Inner "AI" arc indicator at 12 o'clock
   ctx.save();
   ctx.translate(CX, CY);
@@ -817,7 +817,7 @@ function drawAiNataIndicator() {
   ctx.fillStyle = 'rgba(62,184,255,0.6)';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('AiNata', 0, 0);
+  ctx.fillText('aiArchitek', 0, 0);
   
   ctx.restore();
 }
@@ -857,7 +857,7 @@ function tick() {
 
   drawFaceDetails();
   drawCompassPoints();
-  drawAiNataIndicator();
+  drawaiArchitekIndicator();
   
   // Hands
   drawHand(hrAngle, R * 0.52, 7, WHITE, true);

@@ -29,10 +29,14 @@ export default function VideoCard({ video }: VideoCardProps) {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        bgcolor: 'rgba(11,22,41,0.75)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.08)',
         transition: 'all 0.3s ease',
         '&:hover': {
           transform: 'translateY(-4px)',
-          boxShadow: 6,
+          boxShadow: '0 12px 40px rgba(26,143,255,0.12)',
+          borderColor: 'rgba(26,143,255,0.2)',
         },
       }}
     >

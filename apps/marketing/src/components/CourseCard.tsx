@@ -40,10 +40,14 @@ export default function CourseCard({ course }: CourseCardProps) {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        bgcolor: 'rgba(11,22,41,0.75)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.08)',
         transition: 'all 0.3s ease-in-out',
         '&:hover': {
           transform: 'translateY(-8px)',
-          boxShadow: 6,
+          boxShadow: '0 12px 40px rgba(232,160,32,0.15)',
+          borderColor: 'rgba(232,160,32,0.25)',
         },
       }}
     >
@@ -52,10 +56,10 @@ export default function CourseCard({ course }: CourseCardProps) {
         component="div"
         sx={{
           height: 200,
-          bgcolor: 'primary.light',
+          bgcolor: 'rgba(11,22,41,0.9)',
           position: 'relative',
           overflow: 'hidden',
-          backgroundImage: `url(${course.image})`,
+          backgroundImage: `linear-gradient(to top, rgba(11,22,41,0.6) 0%, transparent 50%), url(${course.image})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
@@ -66,8 +70,11 @@ export default function CourseCard({ course }: CourseCardProps) {
             label={course.level}
             size="small"
             sx={{
-              bgcolor: 'background.paper',
+              bgcolor: 'rgba(6,13,31,0.8)',
+              color: '#e8a020',
               fontWeight: 600,
+              border: '1px solid rgba(232,160,32,0.3)',
+              backdropFilter: 'blur(8px)',
             }}
           />
         </Box>
@@ -132,7 +139,7 @@ export default function CourseCard({ course }: CourseCardProps) {
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
               {course.features.slice(0, 3).map((feature, index) => (
-                <Chip key={index} label={feature} size="small" variant="outlined" />
+                <Chip key={index} label={feature} size="small" variant="outlined" sx={{ borderColor: 'rgba(255,255,255,0.15)', color: 'text.secondary' }} />
               ))}
             </Box>
           </Box>
@@ -142,11 +149,19 @@ export default function CourseCard({ course }: CourseCardProps) {
       {/* Card Actions */}
       <CardActions sx={{ p: 3, pt: 0 }}>
         <Button
-          variant="contained"
+          variant="outlined"
           fullWidth
           component={Link}
           href={`/${locale}/courses/${course.slug}`}
-          sx={{ py: 1.2 }}
+          sx={{
+            py: 1.2,
+            borderColor: 'rgba(232,160,32,0.4)',
+            color: '#e8a020',
+            '&:hover': {
+              bgcolor: 'rgba(232,160,32,0.1)',
+              borderColor: '#e8a020',
+            },
+          }}
         >
           Learn More
         </Button>

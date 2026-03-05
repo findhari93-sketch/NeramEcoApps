@@ -1,0 +1,81 @@
+'use client';
+
+import { Box, Typography } from '@neram/ui';
+
+interface RankItem {
+  value: string;
+  label: string;
+}
+
+const rankItems: RankItem[] = [
+  { value: 'AIR 1&2', label: 'JEE b.arch · 2024 & 25' },
+  { value: 'AIR 1&2', label: 'NATA · 2024&25' },
+  { value: '189', label: 'NATA Score' },
+  { value: '10+', label: 'Years' },
+];
+
+/**
+ * RankBar — horizontal stat strip showing key achievements
+ */
+export default function RankBar() {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        mb: { xs: 2, md: 3 },
+        opacity: 0,
+        transform: 'translateY(16px)',
+        animation: 'neramFadeUp 0.9s ease forwards',
+        animationDelay: '0.8s',
+        overflowX: { xs: 'auto', md: 'visible' },
+        flexWrap: { md: 'wrap' },
+        '&::-webkit-scrollbar': { display: 'none' },
+        scrollbarWidth: 'none',
+      }}
+    >
+      {rankItems.map((item, i) => (
+        <Box
+          key={i}
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            px: { xs: 1.5, md: 2.5 },
+            py: { xs: 1, md: 1.75 },
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRight: i < rankItems.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.07)',
+            bgcolor: 'rgba(255,255,255,0.025)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: i === 0 ? '6px 0 0 6px' : i === rankItems.length - 1 ? '0 6px 6px 0' : 0,
+            minWidth: 'max-content',
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily: '"Space Mono", monospace',
+              fontSize: { xs: '16px', md: '22px' },
+              fontWeight: 700,
+              color: 'primary.main',
+              lineHeight: 1,
+            }}
+          >
+            {item.value}
+          </Typography>
+          <Typography
+            sx={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: '10px',
+              fontWeight: 400,
+              color: 'text.secondary',
+              mt: 0.5,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {item.label}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}

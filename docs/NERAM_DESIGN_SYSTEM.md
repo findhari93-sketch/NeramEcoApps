@@ -1,5 +1,5 @@
 # Neram Classes — Design System & Migration Plan
-**From: neramclasses.com (current) → "AiNata Era" redesign**  
+**From: neramclasses.com (current) → "aiArchitek Era" redesign**  
 *Version 1.0 · March 2026 · Prepared by Claude*
 
 ---
@@ -32,7 +32,7 @@ Professional · Technical · Warm · Aspirational · Tamil Pride
 ```
 
 ### What Makes This Different from the Current Site
-| Current Site | AiNata Redesign |
+| Current Site | aiArchitek Redesign |
 |---|---|
 | Flat blue background | Animated blueprint grid, radial glow |
 | Generic coaching aesthetics | Architecture-inspired visual language |
@@ -540,7 +540,7 @@ export default function NataCoachingPage() {
 
 ### Phase 1 — Hero Section (neramclasses.com/en)
 
-**Goal:** Transform the current flat-blue hero into the clock-compass AiNata design.
+**Goal:** Transform the current flat-blue hero into the clock-compass aiArchitek design.
 
 #### Hero Section Component Structure
 
@@ -549,7 +549,7 @@ export default function NataCoachingPage() {
 <Box component="section" sx={heroStyles}>
   <BlueprintBackground />        {/* animated grid + glow SVGs */}
   <HeroNav />                    {/* logo + links + CTA */}
-  <AiNataBadge />                {/* top-right "Introducing AiNata" pill */}
+  <aiArchitekBadge />                {/* top-right "Introducing aiArchitek" pill */}
 
   <Grid container sx={{ minHeight: '100vh', pt: '120px', pb: '80px' }}>
     <Grid item xs={12} md={6}>
@@ -573,7 +573,7 @@ Based on research of neramclasses.com, these sections must remain but get restyl
 | **Why Neram** (15yr, Microsoft, IIT/NIT faculty) | Plain cards | Dark glass cards, gold numbers |
 | **Courses** (NATA, JEE, Crash) | Basic listing | Feature cards with animated border |
 | **Results / Rankers** (AIR 1&2, 189 rankers) | Text section | Dramatic stat display, monospace numbers |
-| **AiNata Tools Intro** | ❌ Doesn't exist | **NEW: 6-card tool grid** |
+| **aiArchitek Tools Intro** | ❌ Doesn't exist | **NEW: 6-card tool grid** |
 | **Testimonials** | Basic cards | Dark carousel, gold quote marks |
 | **Centers / Locations** | Text list | Map + city chip grid |
 | **FAQ** | Accordion | Styled MUI accordion (dark) |
@@ -611,7 +611,7 @@ sx={{ display: { xs: 'none', lg: 'flex' } }}
 
 ```
 [ ] Courses listing page → dark theme, card grid
-[ ] NATA-2026 spoke page → new layout, AiNata tools grid
+[ ] NATA-2026 spoke page → new layout, aiArchitek tools grid
 [ ] Results / Rankers page → dramatic stat-heavy dark design
 [ ] Faculty page → profile cards, dark theme
 ```
@@ -639,7 +639,7 @@ Strategy: Wrap in `<NeramThemeProvider forceLight>` — MUI components instantly
 ### Phase 4 — Blog / FAQ / NATA-2026 Hub
 
 ```
-[ ] /nata-2026 hub page (new) → dark theme, full AiNata branding
+[ ] /nata-2026 hub page (new) → dark theme, full aiArchitek branding
 [ ] Blog → light theme (readability)
 [ ] FAQ → dark theme accordion
 ```
@@ -667,8 +667,8 @@ Your `llms.txt` and structured content are already good. With the new design:
 ✅ Keep "AIR 1 & 2, 2024 & 2025" as text in DOM (not just in canvas)
 ✅ Keep "India's First AI-Enabled NATA Platform" in <h1> or prominent <p>
 ✅ Keep Microsoft Education mention as text
-✅ Add structured data for new AiNata tools section:
-   "@type": "SoftwareApplication", "name": "AiNata Drawing Evaluator" etc.
+✅ Add structured data for new aiArchitek tools section:
+   "@type": "SoftwareApplication", "name": "aiArchitek Drawing Evaluator" etc.
 ✅ Keep FAQ schema for NATA/JEE questions
 ```
 
@@ -695,7 +695,7 @@ Your `llms.txt` and structured content are already good. With the new design:
 
 ---
 
-## 6. AiNata Tools Section — New Homepage Block
+## 6. aiArchitek Tools Section — New Homepage Block
 
 This is new content that doesn't exist yet. Add it below the hero.
 
@@ -714,12 +714,12 @@ This is new content that doesn't exist yet. Add it below the hero.
 
 ```
 Dark section, same blueprint background at 30% opacity
-Section title: "Meet AiNata — Your Free AI Prep Companion"
+Section title: "Meet aiArchitek — Your Free AI Prep Companion"
 Tamil subtitle: "இலவசமாக படியுங்கள்"
 6 cards in 3x2 grid (2x3 on mobile)
 Each card: Tool icon, name, 1-line description, "Try Free →" button
 Bottom: "All tools are free. No sign-up required for most tools."
-Powered by AiNata badge
+Powered by aiArchitek badge
 ```
 
 ---
@@ -734,8 +734,8 @@ ClockCanvas/             → the living clock, accepts size prop
 AnnounceBadge/           → "NEW · India's First..." pill
 RankBar/                 → stat strip (AIR 1, 189 rankers, etc.)
 GlassCard/               → backdrop-blur card, reusable
-FloatingToolBadge/       → the floating "AiNata Tool" cards
-AiNataPill/              → "Introducing AiNata" top-right badge
+FloatingToolBadge/       → the floating "aiArchitek Tool" cards
+aiArchitekPill/              → "Introducing aiArchitek" top-right badge
 MicrosoftBadge/          → MS Education badge with logo
 TamilTag/                → bilingual label component
 SectionDivider/          → architectural line divider between sections
@@ -796,11 +796,11 @@ Add to your root `CLAUDE.md` so Claude Code remembers this context:
 - Gold = tradition, warmth, Tamil identity
 - Blue = AI, technology, Microsoft
 
-## AiNata
+## aiArchitek
 - Brand name for our free AI tools platform
 - Lives at app.neramclasses.com/tools
-- Introduced via hero badge: "Introducing AiNata · Free"
-- Always show AiNata as electric blue (#1a8fff)
+- Introduced via hero badge: "Introducing aiArchitek · Free"
+- Always show aiArchitek as electric blue (#1a8fff)
 
 ## SEO Rules (NEVER break)
 - Never change <h1> text on existing pages
@@ -815,7 +815,7 @@ Add to your root `CLAUDE.md` so Claude Code remembers this context:
 
 ```
 Gold  (#e8a020) → Primary CTA buttons, numbers/stats, brand accents, hover states
-Blue  (#1a8fff) → AI features, AiNata branding, second-hand of clock, links
+Blue  (#1a8fff) → AI features, aiArchitek branding, second-hand of clock, links
 Navy  (#060d1f) → Page background, button text on gold
 Navy2 (#0b1629) → Cards, elevated surfaces
 Cream (#f5f0e8) → Primary text on dark

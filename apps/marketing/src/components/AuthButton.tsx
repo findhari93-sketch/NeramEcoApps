@@ -12,9 +12,17 @@ import {
   Divider,
   CircularProgress,
   LoginModal,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  LanguageIcon,
+  ListItemIcon,
 } from '@neram/ui';
 import { useFirebaseAuth, firebaseSignOut, signInWithCustomToken } from '@neram/auth';
 import { useGoToApp } from '@/hooks/useGoToApp';
+import { usePathname, useRouter } from '@/i18n/routing';
+import { useParams } from 'next/navigation';
+import { locales, localeLabels, type Locale } from '@/i18n';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -26,7 +34,12 @@ function AuthButtonInner() {
   const [signingOut, setSigningOut] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [langDialogOpen, setLangDialogOpen] = useState(false);
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const params = useParams();
+  const locale = params.locale as Locale;
 
   // Handle custom token from cross-domain auth (backward compatibility)
   useEffect(() => {
@@ -101,6 +114,16 @@ function AuthButtonInner() {
   const handleGoToApp = () => {
     handleMenuClose();
     goToApp();
+  };
+
+  const handleOpenLangDialog = () => {
+    handleMenuClose();
+    setLangDialogOpen(true);
+  };
+
+  const handleLocaleChange = (newLocale: Locale) => {
+    router.replace(pathname, { locale: newLocale });
+    setLangDialogOpen(false);
   };
 
   // Loading state
@@ -194,10 +217,44 @@ function AuthButtonInner() {
         <MenuItem onClick={handleGoToApp}>
           Go to App
         </MenuItem>
+        <MenuItem onClick={handleOpenLangDialog}>
+          <ListItemIcon sx={{ minWidth: 28 }}>
+            <LanguageIcon fontSize="small" />
+          </ListItemIcon>
+          Change Language
+        </MenuItem>
         <MenuItem onClick={handleSignOut} disabled={signingOut}>
           {signingOut ? 'Signing out...' : 'Sign Out'}
         </MenuItem>
       </Menu>
+
+      {/* Language Dialog */}
+      <Dialog
+        open={langDialogOpen}
+        onClose={() => setLangDialogOpen(false)}
+        PaperProps={{ sx: { minWidth: 280, borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ pb: 1 }}>Change Language</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: '8px !important' }}>
+          {locales.map((loc) => (
+            <Button
+              key={loc}
+              variant={loc === locale ? 'contained' : 'outlined'}
+              fullWidth
+              onClick={() => handleLocaleChange(loc)}
+              sx={{
+                textTransform: 'none',
+                justifyContent: 'flex-start',
+                px: 2,
+                py: 1,
+                borderRadius: '8px',
+              }}
+            >
+              {localeLabels[loc]}
+            </Button>
+          ))}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

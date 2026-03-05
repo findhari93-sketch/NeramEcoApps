@@ -69,23 +69,33 @@ export default function Footer() {
     return `/${locale}${path}`;
   };
 
-  const linkStyle = { opacity: 0.9, '&:hover': { opacity: 1 }, fontSize: '0.85rem' };
+  const linkStyle = { opacity: 0.7, color: '#f5f0e8', '&:hover': { opacity: 1, color: '#e8a020' }, fontSize: '0.85rem', transition: 'color 0.2s' };
 
   return (
     <Box
       component="footer"
       sx={{
-        bgcolor: 'primary.dark',
-        color: 'primary.contrastText',
+        bgcolor: '#030812',
+        color: '#f5f0e8',
         pt: { xs: 6, md: 8 },
         pb: 3,
+        position: 'relative',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          backgroundImage:
+            'linear-gradient(rgba(232,160,32,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(232,160,32,0.03) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+          pointerEvents: 'none',
+        },
       }}
     >
       <Container maxWidth="lg">
         <Grid container spacing={4}>
           {/* About Section */}
           <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: '#e8a020' }}>
               Neram Classes
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, opacity: 0.9 }}>
@@ -108,9 +118,9 @@ export default function Footer() {
                 height: 22,
                 fontSize: '0.7rem',
                 fontWeight: 600,
-                bgcolor: 'rgba(255,255,255,0.15)',
-                color: 'inherit',
-                border: '1px solid rgba(255,255,255,0.3)',
+                bgcolor: 'rgba(232,160,32,0.1)',
+                color: '#e8a020',
+                border: '1px solid rgba(232,160,32,0.3)',
                 '& .MuiChip-label': { px: 1.5 },
               }}
             />
@@ -248,7 +258,7 @@ export default function Footer() {
           </Grid>
         </Grid>
 
-        <Divider sx={{ my: 4, bgcolor: 'rgba(255, 255, 255, 0.2)' }} />
+        <Divider sx={{ my: 4, bgcolor: 'rgba(232,160,32,0.15)' }} />
 
         {/* Bottom Section */}
         <Grid container spacing={2} alignItems="center">

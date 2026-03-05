@@ -1,3 +1,20 @@
+/* Museo font for logo */
+@font-face {
+  font-family: 'Museo';
+  src: url('/fonts/Museo300-Regular.woff') format('woff');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Museo';
+  src: url('/fonts/Museo700-Regular.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ============================================
    CSS Baseline (replaces MUI CssBaseline)
    Applied via CSS to avoid hydration mismatches
@@ -123,24 +140,167 @@ body::after {
 }
 
 @keyframes neram-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes neram-fade-out {
-  to { opacity: 0; visibility: hidden; }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
 /* Achievement celebration animations */
 @keyframes goldBorderPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(249, 168, 37, 0); }
-  25% { box-shadow: 0 0 20px 4px rgba(249, 168, 37, 0.4); }
-  50% { box-shadow: 0 0 0 0 rgba(249, 168, 37, 0); }
-  75% { box-shadow: 0 0 20px 4px rgba(249, 168, 37, 0.3); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 168, 37, 0);
+  }
+
+  25% {
+    box-shadow: 0 0 20px 4px rgba(249, 168, 37, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 0 rgba(249, 168, 37, 0);
+  }
+
+  75% {
+    box-shadow: 0 0 20px 4px rgba(249, 168, 37, 0.3);
+  }
 }
 
 @keyframes trophyBounce {
-  0%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-6px); }
-  50% { transform: translateY(0); }
-  70% { transform: translateY(-3px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-6px);
+  }
+
+  50% {
+    transform: translateY(0);
+  }
+
+  70% {
+    transform: translateY(-3px);
+  }
+}
+
+/* ============================================
+   aiArchitek 2026 Design System Utilities
+   ============================================ */
+
+/* Blueprint grid background (static) */
+.neram-blueprint-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(232, 160, 32, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 160, 32, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+}
+
+/* Blueprint grid with slow animation */
+.neram-blueprint-bg-animated {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(232, 160, 32, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 160, 32, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+  animation: neramGridShift 60s linear infinite;
+}
+
+@keyframes neramGridShift {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
+
+  to {
+    background-position: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+  }
+}
+
+/* Glass card utility */
+.neram-glass {
+  background: rgba(11, 22, 41, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+}
+
+/* Floating badge animations */
+@keyframes neramFloatA {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes neramFloatB {
+
+  0%,
+  100% {
+    transform: translateY(0px) translateX(0px);
+  }
+
+  50% {
+    transform: translateY(-8px) translateX(-4px);
+  }
+}
+
+/* Fade up animation for staggered reveals */
+@keyframes neramFadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse animation for dots/badges */
+@keyframes neramPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.5);
+    opacity: 0.6;
+  }
+}
+
+/* Gradient line grow animation */
+@keyframes neramLineGrow {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Smooth opacity blink for AI underline */
+@keyframes neramLineBlink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }

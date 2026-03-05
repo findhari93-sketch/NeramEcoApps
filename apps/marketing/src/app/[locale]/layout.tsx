@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Poppins, Inter, Noto_Sans_Tamil } from 'next/font/google';
+import { Poppins, Inter, Noto_Sans_Tamil, Cormorant_Garamond, DM_Sans, Space_Mono } from 'next/font/google';
 import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
 import { locales } from '@/i18n';
 import Header from '@/components/Header';
@@ -31,6 +31,28 @@ const notoSansTamil = Noto_Sans_Tamil({
   weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-noto-tamil',
+});
+
+// aiArchitek Era 2026 fonts
+const cormorantGaramond = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['400', '600', '700'],
+  display: 'swap',
+  variable: '--font-cormorant',
+});
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-dm-sans',
+});
+
+const spaceMono = Space_Mono({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  display: 'swap',
+  variable: '--font-space-mono',
 });
 
 export function generateStaticParams() {
@@ -127,7 +149,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${poppins.variable} ${inter.variable} ${notoSansTamil.variable}`}
+      className={`${poppins.variable} ${inter.variable} ${notoSansTamil.variable} ${cormorantGaramond.variable} ${dmSans.variable} ${spaceMono.variable}`}
       suppressHydrationWarning
     >
       <head />
