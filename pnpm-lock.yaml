@@ -136,6 +136,9 @@ importers:
       '@mui/icons-material':
         specifier: ^5.15.0
         version: 5.18.0(@mui/material@5.18.0)(@types/react@18.3.27)(react@18.3.1)
+      '@mui/material':
+        specifier: ^5.15.0
+        version: 5.18.0(@emotion/react@11.14.0)(@emotion/styled@11.14.1)(@types/react@18.3.27)(react-dom@18.3.1)(react@18.3.1)
       '@neram/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -3385,7 +3388,7 @@ packages:
       '@types/react':
         optional: true
     dependencies:
-      '@babel/runtime': 7.28.4
+      '@babel/runtime': 7.28.6
       '@emotion/react': 11.14.0(@types/react@18.3.27)(react@18.3.1)
       '@emotion/styled': 11.14.1(@emotion/react@11.14.0)(@types/react@18.3.27)(react@18.3.1)
       '@mui/core-downloads-tracker': 5.18.0
