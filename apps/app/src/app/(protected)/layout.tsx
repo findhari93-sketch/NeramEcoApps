@@ -7,6 +7,7 @@ import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
 import { OnboardingWizard } from '@/components/onboarding';
 import AppShell from '@/components/shell/AppShell';
+import { SidebarProvider } from '@/contexts/SidebarContext';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
@@ -321,21 +322,23 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   return (
-    <Suspense
-      fallback={
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            minHeight: '100vh',
-          }}
-        >
-          <Typography>Loading...</Typography>
-        </Box>
-      }
-    >
-      <ProtectedLayoutInner>{children}</ProtectedLayoutInner>
-    </Suspense>
+    <SidebarProvider>
+      <Suspense
+        fallback={
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '100vh',
+            }}
+          >
+            <Typography>Loading...</Typography>
+          </Box>
+        }
+      >
+        <ProtectedLayoutInner>{children}</ProtectedLayoutInner>
+      </Suspense>
+    </SidebarProvider>
   );
 }

@@ -84,8 +84,19 @@ function CenterCard({
   const hasNotes = !!center.notes;
 
   const openDirections = () => {
+    // Use institute name + address for accurate Google Maps resolution
+    const parts: string[] = [];
+    if (center.probable_center_1) parts.push(center.probable_center_1);
+    if (center.center_1_address) parts.push(center.center_1_address);
+
+    // Fallback to city + state if no center name available
+    if (parts.length === 0) {
+      parts.push(center.city_brochure, center.state);
+    }
+
+    const destination = encodeURIComponent(parts.join(', '));
     window.open(
-      `https://www.google.com/maps/dir/?api=1&destination=${center.latitude},${center.longitude}`,
+      `https://www.google.com/maps/dir/?api=1&destination=${destination}`,
       '_blank'
     );
   };

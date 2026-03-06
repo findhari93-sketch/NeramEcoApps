@@ -1,7 +1,7 @@
 {
-  "name": "aiArchitek — Free NATA Exam Preparation App",
+  "name": "aiArchitek — From Cutoffs to Colleges",
   "short_name": "aiArchitek",
-  "description": "India's best free NATA preparation app. AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder. By IIT/NIT alumni at Neram Classes.",
+  "description": "Your complete architecture exam companion. From cutoffs to colleges — AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder & more. By Neram Classes.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#060d1f",

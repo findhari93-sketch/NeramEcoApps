@@ -2695,6 +2695,8 @@ export interface UserExamProfile {
   next_exam_date: string | null;
   planning_year: number | null;
   qb_onboarding_completed: boolean;
+  exam_details_completed: boolean;
+  exam_details_completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -2705,6 +2707,11 @@ export interface UserExamAttempt {
   exam_date: string | null;
   exam_year: number;
   session_label: string | null;
+  exam_city: string | null;
+  exam_state: string | null;
+  exam_center_id: string | null;
+  user_reported_city: string | null;
+  status: 'registered' | 'completed' | 'skipped';
   created_at: string;
 }
 
@@ -2714,6 +2721,81 @@ export interface CreateExamProfileInput {
   next_exam_date?: string;
   planning_year?: number;
   attempts?: { exam_year: number; exam_date?: string; session_label?: string }[];
+}
+
+// Admin-managed exam schedule (migration 20260315)
+export interface ExamScheduleSession {
+  label: string;
+  date: string;
+  day: string;
+}
+
+export interface ExamSchedule {
+  id: string;
+  exam_type: string;
+  exam_year: number;
+  is_active: boolean;
+  registration_open_date: string | null;
+  registration_close_date: string | null;
+  late_registration_close_date: string | null;
+  sessions: ExamScheduleSession[];
+  brochure_url: string | null;
+  notes: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExamScheduleInput {
+  exam_type: string;
+  exam_year: number;
+  is_active?: boolean;
+  registration_open_date?: string;
+  registration_close_date?: string;
+  late_registration_close_date?: string;
+  sessions: ExamScheduleSession[];
+  brochure_url?: string;
+  notes?: string;
+}
+
+// User exam details collection (migration 20260315)
+export interface SaveExamDetailsInput {
+  nata_status: NataExamStatus;
+  planning_year?: number;
+  sessions?: {
+    session_label: string;
+    exam_date: string;
+    exam_city?: string;
+    exam_state?: string;
+    exam_center_id?: string;
+    user_reported_city?: string;
+  }[];
+  same_city_all_sessions?: boolean;
+}
+
+export interface UserReportedExamCenter {
+  id: string;
+  user_id: string;
+  exam_year: number;
+  session_label: string | null;
+  reported_city: string;
+  reported_state: string | null;
+  verification_status: 'pending' | 'verified' | 'rejected';
+  verified_by: string | null;
+  verified_at: string | null;
+  linked_center_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExamDetailAuditLog {
+  id: string;
+  user_id: string;
+  action: 'created' | 'updated';
+  changes: Record<string, { old?: unknown; new?: unknown }>;
+  snapshot: Record<string, unknown>;
+  created_at: string;
 }
 
 // Phase 4: Contribution Tracking (migration 20260305)

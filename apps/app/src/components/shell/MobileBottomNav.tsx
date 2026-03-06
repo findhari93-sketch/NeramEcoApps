@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, BottomNavigation, BottomNavigationAction } from '@neram/ui';
-import { neramTokens } from '@neram/ui';
 import { usePathname, useRouter } from 'next/navigation';
 import { MOBILE_NAV_TABS } from '@/lib/navigation-data';
 
@@ -41,7 +40,7 @@ export default function MobileBottomNav() {
             minWidth: 0,
             py: 0.5,
             '&.Mui-selected': {
-              color: neramTokens.gold[500],
+              color: 'primary.main',
             },
           },
           '& .MuiBottomNavigationAction-label': {

@@ -1,166 +1,97 @@
 'use client';
 
 import { Box, Typography, Grid, Paper, Chip, Button } from '@neram/ui';
-import { neramTokens } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
 import Link from 'next/link';
-import {
-  getTimeGreeting,
-  getDaysUntilExam,
-  NATA_TOOLS,
-} from '@/lib/navigation-data';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import { NATA_TOOLS } from '@/lib/navigation-data';
+import { useExamCountdown } from '@/hooks/useExamCountdown';
+import ExamSetupCard from '@/components/exam-setup/ExamSetupCard';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
-// Quick access: first 4 non-coming-soon NATA tools
-const quickAccessTools = NATA_TOOLS.filter((t) => !t.comingSoon).slice(0, 4);
+const quickAccessTools = NATA_TOOLS.filter((t) => !t.comingSoon).slice(0, 5);
 
 export default function DashboardPage() {
   const { user } = useFirebaseAuth();
-  const firstName = user?.name?.split(' ')[0] || 'Student';
-  const greeting = getTimeGreeting();
-  const daysLeft = getDaysUntilExam();
+  const { daysLeft, cardState, nextSession, nextAttempt } = useExamCountdown();
+
+  // Build header chip label based on user state
+  const getChipLabel = () => {
+    if (cardState === 'applied' && nextAttempt?.session_label && daysLeft !== null) {
+      return `${nextAttempt.session_label} · ${daysLeft} days`;
+    }
+    if (daysLeft !== null && nextSession) {
+      return `NATA ${new Date().getFullYear()} · ${daysLeft} days`;
+    }
+    return null;
+  };
+
+  const chipLabel = getChipLabel();
 
   return (
     <Box>
-      {/* Greeting */}
+      {/* Header row */}
       <Box sx={{ mb: 3 }}>
-        <Typography
-          variant="h4"
-          sx={{
-            fontWeight: 700,
-            fontSize: { xs: '1.5rem', md: '1.85rem' },
-            color: 'text.primary',
-          }}
-        >
-          {greeting}, {firstName}!
-        </Typography>
-        <Typography
-          variant="body1"
-          sx={{ color: 'text.secondary', mt: 0.5 }}
-        >
-          Your NATA 2026 journey continues
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            Dashboard
+          </Typography>
+          {chipLabel && (
+            <Chip
+              label={chipLabel}
+              size="small"
+              variant="outlined"
+              sx={{ fontWeight: 600, fontSize: '0.7rem' }}
+            />
+          )}
+        </Box>
+        <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem', mt: 0.5 }}>
+          From Cutoffs to Colleges — Your Architecture Exam Companion
         </Typography>
       </Box>
 
-      {/* Exam Countdown */}
-      {daysLeft !== null && (
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2, md: 2.5 },
-            mb: 3,
-            borderRadius: 3,
-            border: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            background: `linear-gradient(135deg, ${neramTokens.gold[500]}08 0%, ${neramTokens.blue[500]}06 100%)`,
-          }}
-        >
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 2,
-              bgcolor: `${neramTokens.gold[500]}15`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <CalendarTodayIcon sx={{ color: neramTokens.gold[500] }} />
-          </Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', fontWeight: 500 }}>
-              Next NATA Exam
-            </Typography>
-            <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'text.primary' }}>
-              {daysLeft} days left
-            </Typography>
-          </Box>
-          <Chip
-            label="NATA 2026"
-            size="small"
-            sx={{
-              bgcolor: `${neramTokens.gold[500]}12`,
-              color: neramTokens.gold[600],
-              fontWeight: 600,
-              fontSize: '0.7rem',
-              display: { xs: 'none', sm: 'flex' },
-            }}
-          />
-        </Paper>
-      )}
+      {/* Exam Setup / Countdown Card */}
+      <ExamSetupCard />
 
-      {/* Quick Access Tools */}
+      {/* Quick Access */}
       <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.05rem' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem' }}>
             Quick Access
           </Typography>
           <Button
             component={Link}
-            href="/tools/nata/cutoff-calculator"
+            href="/tools/nata/exam-centers"
             size="small"
-            sx={{ color: neramTokens.gold[500], textTransform: 'none', fontWeight: 600 }}
-            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.9rem !important' }} />}
+            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.8rem !important' }} />}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
           >
             All Tools
           </Button>
         </Box>
-        <Grid container spacing={2}>
+        <Grid container spacing={1.5}>
           {quickAccessTools.map((tool) => (
-            <Grid item xs={6} sm={3} key={tool.href}>
+            <Grid item xs={6} sm={4} md={2.4} key={tool.href}>
               <Paper
                 component={Link}
                 href={tool.href}
-                elevation={0}
                 sx={{
-                  p: 2,
-                  borderRadius: 3,
-                  textDecoration: 'none',
+                  p: 1.5,
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
                   gap: 1,
-                  textAlign: 'center',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  transition: 'all 0.2s ease',
+                  textDecoration: 'none',
+                  transition: 'all 0.15s ease',
+                  cursor: 'pointer',
                   '&:hover': {
-                    borderColor: neramTokens.gold[500],
-                    boxShadow: `0 4px 16px ${neramTokens.gold[500]}12`,
-                    transform: 'translateY(-2px)',
+                    borderColor: 'primary.main',
+                    bgcolor: 'action.hover',
                   },
                 }}
               >
-                <Box
-                  sx={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 2,
-                    bgcolor: `${neramTokens.gold[500]}10`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: neramTokens.gold[500],
-                    '& .MuiSvgIcon-root': { fontSize: '1.3rem' },
-                  }}
-                >
+                <Box sx={{ color: 'primary.main', display: 'flex', '& .MuiSvgIcon-root': { fontSize: '1.1rem' } }}>
                   {tool.icon}
                 </Box>
-                <Typography
-                  sx={{
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    color: 'text.primary',
-                    lineHeight: 1.3,
-                  }}
-                >
+                <Typography sx={{ fontSize: '0.78rem', fontWeight: 500, color: 'text.primary', lineHeight: 1.3 }}>
                   {tool.title}
                 </Typography>
               </Paper>
@@ -171,41 +102,13 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <Box>
-        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.05rem', mb: 2 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem', mb: 1.5 }}>
           Recent Activity
         </Typography>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 3,
-            borderRadius: 3,
-            border: '1px solid',
-            borderColor: 'divider',
-            textAlign: 'center',
-          }}
-        >
-          <AccessTimeIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+        <Paper sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            No recent activity yet. Start using tools to track your progress here!
+            No recent activity. Start using tools to track your progress here.
           </Typography>
-          <Button
-            component={Link}
-            href="/tools/nata/cutoff-calculator"
-            variant="outlined"
-            size="small"
-            sx={{
-              mt: 2,
-              textTransform: 'none',
-              borderColor: neramTokens.gold[500],
-              color: neramTokens.gold[600],
-              '&:hover': {
-                borderColor: neramTokens.gold[600],
-                bgcolor: `${neramTokens.gold[500]}08`,
-              },
-            }}
-          >
-            Explore Tools
-          </Button>
         </Paper>
       </Box>
     </Box>

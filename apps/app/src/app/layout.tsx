@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Cormorant_Garamond, DM_Sans, Space_Mono } from 'next/font/google';
-import { NeramThemeProvider, toolsAppLightTheme, toolsAppDarkTheme } from '@neram/ui';
+import { NeramThemeProvider } from '@neram/ui';
+import { enterpriseLightTheme, enterpriseDarkTheme } from '@/lib/theme';
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import './globals.css';
 
@@ -23,13 +24,13 @@ const spaceMono = Space_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'aiArchitek | Free NATA Preparation App — Cutoff Calculator, College Predictor & More',
+    default: 'aiArchitek | From Cutoffs to Colleges — Your Architecture Exam Companion',
     template: '%s | aiArchitek by Neram Classes',
   },
   description:
-    'India\'s best free NATA preparation app by Neram Classes. AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder, and community question bank. Install as PWA for offline study.',
+    'From cutoffs to colleges — aiArchitek is your complete architecture exam companion. Free AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder, and community question bank by Neram Classes.',
   keywords:
-    'NATA app, NATA preparation app, aiArchitek, NATA cutoff calculator, college predictor NATA, NATA exam centers, architecture entrance exam app, free NATA app, NATA 2026, best NATA app',
+    'NATA app, NATA preparation app, aiArchitek, NATA cutoff calculator, college predictor NATA, NATA exam centers, architecture entrance exam app, free NATA app, NATA 2026, best NATA app, B.Arch admission',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -44,17 +45,17 @@ export const metadata: Metadata = {
     apple: '/icon.svg',
   },
   openGraph: {
-    title: 'aiArchitek — Free NATA Exam Preparation App',
+    title: 'aiArchitek — From Cutoffs to Colleges',
     description:
-      'AI-powered NATA preparation tools. Cutoff calculator, college predictor for 5000+ colleges, exam center locator. Used by 5000+ students.',
+      'Your complete architecture exam companion. AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center locator. Used by 5000+ students.',
     type: 'website',
     url: 'https://app.neramclasses.com',
     siteName: 'aiArchitek by Neram Classes',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'aiArchitek — NATA Preparation App',
-    description: 'Free NATA tools: cutoff calculator, college predictor, exam centers. By Neram Classes.',
+    title: 'aiArchitek — From Cutoffs to Colleges',
+    description: 'Your architecture exam companion. Cutoff calculator, college predictor, exam centers & more. By Neram Classes.',
   },
   alternates: {
     canonical: 'https://app.neramclasses.com',
@@ -86,8 +87,8 @@ export default function RootLayout({
       <body className={inter.className}>
         <GoogleAdsTag />
         <NeramThemeProvider
-          lightTheme={toolsAppLightTheme}
-          darkTheme={toolsAppDarkTheme}
+          lightTheme={enterpriseLightTheme}
+          darkTheme={enterpriseDarkTheme}
           defaultMode="light"
         >
           {children}

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Drawer, Container } from '@neram/ui';
+import { Box, Drawer } from '@neram/ui';
+import { useSidebar } from '@/contexts/SidebarContext';
 import AppTopBar from './AppTopBar';
 import AppSidebar from './AppSidebar';
 import MobileBottomNav from './MobileBottomNav';
 import PendingEnrollmentBanner from '@/components/PendingEnrollmentBanner';
 
-const SIDEBAR_WIDTH = 272;
+const TRANSITION = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -23,59 +24,40 @@ export default function AppShell({
   children,
   userName,
   userAvatar,
-  userEmail,
   phoneVerified,
   onboardingCompleted,
   onSignOut,
 }: AppShellProps) {
+  const { sidebarWidth } = useSidebar();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-
-  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
-  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) =>
-    setAnchorEl(event.currentTarget);
-  const handleProfileMenuClose = () => setAnchorEl(null);
-
-  const handleSignOut = () => {
-    handleProfileMenuClose();
-    onSignOut();
-  };
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Top Bar */}
+      {/* Mobile-only TopBar */}
       <AppTopBar
-        userName={userName}
-        userAvatar={userAvatar}
+        onMenuToggle={() => setMobileOpen(!mobileOpen)}
         phoneVerified={phoneVerified}
-        onMenuToggle={handleDrawerToggle}
-        mobileOpen={mobileOpen}
-        anchorEl={anchorEl}
-        onProfileMenuOpen={handleProfileMenuOpen}
-        onProfileMenuClose={handleProfileMenuClose}
-        onSignOut={handleSignOut}
       />
 
       {/* Mobile Drawer */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
-        onClose={handleDrawerToggle}
+        onClose={() => setMobileOpen(false)}
         ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', sm: 'none' },
           '& .MuiDrawer-paper': {
             boxSizing: 'border-box',
-            width: SIDEBAR_WIDTH,
-            mt: '56px',
-            height: 'calc(100% - 56px)',
+            width: 220,
           },
         }}
       >
         <AppSidebar
           userName={userName}
           userAvatar={userAvatar}
-          userEmail={userEmail}
+          phoneVerified={phoneVerified}
+          onSignOut={onSignOut}
           onItemClick={() => setMobileOpen(false)}
         />
       </Drawer>
@@ -85,15 +67,15 @@ export default function AppShell({
         variant="permanent"
         sx={{
           display: { xs: 'none', sm: 'block' },
-          width: SIDEBAR_WIDTH,
+          width: sidebarWidth,
           flexShrink: 0,
+          transition: TRANSITION,
           '& .MuiDrawer-paper': {
             boxSizing: 'border-box',
-            width: SIDEBAR_WIDTH,
-            mt: '56px',
-            height: 'calc(100% - 56px)',
-            borderRight: '1px solid',
-            borderColor: 'divider',
+            width: sidebarWidth,
+            transition: TRANSITION,
+            overflowX: 'hidden',
+            borderRight: 'none',
           },
         }}
         open
@@ -101,7 +83,8 @@ export default function AppShell({
         <AppSidebar
           userName={userName}
           userAvatar={userAvatar}
-          userEmail={userEmail}
+          phoneVerified={phoneVerified}
+          onSignOut={onSignOut}
         />
       </Drawer>
 
@@ -110,16 +93,17 @@ export default function AppShell({
         component="main"
         sx={{
           flexGrow: 1,
-          width: { sm: `calc(100% - ${SIDEBAR_WIDTH}px)` },
-          mt: '56px',
-          pb: { xs: '56px', sm: 0 }, // Space for mobile bottom nav
-          minHeight: 'calc(100vh - 56px)',
+          width: { sm: `calc(100% - ${sidebarWidth}px)` },
+          mt: { xs: '48px', sm: 0 },
+          pb: { xs: '56px', sm: 0 },
+          minHeight: { xs: 'calc(100vh - 48px)', sm: '100vh' },
+          transition: TRANSITION,
         }}
       >
-        <Container maxWidth="lg" sx={{ py: { xs: 2, md: 3 } }}>
+        <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200 }}>
           {phoneVerified && onboardingCompleted && <PendingEnrollmentBanner />}
           {children}
-        </Container>
+        </Box>
       </Box>
 
       {/* Mobile Bottom Navigation */}

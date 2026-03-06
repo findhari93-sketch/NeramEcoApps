@@ -37,6 +37,7 @@ import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import EventNoteIcon from '@mui/icons-material/EventNote';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -60,6 +61,7 @@ const menuItems = [
   { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
   { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
   { text: 'Exam Centers', icon: LocationOnIcon, path: '/exam-centers' },
+  { text: 'Exam Schedule', icon: EventNoteIcon, path: '/exam-schedule' },
   { text: 'NATA Content', icon: ArchitectureIcon, path: '/nata' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
