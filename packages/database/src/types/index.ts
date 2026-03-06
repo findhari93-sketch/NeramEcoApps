@@ -1233,6 +1233,77 @@ export interface ExamCenter extends Timestamps {
 }
 
 // ============================================
+// NATA EXAM CENTERS (Rich, NATA-specific)
+// ============================================
+
+export type CenterConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type CityPopulationTier = 'Metro' | 'Tier-1' | 'Tier-2' | 'Tier-3' | 'International';
+
+/**
+ * NATA-specific exam center with rich metadata
+ */
+export interface NataExamCenter extends Timestamps {
+  id: string;
+  state: string;
+  city_brochure: string;
+  brochure_ref: string | null;
+  latitude: number;
+  longitude: number;
+  city_population_tier: CityPopulationTier | null;
+
+  // Primary probable center
+  probable_center_1: string | null;
+  center_1_address: string | null;
+  center_1_evidence: string | null;
+
+  // Alternate probable center
+  probable_center_2: string | null;
+  center_2_address: string | null;
+  center_2_evidence: string | null;
+
+  // Classification
+  confidence: CenterConfidence;
+  is_new_2025: boolean;
+  was_in_2024: boolean;
+  tcs_ion_confirmed: boolean;
+  has_barch_college: boolean;
+  notes: string | null;
+
+  // Year tracking
+  year: number;
+
+  // Audit
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+export interface NataExamCenterWithDistance extends NataExamCenter {
+  distance: number;
+}
+
+export interface NataStateSummary {
+  state: string;
+  year: number;
+  total_cities: number;
+  high_confidence: number;
+  medium_confidence: number;
+  low_confidence: number;
+  tcs_confirmed: number;
+  with_barch_colleges: number;
+}
+
+export interface NataExamCenterStats {
+  total: number;
+  high_confidence: number;
+  medium_confidence: number;
+  low_confidence: number;
+  tcs_confirmed: number;
+  with_barch: number;
+  states_count: number;
+  new_this_year: number;
+}
+
+// ============================================
 // TOOL USAGE TRACKING
 // ============================================
 
@@ -1363,24 +1434,80 @@ export interface BlogPost extends Timestamps {
 /**
  * Testimonials
  */
+export type TestimonialLearningMode = 'online' | 'hybrid' | 'offline';
+
 export interface Testimonial extends Timestamps {
   id: string;
-  
+
   student_name: string;
   student_photo: string | null;
-  
+
   // Content (multilingual)
   content: Record<string, string>;
-  
+
   // Results
   exam_type: ExamType;
   score: number | null;
   rank: number | null;
   college_admitted: string | null;
   year: number;
-  
+
+  // Filtering dimensions
+  course_name: string;
+  course_slug: string | null;
+  city: string;
+  state: string;
+  learning_mode: TestimonialLearningMode;
+
+  // Enhanced content
+  rating: number | null;
+  video_url: string | null;
+
   // Display
   is_featured: boolean;
+  is_homepage: boolean;
+  display_order: number;
+  is_active: boolean;
+}
+
+/**
+ * Social Proofs (media testimonials - video, audio, screenshots)
+ * Separate from text-based Testimonial system
+ */
+export type SocialProofType = 'video' | 'audio' | 'screenshot';
+export type SocialProofLanguage = 'tamil' | 'english' | 'hindi' | 'kannada' | 'malayalam' | 'telugu';
+
+export interface SocialProof extends Timestamps {
+  id: string;
+
+  // Type
+  proof_type: SocialProofType;
+
+  // Video
+  youtube_url: string | null;
+  youtube_id: string | null;
+
+  // Audio
+  audio_url: string | null;
+  audio_duration: number | null;
+
+  // Screenshot
+  image_url: string | null;
+
+  // People
+  speaker_name: string;
+  student_name: string | null;
+  parent_photo: string | null;
+
+  // Context
+  batch: string | null;
+  language: SocialProofLanguage;
+  description: Record<string, string>;
+  caption: string | null;
+
+  // Display
+  is_featured: boolean;
+  is_homepage: boolean;
   display_order: number;
   is_active: boolean;
 }

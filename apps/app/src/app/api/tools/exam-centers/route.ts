@@ -4,11 +4,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getSupabaseBrowserClient,
-  listExamCenters,
-  searchExamCenters,
-  getExamCenterStates,
-  getExamCenterCities,
-  findNearestExamCenters,
+  listNataExamCenters,
+  getNataExamCenterStates,
+  getNataExamCenterCities,
+  findNearestNataExamCenters,
   logToolUsage,
 } from '@neram/database';
 import { verifyIdToken } from '@/lib/firebase-admin';
@@ -39,13 +38,13 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseBrowserClient();
 
     if (action === 'states') {
-      const states = await getExamCenterStates(supabase);
+      const states = await getNataExamCenterStates(undefined, supabase);
       return NextResponse.json({ states });
     }
 
     if (action === 'cities') {
       const state = searchParams.get('state') || undefined;
-      const cities = await getExamCenterCities(state, supabase);
+      const cities = await getNataExamCenterCities(state, undefined, supabase);
       return NextResponse.json({ cities });
     }
 
@@ -53,9 +52,14 @@ export async function GET(request: NextRequest) {
     const state = searchParams.get('state') || undefined;
     const city = searchParams.get('city') || undefined;
     const search = searchParams.get('search') || undefined;
+    const confidence = searchParams.get('confidence') as 'HIGH' | 'MEDIUM' | 'LOW' | undefined;
+    const tcsIonOnly = searchParams.get('tcs_ion') === 'true' || undefined;
+    const barchOnly = searchParams.get('barch') === 'true' || undefined;
+    const newOnly = searchParams.get('new_only') === 'true' || undefined;
+    const tier = searchParams.get('tier') || undefined;
 
-    const { centers, count } = await listExamCenters(
-      { state, city, search },
+    const { centers, count } = await listNataExamCenters(
+      { state, city, search, confidence, tcsIonOnly, barchOnly, newOnly, tier },
       supabase
     );
 
@@ -83,7 +87,10 @@ export async function POST(request: NextRequest) {
 
     const startTime = Date.now();
     const body = await request.json();
-    const { state, city, search, latitude, longitude, maxDistance } = body;
+    const {
+      state, city, search, latitude, longitude, maxDistance,
+      confidence, tcsIonOnly, barchOnly, newOnly, tier,
+    } = body;
 
     const supabase = getSupabaseBrowserClient();
 
@@ -92,18 +99,18 @@ export async function POST(request: NextRequest) {
 
     // If coordinates provided, find nearest centers
     if (typeof latitude === 'number' && typeof longitude === 'number') {
-      centers = await findNearestExamCenters(
+      centers = await findNearestNataExamCenters(
         latitude,
         longitude,
-        { maxDistance: maxDistance || 100, limit: 20 },
+        { maxDistance: maxDistance || 500, limit: 30 },
         supabase
       );
       count = centers.length;
-    } else if (search) {
-      centers = await searchExamCenters(search, { state, city }, supabase);
-      count = centers.length;
     } else {
-      const result = await listExamCenters({ state, city }, supabase);
+      const result = await listNataExamCenters(
+        { state, city, search, confidence, tcsIonOnly, barchOnly, newOnly, tier },
+        supabase
+      );
       centers = result.centers;
       count = result.count;
     }
@@ -115,7 +122,7 @@ export async function POST(request: NextRequest) {
       {
         toolName: 'exam_center_locator',
         userId: user.uid,
-        inputData: { state, city, search, latitude, longitude },
+        inputData: { state, city, search, latitude, longitude, confidence, tcsIonOnly },
         resultData: { count },
         executionTimeMs: executionTime,
         userAgent: request.headers.get('user-agent') || undefined,

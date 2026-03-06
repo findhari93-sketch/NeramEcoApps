@@ -104,6 +104,7 @@ function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslat
 const navigationLinks = [
   { labelKey: 'about' as const, href: '/about' as const },
   { labelKey: 'courses' as const, href: '/courses' as const },
+  { labelKey: 'testimonials' as const, href: '/testimonials' as const },
   { labelKey: 'nata2026' as const, href: '/nata-2026' as const, badge: 'NEW' as const },
   { labelKey: 'fees' as const, href: '/fees' as const },
   { labelKey: 'contact' as const, href: '/contact' as const },

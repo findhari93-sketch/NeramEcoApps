@@ -42,7 +42,17 @@ export default function AnnouncementsSection({ locale = 'en' }: { locale?: strin
   if (!loading && items.length === 0) return null;
 
   return (
-    <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+    <Box sx={{
+      py: { xs: 6, md: 10 },
+      position: 'relative',
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        inset: 0,
+        background: 'radial-gradient(ellipse at 30% 50%, rgba(232,160,32,0.06) 0%, transparent 60%)',
+        pointerEvents: 'none',
+      },
+    }}>
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1, mb: 1 }}>

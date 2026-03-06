@@ -1,11 +1,11 @@
 {
-  "name": "Neram - Free NATA Exam Preparation App",
-  "short_name": "Neram NATA",
-  "description": "Best free NATA preparation app. Cutoff calculator, college predictor for 5000+ colleges, exam center finder, study materials. By IIT/NIT alumni experts at Neram Classes.",
+  "name": "aiArchitek — Free NATA Exam Preparation App",
+  "short_name": "aiArchitek",
+  "description": "India's best free NATA preparation app. AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder. By IIT/NIT alumni at Neram Classes.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1976d2",
+  "background_color": "#060d1f",
+  "theme_color": "#060d1f",
   "orientation": "portrait-primary",
   "icons": [
     {

@@ -10,6 +10,10 @@ body {
   overflow-x: hidden;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -42,4 +46,153 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid #e8a020;
+  outline-offset: 2px;
+}
+
+/* ============================================
+   aiArchitek Landing Page — CSS Variables
+   ============================================ */
+
+:root {
+  --ai-bg: #060d1f;
+  --ai-card: #0b1629;
+  --ai-card-elevated: #122040;
+  --ai-text: #f5f0e8;
+  --ai-text-muted: rgba(245, 240, 232, 0.55);
+  --ai-gold: #e8a020;
+  --ai-gold-light: #f4bf5a;
+  --ai-blue: #1a8fff;
+  --ai-border: rgba(255, 255, 255, 0.08);
+  --ai-border-gold: rgba(232, 160, 32, 0.2);
+}
+
+/* ============================================
+   Blueprint Grid Backgrounds
+   ============================================ */
+
+.ai-blueprint-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(232, 160, 32, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 160, 32, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+}
+
+.ai-blueprint-bg-animated {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(232, 160, 32, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 160, 32, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
+  animation: aiGridShift 60s linear infinite;
+}
+
+@keyframes aiGridShift {
+  from { background-position: 0 0, 0 0, 0 0, 0 0; }
+  to { background-position: 40px 40px, 40px 40px, 200px 200px, 200px 200px; }
+}
+
+/* ============================================
+   Glass Card Utility
+   ============================================ */
+
+.ai-glass {
+  background: rgba(11, 22, 41, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+}
+
+.ai-glass-nav {
+  background: rgba(6, 13, 31, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes aiFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aiFadeDown {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aiLineGrow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes aiFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes aiPulseGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(232, 160, 32, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(232, 160, 32, 0.4); }
+}
+
+/* Stagger animation utility classes */
+.ai-animate-fade-up {
+  opacity: 0;
+  transform: translateY(24px);
+  animation: aiFadeUp 0.6s ease forwards;
+}
+
+.ai-animate-fade-down {
+  opacity: 0;
+  transform: translateY(-16px);
+  animation: aiFadeDown 0.5s ease forwards;
+}
+
+.ai-stagger-1 { animation-delay: 0.1s; }
+.ai-stagger-2 { animation-delay: 0.2s; }
+.ai-stagger-3 { animation-delay: 0.3s; }
+.ai-stagger-4 { animation-delay: 0.4s; }
+.ai-stagger-5 { animation-delay: 0.5s; }
+.ai-stagger-6 { animation-delay: 0.6s; }
+.ai-stagger-7 { animation-delay: 0.7s; }
+.ai-stagger-8 { animation-delay: 0.8s; }
+
+/* Gold gradient text */
+.ai-gold-gradient {
+  background: linear-gradient(135deg, #f4bf5a, #e8a020, #c47d10);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Blue gradient text */
+.ai-blue-gradient {
+  background: linear-gradient(135deg, #7dd3fc, #1a8fff, #0d6ecd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }

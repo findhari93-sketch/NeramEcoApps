@@ -1,3 +1,21 @@
+/* Tailwind CSS v4 — theme + utilities (no preflight to avoid MUI conflicts) */
+@import "tailwindcss/theme";
+@import "tailwindcss/utilities";
+
+/* Theme bridge: CSS variables for Tailwind components */
+:root {
+  --neram-bg: #060d1f;
+  --neram-card: #0b1629;
+  --neram-card-elevated: #122040;
+  --neram-text: #f5f0e8;
+  --neram-text-muted: rgba(245, 240, 232, 0.55);
+  --neram-gold: #e8a020;
+  --neram-gold-light: #f4bf5a;
+  --neram-blue: #1a8fff;
+  --neram-border: rgba(255, 255, 255, 0.08);
+  --neram-border-gold: rgba(232, 160, 32, 0.2);
+}
+
 /* Museo font for logo */
 @font-face {
   font-family: 'Museo';

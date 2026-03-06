@@ -9,6 +9,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
 import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
+import GoogleAdsTag from '@/components/GoogleAdsTag';
 import '@/styles/globals.css';
 
 // Font loading - Next.js preloads these automatically, eliminating font swap flash
@@ -154,6 +155,7 @@ export default async function RootLayout({
     >
       <head />
       <body className={inter.className} suppressHydrationWarning>
+        <GoogleAdsTag />
         <NextIntlClientProvider messages={messages}>
           <ThemeRegistry
             options={{ key: 'neram-mui' }}

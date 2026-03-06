@@ -30,10 +30,13 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
 import CampaignIcon from '@mui/icons-material/Campaign';
+import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -52,8 +55,11 @@ const menuItems = [
   { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
   { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
   { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
+  { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
+  { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
   { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
   { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
+  { text: 'Exam Centers', icon: LocationOnIcon, path: '/exam-centers' },
   { text: 'NATA Content', icon: ArchitectureIcon, path: '/nata' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];

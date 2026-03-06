@@ -6,7 +6,8 @@
     "fees": "शुल्क",
     "contact": "संपर्क",
     "apply": "आवेदन करें",
-    "nata2026": "NATA 2026"
+    "nata2026": "NATA 2026",
+    "testimonials": "समीक्षाएं"
   },
   "home": {
     "title": "नेरम क्लासेस में आपका स्वागत है",
@@ -503,5 +504,47 @@
     "alsoRead": "Also Read",
     "tryNow": "Try Now",
     "viewAll": "View All"
+  },
+  "testimonials": {
+    "title": "छात्र सफलता की कहानियां",
+    "subtitle": "नेरम क्लासेस के साथ अपने आर्किटेक्चर सपनों को पूरा करने वाले छात्रों से सुनें",
+    "filterYear": "वर्ष",
+    "filterCourse": "कोर्स",
+    "filterCity": "शहर",
+    "filterMode": "सीखने का तरीका",
+    "clearAll": "सभी साफ करें",
+    "loadMore": "और समीक्षाएं लोड करें",
+    "showing": "{total} में से {shown} समीक्षाएं दिखाई जा रही हैं",
+    "noResults": "आपके फ़िल्टर से कोई प्रशंसापत्र मेल नहीं खाता",
+    "cta": "अपनी खुद की सफलता की कहानी लिखने के लिए तैयार हैं?",
+    "online": "ऑनलाइन",
+    "hybrid": "हाइब्रिड",
+    "offline": "ऑफलाइन",
+    "allYears": "सभी वर्ष",
+    "allCourses": "सभी कोर्स",
+    "allCities": "सभी शहर",
+    "allModes": "सभी तरीके",
+    "students": "छात्र",
+    "cities": "शहर",
+    "avgRating": "औसत रेटिंग"
+  },
+  "socialProof": {
+    "sectionLabel": "असली सबूत",
+    "title": "असली माता-पिता और छात्रों से सुनें",
+    "subtitle": "हमारे साथ सफल हुए माता-पिता और छात्रों के प्रामाणिक वीडियो, ऑडियो रिकॉर्डिंग और स्क्रीनशॉट",
+    "videoTab": "वीडियो कहानियां",
+    "audioTab": "ऑडियो कहानियां",
+    "screenshotTab": "स्क्रीनशॉट",
+    "playVideo": "वीडियो चलाएं",
+    "playAudio": "ऑडियो चलाएं",
+    "pauseAudio": "ऑडियो रोकें",
+    "viewScreenshot": "स्क्रीनशॉट देखें",
+    "close": "बंद करें",
+    "noContent": "जल्द आ रहा है",
+    "watchNow": "अभी देखें",
+    "listenNow": "अभी सुनें",
+    "batch": "बैच",
+    "parent": "अभिभावक",
+    "student": "छात्र"
   }
 }

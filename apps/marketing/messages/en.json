@@ -6,7 +6,8 @@
     "fees": "Fees",
     "contact": "Contact",
     "apply": "Apply",
-    "nata2026": "NATA 2026"
+    "nata2026": "NATA 2026",
+    "testimonials": "Reviews"
   },
   "home": {
     "title": "Welcome to Neram Classes",
@@ -575,5 +576,47 @@
     "alsoRead": "Also Read",
     "tryNow": "Try Now",
     "viewAll": "View All"
+  },
+  "testimonials": {
+    "title": "Student Success Stories",
+    "subtitle": "Hear from students who achieved their architecture dreams with Neram Classes",
+    "filterYear": "Year",
+    "filterCourse": "Course",
+    "filterCity": "City",
+    "filterMode": "Learning Mode",
+    "clearAll": "Clear All",
+    "loadMore": "Load More Reviews",
+    "showing": "Showing {shown} of {total} reviews",
+    "noResults": "No testimonials match your filters",
+    "cta": "Ready to write your own success story?",
+    "online": "Online",
+    "hybrid": "Hybrid",
+    "offline": "Offline",
+    "allYears": "All Years",
+    "allCourses": "All Courses",
+    "allCities": "All Cities",
+    "allModes": "All Modes",
+    "students": "Students",
+    "cities": "Cities",
+    "avgRating": "Avg Rating"
+  },
+  "socialProof": {
+    "sectionLabel": "REAL PROOF",
+    "title": "Hear It From Real Parents & Students",
+    "subtitle": "Authentic videos, audio recordings, and screenshots from parents and students who succeeded with us",
+    "videoTab": "Video Stories",
+    "audioTab": "Audio Stories",
+    "screenshotTab": "Screenshots",
+    "playVideo": "Play video",
+    "playAudio": "Play audio",
+    "pauseAudio": "Pause audio",
+    "viewScreenshot": "View screenshot",
+    "close": "Close",
+    "noContent": "Coming soon",
+    "watchNow": "Watch Now",
+    "listenNow": "Listen Now",
+    "batch": "Batch",
+    "parent": "Parent",
+    "student": "Student"
   }
 }

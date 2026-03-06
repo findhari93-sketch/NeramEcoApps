@@ -24,8 +24,15 @@ export default function AnnouncementCard({ title, description, imageUrl, metadat
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'transform 0.2s',
-        '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 },
+        bgcolor: 'background.paper',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 3,
+        transition: 'transform 0.2s, border-color 0.2s',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+          borderColor: 'rgba(232,160,32,0.3)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        },
       }}
     >
       {/* Optional image */}

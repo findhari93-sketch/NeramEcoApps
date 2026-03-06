@@ -457,3 +457,58 @@ export function generateSoftwareApplicationSchema() {
     },
   };
 }
+
+// ─── Review Schema (for individual testimonials) ────────────────────────────
+
+export function generateReviewSchema(testimonial: {
+  studentName: string;
+  content: string;
+  rating: number;
+  year: number;
+  courseName: string;
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Review',
+    author: { '@type': 'Person', name: testimonial.studentName },
+    reviewBody: testimonial.content,
+    reviewRating: {
+      '@type': 'Rating',
+      ratingValue: String(testimonial.rating),
+      bestRating: '5',
+      worstRating: '1',
+    },
+    datePublished: `${testimonial.year}-01-01`,
+    itemReviewed: {
+      '@type': 'Course',
+      name: testimonial.courseName,
+      provider: {
+        '@type': 'EducationalOrganization',
+        name: ORG_NAME,
+        url: BASE_URL,
+      },
+    },
+  };
+}
+
+// ─── Testimonials Page Schema (aggregate rating) ────────────────────────────
+
+export function generateTestimonialsPageSchema(stats: {
+  total: number;
+  avgRating: number;
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    '@id': `${BASE_URL}/#organization`,
+    name: ORG_NAME,
+    url: BASE_URL,
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: String(stats.avgRating),
+      reviewCount: String(stats.total),
+      bestRating: '5',
+      worstRating: '1',
+    },
+  };
+}

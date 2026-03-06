@@ -1,191 +1,169 @@
 'use client';
 
-import { Box, Typography, Grid, Paper } from '@neram/ui';
+import { Box, Typography, Grid, Paper, Chip, Button } from '@neram/ui';
+import { neramTokens } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
-import ToolCard from '@/components/ToolCard';
+import Link from 'next/link';
+import {
+  getTimeGreeting,
+  getDaysUntilExam,
+  NATA_TOOLS,
+} from '@/lib/navigation-data';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
-const nataTools = [
-  {
-    title: 'Exam Centers',
-    description: 'Find NATA exam centers near you with detailed information and directions',
-    href: '/tools/nata/exam-centers',
-    icon: '📍',
-    color: '#ed6c02',
-  },
-  {
-    title: 'Cutoff Calculator',
-    description: 'Calculate your NATA cutoff scores and predict your chances',
-    href: '/tools/nata/cutoff-calculator',
-    icon: '🔢',
-    color: '#1976d2',
-  },
-  {
-    title: 'College Predictor',
-    description: 'Find architecture colleges matching your NATA score',
-    href: '/tools/nata/college-predictor',
-    icon: '🏫',
-    color: '#2e7d32',
-  },
-  {
-    title: 'Question Bank',
-    description: 'Community-shared exam questions from past NATA sessions',
-    href: '/tools/nata/question-bank',
-    icon: '📚',
-    color: '#7b1fa2',
-  },
-  {
-    title: 'Seat Matrix',
-    description: 'View seat availability across architecture colleges',
-    href: '/tools/nata/seat-matrix',
-    icon: '📊',
-    color: '#0288d1',
-    comingSoon: true,
-  },
-  {
-    title: 'College Reviews',
-    description: 'Read authentic student reviews of architecture colleges',
-    href: '/tools/nata/college-reviews',
-    icon: '⭐',
-    color: '#f9a825',
-    comingSoon: true,
-  },
-  {
-    title: 'Eligibility Checker',
-    description: 'Check if you meet NATA eligibility criteria',
-    href: '/tools/nata/eligibility-checker',
-    icon: '✅',
-    color: '#388e3c',
-    comingSoon: true,
-  },
-  {
-    title: 'Cost Calculator',
-    description: 'Estimate total education cost through NATA route',
-    href: '/tools/nata/cost-calculator',
-    icon: '💰',
-    color: '#e65100',
-    comingSoon: true,
-  },
-];
-
-const jeeTools = [
-  {
-    title: 'Seat Matrix',
-    description: 'JEE Paper 2 seat availability in NITs, IITs and more',
-    href: '/tools/jee/seat-matrix',
-    icon: '📊',
-    color: '#0288d1',
-    comingSoon: true,
-  },
-  {
-    title: 'Eligibility Checker',
-    description: 'Check JEE Paper 2 eligibility and attempt limits',
-    href: '/tools/jee/eligibility-checker',
-    icon: '✅',
-    color: '#388e3c',
-    comingSoon: true,
-  },
-  {
-    title: 'Rank Predictor',
-    description: 'Predict your JEE Paper 2 rank from expected score',
-    href: '/tools/jee/rank-predictor',
-    icon: '🎯',
-    color: '#c62828',
-    comingSoon: true,
-  },
-];
+// Quick access: first 4 non-coming-soon NATA tools
+const quickAccessTools = NATA_TOOLS.filter((t) => !t.comingSoon).slice(0, 4);
 
 export default function DashboardPage() {
   const { user } = useFirebaseAuth();
+  const firstName = user?.name?.split(' ')[0] || 'Student';
+  const greeting = getTimeGreeting();
+  const daysLeft = getDaysUntilExam();
 
   return (
     <Box>
-      {/* Welcome Section */}
-      <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      {/* Greeting */}
+      <Box sx={{ mb: 3 }}>
         <Typography
           variant="h4"
           sx={{
-            color: 'white',
-            fontWeight: 600,
-            fontSize: { xs: '1.5rem', md: '2rem' },
+            fontWeight: 700,
+            fontSize: { xs: '1.5rem', md: '1.85rem' },
+            color: 'text.primary',
           }}
         >
-          Welcome back, {user?.name?.split(' ')[0] || 'Student'}!
+          {greeting}, {firstName}!
         </Typography>
         <Typography
           variant="body1"
-          sx={{ color: 'rgba(255,255,255,0.9)', mt: 1 }}
+          sx={{ color: 'text.secondary', mt: 0.5 }}
         >
-          Ready to excel in your architecture entrance preparation?
+          Your NATA 2026 journey continues
         </Typography>
-      </Paper>
-
-      {/* Quick Stats */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="primary" fontWeight={700}>
-              12
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Tools Used
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="success.main" fontWeight={700}>
-              85%
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Progress
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="warning.main" fontWeight={700}>
-              45
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Days to Exam
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="error.main" fontWeight={700}>
-              3
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Pending Tasks
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* NATA Tools Section */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
-          NATA Tools
-        </Typography>
-        <Grid container spacing={2}>
-          {nataTools.map((tool) => (
-            <Grid item xs={12} sm={6} md={4} key={tool.href}>
-              <ToolCard {...tool} />
-            </Grid>
-          ))}
-        </Grid>
       </Box>
 
-      {/* JEE Paper 2 Tools Section */}
+      {/* Exam Countdown */}
+      {daysLeft !== null && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 2, md: 2.5 },
+            mb: 3,
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            background: `linear-gradient(135deg, ${neramTokens.gold[500]}08 0%, ${neramTokens.blue[500]}06 100%)`,
+          }}
+        >
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: 2,
+              bgcolor: `${neramTokens.gold[500]}15`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <CalendarTodayIcon sx={{ color: neramTokens.gold[500] }} />
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary', fontWeight: 500 }}>
+              Next NATA Exam
+            </Typography>
+            <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'text.primary' }}>
+              {daysLeft} days left
+            </Typography>
+          </Box>
+          <Chip
+            label="NATA 2026"
+            size="small"
+            sx={{
+              bgcolor: `${neramTokens.gold[500]}12`,
+              color: neramTokens.gold[600],
+              fontWeight: 600,
+              fontSize: '0.7rem',
+              display: { xs: 'none', sm: 'flex' },
+            }}
+          />
+        </Paper>
+      )}
+
+      {/* Quick Access Tools */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
-          JEE Paper 2 Tools
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.05rem' }}>
+            Quick Access
+          </Typography>
+          <Button
+            component={Link}
+            href="/tools/nata/cutoff-calculator"
+            size="small"
+            sx={{ color: neramTokens.gold[500], textTransform: 'none', fontWeight: 600 }}
+            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.9rem !important' }} />}
+          >
+            All Tools
+          </Button>
+        </Box>
         <Grid container spacing={2}>
-          {jeeTools.map((tool) => (
-            <Grid item xs={12} sm={6} md={4} key={tool.href}>
-              <ToolCard {...tool} />
+          {quickAccessTools.map((tool) => (
+            <Grid item xs={6} sm={3} key={tool.href}>
+              <Paper
+                component={Link}
+                href={tool.href}
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: 3,
+                  textDecoration: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 1,
+                  textAlign: 'center',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    borderColor: neramTokens.gold[500],
+                    boxShadow: `0 4px 16px ${neramTokens.gold[500]}12`,
+                    transform: 'translateY(-2px)',
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 2,
+                    bgcolor: `${neramTokens.gold[500]}10`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: neramTokens.gold[500],
+                    '& .MuiSvgIcon-root': { fontSize: '1.3rem' },
+                  }}
+                >
+                  {tool.icon}
+                </Box>
+                <Typography
+                  sx={{
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    color: 'text.primary',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {tool.title}
+                </Typography>
+              </Paper>
             </Grid>
           ))}
         </Grid>
@@ -193,13 +171,41 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <Box>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.05rem', mb: 2 }}>
           Recent Activity
         </Typography>
-        <Paper sx={{ p: 2 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: 'divider',
+            textAlign: 'center',
+          }}
+        >
+          <AccessTimeIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">
-            No recent activity. Start using our tools to see your progress here!
+            No recent activity yet. Start using tools to track your progress here!
           </Typography>
+          <Button
+            component={Link}
+            href="/tools/nata/cutoff-calculator"
+            variant="outlined"
+            size="small"
+            sx={{
+              mt: 2,
+              textTransform: 'none',
+              borderColor: neramTokens.gold[500],
+              color: neramTokens.gold[600],
+              '&:hover': {
+                borderColor: neramTokens.gold[600],
+                bgcolor: `${neramTokens.gold[500]}08`,
+              },
+            }}
+          >
+            Explore Tools
+          </Button>
         </Paper>
       </Box>
     </Box>
