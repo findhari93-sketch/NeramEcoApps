@@ -24,6 +24,9 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
+import ArchitectureIcon from '@mui/icons-material/Architecture';
+import EngineeringIcon from '@mui/icons-material/Engineering';
+import GavelIcon from '@mui/icons-material/Gavel';
 import { neramTokens } from '@neram/ui';
 import { useThemeMode } from '@neram/ui';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -32,6 +35,7 @@ import Link from 'next/link';
 import {
   NATA_TOOLS,
   JEE_TOOLS,
+  COUNSELING_TOOLS,
   SIDEBAR_BOTTOM_NAV,
   type ToolNavItem,
   type GeneralNavItem,
@@ -59,6 +63,7 @@ export default function AppSidebar({
   const { collapsed, toggleSidebar } = useSidebar();
   const { mode, toggleMode } = useThemeMode();
   const [examTab, setExamTab] = useState(() => {
+    if (pathname.startsWith('/tools/counseling')) return 2;
     if (pathname.startsWith('/tools/jee')) return 1;
     return 0;
   });
@@ -66,7 +71,7 @@ export default function AppSidebar({
   const isActive = (href: string) =>
     pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'));
 
-  const tools = examTab === 0 ? NATA_TOOLS : JEE_TOOLS;
+  const tools = examTab === 0 ? NATA_TOOLS : examTab === 1 ? JEE_TOOLS : COUNSELING_TOOLS;
 
   const renderNavItem = (item: ToolNavItem | GeneralNavItem, indent = false) => {
     const active = isActive(item.href);
@@ -214,7 +219,7 @@ export default function AppSidebar({
 
       <Divider />
 
-      {/* Exam Tabs — hidden when collapsed */}
+      {/* Exam/Counseling Tabs — icon tabs, hidden when collapsed */}
       {!collapsed && (
         <Tabs
           value={examTab}
@@ -226,23 +231,80 @@ export default function AppSidebar({
             borderColor: 'divider',
             '& .MuiTab-root': {
               minHeight: 36,
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              textTransform: 'none',
+              minWidth: 0,
               py: 0,
+              px: 1,
             },
             '& .MuiTabs-indicator': {
               height: 2,
             },
           }}
         >
-          <Tab label="NATA" />
-          <Tab label="JEE Paper 2" />
+          <Tab
+            icon={<ArchitectureIcon sx={{ fontSize: 16, mb: '-2px' }} />}
+            label="NATA"
+            iconPosition="top"
+            sx={{ fontSize: '0.6rem', fontWeight: 600, '& .MuiTab-iconWrapper': { mb: 0 } }}
+          />
+          <Tab
+            icon={<EngineeringIcon sx={{ fontSize: 16, mb: '-2px' }} />}
+            label="JEE"
+            iconPosition="top"
+            sx={{ fontSize: '0.6rem', fontWeight: 600, '& .MuiTab-iconWrapper': { mb: 0 } }}
+          />
+          <Tab
+            icon={<GavelIcon sx={{ fontSize: 16, mb: '-2px' }} />}
+            label="Counsel"
+            iconPosition="top"
+            sx={{ fontSize: '0.6rem', fontWeight: 600, '& .MuiTab-iconWrapper': { mb: 0 } }}
+          />
         </Tabs>
       )}
 
       {/* Tool Navigation */}
-      <List sx={{ px: collapsed ? 0.25 : 0.5, py: 0.5, flexGrow: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      <List sx={{
+        px: collapsed ? 0.25 : 0.5,
+        py: 0.5,
+        flexGrow: 1,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        // Apple-style thin scrollbar — visible only on hover (desktop)
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'transparent transparent',
+        '&:hover': {
+          scrollbarColor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(255,255,255,0.2) transparent'
+              : 'rgba(0,0,0,0.2) transparent',
+        },
+        '&::-webkit-scrollbar': {
+          width: 6,
+        },
+        '&::-webkit-scrollbar-track': {
+          background: 'transparent',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: 'transparent',
+          borderRadius: 3,
+        },
+        '&:hover::-webkit-scrollbar-thumb': {
+          background: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(255,255,255,0.2)'
+              : 'rgba(0,0,0,0.2)',
+        },
+        '&:hover::-webkit-scrollbar-thumb:hover': {
+          background: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(255,255,255,0.35)'
+              : 'rgba(0,0,0,0.35)',
+        },
+        // Mobile: hide scrollbar, keep native touch scroll
+        '@media (max-width: 600px)': {
+          '&::-webkit-scrollbar': { display: 'none' },
+          scrollbarWidth: 'none',
+        },
+      }}>
         {tools.map((item) => renderNavItem(item, true))}
       </List>
 

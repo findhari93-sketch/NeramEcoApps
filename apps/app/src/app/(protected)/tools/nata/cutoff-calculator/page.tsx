@@ -921,15 +921,39 @@ function ResultsPanel({
         </Alert>
       )}
 
-      {/* CTA */}
-      <Button
-        variant="outlined"
-        fullWidth
-        href="/tools/nata/college-predictor"
-        endIcon={<ArrowForwardIcon />}
+      {/* What's Next CTAs */}
+      <Paper
+        sx={{
+          p: 2,
+          bgcolor: 'grey.50',
+          border: '1px solid',
+          borderColor: 'grey.200',
+          borderRadius: 1.5,
+        }}
       >
-        Find Colleges for Your Score
-      </Button>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>
+          What&apos;s Next?
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Button
+            variant="contained"
+            fullWidth
+            href={`/tools/counseling/rank-predictor?score=${finalCutoff}`}
+            endIcon={<ArrowForwardIcon />}
+            sx={{ bgcolor: '#E65100', '&:hover': { bgcolor: '#BF360C' } }}
+          >
+            Predict Your Rank
+          </Button>
+          <Button
+            variant="outlined"
+            fullWidth
+            href={`/tools/counseling/college-predictor?score=${finalCutoff}`}
+            endIcon={<ArrowForwardIcon />}
+          >
+            Find Colleges for Your Score
+          </Button>
+        </Box>
+      </Paper>
     </Box>
   );
 }

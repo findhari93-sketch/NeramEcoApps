@@ -16,6 +16,8 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import GavelIcon from '@mui/icons-material/Gavel';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import AppsIcon from '@mui/icons-material/Apps';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -30,7 +32,6 @@ export interface ToolNavItem {
 export const NATA_TOOLS: ToolNavItem[] = [
   { title: 'Exam Centers', href: '/tools/nata/exam-centers', icon: <LocationOnIcon fontSize="small" /> },
   { title: 'Cutoff Calculator', href: '/tools/nata/cutoff-calculator', icon: <CalculateIcon fontSize="small" /> },
-  { title: 'College Predictor', href: '/tools/nata/college-predictor', icon: <SchoolIcon fontSize="small" /> },
   { title: 'Question Bank', href: '/tools/nata/question-bank', icon: <BookIcon fontSize="small" /> },
   { title: 'Image Crop', href: '/tools/nata/image-crop', icon: <CropIcon fontSize="small" /> },
   { title: 'Eligibility Checker', href: '/tools/nata/eligibility-checker', icon: <CheckCircleOutlineIcon fontSize="small" /> },
@@ -43,6 +44,11 @@ export const JEE_TOOLS: ToolNavItem[] = [
   { title: 'Rank Predictor', href: '/tools/jee/rank-predictor', icon: <EmojiEventsIcon fontSize="small" />, comingSoon: true },
   { title: 'Seat Matrix', href: '/tools/jee/seat-matrix', icon: <TableChartIcon fontSize="small" />, comingSoon: true },
   { title: 'Eligibility Checker', href: '/tools/jee/eligibility-checker', icon: <CheckCircleOutlineIcon fontSize="small" />, comingSoon: true },
+];
+
+export const COUNSELING_TOOLS: ToolNavItem[] = [
+  { title: 'Rank Predictor', href: '/tools/counseling/rank-predictor', icon: <TrendingUpIcon fontSize="small" /> },
+  { title: 'College Predictor', href: '/tools/counseling/college-predictor', icon: <SchoolIcon fontSize="small" /> },
 ];
 
 export interface GeneralNavItem {

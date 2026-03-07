@@ -1120,51 +1120,69 @@ export interface Batch extends Timestamps {
 /**
  * Colleges for college predictor
  */
+export type CollegeType = 'government' | 'private' | 'deemed' | 'government_aided' | 'autonomous';
+
 export interface College extends Timestamps {
   id: string;
   name: string;
+  short_name: string | null;
   slug: string;
-  
+
   // Location
   city: string;
   state: string;
+  district: string | null;
   address: string | null;
   pincode: string | null;
-  
+  latitude: number | null;
+  longitude: number | null;
+
   // Classification
-  type: 'government' | 'private' | 'deemed';
+  type: CollegeType;
   affiliation: string | null;        // e.g., "AICTE Approved"
   established_year: number | null;
-  
+  coa_approved: boolean;
+
   // Courses offered
   courses_offered: string[];         // ['B.Arch', 'B.Plan', etc.]
   intake_capacity: number | null;
-  
+  total_barch_seats: number | null;
+
   // Rankings & ratings
   nirf_rank: number | null;
+  nirf_rank_architecture: number | null;
   rating: number | null;             // 1-5
-  
+  naac_grade: string | null;         // 'A++', 'A+', 'A', 'B++', etc.
+  neram_tier: string | null;         // 'T1', 'T2', 'T3'
+
   // Fees
   annual_fee_min: number | null;
   annual_fee_max: number | null;
-  
+  annual_fee_approx: number | null;  // Single approx value in INR
+
   // Contact
   website: string | null;
   email: string | null;
   phone: string | null;
-  
+
   // Content
   description: string | null;
   facilities: string[];
-  
+  placement_data: Record<string, unknown> | null;
+  facilities_data: Record<string, unknown> | null;
+
   // Media
   logo_url: string | null;
   images: string[];
-  
+
   // SEO
   meta_title: string | null;
   meta_description: string | null;
-  
+
+  // Audit
+  created_by: string | null;
+  updated_by: string | null;
+
   is_active: boolean;
 }
 
@@ -1195,6 +1213,254 @@ export interface CutoffData extends Timestamps {
   total_seats: number | null;
   
   notes: string | null;
+}
+
+// ============================================
+// COUNSELING INTELLIGENCE TYPES
+// ============================================
+
+/**
+ * Counseling system configuration
+ * One row per state/national counseling process (TNEA B.Arch, KEAM, etc.)
+ */
+export interface CounselingSystem {
+  id: string;
+  code: string;
+  name: string;
+  short_name: string | null;
+  slug: string;
+  state: string;
+  conducting_body: string;
+  conducting_body_full: string | null;
+  official_website: string | null;
+  merit_formula: CounselingMeritFormula;
+  exams_accepted: string[];
+  categories: CounselingCategoryDef[];
+  special_reservations: CounselingSpecialReservation[] | null;
+  typical_counseling_months: string | null;
+  typical_rounds: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CounselingMeritFormula {
+  method: string;                   // 'raw_sum', 'weighted', etc.
+  components: CounselingMeritComponent[];
+  total_marks: number;
+}
+
+export interface CounselingMeritComponent {
+  name: string;
+  key: string;
+  max_marks: number;
+  source: string;                   // 'board_marks', 'entrance_exam'
+  description?: string;
+}
+
+export interface CounselingCategoryDef {
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export interface CounselingSpecialReservation {
+  code: string;
+  name: string;
+  percentage?: number | null;
+}
+
+/**
+ * College participation in a counseling system for a given year
+ */
+export interface CollegeCounselingParticipation {
+  id: string;
+  college_id: string;
+  counseling_system_id: string;
+  college_code: string;
+  branches: CounselingBranch[];
+  year: number;
+  seat_matrix: Record<string, unknown> | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CounselingBranch {
+  code: string;
+  name: string;
+}
+
+/**
+ * Historical cutoff entry — one row per college x year x round x branch x category
+ */
+export interface HistoricalCutoff {
+  id: string;
+  counseling_system_id: string;
+  college_id: string;
+  year: number;
+  round: string;
+  branch_code: string;
+  category: string;
+  closing_mark: number | null;
+  closing_rank: number | null;
+  opening_mark: number | null;
+  opening_rank: number | null;
+  seats_available: number | null;
+  seats_filled: number | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+/**
+ * Rank list entry — anonymized record from rank list PDFs
+ * Used for Score → Rank prediction
+ */
+export interface RankListEntry {
+  id: string;
+  counseling_system_id: string;
+  year: number;
+  serial_number: number | null;
+  rank: number;
+  hsc_aggregate_mark: number | null;
+  entrance_exam_mark: number | null;
+  aggregate_mark: number;
+  community: string;
+  community_rank: number | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+/**
+ * Allotment list entry — anonymized record from allotment list PDFs
+ * Used for college-specific predictions
+ */
+export interface AllotmentListEntry {
+  id: string;
+  counseling_system_id: string;
+  year: number;
+  serial_number: number | null;
+  rank: number | null;
+  aggregate_mark: number | null;
+  community: string;
+  college_code: string;
+  college_id: string | null;
+  branch_code: string;
+  allotted_category: string;
+  application_number: string | null;
+  candidate_name: string | null;
+  date_of_birth: string | null;
+  college_name: string | null;
+  branch_name: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+/**
+ * Prediction log — tracks every prediction run for analytics
+ */
+export interface PredictionLog {
+  id: string;
+  user_id: string | null;
+  prediction_type: 'forward' | 'reverse' | 'rank';
+  counseling_systems: string[];
+  data_year: number;
+  input_data: Record<string, unknown>;
+  results_summary: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/**
+ * Counseling audit log — tracks admin data changes
+ */
+export interface CounselingAuditLog {
+  id: string;
+  table_name: string;
+  record_id: string;
+  field_name: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  change_type: 'CREATE' | 'UPDATE' | 'DELETE';
+  changed_by: string;
+  changed_at: string;
+  context: Record<string, unknown> | null;
+}
+
+/**
+ * Extended user exam profile — counseling-specific fields
+ */
+export interface UserExamProfileCounselingFields {
+  state_domicile: string | null;
+  board_type: string | null;         // 'TN_STATE', 'CBSE', 'ICSE', 'OTHER_STATE'
+  board_marks: BoardMarksData | null;
+  nata_score: number | null;
+  jee_paper2_score: number | null;
+  counseling_categories: Record<string, string> | null;  // {"TNEA_BARCH": "BC", "KEAM_ARCH": "EZ"}
+  gender: string | null;
+  first_graduate: boolean;
+  govt_school_student: boolean;
+  pwd_status: boolean;
+  nri_status: boolean;
+  preferred_states: string[] | null;
+  college_type_preference: string[] | null;
+  budget_max: number | null;
+}
+
+export interface BoardMarksData {
+  total_percentage: number;
+  maths: number;
+  physics: number;
+  chemistry: number;
+  maths_max?: number;
+  physics_max?: number;
+  chemistry_max?: number;
+}
+
+/** Rank prediction result */
+export type PredictionDataSource = 'rank_list' | 'allotment_list';
+
+export interface RankPredictionResult {
+  predictedRankMin: number;
+  predictedRankMax: number;
+  categoryRankMin: number | null;
+  categoryRankMax: number | null;
+  percentile: number;
+  totalCandidates: number;
+  matchedEntries: number;
+  year: number;
+  similarStudents: RankListEntry[];
+  dataSource: PredictionDataSource;
+  dataSourceLabel: string;
+}
+
+/** College prediction with tier */
+export type CollegeTier = 'safe' | 'moderate' | 'reach';
+
+export interface CounselingCollegePrediction {
+  college: College;
+  tier: CollegeTier;
+  closingRank: number | null;
+  closingMark: number | null;
+  predictedRank: number;
+  scoreDifference: number;
+  year: number;
+  category: string;
+}
+
+/** Allotment-based college prediction */
+export interface AllotmentCollegePrediction {
+  collegeCode: string;
+  collegeName: string | null;
+  branchCode: string;
+  branchName: string | null;
+  allottedCount: number;
+  minRank: number;
+  maxRank: number;
+  avgScore: number;
+  categories: string[];
+  year: number;
 }
 
 /**

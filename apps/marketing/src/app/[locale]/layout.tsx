@@ -81,14 +81,14 @@ export async function generateMetadata({
       icon: '/favicon.ico',
     },
     alternates: {
-      canonical: `${baseUrl}/${locale}`,
+      canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
       languages: {
-        en: `${baseUrl}/en`,
+        en: baseUrl,
         ta: `${baseUrl}/ta`,
         hi: `${baseUrl}/hi`,
         kn: `${baseUrl}/kn`,
         ml: `${baseUrl}/ml`,
-        'x-default': `${baseUrl}/en`,
+        'x-default': baseUrl,
       },
     },
     openGraph: {

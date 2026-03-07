@@ -8,8 +8,8 @@ export default createMiddleware({
   // Used when no locale matches
   defaultLocale,
 
-  // Always use locale prefix
-  localePrefix: 'always',
+  // Only prefix non-default locales (en has no prefix, ta/hi/kn/ml do)
+  localePrefix: 'as-needed',
 });
 
 export const config = {

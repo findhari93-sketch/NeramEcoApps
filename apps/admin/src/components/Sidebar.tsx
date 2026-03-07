@@ -38,6 +38,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import EventNoteIcon from '@mui/icons-material/EventNote';
+import GavelIcon from '@mui/icons-material/Gavel';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -63,6 +64,7 @@ const menuItems = [
   { text: 'Exam Centers', icon: LocationOnIcon, path: '/exam-centers' },
   { text: 'Exam Schedule', icon: EventNoteIcon, path: '/exam-schedule' },
   { text: 'NATA Content', icon: ArchitectureIcon, path: '/nata' },
+  { text: 'Counseling', icon: GavelIcon, path: '/counseling' },
   { text: 'Settings', icon: SettingsIcon, path: '/settings' },
 ];
 

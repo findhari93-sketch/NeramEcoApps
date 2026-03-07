@@ -2,7 +2,6 @@
 
 import { useRef, useEffect } from 'react';
 import { Box } from '@neram/ui';
-import { useIsMobile } from '@neram/ui';
 
 // Color palette
 const GOLD = '#e8a020';
@@ -22,7 +21,6 @@ export default function ClockCanvas() {
   const rafRef = useRef<number>(0);
   const ringAngleRef = useRef(0);
   const innerRingAngleRef = useRef(0);
-  const isMobile = useIsMobile();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,17 +29,24 @@ export default function ClockCanvas() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Handle retina displays
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
+    let size: number;
+    let CX: number;
+    let CY: number;
+    let R: number;
 
-    const size = rect.width;
-    const CX = size / 2;
-    const CY = size / 2;
-    const R = size * (190 / BASE_SIZE);
+    function setupCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas!.getBoundingClientRect();
+      canvas!.width = rect.width * dpr;
+      canvas!.height = rect.height * dpr;
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      size = rect.width;
+      CX = size / 2;
+      CY = size / 2;
+      R = size * (190 / BASE_SIZE);
+    }
+
+    setupCanvas();
 
     function drawGlow(x: number, y: number, r: number, color: string, a: number) {
       const grad = ctx!.createRadialGradient(x, y, 0, x, y, r);
@@ -298,10 +303,16 @@ export default function ClockCanvas() {
 
     tick();
 
+    const resizeObserver = new ResizeObserver(() => {
+      setupCanvas();
+    });
+    resizeObserver.observe(canvas);
+
     return () => {
       cancelAnimationFrame(rafRef.current);
+      resizeObserver.disconnect();
     };
-  }, [isMobile]);
+  }, []);
 
   return (
     <Box
@@ -314,13 +325,14 @@ export default function ClockCanvas() {
         animation: 'neramFadeUp 1.2s ease forwards',
         animationDelay: '0.5s',
         transform: 'translateY(16px)',
+        maxWidth: { xs: 280, sm: 340, md: 460 },
+        mx: 'auto',
       }}
     >
       <canvas
         ref={canvasRef}
         style={{
           width: '100%',
-          maxWidth: isMobile ? 280 : 460,
           aspectRatio: '1 / 1',
           display: 'block',
           filter: 'drop-shadow(0 0 60px rgba(232,160,32,0.15))',

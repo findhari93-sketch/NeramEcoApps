@@ -17,8 +17,6 @@ import {
   Divider,
   Tooltip,
   Chip,
-  useMediaQuery,
-  useTheme,
   MenuIcon,
   CloseIcon,
   HelpOutlineIcon,
@@ -106,6 +104,7 @@ const navigationLinks = [
   { labelKey: 'courses' as const, href: '/courses' as const },
   { labelKey: 'testimonials' as const, href: '/testimonials' as const },
   { labelKey: 'nata2026' as const, href: '/nata-2026' as const, badge: 'NEW' as const },
+  { labelKey: 'counseling' as const, href: '/counseling' as const },
   { labelKey: 'fees' as const, href: '/fees' as const },
   { labelKey: 'contact' as const, href: '/contact' as const },
 ];
@@ -113,8 +112,6 @@ const navigationLinks = [
 export default function Header() {
   const params = useParams();
   const locale = params.locale as Locale;
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const pathname = usePathname();
   const router = useRouter();
   const t = useTranslations();
@@ -220,8 +217,7 @@ export default function Header() {
             </Box>
 
             {/* Desktop Navigation Links */}
-            {!isMobile && (
-              <Box sx={{ flexGrow: 1, display: 'flex', gap: 0.5, alignItems: 'center' }}>
+              <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, gap: 0.5, alignItems: 'center' }}>
                 {pathname !== '/' && (
                   <Tooltip title={t('nav.home')} arrow>
                     <IconButton
@@ -312,10 +308,9 @@ export default function Header() {
                   );
                 })}
               </Box>
-            )}
 
             {/* Spacer for mobile */}
-            {isMobile && <Box sx={{ flexGrow: 1 }} />}
+            <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
 
             {/* CTA Button: "Need Help?" on /apply, dynamic status-aware button elsewhere */}
             {isApplyPage ? (
@@ -323,7 +318,7 @@ export default function Header() {
                 component={Link}
                 href="/contact"
                 variant="outlined"
-                size={isMobile ? 'small' : 'medium'}
+                size="small"
                 startIcon={<HelpOutlineIcon sx={{ fontSize: { xs: 16, md: 18 } }} />}
                 sx={{
                   borderRadius: '6px',
@@ -348,7 +343,7 @@ export default function Header() {
                 href={ctaConfig.href}
                 variant={ctaConfig.variant}
                 color={appStatus ? undefined : 'secondary'}
-                size={isMobile ? 'small' : 'medium'}
+                size="small"
                 sx={{
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -365,7 +360,7 @@ export default function Header() {
               <Button
                 onClick={goToApp}
                 variant={ctaConfig.variant}
-                size={isMobile ? 'small' : 'medium'}
+                size="small"
                 sx={{
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -381,11 +376,13 @@ export default function Header() {
             )}
 
             {/* Desktop: Notifications + Auth Button */}
-            {!isMobile && <UserNotificationBell />}
-            {!isMobile && <AuthButton />}
+            <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}>
+              <UserNotificationBell />
+              <AuthButton />
+            </Box>
 
             {/* Mobile: Hamburger Menu */}
-            {isMobile && (
+            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
               <IconButton
                 edge="end"
                 color="inherit"
@@ -395,7 +392,7 @@ export default function Header() {
               >
                 <MenuIcon />
               </IconButton>
-            )}
+            </Box>
           </Toolbar>
         </Container>
 

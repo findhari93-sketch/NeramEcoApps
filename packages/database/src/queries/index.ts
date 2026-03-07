@@ -36,3 +36,5 @@ export * from './testimonials';
 export * from './social-proofs';
 export * from './nata-exam-centers';
 export * from './exam-schedule';
+export * from './counseling';
+export * from './counseling-admin';

@@ -31,6 +31,12 @@
   ],
   "redirects": [
     {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "www.neramclasses.com" }],
+      "destination": "https://neramclasses.com/:path",
+      "permanent": true
+    },
+    {
       "source": "/home",
       "destination": "/",
       "permanent": true

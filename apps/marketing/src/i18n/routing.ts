@@ -4,4 +4,5 @@ import { locales, defaultLocale } from '@/i18n';
 export const { Link, usePathname, useRouter, redirect } = createNavigation({
   locales,
   defaultLocale,
+  localePrefix: 'as-needed',
 });
