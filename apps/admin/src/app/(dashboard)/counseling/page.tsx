@@ -31,7 +31,6 @@ import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import HistoryIcon from '@mui/icons-material/History';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import VerifiedIcon from '@mui/icons-material/Verified';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -401,7 +400,6 @@ export default function CounselingDashboard() {
     { label: 'Allotments', desc: 'Upload CSV allotment data', icon: <UploadFileIcon sx={{ color: '#6A1B9A', fontSize: 18 }} />, color: '#6A1B9A', href: '/counseling/allotment-lists' },
     { label: 'Cutoffs', desc: 'Upload CSV cutoff marks', icon: <UploadFileIcon sx={{ color: '#2E7D32', fontSize: 18 }} />, color: '#2E7D32', href: '/counseling/cutoffs' },
     { label: 'Audit Log', desc: 'View data change history', icon: <HistoryIcon sx={{ color: '#5E35B1', fontSize: 18 }} />, color: '#5E35B1', href: '/counseling/audit-log' },
-    { label: 'COA Checker', desc: 'Verify COA approval status of B.Arch colleges', icon: <VerifiedIcon sx={{ color: '#0277BD', fontSize: 18 }} />, color: '#0277BD', href: '/counseling/coa-checker' },
   ];
 
   return (

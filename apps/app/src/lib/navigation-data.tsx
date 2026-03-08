@@ -18,6 +18,7 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GavelIcon from '@mui/icons-material/Gavel';
+import VerifiedIcon from '@mui/icons-material/Verified';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import AppsIcon from '@mui/icons-material/Apps';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -49,6 +50,7 @@ export const JEE_TOOLS: ToolNavItem[] = [
 export const COUNSELING_TOOLS: ToolNavItem[] = [
   { title: 'Rank Predictor', href: '/tools/counseling/rank-predictor', icon: <TrendingUpIcon fontSize="small" /> },
   { title: 'College Predictor', href: '/tools/counseling/college-predictor', icon: <SchoolIcon fontSize="small" /> },
+  { title: 'COA Checker', href: '/tools/counseling/coa-checker', icon: <VerifiedIcon fontSize="small" /> },
 ];
 
 export interface GeneralNavItem {
