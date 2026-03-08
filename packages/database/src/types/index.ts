@@ -3646,3 +3646,81 @@ export interface Database {
     };
   };
 }
+
+// ============================================
+// COA INSTITUTIONS
+// ============================================
+
+// ============================================
+// COUNSELING COLLEGE DIRECTORY
+// ============================================
+
+/**
+ * Maps counseling-system-specific college codes to college names.
+ * Each counseling system (TNEA, KEAM, etc.) has its own code namespace.
+ */
+export interface CounselingCollegeDirectory {
+  id: string;
+  counseling_system_id: string;
+  college_code: string;
+  college_name: string;
+  city: string | null;
+  district: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Similar student entry — may include college info when data source is allotment data
+ */
+export interface SimilarStudent {
+  rank: number;
+  aggregate_mark: number;
+  community: string;
+  community_rank: number | null;
+  // Present only when data source is allotment_list:
+  candidate_name?: string;
+  college_code?: string;
+  college_name?: string;
+  allotted_category?: string;
+}
+
+export type CoaApprovalStatus = 'active' | 'expiring' | 'unknown';
+
+export interface CoaInstitution {
+  id: string;
+  institution_code: string;
+  name: string;
+  head_of_dept: string | null;
+  address: string | null;
+  city: string;
+  state: string;
+  pincode: string | null;
+  affiliating_university: string | null;
+  course_name: string;
+  commenced_year: number | null;
+  current_intake: number | null;
+  approval_period_raw: string;
+  approval_status: CoaApprovalStatus;
+  valid_for_2025_26: boolean;
+  phone: string | null;
+  fax: string | null;
+  email: string | null;
+  mobile: string | null;
+  website: string | null;
+  data_source_url: string | null;
+  last_scraped_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoaStatStat {
+  state: string;
+  college_count: number;
+  total_seats: number;
+  active_colleges: number;
+  active_seats: number;
+  expiring_colleges: number;
+  oldest_program: number | null;
+  newest_program: number | null;
+}

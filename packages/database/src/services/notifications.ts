@@ -155,6 +155,15 @@ export async function dispatchNotification(
     results.userNotification = { success: false, error: userNotifResult.reason?.message || 'Unknown error' };
   }
 
+  // Log dispatch results for production debugging
+  console.log(`[Notification] Dispatch results for "${event.type}":`, {
+    telegram: results.telegram.success ? 'OK' : `FAIL: ${results.telegram.error}`,
+    email: `sent=${results.email.sent} failed=${results.email.failed}`,
+    admin: results.admin.success ? 'OK' : `FAIL: ${results.admin.error}`,
+    whatsapp: results.whatsapp.success ? 'OK' : `FAIL: ${results.whatsapp.error}`,
+    userNotification: results.userNotification.success ? 'OK' : `FAIL: ${results.userNotification.error}`,
+  });
+
   return results;
 }
 
@@ -580,6 +589,45 @@ function formatTelegramMessage(event: NotificationEvent): string | null {
         `<b>Phone:</b> ${data.phone || 'N/A'}`,
         '',
         'Scheduled callback is due now. Contact this enquiry.',
+      ].join('\n');
+
+    case 'ticket_created':
+      return [
+        '<b>🎫 New Support Ticket</b>',
+        '',
+        `<b>Ticket #:</b> ${data.ticket_number || 'N/A'}`,
+        `<b>User:</b> ${data.user_name || 'Unknown'}`,
+        `<b>Category:</b> ${data.category || 'General'}`,
+        `<b>Subject:</b> ${data.subject || 'No subject'}`,
+        '',
+        '<i>Review in Admin → Support Tickets</i>',
+      ].join('\n');
+
+    case 'ticket_resolved':
+      return [
+        '<b>✅ Support Ticket Resolved</b>',
+        '',
+        `<b>Ticket #:</b> ${data.ticket_number || 'N/A'}`,
+        `<b>User:</b> ${data.user_name || 'Unknown'}`,
+      ].join('\n');
+
+    case 'link_regeneration_requested':
+      return [
+        '<b>🔗 Enrollment Link Regeneration Requested</b>',
+        '',
+        `<b>Student:</b> ${data.student_name || data.user_name || 'Unknown'}`,
+        `<b>Phone:</b> ${data.student_phone || data.phone || 'N/A'}`,
+        `<b>Email:</b> ${data.student_email || data.email || 'N/A'}`,
+        '',
+        '<i>Review in Admin → Direct Enrollment</i>',
+      ].join('\n');
+
+    case 'direct_enrollment_completed':
+      return [
+        '<b>🎓 Direct Enrollment Completed</b>',
+        '',
+        `<b>Student:</b> ${data.student_name || data.user_name || 'Unknown'}`,
+        `<b>Phone:</b> ${data.phone || 'N/A'}`,
       ].join('\n');
 
     default:

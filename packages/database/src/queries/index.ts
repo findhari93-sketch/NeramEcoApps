@@ -38,3 +38,4 @@ export * from './nata-exam-centers';
 export * from './exam-schedule';
 export * from './counseling';
 export * from './counseling-admin';
+export * from './coa';

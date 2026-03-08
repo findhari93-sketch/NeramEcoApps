@@ -15,7 +15,9 @@ import type {
   CollegeCounselingParticipation,
   CounselingAuditLog,
   CounselingSystem,
+  CounselingCollegeDirectory,
 } from '../types';
+import { getCollegeDirectory } from './counseling';
 
 // ============================================
 // BULK IMPORT OPERATIONS
@@ -125,8 +127,15 @@ export async function importAllotmentListEntries(
 
   if (deleteError) throw deleteError;
 
+  // Auto-fill missing college names from directory
+  const directory = await getCollegeDirectory(systemId, supabase);
+
   const rows = entries.map((entry) => ({
     ...entry,
+    // Enrich: if college_name is missing but code exists in directory, fill it
+    college_name: entry.college_name || (entry.college_code && directory.has(entry.college_code)
+      ? directory.get(entry.college_code)!
+      : entry.college_name),
     counseling_system_id: systemId,
     year,
     created_by: createdBy,
@@ -442,4 +451,92 @@ export async function getCounselingStats(
     totalAllotmentEntries,
     availableYears,
   };
+}
+
+// ============================================
+// COLLEGE DIRECTORY ADMIN OPERATIONS
+// ============================================
+
+/**
+ * Upsert a single college directory entry.
+ */
+export async function upsertCollegeDirectoryEntry(
+  systemId: string,
+  entry: { college_code: string; college_name: string; city?: string; district?: string },
+  client?: TypedSupabaseClient
+): Promise<CounselingCollegeDirectory> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('counseling_college_directory')
+    .upsert({
+      counseling_system_id: systemId,
+      college_code: entry.college_code,
+      college_name: entry.college_name,
+      city: entry.city || null,
+      district: entry.district || null,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'counseling_system_id,college_code',
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as CounselingCollegeDirectory;
+}
+
+/**
+ * Bulk import college directory entries from CSV.
+ * Uses upsert to handle existing entries.
+ */
+export async function importCollegeDirectory(
+  systemId: string,
+  entries: { college_code: string; college_name: string; city?: string; district?: string }[],
+  client?: TypedSupabaseClient
+): Promise<{ upserted: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const rows = entries.map(e => ({
+    counseling_system_id: systemId,
+    college_code: e.college_code,
+    college_name: e.college_name,
+    city: e.city || null,
+    district: e.district || null,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const batchSize = 500;
+  let upserted = 0;
+
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await supabase
+      .from('counseling_college_directory')
+      .upsert(batch as any, {
+        onConflict: 'counseling_system_id,college_code',
+      });
+
+    if (error) throw error;
+    upserted += batch.length;
+  }
+
+  return { upserted };
+}
+
+/**
+ * Delete a college directory entry.
+ */
+export async function deleteCollegeDirectoryEntry(
+  entryId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { error } = await supabase
+    .from('counseling_college_directory')
+    .delete()
+    .eq('id', entryId);
+
+  if (error) throw error;
 }

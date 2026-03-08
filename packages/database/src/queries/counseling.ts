@@ -20,6 +20,8 @@ import type {
   AllotmentCollegePrediction,
   CollegeTier,
   PredictionLog,
+  CounselingCollegeDirectory,
+  SimilarStudent,
 } from '../types';
 
 // ============================================
@@ -363,41 +365,123 @@ export async function findSimilarStudentsFromAllotment(
   score: number,
   range: number = 5,
   limit: number = 20,
-  client?: TypedSupabaseClient
+  client?: TypedSupabaseClient,
+  predictedRank?: number,
+  category?: string
 ): Promise<any[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  // Try with initial range, expand if empty (e.g. score above/below all data)
-  let searchRange = range;
   let data: any[] | null = null;
 
-  for (const r of [searchRange, 20, 50]) {
+  // Strategy: find students near the PREDICTED RANK (not just score range)
+  // This gives more relevant results centered around where the user would actually be
+  if (predictedRank) {
+    const rankRange = 15; // ±15 ranks around predicted
     const { data: result, error } = await supabase
       .from('allotment_list_entries')
-      .select('rank, aggregate_mark, community, college_code, college_name, allotted_category')
+      .select('rank, aggregate_mark, community, college_code, college_name, allotted_category, candidate_name')
       .eq('counseling_system_id', systemId)
       .eq('year', year)
       .not('rank', 'is', null)
       .not('aggregate_mark', 'is', null)
-      .gte('aggregate_mark', score - r)
-      .lte('aggregate_mark', score + r)
+      .gte('rank', Math.max(1, predictedRank - rankRange))
+      .lte('rank', predictedRank + rankRange)
       .order('rank', { ascending: true })
       .limit(limit);
 
     if (error) throw error;
-    if (result && result.length > 0) {
-      data = result;
-      break;
+    if (result && result.length > 0) data = result;
+  }
+
+  // Fallback: search by score range if rank-based search found nothing
+  if (!data) {
+    for (const r of [range, 20, 50]) {
+      const { data: result, error } = await supabase
+        .from('allotment_list_entries')
+        .select('rank, aggregate_mark, community, college_code, college_name, allotted_category, candidate_name')
+        .eq('counseling_system_id', systemId)
+        .eq('year', year)
+        .not('rank', 'is', null)
+        .not('aggregate_mark', 'is', null)
+        .gte('aggregate_mark', score - r)
+        .lte('aggregate_mark', score + r)
+        .order('rank', { ascending: true })
+        .limit(limit);
+
+      if (error) throw error;
+      if (result && result.length > 0) {
+        data = result;
+        break;
+      }
     }
   }
 
-  // Map to rank-list-like shape for UI compatibility
-  return (data || []).map((d: any) => ({
-    rank: d.rank,
-    aggregate_mark: d.aggregate_mark,
-    community: d.community,
-    community_rank: null,
-  }));
+  if (!data || data.length === 0) return [];
+
+  // Compute community rank for each student by counting how many of the same
+  // community have a better (lower) rank in the full dataset
+  const communities = [...new Set(data.map((d: any) => d.community))];
+  const communityRankMap = new Map<string, number>();
+
+  // For each community represented, get the count of students with better rank
+  if (category || communities.length > 0) {
+    const targetCommunities = category ? [category, ...communities.filter(c => c !== category)] : communities;
+    for (const comm of targetCommunities) {
+      // Find the best (lowest) rank in our result set for this community
+      const bestRankInSet = data.filter((d: any) => d.community === comm)
+        .reduce((min: number, d: any) => Math.min(min, d.rank), Infinity);
+
+      if (bestRankInSet < Infinity) {
+        const { count, error } = await supabase
+          .from('allotment_list_entries')
+          .select('*', { count: 'exact', head: true })
+          .eq('counseling_system_id', systemId)
+          .eq('year', year)
+          .eq('community', comm)
+          .not('rank', 'is', null)
+          .lt('rank', bestRankInSet);
+
+        if (!error && count != null) {
+          // The community rank of the best student in our set = count + 1
+          communityRankMap.set(`${comm}_${bestRankInSet}`, count + 1);
+        }
+      }
+    }
+  }
+
+  // Build a running community rank counter for students in our result set
+  const communityCounters = new Map<string, number>();
+  // First pass: get the base rank for the first student of each community
+  for (const comm of communities) {
+    const firstOfComm = data.find((d: any) => d.community === comm);
+    if (firstOfComm) {
+      const baseRank = communityRankMap.get(`${comm}_${firstOfComm.rank}`);
+      communityCounters.set(comm, baseRank || 0);
+    }
+  }
+
+  // Map to SimilarStudent shape — includes college info and computed community rank
+  let lastCommunityRanks = new Map<string, number>();
+  return data.map((d: any) => {
+    let commRank: number | null = null;
+    const base = communityCounters.get(d.community);
+    if (base != null && base > 0) {
+      const current = (lastCommunityRanks.get(d.community) || 0) + 1;
+      lastCommunityRanks.set(d.community, current);
+      commRank = base + current - 1;
+    }
+
+    return {
+      rank: d.rank,
+      aggregate_mark: d.aggregate_mark,
+      community: d.community,
+      community_rank: commRank,
+      college_code: d.college_code || undefined,
+      college_name: d.college_name || undefined,
+      allotted_category: d.allotted_category || undefined,
+      candidate_name: d.candidate_name || undefined,
+    };
+  });
 }
 
 /**
@@ -592,9 +676,14 @@ export async function predictRankFromScore(
   const percentile = Math.round(((totalCandidates - midRank) / totalCandidates) * 100);
 
   // Similar students from whichever data source is available
-  const similarStudents = dataSource === 'rank_list'
+  let similarStudents = dataSource === 'rank_list'
     ? await findSimilarStudents(systemId, year, score, 5, 20, supabase)
-    : await findSimilarStudentsFromAllotment(systemId, year, score, 5, 20, supabase);
+    : await findSimilarStudentsFromAllotment(systemId, year, score, 5, 20, supabase, predictedRank, category);
+
+  // Enrich missing college names from directory (when allotment data is source)
+  if (dataSource === 'allotment_list') {
+    similarStudents = await enrichCollegeNames(similarStudents, systemId, supabase);
+  }
 
   return {
     predictedRankMin,
@@ -1064,5 +1153,110 @@ export async function predictCollegesFromAllotment(
   // Sort by allotted count descending (most popular colleges first)
   predictions.sort((a, b) => b.allottedCount - a.allottedCount);
 
+  // Enrich missing college names from directory
+  const codesWithoutNames = predictions
+    .filter(p => !p.collegeName && p.collegeCode)
+    .map(p => p.collegeCode);
+
+  if (codesWithoutNames.length > 0) {
+    const directory = await getCollegeDirectory(systemId, supabase);
+    for (const pred of predictions) {
+      if (!pred.collegeName && directory.has(pred.collegeCode)) {
+        pred.collegeName = directory.get(pred.collegeCode)!;
+      }
+    }
+  }
+
   return predictions;
+}
+
+// ============================================
+// COLLEGE DIRECTORY LOOKUP
+// ============================================
+
+/**
+ * Get the full college directory for a counseling system.
+ * Returns a Map of college_code → college_name for fast lookups.
+ */
+export async function getCollegeDirectory(
+  systemId: string,
+  client?: TypedSupabaseClient
+): Promise<Map<string, string>> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  const { data, error } = await supabase
+    .from('counseling_college_directory')
+    .select('college_code, college_name')
+    .eq('counseling_system_id', systemId)
+    .order('college_code');
+
+  if (error) throw error;
+
+  const map = new Map<string, string>();
+  for (const entry of (data || []) as any[]) {
+    map.set(entry.college_code, entry.college_name);
+  }
+  return map;
+}
+
+/**
+ * Get full college directory entries (with city, district) for admin display.
+ */
+export async function getCollegeDirectoryEntries(
+  systemId: string,
+  client?: TypedSupabaseClient
+): Promise<CounselingCollegeDirectory[]> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  const { data, error } = await supabase
+    .from('counseling_college_directory')
+    .select('*')
+    .eq('counseling_system_id', systemId)
+    .order('college_code');
+
+  if (error) throw error;
+  return (data || []) as CounselingCollegeDirectory[];
+}
+
+/**
+ * Look up a single college name by code.
+ */
+export async function getCollegeNameByCode(
+  systemId: string,
+  code: string,
+  client?: TypedSupabaseClient
+): Promise<string | null> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  const { data, error } = await supabase
+    .from('counseling_college_directory')
+    .select('college_name')
+    .eq('counseling_system_id', systemId)
+    .eq('college_code', code)
+    .single();
+
+  if (error) return null;
+  return (data as any)?.college_name || null;
+}
+
+/**
+ * Enrich entries that have college_code but missing college_name
+ * by looking up from the counseling_college_directory.
+ */
+export async function enrichCollegeNames<T extends { college_code?: string; college_name?: string | null }>(
+  entries: T[],
+  systemId: string,
+  client?: TypedSupabaseClient
+): Promise<T[]> {
+  const needsEnrichment = entries.filter(e => e.college_code && !e.college_name);
+  if (needsEnrichment.length === 0) return entries;
+
+  const directory = await getCollegeDirectory(systemId, client);
+
+  return entries.map(entry => {
+    if (entry.college_code && !entry.college_name && directory.has(entry.college_code)) {
+      return { ...entry, college_name: directory.get(entry.college_code)! };
+    }
+    return entry;
+  });
 }

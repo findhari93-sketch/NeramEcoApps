@@ -41,6 +41,10 @@ export async function sendTelegramMessage(
     const chatId = getChatId();
     const parseMode = options.parseMode || 'HTML';
 
+    // 10-second timeout to prevent Vercel function hangs
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${TELEGRAM_API_BASE}${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -49,20 +53,25 @@ export async function sendTelegramMessage(
         text: message,
         parse_mode: parseMode,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMsg = (errorData as any)?.description || `HTTP ${response.status}`;
-      console.error('Telegram API error:', errorMsg);
+      console.error('[Telegram] API error:', errorMsg, { status: response.status });
       return { success: false, error: errorMsg };
     }
 
+    console.log('[Telegram] Message sent successfully');
     return { success: true };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Telegram service error:', errorMsg);
-    return { success: false, error: errorMsg };
+    const isTimeout = err instanceof Error && err.name === 'AbortError';
+    console.error('[Telegram] Service error:', isTimeout ? 'Request timed out (10s)' : errorMsg);
+    return { success: false, error: isTimeout ? 'Request timed out' : errorMsg };
   }
 }
 
@@ -70,7 +79,12 @@ export async function sendTelegramMessage(
  * Check if Telegram is configured
  */
 export function isTelegramConfigured(): boolean {
-  return !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
+  const hasToken = !!process.env.TELEGRAM_BOT_TOKEN;
+  const hasChatId = !!process.env.TELEGRAM_CHAT_ID;
+  if (!hasToken || !hasChatId) {
+    console.warn('[Telegram] Not configured:', { hasToken, hasChatId });
+  }
+  return hasToken && hasChatId;
 }
 
 // ============================================

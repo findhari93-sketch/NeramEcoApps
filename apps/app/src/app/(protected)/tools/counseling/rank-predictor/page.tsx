@@ -421,7 +421,11 @@ export default function CounselingRankPredictorPage() {
             )}
 
             {/* Similar Students */}
-            {similarStudents.length > 0 && (
+            {similarStudents.length > 0 && (() => {
+              const hasCollegeData = similarStudents.some((s: any) => s.college_name);
+              const hasNameData = similarStudents.some((s: any) => s.candidate_name);
+              const hasCommRank = similarStudents.some((s: any) => s.community_rank != null);
+              return (
               <Paper elevation={0} sx={{ mb: 2, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
                 <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'grey.100', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                   <PeopleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
@@ -432,25 +436,52 @@ export default function CounselingRankPredictorPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Rank</TableCell>
+                        {hasNameData && (
+                          <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Name</TableCell>
+                        )}
                         <TableCell sx={{ fontWeight: 600, py: 0.75 }} align="right">Score</TableCell>
                         <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Community</TableCell>
-                        <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Comm. Rank</TableCell>
+                        {hasCommRank && (
+                          <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Comm. Rank</TableCell>
+                        )}
+                        {hasCollegeData && (
+                          <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Allotted College</TableCell>
+                        )}
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {similarStudents.map((s, i) => (
+                      {similarStudents.map((s: any, i: number) => (
                         <TableRow key={i} sx={{ bgcolor: Math.abs(s.aggregate_mark - parseFloat(compositeScore)) < 1 ? 'action.selected' : 'inherit' }}>
                           <TableCell sx={{ py: 0.5 }}><strong>{s.rank}</strong></TableCell>
+                          {hasNameData && (
+                            <TableCell sx={{ py: 0.5, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                                {s.candidate_name || '–'}
+                              </Typography>
+                            </TableCell>
+                          )}
                           <TableCell sx={{ py: 0.5 }} align="right">{s.aggregate_mark}</TableCell>
                           <TableCell sx={{ py: 0.5 }}><Chip label={s.community} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} /></TableCell>
-                          <TableCell sx={{ py: 0.5 }}>{s.community_rank ?? '–'}</TableCell>
+                          {hasCommRank && (
+                            <TableCell sx={{ py: 0.5 }}>{s.community_rank ?? '–'}</TableCell>
+                          )}
+                          {hasCollegeData && (
+                            <TableCell sx={{ py: 0.5, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <Tooltip title={s.college_name || ''} arrow placement="top">
+                                <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                                  {s.college_name || '–'}
+                                </Typography>
+                              </Tooltip>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
               </Paper>
-            )}
+              );
+            })()}
 
             {/* CTA to College Predictor */}
             {prediction?.predictedRank && (

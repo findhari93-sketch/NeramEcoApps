@@ -332,6 +332,11 @@ export default function CsvImporter({ type, systemId, systemName, year, onImport
           : result.message,
       });
       onImportComplete?.({ count: verifiedCount || importedCount });
+      // Signal counseling overview to refresh its year-wise data summary
+      try {
+        localStorage.setItem('counseling_data_changed', Date.now().toString());
+        window.dispatchEvent(new CustomEvent('counseling-data-changed'));
+      } catch {}
     } catch (err: any) {
       setImportResult({ success: false, message: err.message || 'Import failed' });
     } finally {
