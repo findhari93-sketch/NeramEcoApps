@@ -1324,6 +1324,9 @@ export interface RankListEntry {
   year: number;
   serial_number: number | null;
   rank: number;
+  application_number: string | null;
+  candidate_name: string | null;
+  date_of_birth: string | null;
   hsc_aggregate_mark: number | null;
   entrance_exam_mark: number | null;
   aggregate_mark: number;

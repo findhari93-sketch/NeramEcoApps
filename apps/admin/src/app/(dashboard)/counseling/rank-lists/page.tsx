@@ -161,6 +161,9 @@ export default function RankListsPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600 }}>Rank</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Appln No</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Candidate Name</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>DOB</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="right">Aggregate Mark</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="right">HSC Mark</TableCell>
                     <TableCell sx={{ fontWeight: 600 }} align="right">Entrance Mark</TableCell>
@@ -174,6 +177,9 @@ export default function RankListsPage() {
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>{entry.rank}</Typography>
                       </TableCell>
+                      <TableCell>{entry.application_number ?? '-'}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{entry.candidate_name ?? '-'}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{entry.date_of_birth ?? '-'}</TableCell>
                       <TableCell align="right">{entry.aggregate_mark}</TableCell>
                       <TableCell align="right">{entry.hsc_aggregate_mark ?? '-'}</TableCell>
                       <TableCell align="right">{entry.entrance_exam_mark ?? '-'}</TableCell>

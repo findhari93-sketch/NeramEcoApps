@@ -42,7 +42,7 @@ interface CsvImporterProps {
 const EXPECTED_COLUMNS: Record<string, { required: string[]; optional: string[] }> = {
   'rank-list': {
     required: ['rank', 'aggregate_mark', 'community'],
-    optional: ['serial_number', 'hsc_aggregate_mark', 'entrance_exam_mark', 'community_rank'],
+    optional: ['serial_number', 'application_number', 'candidate_name', 'date_of_birth', 'hsc_aggregate_mark', 'entrance_exam_mark', 'community_rank'],
   },
   'allotment-list': {
     required: ['community', 'college_code', 'branch_code', 'allotted_category'],
@@ -65,6 +65,10 @@ const COLUMN_ALIASES: Record<string, string> = {
   'name_of_the_candidate': 'candidate_name',
   'date_of_birth': 'date_of_birth',
   'application_number': 'application_number',
+  'nata_/_jee_mark': 'entrance_exam_mark',
+  'nata_jee_mark': 'entrance_exam_mark',
+  'entrance_mark': 'entrance_exam_mark',
+  'hsc_mark': 'hsc_aggregate_mark',
 };
 
 // Columns that must be numeric — "-", "N/A", empty → null
@@ -83,11 +87,11 @@ const TYPE_LABELS: Record<string, string> = {
 // Sample rows for template CSV downloads
 const TEMPLATE_SAMPLES: Record<string, string[][]> = {
   'rank-list': [
-    ['1', '385.50', 'OC', '', '195.50', '190.00', ''],
-    ['2', '382.00', 'BC', '1', '188.00', '194.00', '1001'],
-    ['3', '380.20', 'OC', '', '192.20', '188.00', ''],
-    ['4', '378.10', 'MBC', '1', '185.10', '193.00', '2001'],
-    ['5', '375.00', 'SC', '1', '180.00', '195.00', '3001'],
+    ['1', '385.50', 'OC', '', '100029', 'Keerthana Venkatraman', '21-03-2005', '195.50', '190.00', ''],
+    ['2', '382.00', 'BC', '1', '100030', 'Harini S N', '28-09-2005', '188.00', '194.00', '1001'],
+    ['3', '380.20', 'OC', '', '101304', 'Meena KP', '12-05-2005', '192.20', '188.00', ''],
+    ['4', '378.10', 'MBC', '1', '101679', 'Student D', '18-12-2005', '185.10', '193.00', '2001'],
+    ['5', '375.00', 'SC', '1', '101648', 'Student E', '05-04-2006', '180.00', '195.00', '3001'],
   ],
   'allotment-list': [
     ['OC', '1001', 'ARCH', 'OC', '1', '1', '385.50', '', 'APP2024001', 'STUDENT A', '2006-05-15', 'ABC Architecture College', 'Architecture'],
@@ -207,7 +211,9 @@ export default function CsvImporter({ type, systemId, systemName, year, onImport
       skipEmptyLines: true,
       dynamicTyping: true,
       transformHeader: (header: string) => {
-        const lower = header.trim().toLowerCase();
+        // Normalize: lowercase, trim, replace spaces with underscores
+        // This handles PDF headers like "NAME OF THE CANDIDATE" → "name_of_the_candidate"
+        const lower = header.trim().toLowerCase().replace(/\s+/g, '_');
         return COLUMN_ALIASES[lower] || lower;
       },
       complete: (results) => {

@@ -62,6 +62,9 @@ export default function robots(): MetadataRoute.Robots {
       { userAgent: 'Applebot-Extended', allow: '/' },
       { userAgent: 'Bytespider', allow: '/' },
       { userAgent: 'CCBot', allow: '/' },
+      // Google Ads crawlers — need unrestricted access to verify ad landing pages
+      { userAgent: 'AdsBot-Google', allow: '/' },
+      { userAgent: 'AdsBot-Google-Mobile', allow: '/' },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
     host: baseUrl,
