@@ -13,6 +13,14 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n'],
+  async rewrites() {
+    return [
+      {
+        source: '/.well-known/assetlinks.json',
+        destination: '/api/assetlinks',
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: '/tools/cutoff-calculator', destination: '/tools/nata/cutoff-calculator', permanent: true },
