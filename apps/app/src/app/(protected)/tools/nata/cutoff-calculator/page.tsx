@@ -738,6 +738,7 @@ function ResultsPanel({
   bestAttemptResult,
   finalCutoff,
   hasData,
+  board,
 }: {
   boardConverted: number;
   boardPercentage: number;
@@ -746,6 +747,7 @@ function ResultsPanel({
   bestAttemptResult: NataAttemptResult;
   finalCutoff: number;
   hasData: boolean;
+  board?: string;
 }) {
   if (!hasData) {
     return (
@@ -931,14 +933,17 @@ function ResultsPanel({
           borderRadius: 1.5,
         }}
       >
-        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 0.5 }}>
           What&apos;s Next?
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+          Suggested for {board ? (BOARD_CONFIG[board as BoardType]?.label || board) : 'your board'}: TNEA B.Arch Counseling
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Button
             variant="contained"
             fullWidth
-            href={`/tools/counseling/rank-predictor?score=${finalCutoff}`}
+            href={`/tools/counseling/rank-predictor?score=${finalCutoff}&system=TNEA_BARCH`}
             endIcon={<ArrowForwardIcon />}
             sx={{ bgcolor: '#E65100', '&:hover': { bgcolor: '#BF360C' } }}
           >
@@ -947,7 +952,7 @@ function ResultsPanel({
           <Button
             variant="outlined"
             fullWidth
-            href={`/tools/counseling/college-predictor?score=${finalCutoff}`}
+            href={`/tools/counseling/college-predictor?score=${finalCutoff}&system=TNEA_BARCH`}
             endIcon={<ArrowForwardIcon />}
           >
             Find Colleges for Your Score
@@ -1223,6 +1228,7 @@ export default function CutoffCalculatorPage() {
                         bestAttemptResult={state.bestAttemptResult}
                         finalCutoff={state.finalCutoff}
                         hasData={state.hasData}
+                        board={state.board}
                       />
                     </AuthGate>
                   </Box>
@@ -1330,6 +1336,7 @@ export default function CutoffCalculatorPage() {
                   bestAttemptResult={state.bestAttemptResult}
                   finalCutoff={state.finalCutoff}
                   hasData={state.hasData}
+                  board={state.board}
                 />
               </AuthGate>
               {/* Desktop: purpose prompt inline below results */}

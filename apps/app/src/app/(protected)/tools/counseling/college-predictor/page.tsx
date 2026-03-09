@@ -19,12 +19,16 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
+  Tabs,
+  Tab,
   useTheme,
   useMediaQuery,
 } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import SearchIcon from '@mui/icons-material/Search';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import EventSeatIcon from '@mui/icons-material/EventSeat';
+import GroupIcon from '@mui/icons-material/Group';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { AuthGate } from '@/components/AuthGate';
 
@@ -39,13 +43,26 @@ interface CounselingSystem {
   is_active: boolean;
 }
 
-interface CounselingPrediction {
-  college: { id: string; name: string; slug: string; city: string; type: string; annual_fee_approx: number | null; neram_tier: string | null };
+interface SeatAwarePrediction {
+  collegeCode: string;
+  collegeName: string | null;
+  city: string | null;
   tier: 'safe' | 'moderate' | 'reach';
-  closingMark: number;
+  totalSeats: number | null;
+  categorySeats: number | null;
+  seatsFilledByHigherRank: number;
+  categoryFilledByHigherRank: number;
+  estimatedRemainingSeats: number | null;
+  estimatedRemainingCategorySeats: number | null;
+  isFull: boolean;
+  isCategoryFull: boolean;
   closingRank: number | null;
-  openingMark: number | null;
-  gap: number;
+  closingMark: number | null;
+  predictedRank: number;
+  matchCategory: 'general' | 'community';
+  studentCategory: string | null;
+  coaInstitutionCode: string | null;
+  seatDataAvailable: boolean;
 }
 
 interface LegacyPrediction {
@@ -68,6 +85,86 @@ const TIER_CONFIG = {
 
 const LEGACY_CATEGORIES = ['General', 'OBC', 'SC', 'ST', 'EWS'];
 
+// ─── Seat Info Pill ────────────────────────────────────
+function SeatPill({ filled, total, label }: { filled: number; total: number | null; label?: string }) {
+  if (total === null) return <Chip label="Seat data unavailable" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />;
+  const remaining = Math.max(0, total - filled);
+  const fillRatio = total > 0 ? filled / total : 0;
+  const color = fillRatio >= 1 ? '#C62828' : fillRatio >= 0.8 ? '#E65100' : '#2E7D32';
+  return (
+    <Chip
+      icon={<EventSeatIcon sx={{ fontSize: 14 }} />}
+      label={`${label ? label + ': ' : ''}${remaining}/${total} seats left`}
+      size="small"
+      variant="outlined"
+      sx={{ height: 22, fontSize: '0.65rem', fontWeight: 600, borderColor: color, color, '& .MuiChip-icon': { color } }}
+    />
+  );
+}
+
+// ─── College Card ────────────────────────────────────
+function CollegeCard({ prediction, showCommunity }: { prediction: SeatAwarePrediction; showCommunity?: boolean }) {
+  const tier = TIER_CONFIG[prediction.tier];
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        border: '1px solid',
+        borderColor: prediction.isFull ? '#FFCDD2' : 'grey.200',
+        borderLeft: `3px solid ${prediction.isFull ? '#C62828' : tier.color}`,
+        borderRadius: 1,
+        bgcolor: prediction.isFull ? '#FFF8F8' : 'white',
+      }}
+    >
+      <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 0.5 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap>
+              {prediction.collegeName || `College ${prediction.collegeCode}`}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {prediction.city || 'Unknown'} · Code: {prediction.collegeCode}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+            {prediction.isFull && (
+              <Chip label="Likely Full" size="small" sx={{ height: 22, fontSize: '0.65rem', fontWeight: 600, bgcolor: '#FFCDD2', color: '#C62828' }} />
+            )}
+            <Chip label={tier.label} size="small" color={tier.chipColor} sx={{ height: 22, fontWeight: 600 }} />
+          </Box>
+        </Box>
+
+        {/* Seat info row */}
+        <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+          {prediction.seatDataAvailable ? (
+            <>
+              <SeatPill filled={prediction.seatsFilledByHigherRank} total={prediction.totalSeats} />
+              {showCommunity && prediction.studentCategory && (
+                <SeatPill filled={prediction.categoryFilledByHigherRank} total={prediction.categorySeats} label={prediction.studentCategory} />
+              )}
+            </>
+          ) : (
+            <Chip label="Seat data unavailable" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+          )}
+        </Box>
+
+        {/* Closing rank */}
+        <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25 }}>
+          {prediction.closingRank && (
+            <Typography variant="caption" color="text.secondary">
+              Last allotted rank: <strong>{prediction.closingRank}</strong>
+            </Typography>
+          )}
+          <Typography variant="caption" color="text.secondary">
+            Your rank: <strong>{prediction.predictedRank}</strong>
+          </Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────
 export default function CounselingCollegePredictorPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -77,6 +174,8 @@ export default function CounselingCollegePredictorPage() {
   const urlScore = searchParams.get('score');
   const urlSystem = searchParams.get('system');
   const urlCategory = searchParams.get('category');
+  const urlRank = searchParams.get('rank');
+  const urlYear = searchParams.get('year');
   const isCounselingMode = !!(urlSystem || urlScore);
 
   // Systems
@@ -87,12 +186,17 @@ export default function CounselingCollegePredictorPage() {
   // Input
   const [compositeScore, setCompositeScore] = useState(urlScore || '');
   const [category, setCategory] = useState(urlCategory || '');
-  const [year, setYear] = useState(2025);
-  const [results, setResults] = useState<CounselingPrediction[]>([]);
-  const [allotmentResults, setAllotmentResults] = useState<any[]>([]);
+  const [year, setYear] = useState(urlYear ? parseInt(urlYear, 10) : 2025);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Seat-aware results
+  const [generalPredictions, setGeneralPredictions] = useState<SeatAwarePrediction[]>([]);
+  const [communityPredictions, setCommunityPredictions] = useState<SeatAwarePrediction[]>([]);
+  const [seatDataAvailable, setSeatDataAvailable] = useState(false);
+  const [rankPrediction, setRankPrediction] = useState<any>(null);
+  const [resultTab, setResultTab] = useState(0);
 
   // Legacy mode
   const [nataScore, setNataScore] = useState('');
@@ -113,8 +217,7 @@ export default function CounselingCollegePredictorPage() {
             const first = allSystems.find((s) => s.is_active);
             if (first) setSelectedSystemCode(first.code);
           }
-          // Set default category from system
-          const sys = allSystems.find((s) => s.code === (urlSystem || first?.code));
+          const sys = allSystems.find((s) => s.code === (urlSystem || ''));
           if (sys && !category && sys.categories.length > 0) {
             setCategory(sys.categories[0].code);
           }
@@ -155,16 +258,26 @@ export default function CounselingCollegePredictorPage() {
       const res = await fetch('/api/tools/college-predictor/counseling', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ systemCode: selectedSystem.code, compositeScore: score, category: category || undefined, year }),
+        body: JSON.stringify({
+          systemCode: selectedSystem.code,
+          compositeScore: score,
+          category: category || undefined,
+          year,
+          seatAware: true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Prediction failed');
-      setResults(data.predictions || []);
-      setAllotmentResults(data.allotmentPredictions || []);
+
+      setGeneralPredictions(data.generalPredictions || []);
+      setCommunityPredictions(data.communityPredictions || []);
+      setSeatDataAvailable(data.seatDataAvailable || false);
+      setRankPrediction(data.rankPrediction || null);
+      setResultTab(0);
     } catch (err: any) {
       setError(err.message);
-      setResults([]);
-      setAllotmentResults([]);
+      setGeneralPredictions([]);
+      setCommunityPredictions([]);
     } finally {
       setLoading(false);
     }
@@ -203,7 +316,7 @@ export default function CounselingCollegePredictorPage() {
 
   // Re-fetch on auth
   useEffect(() => {
-    if (user && hasSearched && results.length === 0 && legacyResults.length === 0 && !loading) {
+    if (user && hasSearched && generalPredictions.length === 0 && legacyResults.length === 0 && !loading) {
       if (isCounselingMode) handleCounselingPredict();
       else handleLegacyPredict();
     }
@@ -213,11 +326,13 @@ export default function CounselingCollegePredictorPage() {
     ? selectedSystem.categories.map((c) => ({ value: c.code, label: c.code }))
     : [];
 
-  const tierCounts = {
-    safe: results.filter((r) => r.tier === 'safe').length,
-    moderate: results.filter((r) => r.tier === 'moderate').length,
-    reach: results.filter((r) => r.tier === 'reach').length,
+  const generalTierCounts = {
+    safe: generalPredictions.filter((r) => r.tier === 'safe').length,
+    moderate: generalPredictions.filter((r) => r.tier === 'moderate').length,
+    reach: generalPredictions.filter((r) => r.tier === 'reach').length,
   };
+
+  const hasResults = generalPredictions.length > 0 || communityPredictions.length > 0;
 
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto', pb: 4 }}>
@@ -229,12 +344,12 @@ export default function CounselingCollegePredictorPage() {
         <Box>
           <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.2 }}>College Predictor</Typography>
           <Typography variant="caption" color="text.secondary">
-            {isCounselingMode ? 'Find colleges based on your counseling score' : 'Find colleges matching your NATA score'}
+            {isCounselingMode ? 'Seat-aware predictions based on your counseling score' : 'Find colleges matching your NATA score'}
           </Typography>
         </Box>
       </Box>
 
-      {/* Counseling Mode — compact form */}
+      {/* Counseling Mode */}
       {isCounselingMode ? (
         <>
           <Paper elevation={0} sx={{ p: isMobile ? 2 : 2.5, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}>
@@ -244,7 +359,7 @@ export default function CounselingCollegePredictorPage() {
                 <InputLabel>Counseling System</InputLabel>
                 <Select
                   value={selectedSystemCode}
-                  onChange={(e) => { setSelectedSystemCode(e.target.value); setCategory(''); setResults([]); }}
+                  onChange={(e) => { setSelectedSystemCode(e.target.value); setCategory(''); setGeneralPredictions([]); setCommunityPredictions([]); }}
                   label="Counseling System"
                 >
                   {systems.map((sys) => (
@@ -302,139 +417,103 @@ export default function CounselingCollegePredictorPage() {
           >
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
-            ) : results.length > 0 ? (
+            ) : hasResults ? (
               <Box>
-                {/* Tier chips */}
-                <Box sx={{ display: 'flex', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
-                  {(['safe', 'moderate', 'reach'] as const).map((t) => (
-                    <Chip key={t} label={`${TIER_CONFIG[t].label}: ${tierCounts[t]}`}
-                      sx={{ bgcolor: TIER_CONFIG[t].bgColor, color: TIER_CONFIG[t].color, fontWeight: 600, fontSize: '0.8rem' }} />
-                  ))}
-                  <Chip label={`Total: ${results.length}`} variant="outlined" size="small" />
-                </Box>
-
-                {/* College list */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {results.map((p) => {
-                    const tier = TIER_CONFIG[p.tier];
-                    return (
-                      <Card key={p.college.id} elevation={0}
-                        sx={{ border: '1px solid', borderColor: 'grey.200', borderLeft: `3px solid ${tier.color}`, borderRadius: 1 }}>
-                        <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography variant="body2" fontWeight={600} noWrap>{p.college.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {p.college.city} · {p.college.type}
-                                {p.college.annual_fee_approx && ` · ₹${p.college.annual_fee_approx.toLocaleString('en-IN')}/yr`}
-                              </Typography>
-                            </Box>
-                            <Chip label={tier.label} size="small" color={tier.chipColor} sx={{ ml: 1, fontWeight: 600, height: 22 }} />
-                          </Box>
-                          <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              Closing: <strong>{p.closingMark}</strong>
-                            </Typography>
-                            {p.closingRank && (
-                              <Typography variant="caption" color="text.secondary">
-                                Rank: <strong>{p.closingRank}</strong>
-                              </Typography>
-                            )}
-                            <Typography variant="caption" color="text.secondary">
-                              Gap: <strong style={{ color: p.gap >= 0 ? '#2E7D32' : '#C62828' }}>
-                                {p.gap >= 0 ? '+' : ''}{p.gap.toFixed(1)}
-                              </strong>
-                            </Typography>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </Box>
-
-                {/* Allotment History */}
-                {allotmentResults.length > 0 && (
-                  <Paper elevation={0} sx={{ mt: 2, borderRadius: 1.5, border: '1px solid', borderColor: '#6A1B9A', overflow: 'hidden' }}>
-                    <Box sx={{ px: 1.5, py: 1, bgcolor: '#F3E5F5', borderBottom: '1px solid', borderColor: '#CE93D8' }}>
-                      <Typography variant="subtitle2" fontWeight={600} color="#6A1B9A">
-                        Allotment History — Students at similar ranks got these colleges
+                {/* Rank summary */}
+                {rankPrediction && (
+                  <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, borderRadius: 1.5, bgcolor: '#E3F2FD', border: '1px solid', borderColor: '#90CAF9' }}>
+                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <Typography variant="body2">
+                        Predicted Rank: <strong>{rankPrediction.predictedRankMin}–{rankPrediction.predictedRankMax}</strong>
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Based on {year} allotment data · {allotmentResults.length} colleges found
+                      <Typography variant="body2">
+                        Percentile: <strong>{rankPrediction.percentile?.toFixed(1)}%</strong>
                       </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                      {allotmentResults.slice(0, 15).map((a: any, i: number) => (
-                        <Box key={`${a.collegeCode}-${a.branchCode}-${i}`}
-                          sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'grey.100', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }} noWrap>
-                              {a.collegeName || `College ${a.collegeCode}`}
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.25 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                {a.branchCode}{a.branchName ? ` · ${a.branchName}` : ''}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                · Rank {a.minRank}–{a.maxRank}
-                              </Typography>
-                            </Box>
-                          </Box>
-                          <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                            <Chip label={`${a.allottedCount} students`} size="small" variant="outlined" color="secondary"
-                              sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }} />
-                            <Box sx={{ display: 'flex', gap: 0.25, mt: 0.25, justifyContent: 'flex-end' }}>
-                              {a.categories.slice(0, 3).map((cat: string) => (
-                                <Chip key={cat} label={cat} size="small" variant="outlined"
-                                  sx={{ height: 16, fontSize: '0.55rem', '& .MuiChip-label': { px: 0.5 } }} />
-                              ))}
-                            </Box>
-                          </Box>
-                        </Box>
-                      ))}
+                      {rankPrediction.categoryRankMin && (
+                        <Typography variant="body2">
+                          {category} Rank: <strong>{rankPrediction.categoryRankMin}–{rankPrediction.categoryRankMax}</strong>
+                        </Typography>
+                      )}
                     </Box>
                   </Paper>
+                )}
+
+                {/* Summary chips */}
+                <Box sx={{ display: 'flex', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+                  {(['safe', 'moderate', 'reach'] as const).map((t) => (
+                    <Chip key={t} label={`${TIER_CONFIG[t].label}: ${generalTierCounts[t]}`}
+                      sx={{ bgcolor: TIER_CONFIG[t].bgColor, color: TIER_CONFIG[t].color, fontWeight: 600, fontSize: '0.8rem' }} />
+                  ))}
+                  {seatDataAvailable && (
+                    <Chip icon={<EventSeatIcon sx={{ fontSize: 14 }} />} label="Seat data available" size="small" color="info" variant="outlined" />
+                  )}
+                </Box>
+
+                {/* Tabs: General + Community */}
+                {communityPredictions.length > 0 ? (
+                  <>
+                    <Tabs
+                      value={resultTab}
+                      onChange={(_, v) => setResultTab(v)}
+                      variant="fullWidth"
+                      sx={{
+                        mb: 1.5,
+                        minHeight: 40,
+                        '& .MuiTab-root': { minHeight: 40, py: 0.5, fontSize: '0.85rem', fontWeight: 600 },
+                        '& .MuiTabs-indicator': { height: 3, borderRadius: 1.5 },
+                      }}
+                    >
+                      <Tab
+                        icon={<SchoolIcon sx={{ fontSize: 18 }} />}
+                        iconPosition="start"
+                        label={`General (${generalPredictions.length})`}
+                      />
+                      <Tab
+                        icon={<GroupIcon sx={{ fontSize: 18 }} />}
+                        iconPosition="start"
+                        label={`Via ${category} (${communityPredictions.length})`}
+                      />
+                    </Tabs>
+
+                    {/* Tab Content */}
+                    {resultTab === 0 ? (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {generalPredictions.map((p) => (
+                          <CollegeCard key={`g-${p.collegeCode}`} prediction={p} />
+                        ))}
+                      </Box>
+                    ) : (
+                      <Box>
+                        <Alert severity="info" sx={{ mb: 1.5, py: 0.25 }}>
+                          <Typography variant="caption">
+                            These colleges have <strong>{category}</strong> reserved seats available.
+                            Even if general seats are full, you may get admission through community quota.
+                          </Typography>
+                        </Alert>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {communityPredictions.map((p) => (
+                            <CollegeCard key={`c-${p.collegeCode}`} prediction={p} showCommunity />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </>
+                ) : (
+                  /* No community tab — just show general */
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {generalPredictions.map((p) => (
+                      <CollegeCard key={`g-${p.collegeCode}`} prediction={p} />
+                    ))}
+                  </Box>
                 )}
               </Box>
             ) : hasSearched && user ? (
-              <Box>
-                {allotmentResults.length > 0 ? (
-                  <Paper elevation={0} sx={{ borderRadius: 1.5, border: '1px solid', borderColor: '#6A1B9A', overflow: 'hidden' }}>
-                    <Box sx={{ px: 1.5, py: 1, bgcolor: '#F3E5F5', borderBottom: '1px solid', borderColor: '#CE93D8' }}>
-                      <Typography variant="subtitle2" fontWeight={600} color="#6A1B9A">
-                        Allotment History — Students at similar ranks got these colleges
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        No cutoff data available. Showing {year} allotment data instead.
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                      {allotmentResults.slice(0, 15).map((a: any, i: number) => (
-                        <Box key={`${a.collegeCode}-${a.branchCode}-${i}`}
-                          sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'grey.100', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }} noWrap>
-                              {a.collegeName || `College ${a.collegeCode}`}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {a.branchCode} · Rank {a.minRank}–{a.maxRank}
-                            </Typography>
-                          </Box>
-                          <Chip label={`${a.allottedCount} students`} size="small" variant="outlined" color="secondary"
-                            sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }} />
-                        </Box>
-                      ))}
-                    </Box>
-                  </Paper>
-                ) : (
-                  <Paper sx={{ p: 3, textAlign: 'center' }}>
-                    <Typography variant="body1" color="text.secondary" gutterBottom>No colleges found for this score</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Try a different year or category. Cutoff data may not be available yet.
-                    </Typography>
-                  </Paper>
-                )}
-              </Box>
+              <Paper sx={{ p: 3, textAlign: 'center' }}>
+                <Typography variant="body1" color="text.secondary" gutterBottom>No colleges found for this score</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Try a different year or category. Data may not be available yet.
+                </Typography>
+              </Paper>
             ) : (
               <Paper sx={{ p: 3, textAlign: 'center' }}>
                 <Typography variant="body1" color="text.secondary" gutterBottom>Enter your composite score to see predictions</Typography>

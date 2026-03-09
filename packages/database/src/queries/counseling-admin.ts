@@ -52,13 +52,28 @@ export async function importRankListEntries(
 
   if (deleteError) throw deleteError;
 
-  // Prepare rows with system ID, year, and created_by
-  const rows = entries.map((entry) => ({
-    ...entry,
-    counseling_system_id: systemId,
-    year,
-    created_by: createdBy,
-  }));
+  // Only pick columns that exist in rank_list_entries table
+  // (CSVs may contain extra columns like college_name, branch_name from allotment data)
+  const VALID_COLUMNS = [
+    'rank', 'serial_number', 'aggregate_mark', 'hsc_aggregate_mark',
+    'entrance_exam_mark', 'community', 'community_rank',
+    'application_number', 'candidate_name', 'date_of_birth',
+  ];
+
+  const rows = entries.map((entry) => {
+    const cleaned: Record<string, any> = {};
+    for (const col of VALID_COLUMNS) {
+      if ((entry as any)[col] !== undefined) {
+        cleaned[col] = (entry as any)[col];
+      }
+    }
+    return {
+      ...cleaned,
+      counseling_system_id: systemId,
+      year,
+      created_by: createdBy,
+    };
+  });
 
   // Insert in batches of 500 to avoid payload limits
   const batchSize = 500;
@@ -130,16 +145,32 @@ export async function importAllotmentListEntries(
   // Auto-fill missing college names from directory
   const directory = await getCollegeDirectory(systemId, supabase);
 
-  const rows = entries.map((entry) => ({
-    ...entry,
+  // Only pick columns that exist in allotment_list_entries table
+  const VALID_COLUMNS = [
+    'rank', 'serial_number', 'aggregate_mark', 'community', 'community_rank',
+    'college_code', 'branch_code', 'allotted_category', 'college_id',
+    'application_number', 'candidate_name', 'date_of_birth',
+    'college_name', 'branch_name',
+  ];
+
+  const rows = entries.map((entry) => {
+    const cleaned: Record<string, any> = {};
+    for (const col of VALID_COLUMNS) {
+      if ((entry as any)[col] !== undefined) {
+        cleaned[col] = (entry as any)[col];
+      }
+    }
     // Enrich: if college_name is missing but code exists in directory, fill it
-    college_name: entry.college_name || (entry.college_code && directory.has(entry.college_code)
-      ? directory.get(entry.college_code)!
-      : entry.college_name),
-    counseling_system_id: systemId,
-    year,
-    created_by: createdBy,
-  }));
+    cleaned.college_name = cleaned.college_name || (cleaned.college_code && directory.has(cleaned.college_code)
+      ? directory.get(cleaned.college_code)!
+      : cleaned.college_name);
+    return {
+      ...cleaned,
+      counseling_system_id: systemId,
+      year,
+      created_by: createdBy,
+    };
+  });
 
   const batchSize = 500;
   let inserted = 0;
@@ -435,14 +466,20 @@ export async function getCounselingStats(
     countQuery('historical_cutoffs'),
   ]);
 
-  // Get available years from cutoffs
-  let yearsQuery = supabase
+  // Collect available years from ALL data sources (rank list + allotment + cutoffs)
+  const allYears = new Set<number>();
+  if (systemId) {
+    rankSummary.forEach(r => allYears.add(r.year));
+    allotmentSummary.forEach(a => allYears.add(a.year));
+  }
+  let cutoffYearsQuery = supabase
     .from('historical_cutoffs')
     .select('year')
     .limit(1000);
-  if (systemId) yearsQuery = yearsQuery.eq('counseling_system_id', systemId);
-  const { data: yearsData } = await yearsQuery;
-  const availableYears = [...new Set((yearsData || []).map((d: any) => d.year))].sort((a, b) => b - a);
+  if (systemId) cutoffYearsQuery = cutoffYearsQuery.eq('counseling_system_id', systemId);
+  const { data: cutoffYearsData } = await cutoffYearsQuery;
+  (cutoffYearsData || []).forEach((d: any) => allYears.add(d.year));
+  const availableYears = [...allYears].sort((a, b) => b - a);
 
   return {
     totalColleges,

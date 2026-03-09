@@ -22,6 +22,8 @@ import type {
   PredictionLog,
   CounselingCollegeDirectory,
   SimilarStudent,
+  SeatAwareCollegePrediction,
+  SeatMatrix,
 } from '../types';
 
 // ============================================
@@ -944,7 +946,7 @@ export async function logPrediction(
 /**
  * Get year-wise summary of rank list entries for a counseling system.
  * Returns which years have data and how many records each year has.
- * Uses server-side RPC to avoid Supabase's default 1000-row limit.
+ * Uses direct table query + JS aggregation (bypasses PostgREST RPC issues).
  */
 export async function getRankListYearSummary(
   systemId: string,
@@ -952,16 +954,22 @@ export async function getRankListYearSummary(
 ): Promise<{ year: number; totalEntries: number }[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  const { data, error } = await (supabase as any).rpc('get_rank_list_year_summary', {
-    p_system_id: systemId,
-  });
+  const { data, error } = await supabase
+    .from('rank_list_entries')
+    .select('year')
+    .eq('counseling_system_id', systemId)
+    .limit(200000);
 
   if (error) throw error;
 
-  return (data || []).map((row: any) => ({
-    year: row.year,
-    totalEntries: Number(row.total_entries),
-  }));
+  const yearCounts = new Map<number, number>();
+  for (const row of data || []) {
+    yearCounts.set(row.year, (yearCounts.get(row.year) || 0) + 1);
+  }
+
+  return [...yearCounts.entries()]
+    .map(([year, count]) => ({ year, totalEntries: count }))
+    .sort((a, b) => b.year - a.year);
 }
 
 /**
@@ -1008,7 +1016,7 @@ export async function getRankListCommunityStats(
 
 /**
  * Get year-wise summary of allotment list entries.
- * Uses server-side RPC to avoid 1000-row limit.
+ * Uses direct table query + JS aggregation (bypasses PostgREST RPC issues).
  */
 export async function getAllotmentYearSummary(
   systemId: string,
@@ -1016,16 +1024,22 @@ export async function getAllotmentYearSummary(
 ): Promise<{ year: number; totalEntries: number }[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  const { data, error } = await (supabase as any).rpc('get_allotment_year_summary', {
-    p_system_id: systemId,
-  });
+  const { data, error } = await supabase
+    .from('allotment_list_entries')
+    .select('year')
+    .eq('counseling_system_id', systemId)
+    .limit(200000);
 
   if (error) throw error;
 
-  return (data || []).map((row: any) => ({
-    year: row.year,
-    totalEntries: Number(row.total_entries),
-  }));
+  const yearCounts = new Map<number, number>();
+  for (const row of data || []) {
+    yearCounts.set(row.year, (yearCounts.get(row.year) || 0) + 1);
+  }
+
+  return [...yearCounts.entries()]
+    .map(([year, count]) => ({ year, totalEntries: count }))
+    .sort((a, b) => b.year - a.year);
 }
 
 /**
@@ -1259,4 +1273,322 @@ export async function enrichCollegeNames<T extends { college_code?: string; coll
     }
     return entry;
   });
+}
+
+// ============================================
+// SEAT-AWARE COLLEGE PREDICTION
+// ============================================
+
+/**
+ * Tamil Nadu 69% Reservation Rule
+ * Applied to government quota seats to compute category-wise allocation
+ */
+export const TN_RESERVATION_RULE: Record<string, number> = {
+  OC: 0.31,
+  BC: 0.265,
+  BCM: 0.035,
+  MBC: 0.20,
+  SC: 0.15,
+  SCA: 0.03,
+  ST: 0.01,
+};
+
+/**
+ * Board type to counseling system mapping
+ * Used for auto-detecting counseling system from calculator
+ */
+export const BOARD_TO_COUNSELING_SYSTEM: Record<string, string> = {
+  TN_STATE: 'TNEA_BARCH',
+  CBSE: 'TNEA_BARCH',
+  ICSE: 'TNEA_BARCH',
+  DIPLOMA: 'TNEA_BARCH',
+  KA_PUC: 'KEA_BARCH',
+  AP_TS_IPE: 'AP_BARCH',
+  KERALA_HSE: 'KEAM_BARCH',
+  MAHARASHTRA_HSC: 'MH_BARCH',
+  WB: 'TNEA_BARCH',
+  UP: 'TNEA_BARCH',
+  BIHAR: 'TNEA_BARCH',
+  RAJASTHAN: 'TNEA_BARCH',
+  OTHER: 'TNEA_BARCH',
+};
+
+/**
+ * Compute category-wise seat allocation from total seats using reservation percentages
+ */
+export function computeCategorySeats(
+  totalSeats: number,
+  reservationRule: Record<string, number> = TN_RESERVATION_RULE
+): SeatMatrix {
+  const byCategory: Record<string, number> = {};
+  let allocated = 0;
+
+  const entries = Object.entries(reservationRule);
+  for (let i = 0; i < entries.length; i++) {
+    const [category, percentage] = entries[i];
+    if (i === entries.length - 1) {
+      // Last category gets remaining seats to ensure total adds up
+      byCategory[category] = Math.max(0, totalSeats - allocated);
+    } else {
+      const seats = Math.round(totalSeats * percentage);
+      byCategory[category] = seats;
+      allocated += seats;
+    }
+  }
+
+  return { total: totalSeats, by_category: byCategory };
+}
+
+/**
+ * Get college directory entries with COA institution mapping
+ */
+export async function getCollegeDirectoryWithSeats(
+  systemId: string,
+  client?: TypedSupabaseClient
+): Promise<Map<string, { collegeName: string; city: string | null; coaCode: string | null; totalSeats: number | null }>> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  // Get directory entries with COA mapping
+  const { data: dirEntries, error: dirError } = await supabase
+    .from('counseling_college_directory')
+    .select('college_code, college_name, city, coa_institution_code')
+    .eq('counseling_system_id', systemId);
+
+  if (dirError) throw dirError;
+
+  // Get COA institutions for seat data
+  const coaCodes = (dirEntries || [])
+    .map((e: any) => e.coa_institution_code)
+    .filter(Boolean);
+
+  let coaMap = new Map<string, number>();
+  if (coaCodes.length > 0) {
+    const { data: coaData, error: coaError } = await supabase
+      .from('coa_institutions')
+      .select('institution_code, current_intake')
+      .in('institution_code', coaCodes);
+
+    if (!coaError && coaData) {
+      for (const row of coaData as any[]) {
+        coaMap.set(row.institution_code, row.current_intake);
+      }
+    }
+  }
+
+  const result = new Map<string, { collegeName: string; city: string | null; coaCode: string | null; totalSeats: number | null }>();
+  for (const entry of (dirEntries || []) as any[]) {
+    const coaCode = entry.coa_institution_code;
+    result.set(entry.college_code, {
+      collegeName: entry.college_name,
+      city: entry.city,
+      coaCode,
+      totalSeats: coaCode ? (coaMap.get(coaCode) || null) : null,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Seat-aware college prediction
+ *
+ * Uses COA-approved seat data + allotment data to predict which colleges
+ * a student can get into, split by general and community categories.
+ *
+ * Algorithm:
+ * 1. Get total seats per college from COA data (via mapping)
+ * 2. Compute category-wise seats using reservation percentages
+ * 3. Count seats filled by higher-ranked students from allotment data
+ * 4. Classify colleges into general vs community predictions
+ */
+export async function predictCollegesWithSeatAwareness(
+  systemId: string,
+  year: number,
+  predictedRank: number,
+  compositeScore: number,
+  category?: string,
+  client?: TypedSupabaseClient
+): Promise<{
+  generalPredictions: SeatAwareCollegePrediction[];
+  communityPredictions: SeatAwareCollegePrediction[];
+  seatDataAvailable: boolean;
+  totalColleges: number;
+}> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  // Step 1: Get college directory with seat data
+  const collegeDirectory = await getCollegeDirectoryWithSeats(systemId, supabase);
+
+  // Step 2: Get seat occupancy from allotment data (all students ranked better)
+  const { data: occupancyData, error: occError } = await supabase.rpc(
+    'get_college_seat_occupancy',
+    {
+      p_system_id: systemId,
+      p_year: year,
+      p_max_rank: predictedRank,
+    }
+  );
+  if (occError) throw occError;
+
+  // Build occupancy lookup: college_code -> { category -> seats_filled, total_filled, max_rank }
+  const occupancy = new Map<string, {
+    totalFilled: number;
+    byCategory: Map<string, number>;
+    maxRank: number;
+  }>();
+
+  for (const row of (occupancyData || []) as any[]) {
+    let entry = occupancy.get(row.college_code);
+    if (!entry) {
+      entry = { totalFilled: 0, byCategory: new Map(), maxRank: 0 };
+      occupancy.set(row.college_code, entry);
+    }
+    entry.totalFilled += Number(row.seats_filled);
+    const catFilled = entry.byCategory.get(row.allotted_category) || 0;
+    entry.byCategory.set(row.allotted_category, catFilled + Number(row.seats_filled));
+    entry.maxRank = Math.max(entry.maxRank, Number(row.max_rank) || 0);
+  }
+
+  // Step 3: Also get total occupancy (all ranks, not just higher) for closing rank estimation
+  const { data: totalOccData } = await supabase.rpc(
+    'get_college_total_occupancy',
+    { p_system_id: systemId, p_year: year }
+  );
+
+  const totalOccupancy = new Map<string, { total: number; maxRank: number }>();
+  for (const row of (totalOccData || []) as any[]) {
+    totalOccupancy.set(row.college_code, {
+      total: Number(row.total_allotted),
+      maxRank: Number(row.max_rank) || 0,
+    });
+  }
+
+  // Step 4: Build predictions
+  const generalPredictions: SeatAwareCollegePrediction[] = [];
+  const communityPredictions: SeatAwareCollegePrediction[] = [];
+  let hasSeatData = false;
+
+  for (const [collegeCode, info] of collegeDirectory) {
+    const totalSeats = info.totalSeats;
+    const seatDataAvail = totalSeats !== null && totalSeats > 0;
+    if (seatDataAvail) hasSeatData = true;
+
+    const seatMatrix = totalSeats ? computeCategorySeats(totalSeats) : null;
+    const occ = occupancy.get(collegeCode);
+    const totOcc = totalOccupancy.get(collegeCode);
+
+    // Closing rank = max rank allotted to this college (from full allotment data)
+    const closingRank = totOcc?.maxRank || null;
+
+    // General category (OC) analysis
+    const ocSeats = seatMatrix?.by_category?.OC || null;
+    const ocFilled = occ?.byCategory?.get('OC') || 0;
+    const totalFilled = occ?.totalFilled || 0;
+    const isGeneralFull = seatDataAvail && ocSeats !== null && ocFilled >= ocSeats;
+
+    // Determine tier based on closing rank
+    let generalTier: CollegeTier = 'reach';
+    if (closingRank) {
+      if (predictedRank <= closingRank * 0.7) generalTier = 'safe';
+      else if (predictedRank <= closingRank) generalTier = 'moderate';
+      else generalTier = 'reach';
+    } else if (seatDataAvail) {
+      // No closing rank data — use seat occupancy ratio
+      const fillRatio = totalSeats ? totalFilled / totalSeats : 0;
+      if (fillRatio < 0.5) generalTier = 'safe';
+      else if (fillRatio < 0.8) generalTier = 'moderate';
+      else generalTier = 'reach';
+    }
+
+    // Skip colleges where the predicted rank is way beyond reach
+    if (closingRank && predictedRank > closingRank * 1.5) continue;
+
+    // General prediction
+    const generalPred: SeatAwareCollegePrediction = {
+      collegeCode,
+      collegeName: info.collegeName,
+      city: info.city,
+      tier: isGeneralFull ? 'reach' : generalTier,
+      totalSeats: totalSeats,
+      categorySeats: ocSeats,
+      seatsFilledByHigherRank: totalFilled,
+      categoryFilledByHigherRank: ocFilled,
+      estimatedRemainingSeats: totalSeats !== null ? Math.max(0, totalSeats - totalFilled) : null,
+      estimatedRemainingCategorySeats: ocSeats !== null ? Math.max(0, ocSeats - ocFilled) : null,
+      isFull: seatDataAvail ? (totalFilled >= (totalSeats || 0)) : false,
+      isCategoryFull: isGeneralFull,
+      closingRank,
+      closingMark: null,
+      predictedRank,
+      matchCategory: 'general',
+      studentCategory: null,
+      coaInstitutionCode: info.coaCode,
+      seatDataAvailable: seatDataAvail,
+    };
+    generalPredictions.push(generalPred);
+
+    // Community category analysis (if student has a category)
+    if (category && category !== 'OC') {
+      const catSeats = seatMatrix?.by_category?.[category] || null;
+      const catFilled = occ?.byCategory?.get(category) || 0;
+      const isCatFull = catSeats !== null && catFilled >= catSeats;
+
+      // For community, tier is based on community-specific occupancy
+      let communityTier: CollegeTier = 'moderate';
+      if (catSeats !== null) {
+        const catFillRatio = catSeats > 0 ? catFilled / catSeats : 1;
+        if (catFillRatio < 0.5) communityTier = 'safe';
+        else if (catFillRatio < 0.8) communityTier = 'moderate';
+        else communityTier = 'reach';
+      }
+
+      // Only add community prediction if general is full or moderate/reach
+      // (i.e., community seats provide additional opportunity)
+      if (isGeneralFull || generalTier !== 'safe') {
+        const communityPred: SeatAwareCollegePrediction = {
+          collegeCode,
+          collegeName: info.collegeName,
+          city: info.city,
+          tier: isCatFull ? 'reach' : communityTier,
+          totalSeats: totalSeats,
+          categorySeats: catSeats,
+          seatsFilledByHigherRank: totalFilled,
+          categoryFilledByHigherRank: catFilled,
+          estimatedRemainingSeats: totalSeats !== null ? Math.max(0, totalSeats - totalFilled) : null,
+          estimatedRemainingCategorySeats: catSeats !== null ? Math.max(0, catSeats - catFilled) : null,
+          isFull: seatDataAvail ? (totalFilled >= (totalSeats || 0)) : false,
+          isCategoryFull: isCatFull,
+          closingRank,
+          closingMark: null,
+          predictedRank,
+          matchCategory: 'community',
+          studentCategory: category,
+          coaInstitutionCode: info.coaCode,
+          seatDataAvailable: seatDataAvail,
+        };
+        communityPredictions.push(communityPred);
+      }
+    }
+  }
+
+  // Sort: safe first, then moderate, then reach. Within tier, by closing rank
+  const tierOrder: Record<CollegeTier, number> = { safe: 0, moderate: 1, reach: 2 };
+  const sortFn = (a: SeatAwareCollegePrediction, b: SeatAwareCollegePrediction) => {
+    const tierDiff = tierOrder[a.tier] - tierOrder[b.tier];
+    if (tierDiff !== 0) return tierDiff;
+    // Within same tier, colleges with more remaining seats first
+    const aRemain = a.estimatedRemainingSeats ?? 999;
+    const bRemain = b.estimatedRemainingSeats ?? 999;
+    return bRemain - aRemain;
+  };
+
+  generalPredictions.sort(sortFn);
+  communityPredictions.sort(sortFn);
+
+  return {
+    generalPredictions,
+    communityPredictions,
+    seatDataAvailable: hasSeatData,
+    totalColleges: collegeDirectory.size,
+  };
 }

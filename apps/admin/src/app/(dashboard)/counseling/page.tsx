@@ -491,7 +491,7 @@ export default function CounselingDashboard() {
           />
           <StatCard
             title="Cutoffs"
-            value={stats?.totalCutoffRecords || 0}
+            value={stats?.totalCutoffRecords ? stats.totalCutoffRecords : (loading ? 0 : 'No data')}
             icon={<BarChartIcon sx={{ color: '#2E7D32', fontSize: 18 }} />}
             color="#2E7D32"
             loading={loading}

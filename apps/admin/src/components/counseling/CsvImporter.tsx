@@ -67,6 +67,7 @@ const COLUMN_ALIASES: Record<string, string> = {
   'application_number': 'application_number',
   'nata_/_jee_mark': 'entrance_exam_mark',
   'nata_jee_mark': 'entrance_exam_mark',
+  'nata_mark': 'entrance_exam_mark',
   'entrance_mark': 'entrance_exam_mark',
   'hsc_mark': 'hsc_aggregate_mark',
 };

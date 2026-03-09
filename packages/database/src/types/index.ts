@@ -1466,6 +1466,38 @@ export interface AllotmentCollegePrediction {
   year: number;
 }
 
+/** Seat matrix for a college in a counseling system */
+export interface SeatMatrix {
+  total: number;
+  by_category: Record<string, number>;
+}
+
+/** Seat-aware college prediction with occupancy info */
+export interface SeatAwareCollegePrediction {
+  collegeCode: string;
+  collegeName: string | null;
+  city: string | null;
+  tier: CollegeTier;
+  // Seat info
+  totalSeats: number | null;
+  categorySeats: number | null;
+  seatsFilledByHigherRank: number;
+  categoryFilledByHigherRank: number;
+  estimatedRemainingSeats: number | null;
+  estimatedRemainingCategorySeats: number | null;
+  isFull: boolean;
+  isCategoryFull: boolean;
+  // Rank/score info
+  closingRank: number | null;
+  closingMark: number | null;
+  predictedRank: number;
+  // Metadata
+  matchCategory: 'general' | 'community';
+  studentCategory: string | null;
+  coaInstitutionCode: string | null;
+  seatDataAvailable: boolean;
+}
+
 /**
  * Exam centers for NATA/JEE
  */
@@ -3666,6 +3698,7 @@ export interface CounselingCollegeDirectory {
   college_name: string;
   city: string | null;
   district: string | null;
+  coa_institution_code: string | null;
   created_at: string;
   updated_at: string;
 }

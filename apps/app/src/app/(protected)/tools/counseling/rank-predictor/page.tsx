@@ -496,7 +496,7 @@ export default function CounselingRankPredictorPage() {
                   size="small"
                   variant="contained"
                   endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
-                  href={`/tools/counseling/college-predictor?system=${selectedSystem.code}&score=${compositeScore}&rank=${prediction.predictedRank.min}${category ? `&category=${category}` : ''}`}
+                  href={`/tools/counseling/college-predictor?system=${selectedSystem.code}&score=${compositeScore}&rank=${prediction.predictedRank.min}&year=${selectedYear}${category ? `&category=${category}` : ''}`}
                   sx={{ bgcolor: '#1565C0', '&:hover': { bgcolor: '#0D47A1' } }}
                 >
                   College Predictor
