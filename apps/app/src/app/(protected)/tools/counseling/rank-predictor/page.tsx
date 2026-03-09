@@ -304,7 +304,7 @@ export default function CounselingRankPredictorPage() {
 
       {/* Community Stats Summary */}
       {communityStats.length > 0 && selectedYear && !hasResults && (
-        <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
+        <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
           <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
             Based on {selectedYear} data: {communityTotal.toLocaleString()} applied{allotmentCount > 0 ? ` · ${allotmentCount.toLocaleString()} got seats` : ''}
           </Typography>
@@ -489,7 +489,7 @@ export default function CounselingRankPredictorPage() {
             {prediction?.predictedRank && (
               <Paper
                 elevation={0}
-                sx={{ p: 2, borderRadius: 1.5, border: '1px solid', borderColor: '#1565C0', bgcolor: '#E3F2FD', textAlign: 'center' }}
+                sx={{ p: 2, borderRadius: 1.5, border: '1px solid', borderColor: '#1565C0', bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(21, 101, 192, 0.12)' : '#E3F2FD', textAlign: 'center' }}
               >
                 <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 0.5 }}>
                   Find colleges for rank {prediction.predictedRank.min}–{prediction.predictedRank.max}
