@@ -954,22 +954,17 @@ export async function getRankListYearSummary(
 ): Promise<{ year: number; totalEntries: number }[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  const { data, error } = await supabase
-    .from('rank_list_entries')
-    .select('year')
-    .eq('counseling_system_id', systemId)
-    .limit(200000);
+  // Use RPC to get distinct years with counts (avoids PostgREST max_rows 1000 limit)
+  const { data, error } = await (supabase as any).rpc('get_distinct_rank_list_years', {
+    p_system_id: systemId,
+  });
 
   if (error) throw error;
 
-  const yearCounts = new Map<number, number>();
-  for (const row of data || []) {
-    yearCounts.set(row.year, (yearCounts.get(row.year) || 0) + 1);
-  }
-
-  return [...yearCounts.entries()]
-    .map(([year, count]) => ({ year, totalEntries: count }))
-    .sort((a, b) => b.year - a.year);
+  return (data || []).map((row: any) => ({
+    year: Number(row.year),
+    totalEntries: Number(row.total_entries),
+  }));
 }
 
 /**
@@ -1024,22 +1019,17 @@ export async function getAllotmentYearSummary(
 ): Promise<{ year: number; totalEntries: number }[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  const { data, error } = await supabase
-    .from('allotment_list_entries')
-    .select('year')
-    .eq('counseling_system_id', systemId)
-    .limit(200000);
+  // Use RPC to get distinct years with counts (avoids PostgREST max_rows 1000 limit)
+  const { data, error } = await (supabase as any).rpc('get_distinct_allotment_years', {
+    p_system_id: systemId,
+  });
 
   if (error) throw error;
 
-  const yearCounts = new Map<number, number>();
-  for (const row of data || []) {
-    yearCounts.set(row.year, (yearCounts.get(row.year) || 0) + 1);
-  }
-
-  return [...yearCounts.entries()]
-    .map(([year, count]) => ({ year, totalEntries: count }))
-    .sort((a, b) => b.year - a.year);
+  return (data || []).map((row: any) => ({
+    year: Number(row.year),
+    totalEntries: Number(row.total_entries),
+  }));
 }
 
 /**

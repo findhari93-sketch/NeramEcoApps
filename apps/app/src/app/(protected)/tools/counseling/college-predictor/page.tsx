@@ -508,7 +508,7 @@ export default function CounselingCollegePredictorPage() {
   const urlCategory = searchParams.get('category');
   const urlRank = searchParams.get('rank');
   const urlYear = searchParams.get('year');
-  const isCounselingMode = !!(urlSystem || urlScore);
+  const isCounselingMode = true;
 
   // Systems
   const [systems, setSystems] = useState<CounselingSystem[]>([]);
@@ -519,6 +519,7 @@ export default function CounselingCollegePredictorPage() {
   const [compositeScore, setCompositeScore] = useState(urlScore || '');
   const [category, setCategory] = useState(urlCategory || '');
   const [year, setYear] = useState(urlYear ? parseInt(urlYear, 10) : 2025);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -573,6 +574,19 @@ export default function CounselingCollegePredictorPage() {
         .catch(() => {});
     }
   }, []);
+
+  // Fetch available years when system changes
+  useEffect(() => {
+    if (!selectedSystem) return;
+    fetch(`/api/tools/rank-predictor?action=years&systemId=${selectedSystem.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const years: number[] = data.years || [];
+        setAvailableYears(years);
+        if (!urlYear && years.length > 0) setYear(years[0]);
+      })
+      .catch(() => {});
+  }, [selectedSystem?.id]);
 
   // Auto-predict if URL has score
   useEffect(() => {
@@ -828,11 +842,15 @@ export default function CounselingCollegePredictorPage() {
                   {categoryOptions.map((c) => <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField
-                size="small" label="Year" type="number" value={year}
-                onChange={(e) => setYear(parseInt(e.target.value, 10))}
-                sx={{ width: 80 }}
-              />
+              <FormControl size="small" sx={{ minWidth: 90 }}>
+                <InputLabel>Year</InputLabel>
+                <Select value={year} onChange={(e) => setYear(Number(e.target.value))} label="Year">
+                  {availableYears.length > 0
+                    ? availableYears.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)
+                    : <MenuItem value={year}>{year}</MenuItem>
+                  }
+                </Select>
+              </FormControl>
               <Button
                 variant="contained" onClick={handleCounselingPredict}
                 disabled={loading || !compositeScore || !selectedSystem}
