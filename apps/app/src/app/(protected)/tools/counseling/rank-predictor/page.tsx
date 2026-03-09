@@ -218,7 +218,7 @@ export default function CounselingRankPredictorPage() {
       <Paper elevation={0} sx={{ p: isMobile ? 2 : 2.5, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}>
         {/* Row 1: System + Score */}
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}>
-          <FormControl size="small" sx={{ minWidth: 200, flex: 1 }}>
+          <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 }, flex: 1 }}>
             <InputLabel>Counseling System</InputLabel>
             <Select
               value={selectedSystemCode}
@@ -250,7 +250,7 @@ export default function CounselingRankPredictorPage() {
             value={compositeScore}
             onChange={(e) => setCompositeScore(e.target.value)}
             inputProps={{ min: 0, max: selectedSystem?.merit_formula.total_marks || 400, step: 0.01 }}
-            sx={{ flex: 1, minWidth: 160 }}
+            sx={{ flex: 1, minWidth: { xs: '100%', sm: 160 } }}
             disabled={!hasData}
           />
         </Box>
@@ -338,7 +338,7 @@ export default function CounselingRankPredictorPage() {
               {/* Overall Rank */}
               <Paper
                 elevation={0}
-                sx={{ flex: 1, minWidth: 140, p: 1.5, borderRadius: 1.5, border: '2px solid', borderColor: '#E65100', textAlign: 'center' }}
+                sx={{ flex: { xs: '0 0 auto', sm: 1 }, minWidth: 140, p: 1.5, borderRadius: 1.5, border: '2px solid', borderColor: '#E65100', textAlign: 'center' }}
               >
                 <Typography variant="caption" color="text.secondary">Overall Rank</Typography>
                 {prediction?.predictedRank ? (
@@ -359,7 +359,7 @@ export default function CounselingRankPredictorPage() {
               {category && (
                 <Paper
                   elevation={0}
-                  sx={{ flex: 1, minWidth: 140, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', textAlign: 'center' }}
+                  sx={{ flex: { xs: '0 0 auto', sm: 1 }, minWidth: 140, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', textAlign: 'center' }}
                 >
                   <Typography variant="caption" color="text.secondary">
                     {category} Rank
@@ -383,7 +383,7 @@ export default function CounselingRankPredictorPage() {
               <Tooltip title="Your predicted score is better than this percentage of all candidates" arrow placement="top">
                 <Paper
                   elevation={0}
-                  sx={{ flex: 1, minWidth: 100, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', textAlign: 'center', cursor: 'help' }}
+                  sx={{ flex: { xs: '0 0 auto', sm: 1 }, minWidth: 100, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', textAlign: 'center', cursor: 'help' }}
                 >
                   <Typography variant="caption" color="text.secondary">Better Than</Typography>
                   {prediction?.percentile != null ? (
@@ -403,7 +403,7 @@ export default function CounselingRankPredictorPage() {
               <Tooltip title="Students with scores within ±5 marks of yours, used to predict your rank" arrow placement="top">
                 <Paper
                   elevation={0}
-                  sx={{ flex: 1, minWidth: 100, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', textAlign: 'center', cursor: 'help' }}
+                  sx={{ flex: { xs: '0 0 auto', sm: 1 }, minWidth: 100, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', textAlign: 'center', cursor: 'help' }}
                 >
                   <Typography variant="caption" color="text.secondary">Accuracy</Typography>
                   <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2, my: 0.25 }}>
@@ -428,26 +428,26 @@ export default function CounselingRankPredictorPage() {
               const hasNameData = similarStudents.some((s: any) => s.candidate_name);
               const hasCommRank = similarStudents.some((s: any) => s.community_rank != null);
               return (
-              <Paper elevation={0} sx={{ mb: 2, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
+              <Paper elevation={0} sx={{ mb: 2, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden', maxWidth: '100%' }}>
                 <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'grey.100', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                   <PeopleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                   <Typography variant="caption" fontWeight={600}>Similar Students (±5 marks)</Typography>
                 </Box>
-                <TableContainer sx={{ maxHeight: 280, overflowX: 'auto' }}>
-                  <Table size="small">
+                <TableContainer sx={{ maxHeight: 280, overflowX: 'auto', width: '100%' }}>
+                  <Table size="small" sx={{ tableLayout: 'auto' }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Rank</TableCell>
+                        <TableCell sx={{ fontWeight: 600, py: 0.75, whiteSpace: 'nowrap' }}>Rank</TableCell>
                         {hasNameData && (
-                          <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Name</TableCell>
+                          <TableCell sx={{ fontWeight: 600, py: 0.75, whiteSpace: 'nowrap' }}>Name</TableCell>
                         )}
-                        <TableCell sx={{ fontWeight: 600, py: 0.75 }} align="right">Score</TableCell>
-                        <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Community</TableCell>
+                        <TableCell sx={{ fontWeight: 600, py: 0.75, whiteSpace: 'nowrap' }} align="right">Score</TableCell>
+                        <TableCell sx={{ fontWeight: 600, py: 0.75, whiteSpace: 'nowrap' }}>Community</TableCell>
                         {hasCommRank && (
-                          <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Comm. Rank</TableCell>
+                          <TableCell sx={{ fontWeight: 600, py: 0.75, whiteSpace: 'nowrap' }}>Comm. Rank</TableCell>
                         )}
                         {hasCollegeData && (
-                          <TableCell sx={{ fontWeight: 600, py: 0.75 }}>Allotted College</TableCell>
+                          <TableCell sx={{ fontWeight: 600, py: 0.75, whiteSpace: 'nowrap' }}>Allotted College</TableCell>
                         )}
                       </TableRow>
                     </TableHead>

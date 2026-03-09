@@ -208,9 +208,11 @@ export default function AppSidebar({
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
               {phoneVerified && <UserNotificationBell />}
-              <IconButton onClick={toggleSidebar} size="small" sx={{ width: 22, height: 22 }}>
-                <ChevronLeftIcon sx={{ fontSize: 14 }} />
-              </IconButton>
+              {!forceExpanded && (
+                <IconButton onClick={toggleSidebar} size="small" sx={{ width: 22, height: 22 }}>
+                  <ChevronLeftIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              )}
             </Box>
           </>
         ) : (
@@ -222,47 +224,68 @@ export default function AppSidebar({
 
       <Divider />
 
-      {/* Exam/Counseling Tabs — icon tabs, hidden when collapsed */}
-      {!collapsed && (
-        <Tabs
-          value={examTab}
-          onChange={(_e, v) => setExamTab(v)}
-          variant="fullWidth"
+      {/* Exam/Counseling Tabs — icon-only when collapsed */}
+      <Tabs
+        value={examTab}
+        onChange={(_e, v) => setExamTab(v)}
+        variant="fullWidth"
+        orientation={collapsed ? 'vertical' : 'horizontal'}
+        sx={{
+          minHeight: collapsed ? 'auto' : 36,
+          borderBottom: collapsed ? 'none' : '1px solid',
+          borderColor: 'divider',
+          transition: TRANSITION,
+          '& .MuiTab-root': {
+            minHeight: collapsed ? 32 : 36,
+            minWidth: 0,
+            py: collapsed ? 0.25 : 0,
+            px: collapsed ? 0.5 : 1,
+          },
+          '& .MuiTabs-indicator': {
+            height: collapsed ? 0 : 2,
+            width: collapsed ? 2 : 'auto',
+            left: collapsed ? 0 : 'auto',
+          },
+        }}
+      >
+        <Tab
+          icon={<ArchitectureIcon sx={{ fontSize: collapsed ? 18 : 16, mb: collapsed ? 0 : '-2px' }} />}
+          label={collapsed ? undefined : 'NATA'}
+          iconPosition="top"
           sx={{
-            minHeight: 36,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            '& .MuiTab-root': {
-              minHeight: 36,
-              minWidth: 0,
-              py: 0,
-              px: 1,
-            },
-            '& .MuiTabs-indicator': {
-              height: 2,
-            },
+            fontSize: '0.6rem',
+            fontWeight: 600,
+            '& .MuiTab-iconWrapper': { mb: 0 },
+            bgcolor: collapsed && examTab === 0 ? 'action.selected' : 'transparent',
+            borderRadius: collapsed ? 1 : 0,
           }}
-        >
-          <Tab
-            icon={<ArchitectureIcon sx={{ fontSize: 16, mb: '-2px' }} />}
-            label="NATA"
-            iconPosition="top"
-            sx={{ fontSize: '0.6rem', fontWeight: 600, '& .MuiTab-iconWrapper': { mb: 0 } }}
-          />
-          <Tab
-            icon={<EngineeringIcon sx={{ fontSize: 16, mb: '-2px' }} />}
-            label="JEE"
-            iconPosition="top"
-            sx={{ fontSize: '0.6rem', fontWeight: 600, '& .MuiTab-iconWrapper': { mb: 0 } }}
-          />
-          <Tab
-            icon={<GavelIcon sx={{ fontSize: 16, mb: '-2px' }} />}
-            label="Counsel"
-            iconPosition="top"
-            sx={{ fontSize: '0.6rem', fontWeight: 600, '& .MuiTab-iconWrapper': { mb: 0 } }}
-          />
-        </Tabs>
-      )}
+        />
+        <Tab
+          icon={<EngineeringIcon sx={{ fontSize: collapsed ? 18 : 16, mb: collapsed ? 0 : '-2px' }} />}
+          label={collapsed ? undefined : 'JEE'}
+          iconPosition="top"
+          sx={{
+            fontSize: '0.6rem',
+            fontWeight: 600,
+            '& .MuiTab-iconWrapper': { mb: 0 },
+            bgcolor: collapsed && examTab === 1 ? 'action.selected' : 'transparent',
+            borderRadius: collapsed ? 1 : 0,
+          }}
+        />
+        <Tab
+          icon={<GavelIcon sx={{ fontSize: collapsed ? 18 : 16, mb: collapsed ? 0 : '-2px' }} />}
+          label={collapsed ? undefined : 'Counsel'}
+          iconPosition="top"
+          sx={{
+            fontSize: '0.6rem',
+            fontWeight: 600,
+            '& .MuiTab-iconWrapper': { mb: 0 },
+            bgcolor: collapsed && examTab === 2 ? 'action.selected' : 'transparent',
+            borderRadius: collapsed ? 1 : 0,
+          }}
+        />
+      </Tabs>
+      {collapsed && <Divider />}
 
       {/* Tool Navigation */}
       <List sx={{

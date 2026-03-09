@@ -94,11 +94,13 @@ export default function AppShell({
         component="main"
         sx={{
           flexGrow: 1,
+          minWidth: 0,
           width: { sm: `calc(100% - ${sidebarWidth}px)` },
           mt: { xs: '48px', sm: 0 },
           pb: { xs: '56px', sm: 0 },
           minHeight: { xs: 'calc(100vh - 48px)', sm: '100vh' },
           transition: TRANSITION,
+          overflowX: 'hidden',
         }}
       >
         <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200 }}>
