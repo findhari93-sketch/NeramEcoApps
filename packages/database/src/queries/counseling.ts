@@ -946,7 +946,7 @@ export async function logPrediction(
 /**
  * Get year-wise summary of rank list entries for a counseling system.
  * Returns which years have data and how many records each year has.
- * Uses direct table query + JS aggregation (bypasses PostgREST RPC issues).
+ * Uses a PostgreSQL VIEW (bypasses PostgREST RPC issues).
  */
 export async function getRankListYearSummary(
   systemId: string,
@@ -954,10 +954,11 @@ export async function getRankListYearSummary(
 ): Promise<{ year: number; totalEntries: number }[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  // Use RPC to get distinct years with counts (avoids PostgREST max_rows 1000 limit)
-  const { data, error } = await (supabase as any).rpc('get_distinct_rank_list_years', {
-    p_system_id: systemId,
-  });
+  const { data, error } = await (supabase as any)
+    .from('rank_list_year_summary')
+    .select('year, total_entries')
+    .eq('counseling_system_id', systemId)
+    .order('year', { ascending: false });
 
   if (error) throw error;
 
@@ -1011,7 +1012,7 @@ export async function getRankListCommunityStats(
 
 /**
  * Get year-wise summary of allotment list entries.
- * Uses direct table query + JS aggregation (bypasses PostgREST RPC issues).
+ * Uses a PostgreSQL VIEW (bypasses PostgREST RPC issues).
  */
 export async function getAllotmentYearSummary(
   systemId: string,
@@ -1019,10 +1020,11 @@ export async function getAllotmentYearSummary(
 ): Promise<{ year: number; totalEntries: number }[]> {
   const supabase = client || getSupabaseBrowserClient();
 
-  // Use RPC to get distinct years with counts (avoids PostgREST max_rows 1000 limit)
-  const { data, error } = await (supabase as any).rpc('get_distinct_allotment_years', {
-    p_system_id: systemId,
-  });
+  const { data, error } = await (supabase as any)
+    .from('allotment_year_summary')
+    .select('year, total_entries')
+    .eq('counseling_system_id', systemId)
+    .order('year', { ascending: false });
 
   if (error) throw error;
 
