@@ -95,6 +95,7 @@ export default function CounselingRankPredictorPage() {
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [communityStats, setCommunityStats] = useState<{ community: string; count: number; avgScore: number }[]>([]);
   const [communityTotal, setCommunityTotal] = useState(0);
+  const [allotmentCount, setAllotmentCount] = useState(0);
 
   const selectedSystem = systems.find((s) => s.code === selectedSystemCode) || null;
   const hasData = availableYears.length > 0;
@@ -140,6 +141,7 @@ export default function CounselingRankPredictorPage() {
           setCommunityStats(data.communityStats);
           setCommunityTotal(data.communityStats.reduce((sum: number, s: any) => sum + s.count, 0));
         }
+        setAllotmentCount(data.allotmentCount || 0);
       } catch {
         setAvailableYears([]);
       }
@@ -304,7 +306,7 @@ export default function CounselingRankPredictorPage() {
       {communityStats.length > 0 && selectedYear && !hasResults && (
         <Paper elevation={0} sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.100', bgcolor: 'grey.50' }}>
           <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
-            Based on {selectedYear} data: {communityTotal.toLocaleString()} students
+            Based on {selectedYear} data: {communityTotal.toLocaleString()} applied{allotmentCount > 0 ? ` · ${allotmentCount.toLocaleString()} got seats` : ''}
           </Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             {communityStats.map((cs) => (

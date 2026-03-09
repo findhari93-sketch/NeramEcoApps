@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const adminClient = getSupabaseAdminClient();
 
     // Get or create user in Supabase
-    const user = await getOrCreateUserFromFirebase({
+    const { user, isNewUser } = await getOrCreateUserFromFirebase({
       uid: decodedToken.uid,
       email: decodedToken.email || null,
       phoneNumber: decodedToken.phone_number || null,
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
         status: user.status,
         onboarding_completed: (user as any).onboarding_completed ?? false,
       },
+      isNewUser,
     }, { headers: corsHeaders });
 
   } catch (error) {

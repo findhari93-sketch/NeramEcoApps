@@ -329,6 +329,16 @@ function FormWizardInner() {
       const result = await response.json();
 
       if (result.success) {
+        // Fire Google Ads sign-up conversion
+        if (typeof window !== 'undefined' && (window as any).gtag) {
+          const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
+          const signupLabel = process.env.NEXT_PUBLIC_GOOGLE_ADS_SIGNUP_LABEL;
+          if (adsId && signupLabel) {
+            (window as any).gtag('event', 'conversion', {
+              send_to: `${adsId}/${signupLabel}`,
+            });
+          }
+        }
         setApplicationNumber(result.data.application_number || (isEditing ? 'Updated' : 'NERAM-PENDING'));
         setSubmitted(true);
         clearSavedForm();

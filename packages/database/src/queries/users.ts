@@ -241,7 +241,7 @@ export async function getOrCreateUserFromFirebase(
     photoURL?: string | null;
   },
   client?: TypedSupabaseClient
-): Promise<User> {
+): Promise<{ user: User; isNewUser: boolean }> {
   const supabase = client || getSupabaseAdminClient();
 
   // Build profile updates from Firebase data (fill missing fields)
@@ -266,9 +266,9 @@ export async function getOrCreateUserFromFirebase(
     // Update any missing profile fields from Firebase data
     const updates = buildProfileUpdates(user);
     if (Object.keys(updates).length > 0) {
-      return updateUser(user.id, updates, supabase);
+      return { user: await updateUser(user.id, updates, supabase), isNewUser: false };
     }
-    return user;
+    return { user, isNewUser: false };
   }
 
   // Try to find by phone — if found, link this Firebase UID to that existing user
@@ -277,7 +277,7 @@ export async function getOrCreateUserFromFirebase(
     if (user) {
       // Link Firebase UID and sync profile data
       const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
-      return updateUser(user.id, updates, supabase);
+      return { user: await updateUser(user.id, updates, supabase), isNewUser: false };
     }
   }
 
@@ -287,7 +287,7 @@ export async function getOrCreateUserFromFirebase(
     if (user) {
       // Link Firebase UID and sync profile data
       const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
-      return updateUser(user.id, updates, supabase);
+      return { user: await updateUser(user.id, updates, supabase), isNewUser: false };
     }
   }
 
@@ -310,7 +310,7 @@ export async function getOrCreateUserFromFirebase(
   }
 
   // Create new user
-  return createUser({
+  const newUser = await createUser({
     name: firebaseUser.displayName || 'User',
     email: firebaseUser.email || null,
     phone: phoneForNewUser,
@@ -327,6 +327,7 @@ export async function getOrCreateUserFromFirebase(
     last_login_at: new Date().toISOString(),
     metadata: null,
   }, supabase);
+  return { user: newUser, isNewUser: true };
 }
 
 // ============================================

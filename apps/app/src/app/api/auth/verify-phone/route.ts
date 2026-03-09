@@ -50,12 +50,13 @@ export async function POST(req: NextRequest) {
     if (!user) {
       // Fallback: create user if register-user hadn't completed
       try {
-        user = await getOrCreateUserFromFirebase({
+        const result = await getOrCreateUserFromFirebase({
           uid: decodedToken.uid,
           email: decodedToken.email || null,
           phoneNumber: phoneNumber,
           displayName: decodedToken.name || null,
         });
+        user = result.user;
       } catch (createError) {
         console.error('Failed to create fallback user:', createError);
         return NextResponse.json(

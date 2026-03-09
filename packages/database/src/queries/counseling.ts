@@ -1069,6 +1069,43 @@ export async function getAllotmentCommunityStats(
   }));
 }
 
+/**
+ * Get per-college allotment statistics for a given system and year.
+ * Returns college-level breakdown: allotted count, rank range, categories.
+ */
+export async function getAllotmentCollegeStats(
+  systemId: string,
+  year: number,
+  client?: TypedSupabaseClient
+): Promise<{
+  collegeCode: string;
+  collegeName: string;
+  allotted: number;
+  minRank: number | null;
+  maxRank: number | null;
+  avgScore: number | null;
+  categories: string;
+}[]> {
+  const supabase = client || getSupabaseBrowserClient();
+
+  const { data, error } = await (supabase as any).rpc('get_allotment_college_stats', {
+    p_system_id: systemId,
+    p_year: year,
+  });
+
+  if (error) throw error;
+
+  return (data || []).map((row: any) => ({
+    collegeCode: row.college_code,
+    collegeName: row.college_name || row.college_code,
+    allotted: Number(row.allotted),
+    minRank: row.min_rank != null ? Number(row.min_rank) : null,
+    maxRank: row.max_rank != null ? Number(row.max_rank) : null,
+    avgScore: row.avg_score != null ? Number(row.avg_score) : null,
+    categories: row.categories || '',
+  }));
+}
+
 // ============================================
 // ALLOTMENT-BASED COLLEGE PREDICTION
 // ============================================

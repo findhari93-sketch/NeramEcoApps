@@ -10,6 +10,7 @@ import {
   getAvailableYearsWithSource,
   getRankListCommunityStats,
   getAllotmentCommunityStats,
+  getAllotmentYearSummary,
   logToolUsage,
   getSupabaseBrowserClient,
 } from '@neram/database';
@@ -58,7 +59,15 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      return NextResponse.json({ years, yearsWithSource, communityStats, statsYear: targetYear });
+      // Get allotment count for the target year (to show "X got seats")
+      let allotmentCount = 0;
+      if (targetYear) {
+        const allotmentSummary = await getAllotmentYearSummary(systemId, supabase);
+        const allotmentYear = allotmentSummary.find((s) => s.year === targetYear);
+        if (allotmentYear) allotmentCount = allotmentYear.totalEntries;
+      }
+
+      return NextResponse.json({ years, yearsWithSource, communityStats, statsYear: targetYear, allotmentCount });
     }
 
     // Default: return systems

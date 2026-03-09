@@ -22,6 +22,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import AppsIcon from '@mui/icons-material/Apps';
 import DescriptionIcon from '@mui/icons-material/Description';
+import InsightsIcon from '@mui/icons-material/Insights';
 
 export interface ToolNavItem {
   title: string;
@@ -50,6 +51,7 @@ export const JEE_TOOLS: ToolNavItem[] = [
 export const COUNSELING_TOOLS: ToolNavItem[] = [
   { title: 'Rank Predictor', href: '/tools/counseling/rank-predictor', icon: <TrendingUpIcon fontSize="small" /> },
   { title: 'College Predictor', href: '/tools/counseling/college-predictor', icon: <SchoolIcon fontSize="small" /> },
+  { title: 'Insights', href: '/tools/counseling/insights', icon: <InsightsIcon fontSize="small" /> },
   { title: 'COA Checker', href: '/tools/counseling/coa-checker', icon: <VerifiedIcon fontSize="small" /> },
 ];
 

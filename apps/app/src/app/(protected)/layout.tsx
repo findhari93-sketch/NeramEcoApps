@@ -68,11 +68,22 @@ function ProtectedLayoutInner({
         });
 
         if (response.ok) {
-          const { user: dbUser } = await response.json();
+          const { user: dbUser, isNewUser } = await response.json();
           setSupabaseUser(dbUser);
           setPhoneVerified(dbUser.phone_verified);
           setOnboardingCompleted(dbUser.onboarding_completed ?? false);
           setIdToken(idToken);
+
+          // Fire Google Ads conversion for new registrations
+          if (isNewUser && (window as any).gtag) {
+            const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
+            const signupLabel = process.env.NEXT_PUBLIC_GOOGLE_ADS_SIGNUP_LABEL;
+            if (adsId && signupLabel) {
+              (window as any).gtag('event', 'conversion', {
+                send_to: `${adsId}/${signupLabel}`,
+              });
+            }
+          }
         } else {
           console.error('Register user failed:', response.status);
           setRegistrationError(true);
