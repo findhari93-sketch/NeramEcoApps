@@ -146,8 +146,8 @@ const nextConfig = {
       { source: '/JEE_B.arch_Syllabus', destination: '/en/nata-syllabus', permanent: true },
       { source: '/NATA_Best_Architecture_Colleges', destination: '/en/courses', permanent: true },
       { source: '/NATA_Free_Books', destination: '/en/free-resources', permanent: true },
-      { source: '/about', destination: '/en/about', permanent: true },
-      { source: '/contact', destination: '/en/contact', permanent: true },
+      // NOTE: /about and /contact are handled by next-intl middleware (localePrefix: 'as-needed')
+      // Explicit redirects here cause ERR_TOO_MANY_REDIRECTS
 
       // Old city URLs with -url suffix — specific cities first, then catch-all
       { source: '/trichy-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-trichy', permanent: true },

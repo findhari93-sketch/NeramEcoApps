@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Container, Typography, Button, Paper } from '@neram/ui';
-import { CheckCircleOutlined, ArrowForward } from '@mui/icons-material';
+import { CheckCircleOutlined, ArrowForward, Check } from '@mui/icons-material';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
 
@@ -75,7 +75,7 @@ export default function SuccessScreen({ applicationNumber }: SuccessScreenProps)
                   flexShrink: 0,
                 }}
               >
-                {item.done ? '✓' : item.step}
+                {item.done ? <Check sx={{ fontSize: 16 }} /> : item.step}
               </Box>
               <Typography variant="body2" color={item.done ? 'success.main' : 'text.primary'}>
                 {item.text}
