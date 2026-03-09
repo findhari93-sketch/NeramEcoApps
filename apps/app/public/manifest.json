@@ -1,8 +1,10 @@
 {
   "name": "aiArchitek — From Cutoffs to Colleges",
   "short_name": "aiArchitek",
+  "id": "/",
   "description": "Free NATA & JEE Paper 2 preparation app by Neram Classes. AI-powered NATA cutoff calculator, B.Arch college predictor for 5000+ architecture colleges, NATA exam center finder, TNEA counselling support, mock tests & previous year papers. Your complete NATA 2026 companion.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#060d1f",
   "theme_color": "#060d1f",
@@ -39,6 +41,28 @@
       "purpose": "any"
     }
   ],
+  "shortcuts": [
+    {
+      "name": "Cutoff Calculator",
+      "short_name": "Cutoffs",
+      "url": "/tools/nata/cutoff-calculator",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "College Predictor",
+      "short_name": "Colleges",
+      "url": "/tools/nata/college-predictor",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Exam Centers",
+      "short_name": "Centers",
+      "url": "/tools/nata/exam-centers",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false,
   "categories": ["education", "productivity", "utilities"],
   "lang": "en-IN",
   "dir": "ltr",

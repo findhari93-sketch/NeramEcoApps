@@ -7,9 +7,7 @@ const assetLinks = [
       namespace: 'android_app',
       package_name: 'com.neramclasses.app',
       sha256_cert_fingerprints: [
-        // TODO: Replace with actual SHA256 fingerprint from your signing key after
-        // generating the Android package via PWABuilder
-        'PLACEHOLDER:REPLACE_WITH_ACTUAL_SHA256_FINGERPRINT',
+        'D5:A8:33:0B:D1:BA:C8:F2:4A:64:FD:28:0C:2C:F9:59:C0:AC:E2:40:4E:E5:68:73:2F:27:9D:4F:30:B6:CB:44',
       ],
     },
   },
