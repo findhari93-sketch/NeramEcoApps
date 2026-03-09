@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   description:
     'From cutoffs to colleges — aiArchitek is your complete architecture exam companion. Free AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder, and community question bank by Neram Classes.',
   keywords:
-    'NATA app, NATA preparation app, aiArchitek, NATA cutoff calculator, college predictor NATA, NATA exam centers, architecture entrance exam app, free NATA app, NATA 2026, best NATA app, B.Arch admission',
+    'NATA, NATA 2026, NATA preparation, NATA app, NATA cutoff calculator, NATA college predictor, NATA rank predictor, NATA mock test, NATA previous year papers, JEE Paper 2, B.Arch entrance exam, B.Arch colleges, B.Arch admission, architecture entrance exam app, free NATA app, NATA coaching, NATA study material, TNEA, TNEA counselling, architecture colleges India, NATA drawing test, NATA exam centers, college predictor, cutoff calculator, Neram Classes, aiArchitek',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -41,8 +41,12 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
-    apple: '/icon.svg',
+    icon: [
+      { url: '/icons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/icons/apple-touch-icon.png',
   },
   openGraph: {
     title: 'aiArchitek — From Cutoffs to Colleges',

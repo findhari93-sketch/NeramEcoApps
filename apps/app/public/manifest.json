@@ -1,7 +1,7 @@
 {
   "name": "aiArchitek — From Cutoffs to Colleges",
   "short_name": "aiArchitek",
-  "description": "Your complete architecture exam companion. From cutoffs to colleges — AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder & more. By Neram Classes.",
+  "description": "Free NATA & JEE Paper 2 preparation app by Neram Classes. AI-powered NATA cutoff calculator, B.Arch college predictor for 5000+ architecture colleges, NATA exam center finder, TNEA counselling support, mock tests & previous year papers. Your complete NATA 2026 companion.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#060d1f",

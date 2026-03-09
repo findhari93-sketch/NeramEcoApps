@@ -22,9 +22,9 @@ export default function PrivacyPolicyPage() {
             1. Introduction
           </Typography>
           <Typography>
-            Neram Classes (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) operates the aiArchitek application
-            (the &quot;Service&quot;). This Privacy Policy explains how we collect, use, and protect your
-            personal information when you use our Service.
+            Neram Classes (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) operates the aiArchitek - NATA/JEE Paper 2
+            Learning App (the &quot;Service&quot;) at neramclasses.com. This Privacy Policy explains how we
+            collect, use, and protect your personal information when you use our Service.
           </Typography>
 
           <Typography variant="h6" component="h2" fontWeight={600}>
