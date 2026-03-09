@@ -12,6 +12,7 @@ import {
   getCourseById,
   getAvailableBatches,
   incrementBatchEnrollment,
+  initializeStudentOnboarding,
 } from '@neram/database';
 
 // POST /api/leads/[id]/approve - Approve a lead and convert to student
@@ -87,6 +88,13 @@ export async function POST(
       emergency_contact: null,
       notes: notes || null,
     }, supabase);
+
+    // Initialize post-enrollment onboarding steps
+    try {
+      await initializeStudentOnboarding(studentProfile.id, id, 'regular', supabase);
+    } catch (e) {
+      console.warn('Failed to initialize onboarding steps:', e);
+    }
 
     // Increment batch enrollment if batch selected
     if (batchId) {

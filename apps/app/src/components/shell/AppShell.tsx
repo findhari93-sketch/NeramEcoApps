@@ -59,6 +59,7 @@ export default function AppShell({
           phoneVerified={phoneVerified}
           onSignOut={onSignOut}
           onItemClick={() => setMobileOpen(false)}
+          forceExpanded
         />
       </Drawer>
 

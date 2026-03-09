@@ -30,6 +30,7 @@ export * from './exam-profile';
 export * from './qb-stats';
 export * from './score-calculations';
 export * from './direct-enrollment';
+export * from './post-enrollment-onboarding';
 export * from './support-tickets';
 export * from './nata';
 export * from './testimonials';

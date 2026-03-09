@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { NATA_TOOLS } from '@/lib/navigation-data';
 import { useExamCountdown } from '@/hooks/useExamCountdown';
 import ExamSetupCard from '@/components/exam-setup/ExamSetupCard';
+import OnboardingChecklist from '@/components/post-enrollment/OnboardingChecklist';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
 const quickAccessTools = NATA_TOOLS.filter((t) => !t.comingSoon).slice(0, 5);
@@ -48,6 +49,9 @@ export default function DashboardPage() {
           From Cutoffs to Colleges — Your Architecture Exam Companion
         </Typography>
       </Box>
+
+      {/* Post-enrollment onboarding checklist (shown until all steps complete) */}
+      <OnboardingChecklist />
 
       {/* Exam Setup / Countdown Card */}
       <ExamSetupCard />

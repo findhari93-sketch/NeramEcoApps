@@ -49,6 +49,7 @@ interface AppSidebarProps {
   phoneVerified: boolean;
   onSignOut: () => void;
   onItemClick?: () => void;
+  forceExpanded?: boolean;
 }
 
 export default function AppSidebar({
@@ -57,10 +58,12 @@ export default function AppSidebar({
   phoneVerified,
   onSignOut,
   onItemClick,
+  forceExpanded,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { collapsed, toggleSidebar } = useSidebar();
+  const { collapsed: contextCollapsed, toggleSidebar } = useSidebar();
+  const collapsed = forceExpanded ? false : contextCollapsed;
   const { mode, toggleMode } = useThemeMode();
   const [examTab, setExamTab] = useState(() => {
     if (pathname.startsWith('/tools/counseling')) return 2;

@@ -93,9 +93,9 @@ export async function DELETE(
       );
     }
 
-    if (existing.status !== 'cancelled' && existing.status !== 'expired') {
+    if (existing.status === 'active') {
       return NextResponse.json(
-        { error: 'Only cancelled or expired links can be deleted' },
+        { error: 'Active links cannot be deleted. Cancel them first.' },
         { status: 400 }
       );
     }

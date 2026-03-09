@@ -214,6 +214,7 @@ export default function DirectEnrollmentPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [actionTargetId, setActionTargetId] = useState<string | null>(null);
+  const [actionTargetStatus, setActionTargetStatus] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchLinks = useCallback(async () => {
@@ -347,9 +348,10 @@ export default function DirectEnrollmentPage() {
     setSnackbar({ open: true, message: 'Link copied to clipboard!' });
   };
 
-  const handleCancelLink = (e: React.MouseEvent, linkId: string) => {
+  const handleCancelLink = (e: React.MouseEvent, linkId: string, linkStatus?: string) => {
     e.stopPropagation();
     setActionTargetId(linkId);
+    setActionTargetStatus(linkStatus || 'active');
     setCancelDialogOpen(true);
   };
 
@@ -689,8 +691,22 @@ export default function DirectEnrollmentPage() {
                                 </IconButton>
                               </Tooltip>
                               <Tooltip title="Cancel Link">
-                                <IconButton size="small" color="error" onClick={(e) => handleCancelLink(e, link.id)}>
+                                <IconButton size="small" color="error" onClick={(e) => handleCancelLink(e, link.id, link.status)}>
                                   <CancelIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
+                          {link.status === 'used' && (
+                            <>
+                              <Tooltip title="Cancel Link Record">
+                                <IconButton size="small" color="warning" onClick={(e) => handleCancelLink(e, link.id, link.status)}>
+                                  <CancelIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete Permanently">
+                                <IconButton size="small" color="error" onClick={(e) => handleDeleteLink(e, link.id)}>
+                                  <DeleteIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                             </>
@@ -754,7 +770,10 @@ export default function DirectEnrollmentPage() {
         onClose={() => { setCancelDialogOpen(false); setActionTargetId(null); }}
         onConfirm={confirmCancel}
         title="Cancel Enrollment Link"
-        message="Are you sure you want to cancel this enrollment link? The student will no longer be able to use it to enroll."
+        message={actionTargetStatus === 'used'
+          ? "Are you sure you want to cancel this completed enrollment link? The student's enrollment and profile will NOT be affected."
+          : "Are you sure you want to cancel this enrollment link? The student will no longer be able to use it to enroll."
+        }
         confirmLabel="Cancel Link"
         loading={actionLoading}
       />

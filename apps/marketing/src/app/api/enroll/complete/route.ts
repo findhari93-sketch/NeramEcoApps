@@ -10,6 +10,7 @@ import {
   updateUser,
   incrementBatchEnrollment,
   notifyNewApplication,
+  initializeStudentOnboarding,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
 
@@ -224,7 +225,14 @@ export async function POST(request: NextRequest) {
         form_completed: false,
       });
 
-    // 9. Send notification
+    // 9. Initialize post-enrollment onboarding steps
+    try {
+      await initializeStudentOnboarding(studentProfile.id, auth.userId, 'direct', supabase);
+    } catch (e) {
+      console.warn('Failed to initialize onboarding steps:', e);
+    }
+
+    // 10. Send notification
     try {
       await notifyNewApplication({
         applicationNumber,

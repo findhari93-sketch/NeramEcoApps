@@ -202,7 +202,7 @@ export default function CounselingRankPredictorPage() {
     : '';
 
   return (
-    <Box sx={{ maxWidth: 700, mx: 'auto', pb: 4 }}>
+    <Box sx={{ maxWidth: 700, mx: 'auto', pb: 4, overflow: 'hidden' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
         <Box sx={{ width: 40, height: 40, borderRadius: 1.5, bgcolor: '#E65100', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -334,7 +334,7 @@ export default function CounselingRankPredictorPage() {
         >
           <Box>
             {/* Compact result cards */}
-            <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', gap: 1.5, mb: 2, overflowX: 'auto', pb: 0.5, flexWrap: { xs: 'nowrap', sm: 'wrap' } }}>
               {/* Overall Rank */}
               <Paper
                 elevation={0}
@@ -433,7 +433,7 @@ export default function CounselingRankPredictorPage() {
                   <PeopleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                   <Typography variant="caption" fontWeight={600}>Similar Students (±5 marks)</Typography>
                 </Box>
-                <TableContainer sx={{ maxHeight: 280 }}>
+                <TableContainer sx={{ maxHeight: 280, overflowX: 'auto' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>

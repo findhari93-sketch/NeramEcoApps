@@ -39,6 +39,7 @@ import ArchitectureIcon from '@mui/icons-material/Architecture';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import GavelIcon from '@mui/icons-material/Gavel';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -51,6 +52,7 @@ const menuItems = [
   { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
   { text: 'Students', icon: SchoolIcon, path: '/students' },
   { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
+  { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
   { text: 'Payments', icon: PaymentIcon, path: '/payments' },
   { text: 'Courses', icon: BookIcon, path: '/courses' },
   { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },
