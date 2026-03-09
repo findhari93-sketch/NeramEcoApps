@@ -17,10 +17,16 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import DeleteIcon from '@mui/icons-material/Delete';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
@@ -182,6 +188,10 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Delete
+  const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Filters
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState('');
@@ -236,6 +246,24 @@ export default function StudentsPage() {
 
   const handleRowClick = (row: StudentRow) => {
     router.push(`/crm/${row.user_id}`);
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/students/${deleteTarget.user_id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete');
+      }
+      setDeleteTarget(null);
+      fetchStudents();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete student');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Column definitions for DataTable
@@ -328,6 +356,25 @@ export default function StudentsPage() {
         >
           {row.fee_due > 0 ? formatCurrency(row.fee_due) : '-'}
         </Typography>
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 60,
+      renderCell: ({ row }: { row: StudentRow; value: any }) => (
+        <Tooltip title="Delete student">
+          <IconButton
+            size="small"
+            color="error"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              setDeleteTarget(row);
+            }}
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       ),
     },
   ];
@@ -471,6 +518,38 @@ export default function StudentsPage() {
           defaultRowsPerPage={25}
         />
       </Paper>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)}>
+        <DialogTitle>Delete Student</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to permanently delete{' '}
+            <strong>
+              {deleteTarget
+                ? [deleteTarget.first_name, deleteTarget.last_name].filter(Boolean).join(' ') || deleteTarget.email
+                : ''}
+            </strong>
+            ?
+          </Typography>
+          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+            This will delete the student profile, lead profile, payments, onboarding progress, and user account. This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteStudent}
+            color="error"
+            variant="contained"
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting...' : 'Delete Permanently'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

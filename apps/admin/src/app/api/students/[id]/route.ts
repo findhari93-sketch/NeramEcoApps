@@ -87,6 +87,82 @@ export async function GET(
   }
 }
 
+// DELETE /api/students/[id] - Delete a student (hard delete: student_profile + related data)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = getSupabaseAdminClient();
+
+    const user = await getUserById(id, supabase);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Student not found' },
+        { status: 404 }
+      );
+    }
+
+    // Nullify FK references on direct_enrollment_links before deleting profiles
+    await supabase
+      .from('direct_enrollment_links')
+      .update({ used_by: null, lead_profile_id: null, student_profile_id: null })
+      .eq('used_by', id);
+
+    // Delete from all tables that reference users.id (order matters for FK deps)
+    const tablesToClean = [
+      'student_onboarding_progress',
+      'post_enrollment_details',
+      'onboarding_responses',
+      'onboarding_sessions',
+      'payments',
+      'scholarship_applications',
+      'application_documents',
+      'user_exam_attempts',
+      'user_exam_profiles',
+      'user_avatars',
+      'user_notifications',
+      'user_profile_history',
+      'email_logs',
+      'score_calculations',
+      'prediction_logs',
+      'tool_usage_logs',
+      'cashback_claims',
+      'youtube_subscription_coupons',
+      'student_profiles',
+      'lead_profiles',
+    ];
+
+    for (const table of tablesToClean) {
+      await supabase.from(table).delete().eq('user_id', id);
+    }
+
+    // Finally delete the user
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.error('User delete error:', deleteError);
+      // If FK constraint still blocks, return partial success
+      return NextResponse.json({
+        success: true,
+        warning: 'Student profile deleted but user record retained due to other references.',
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete student' },
+      { status: 500 }
+    );
+  }
+}
+
 // PATCH /api/students/[id] - Update a student
 export async function PATCH(
   request: NextRequest,
