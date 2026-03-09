@@ -1542,9 +1542,9 @@ export async function predictCollegesWithSeatAwareness(
         else communityTier = 'reach';
       }
 
-      // Only add community prediction if general is full or moderate/reach
-      // (i.e., community seats provide additional opportunity)
-      if (isGeneralFull || generalTier !== 'safe') {
+      // Show all colleges with community seats — students should see their
+      // category seat availability regardless of general tier
+      {
         const communityPred: SeatAwareCollegePrediction = {
           collegeCode,
           collegeName: info.collegeName,
