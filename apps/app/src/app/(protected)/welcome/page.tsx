@@ -154,13 +154,15 @@ export default function WelcomePage() {
           py: 4,
           px: 3,
           mb: 3,
-          background: 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)',
+          background: (t) => t.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(76,175,80,0.15) 0%, rgba(76,175,80,0.08) 100%)'
+            : 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)',
           borderRadius: 1.5,
         }}
       >
         <Box
           sx={{
-            width: 80, height: 80, borderRadius: '50%', bgcolor: 'white',
+            width: 80, height: 80, borderRadius: '50%', bgcolor: 'background.paper',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             mx: 'auto', mb: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
           }}
@@ -177,14 +179,14 @@ export default function WelcomePage() {
         {info?.receiptNumber && (
           <Chip
             label={`Receipt: ${info.receiptNumber}`}
-            sx={{ mt: 1.5, fontFamily: 'monospace', fontWeight: 600, bgcolor: 'white' }}
+            sx={{ mt: 1.5, fontFamily: 'monospace', fontWeight: 600, bgcolor: 'background.paper' }}
           />
         )}
       </Paper>
 
       {/* Payment Summary */}
       {info && (
-        <Paper elevation={0} sx={{ p: 2.5, mb: 3, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+        <Paper elevation={0} sx={{ p: 2.5, mb: 3, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Enrollment Details</Typography>
           <Stack spacing={0.75}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -233,15 +235,19 @@ export default function WelcomePage() {
               p: 2.5,
               borderRadius: 1,
               border: '1px solid',
-              borderColor: step.done ? '#C8E6C9' : '#e0e0e0',
-              bgcolor: step.done ? '#F1F8E9' : 'white',
+              borderColor: step.done ? 'success.light' : 'divider',
+              bgcolor: step.done
+                ? (t) => t.palette.mode === 'dark' ? 'rgba(76,175,80,0.08)' : '#F1F8E9'
+                : 'background.paper',
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
               <Box
                 sx={{
                   width: 40, height: 40, borderRadius: 1,
-                  bgcolor: step.done ? '#E8F5E9' : `${step.color}15`,
+                  bgcolor: step.done
+                    ? (t) => t.palette.mode === 'dark' ? 'rgba(76,175,80,0.15)' : '#E8F5E9'
+                    : `${step.color}15`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: step.done ? 'success.main' : step.color,
                   flexShrink: 0,

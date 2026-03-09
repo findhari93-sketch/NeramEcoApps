@@ -117,7 +117,7 @@ export default function OnboardingChecklist() {
     return (
       <Paper
         elevation={0}
-        sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}
+        sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
       >
         <Skeleton variant="text" width="60%" height={24} />
         <Skeleton variant="rectangular" height={8} sx={{ mt: 1, borderRadius: 1 }} />
@@ -149,7 +149,7 @@ export default function OnboardingChecklist() {
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'primary.light',
-        bgcolor: 'primary.50',
+        bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(25,118,210,0.08)' : 'rgba(25,118,210,0.04)',
       }}
     >
       {/* Header */}
@@ -175,7 +175,7 @@ export default function OnboardingChecklist() {
           height: 6,
           borderRadius: 3,
           mb: 2,
-          bgcolor: 'grey.200',
+          bgcolor: 'action.disabledBackground',
           '& .MuiLinearProgress-bar': { borderRadius: 3 },
         }}
       />
@@ -208,9 +208,9 @@ export default function OnboardingChecklist() {
                 gap: 1.5,
                 p: 1.5,
                 borderRadius: 1.5,
-                bgcolor: step.is_completed ? 'grey.50' : 'background.paper',
+                bgcolor: step.is_completed ? 'action.hover' : 'background.paper',
                 border: '1px solid',
-                borderColor: step.is_completed ? 'grey.200' : 'grey.300',
+                borderColor: 'divider',
                 cursor: step.is_completed ? 'default' : 'pointer',
                 opacity: step.is_completed ? 0.7 : 1,
                 transition: 'all 0.2s',

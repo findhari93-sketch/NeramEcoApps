@@ -37,7 +37,7 @@ export default function BlurredContent({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          bgcolor: 'rgba(255,255,255,0.7)',
+          bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)',
           borderRadius: 1,
         }}
       >

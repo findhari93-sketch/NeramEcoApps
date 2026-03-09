@@ -174,7 +174,7 @@ function CompetitionBadge({ score }: { score: number }) {
       <Typography variant="caption" fontWeight={700} sx={{ color, fontSize: '0.7rem', lineHeight: 1 }}>
         {score}
       </Typography>
-      <Box sx={{ width: 24, height: 6, bgcolor: 'grey.200', borderRadius: 3, overflow: 'hidden' }}>
+      <Box sx={{ width: 24, height: 6, bgcolor: 'action.disabledBackground', borderRadius: 3, overflow: 'hidden' }}>
         <Box sx={{ width: `${Math.min(score, 100)}%`, height: '100%', bgcolor: color, borderRadius: 3 }} />
       </Box>
     </Box>
@@ -202,12 +202,18 @@ function CompactCollegeRow({
     <Box
       sx={{
         borderBottom: '1px solid',
-        borderBottomColor: 'grey.200',
+        borderBottomColor: 'divider',
         borderLeft: `4px solid ${prediction.isFull ? '#C62828' : tier.color}`,
-        bgcolor: prediction.isFull ? '#FFF8F8' : 'white',
+        bgcolor: prediction.isFull
+          ? (t: any) => t.palette.mode === 'dark' ? 'rgba(198,40,40,0.08)' : '#FFF8F8'
+          : 'background.paper',
         cursor: 'pointer',
-        '&:hover': { bgcolor: prediction.isFull ? '#FFF0F0' : 'grey.50' },
-        '&:active': { bgcolor: prediction.isFull ? '#FFE8E8' : 'grey.100' },
+        '&:hover': { bgcolor: prediction.isFull
+          ? (t: any) => t.palette.mode === 'dark' ? 'rgba(198,40,40,0.12)' : '#FFF0F0'
+          : 'action.hover' },
+        '&:active': { bgcolor: prediction.isFull
+          ? (t: any) => t.palette.mode === 'dark' ? 'rgba(198,40,40,0.16)' : '#FFE8E8'
+          : 'action.selected' },
       }}
       onClick={onToggle}
     >
@@ -287,9 +293,9 @@ function CompactCollegeRow({
           sx={{
             px: 1.5,
             py: 1,
-            bgcolor: 'grey.50',
+            bgcolor: 'action.hover',
             borderTop: '1px solid',
-            borderTopColor: 'grey.200',
+            borderTopColor: 'divider',
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gap: 0.5,
@@ -418,7 +424,7 @@ function FilterPanel({
     <Collapse in={open}>
       <Paper
         elevation={0}
-        sx={{ p: 1.5, mb: 1, borderRadius: 1.5, border: '1px solid', borderColor: 'grey.200', bgcolor: 'grey.50' }}
+        sx={{ p: 1.5, mb: 1, borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}
       >
         {/* City filter */}
         <Autocomplete
@@ -877,7 +883,7 @@ export default function CounselingCollegePredictorPage() {
               <Box>
                 {/* Rank summary */}
                 {rankPrediction && (
-                  <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, borderRadius: 1.5, bgcolor: '#E3F2FD', border: '1px solid', borderColor: '#90CAF9' }}>
+                  <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, borderRadius: 1.5, bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(21,101,192,0.12)' : '#E3F2FD', border: '1px solid', borderColor: (t) => t.palette.mode === 'dark' ? 'rgba(144,202,249,0.3)' : '#90CAF9' }}>
                     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                       <Typography variant="body2">
                         Predicted Rank: <strong>{rankPrediction.predictedRankMin}–{rankPrediction.predictedRankMax}</strong>
@@ -1038,7 +1044,7 @@ export default function CounselingCollegePredictorPage() {
               <Button variant="contained" fullWidth onClick={handleLegacyPredict} disabled={loading || !nataScore}>
                 {loading ? <CircularProgress size={20} /> : 'Predict Colleges'}
               </Button>
-              <Paper sx={{ p: 1.5, mt: 1.5, bgcolor: '#E3F2FD', border: '1px solid', borderColor: '#1565C0' }}>
+              <Paper sx={{ p: 1.5, mt: 1.5, bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(21,101,192,0.12)' : '#E3F2FD', border: '1px solid', borderColor: '#1565C0' }}>
                 <Typography variant="caption" fontWeight={600}>Try Enhanced Predictions</Typography>
                 <Button size="small" variant="outlined" fullWidth href="/tools/nata/cutoff-calculator"
                   endIcon={<ArrowForwardIcon />} sx={{ mt: 0.5 }}>Cutoff Calculator</Button>
