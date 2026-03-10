@@ -3815,3 +3815,52 @@ export interface CoaStatStat {
   oldest_program: number | null;
   newest_program: number | null;
 }
+
+// Device Sessions & Diagnostics
+export interface UserDeviceSession {
+  id: string;
+  user_id: string;
+  device_type: string | null;
+  browser: string | null;
+  browser_version: string | null;
+  os: string | null;
+  os_version: string | null;
+  user_agent: string | null;
+  screen_width: number | null;
+  screen_height: number | null;
+  device_pixel_ratio: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_accuracy: number | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  timezone: string | null;
+  connection_type: string | null;
+  effective_bandwidth: number | null;
+  language: string | null;
+  app_version: string | null;
+  is_pwa: boolean;
+  session_start: string;
+  last_active: string;
+  created_at: string;
+}
+
+export type UserDeviceSessionInsert = Omit<UserDeviceSession, 'id' | 'created_at' | 'session_start' | 'last_active'>;
+
+export interface UserErrorLog {
+  id: string;
+  user_id: string | null;
+  session_id: string | null;
+  error_type: string | null;
+  error_message: string | null;
+  error_stack: string | null;
+  page_url: string | null;
+  component: string | null;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+  created_at: string;
+}
+
+export type UserErrorLogInsert = Omit<UserErrorLog, 'id' | 'created_at'>;

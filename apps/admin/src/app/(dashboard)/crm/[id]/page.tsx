@@ -17,6 +17,7 @@ import DemoClassSection from '../../../../components/crm/DemoClassSection';
 import CallbackSection from '../../../../components/crm/CallbackSection';
 import OnboardingSection from '../../../../components/crm/OnboardingSection';
 import { ScoreCalculationsSection } from '../../../../components/crm/ScoreCalculationsSection';
+import DeviceDiagnosticsSection from '../../../../components/crm/DeviceDiagnosticsSection';
 import DocumentsSection from '../../../../components/crm/DocumentsSection';
 import HistoryTimeline from '../../../../components/crm/HistoryTimeline';
 import AdminNotesSection from '../../../../components/crm/AdminNotesSection';
@@ -166,6 +167,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           </Box>
           <Box id="crm-section-score-calculations" sx={{ borderRadius: 1 }}>
             <ScoreCalculationsSection userId={detail.user.id} />
+          </Box>
+          <Box id="crm-section-diagnostics" sx={{ borderRadius: 1 }}>
+            <DeviceDiagnosticsSection userId={detail.user.id} />
           </Box>
           <DocumentsSection detail={detail} />
         </Grid>

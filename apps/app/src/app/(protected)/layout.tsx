@@ -8,6 +8,8 @@ import { useSSOToken } from '@/hooks/useSSOToken';
 import { OnboardingWizard } from '@/components/onboarding';
 import AppShell from '@/components/shell/AppShell';
 import { SidebarProvider } from '@/contexts/SidebarContext';
+import { GlobalErrorLogger } from '@/components/ErrorBoundary';
+import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
@@ -39,6 +41,7 @@ function ProtectedLayoutInner({
   const [checkingUser, setCheckingUser] = useState(true);
   const [registrationError, setRegistrationError] = useState(false);
   const [idToken, setIdToken] = useState<string | null>(null);
+  const [diagnosticSessionId, setDiagnosticSessionId] = useState<string | null>(null);
   const sso = useSSOToken();
 
   // Redirect to login if not authenticated (skip if SSO is processing)
@@ -98,6 +101,43 @@ function ProtectedLayoutInner({
 
     registerUser();
   }, [user, loading]);
+
+  // Collect device info + location once per session after auth
+  useEffect(() => {
+    if (!idToken || !supabaseUser) return;
+
+    const alreadyCollected = sessionStorage.getItem('neram_diagnostics_collected');
+    if (alreadyCollected) return;
+
+    async function collectAndSend() {
+      try {
+        sessionStorage.setItem('neram_diagnostics_collected', '1');
+        const deviceInfo = collectDeviceInfo();
+        const location = await collectLocation();
+
+        const response = await fetch('/api/diagnostics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'session',
+            idToken,
+            ...deviceInfo,
+            ...(location || {}),
+            app_version: '1.0.0',
+          }),
+        });
+
+        if (response.ok) {
+          const { session_id } = await response.json();
+          if (session_id) setDiagnosticSessionId(session_id);
+        }
+      } catch {
+        // Diagnostics should never break the app
+      }
+    }
+
+    collectAndSend();
+  }, [idToken, supabaseUser]);
 
   const handleRetryRegistration = async () => {
     setCheckingUser(true);
@@ -291,6 +331,9 @@ function ProtectedLayoutInner({
 
   return (
     <>
+      {/* Global error/crash logger */}
+      <GlobalErrorLogger idToken={idToken} sessionId={diagnosticSessionId} />
+
       <AppShell
         userName={user.name || 'Student'}
         userAvatar={user.avatar}

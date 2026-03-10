@@ -40,3 +40,4 @@ export * from './exam-schedule';
 export * from './counseling';
 export * from './counseling-admin';
 export * from './coa';
+export * from './diagnostics';
