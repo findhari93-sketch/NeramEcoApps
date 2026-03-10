@@ -465,6 +465,7 @@ export type {
   ChatInputConfig,
 } from './ChatWidget';
 export { applicationFormFlow } from './ChatWidget/applicationFlow';
+export { ConnectToOffice } from './ChatWidget/ConnectToOffice';
 
 // Login Modal Component
 export { LoginModal } from './LoginModal';

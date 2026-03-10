@@ -101,6 +101,13 @@
       "academic": "शैक्षणिक विवरण",
       "course": "पाठ्यक्रम चयन",
       "review": "समीक्षा और सबमिट करें"
+    },
+    "chatAssistant": {
+      "toggleButton": "मदद चाहिए? हमारे सहायक से चैट करें",
+      "title": "नेरा",
+      "subtitle": "आवेदन सहायक",
+      "connectToOffice": "किसी व्यक्ति से बात करें",
+      "officePhone": "+91 91761 37043"
     }
   },
   "footer": {

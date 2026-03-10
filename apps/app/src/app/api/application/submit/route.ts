@@ -1,17 +1,71 @@
-// @ts-nocheck
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@neram/database';
+import { createAdminClient } from '@neram/database';
+import { createApplication, updateApplication, submitApplication } from '@neram/database/queries';
+import { getAuth } from 'firebase-admin/auth';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
+// Initialize Firebase Admin if not already initialized
+if (!getApps().length) {
+  try {
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+  } catch {
+    // App might already be initialized
+  }
+}
+
+/**
+ * POST /api/application/submit
+ *
+ * Submit a completed application form.
+ * Maps the new 4-step form data to DB columns using createApplication/updateApplication.
+ */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    const supabase = createAdminClient();
 
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Authenticate via Firebase token
+    const authHeader = request.headers.get('Authorization');
+    let userId: string | null = null;
 
-    if (authError || !user) {
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const decodedToken = await getAuth().verifyIdToken(token);
+        const { data: user } = await supabase
+          .from('users' as any)
+          .select('id')
+          .eq('firebase_uid', decodedToken.uid)
+          .single() as { data: { id: string } | null };
+        userId = user?.id || null;
+      } catch {
+        // Fall through to cookie-based auth
+      }
+    }
+
+    // Fallback: try Supabase session auth
+    if (!userId) {
+      const { createServerClient } = await import('@neram/database');
+      const supabaseSession = createServerClient();
+      const { data: { user: sessionUser } } = await supabaseSession.auth.getUser();
+      if (sessionUser) {
+        const { data: dbUser } = await supabase
+          .from('users' as any)
+          .select('id')
+          .eq('firebase_uid', sessionUser.id)
+          .single() as { data: { id: string } | null };
+        userId = dbUser?.id || null;
+      }
+    }
+
+    if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'You must be logged in to submit an application' },
         { status: 401 }
@@ -21,182 +75,82 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // Validate required fields
-    const requiredFields = ['fullName', 'email', 'phone', 'gender', 'schoolName', 'board', 'currentClass', 'courseInterest', 'batchPreference', 'sourceCategory'];
-    const missingFields = requiredFields.filter(field => !body[field]);
-
-    if (missingFields.length > 0) {
+    if (!body.first_name) {
       return NextResponse.json(
-        { error: 'Validation Error', message: `Missing required fields: ${missingFields.join(', ')}` },
+        { error: 'Validation Error', message: 'First name is required' },
         { status: 400 }
       );
     }
 
-    // Check if user already has a lead profile
-    // @ts-ignore - Supabase types not generated
-    const { data: existingLead } = await supabase
-      .from('lead_profiles' as any)
-      .select('id')
-      .eq('user_id', user.id)
-      .single() as { data: { id: string } | null };
-
-    let leadProfileId: string;
-
-    if (existingLead) {
-      // Update existing lead profile
-      const { data: updatedLead, error: updateError } = await supabase
-        .from('lead_profiles' as any)
-        // @ts-ignore - Supabase types not generated
-        .update({
-          full_name: body.fullName,
-          email: body.email,
-          phone: body.phone,
-          date_of_birth: body.dob || null,
-          gender: body.gender,
-          address: body.address || null,
-          city: body.city || null,
-          state: body.state || null,
-          pincode: body.pincode || null,
-          school_name: body.schoolName,
-          board: body.board,
-          current_class: body.currentClass,
-          stream: body.stream || null,
-          course_interest: body.courseInterest,
-          batch_preference: body.batchPreference,
-          total_cashback_eligible: body.totalCashbackEligible || 0,
-          form_step_completed: 6,
-          form_completed_at: new Date().toISOString(),
-          status: 'new',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingLead.id)
-        .select()
-        .single() as unknown as { data: { id: string } | null; error: unknown };
-
-      if (updateError) {
-        console.error('Update lead error:', updateError);
-        return NextResponse.json(
-          { error: 'Database Error', message: 'Failed to update application' },
-          { status: 500 }
-        );
-      }
-
-      leadProfileId = updatedLead!.id;
-    } else {
-      // Create new lead profile
-      const { data: newLead, error: createError } = await supabase
-        .from('lead_profiles' as any)
-        // @ts-ignore - Supabase types not generated
-        .insert({
-          user_id: user.id,
-          full_name: body.fullName,
-          email: body.email,
-          phone: body.phone,
-          date_of_birth: body.dob || null,
-          gender: body.gender,
-          address: body.address || null,
-          city: body.city || null,
-          state: body.state || null,
-          pincode: body.pincode || null,
-          school_name: body.schoolName,
-          board: body.board,
-          current_class: body.currentClass,
-          stream: body.stream || null,
-          course_interest: body.courseInterest,
-          batch_preference: body.batchPreference,
-          total_cashback_eligible: body.totalCashbackEligible || 0,
-          form_step_completed: 6,
-          form_completed_at: new Date().toISOString(),
-          status: 'new',
-        })
-        .select()
-        .single() as unknown as { data: { id: string } | null; error: unknown };
-
-      if (createError) {
-        console.error('Create lead error:', createError);
-        return NextResponse.json(
-          { error: 'Database Error', message: 'Failed to create application' },
-          { status: 500 }
-        );
-      }
-
-      leadProfileId = newLead!.id;
+    if (!body.interest_course) {
+      return NextResponse.json(
+        { error: 'Validation Error', message: 'Course selection is required' },
+        { status: 400 }
+      );
     }
 
-    // Create scholarship application if applicable
-    if (body.isGovernmentSchool) {
-      await supabase
-        .from('scholarship_applications' as any)
-        // @ts-ignore - Supabase types not generated
-        .upsert({
-          lead_profile_id: leadProfileId,
-          is_government_school: body.isGovernmentSchool,
-          government_school_years: body.governmentSchoolYears || 0,
-          school_id_card_url: body.schoolIdCardUrl || null,
-          income_certificate_url: body.incomeCertificateUrl || null,
-          is_low_income: body.isLowIncome || false,
-          scholarship_percentage: body.scholarshipPercentage || 0,
-          verification_status: 'pending',
-        }, {
-          onConflict: 'lead_profile_id',
-        });
+    // Update user's first_name on users table
+    if (body.first_name) {
+      await (supabase.from('users') as any)
+        .update({ first_name: body.first_name })
+        .eq('id', userId);
     }
 
-    // Create cashback claims
-    if (body.youtubeVerified) {
-      await supabase
-        .from('cashback_claims' as any)
-        // @ts-ignore - Supabase types not generated
-        .upsert({
-          lead_profile_id: leadProfileId,
-          user_id: user.id,
-          cashback_type: 'youtube_subscription',
-          amount: 50,
-          youtube_channel_subscribed: true,
-          status: 'verified',
-          cashback_phone: body.cashbackPhoneNumber || body.phone,
-        }, {
-          onConflict: 'lead_profile_id,cashback_type',
-        });
-    }
+    // Build the application input
+    const applicationInput = {
+      user_id: userId,
+      father_name: body.father_name || undefined,
+      country: body.country || 'IN',
+      city: body.city || undefined,
+      state: body.state || undefined,
+      district: body.district || undefined,
+      pincode: body.pincode || undefined,
+      address: body.address || undefined,
+      latitude: body.latitude ?? undefined,
+      longitude: body.longitude ?? undefined,
+      location_source: body.location_source || undefined,
+      detected_location: body.detected_location || undefined,
+      applicant_category: body.applicant_category || undefined,
+      caste_category: body.caste_category || undefined,
+      target_exam_year: body.target_exam_year || undefined,
+      school_type: body.school_type || undefined,
+      academic_data: body.academic_data || undefined,
+      interest_course: body.interest_course || undefined,
+      selected_course_id: body.selected_course_id || undefined,
+      selected_center_id: body.selected_center_id || undefined,
+      hybrid_learning_accepted: body.hybrid_learning_accepted ?? undefined,
+      learning_mode: body.learning_mode || 'hybrid',
+      phone_verified: body.phone_verified ?? false,
+      phone_verified_at: body.phone_verified_at || undefined,
+      utm_source: body.utm_source || undefined,
+      utm_medium: body.utm_medium || undefined,
+      utm_campaign: body.utm_campaign || undefined,
+      referral_code: body.referral_code || undefined,
+      form_step_completed: body.form_step_completed || 4,
+      source: (body.source || 'app') as 'website_form' | 'app' | 'referral' | 'manual',
+      status: 'submitted' as const,
+    };
 
-    if (body.instagramFollowed && body.instagramUsername) {
-      await supabase
-        .from('cashback_claims' as any)
-        // @ts-ignore - Supabase types not generated
-        .upsert({
-          lead_profile_id: leadProfileId,
-          user_id: user.id,
-          cashback_type: 'instagram_follow',
-          amount: 50,
-          instagram_username: body.instagramUsername,
-          status: 'pending', // Admin will verify
-          cashback_phone: body.cashbackPhoneNumber || body.phone,
-        }, {
-          onConflict: 'lead_profile_id,cashback_type',
-        });
-    }
+    let leadProfile;
 
-    // Create source tracking
-    await supabase
-      .from('source_tracking' as any)
-      // @ts-ignore - Supabase types not generated
-      .upsert({
-        lead_profile_id: leadProfileId,
-        source_category: body.sourceCategory,
-        source_detail: body.sourceDetail || null,
-        friend_referral_name: body.friendReferralName || null,
-        friend_referral_phone: body.friendReferralPhone || null,
-      }, {
-        onConflict: 'lead_profile_id',
+    if (body.draftId) {
+      // Update existing draft and submit
+      leadProfile = await updateApplication(supabase, body.draftId, {
+        ...applicationInput,
+        status: undefined, // Will be set by submitApplication
       });
-
-    // TODO: Send confirmation email
-    // await sendEmail(body.email, 'application-submitted', { name: body.fullName });
+      leadProfile = await submitApplication(supabase, body.draftId);
+    } else {
+      // Create new application and submit
+      leadProfile = await createApplication(supabase, applicationInput);
+      leadProfile = await submitApplication(supabase, leadProfile.id);
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Application submitted successfully',
-      leadProfileId,
+      leadProfileId: leadProfile.id,
+      applicationNumber: leadProfile.application_number,
     });
   } catch (error) {
     console.error('Application submit error:', error);

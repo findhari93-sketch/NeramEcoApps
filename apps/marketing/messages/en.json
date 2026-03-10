@@ -102,6 +102,13 @@
       "academic": "Academic Details",
       "course": "Course Selection",
       "review": "Review & Submit"
+    },
+    "chatAssistant": {
+      "toggleButton": "Need help? Chat with our assistant",
+      "title": "Nera",
+      "subtitle": "Application Assistant",
+      "connectToOffice": "Talk to a real person",
+      "officePhone": "+91 91761 37043"
     }
   },
   "footer": {

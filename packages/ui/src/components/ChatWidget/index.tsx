@@ -12,15 +12,14 @@ import {
   Zoom,
   Avatar,
   Chip,
-  Select,
-  MenuItem,
-  FormControl,
 } from '@mui/material';
 import ChatIcon from '@mui/icons-material/Chat';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import type { ChatWidgetProps, ChatMessage, ChatStep } from './types';
+import { ConnectToOffice } from './ConnectToOffice';
 
 export * from './types';
 
@@ -29,18 +28,23 @@ export function ChatWidget({
   formData,
   onFieldUpdate,
   onComplete,
+  displayMode = 'floating',
   position = 'right',
   title = 'Nera',
   subtitle = 'Application Assistant',
   avatarUrl,
+  showConnectToOffice = false,
+  onConnectToOffice,
 }: ChatWidgetProps): JSX.Element {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(displayMode === 'panel');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [showOfficePanel, setShowOfficePanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatStartedRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -49,6 +53,15 @@ export function ChatWidget({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-start chat in panel mode
+  useEffect(() => {
+    if (displayMode === 'panel' && !chatStartedRef.current) {
+      chatStartedRef.current = true;
+      startChat();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayMode]);
 
   const addBotMessage = useCallback((content: string, delay: number = 0) => {
     return new Promise<void>((resolve) => {
@@ -114,7 +127,7 @@ export function ChatWidget({
 
   // Handle completion
   useEffect(() => {
-    if (currentStepIndex >= flowConfig.steps.length && !isComplete) {
+    if (currentStepIndex >= flowConfig.steps.length && !isComplete && currentStepIndex > 0) {
       const showCompletionMessages = async () => {
         setIsTyping(true);
         for (let i = 0; i < flowConfig.completionMessages.length; i++) {
@@ -136,8 +149,16 @@ export function ChatWidget({
     if (validation.minLength && value.length < validation.minLength) return false;
     if (validation.maxLength && value.length > validation.maxLength) return false;
     if (validation.pattern && !validation.pattern.test(value)) return false;
+    if (validation.min !== undefined && Number(value) < validation.min) return false;
+    if (validation.max !== undefined && Number(value) > validation.max) return false;
 
     return true;
+  };
+
+  const handleFieldUpdate = (step: ChatStep, value: string) => {
+    // For number type, convert to number
+    const parsedValue = step.inputConfig.type === 'number' ? Number(value) : value;
+    onFieldUpdate(step.fieldName, parsedValue, step.section, step.subSection);
   };
 
   const handleSubmit = async () => {
@@ -156,8 +177,8 @@ export function ChatWidget({
     const isValid = validateInput(value, step);
 
     if (isValid) {
-      // Update form data
-      onFieldUpdate(step.fieldName, value);
+      // Update form data with section info
+      handleFieldUpdate(step, value);
 
       // Show response
       setIsTyping(true);
@@ -188,9 +209,24 @@ export function ChatWidget({
     }
   };
 
+  const handleChipSelect = (step: ChatStep, optionValue: string, optionLabel: string) => {
+    setInputValue('');
+    addUserMessage(optionLabel);
+    handleFieldUpdate(step, optionValue);
+    setIsTyping(true);
+    const response = typeof step.responses.valid === 'function'
+      ? step.responses.valid(optionValue)
+      : step.responses.valid.replace('{{value}}', optionLabel);
+    addBotMessage(response, 500).then(() => {
+      setIsTyping(false);
+      setCurrentStepIndex((prev) => prev + 1);
+    });
+  };
+
   const handleOpen = () => {
     setIsOpen(true);
     if (messages.length === 0) {
+      chatStartedRef.current = true;
       startChat();
     }
   };
@@ -199,6 +235,244 @@ export function ChatWidget({
     ? flowConfig.steps[currentStepIndex]
     : null;
 
+  // ============================================
+  // CHAT CONTENT (shared between floating and panel modes)
+  // ============================================
+  const chatContent = (
+    <>
+      {/* Header */}
+      <Box
+        sx={{
+          p: 2,
+          background: 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)',
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+        }}
+      >
+        <Avatar
+          src={avatarUrl}
+          sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}
+        >
+          <SmartToyIcon />
+        </Avatar>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="subtitle1" fontWeight={600}>
+            {title}
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.9 }}>
+            {subtitle}
+          </Typography>
+        </Box>
+        {displayMode === 'floating' && (
+          <IconButton
+            size="small"
+            onClick={() => setIsOpen(false)}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
+      </Box>
+
+      {/* Messages */}
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          p: 2,
+          bgcolor: '#f5f5f5',
+        }}
+      >
+        {messages.map((message) => (
+          <Box
+            key={message.id}
+            sx={{
+              display: 'flex',
+              justifyContent: message.type === 'user' ? 'flex-end' : 'flex-start',
+              mb: 1.5,
+            }}
+          >
+            <Box
+              sx={{
+                maxWidth: '80%',
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: message.type === 'user' ? 'primary.main' : 'white',
+                color: message.type === 'user' ? 'white' : 'text.primary',
+                boxShadow: 1,
+              }}
+            >
+              <Typography variant="body2">{message.content}</Typography>
+            </Box>
+          </Box>
+        ))}
+
+        {isTyping && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1.5 }}>
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: 1,
+                bgcolor: 'white',
+                boxShadow: 1,
+              }}
+            >
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {[0, 1, 2].map((i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      bgcolor: 'grey.400',
+                      animation: 'bounce 1.4s infinite',
+                      animationDelay: `${i * 0.2}s`,
+                      '@keyframes bounce': {
+                        '0%, 80%, 100%': { transform: 'scale(0)' },
+                        '40%': { transform: 'scale(1)' },
+                      },
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        )}
+
+        <div ref={messagesEndRef} />
+      </Box>
+
+      {/* Input */}
+      {currentStep && !isComplete && !showOfficePanel && (
+        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white' }}>
+          {currentStep.inputConfig.type === 'select' ? (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {currentStep.inputConfig.options?.map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  onClick={() => handleChipSelect(currentStep, option.value, option.label)}
+                  sx={{ cursor: 'pointer' }}
+                  color="primary"
+                  variant="outlined"
+                />
+              ))}
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder={currentStep.inputConfig.placeholder || 'Type your answer...'}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyPress}
+                type={
+                  currentStep.inputConfig.type === 'email' ? 'email' :
+                  currentStep.inputConfig.type === 'phone' ? 'tel' :
+                  currentStep.inputConfig.type === 'number' ? 'number' :
+                  currentStep.inputConfig.type === 'date' ? 'date' :
+                  'text'
+                }
+                disabled={isTyping}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 1.5,
+                  },
+                }}
+              />
+              <IconButton
+                color="primary"
+                onClick={handleSubmit}
+                disabled={!inputValue.trim() || isTyping}
+              >
+                <SendIcon />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Connect to Office panel */}
+      {showOfficePanel && (
+        <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'white' }}>
+          <ConnectToOffice onRequestCallback={onConnectToOffice} />
+          <Box sx={{ px: 2, pb: 1 }}>
+            <Button
+              size="small"
+              onClick={() => setShowOfficePanel(false)}
+              sx={{ textTransform: 'none' }}
+            >
+              Back to chat
+            </Button>
+          </Box>
+        </Box>
+      )}
+
+      {/* Completion + Connect to Office button */}
+      {isComplete && !showOfficePanel && (
+        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white', textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: showConnectToOffice ? 1.5 : 0 }}>
+            Chat complete! Review your application above.
+          </Typography>
+          {showConnectToOffice && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<SupportAgentIcon />}
+              onClick={() => setShowOfficePanel(true)}
+              sx={{ textTransform: 'none' }}
+            >
+              Talk to a real person
+            </Button>
+          )}
+        </Box>
+      )}
+
+      {/* Persistent "Connect to Office" link during chat */}
+      {showConnectToOffice && !isComplete && !showOfficePanel && currentStep && (
+        <Box sx={{ px: 2, pb: 1, bgcolor: 'white', textAlign: 'center' }}>
+          <Button
+            size="small"
+            startIcon={<SupportAgentIcon />}
+            onClick={() => setShowOfficePanel(true)}
+            sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+            color="inherit"
+          >
+            Need human help?
+          </Button>
+        </Box>
+      )}
+    </>
+  );
+
+  // ============================================
+  // PANEL MODE: Render inline, filling parent
+  // ============================================
+  if (displayMode === 'panel') {
+    return (
+      <Paper
+        elevation={2}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          minHeight: 400,
+          borderRadius: 1.5,
+          overflow: 'hidden',
+        }}
+      >
+        {chatContent}
+      </Paper>
+    );
+  }
+
+  // ============================================
+  // FLOATING MODE: FAB + popup (original behavior)
+  // ============================================
   return (
     <>
       {/* Floating Button */}
@@ -236,182 +510,7 @@ export function ChatWidget({
             overflow: 'hidden',
           }}
         >
-          {/* Header */}
-          <Box
-            sx={{
-              p: 2,
-              background: 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-            }}
-          >
-            <Avatar
-              src={avatarUrl}
-              sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}
-            >
-              <SmartToyIcon />
-            </Avatar>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="subtitle1" fontWeight={600}>
-                {title}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                {subtitle}
-              </Typography>
-            </Box>
-            <IconButton
-              size="small"
-              onClick={() => setIsOpen(false)}
-              sx={{ color: 'white' }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-
-          {/* Messages */}
-          <Box
-            sx={{
-              flex: 1,
-              overflowY: 'auto',
-              p: 2,
-              bgcolor: '#f5f5f5',
-            }}
-          >
-            {messages.map((message) => (
-              <Box
-                key={message.id}
-                sx={{
-                  display: 'flex',
-                  justifyContent: message.type === 'user' ? 'flex-end' : 'flex-start',
-                  mb: 1.5,
-                }}
-              >
-                <Box
-                  sx={{
-                    maxWidth: '80%',
-                    p: 1.5,
-                    borderRadius: 1,
-                    bgcolor: message.type === 'user' ? 'primary.main' : 'white',
-                    color: message.type === 'user' ? 'white' : 'text.primary',
-                    boxShadow: 1,
-                  }}
-                >
-                  <Typography variant="body2">{message.content}</Typography>
-                </Box>
-              </Box>
-            ))}
-
-            {isTyping && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1.5 }}>
-                <Box
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 1,
-                    bgcolor: 'white',
-                    boxShadow: 1,
-                  }}
-                >
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    {[0, 1, 2].map((i) => (
-                      <Box
-                        key={i}
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          bgcolor: 'grey.400',
-                          animation: 'bounce 1.4s infinite',
-                          animationDelay: `${i * 0.2}s`,
-                          '@keyframes bounce': {
-                            '0%, 80%, 100%': { transform: 'scale(0)' },
-                            '40%': { transform: 'scale(1)' },
-                          },
-                        }}
-                      />
-                    ))}
-                  </Box>
-                </Box>
-              </Box>
-            )}
-
-            <div ref={messagesEndRef} />
-          </Box>
-
-          {/* Input */}
-          {currentStep && !isComplete && (
-            <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white' }}>
-              {currentStep.inputConfig.type === 'select' ? (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {currentStep.inputConfig.options?.map((option) => (
-                    <Chip
-                      key={option.value}
-                      label={option.label}
-                      onClick={() => {
-                        setInputValue(option.value);
-                        setTimeout(() => {
-                          setInputValue('');
-                          addUserMessage(option.label);
-                          onFieldUpdate(currentStep.fieldName, option.value);
-                          setIsTyping(true);
-                          const response = typeof currentStep.responses.valid === 'function'
-                            ? currentStep.responses.valid(option.value)
-                            : currentStep.responses.valid.replace('{{value}}', option.label);
-                          addBotMessage(response, 500).then(() => {
-                            setIsTyping(false);
-                            setCurrentStepIndex((prev) => prev + 1);
-                          });
-                        }, 100);
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                      color="primary"
-                      variant={inputValue === option.value ? 'filled' : 'outlined'}
-                    />
-                  ))}
-                </Box>
-              ) : (
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder={currentStep.inputConfig.placeholder || 'Type your answer...'}
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    type={
-                      currentStep.inputConfig.type === 'email' ? 'email' :
-                      currentStep.inputConfig.type === 'phone' ? 'tel' :
-                      currentStep.inputConfig.type === 'number' ? 'number' :
-                      currentStep.inputConfig.type === 'date' ? 'date' :
-                      'text'
-                    }
-                    disabled={isTyping}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 1.5,
-                      },
-                    }}
-                  />
-                  <IconButton
-                    color="primary"
-                    onClick={handleSubmit}
-                    disabled={!inputValue.trim() || isTyping}
-                  >
-                    <SendIcon />
-                  </IconButton>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {isComplete && (
-            <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'white', textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Chat complete! Review your application above.
-              </Typography>
-            </Box>
-          )}
+          {chatContent}
         </Paper>
       </Zoom>
     </>

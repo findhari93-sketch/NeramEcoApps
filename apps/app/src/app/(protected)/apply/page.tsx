@@ -13,92 +13,144 @@ import {
   CircularProgress,
   Snackbar,
   Container,
+  Skeleton,
+  LoginModal,
 } from '@neram/ui';
 import { ChatWidget, applicationFormFlow } from '@neram/ui';
-import { useApplicationForm } from './hooks/useApplicationForm';
-import Step1BasicDetails from './components/Step1BasicDetails';
-import Step2Education from './components/Step2Education';
-import Step3Scholarship from './components/Step3Scholarship';
-import Step4Cashback from './components/Step4Cashback';
-import Step5Source from './components/Step5Source';
-import Step6Preview from './components/Step6Preview';
+import { FormProvider, useFormContext } from './hooks/useApplicationForm';
+import type { FormStep } from './types';
+import { STEP_LABELS } from './types';
+import PersonalInfoStep from './components/PersonalInfoStep';
+import AcademicDetailsStep from './components/AcademicDetailsStep';
+import CourseSelectionStep from './components/CourseSelectionStep';
+import ReviewStep from './components/ReviewStep';
+import ApplicationDashboard from './components/ApplicationDashboard';
 
-const steps = [
-  'Basic Details',
-  'Education',
-  'Scholarship',
-  'Cashback',
-  'Source',
-  'Review',
-];
+// ============================================
+// INNER FORM COMPONENT (uses context)
+// ============================================
 
-export default function ApplyPage() {
-  const form = useApplicationForm();
+function ApplyFormContent() {
   const {
+    formData,
     activeStep,
     isSubmitting,
-    submitError,
+    submissionError,
+    setSubmissionError,
+    setIsSubmitting,
     validateStep,
-    nextStep,
-    prevStep,
-    submitForm,
-    updateField,
-  } = form;
+    goToNextStep,
+    goToPreviousStep,
+    saveDraftToDb,
+    draftId,
+    clearSavedForm,
+    updateFormData,
+    isReturningUser,
+    returnUserMode,
+    returningUserCheckComplete,
+    isAuthLoading,
+    showPhoneVerification,
+    setShowPhoneVerification,
+    onPhoneVerified,
+  } = useFormContext();
 
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [chatComplete, setChatComplete] = useState(false);
+
+  // Loading state while checking returning user
+  if (isAuthLoading || !returningUserCheckComplete) {
+    return (
+      <Container maxWidth="sm">
+        <Box sx={{ py: 4 }}>
+          <Skeleton variant="text" width="60%" height={40} sx={{ mb: 2 }} />
+          <Skeleton variant="text" width="80%" height={24} sx={{ mb: 3 }} />
+          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 1, mb: 2 }} />
+          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 1 }} />
+        </Box>
+      </Container>
+    );
+  }
+
+  // Show dashboard for returning users
+  if (isReturningUser && returnUserMode === 'dashboard') {
+    return <ApplicationDashboard />;
+  }
 
   const handleNext = () => {
     const validation = validateStep(activeStep);
     if (validation.isValid) {
-      setValidationErrors({});
-      nextStep();
-    } else {
-      setValidationErrors(validation.errors);
+      // Save draft to DB on each step transition
+      saveDraftToDb(activeStep);
+      goToNextStep();
     }
   };
 
   const handleSubmit = async () => {
     const validation = validateStep(activeStep);
-    if (!validation.isValid) {
-      setValidationErrors(validation.errors);
-      return;
-    }
+    if (!validation.isValid) return;
+
+    setIsSubmitting(true);
+    setSubmissionError(null);
 
     try {
-      await submitForm();
+      const { user } = await import('@neram/auth').then(m => {
+        // Access the current auth state - the hook is already in context
+        return { user: null }; // We'll use fetch with the token instead
+      });
+
+      // Build submission payload
+      const payload = buildSubmitPayload(formData, draftId);
+
+      const response = await fetch('/api/application/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to submit application');
+      }
+
+      clearSavedForm();
       setShowSuccess(true);
-    } catch {
-      // Error is handled in the hook
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An error occurred';
+      setSubmissionError(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Handle chat widget field updates
   const handleChatFieldUpdate = (field: string, value: unknown) => {
-    updateField(field as keyof typeof form.formData, value as string);
-  };
+    // Map flat field names to nested structure
+    const fieldMappings: Record<string, { section: string; key: string }> = {
+      firstName: { section: 'personal', key: 'firstName' },
+      fatherName: { section: 'personal', key: 'fatherName' },
+      email: { section: 'personal', key: 'email' },
+      phone: { section: 'personal', key: 'phone' },
+      dateOfBirth: { section: 'personal', key: 'dateOfBirth' },
+      gender: { section: 'personal', key: 'gender' },
+      pincode: { section: 'location', key: 'pincode' },
+      city: { section: 'location', key: 'city' },
+      state: { section: 'location', key: 'state' },
+      address: { section: 'location', key: 'address' },
+    };
 
-  const handleChatComplete = () => {
-    setChatComplete(true);
+    const mapping = fieldMappings[field];
+    if (mapping) {
+      updateFormData(mapping.section as any, { [mapping.key]: value });
+    }
   };
 
   const renderStepContent = () => {
     switch (activeStep) {
-      case 0:
-        return <Step1BasicDetails form={form} errors={validationErrors} />;
-      case 1:
-        return <Step2Education form={form} errors={validationErrors} />;
-      case 2:
-        return <Step3Scholarship form={form} errors={validationErrors} />;
-      case 3:
-        return <Step4Cashback form={form} errors={validationErrors} />;
-      case 4:
-        return <Step5Source form={form} errors={validationErrors} />;
-      case 5:
-        return <Step6Preview form={form} errors={validationErrors} />;
-      default:
-        return null;
+      case 0: return <PersonalInfoStep />;
+      case 1: return <AcademicDetailsStep />;
+      case 2: return <CourseSelectionStep />;
+      case 3: return <ReviewStep />;
+      default: return null;
     }
   };
 
@@ -120,7 +172,7 @@ export default function ApplyPage() {
               mb: 3,
             }}
           >
-            <Typography variant="h3">✓</Typography>
+            <Typography variant="h3">&#10003;</Typography>
           </Box>
           <Typography variant="h5" gutterBottom fontWeight={600}>
             Application Submitted!
@@ -135,32 +187,12 @@ export default function ApplyPage() {
               <br />
               1. Our counselor will call you to discuss course details
               <br />
-              2. After verification, you'll receive fee details via email
+              2. After verification, you will receive fee details via email
               <br />
               3. Complete payment to confirm your admission
             </Typography>
           </Alert>
-          {form.formData.scholarshipPercentage > 0 && (
-            <Alert severity="success" sx={{ textAlign: 'left', mb: 3 }}>
-              <Typography variant="body2">
-                Your {form.formData.scholarshipPercentage}% scholarship documents will be verified.
-                You'll be notified once approved!
-              </Typography>
-            </Alert>
-          )}
-          {form.formData.totalCashbackEligible > 0 && (
-            <Alert severity="success" sx={{ textAlign: 'left', mb: 3 }}>
-              <Typography variant="body2">
-                You've earned Rs. {form.formData.totalCashbackEligible} cashback!
-                It will be processed after your enrollment is complete.
-              </Typography>
-            </Alert>
-          )}
-          <Button
-            variant="contained"
-            href="/dashboard"
-            sx={{ mt: 2 }}
-          >
+          <Button variant="contained" href="/dashboard" sx={{ mt: 2 }}>
             Go to Dashboard
           </Button>
         </Paper>
@@ -178,10 +210,10 @@ export default function ApplyPage() {
       </Typography>
 
       <Paper sx={{ p: { xs: 2, md: 3 } }}>
-        {/* Stepper - Hidden on mobile, shown on larger screens */}
+        {/* Stepper - Hidden on mobile */}
         <Box sx={{ display: { xs: 'none', md: 'block' }, mb: 4 }}>
           <Stepper activeStep={activeStep}>
-            {steps.map((label, index) => (
+            {STEP_LABELS.map((label, index) => (
               <Step key={label} completed={index < activeStep}>
                 <StepLabel>{label}</StepLabel>
               </Step>
@@ -192,17 +224,17 @@ export default function ApplyPage() {
         {/* Mobile step indicator */}
         <Box sx={{ display: { xs: 'flex', md: 'none' }, mb: 3, alignItems: 'center', gap: 1 }}>
           <Typography variant="subtitle2" color="primary">
-            Step {activeStep + 1} of {steps.length}
+            Step {activeStep + 1} of {STEP_LABELS.length}
           </Typography>
           <Typography variant="subtitle1" fontWeight={600}>
-            {steps[activeStep]}
+            {STEP_LABELS[activeStep]}
           </Typography>
         </Box>
 
         {/* Error display */}
-        {submitError && (
+        {submissionError && (
           <Alert severity="error" sx={{ mb: 3 }}>
-            {submitError}
+            {submissionError}
           </Alert>
         )}
 
@@ -215,13 +247,13 @@ export default function ApplyPage() {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 2, borderTop: 1, borderColor: 'divider' }}>
           <Button
             disabled={activeStep === 0 || isSubmitting}
-            onClick={prevStep}
+            onClick={goToPreviousStep}
             variant="outlined"
           >
             Back
           </Button>
           <Box sx={{ display: 'flex', gap: 2 }}>
-            {activeStep === steps.length - 1 ? (
+            {activeStep === 3 ? (
               <Button
                 variant="contained"
                 onClick={handleSubmit}
@@ -231,10 +263,7 @@ export default function ApplyPage() {
                 {isSubmitting ? 'Submitting...' : 'Submit Application'}
               </Button>
             ) : (
-              <Button
-                variant="contained"
-                onClick={handleNext}
-              >
+              <Button variant="contained" onClick={handleNext}>
                 Next
               </Button>
             )}
@@ -245,21 +274,36 @@ export default function ApplyPage() {
       {/* Progress indicator */}
       <Box sx={{ mt: 2, textAlign: 'center' }}>
         <Typography variant="caption" color="text.secondary">
-          {Math.round(((activeStep + 1) / steps.length) * 100)}% complete
+          {Math.round(((activeStep + 1) / STEP_LABELS.length) * 100)}% complete
         </Typography>
       </Box>
 
-      {/* Chat Widget for guided form filling */}
+      {/* Phone Verification Modal */}
+      <LoginModal
+        open={showPhoneVerification}
+        onClose={() => setShowPhoneVerification(false)}
+        allowClose={true}
+        apiBaseUrl={process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}
+        onAuthenticated={async () => {
+          setShowPhoneVerification(false);
+          const { getFirebaseAuth } = await import('@neram/auth');
+          const currentUser = getFirebaseAuth().currentUser;
+          if (currentUser?.phoneNumber) {
+            onPhoneVerified(currentUser.phoneNumber);
+          }
+        }}
+      />
+
+      {/* Chat Widget */}
       <ChatWidget
         flowConfig={applicationFormFlow}
-        formData={form.formData as unknown as Record<string, unknown>}
+        formData={flattenFormData(formData) as unknown as Record<string, unknown>}
         onFieldUpdate={handleChatFieldUpdate}
-        onComplete={handleChatComplete}
+        onComplete={() => setChatComplete(true)}
         title="Nera"
         subtitle="Application Assistant"
       />
 
-      {/* Snackbar for chat completion */}
       <Snackbar
         open={chatComplete && !showSuccess}
         autoHideDuration={5000}
@@ -267,5 +311,89 @@ export default function ApplyPage() {
         message="Chat complete! Review your form and click Submit when ready."
       />
     </Box>
+  );
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+function flattenFormData(formData: any): Record<string, unknown> {
+  return {
+    ...formData.personal,
+    ...formData.location,
+    applicantCategory: formData.academic.applicantCategory,
+    casteCategory: formData.academic.casteCategory,
+    targetExamYear: formData.academic.targetExamYear,
+    interestCourse: formData.course.interestCourse,
+    learningMode: formData.course.learningMode,
+    termsAccepted: formData.termsAccepted,
+  };
+}
+
+function buildSubmitPayload(formData: any, draftId: string | null) {
+  let academicData = null;
+  switch (formData.academic.applicantCategory) {
+    case 'school_student': academicData = formData.academic.schoolStudentData; break;
+    case 'diploma_student': academicData = formData.academic.diplomaStudentData; break;
+    case 'college_student': academicData = formData.academic.collegeStudentData; break;
+    case 'working_professional': academicData = formData.academic.workingProfessionalData; break;
+  }
+
+  return {
+    draftId,
+    // Personal
+    first_name: formData.personal.firstName,
+    father_name: formData.personal.fatherName,
+    email: formData.personal.email,
+    phone: formData.personal.phone,
+    phone_verified: formData.personal.phoneVerified,
+    phone_verified_at: formData.personal.phoneVerifiedAt,
+    date_of_birth: formData.personal.dateOfBirth,
+    gender: formData.personal.gender,
+    // Location
+    country: formData.location.country || 'IN',
+    pincode: formData.location.pincode,
+    city: formData.location.city,
+    state: formData.location.state,
+    district: formData.location.district,
+    address: formData.location.address,
+    latitude: formData.location.latitude,
+    longitude: formData.location.longitude,
+    location_source: formData.location.locationSource,
+    detected_location: formData.location.detectedLocation,
+    // Academic
+    applicant_category: formData.academic.applicantCategory,
+    caste_category: formData.academic.casteCategory,
+    target_exam_year: formData.academic.targetExamYear,
+    school_type: formData.academic.schoolType,
+    academic_data: academicData,
+    // Course
+    interest_course: formData.course.interestCourse,
+    selected_course_id: formData.course.selectedCourseId,
+    selected_center_id: formData.course.selectedCenterId,
+    hybrid_learning_accepted: formData.course.hybridLearningAccepted,
+    learning_mode: formData.course.learningMode,
+    // Source
+    utm_source: formData.utmSource,
+    utm_medium: formData.utmMedium,
+    utm_campaign: formData.utmCampaign,
+    referral_code: formData.referralCode,
+    // Meta
+    terms_accepted: formData.termsAccepted,
+    form_step_completed: 4,
+    source: 'app',
+  };
+}
+
+// ============================================
+// MAIN PAGE (wraps content in FormProvider)
+// ============================================
+
+export default function ApplyPage() {
+  return (
+    <FormProvider>
+      <ApplyFormContent />
+    </FormProvider>
   );
 }

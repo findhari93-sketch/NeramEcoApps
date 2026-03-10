@@ -562,16 +562,28 @@ function FormWizardInner() {
 }
 
 // ============================================
-// MAIN EXPORT
+// CONTENT EXPORT (without FormProvider — for external wrapping)
+// ============================================
+
+export function ApplyFormWizardContent() {
+  return (
+    <>
+      <Container maxWidth="md">
+        <FormWizardInner />
+      </Container>
+      <QuickInfoPanelWithContext />
+    </>
+  );
+}
+
+// ============================================
+// MAIN EXPORT (self-contained with FormProvider)
 // ============================================
 
 export default function ApplyFormWizard() {
   return (
     <FormProvider>
-      <Container maxWidth="md">
-        <FormWizardInner />
-      </Container>
-      <QuickInfoPanelWithContext />
+      <ApplyFormWizardContent />
     </FormProvider>
   );
 }
