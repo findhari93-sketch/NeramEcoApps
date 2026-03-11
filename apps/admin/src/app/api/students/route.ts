@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         total_fee,
         fee_paid,
         fee_due,
+        batches:batch_id (id, name),
         users!inner (
           id,
           first_name,
@@ -41,7 +42,8 @@ export async function GET(request: NextRequest) {
             application_number,
             final_fee,
             full_payment_discount,
-            discount_amount
+            discount_amount,
+            source
           )
         )
       `,
@@ -91,6 +93,7 @@ export async function GET(request: NextRequest) {
         avatar_url: user?.avatar_url || null,
         enrollment_date: sp.enrollment_date,
         batch_id: sp.batch_id,
+        batch_name: sp.batches?.name || null,
         payment_status: sp.payment_status,
         total_fee: sp.total_fee || 0,
         fee_paid: sp.fee_paid || 0,
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
         final_fee: lead?.final_fee || null,
         full_payment_discount: lead?.full_payment_discount || null,
         discount_amount: lead?.discount_amount || null,
+        source: lead?.source || null,
       };
     });
 

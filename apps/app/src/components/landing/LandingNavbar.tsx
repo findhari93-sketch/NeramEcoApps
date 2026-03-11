@@ -40,7 +40,7 @@ export default function LandingNavbar() {
             >
               <Box
                 component="img"
-                src="/aiArchitect_logo_nata_coaching.png"
+                src="/aiArchitect_logo.svg"
                 alt="aiArchitek logo"
                 sx={{ width: { xs: 32, md: 36 }, height: { xs: 32, md: 36 }, borderRadius: '50%' }}
               />

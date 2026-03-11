@@ -133,14 +133,43 @@ export async function getPipelineStageCounts(
 ): Promise<PipelineStageCounts> {
   const supabase = client || getSupabaseAdminClient();
 
-  const { data, error } = await supabase
-    .from('user_journey_view')
-    .select('pipeline_stage');
+  // Use SQL aggregation instead of fetching all rows
+  const { data, error } = await (supabase as any).rpc('get_pipeline_stage_counts');
 
+  // Fallback to client-side counting if RPC doesn't exist
   if (error) {
-    throw error;
+    const { data: rows, error: fallbackError } = await supabase
+      .from('user_journey_view')
+      .select('pipeline_stage');
+
+    if (fallbackError) throw fallbackError;
+
+    const counts: PipelineStageCounts = {
+      new_lead: 0,
+      demo_requested: 0,
+      demo_attended: 0,
+      phone_verified: 0,
+      application_submitted: 0,
+      admin_approved: 0,
+      payment_complete: 0,
+      enrolled: 0,
+      total: 0,
+    };
+
+    if (rows) {
+      for (const row of rows) {
+        const stage = row.pipeline_stage as PipelineStage;
+        if (stage in counts) {
+          counts[stage]++;
+        }
+        counts.total++;
+      }
+    }
+
+    return counts;
   }
 
+  // Build counts from RPC result
   const counts: PipelineStageCounts = {
     new_lead: 0,
     demo_requested: 0,
@@ -157,9 +186,9 @@ export async function getPipelineStageCounts(
     for (const row of data) {
       const stage = row.pipeline_stage as PipelineStage;
       if (stage in counts) {
-        counts[stage]++;
+        counts[stage] = Number(row.cnt);
       }
-      counts.total++;
+      counts.total += Number(row.cnt);
     }
   }
 

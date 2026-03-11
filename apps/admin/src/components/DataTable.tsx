@@ -101,7 +101,7 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
   return (
     <Paper sx={{ width: '100%', overflow: 'hidden' }}>
       <TableContainer sx={{ maxHeight: 600 }}>
-        <Table stickyHeader>
+        <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
@@ -115,6 +115,7 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
                 <TableCell
                   key={column.field}
                   style={{ width: column.width, minWidth: column.width }}
+                  sx={{ py: 0.75, px: 1, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}
                 >
                   {column.headerName}
                 </TableCell>
@@ -143,7 +144,7 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
                     />
                   </TableCell>
                   {columns.map((column) => (
-                    <TableCell key={column.field}>
+                    <TableCell key={column.field} sx={{ py: 0.5, px: 1, fontSize: 13 }}>
                       {column.renderCell
                         ? column.renderCell({ row, value: row[column.field] })
                         : row[column.field]}
@@ -156,7 +157,7 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
         </Table>
       </TableContainer>
       <TablePagination
-        rowsPerPageOptions={[5, 10, 25, 50]}
+        rowsPerPageOptions={[10, 25, 50, 100]}
         component="div"
         count={rows.length}
         rowsPerPage={rowsPerPage}

@@ -8,6 +8,7 @@ import {
   updateUser,
   getStudentProfileByUserId,
   updateStudentProfile,
+  adminBulkDeleteUsers,
 } from '@neram/database';
 
 // GET /api/students/[id] - Get a single student
@@ -110,50 +111,31 @@ export async function DELETE(
       .update({ used_by: null, lead_profile_id: null, student_profile_id: null })
       .eq('used_by', id);
 
-    // Delete from all tables that reference users.id (order matters for FK deps)
-    const tablesToClean = [
+    // Clean up tables not covered by the bulk delete RPC
+    const extraTables = [
       'student_onboarding_progress',
-      'post_enrollment_details',
-      'onboarding_responses',
-      'onboarding_sessions',
-      'payments',
-      'scholarship_applications',
-      'application_documents',
       'user_exam_attempts',
       'user_exam_profiles',
-      'user_avatars',
       'user_notifications',
-      'user_profile_history',
-      'email_logs',
       'score_calculations',
       'prediction_logs',
-      'tool_usage_logs',
-      'cashback_claims',
-      'youtube_subscription_coupons',
-      'student_profiles',
-      'lead_profiles',
     ];
-
-    for (const table of tablesToClean) {
-      await supabase.from(table).delete().eq('user_id', id);
+    for (const table of extraTables) {
+      const { error: cleanErr } = await supabase.from(table).delete().eq('user_id', id);
+      if (cleanErr) console.warn(`Warning: failed to clean ${table}:`, cleanErr.message);
     }
 
-    // Finally delete the user
-    const { error: deleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', id);
+    // Use atomic RPC to delete user and all remaining related data
+    const result = await adminBulkDeleteUsers([id], id, supabase);
 
-    if (deleteError) {
-      console.error('User delete error:', deleteError);
-      // If FK constraint still blocks, return partial success
-      return NextResponse.json({
-        success: true,
-        warning: 'Student profile deleted but user record retained due to other references.',
-      });
+    if (result.deletedUsers === 0) {
+      return NextResponse.json(
+        { error: 'Failed to delete student. The user record could not be removed due to remaining references.' },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deleted: result });
   } catch (error) {
     console.error('Error deleting student:', error);
     return NextResponse.json(
@@ -196,7 +178,7 @@ export async function PATCH(
     const profile = await getStudentProfileByUserId(id, supabase);
     if (profile) {
       const profileUpdates: Record<string, unknown> = {};
-      if (body.batchId !== undefined) profileUpdates.batch_id = body.batchId;
+      if (body.batchId !== undefined) profileUpdates.batch_id = body.batchId || null;
       if (body.courseId !== undefined) profileUpdates.course_id = body.courseId;
       if (body.msTeamsId !== undefined) profileUpdates.ms_teams_id = body.msTeamsId;
       if (body.msTeamsEmail !== undefined) profileUpdates.ms_teams_email = body.msTeamsEmail;
@@ -208,6 +190,29 @@ export async function PATCH(
       if (body.parentContact !== undefined) profileUpdates.parent_contact = body.parentContact;
       if (body.emergencyContact !== undefined) profileUpdates.emergency_contact = body.emergencyContact;
       if (body.notes !== undefined) profileUpdates.notes = body.notes;
+
+      // Handle batch enrollment count changes
+      if (body.batchId !== undefined) {
+        const oldBatchId = profile.batch_id;
+        const newBatchId = body.batchId || null;
+
+        if (oldBatchId !== newBatchId) {
+          // Decrement old batch count
+          if (oldBatchId) {
+            const { data: oldBatch } = await supabase.from('batches').select('enrolled_count').eq('id', oldBatchId).single();
+            if (oldBatch) {
+              await supabase.from('batches').update({ enrolled_count: Math.max(0, oldBatch.enrolled_count - 1) }).eq('id', oldBatchId);
+            }
+          }
+          // Increment new batch count
+          if (newBatchId) {
+            const { data: newBatch } = await supabase.from('batches').select('enrolled_count').eq('id', newBatchId).single();
+            if (newBatch) {
+              await supabase.from('batches').update({ enrolled_count: newBatch.enrolled_count + 1 }).eq('id', newBatchId);
+            }
+          }
+        }
+      }
 
       if (Object.keys(profileUpdates).length > 0) {
         await updateStudentProfile(profile.id, profileUpdates as any, supabase);

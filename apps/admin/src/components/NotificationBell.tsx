@@ -142,15 +142,14 @@ export default function NotificationBell() {
       const res = await fetch('/api/notifications?limit=10&offset=0');
       const data = await res.json();
       setNotifications(data.notifications || []);
-      // Also update unread count from the data
-      const unread = (data.notifications || []).filter((n: AdminNotification) => !n.is_read).length;
-      setUnreadCount((prev) => Math.max(prev, unread));
+      // Refresh authoritative unread count from server
+      fetchUnreadCount();
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchUnreadCount]);
 
   // Initial fetch and polling
   useEffect(() => {
@@ -179,18 +178,24 @@ export default function NotificationBell() {
     if (!supabaseUserId) return;
 
     try {
-      await fetch('/api/notifications/mark-read', {
+      const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationId, userId: supabaseUserId }),
       });
+
+      if (!res.ok) {
+        console.error('Failed to mark notification as read:', res.status);
+        return;
+      }
 
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === notificationId ? { ...n, is_read: true } : n
         )
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      // Refresh authoritative count from server
+      fetchUnreadCount();
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -200,14 +205,20 @@ export default function NotificationBell() {
     if (!supabaseUserId) return;
 
     try {
-      await fetch('/api/notifications/mark-read', {
+      const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: supabaseUserId }),
       });
 
+      if (!res.ok) {
+        console.error('Failed to mark all notifications as read:', res.status);
+        return;
+      }
+
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
+      // Refresh authoritative count from server
+      fetchUnreadCount();
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }

@@ -47,7 +47,7 @@ export default function LandingFooter() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: { xs: 'center', md: 'flex-start' }, mb: 0.5 }}>
               <Box
                 component="img"
-                src="/aiArchitect_logo_nata_coaching.png"
+                src="/aiArchitect_logo.svg"
                 alt="aiArchitek logo"
                 sx={{ width: 36, height: 36, borderRadius: '50%' }}
               />

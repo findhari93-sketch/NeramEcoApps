@@ -179,7 +179,7 @@ export default function AppSidebar({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               <Box
                 component="img"
-                src="/aiArchitect_logo_nata_coaching.png"
+                src="/aiArchitect_logo.svg"
                 alt="aiArchitek logo"
                 sx={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0 }}
               />
@@ -227,7 +227,7 @@ export default function AppSidebar({
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
             <Box
               component="img"
-              src="/aiArchitect_logo_nata_coaching.png"
+              src="/aiArchitect_logo.svg"
               alt="aiArchitek logo"
               sx={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer' }}
               onClick={toggleSidebar}

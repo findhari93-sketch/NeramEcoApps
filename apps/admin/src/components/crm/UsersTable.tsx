@@ -120,16 +120,16 @@ export default function UsersTable({
       {
         accessorKey: 'name',
         header: 'User',
-        size: 270,
+        size: 220,
         enableColumnFilter: false,
         Cell: ({ row }) => (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0 }}>
             <Avatar
               src={row.original.avatar_url || undefined}
               sx={{
-                width: 38,
-                height: 38,
-                fontSize: 14,
+                width: 28,
+                height: 28,
+                fontSize: 11,
                 fontWeight: 600,
                 bgcolor: row.original.avatar_url ? 'transparent' : 'primary.light',
                 color: 'primary.contrastText',
@@ -173,8 +173,8 @@ export default function UsersTable({
       },
       {
         accessorKey: 'phone',
-        header: 'Phone Number',
-        size: 170,
+        header: 'Phone',
+        size: 150,
         Cell: ({ row }) => {
           if (!row.original.phone) {
             return (
@@ -197,8 +197,8 @@ export default function UsersTable({
       },
       {
         accessorKey: 'pipeline_stage',
-        header: 'Pipeline Stage',
-        size: 160,
+        header: 'Pipeline',
+        size: 140,
         filterVariant: 'select',
         filterSelectOptions: Object.entries(PIPELINE_STAGE_CONFIG).map(
           ([value, config]) => ({ value, text: config.label })
@@ -380,7 +380,7 @@ export default function UsersTable({
       {
         accessorKey: 'city',
         header: 'Location',
-        size: 150,
+        size: 130,
         Cell: ({ row }) => {
           const city = row.original.city;
           const state = row.original.state;
@@ -558,8 +558,8 @@ export default function UsersTable({
         color: 'text.primary',
         borderBottom: '2px solid',
         borderBottomColor: 'grey.200',
-        py: 1.5,
-        px: 2,
+        py: 0.75,
+        px: 1.25,
         whiteSpace: 'nowrap',
         // Hide sort arrows and column menu by default
         '& .MuiTableSortLabel-icon': {
@@ -588,8 +588,9 @@ export default function UsersTable({
       sx: {
         borderBottom: '1px solid',
         borderBottomColor: 'grey.100',
-        py: 1.5,
-        px: 2,
+        py: 0.5,
+        px: 1.25,
+        fontSize: 13,
       },
     },
 
@@ -661,8 +662,11 @@ export default function UsersTable({
         borderTopColor: 'grey.200',
       },
     },
+    initialState: {
+      density: 'compact',
+    },
     muiPaginationProps: {
-      rowsPerPageOptions: [10, 25, 50, 100],
+      rowsPerPageOptions: [25, 50, 100],
       showFirstButton: true,
       showLastButton: true,
     },

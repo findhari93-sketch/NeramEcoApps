@@ -45,6 +45,7 @@ interface StudentRow {
   avatar_url: string | null;
   enrollment_date: string;
   batch_id: string | null;
+  batch_name: string | null;
   payment_status: string;
   total_fee: number;
   fee_paid: number;
@@ -54,6 +55,7 @@ interface StudentRow {
   final_fee: number | null;
   full_payment_discount: number | null;
   discount_amount: number | null;
+  source: string | null;
 }
 
 interface Stats {
@@ -196,6 +198,11 @@ export default function StudentsPage() {
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [batchFilter, setBatchFilter] = useState('');
+
+  // Batches for assignment
+  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string; course_id: string; capacity: number; enrolled_count: number }[]>([]);
+  const [assigningBatch, setAssigningBatch] = useState<string | null>(null); // user_id being assigned
 
   // Debounce
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -233,6 +240,31 @@ export default function StudentsPage() {
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
+
+  // Fetch available batches for assignment
+  useEffect(() => {
+    fetch('/api/batches?isActive=true')
+      .then((r) => r.json())
+      .then((d) => setAvailableBatches(d.data || []))
+      .catch(() => {});
+  }, []);
+
+  const handleAssignBatch = async (userId: string, batchId: string) => {
+    setAssigningBatch(userId);
+    try {
+      const res = await fetch(`/api/students/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId: batchId || null }),
+      });
+      if (!res.ok) throw new Error('Failed to assign batch');
+      fetchStudents();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setAssigningBatch(null);
+    }
+  };
 
   // Handle search with debounce
   const handleSearchChange = (value: string) => {
@@ -314,11 +346,62 @@ export default function StudentsPage() {
     {
       field: 'enrollment_date',
       headerName: 'Enrolled',
-      width: 130,
+      width: 110,
       renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2">
+        <Typography variant="body2" sx={{ fontSize: 13 }}>
           {formatDate(row.enrollment_date)}
         </Typography>
+      ),
+    },
+    {
+      field: 'source',
+      headerName: 'Join Method',
+      width: 120,
+      renderCell: ({ row }: { row: StudentRow; value: any }) => {
+        const label = row.source === 'direct_link' ? 'Direct' : 'Application';
+        const color = row.source === 'direct_link' ? '#7B1FA2' : '#1565C0';
+        return (
+          <Chip
+            label={label}
+            size="small"
+            sx={{
+              fontWeight: 600,
+              fontSize: 11,
+              height: 22,
+              bgcolor: `${color}14`,
+              color,
+              borderRadius: 0.75,
+            }}
+          />
+        );
+      },
+    },
+    {
+      field: 'batch_name',
+      headerName: 'Batch',
+      width: 160,
+      renderCell: ({ row }: { row: StudentRow; value: any }) => (
+        <Select
+          size="small"
+          value={row.batch_id || ''}
+          onChange={(e) => {
+            e.stopPropagation();
+            handleAssignBatch(row.user_id, e.target.value as string);
+          }}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          displayEmpty
+          disabled={assigningBatch === row.user_id}
+          sx={{ fontSize: 12, height: 28, minWidth: 120, '& .MuiSelect-select': { py: 0.5 } }}
+        >
+          <MenuItem value="" sx={{ fontSize: 12 }}>
+            <em>Unassigned</em>
+          </MenuItem>
+          {availableBatches.map((b) => (
+            <MenuItem key={b.id} value={b.id} sx={{ fontSize: 12 }}>
+              {b.name} ({b.enrolled_count}/{b.capacity})
+            </MenuItem>
+          ))}
+        </Select>
       ),
     },
     {
@@ -498,6 +581,20 @@ export default function StudentsPage() {
             <MenuItem value="refunded">Refunded</MenuItem>
           </Select>
         </FormControl>
+        <FormControl size="small" sx={{ minWidth: 150 }}>
+          <InputLabel>Batch</InputLabel>
+          <Select
+            value={batchFilter}
+            label="Batch"
+            onChange={(e) => setBatchFilter(e.target.value)}
+          >
+            <MenuItem value="">All Batches</MenuItem>
+            <MenuItem value="unassigned">Unassigned</MenuItem>
+            {availableBatches.map((b) => (
+              <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Box>
 
       {/* Data Table */}
@@ -511,7 +608,7 @@ export default function StudentsPage() {
         }}
       >
         <DataTable
-          rows={students}
+          rows={batchFilter ? (batchFilter === 'unassigned' ? students.filter((s) => !s.batch_id) : students.filter((s) => s.batch_id === batchFilter)) : students}
           columns={columns}
           loading={loading}
           onRowClick={handleRowClick}
