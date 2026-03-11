@@ -10,16 +10,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { notificationId, userId } = body;
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      );
-    }
+    // userId is optional — use 'system' as fallback for bulk mark-all
+    const readBy = userId || 'system';
 
-    // Validate userId is a valid UUID (Supabase user ID, not email)
+    // Validate userId is a valid UUID if provided (Supabase user ID, not email)
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!UUID_REGEX.test(userId)) {
+    if (userId && !UUID_REGEX.test(userId)) {
       return NextResponse.json(
         { error: 'userId must be a valid UUID (Supabase user ID)' },
         { status: 400 }
@@ -28,10 +24,10 @@ export async function POST(request: NextRequest) {
 
     if (notificationId) {
       // Mark single notification as read
-      await markNotificationRead(notificationId, userId);
+      await markNotificationRead(notificationId, readBy);
     } else {
       // Mark all notifications as read
-      await markAllNotificationsRead(userId);
+      await markAllNotificationsRead(readBy);
     }
 
     return NextResponse.json({ success: true });

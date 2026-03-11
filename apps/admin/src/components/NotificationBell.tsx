@@ -175,14 +175,12 @@ export default function NotificationBell() {
     // Optimistically clear badge immediately
     setUnreadCount(0);
     fetchNotifications();
-    // Auto-mark all as read when opening the popover
-    if (supabaseUserId) {
-      fetch('/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: supabaseUserId }),
-      }).then(() => fetchUnreadCount()).catch(() => {});
-    }
+    // Auto-mark all as read when opening the popover (works with or without supabaseUserId)
+    fetch('/api/notifications/mark-read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: supabaseUserId || undefined }),
+    }).then(() => fetchUnreadCount()).catch(() => {});
   };
 
   const handleClose = () => {
