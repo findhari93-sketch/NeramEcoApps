@@ -75,8 +75,8 @@ export default function StudentDashboard() {
   return (
     <Box>
       {/* Welcome Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
           Welcome, {user?.name?.split(' ')[0] || 'Student'}
         </Typography>
         <Typography variant="body2" color="text.secondary">

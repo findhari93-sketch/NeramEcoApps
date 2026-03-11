@@ -13,6 +13,10 @@ import {
   Avatar,
   Divider,
 } from '@neram/ui';
+import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface TodayClass {
@@ -76,8 +80,8 @@ export default function TeacherDashboard() {
   return (
     <Box>
       {/* Welcome Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
           Good {getGreeting()}, {user?.name?.split(' ')[0] || 'Teacher'}
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -223,10 +227,10 @@ export default function TeacherDashboard() {
             </Typography>
             <Grid container spacing={1.5}>
               {[
-                { label: 'View Students', path: '/teacher/students', icon: '👥' },
-                { label: 'Attendance', path: '/teacher/attendance', icon: '📋' },
-                { label: 'Manage Timetable', path: '/teacher/timetable', icon: '📅' },
-                { label: 'Checklist', path: '/teacher/checklist', icon: '✅' },
+                { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
+                { label: 'Attendance', path: '/teacher/attendance', icon: <FactCheckOutlinedIcon /> },
+                { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
+                { label: 'Checklist', path: '/teacher/checklist', icon: <ChecklistOutlinedIcon /> },
               ].map((action) => (
                 <Grid item xs={6} sm={3} key={action.path}>
                   <Button
@@ -234,16 +238,19 @@ export default function TeacherDashboard() {
                     fullWidth
                     onClick={() => router.push(action.path)}
                     sx={{
-                      py: 2,
+                      py: 1.5,
                       textTransform: 'none',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 0.5,
-                      minHeight: 72,
+                      minHeight: 64,
+                      borderColor: 'divider',
+                      color: 'text.primary',
+                      '& .MuiSvgIcon-root': { fontSize: '1.5rem', color: 'primary.main' },
                     }}
                   >
-                    <span style={{ fontSize: '1.5rem' }}>{action.icon}</span>
-                    <Typography variant="caption">{action.label}</Typography>
+                    {action.icon}
+                    <Typography variant="caption" sx={{ fontWeight: 500 }}>{action.label}</Typography>
                   </Button>
                 </Grid>
               ))}

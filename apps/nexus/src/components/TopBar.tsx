@@ -49,7 +49,7 @@ export default function TopBar() {
         boxShadow: 1,
       }}
     >
-      <Toolbar sx={{ minHeight: { xs: 56, sm: 64 } }}>
+      <Toolbar sx={{ minHeight: { xs: 48, sm: 56 } }}>
         {/* Brand */}
         <Typography
           variant="h6"

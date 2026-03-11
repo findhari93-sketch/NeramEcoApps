@@ -56,15 +56,24 @@ export default function BottomNav({ items }: BottomNavProps) {
         }}
         showLabels
         sx={{
-          height: 64,
+          height: 56,
           '& .MuiBottomNavigationAction-root': {
             minWidth: 0,
-            padding: '6px 0',
+            padding: '4px 0',
             minHeight: 48,
+            color: 'text.secondary',
+            '&.Mui-selected': {
+              color: 'primary.main',
+            },
+            '& .MuiSvgIcon-root': {
+              fontSize: '1.35rem',
+            },
             '& .MuiBottomNavigationAction-label': {
-              fontSize: '0.625rem',
+              fontSize: '0.6875rem',
+              fontWeight: 500,
               '&.Mui-selected': {
                 fontSize: '0.6875rem',
+                fontWeight: 600,
               },
             },
           },
