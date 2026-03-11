@@ -176,35 +176,43 @@ export default function AppSidebar({
       >
         {!collapsed ? (
           <>
-            <Box>
-              <Typography
-                component={Link}
-                href="/dashboard"
-                sx={{
-                  fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
-                  fontSize: '1.1rem',
-                  fontWeight: 700,
-                  color: 'text.primary',
-                  textDecoration: 'none',
-                  lineHeight: 1,
-                }}
-              >
-                ai
-                <Box component="span" sx={{ color: neramTokens.gold[500] }}>
-                  Architek
-                </Box>
-              </Typography>
-              <Typography
-                sx={{
-                  fontSize: '0.55rem',
-                  color: 'text.secondary',
-                  lineHeight: 1.2,
-                  mt: 0.25,
-                  letterSpacing: '0.02em',
-                }}
-              >
-                From Cutoffs to Colleges
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <Box
+                component="img"
+                src="/aiArchitect_logo_nata_coaching.png"
+                alt="aiArchitek logo"
+                sx={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0 }}
+              />
+              <Box>
+                <Typography
+                  component={Link}
+                  href="/dashboard"
+                  sx={{
+                    fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    color: 'text.primary',
+                    textDecoration: 'none',
+                    lineHeight: 1,
+                  }}
+                >
+                  ai
+                  <Box component="span" sx={{ color: neramTokens.gold[500] }}>
+                    Architek
+                  </Box>
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: '0.55rem',
+                    color: 'text.secondary',
+                    lineHeight: 1.2,
+                    mt: 0.25,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  From Cutoffs to Colleges
+                </Typography>
+              </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
               {phoneVerified && <UserNotificationBell />}
@@ -216,9 +224,15 @@ export default function AppSidebar({
             </Box>
           </>
         ) : (
-          <IconButton onClick={toggleSidebar} size="small" sx={{ width: 22, height: 22 }}>
-            <ChevronRightIcon sx={{ fontSize: 14 }} />
-          </IconButton>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+            <Box
+              component="img"
+              src="/aiArchitect_logo_nata_coaching.png"
+              alt="aiArchitek logo"
+              sx={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer' }}
+              onClick={toggleSidebar}
+            />
+          </Box>
         )}
       </Box>
 

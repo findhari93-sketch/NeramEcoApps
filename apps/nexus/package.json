@@ -12,6 +12,7 @@
     "clean:build": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
   "dependencies": {
+    "@mui/icons-material": "^7.3.9",
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
     "@neram/ui": "workspace:*",

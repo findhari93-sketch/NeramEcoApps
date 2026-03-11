@@ -33,24 +33,33 @@ export default function LandingNavbar() {
         >
           {/* Logo */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
-            <Typography
-              variant="h6"
+            <Box
               component={Link}
               href="/"
-              sx={{
-                fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
-                fontWeight: 700,
-                fontSize: { xs: '1.25rem', md: '1.5rem' },
-                color: neramTokens.cream[100],
-                letterSpacing: '-0.02em',
-                textDecoration: 'none',
-              }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none' }}
             >
-              ai
-              <Box component="span" sx={{ color: neramTokens.gold[500] }}>
-                Architek
-              </Box>
-            </Typography>
+              <Box
+                component="img"
+                src="/aiArchitect_logo_nata_coaching.png"
+                alt="aiArchitek logo"
+                sx={{ width: { xs: 32, md: 36 }, height: { xs: 32, md: 36 }, borderRadius: '50%' }}
+              />
+              <Typography
+                variant="h6"
+                sx={{
+                  fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+                  fontWeight: 700,
+                  fontSize: { xs: '1.25rem', md: '1.5rem' },
+                  color: neramTokens.cream[100],
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                ai
+                <Box component="span" sx={{ color: neramTokens.gold[500] }}>
+                  Architek
+                </Box>
+              </Typography>
+            </Box>
           </Box>
 
           {/* Desktop nav links */}

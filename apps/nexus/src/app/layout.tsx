@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { NeramThemeProvider, nexusLightTheme, nexusDarkTheme } from '@neram/ui';
+import Providers from './providers';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Nexus - Student Classroom',
-  description: 'Student learning platform for Neram Classes',
+  title: 'Nexus - Neram Classroom',
+  description: 'Classroom management platform for Neram Classes',
 };
 
 export const viewport: Viewport = {
@@ -15,7 +16,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  themeColor: '#7C3AED', // Nexus purple theme
+  themeColor: '#7C3AED',
 };
 
 export default function RootLayout({
@@ -34,7 +35,7 @@ export default function RootLayout({
           darkTheme={nexusDarkTheme}
           defaultMode="light"
         >
-          {children}
+          <Providers>{children}</Providers>
         </NeramThemeProvider>
       </body>
     </html>

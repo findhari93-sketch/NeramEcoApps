@@ -12,7 +12,7 @@
 // ENUMS
 // ============================================
 
-export type UserType = 'lead' | 'student' | 'teacher' | 'admin';
+export type UserType = 'lead' | 'student' | 'teacher' | 'admin' | 'parent';
 export type UserStatus = 'pending' | 'approved' | 'rejected' | 'active' | 'inactive';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 export type ApplicationSource = 'website_form' | 'app' | 'referral' | 'manual' | 'direct_link';
@@ -3329,7 +3329,13 @@ export interface ChatbotConversation {
 // DATABASE SCHEMA TYPE
 // ============================================
 
-export interface Database {
+// Use auto-generated Database type from Supabase CLI (includes all tables including nexus_*)
+export type { Database } from './database.generated';
+export type { Json } from './database.generated';
+
+// Legacy manual Database interface kept commented for reference
+/*
+interface _LegacyDatabase {
   public: {
     Tables: {
       users: {
@@ -3736,6 +3742,7 @@ export interface Database {
     };
   };
 }
+*/
 
 // ============================================
 // COA INSTITUTIONS
@@ -3864,3 +3871,142 @@ export interface UserErrorLog {
 }
 
 export type UserErrorLogInsert = Omit<UserErrorLog, 'id' | 'created_at'>;
+
+// ============================================
+// NEXUS CLASSROOM MANAGEMENT TYPES
+// ============================================
+
+export type NexusClassroomType = 'nata' | 'jee' | 'revit' | 'other';
+export type NexusEnrollmentRole = 'teacher' | 'student';
+export type NexusTopicCategory = 'mathematics' | 'aptitude' | 'drawing' | 'architecture_awareness' | 'general';
+export type NexusClassStatus = 'scheduled' | 'live' | 'completed' | 'cancelled' | 'rescheduled';
+export type NexusAttendanceSource = 'teams' | 'manual';
+export type NexusTopicProgressStatus = 'not_started' | 'attended' | 'completed' | 'skipped';
+export type NexusResourceType = 'pdf' | 'image' | 'youtube' | 'onenote' | 'link';
+
+export interface NexusClassroom extends Timestamps {
+  id: string;
+  name: string;
+  type: NexusClassroomType;
+  description: string | null;
+  ms_team_id: string | null;
+  is_active: boolean;
+  created_by: string | null;
+}
+
+export interface NexusEnrollment {
+  id: string;
+  user_id: string;
+  classroom_id: string;
+  role: NexusEnrollmentRole;
+  enrolled_at: string;
+  is_active: boolean;
+}
+
+export interface NexusParentLink {
+  id: string;
+  parent_user_id: string | null;
+  student_user_id: string;
+  invite_token: string;
+  invite_expires_at: string;
+  linked_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface NexusTopic extends Timestamps {
+  id: string;
+  classroom_id: string;
+  title: string;
+  description: string | null;
+  category: NexusTopicCategory | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface NexusScheduledClass extends Timestamps {
+  id: string;
+  classroom_id: string;
+  topic_id: string | null;
+  teacher_id: string | null;
+  title: string;
+  description: string | null;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+  teams_meeting_url: string | null;
+  teams_meeting_id: string | null;
+  recording_url: string | null;
+  recording_duration_minutes: number | null;
+  status: NexusClassStatus;
+  rescheduled_to: string | null;
+  notes: string | null;
+}
+
+export interface NexusAttendance {
+  id: string;
+  scheduled_class_id: string;
+  student_id: string;
+  attended: boolean;
+  joined_at: string | null;
+  left_at: string | null;
+  duration_minutes: number | null;
+  source: NexusAttendanceSource;
+  created_at: string;
+}
+
+export interface NexusChecklistItem extends Timestamps {
+  id: string;
+  classroom_id: string;
+  topic_id: string | null;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface NexusChecklistResource {
+  id: string;
+  checklist_item_id: string;
+  title: string;
+  resource_type: NexusResourceType | null;
+  url: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusStudentChecklistProgress {
+  id: string;
+  student_id: string;
+  checklist_item_id: string;
+  is_completed: boolean;
+  completed_at: string | null;
+}
+
+export interface NexusStudentTopicProgress {
+  id: string;
+  student_id: string;
+  topic_id: string;
+  classroom_id: string;
+  status: NexusTopicProgressStatus;
+  completed_at: string | null;
+}
+
+// Nexus joined types for queries
+export interface NexusEnrollmentWithUser extends NexusEnrollment {
+  user: User;
+}
+
+export interface NexusScheduledClassWithTopic extends NexusScheduledClass {
+  topic: NexusTopic | null;
+  teacher: Pick<User, 'id' | 'name' | 'avatar_url'> | null;
+}
+
+export interface NexusChecklistItemWithResources extends NexusChecklistItem {
+  topic: NexusTopic | null;
+  resources: NexusChecklistResource[];
+}
+
+export interface NexusChecklistItemWithProgress extends NexusChecklistItemWithResources {
+  progress: NexusStudentChecklistProgress | null;
+}

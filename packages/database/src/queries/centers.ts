@@ -101,5 +101,5 @@ export async function getAllCenterSeoSlugs(
     .not('seo_slug', 'is', null);
 
   if (error) throw error;
-  return (data ?? []).map((d: { seo_slug: string }) => d.seo_slug);
+  return (data ?? []).map((d: { seo_slug: string | null }) => d.seo_slug).filter((s): s is string => s !== null);
 }

@@ -52,6 +52,12 @@ export const loginScopes = {
   teams: ['openid', 'profile', 'email', 'User.Read', 'Team.ReadBasic.All', 'Channel.ReadBasic.All'],
   graph: ['openid', 'profile', 'email', 'User.Read', 'Mail.Read', 'Calendars.Read'],
   admin: ['openid', 'profile', 'email', 'User.Read', 'User.ReadWrite.All', 'Directory.Read.All'],
+  nexus: [
+    'openid', 'profile', 'email', 'User.Read',
+    'OnlineMeetings.ReadWrite',
+    'OnlineMeetingArtifact.Read.All',
+    'Files.ReadWrite',
+  ],
 };
 
 // ============================================

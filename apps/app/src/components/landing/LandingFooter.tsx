@@ -44,20 +44,27 @@ export default function LandingFooter() {
         >
           {/* Logo + tagline */}
           <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
-            <Typography
-              sx={{
-                fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
-                fontSize: '1.5rem',
-                fontWeight: 700,
-                color: neramTokens.cream[100],
-                mb: 0.5,
-              }}
-            >
-              ai
-              <Box component="span" sx={{ color: neramTokens.gold[500] }}>
-                Architek
-              </Box>
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: { xs: 'center', md: 'flex-start' }, mb: 0.5 }}>
+              <Box
+                component="img"
+                src="/aiArchitect_logo_nata_coaching.png"
+                alt="aiArchitek logo"
+                sx={{ width: 36, height: 36, borderRadius: '50%' }}
+              />
+              <Typography
+                sx={{
+                  fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+                  fontSize: '1.5rem',
+                  fontWeight: 700,
+                  color: neramTokens.cream[100],
+                }}
+              >
+                ai
+                <Box component="span" sx={{ color: neramTokens.gold[500] }}>
+                  Architek
+                </Box>
+              </Typography>
+            </Box>
             <Typography
               sx={{
                 fontSize: '0.8rem',
