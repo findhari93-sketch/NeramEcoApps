@@ -51,12 +51,33 @@ export async function GET(request: NextRequest) {
       )
       .order('enrollment_date', { ascending: false });
 
-    // Apply search filter (name, email, phone)
+    // Search filter: PostgREST doesn't support .or() on foreign table columns.
+    // If searching, first find matching user IDs, then filter student_profiles.
     if (search) {
-      // Search across user fields using the related users table
-      query = query.or(
-        `users.first_name.ilike.%${search}%,users.last_name.ilike.%${search}%,users.email.ilike.%${search}%,users.phone.ilike.%${search}%`
-      );
+      const { data: matchingUsers } = await supabase
+        .from('users')
+        .select('id')
+        .or(
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
+        );
+      const matchingIds = (matchingUsers || []).map((u: any) => u.id);
+      if (matchingIds.length === 0) {
+        // No users match — return empty result early
+        const { data: allProfiles } = await supabase
+          .from('student_profiles')
+          .select('payment_status, fee_paid, total_fee, fee_due');
+        return NextResponse.json({
+          students: [],
+          total: 0,
+          stats: {
+            totalStudents: allProfiles?.length || 0,
+            fullyPaid: allProfiles?.filter((p: any) => p.payment_status === 'paid').length || 0,
+            partialPayment: allProfiles?.filter((p: any) => p.payment_status === 'pending' && (p.fee_paid || 0) > 0).length || 0,
+            totalRevenue: allProfiles?.reduce((sum: number, p: any) => sum + (p.fee_paid || 0), 0) || 0,
+          },
+        });
+      }
+      query = query.in('user_id', matchingIds);
     }
 
     // Apply payment status filter

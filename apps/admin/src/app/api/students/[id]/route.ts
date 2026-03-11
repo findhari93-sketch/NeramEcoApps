@@ -97,38 +97,17 @@ export async function DELETE(
     const { id } = await params;
     const supabase = getSupabaseAdminClient();
 
-    // Verify user exists with a direct query (bypasses getUserById RLS issues)
-    const { data: userCheck, error: userCheckErr } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle();
+    // Skip existence checks — go straight to deletion.
+    // The RPC uses SECURITY DEFINER (bypasses RLS completely).
+    // PostgREST queries with service_role can be blocked by restrictive RLS,
+    // but the RPC runs as postgres owner and always works.
 
-    if (userCheckErr) {
-      console.error('User check error:', userCheckErr);
-    }
-
-    if (!userCheck) {
-      // Fallback: check if student_profile exists with this user_id
-      const { data: profileCheck } = await supabase
-        .from('student_profiles')
-        .select('id, user_id')
-        .eq('user_id', id)
-        .maybeSingle();
-
-      if (!profileCheck) {
-        return NextResponse.json(
-          { error: 'Student not found' },
-          { status: 404 }
-        );
-      }
-    }
-
-    // Nullify FK references on direct_enrollment_links before deleting profiles
-    await supabase
+    // Nullify FK references on direct_enrollment_links (not covered by RPC)
+    const { error: linkErr } = await supabase
       .from('direct_enrollment_links')
       .update({ used_by: null, lead_profile_id: null, student_profile_id: null })
       .eq('used_by', id);
+    if (linkErr) console.warn('Warning: direct_enrollment_links cleanup:', linkErr.message);
 
     // Clean up tables not covered by the bulk delete RPC
     const extraTables = [
@@ -144,14 +123,24 @@ export async function DELETE(
       if (cleanErr) console.warn(`Warning: failed to clean ${table}:`, cleanErr.message);
     }
 
-    // Use atomic RPC to delete user and all remaining related data
+    // Use atomic RPC to delete user and all related data (SECURITY DEFINER — bypasses RLS)
     const result = await adminBulkDeleteUsers([id], id, supabase);
 
+    if (result.deletedUsers === 0) {
+      // User was already deleted or never existed — still return success
+      // since the intent was to remove the student
+      return NextResponse.json({
+        success: true,
+        message: 'Student records cleaned up',
+        deleted: result,
+      });
+    }
+
     return NextResponse.json({ success: true, deleted: result });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting student:', error);
     return NextResponse.json(
-      { error: 'Failed to delete student' },
+      { error: error.message || 'Failed to delete student' },
       { status: 500 }
     );
   }

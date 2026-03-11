@@ -10,8 +10,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { notificationId, userId } = body;
 
-    // userId is optional — use 'system' as fallback for bulk mark-all
-    const readBy = userId || 'system';
+    // userId is optional — use null as fallback (read_by is UUID type)
+    const readBy = userId || null;
 
     // Validate userId is a valid UUID if provided (Supabase user ID, not email)
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

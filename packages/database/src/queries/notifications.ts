@@ -287,18 +287,22 @@ export async function listAdminNotifications(
  */
 export async function markNotificationRead(
   notificationId: string,
-  readByUserId: string,
+  readByUserId: string | null,
   client?: TypedSupabaseClient
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
 
+  const updateData: Record<string, unknown> = {
+    is_read: true,
+    read_at: new Date().toISOString(),
+  };
+  if (readByUserId) {
+    updateData.read_by = readByUserId;
+  }
+
   const { error } = await (supabase as any)
     .from('admin_notifications')
-    .update({
-      is_read: true,
-      read_by: readByUserId,
-      read_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', notificationId);
 
   if (error) throw error;
@@ -308,18 +312,22 @@ export async function markNotificationRead(
  * Mark all notifications as read
  */
 export async function markAllNotificationsRead(
-  readByUserId: string,
+  readByUserId: string | null,
   client?: TypedSupabaseClient
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
 
+  const updateData: Record<string, unknown> = {
+    is_read: true,
+    read_at: new Date().toISOString(),
+  };
+  if (readByUserId) {
+    updateData.read_by = readByUserId;
+  }
+
   const { error } = await (supabase as any)
     .from('admin_notifications')
-    .update({
-      is_read: true,
-      read_by: readByUserId,
-      read_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('is_read', false);
 
   if (error) throw error;
