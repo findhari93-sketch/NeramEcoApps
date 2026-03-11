@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
       }
 
       const supabase = getSupabaseAdminClient();
-      const { count, error } = await supabase
-        .from(tableName)
+      const { count, error } = await (supabase
+        .from(tableName as any) as any)
         .select('*', { count: 'exact', head: true })
         .eq('counseling_system_id', systemId)
         .eq('year', year);
