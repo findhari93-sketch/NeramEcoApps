@@ -124,6 +124,7 @@ function clearInteractionState(): void {
 
 let msalInstance: PublicClientApplication | null = null;
 let msalInitialized = false;
+let redirectResult: AuthenticationResult | null = null;
 
 export async function initializeMsal(): Promise<PublicClientApplication> {
   if (msalInstance && msalInitialized) {
@@ -134,10 +135,19 @@ export async function initializeMsal(): Promise<PublicClientApplication> {
   await msalInstance.initialize();
   msalInitialized = true;
 
-  // Handle redirect response
-  await msalInstance.handleRedirectPromise();
+  // Handle redirect response (returns result if user just came back from redirect login)
+  const result = await msalInstance.handleRedirectPromise();
+  if (result?.account) {
+    msalInstance.setActiveAccount(result.account);
+    redirectResult = result;
+  }
 
   return msalInstance;
+}
+
+/** Returns the result from the most recent redirect login, if any. */
+export function getRedirectResult(): AuthenticationResult | null {
+  return redirectResult;
 }
 
 export function getMsalInstance(): PublicClientApplication {
@@ -160,7 +170,7 @@ export function isMsalConfigured(): boolean {
 
 export async function signInWithMicrosoft(
   scopes: string[] = loginScopes.default,
-  usePopup = true
+  usePopup = false
 ): Promise<AuthenticationResult> {
   const msal = await initializeMsal();
 
@@ -324,7 +334,7 @@ export async function signOut(
   const accountToLogout = account || getActiveAccount();
 
   if (accountToLogout) {
-    await msal.logoutPopup({
+    await msal.logoutRedirect({
       account: accountToLogout,
       postLogoutRedirectUri: postLogoutRedirectUri || window.location.origin,
     });

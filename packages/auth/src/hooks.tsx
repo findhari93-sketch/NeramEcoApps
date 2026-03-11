@@ -247,10 +247,12 @@ export function useMicrosoftAuth() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { initializeMsal, getActiveAccount } = await import('./microsoft');
+        const { initializeMsal, getActiveAccount, getRedirectResult } = await import('./microsoft');
         await initializeMsal();
-        
-        const account = getActiveAccount();
+
+        // Check redirect result first (user just came back from MS login redirect)
+        const redirectResult = getRedirectResult();
+        const account = redirectResult?.account || getActiveAccount();
         if (account) {
           setState({
             user: {

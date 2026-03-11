@@ -22,11 +22,13 @@ export default function LoginPage() {
     setLoginError(null);
     try {
       await signIn();
+      // Redirect flow navigates away; signIn() only returns if popup mode is used
     } catch (err) {
+      // MsalLoginError with 'redirect_fallback' is expected for redirect flow — not a real error
+      if (err instanceof Error && err.message?.includes('Redirecting')) return;
       console.error('Login failed:', err);
       const errorInfo = getMsalErrorMessage(err as Error);
       setLoginError(errorInfo);
-    } finally {
       setSigningIn(false);
     }
   };
