@@ -71,12 +71,19 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   // Non-English locale pages have no translations (identical English text = duplicate content).
   // Low-priority cities have thin template content.
   const shouldIndex = params.locale === 'en' && location.sitemapPriority !== 'low';
+  const pagePath = `/coaching/nata-coaching/${params.slug}`;
+
+  // For noindexed pages, canonical should point to the English version
+  // so Google consolidates signals to the indexable page.
+  const alternates = shouldIndex
+    ? buildAlternates(params.locale, pagePath)
+    : { canonical: `https://neramclasses.com${pagePath}` };
 
   return {
     title,
     description,
     keywords: `NATA coaching ${location.cityDisplay}, NATA classes ${location.cityDisplay}, best NATA coaching in ${location.cityDisplay}, NATA preparation ${location.stateDisplay}, online NATA coaching ${location.cityDisplay}, architecture entrance coaching ${location.cityDisplay}, NATA coaching near me ${location.cityDisplay}`,
-    alternates: buildAlternates(params.locale, `/coaching/nata-coaching/${params.slug}`),
+    alternates,
     openGraph: {
       title,
       description,

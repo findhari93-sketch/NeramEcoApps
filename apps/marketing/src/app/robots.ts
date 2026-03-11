@@ -26,24 +26,11 @@ export default function robots(): MetadataRoute.Robots {
           '/trackback/',
           '/xmlrpc.php',
           '/cgi-bin/',
-          // Old duplicate city/location URLs (catch-all pattern)
-          '/*-url',
-          // Old paths from WordPress site
+          // Old WordPress paths (have redirects in next.config.js, block direct crawling)
           '/test-page/*',
           '/register/*',
           '/members/*',
-          '/NATA-coaching-centers-nearby/*',
-          '/NATA_Coaching_center_near_me_address',
-          '/Application-form-Nata-Coaching',
-          '/Free-Nata-Class-books-online-registration',
           '/NATA_Application_Form_*',
-          '/FAQs-nata-exam-questions',
-          '/JEE_B.arch_Syllabus',
-          '/NATA_Best_Architecture_Colleges',
-          '/NATA_Free_Books',
-          '/materials',
-          // Disallow .html duplicates
-          '/*.html',
           // Special characters
           '/&',
           '/$',

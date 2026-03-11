@@ -124,7 +124,9 @@ const nextConfig = {
       { source: '/jee-paper-2-formula-sheet', destination: '/en/jee-paper-2-preparation', permanent: true },
       { source: '/jee-paper-2-mock-test-series', destination: '/en/jee-paper-2-preparation', permanent: true },
       { source: '/jee-paper-2-mathematics-syllabus', destination: '/en/jee-paper-2-preparation', permanent: true },
+      { source: '/jee-paper-2-previous-year-papers', destination: '/en/previous-year-papers', permanent: true },
       { source: '/nata-jee-batch-combined-preparation', destination: '/en/courses', permanent: true },
+      { source: '/jee-batch-coaching', destination: '/en/courses', permanent: true },
       { source: '/nata-exam-questions', destination: '/en/nata-important-questions', permanent: true },
       { source: '/how-to-score-99-percentile-jee-batch', destination: '/en/how-to-score-150-in-nata', permanent: true },
       { source: '/nata-app-url', destination: '/en/courses', permanent: true },
@@ -135,6 +137,7 @@ const nextConfig = {
       { source: '/online-coaching-url', destination: '/en/coaching/nata-coaching', permanent: true },
       { source: '/contact-us-url', destination: '/en/contact', permanent: true },
       { source: '/speed-url', destination: '/en/coaching/nata-coaching', permanent: true },
+      { source: '/materials', destination: '/en/free-resources', permanent: true },
 
       // Old WordPress content paths
       { source: '/NATA-coaching-centers-nearby/:path*', destination: '/en/coaching/nata-coaching', permanent: true },
@@ -143,11 +146,27 @@ const nextConfig = {
       { source: '/Free-Nata-Class-books-online-registration', destination: '/en/free-resources', permanent: true },
       { source: '/nata-cutoff-calculator-url/:path*', destination: '/en/tools/cutoff-calculator', permanent: true },
       { source: '/FAQs-nata-exam-questions', destination: '/en/nata-important-questions', permanent: true },
+      { source: '/JEE_B.arch_Syllabus/:path*', destination: '/en/nata-syllabus', permanent: true },
       { source: '/JEE_B.arch_Syllabus', destination: '/en/nata-syllabus', permanent: true },
       { source: '/NATA_Best_Architecture_Colleges', destination: '/en/courses', permanent: true },
       { source: '/NATA_Free_Books', destination: '/en/free-resources', permanent: true },
       // NOTE: /about and /contact are handled by next-intl middleware (localePrefix: 'as-needed')
       // Explicit redirects here cause ERR_TOO_MANY_REDIRECTS
+
+      // Auth pages → redirect to student app
+      { source: '/auth/login', destination: 'https://app.neramclasses.com/login', permanent: true },
+      { source: '/auth/:path*', destination: 'https://app.neramclasses.com/login', permanent: true },
+
+      // Old version paths
+      { source: '/v3', destination: '/', permanent: true },
+      { source: '/v5', destination: '/', permanent: true },
+      { source: '/v6', destination: '/', permanent: true },
+
+      // Old .html pages (WordPress artifacts)
+      { source: '/index.html', destination: '/', permanent: true },
+      { source: '/register/:path*.html', destination: '/en/free-resources', permanent: true },
+      { source: '/nata-cutoff-calculator/:path*.html', destination: '/en/tools/cutoff-calculator', permanent: true },
+      { source: '/about/Free-NATA-study-Materials.html', destination: '/en/free-resources', permanent: true },
 
       // Old city URLs with -url suffix — specific cities first, then catch-all
       { source: '/trichy-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-trichy', permanent: true },
@@ -161,8 +180,14 @@ const nextConfig = {
       { source: '/vizag-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-visakhapatnam', permanent: true },
       { source: '/tirunelveli-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-tirunelveli', permanent: true },
       { source: '/dindigul-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-dindigul', permanent: true },
+      { source: '/mumbai-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-mumbai', permanent: true },
+      { source: '/coimbatore-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-coimbatore', permanent: true },
+      { source: '/chennai-url', destination: '/en/coaching/nata-coaching/nata-coaching-centers-in-chennai', permanent: true },
       // Catch-all for remaining -url suffix patterns → coaching hub
       { source: '/:slug(.*-url)', destination: '/en/coaching/nata-coaching', permanent: true },
+
+      // Catch-all for .html extensions (strip .html and redirect)
+      { source: '/:path*.html', destination: '/', permanent: true },
     ];
   },
 };

@@ -87,19 +87,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [];
   const currentDate = new Date();
 
+  // Helper: build URL respecting localePrefix: 'as-needed'
+  // English (default locale) has no /en/ prefix; other locales do.
+  const localeUrl = (locale: string, path: string) =>
+    locale === 'en' ? `${baseUrl}${path}` : `${baseUrl}/${locale}${path}`;
+
   // ─── Static pages: all locales (these have i18n translations) ───
   for (const locale of locales) {
     for (const page of staticPages) {
       const isHomepage = page === '';
       const isHighPriority = page.includes('coaching') || page.includes('nata') || page.includes('jee');
       entries.push({
-        url: `${baseUrl}/${locale}${page}`,
+        url: localeUrl(locale, page),
         lastModified: currentDate,
         changeFrequency: isHomepage ? 'daily' : isHighPriority ? 'weekly' : 'weekly',
         priority: isHomepage ? 1.0 : isHighPriority ? 0.9 : 0.8,
         alternates: {
           languages: Object.fromEntries(
-            locales.map((l) => [l, `${baseUrl}/${l}${page}`])
+            locales.map((l) => [l, localeUrl(l, page)])
           ),
         },
       });
@@ -107,14 +112,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     // Course pages: all locales
     for (const slug of courseSlugs) {
+      const path = `/courses/${slug}`;
       entries.push({
-        url: `${baseUrl}/${locale}/courses/${slug}`,
+        url: localeUrl(locale, path),
         lastModified: currentDate,
         changeFrequency: 'weekly',
         priority: 0.8,
         alternates: {
           languages: Object.fromEntries(
-            locales.map((l) => [l, `${baseUrl}/${l}/courses/${slug}`])
+            locales.map((l) => [l, localeUrl(l, path)])
           ),
         },
       });
@@ -122,14 +128,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     // Blog posts: all locales
     for (const post of blogSlugs) {
+      const path = `/blog/${post.slug}`;
       entries.push({
-        url: `${baseUrl}/${locale}/blog/${post.slug}`,
+        url: localeUrl(locale, path),
         lastModified: new Date(post.date),
         changeFrequency: 'monthly',
         priority: post.isCityGuide ? 0.85 : 0.7,
         alternates: {
           languages: Object.fromEntries(
-            locales.map((l) => [l, `${baseUrl}/${l}/blog/${post.slug}`])
+            locales.map((l) => [l, localeUrl(l, path)])
           ),
         },
       });
@@ -140,22 +147,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Location pages have no i18n translations (hardcoded English content).
   // Including all 5 locales creates 1,010 duplicate-content URLs that
   // waste crawl budget. Only include English versions of indexable cities.
+  // English URLs have no /en/ prefix (localePrefix: 'as-needed').
   const sitemapLocations = getSitemapLocations();
   for (const location of sitemapLocations) {
     entries.push({
-      url: `${baseUrl}/en/coaching/nata-coaching/nata-coaching-centers-in-${location.city}`,
+      url: `${baseUrl}/coaching/nata-coaching/nata-coaching-centers-in-${location.city}`,
       lastModified: currentDate,
       changeFrequency: 'monthly',
       priority: location.sitemapPriority === 'high' ? 0.7 : 0.5,
     });
   }
 
-  // ─── Center detail pages: English only ───
+  // ─── Center detail pages: English only (no /en/ prefix) ───
   try {
     const centerSlugs = await getAllCenterSeoSlugs();
     for (const centerSlug of centerSlugs) {
       entries.push({
-        url: `${baseUrl}/en/contact/${centerSlug}`,
+        url: `${baseUrl}/contact/${centerSlug}`,
         lastModified: currentDate,
         changeFrequency: 'monthly',
         priority: 0.8,

@@ -129,10 +129,15 @@ export default function NotificationBell() {
   const fetchUnreadCount = useCallback(async () => {
     try {
       const res = await fetch('/api/notifications?isRead=false&limit=1&offset=0');
+      if (!res.ok) {
+        setUnreadCount(0);
+        return;
+      }
       const data = await res.json();
       setUnreadCount(data.count || 0);
     } catch (error) {
       console.error('Error fetching unread count:', error);
+      setUnreadCount(0);
     }
   }, []);
 
@@ -141,15 +146,15 @@ export default function NotificationBell() {
       setLoading(true);
       const res = await fetch('/api/notifications?limit=10&offset=0');
       const data = await res.json();
-      setNotifications(data.notifications || []);
-      // Refresh authoritative unread count from server
-      fetchUnreadCount();
+      // Mark all as read in local state since opening the popover marks them read
+      const notifs = (data.notifications || []).map((n: AdminNotification) => ({ ...n, is_read: true }));
+      setNotifications(notifs);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
     }
-  }, [fetchUnreadCount]);
+  }, []);
 
   // Initial fetch and polling
   useEffect(() => {
@@ -167,7 +172,17 @@ export default function NotificationBell() {
 
   const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
+    // Optimistically clear badge immediately
+    setUnreadCount(0);
     fetchNotifications();
+    // Auto-mark all as read when opening the popover
+    if (supabaseUserId) {
+      fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: supabaseUserId }),
+      }).then(() => fetchUnreadCount()).catch(() => {});
+    }
   };
 
   const handleClose = () => {

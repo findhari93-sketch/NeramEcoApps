@@ -10,12 +10,17 @@ import { BASE_URL, SUPPORTED_LOCALES, DEFAULT_LOCALE } from './constants';
 export function buildAlternates(locale: string, path: string) {
   const languages: Record<string, string> = {};
   for (const l of SUPPORTED_LOCALES) {
-    languages[l] = `${BASE_URL}/${l}${path}`;
+    // Default locale (en) has no prefix due to localePrefix: 'as-needed'
+    languages[l] =
+      l === DEFAULT_LOCALE ? `${BASE_URL}${path}` : `${BASE_URL}/${l}${path}`;
   }
-  languages['x-default'] = `${BASE_URL}/${DEFAULT_LOCALE}${path}`;
+  languages['x-default'] = `${BASE_URL}${path}`;
 
   return {
-    canonical: `${BASE_URL}/${locale}${path}`,
+    canonical:
+      locale === DEFAULT_LOCALE
+        ? `${BASE_URL}${path}`
+        : `${BASE_URL}/${locale}${path}`,
     languages,
   };
 }
