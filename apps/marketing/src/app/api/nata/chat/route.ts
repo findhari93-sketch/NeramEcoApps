@@ -123,7 +123,7 @@ async function logConversation(params: {
 }) {
   try {
     const supabase = createAdminClient();
-    await (supabase.from('chatbot_conversations') as ReturnType<typeof supabase.from>).insert({
+    await (supabase.from('chatbot_conversations') as any).insert({
       session_id: params.sessionId,
       user_message: params.userMessage,
       ai_response: params.aiResponse,

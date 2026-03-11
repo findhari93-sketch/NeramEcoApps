@@ -12,7 +12,7 @@ export async function GET(
   const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
 
   const { data, error } = await (supabase
-    .from('chatbot_conversations') as ReturnType<typeof supabase.from>)
+    .from('chatbot_conversations') as any)
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -23,7 +23,7 @@ export async function GET(
   }
 
   // Group by session for better display
-  const rows = (data || []) as { session_id: string; [key: string]: unknown }[];
+  const rows = (data || []) as unknown as { session_id: string; [key: string]: unknown }[];
   const sessions: Record<string, typeof rows> = {};
   for (const msg of rows) {
     const sid = msg.session_id;
