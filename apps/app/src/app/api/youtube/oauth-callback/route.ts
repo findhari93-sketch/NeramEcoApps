@@ -109,14 +109,14 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (existingUser) {
-      user = existingUser as User;
+      user = existingUser as unknown as User;
 
       // Update Google ID if not set
-      if (!(existingUser as User).google_id) {
+      if (!(existingUser as unknown as User).google_id) {
         await supabase
           .from('users' as any)
           .update({ google_id: userInfo.id } as never)
-          .eq('id', (existingUser as User).id);
+          .eq('id', (existingUser as unknown as User).id);
       }
     } else {
       // Create new user
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      user = newUser as User;
+      user = newUser as unknown as User;
     }
 
     if (!user) {

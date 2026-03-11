@@ -83,7 +83,7 @@ function getDeviceType(): string {
 export function collectDeviceInfo(): DeviceInfo {
   const browser = getBrowserInfo();
   const os = getOSInfo();
-  const connection = (navigator as Record<string, unknown>).connection as Record<string, unknown> | undefined;
+  const connection = (navigator as unknown as Record<string, unknown>).connection as Record<string, unknown> | undefined;
 
   return {
     device_type: getDeviceType(),
