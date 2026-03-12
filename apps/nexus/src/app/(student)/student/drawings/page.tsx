@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -12,7 +12,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Avatar,
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
@@ -21,12 +20,14 @@ import PendingOutlinedIcon from '@mui/icons-material/PendingOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import SubmissionUpload from '@/components/SubmissionUpload';
 
 interface DrawingExercise {
   id: string;
   title: string;
   description: string | null;
   instructions: string | null;
+  dos_and_donts: string | null;
   reference_images: Array<{ url: string; caption?: string }>;
   is_unlocked: boolean;
   latest_submission: {
@@ -68,42 +69,40 @@ export default function StudentDrawings() {
   const [loading, setLoading] = useState(true);
   const [selectedExercise, setSelectedExercise] = useState<DrawingExercise | null>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     if (!activeClassroom) return;
+    setLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
 
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        if (!token) return;
+      const headers = { Authorization: `Bearer ${token}` };
+      const [pathRes, progressRes] = await Promise.all([
+        fetch(`/api/drawings?classroom=${activeClassroom.id}&mode=path`, { headers }),
+        fetch(`/api/drawings?classroom=${activeClassroom.id}&mode=progress`, { headers }),
+      ]);
 
-        const headers = { Authorization: `Bearer ${token}` };
-        const [pathRes, progressRes] = await Promise.all([
-          fetch(`/api/drawings?classroom=${activeClassroom!.id}&mode=path`, { headers }),
-          fetch(`/api/drawings?classroom=${activeClassroom!.id}&mode=progress`, { headers }),
-        ]);
-
-        if (pathRes.ok) {
-          const data = await pathRes.json();
-          setLevels(data.levels || []);
-        }
-        if (progressRes.ok) {
-          setProgress(await progressRes.json());
-        }
-      } catch (err) {
-        console.error('Failed to load drawings:', err);
-      } finally {
-        setLoading(false);
+      if (pathRes.ok) {
+        const data = await pathRes.json();
+        setLevels(data.levels || []);
       }
+      if (progressRes.ok) {
+        setProgress(await progressRes.json());
+      }
+    } catch (err) {
+      console.error('Failed to load drawings:', err);
+    } finally {
+      setLoading(false);
     }
-
-    fetchData();
   }, [activeClassroom, getToken]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const getStatusIcon = (exercise: DrawingExercise) => {
     if (!exercise.is_unlocked) return <LockOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />;
     if (!exercise.latest_submission) return <BrushOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary' }} />;
-
     const status = exercise.latest_submission.status;
     if (status === 'approved') return <CheckCircleOutlinedIcon sx={{ fontSize: 18, color: 'success.main' }} />;
     if (status === 'redo') return <ReplayOutlinedIcon sx={{ fontSize: 18, color: 'warning.main' }} />;
@@ -114,7 +113,6 @@ export default function StudentDrawings() {
   const getStatusChip = (exercise: DrawingExercise) => {
     if (!exercise.is_unlocked) return <Chip label="Locked" size="small" disabled />;
     if (!exercise.latest_submission) return <Chip label="Not Started" size="small" variant="outlined" />;
-
     const status = exercise.latest_submission.status;
     const map: Record<string, { label: string; color: any }> = {
       approved: { label: 'Approved', color: 'success' },
@@ -156,37 +154,25 @@ export default function StudentDrawings() {
 
   return (
     <Box>
-      {/* Header with progress */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
           Drawing Exercises
         </Typography>
         {progress && progress.total > 0 && (
-          <Chip
-            label={`${progress.approved}/${progress.total}`}
-            size="small"
-            color="primary"
-            variant="outlined"
-          />
+          <Chip label={`${progress.approved}/${progress.total}`} size="small" color="primary" variant="outlined" />
         )}
       </Box>
 
-      {/* Progress bar */}
       {progress && progress.total > 0 && (
         <Paper sx={{ p: 1.5, mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="caption" color="text.secondary">Overall Progress</Typography>
             <Typography variant="caption" fontWeight={600}>{progress.percentage}%</Typography>
           </Box>
-          <LinearProgress
-            variant="determinate"
-            value={progress.percentage}
-            sx={{ height: 6, borderRadius: 3 }}
-          />
+          <LinearProgress variant="determinate" value={progress.percentage} sx={{ height: 6, borderRadius: 3 }} />
         </Paper>
       )}
 
-      {/* Levels */}
       {levels.map((level) => (
         <Box key={level.id} sx={{ mb: 2 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, px: 0.5 }}>
@@ -198,7 +184,6 @@ export default function StudentDrawings() {
             </Typography>
           )}
 
-          {/* Categories as accordions */}
           {level.categories.map((category) => (
             <Accordion
               key={category.id}
@@ -262,34 +247,37 @@ export default function StudentDrawings() {
         </Box>
       ))}
 
-      {/* Exercise detail bottom sheet / dialog */}
+      {/* Exercise detail bottom sheet */}
       {selectedExercise && (
         <ExerciseDetail
           exercise={selectedExercise}
-          classroomId={activeClassroom!.id}
           getToken={getToken}
           onClose={() => setSelectedExercise(null)}
+          onSubmitted={() => {
+            setSelectedExercise(null);
+            fetchData();
+          }}
         />
       )}
     </Box>
   );
 }
 
-// ============================================
-// Exercise Detail Panel
-// ============================================
-
 function ExerciseDetail({
   exercise,
-  classroomId,
   getToken,
   onClose,
+  onSubmitted,
 }: {
   exercise: DrawingExercise;
-  classroomId: string;
   getToken: () => Promise<string | null>;
   onClose: () => void;
+  onSubmitted: () => void;
 }) {
+  const canSubmit = !exercise.latest_submission ||
+    exercise.latest_submission.status === 'redo' ||
+    exercise.latest_submission.status === 'graded';
+
   return (
     <Box
       sx={{
@@ -303,24 +291,18 @@ function ExerciseDetail({
         flexDirection: 'column',
       }}
     >
-      {/* Backdrop */}
-      <Box
-        onClick={onClose}
-        sx={{ flex: 1, bgcolor: 'rgba(0,0,0,0.5)', minHeight: 60 }}
-      />
+      <Box onClick={onClose} sx={{ flex: 1, bgcolor: 'rgba(0,0,0,0.5)', minHeight: 60 }} />
 
-      {/* Panel */}
       <Paper
         elevation={8}
         sx={{
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
-          maxHeight: '80vh',
+          maxHeight: '85vh',
           overflow: 'auto',
           p: { xs: 2, sm: 3 },
         }}
       >
-        {/* Handle */}
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
           <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
         </Box>
@@ -346,7 +328,17 @@ function ExerciseDetail({
           </Box>
         )}
 
-        {/* Reference images */}
+        {exercise.dos_and_donts && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: 'uppercase' }}>
+              Do&apos;s &amp; Don&apos;ts
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-line' }}>
+              {exercise.dos_and_donts}
+            </Typography>
+          </Box>
+        )}
+
         {exercise.reference_images.length > 0 && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: 'uppercase', mb: 1, display: 'block' }}>
@@ -403,35 +395,46 @@ function ExerciseDetail({
                 Grade: <strong>{exercise.latest_submission.grade}</strong>
               </Typography>
             )}
+            {exercise.latest_submission.correction_url && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary">Teacher Correction:</Typography>
+                <Box
+                  component="img"
+                  src={exercise.latest_submission.correction_url}
+                  alt="Teacher correction"
+                  sx={{ width: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 1, mt: 0.5 }}
+                />
+              </Box>
+            )}
           </Paper>
         )}
 
-        {/* Action buttons */}
-        <Box sx={{ display: 'flex', gap: 1.5, mt: 2 }}>
-          <Button
-            variant="outlined"
-            fullWidth
-            onClick={onClose}
-            sx={{ textTransform: 'none', minHeight: 48 }}
-          >
-            Close
-          </Button>
-          {(!exercise.latest_submission ||
-            exercise.latest_submission.status === 'redo' ||
-            exercise.latest_submission.status === 'graded') && (
-            <Button
-              variant="contained"
-              fullWidth
-              sx={{ textTransform: 'none', minHeight: 48 }}
-              onClick={() => {
-                // TODO: Implement upload flow (Phase 2C - camera/file picker → OneDrive)
-                alert('Upload coming soon — OneDrive integration pending');
-              }}
-            >
-              {exercise.latest_submission ? 'Resubmit' : 'Submit Drawing'}
-            </Button>
-          )}
-        </Box>
+        {/* Upload or close */}
+        {canSubmit ? (
+          <Box sx={{ mb: 1 }}>
+            <SubmissionUpload
+              exerciseId={exercise.id}
+              getToken={getToken}
+              onSubmitted={onSubmitted}
+              label={exercise.latest_submission ? 'Resubmit Drawing' : 'Submit Drawing'}
+            />
+          </Box>
+        ) : (
+          exercise.latest_submission?.status === 'pending' && (
+            <Typography variant="body2" color="info.main" sx={{ textAlign: 'center', mb: 1 }}>
+              Your submission is being reviewed by the teacher.
+            </Typography>
+          )
+        )}
+
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={onClose}
+          sx={{ textTransform: 'none', minHeight: 48 }}
+        >
+          Close
+        </Button>
       </Paper>
     </Box>
   );

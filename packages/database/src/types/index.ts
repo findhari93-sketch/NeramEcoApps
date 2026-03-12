@@ -1955,6 +1955,81 @@ export interface MarketingContent extends Timestamps {
 export type CreateMarketingContentInput = Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'>;
 
 // ============================================
+// CAREERS / JOB POSTINGS
+// ============================================
+
+export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'internship';
+export type JobTargetAudience = 'college_students' | 'experienced' | 'any';
+export type JobPostingStatus = 'draft' | 'published' | 'closed' | 'archived';
+export type JobApplicationStatus = 'new' | 'reviewing' | 'shortlisted' | 'interview' | 'offered' | 'rejected' | 'withdrawn';
+export type ScreeningQuestionType = 'text' | 'number' | 'select' | 'multi_select' | 'boolean';
+
+export interface ScreeningQuestion {
+  id: string;
+  question: string;
+  type: ScreeningQuestionType;
+  required: boolean;
+  options?: string[];
+  placeholder?: string;
+}
+
+export interface ContractTerms {
+  min_duration_months?: number;
+  probation_period_months?: number;
+  early_termination_note?: string;
+  remuneration_note?: string;
+  additional_terms?: string[];
+}
+
+export interface JobPosting extends Timestamps {
+  id: string;
+  title: string;
+  slug: string;
+  department: string;
+  description: string;
+  skills_required: string[];
+  employment_type: EmploymentType;
+  target_audience: JobTargetAudience;
+  schedule_details: string | null;
+  location: string;
+  experience_required: string | null;
+  screening_questions: ScreeningQuestion[];
+  contract_terms: ContractTerms;
+  status: JobPostingStatus;
+  display_priority: number;
+  published_at: string | null;
+  closed_at: string | null;
+  created_by: string | null;
+}
+
+export interface ScreeningAnswer {
+  question_id: string;
+  answer: string | number | boolean | string[];
+}
+
+export interface JobApplication extends Timestamps {
+  id: string;
+  job_posting_id: string;
+  applicant_name: string;
+  applicant_email: string;
+  applicant_phone: string;
+  resume_url: string | null;
+  portfolio_url: string | null;
+  screening_answers: ScreeningAnswer[];
+  terms_agreed: boolean;
+  terms_agreed_at: string | null;
+  status: JobApplicationStatus;
+  admin_notes: string | null;
+}
+
+export interface JobApplicationWithJob extends JobApplication {
+  job_posting: Pick<JobPosting, 'id' | 'title' | 'slug' | 'department'>;
+}
+
+export type CreateJobPostingInput = Omit<JobPosting, 'id' | 'created_at' | 'updated_at'>;
+export type CreateJobApplicationInput = Omit<JobApplication, 'id' | 'created_at' | 'updated_at' | 'status' | 'admin_notes'>;
+
+// ============================================
 // NOTIFICATIONS & EMAILS
 // ============================================
 
@@ -3548,6 +3623,16 @@ interface _LegacyDatabase {
         Row: MarketingContent;
         Insert: Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<MarketingContent, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      job_postings: {
+        Row: JobPosting;
+        Insert: Omit<JobPosting, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<JobPosting, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      job_applications: {
+        Row: JobApplication;
+        Insert: Omit<JobApplication, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<JobApplication, 'id' | 'created_at' | 'updated_at'>>;
       };
       // Question sharing tables (migration 20260301)
       question_posts: {

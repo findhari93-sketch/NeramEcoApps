@@ -2639,6 +2639,134 @@ export type Database = {
           },
         ]
       }
+      job_applications: {
+        Row: {
+          admin_notes: string | null
+          applicant_email: string
+          applicant_name: string
+          applicant_phone: string
+          created_at: string
+          id: string
+          job_posting_id: string
+          portfolio_url: string | null
+          resume_url: string | null
+          screening_answers: Json
+          status: string
+          terms_agreed: boolean
+          terms_agreed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          applicant_email: string
+          applicant_name: string
+          applicant_phone: string
+          created_at?: string
+          id?: string
+          job_posting_id: string
+          portfolio_url?: string | null
+          resume_url?: string | null
+          screening_answers?: Json
+          status?: string
+          terms_agreed?: boolean
+          terms_agreed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          applicant_email?: string
+          applicant_name?: string
+          applicant_phone?: string
+          created_at?: string
+          id?: string
+          job_posting_id?: string
+          portfolio_url?: string | null
+          resume_url?: string | null
+          screening_answers?: Json
+          status?: string
+          terms_agreed?: boolean
+          terms_agreed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_applications_job_posting_id_fkey"
+            columns: ["job_posting_id"]
+            isOneToOne: false
+            referencedRelation: "job_postings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_postings: {
+        Row: {
+          closed_at: string | null
+          contract_terms: Json
+          created_at: string
+          created_by: string | null
+          department: string
+          description: string
+          display_priority: number
+          employment_type: string
+          experience_required: string | null
+          id: string
+          location: string
+          published_at: string | null
+          schedule_details: string | null
+          screening_questions: Json
+          skills_required: Json
+          slug: string
+          status: string
+          target_audience: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          contract_terms?: Json
+          created_at?: string
+          created_by?: string | null
+          department: string
+          description: string
+          display_priority?: number
+          employment_type?: string
+          experience_required?: string | null
+          id?: string
+          location: string
+          published_at?: string | null
+          schedule_details?: string | null
+          screening_questions?: Json
+          skills_required?: Json
+          slug: string
+          status?: string
+          target_audience?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          contract_terms?: Json
+          created_at?: string
+          created_by?: string | null
+          department?: string
+          description?: string
+          display_priority?: number
+          employment_type?: string
+          experience_required?: string | null
+          id?: string
+          location?: string
+          published_at?: string | null
+          schedule_details?: string | null
+          screening_questions?: Json
+          skills_required?: Json
+          slug?: string
+          status?: string
+          target_audience?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       lead_profiles: {
         Row: {
           academic_data: Json | null
@@ -3890,6 +4018,78 @@ export type Database = {
           },
         ]
       }
+      nexus_parent_invite_codes: {
+        Row: {
+          classroom_id: string
+          created_at: string | null
+          created_by: string | null
+          expires_at: string
+          id: string
+          invite_code: string
+          is_active: boolean | null
+          student_id: string
+          used_at: string | null
+        }
+        Insert: {
+          classroom_id: string
+          created_at?: string | null
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          invite_code: string
+          is_active?: boolean | null
+          student_id: string
+          used_at?: string | null
+        }
+        Update: {
+          classroom_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          invite_code?: string
+          is_active?: boolean | null
+          student_id?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_parent_invite_codes_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_parent_invite_codes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_parent_invite_codes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_parent_invite_codes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_parent_invite_codes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_parent_links: {
         Row: {
           created_at: string | null
@@ -3948,6 +4148,80 @@ export type Database = {
             columns: ["student_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_resources: {
+        Row: {
+          classroom_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          resource_type: string
+          sort_order: number | null
+          thumbnail_url: string | null
+          title: string
+          topic_id: string | null
+          url: string
+        }
+        Insert: {
+          classroom_id: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          resource_type: string
+          sort_order?: number | null
+          thumbnail_url?: string | null
+          title: string
+          topic_id?: string | null
+          url: string
+        }
+        Update: {
+          classroom_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          resource_type?: string
+          sort_order?: number | null
+          thumbnail_url?: string | null
+          title?: string
+          topic_id?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_resources_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_resources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_resources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_resources_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_topics"
             referencedColumns: ["id"]
           },
         ]
@@ -4084,6 +4358,87 @@ export type Database = {
           {
             foreignKeyName: "nexus_student_checklist_progress_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_student_documents: {
+        Row: {
+          category: string
+          classroom_id: string
+          file_type: string | null
+          file_url: string
+          id: string
+          notes: string | null
+          status: string | null
+          student_id: string
+          title: string
+          uploaded_at: string | null
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          category: string
+          classroom_id: string
+          file_type?: string | null
+          file_url: string
+          id?: string
+          notes?: string | null
+          status?: string | null
+          student_id: string
+          title: string
+          uploaded_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          category?: string
+          classroom_id?: string
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          notes?: string | null
+          status?: string | null
+          student_id?: string
+          title?: string
+          uploaded_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_student_documents_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_verified_by_fkey"
+            columns: ["verified_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]

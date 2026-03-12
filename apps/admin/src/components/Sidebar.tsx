@@ -40,6 +40,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import GavelIcon from '@mui/icons-material/Gavel';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import WorkIcon from '@mui/icons-material/Work';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -59,6 +60,7 @@ const menuItems = [
   { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
   { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
   { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
+  { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' as any },
   { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
   { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
   { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
@@ -76,7 +78,9 @@ export default function Sidebar() {
   const { user, signOut } = useMicrosoftAuth();
   const { collapsed, toggleSidebar, sidebarWidth } = useSidebar();
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [careersNewCount, setCareersNewCount] = useState(0);
   const messageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const careersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMessageUnreadCount = useCallback(async () => {
     try {
@@ -90,15 +94,32 @@ export default function Sidebar() {
     }
   }, []);
 
+  const fetchCareersNewCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/careers/applications/count');
+      if (res.ok) {
+        const data = await res.json();
+        setCareersNewCount(data.count || 0);
+      }
+    } catch {
+      // Silently fail for badge count
+    }
+  }, []);
+
   useEffect(() => {
     fetchMessageUnreadCount();
+    fetchCareersNewCount();
     messageIntervalRef.current = setInterval(fetchMessageUnreadCount, 60000);
+    careersIntervalRef.current = setInterval(fetchCareersNewCount, 60000);
     return () => {
       if (messageIntervalRef.current) {
         clearInterval(messageIntervalRef.current);
       }
+      if (careersIntervalRef.current) {
+        clearInterval(careersIntervalRef.current);
+      }
     };
-  }, [fetchMessageUnreadCount]);
+  }, [fetchMessageUnreadCount, fetchCareersNewCount]);
 
   const handleLogout = async () => {
     await signOut();
@@ -205,8 +226,12 @@ export default function Sidebar() {
                   justifyContent: 'center',
                 }}
               >
-                {item.hasBadge && messageUnreadCount > 0 ? (
+                {item.hasBadge === true && messageUnreadCount > 0 ? (
                   <Badge badgeContent={messageUnreadCount} color="error" max={99}>
+                    <Icon sx={{ fontSize: 16 }} />
+                  </Badge>
+                ) : (item.hasBadge as any) === 'careers' && careersNewCount > 0 ? (
+                  <Badge badgeContent={careersNewCount} color="error" max={99}>
                     <Icon sx={{ fontSize: 16 }} />
                   </Badge>
                 ) : (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -10,107 +10,18 @@ import {
   CardContent,
   Button,
   Chip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
+  Skeleton,
 } from '@neram/ui';
 import Link from 'next/link';
-
-const openPositions = [
-  {
-    title: 'NATA/JEE Faculty - Mathematics',
-    department: 'Academics',
-    location: 'Chennai / Remote',
-    type: 'Full-time',
-    experience: '3+ years',
-    description: 'Looking for experienced mathematics faculty to teach aptitude and mathematics for NATA/JEE Paper 2 aspirants.',
-    requirements: [
-      'B.Tech/M.Tech or M.Sc in Mathematics',
-      'Experience in coaching for entrance exams',
-      'Strong communication skills',
-      'Ability to simplify complex concepts',
-    ],
-  },
-  {
-    title: 'Drawing & Sketching Instructor',
-    department: 'Academics',
-    location: 'Chennai',
-    type: 'Full-time',
-    experience: '2+ years',
-    description: 'Seeking creative drawing instructors to train students in architectural sketching and perspective drawing.',
-    requirements: [
-      'B.Arch or Fine Arts degree',
-      'Portfolio of architectural sketches',
-      'Teaching experience preferred',
-      'Patient and encouraging approach',
-    ],
-  },
-  {
-    title: 'Academic Counselor',
-    department: 'Student Success',
-    location: 'Chennai / Coimbatore',
-    type: 'Full-time',
-    experience: '1+ years',
-    description: 'Guide students and parents through the admission process, course selection, and career planning.',
-    requirements: [
-      "Bachelor's degree in any field",
-      'Excellent communication skills',
-      'Knowledge of architecture entrance exams',
-      'Empathetic and patient demeanor',
-    ],
-  },
-  {
-    title: 'Content Developer - Architecture',
-    department: 'Content',
-    location: 'Remote',
-    type: 'Full-time / Contract',
-    experience: '2+ years',
-    description: 'Create engaging study materials, practice questions, and video content for architecture entrance preparation.',
-    requirements: [
-      'B.Arch degree preferred',
-      'Excellent writing skills',
-      'Experience in content creation',
-      'Familiarity with exam patterns',
-    ],
-  },
-  {
-    title: 'Full Stack Developer',
-    department: 'Technology',
-    location: 'Chennai / Remote',
-    type: 'Full-time',
-    experience: '2+ years',
-    description: 'Build and maintain our learning management system, student portal, and internal tools.',
-    requirements: [
-      'Experience with React, Next.js, Node.js',
-      'Database design skills',
-      'API development experience',
-      'Understanding of EdTech platforms',
-    ],
-  },
-  {
-    title: 'Marketing Executive',
-    department: 'Marketing',
-    location: 'Chennai',
-    type: 'Full-time',
-    experience: '1+ years',
-    description: 'Drive student enrollments through digital marketing, events, and partnerships.',
-    requirements: [
-      "Bachelor's degree in Marketing or related field",
-      'Digital marketing experience',
-      'Social media management skills',
-      'Creative thinking ability',
-    ],
-  },
-];
+import type { JobPosting, EmploymentType } from '@neram/database';
 
 const benefits = [
-  { icon: '💰', title: 'Competitive Salary', desc: 'Industry-leading compensation packages' },
-  { icon: '🏥', title: 'Health Insurance', desc: 'Comprehensive health coverage for you and family' },
-  { icon: '📚', title: 'Learning Budget', desc: 'Annual allowance for courses and certifications' },
-  { icon: '🏠', title: 'Flexible Work', desc: 'Work from home options available' },
-  { icon: '🎯', title: 'Growth Path', desc: 'Clear career progression opportunities' },
-  { icon: '🎉', title: 'Team Events', desc: 'Regular team outings and celebrations' },
+  { icon: '\uD83D\uDCB0', title: 'Competitive Salary', desc: 'Industry-leading compensation packages' },
+  { icon: '\uD83C\uDFE5', title: 'Health Insurance', desc: 'Comprehensive health coverage for you and family' },
+  { icon: '\uD83D\uDCDA', title: 'Learning Budget', desc: 'Annual allowance for courses and certifications' },
+  { icon: '\uD83C\uDFE0', title: 'Flexible Work', desc: 'Work from home options available' },
+  { icon: '\uD83C\uDFAF', title: 'Growth Path', desc: 'Clear career progression opportunities' },
+  { icon: '\uD83C\uDF89', title: 'Team Events', desc: 'Regular team outings and celebrations' },
 ];
 
 const values = [
@@ -120,7 +31,72 @@ const values = [
   { title: 'Collaboration', desc: 'We work together as a team, supporting each other to achieve common goals.' },
 ];
 
+type FilterType = 'all' | EmploymentType;
+
+const filterLabels: Record<FilterType, string> = {
+  all: 'All',
+  full_time: 'Full-time',
+  part_time: 'Part-time',
+  contract: 'Contract',
+  internship: 'Internship',
+};
+
+function employmentTypeLabel(type: EmploymentType): string {
+  return filterLabels[type] || type;
+}
+
+function JobCardSkeleton() {
+  return (
+    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <CardContent sx={{ flexGrow: 1, p: { xs: 3, md: 4 } }}>
+        <Skeleton variant="text" width="70%" height={32} sx={{ mb: 1 }} />
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+          <Skeleton variant="rounded" width={80} height={24} />
+          <Skeleton variant="rounded" width={100} height={24} />
+          <Skeleton variant="rounded" width={70} height={24} />
+        </Box>
+        <Skeleton variant="text" width="100%" />
+        <Skeleton variant="text" width="90%" />
+        <Skeleton variant="text" width="60%" sx={{ mb: 2 }} />
+        <Skeleton variant="rounded" width="100%" height={40} />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CareersPageContent() {
+  const [jobs, setJobs] = useState<JobPosting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterType>('all');
+
+  useEffect(() => {
+    async function fetchJobs() {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/careers');
+        const json = await res.json();
+        if (json.success) {
+          setJobs(json.data);
+        } else {
+          setError(json.error || 'Failed to load jobs');
+        }
+      } catch {
+        setError('Failed to load job postings');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchJobs();
+  }, []);
+
+  const filteredJobs = filter === 'all'
+    ? jobs
+    : jobs.filter((job) => job.employment_type === filter);
+
+  // Determine which filter types actually have jobs
+  const availableTypes = new Set(jobs.map((j) => j.employment_type));
+
   return (
     <Box>
       {/* Hero Section */}
@@ -139,7 +115,7 @@ export default function CareersPageContent() {
               </Typography>
               <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
                 Join Neram Classes and help thousands of students achieve their dream of becoming architects.
-                We're building the best team in education.
+                We&apos;re building the best team in education.
               </Typography>
               <Button
                 variant="contained"
@@ -217,59 +193,126 @@ export default function CareersPageContent() {
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
             Open Positions
           </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
+          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 4 }}>
             Find your next opportunity
           </Typography>
 
-          <Grid container spacing={4}>
-            {openPositions.map((position, index) => (
-              <Grid item xs={12} md={6} key={index}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flexGrow: 1, p: 4 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                      <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                        {position.title}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                      <Chip label={position.department} size="small" color="secondary" />
-                      <Chip label={position.location} size="small" variant="outlined" />
-                      <Chip label={position.type} size="small" variant="outlined" />
-                      <Chip label={position.experience} size="small" variant="outlined" />
-                    </Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      {position.description}
-                    </Typography>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                      Requirements:
-                    </Typography>
-                    <List dense>
-                      {position.requirements.map((req, idx) => (
-                        <ListItem key={idx} sx={{ py: 0.25, px: 0 }}>
-                          <ListItemIcon sx={{ minWidth: 24 }}>
-                            <Typography variant="body2">•</Typography>
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={req}
-                            primaryTypographyProps={{ variant: 'body2' }}
+          {/* Filter Chips */}
+          {!loading && jobs.length > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap', mb: 4 }}>
+              <Chip
+                label="All"
+                color={filter === 'all' ? 'secondary' : 'default'}
+                variant={filter === 'all' ? 'filled' : 'outlined'}
+                onClick={() => setFilter('all')}
+                sx={{ minHeight: 40, cursor: 'pointer' }}
+              />
+              {(['full_time', 'part_time', 'contract', 'internship'] as EmploymentType[]).map((type) =>
+                availableTypes.has(type) ? (
+                  <Chip
+                    key={type}
+                    label={filterLabels[type]}
+                    color={filter === type ? 'secondary' : 'default'}
+                    variant={filter === type ? 'filled' : 'outlined'}
+                    onClick={() => setFilter(type)}
+                    sx={{ minHeight: 40, cursor: 'pointer' }}
+                  />
+                ) : null
+              )}
+            </Box>
+          )}
+
+          {/* Loading Skeletons */}
+          {loading && (
+            <Grid container spacing={4}>
+              {[1, 2, 3, 4].map((i) => (
+                <Grid item xs={12} md={6} key={i}>
+                  <JobCardSkeleton />
+                </Grid>
+              ))}
+            </Grid>
+          )}
+
+          {/* Error */}
+          {!loading && error && (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
+              <Button variant="outlined" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            </Box>
+          )}
+
+          {/* No Jobs */}
+          {!loading && !error && filteredJobs.length === 0 && (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                {filter !== 'all'
+                  ? `No ${filterLabels[filter].toLowerCase()} positions available at the moment.`
+                  : 'No open positions at the moment.'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Send your resume to careers@neramclasses.com and we&apos;ll keep you in mind for future opportunities.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Job Cards */}
+          {!loading && !error && filteredJobs.length > 0 && (
+            <Grid container spacing={4}>
+              {filteredJobs.map((job) => (
+                <Grid item xs={12} md={6} key={job.id}>
+                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 6 } }}>
+                    <CardContent sx={{ flexGrow: 1, p: { xs: 3, md: 4 } }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                          {job.title}
+                        </Typography>
+                      </Box>
+
+                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                        <Chip label={job.department} size="small" color="secondary" />
+                        <Chip label={job.location} size="small" variant="outlined" />
+                        <Chip label={employmentTypeLabel(job.employment_type)} size="small" variant="outlined" />
+                        {job.experience_required && (
+                          <Chip label={job.experience_required} size="small" variant="outlined" />
+                        )}
+                        {job.target_audience === 'college_students' && (
+                          <Chip
+                            label="Ideal for College Students"
+                            size="small"
+                            sx={{
+                              bgcolor: '#fff3e0',
+                              color: '#e65100',
+                              fontWeight: 600,
+                              border: '1px solid #ffcc80',
+                            }}
                           />
-                        </ListItem>
-                      ))}
-                    </List>
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      fullWidth
-                      sx={{ mt: 2 }}
-                      href={`mailto:careers@neramclasses.com?subject=Application for ${position.title}`}
-                    >
-                      Apply Now
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                        )}
+                      </Box>
+
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {job.description.length > 150
+                          ? `${job.description.substring(0, 150)}...`
+                          : job.description}
+                      </Typography>
+
+                      <Button
+                        component={Link}
+                        href={`/careers/${job.slug}`}
+                        variant="outlined"
+                        color="secondary"
+                        fullWidth
+                        sx={{ mt: 'auto', minHeight: 48 }}
+                      >
+                        View Details & Apply
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
         </Container>
       </Box>
 
@@ -284,10 +327,10 @@ export default function CareersPageContent() {
       >
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Don't See a Perfect Fit?
+            Don&apos;t See a Perfect Fit?
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            We're always looking for talented individuals. Send us your resume and we'll keep you in mind for future opportunities.
+            We&apos;re always looking for talented individuals. Send us your resume and we&apos;ll keep you in mind for future opportunities.
           </Typography>
           <Button
             variant="contained"

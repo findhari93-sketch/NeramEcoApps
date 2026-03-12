@@ -42,3 +42,4 @@ export * from './counseling-admin';
 export * from './coa';
 export * from './diagnostics';
 export * from './nexus';
+export * from './careers';

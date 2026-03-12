@@ -17,8 +17,9 @@ import {
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import GradeOutlinedIcon from '@mui/icons-material/GradeOutlined';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import CreateOutlinedIcon from '@mui/icons-material/CreateOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import SketchpadOverlay from '@/components/SketchpadOverlay';
 
 interface SubmissionForReview {
   id: string;
@@ -55,6 +56,8 @@ export default function TeacherEvaluate() {
   const [evalStatus, setEvalStatus] = useState<'approved' | 'redo' | 'graded'>('approved');
   const [grade, setGrade] = useState('');
   const [notes, setNotes] = useState('');
+  const [showSketchpad, setShowSketchpad] = useState(false);
+  const [correctionUrl, setCorrectionUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeClassroom) return;
@@ -100,16 +103,17 @@ export default function TeacherEvaluate() {
           status: evalStatus,
           grade: evalStatus === 'graded' ? grade : undefined,
           teacher_notes: notes || undefined,
+          correction_url: correctionUrl || undefined,
         }),
       });
 
       if (res.ok) {
-        // Remove from list and reset
         setSubmissions((prev) => prev.filter((s) => s.id !== selected.id));
         setSelected(null);
         setGrade('');
         setNotes('');
         setEvalStatus('approved');
+        setCorrectionUrl(null);
       }
     } catch (err) {
       console.error('Failed to evaluate:', err);
@@ -117,6 +121,33 @@ export default function TeacherEvaluate() {
       setEvaluating(false);
     }
   }
+
+  const handleSketchpadSave = async (dataUrl: string) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const blob = await fetch(dataUrl).then((r) => r.blob());
+      const file = new File([blob], `correction-${Date.now()}.png`, { type: 'image/png' });
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('exercise_id', selected?.exercise?.id || 'correction');
+
+      const res = await fetch('/api/drawings/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setCorrectionUrl(data.url);
+      }
+    } catch (err) {
+      console.error('Failed to upload correction:', err);
+    }
+    setShowSketchpad(false);
+  };
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -156,6 +187,7 @@ export default function TeacherEvaluate() {
                 setGrade('');
                 setNotes('');
                 setEvalStatus('approved');
+                setCorrectionUrl(null);
               }}
               sx={{
                 p: 2,
@@ -191,8 +223,8 @@ export default function TeacherEvaluate() {
         </Box>
       )}
 
-      {/* Evaluation Panel (bottom sheet) */}
-      {selected && (
+      {/* Evaluation Panel */}
+      {selected && !showSketchpad && (
         <Box
           sx={{
             position: 'fixed',
@@ -216,25 +248,31 @@ export default function TeacherEvaluate() {
               p: { xs: 2, sm: 3 },
             }}
           >
-            {/* Handle */}
             <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
               <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
             </Box>
 
-            {/* Student info */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Avatar src={selected.student.avatar_url || undefined} sx={{ width: 36, height: 36 }}>
                 {selected.student.name?.charAt(0)}
               </Avatar>
-              <Box>
+              <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" fontWeight={600}>{selected.student.name}</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {selected.exercise.category?.level?.title} &gt; {selected.exercise.category?.title} &gt; {selected.exercise.title}
                 </Typography>
               </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<CreateOutlinedIcon />}
+                onClick={() => setShowSketchpad(true)}
+                sx={{ textTransform: 'none', minHeight: 36 }}
+              >
+                Draw
+              </Button>
             </Box>
 
-            {/* Submission image */}
             <Box
               component="img"
               src={selected.submission_url}
@@ -247,13 +285,26 @@ export default function TeacherEvaluate() {
                 border: '1px solid',
                 borderColor: 'divider',
                 bgcolor: 'grey.50',
-                mb: 2,
+                mb: 1,
               }}
             />
 
-            <Divider sx={{ mb: 2 }} />
+            {correctionUrl && (
+              <Paper variant="outlined" sx={{ p: 1, mb: 1 }}>
+                <Typography variant="caption" color="success.main" fontWeight={600}>
+                  Correction added
+                </Typography>
+                <Box
+                  component="img"
+                  src={correctionUrl}
+                  alt="Correction"
+                  sx={{ width: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 1, mt: 0.5 }}
+                />
+              </Paper>
+            )}
 
-            {/* Evaluation controls */}
+            <Divider sx={{ my: 1.5 }} />
+
             <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
               Decision
             </Typography>
@@ -321,6 +372,15 @@ export default function TeacherEvaluate() {
             </Box>
           </Paper>
         </Box>
+      )}
+
+      {/* Sketchpad Overlay */}
+      {showSketchpad && selected && (
+        <SketchpadOverlay
+          imageUrl={selected.submission_url}
+          onSave={handleSketchpadSave}
+          onClose={() => setShowSketchpad(false)}
+        />
       )}
     </Box>
   );
