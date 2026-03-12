@@ -24,7 +24,7 @@ export async function generateMetadata({
       description:
         'Learn about Neram Classes, founded in 2020. Expert IIT/NIT alumni faculty providing NATA & JEE Paper 2 coaching across India.',
       type: 'website',
-      url: `${baseUrl}/${locale}/about`,
+      url: locale === 'en' ? `${baseUrl}/about` : `${baseUrl}/${locale}/about`,
     },
   };
 }

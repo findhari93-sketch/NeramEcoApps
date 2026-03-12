@@ -66,6 +66,17 @@ const STATUS_PRIORITY: Record<string, number> = {
 };
 
 /**
+ * Force a re-fetch of application status (e.g., after enrollment completion).
+ * Clears the cache and dispatches a custom event to notify the hook.
+ */
+export function invalidateApplicationStatus() {
+  clearCachedStatus();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('neram:status-invalidated'));
+  }
+}
+
+/**
  * Hook that returns the highest-priority application status for the current user.
  * Used by the Header to show context-aware CTA buttons.
  */
@@ -77,6 +88,17 @@ export function useApplicationStatus(): {
   const [status, setStatus] = useState<AppStatusSummary>(null);
   const [loading, setLoading] = useState(true);
   const fetchedForUid = useRef<string | null>(null);
+  const [invalidated, setInvalidated] = useState(0);
+
+  // Listen for invalidation events (e.g., after enrollment)
+  useEffect(() => {
+    const handler = () => {
+      fetchedForUid.current = null;
+      setInvalidated((n) => n + 1);
+    };
+    window.addEventListener('neram:status-invalidated', handler);
+    return () => window.removeEventListener('neram:status-invalidated', handler);
+  }, []);
 
   useEffect(() => {
     // Not authenticated — no status
@@ -151,7 +173,7 @@ export function useApplicationStatus(): {
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading]);
+  }, [user, authLoading, invalidated]);
 
   return { status, loading };
 }

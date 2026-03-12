@@ -24,7 +24,7 @@ export async function generateMetadata({
       description:
         'Our proven NATA coaching methodology with IIT/NIT faculty, personalized study plans, and weekly mock tests.',
       type: 'website',
-      url: `${baseUrl}/${locale}/coaching`,
+      url: locale === 'en' ? `${baseUrl}/coaching` : `${baseUrl}/${locale}/coaching`,
     },
   };
 }

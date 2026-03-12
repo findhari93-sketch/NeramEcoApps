@@ -93,11 +93,12 @@ const faqs = [
 export default function ExamCentersPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
   const baseUrl = 'https://neramclasses.com';
+  const localeUrl = (path: string) => locale === 'en' ? `${baseUrl}${path}` : `${baseUrl}/${locale}${path}`;
   const sortedStates = Object.keys(examCenters).sort();
 
   return (
     <>
-      <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: baseUrl }, { name: 'NATA 2026', url: `${baseUrl}/${locale}/nata-2026` }, { name: 'Exam Centers' }])} />
+      <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Exam Centers' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
       <Box>

@@ -26,6 +26,7 @@ import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutlin
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
+import { invalidateApplicationStatus } from '@/hooks/useApplicationStatus';
 import PersonalDetailsStep from './PersonalDetailsStep';
 import AcademicDetailsStep from './AcademicDetailsStep';
 import ReviewStep from './ReviewStep';
@@ -292,6 +293,9 @@ export default function EnrollWizard() {
 
       // Clear saved progress on success
       clearProgress();
+
+      // Invalidate application status so Header re-fetches and shows "Go to App"
+      invalidateApplicationStatus();
 
       setApplicationNumber(data.data.applicationNumber);
       setCurrentStep(3); // Success

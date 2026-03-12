@@ -12,7 +12,7 @@ export async function generateMetadata({ params: { locale } }: { params: { local
     description: 'Book a free NATA demo class with our IIT/NIT alumni faculty. Experience our teaching methodology, interactive sessions, and personalized feedback before enrolling.',
     keywords: 'free NATA demo class, NATA trial class, free architecture coaching demo, try NATA coaching free',
     alternates: {
-      canonical: `${baseUrl}/${locale}/demo-class`,
+      canonical: locale === 'en' ? `${baseUrl}/demo-class` : `${baseUrl}/${locale}/demo-class`,
     },
   };
 }

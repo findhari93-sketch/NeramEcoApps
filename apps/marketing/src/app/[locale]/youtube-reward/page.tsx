@@ -23,7 +23,7 @@ export async function generateMetadata({
       title: 'YouTube Subscription Reward - Get Discount on NATA Coaching',
       description:
         'Subscribe to Neram Classes YouTube channel and get exclusive discounts on NATA coaching.',
-      url: `${baseUrl}/${locale}/youtube-reward`,
+      url: locale === 'en' ? `${baseUrl}/youtube-reward` : `${baseUrl}/${locale}/youtube-reward`,
       type: 'website',
     },
   };

@@ -102,6 +102,7 @@ export default function HowToApplyPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
   const baseUrl = 'https://neramclasses.com';
+  const localeUrl = (path: string) => locale === 'en' ? `${baseUrl}${path}` : `${baseUrl}/${locale}${path}`;
 
   const howToSchema = {
     '@context': 'https://schema.org',
@@ -123,8 +124,8 @@ export default function HowToApplyPage({ params: { locale } }: PageProps) {
       <JsonLd data={howToSchema} />
       <JsonLd
         data={generateBreadcrumbSchema([
-          { name: 'Home', url: baseUrl },
-          { name: 'NATA 2026', url: `${baseUrl}/${locale}/nata-2026` },
+          { name: 'Home', url: localeUrl('') },
+          { name: 'NATA 2026', url: localeUrl('/nata-2026') },
           { name: 'How to Apply' },
         ])}
       />

@@ -83,7 +83,7 @@ export async function generateMetadata({
       title,
       description,
       type: 'website',
-      url: `${baseUrl}/${locale}/contact/${slug}`,
+      url: locale === 'en' ? `${baseUrl}/contact/${slug}` : `${baseUrl}/${locale}/contact/${slug}`,
     },
   };
 }
@@ -190,12 +190,13 @@ export default async function CenterDetailPage({
   const cityDisplay = center.city;
   const nearbyCities = center.nearby_cities || [];
   const faqs = buildCenterFAQs(center);
+  const localeUrl = (path: string) => locale === 'en' ? `${baseUrl}${path}` : `${baseUrl}/${locale}${path}`;
 
   // ─── JSON-LD Schemas ────────────────────────────────────────────────────
 
   const centerSchema = generateCenterLocalBusinessSchema({
     name: center.name,
-    url: `${baseUrl}/${locale}/contact/${slug}`,
+    url: localeUrl(`/contact/${slug}`),
     phone: center.contact_phone || undefined,
     email: center.contact_email || undefined,
     address: center.address,
@@ -216,13 +217,13 @@ export default async function CenterDetailPage({
   const courseSchema = generateCourseSchema({
     name: `NATA Coaching in ${cityDisplay}`,
     description: `Comprehensive NATA and JEE Paper 2 preparation course at Neram Classes ${cityDisplay}. Expert IIT/NIT alumni faculty, study materials, and mock tests included.`,
-    url: `${baseUrl}/${locale}/contact/${slug}`,
+    url: localeUrl(`/contact/${slug}`),
     modes: ['online', 'onsite'],
   });
 
   const breadcrumbSchema = generateBreadcrumbSchema([
-    { name: 'Home', url: `${baseUrl}/${locale}` },
-    { name: 'Contact', url: `${baseUrl}/${locale}/contact` },
+    { name: 'Home', url: locale === 'en' ? baseUrl : `${baseUrl}/${locale}` },
+    { name: 'Contact', url: localeUrl('/contact') },
     { name: center.name },
   ]);
 

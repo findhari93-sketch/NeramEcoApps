@@ -24,7 +24,7 @@ export async function generateMetadata({
       description:
         'Apply now for NATA and JEE Paper 2 coaching at Neram Classes. Scholarships available, flexible batch options.',
       type: 'website',
-      url: `${baseUrl}/${locale}/apply`,
+      url: locale === 'en' ? `${baseUrl}/apply` : `${baseUrl}/${locale}/apply`,
     },
   };
 }

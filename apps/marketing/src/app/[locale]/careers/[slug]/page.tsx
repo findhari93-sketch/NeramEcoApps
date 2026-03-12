@@ -70,13 +70,13 @@ export async function generateMetadata({
     title: `${job.title} - Careers at Neram Classes`,
     description,
     alternates: {
-      canonical: `${baseUrl}/${locale}/careers/${slug}`,
+      canonical: locale === 'en' ? `${baseUrl}/careers/${slug}` : `${baseUrl}/${locale}/careers/${slug}`,
     },
     openGraph: {
       title: `${job.title} - Careers at Neram Classes`,
       description,
       type: 'article',
-      url: `${baseUrl}/${locale}/careers/${slug}`,
+      url: locale === 'en' ? `${baseUrl}/careers/${slug}` : `${baseUrl}/${locale}/careers/${slug}`,
     },
   };
 }

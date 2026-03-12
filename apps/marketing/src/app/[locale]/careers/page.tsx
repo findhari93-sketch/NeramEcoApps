@@ -24,7 +24,7 @@ export async function generateMetadata({
       description:
         'Join Neram Classes as a faculty member, content creator, or counselor. Shape the future of architecture students.',
       type: 'website',
-      url: `${baseUrl}/${locale}/careers`,
+      url: locale === 'en' ? `${baseUrl}/careers` : `${baseUrl}/${locale}/careers`,
     },
   };
 }

@@ -17,7 +17,7 @@ export async function generateMetadata({
       'Your application to Neram Classes has been submitted successfully. Our team will contact you within 24 hours.',
     keywords: 'Neram Classes application status',
     alternates: {
-      canonical: `${baseUrl}/${locale}/apply/callback`,
+      canonical: locale === 'en' ? `${baseUrl}/apply/callback` : `${baseUrl}/${locale}/apply/callback`,
     },
     robots: {
       index: false,

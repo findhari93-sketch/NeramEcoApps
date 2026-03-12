@@ -24,7 +24,7 @@ export async function generateMetadata({
       description:
         'Get in touch with Neram Classes for NATA and JEE Paper 2 coaching enquiries. Free demo class available.',
       type: 'website',
-      url: `${baseUrl}/${locale}/contact`,
+      url: locale === 'en' ? `${baseUrl}/contact` : `${baseUrl}/${locale}/contact`,
     },
   };
 }

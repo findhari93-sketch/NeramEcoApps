@@ -26,7 +26,7 @@ export async function generateMetadata({
       title: 'NATA Cutoff Calculator 2026 - Check Your Score & College Chances',
       description:
         'Free NATA cutoff calculator. Enter your section scores to calculate total marks, percentile, and check admission chances at top architecture colleges.',
-      url: `${baseUrl}/${locale}/tools/cutoff-calculator`,
+      url: locale === 'en' ? `${baseUrl}/tools/cutoff-calculator` : `${baseUrl}/${locale}/tools/cutoff-calculator`,
       type: 'website',
     },
   };

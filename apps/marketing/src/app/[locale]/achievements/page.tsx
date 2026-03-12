@@ -10,7 +10,7 @@ export async function generateMetadata({ params: { locale } }: { params: { local
     description: 'Congratulations to our students who secured top ranks in NATA and JEE Paper 2 exams. View achievements by academic year.',
     keywords: 'NATA toppers, JEE Paper 2 results, architecture entrance toppers, Neram Classes achievements, student success',
     alternates: {
-      canonical: `${baseUrl}/${locale}/achievements`,
+      canonical: locale === 'en' ? `${baseUrl}/achievements` : `${baseUrl}/${locale}/achievements`,
     },
   };
 }

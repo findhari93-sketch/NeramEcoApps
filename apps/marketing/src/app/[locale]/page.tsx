@@ -18,7 +18,7 @@ export async function generateMetadata({
     keywords:
       'NATA coaching, best NATA coaching India, NATA preparation 2026, JEE Paper 2 coaching, architecture entrance exam, online NATA classes, NATA coaching Tamil Nadu, NATA coaching online, architecture entrance coaching India, NATA drawing classes, NATA mathematics coaching',
     alternates: {
-      canonical: `${baseUrl}/${locale}`,
+      canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
       languages: {
         en: `${baseUrl}/en`,
         ta: `${baseUrl}/ta`,
@@ -33,7 +33,7 @@ export async function generateMetadata({
       description:
         "India's top NATA coaching institute. IIT/NIT alumni faculty, online & offline classes. Join 5000+ successful students.",
       type: 'website',
-      url: `${baseUrl}/${locale}`,
+      url: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
     },
   };
 }

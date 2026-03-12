@@ -24,7 +24,7 @@ export async function generateMetadata({
       description:
         'Explore our comprehensive NATA coaching, JEE Paper 2, and Revit Architecture courses. Expert faculty, flexible programs.',
       type: 'website',
-      url: `${baseUrl}/${locale}/courses`,
+      url: locale === 'en' ? `${baseUrl}/courses` : `${baseUrl}/${locale}/courses`,
     },
   };
 }

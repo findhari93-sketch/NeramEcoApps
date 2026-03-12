@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     // 3. Create lead profile entry (for record-keeping)
     const applicationNumber = `NERAM-DE-${Date.now().toString(36).toUpperCase()}`;
 
-    const { data: leadProfile } = await supabase
+    const { data: leadProfile, error: leadProfileError } = await supabase
       .from('lead_profiles')
       .insert({
         user_id: auth.userId,
@@ -130,15 +130,15 @@ export async function POST(request: NextRequest) {
         pincode: pincode || null,
         address: address || null,
         // Academic
-        applicant_category: applicantCategory,
+        applicant_category: applicantCategory || null,
         academic_data: academicData || null,
         caste_category: casteCategory || null,
-        target_exam_year: targetExamYear || null,
+        target_exam_year: targetExamYear ? Number(targetExamYear) : null,
         school_type: schoolType || null,
         // Course (pre-filled from link)
         interest_course: link.interest_course,
-        selected_course_id: link.course_id,
-        selected_center_id: link.center_id,
+        selected_course_id: link.course_id || null,
+        selected_center_id: link.center_id || null,
         learning_mode: link.learning_mode,
         // Phone
         phone_verified: true,
@@ -156,6 +156,11 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
+
+    if (leadProfileError) {
+      console.error('[Direct Enrollment] Failed to create lead_profile:', leadProfileError.message, leadProfileError.details);
+      // Don't block enrollment — lead_profile is for record-keeping
+    }
 
     // 4. Create student profile
     const studentProfile = await createStudentProfile({

@@ -12,7 +12,7 @@ export async function generateMetadata({ params: { locale } }: { params: { local
     description: 'Find Neram Classes NATA coaching centers near you. Online and offline classes available across Tamil Nadu, Karnataka, Kerala, and major cities in India.',
     keywords: 'NATA coaching centers, NATA coaching near me, architecture coaching locations, Neram Classes branches',
     alternates: {
-      canonical: `${baseUrl}/${locale}/centers`,
+      canonical: locale === 'en' ? `${baseUrl}/centers` : `${baseUrl}/${locale}/centers`,
     },
   };
 }

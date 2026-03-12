@@ -88,7 +88,7 @@ export default function SuccessScreen({ applicationNumber }: SuccessScreenProps)
           variant="contained"
           size="large"
           fullWidth
-          href={APP_URL}
+          href={`${APP_URL}/login`}
           target="_blank"
           rel="noopener noreferrer"
           endIcon={<ArrowForward />}
@@ -104,7 +104,7 @@ export default function SuccessScreen({ applicationNumber }: SuccessScreenProps)
         </Button>
 
         <Typography variant="caption" color="text.secondary">
-          The app will guide you through a quick onboarding questionnaire to personalize your experience.
+          Sign in with the same Google account to access your student dashboard and complete onboarding.
         </Typography>
       </Box>
     </Container>

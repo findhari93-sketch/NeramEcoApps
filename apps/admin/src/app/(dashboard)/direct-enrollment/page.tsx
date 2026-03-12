@@ -188,7 +188,7 @@ export default function DirectEnrollmentPage() {
   const [error, setError] = useState('');
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);

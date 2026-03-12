@@ -35,7 +35,7 @@ export async function generateMetadata({
       description:
         'Real reviews from NATA & JEE Paper 2 students who achieved top ranks with Neram Classes coaching.',
       type: 'website',
-      url: `${baseUrl}/${locale}/testimonials`,
+      url: locale === 'en' ? `${baseUrl}/testimonials` : `${baseUrl}/${locale}/testimonials`,
     },
   };
 }

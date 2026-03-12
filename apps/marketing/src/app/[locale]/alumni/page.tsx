@@ -12,7 +12,7 @@ export async function generateMetadata({ params: { locale } }: { params: { local
     description: 'Meet our successful NATA toppers and alumni placed in top architecture colleges across India. Real success stories from IIT, NIT, SPA, and Anna University students.',
     keywords: 'NATA toppers, architecture college alumni, NATA success stories, Neram Classes results, architecture entrance results',
     alternates: {
-      canonical: `${baseUrl}/${locale}/alumni`,
+      canonical: locale === 'en' ? `${baseUrl}/alumni` : `${baseUrl}/${locale}/alumni`,
     },
   };
 }
