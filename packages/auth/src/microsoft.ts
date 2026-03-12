@@ -111,9 +111,21 @@ function clearInteractionState(): void {
     if (
       key.includes('msal.interaction.status') ||
       key.includes('.interaction_in_progress') ||
-      key.includes('msal.temp')
+      key.includes('msal.temp') ||
+      key.includes('msal.broker') ||
+      key.includes('-request.') ||
+      key.includes('.request.params') ||
+      key.includes('.request.origin')
     ) {
       localStorage.removeItem(key);
+    }
+  }
+
+  // Also clear sessionStorage interaction keys
+  const sessionKeys = Object.keys(sessionStorage);
+  for (const key of sessionKeys) {
+    if (key.includes('msal') && (key.includes('interaction') || key.includes('request') || key.includes('temp'))) {
+      sessionStorage.removeItem(key);
     }
   }
 }
@@ -242,7 +254,24 @@ export async function signInWithMicrosoft(
       throw error;
     }
   } else {
-    await msal.loginRedirect(request);
+    try {
+      await msal.loginRedirect(request);
+    } catch (error) {
+      // Handle interaction_in_progress: clear stuck state and retry once
+      if (
+        error instanceof BrowserAuthError &&
+        error.errorCode === BrowserAuthErrorCodes.interactionInProgress
+      ) {
+        console.warn('[MSAL] Redirect blocked by interaction_in_progress, clearing and retrying...');
+        clearInteractionState();
+        msalInstance = null;
+        msalInitialized = false;
+        const freshMsal = await initializeMsal();
+        await freshMsal.loginRedirect(request);
+      } else {
+        throw error;
+      }
+    }
     throw new MsalLoginError('redirect_fallback', 'Redirecting to Microsoft login...');
   }
 }
