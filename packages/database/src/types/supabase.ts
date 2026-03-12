@@ -4152,6 +4152,86 @@ export type Database = {
           },
         ]
       }
+      nexus_question_submissions: {
+        Row: {
+          classroom_id: string
+          correct_answer: string | null
+          created_at: string | null
+          difficulty: string | null
+          exam_date: string | null
+          exam_name: string
+          id: string
+          merged_into: string | null
+          options: Json | null
+          question_image_url: string | null
+          question_text: string
+          status: string | null
+          student_id: string
+          topic_id: string | null
+        }
+        Insert: {
+          classroom_id: string
+          correct_answer?: string | null
+          created_at?: string | null
+          difficulty?: string | null
+          exam_date?: string | null
+          exam_name: string
+          id?: string
+          merged_into?: string | null
+          options?: Json | null
+          question_image_url?: string | null
+          question_text: string
+          status?: string | null
+          student_id: string
+          topic_id?: string | null
+        }
+        Update: {
+          classroom_id?: string
+          correct_answer?: string | null
+          created_at?: string | null
+          difficulty?: string | null
+          exam_date?: string | null
+          exam_name?: string
+          id?: string
+          merged_into?: string | null
+          options?: Json | null
+          question_image_url?: string | null
+          question_text?: string
+          status?: string | null
+          student_id?: string
+          topic_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_question_submissions_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_question_submissions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_question_submissions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_question_submissions_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_resources: {
         Row: {
           classroom_id: string
@@ -4501,6 +4581,200 @@ export type Database = {
           },
         ]
       }
+      nexus_test_attempts: {
+        Row: {
+          answers: Json | null
+          created_at: string | null
+          id: string
+          percentage: number | null
+          score: number | null
+          started_at: string | null
+          status: string | null
+          student_id: string
+          submitted_at: string | null
+          test_id: string
+          time_spent_seconds: number | null
+          total_marks: number | null
+        }
+        Insert: {
+          answers?: Json | null
+          created_at?: string | null
+          id?: string
+          percentage?: number | null
+          score?: number | null
+          started_at?: string | null
+          status?: string | null
+          student_id: string
+          submitted_at?: string | null
+          test_id: string
+          time_spent_seconds?: number | null
+          total_marks?: number | null
+        }
+        Update: {
+          answers?: Json | null
+          created_at?: string | null
+          id?: string
+          percentage?: number | null
+          score?: number | null
+          started_at?: string | null
+          status?: string | null
+          student_id?: string
+          submitted_at?: string | null
+          test_id?: string
+          time_spent_seconds?: number | null
+          total_marks?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_test_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_test_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_test_attempts_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_test_questions: {
+        Row: {
+          id: string
+          marks: number | null
+          negative_marks: number | null
+          question_id: string
+          sort_order: number | null
+          test_id: string
+        }
+        Insert: {
+          id?: string
+          marks?: number | null
+          negative_marks?: number | null
+          question_id: string
+          sort_order?: number | null
+          test_id: string
+        }
+        Update: {
+          id?: string
+          marks?: number | null
+          negative_marks?: number | null
+          question_id?: string
+          sort_order?: number | null
+          test_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_test_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_verified_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_test_questions_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_tests: {
+        Row: {
+          available_from: string | null
+          available_until: string | null
+          classroom_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          duration_minutes: number | null
+          id: string
+          is_active: boolean | null
+          is_published: boolean | null
+          passing_marks: number | null
+          per_question_seconds: number | null
+          show_answers_after: boolean | null
+          shuffle_questions: boolean | null
+          test_type: string
+          title: string
+          total_marks: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          available_from?: string | null
+          available_until?: string | null
+          classroom_id: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          passing_marks?: number | null
+          per_question_seconds?: number | null
+          show_answers_after?: boolean | null
+          shuffle_questions?: boolean | null
+          test_type?: string
+          title: string
+          total_marks?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          available_from?: string | null
+          available_until?: string | null
+          classroom_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          passing_marks?: number | null
+          per_question_seconds?: number | null
+          show_answers_after?: boolean | null
+          shuffle_questions?: boolean | null
+          test_type?: string
+          title?: string
+          total_marks?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_tests_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_tests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_tests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_topics: {
         Row: {
           category: string | null
@@ -4541,6 +4815,95 @@ export type Database = {
             columns: ["classroom_id"]
             isOneToOne: false
             referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_verified_questions: {
+        Row: {
+          classroom_id: string
+          correct_answer: string | null
+          created_at: string | null
+          created_by: string | null
+          difficulty: string | null
+          explanation: string | null
+          id: string
+          is_active: boolean | null
+          options: Json | null
+          question_image_url: string | null
+          question_text: string
+          question_type: string
+          source_exam: string | null
+          source_year: number | null
+          tags: string[] | null
+          topic_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          classroom_id: string
+          correct_answer?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          difficulty?: string | null
+          explanation?: string | null
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          question_image_url?: string | null
+          question_text: string
+          question_type?: string
+          source_exam?: string | null
+          source_year?: number | null
+          tags?: string[] | null
+          topic_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          classroom_id?: string
+          correct_answer?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          difficulty?: string | null
+          explanation?: string | null
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          question_image_url?: string | null
+          question_text?: string
+          question_type?: string
+          source_exam?: string | null
+          source_year?: number | null
+          tags?: string[] | null
+          topic_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_verified_questions_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_verified_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_verified_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_verified_questions_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_topics"
             referencedColumns: ["id"]
           },
         ]
