@@ -131,15 +131,25 @@ export async function initializeMsal(): Promise<PublicClientApplication> {
     return msalInstance;
   }
 
+  // Clear any stale interaction state from a previous failed redirect
+  // (e.g., user clicked back from Microsoft login, or redirect URI was rejected)
+  clearInteractionState();
+
   msalInstance = new PublicClientApplication(msalConfig);
   await msalInstance.initialize();
   msalInitialized = true;
 
   // Handle redirect response (returns result if user just came back from redirect login)
-  const result = await msalInstance.handleRedirectPromise();
-  if (result?.account) {
-    msalInstance.setActiveAccount(result.account);
-    redirectResult = result;
+  try {
+    const result = await msalInstance.handleRedirectPromise();
+    if (result?.account) {
+      msalInstance.setActiveAccount(result.account);
+      redirectResult = result;
+    }
+  } catch (error) {
+    // If handleRedirectPromise fails (e.g., interaction_in_progress), clear state and continue
+    console.warn('[MSAL] handleRedirectPromise failed, clearing state:', error);
+    clearInteractionState();
   }
 
   return msalInstance;
