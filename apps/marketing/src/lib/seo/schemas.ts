@@ -93,7 +93,7 @@ export function generateWebSiteSchema() {
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: `${BASE_URL}/en/blog?q={search_term_string}`,
+        urlTemplate: `${BASE_URL}/blog?q={search_term_string}`,
       },
       'query-input': 'required name=search_term_string',
     },
@@ -172,10 +172,10 @@ export function generateLocalBusinessSchema(location: {
   return {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
-    '@id': `${BASE_URL}/en/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
+    '@id': `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
     name: `${ORG_NAME} ${location.cityDisplay}`,
     image: ORG_LOGO,
-    url: `${BASE_URL}/en/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
+    url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
     telephone: location.phone || ORG_PHONE,
     address: {
       '@type': 'PostalAddress',

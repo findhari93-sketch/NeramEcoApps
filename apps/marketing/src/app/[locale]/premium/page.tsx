@@ -3,6 +3,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import PremiumPageContent from '@/components/PremiumPageContent';
+import { buildAlternates } from '@/lib/seo/metadata';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -11,9 +12,7 @@ export async function generateMetadata({ params: { locale } }: { params: { local
     title: 'Premium NATA Coaching - 1-on-1 Mentoring & Exclusive Resources',
     description: 'Get premium NATA coaching with personal mentoring from IIT/NIT alumni, exclusive study materials, unlimited mock tests, and guaranteed score improvement.',
     keywords: 'premium NATA coaching, personal mentoring NATA, exclusive NATA study material, best NATA preparation, 1-on-1 architecture coaching',
-    alternates: {
-      canonical: `${baseUrl}/${locale}/premium`,
-    },
+    alternates: buildAlternates(locale, '/premium'),
   };
 }
 
@@ -23,7 +22,7 @@ export default function PremiumPage({ params: { locale } }: { params: { locale: 
     <>
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: baseUrl },
-        { name: 'Premium', url: `${baseUrl}/en/premium` },
+        { name: 'Premium', url: `${baseUrl}/premium` },
       ])} />
       <PremiumPageContent />
     </>

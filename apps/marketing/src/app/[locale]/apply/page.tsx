@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 import ApplyPageContent from '@/components/ApplyPageContent';
 
 const baseUrl = 'https://neramclasses.com';
@@ -17,17 +18,7 @@ export async function generateMetadata({
       'Apply now for NATA and JEE Paper 2 coaching at Neram Classes. Easy online application, scholarships available, flexible batch options.',
     keywords:
       'apply NATA coaching, Neram Classes admission, NATA coaching enrollment, architecture coaching application',
-    alternates: {
-      canonical: `${baseUrl}/${locale}/apply`,
-      languages: {
-        en: `${baseUrl}/en/apply`,
-        ta: `${baseUrl}/ta/apply`,
-        hi: `${baseUrl}/hi/apply`,
-        kn: `${baseUrl}/kn/apply`,
-        ml: `${baseUrl}/ml/apply`,
-        'x-default': `${baseUrl}/en/apply`,
-      },
-    },
+    alternates: buildAlternates(locale, '/apply'),
     openGraph: {
       title: 'Apply for NATA Coaching - Neram Classes Admission',
       description:
@@ -50,7 +41,7 @@ export default function ApplyPage({
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Apply', url: `${baseUrl}/en/apply` },
+          { name: 'Apply', url: `${baseUrl}/apply` },
         ])}
       />
       <ApplyPageContent />

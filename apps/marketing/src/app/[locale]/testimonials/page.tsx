@@ -53,7 +53,7 @@ export default function TestimonialsPage({
         data={[
           generateBreadcrumbSchema([
             { name: 'Home', url: baseUrl },
-            { name: 'Testimonials', url: `${baseUrl}/en/testimonials` },
+            { name: 'Testimonials', url: `${baseUrl}/testimonials` },
           ]),
           generateTestimonialsPageSchema({
             total: 2500,

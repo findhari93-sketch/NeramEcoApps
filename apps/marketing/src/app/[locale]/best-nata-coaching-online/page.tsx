@@ -236,7 +236,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
           name: 'Online NATA Coaching',
           description:
             'Best online NATA coaching by IIT/NIT alumni faculty. Live interactive classes, daily drawing practice, small batches of 25, 100+ mock tests, and 99.9% success rate.',
-          url: `${baseUrl}/en/best-nata-coaching-online`,
+          url: `${baseUrl}/best-nata-coaching-online`,
           modes: ['online'],
           price: 15000,
         })}
@@ -247,7 +247,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Coaching', url: `${baseUrl}/en/coaching` },
+          { name: 'Coaching', url: `${baseUrl}/coaching` },
           { name: 'Online NATA Coaching' },
         ])}
       />

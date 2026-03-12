@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
     if (isPopupMode) {
       return renderPopupResponse({ success: false, error: msg }, origin);
     }
-    const url = new URL('/en/youtube-reward', origin);
+    const url = new URL('/youtube-reward', origin);
     url.searchParams.set('error', msg);
     return Response.redirect(url.toString());
   };
@@ -288,7 +288,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Non-popup mode: redirect to reward page
-    const successUrl = new URL('/en/youtube-reward', origin);
+    const successUrl = new URL('/youtube-reward', origin);
     successUrl.searchParams.set('coupon', coupon.code);
     successUrl.searchParams.set('name', userInfo.name);
     return Response.redirect(successUrl.toString());

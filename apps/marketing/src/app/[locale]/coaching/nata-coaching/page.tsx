@@ -87,12 +87,12 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
       <JsonLd data={generateCourseSchema({
         name: 'NATA Coaching - Online & Offline Classes',
         description: 'Comprehensive NATA preparation course with expert IIT/NIT alumni faculty. Covers Mathematics, General Aptitude, and Drawing. Online and offline classes available.',
-        url: `${baseUrl}/en/coaching/nata-coaching`,
+        url: `${baseUrl}/coaching/nata-coaching`,
         modes: ['online', 'onsite'],
       })} />
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: baseUrl },
-        { name: 'Coaching', url: `${baseUrl}/en/coaching` },
+        { name: 'Coaching', url: `${baseUrl}/coaching` },
         { name: 'NATA Coaching' },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

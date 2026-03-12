@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 import ContactPageContent from '@/components/ContactPageContent';
 
 const baseUrl = 'https://neramclasses.com';
@@ -17,17 +18,7 @@ export async function generateMetadata({
       'Get in touch with Neram Classes for NATA and JEE Paper 2 coaching enquiries. Call +91-9176137043 or visit our website for a free demo class.',
     keywords:
       'contact Neram Classes, NATA coaching enquiry, architecture coaching contact, free demo class NATA',
-    alternates: {
-      canonical: `${baseUrl}/${locale}/contact`,
-      languages: {
-        en: `${baseUrl}/en/contact`,
-        ta: `${baseUrl}/ta/contact`,
-        hi: `${baseUrl}/hi/contact`,
-        kn: `${baseUrl}/kn/contact`,
-        ml: `${baseUrl}/ml/contact`,
-        'x-default': `${baseUrl}/en/contact`,
-      },
-    },
+    alternates: buildAlternates(locale, '/contact'),
     openGraph: {
       title: 'Contact Neram Classes - NATA Coaching Enquiry',
       description:
@@ -50,7 +41,7 @@ export default function ContactPage({
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Contact', url: `${baseUrl}/en/contact` },
+          { name: 'Contact', url: `${baseUrl}/contact` },
         ])}
       />
       <ContactPageContent />

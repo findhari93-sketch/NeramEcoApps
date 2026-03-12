@@ -23,7 +23,7 @@ export default function AlumniPage({ params: { locale } }: { params: { locale: s
     <>
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: baseUrl },
-        { name: 'Alumni', url: `${baseUrl}/en/alumni` },
+        { name: 'Alumni', url: `${baseUrl}/alumni` },
       ])} />
       <AlumniPageContent />
     </>

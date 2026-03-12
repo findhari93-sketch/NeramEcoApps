@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 import CareersPageContent from '@/components/CareersPageContent';
 
 const baseUrl = 'https://neramclasses.com';
@@ -17,17 +18,7 @@ export async function generateMetadata({
       'Join Neram Classes as a faculty member, content creator, or counselor. We are looking for passionate educators to shape the future of architecture students.',
     keywords:
       'careers Neram Classes, teaching jobs NATA coaching, architecture faculty jobs, education jobs Tamil Nadu',
-    alternates: {
-      canonical: `${baseUrl}/${locale}/careers`,
-      languages: {
-        en: `${baseUrl}/en/careers`,
-        ta: `${baseUrl}/ta/careers`,
-        hi: `${baseUrl}/hi/careers`,
-        kn: `${baseUrl}/kn/careers`,
-        ml: `${baseUrl}/ml/careers`,
-        'x-default': `${baseUrl}/en/careers`,
-      },
-    },
+    alternates: buildAlternates(locale, '/careers'),
     openGraph: {
       title: 'Careers at Neram Classes - Join Our Teaching Team',
       description:
@@ -50,7 +41,7 @@ export default function CareersPage({
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Careers', url: `${baseUrl}/en/careers` },
+          { name: 'Careers', url: `${baseUrl}/careers` },
         ])}
       />
       <CareersPageContent />

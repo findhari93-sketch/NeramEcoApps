@@ -5,51 +5,52 @@ import { getSitemapLocations } from '@neram/database';
 
 const baseUrl = 'https://neramclasses.com';
 
-// All static pages (these use i18n translations → include all locales)
-const staticPages = [
-  '',
-  '/about',
-  '/contact',
-  '/apply',
-  '/courses',
-  '/coaching',
-  '/premium',
-  '/alumni',
-  '/careers',
-  '/fees',
-  '/demo-class',
-  '/centers',
-  '/scholarship',
-  '/youtube-reward',
-  '/free-resources',
-  '/previous-year-papers',
-  '/nata-syllabus',
-  '/nata-preparation-guide',
-  '/nata-important-questions',
-  '/jee-paper-2-preparation',
-  '/best-books-nata-jee',
-  '/how-to-score-150-in-nata',
-  '/tools/cutoff-calculator',
-  '/nata-app',
-  '/best-nata-coaching-online',
-  '/blog',
-  '/coaching/nata-coaching',
-  '/privacy',
-  '/terms',
-  '/refund-policy',
+// Static pages with realistic lastModified dates.
+// Google ignores lastmod if every page has the same date — use actual dates.
+const staticPages: Array<{ path: string; lastModified: string }> = [
+  { path: '', lastModified: '2026-03-10' },  // Homepage - updated frequently
+  { path: '/about', lastModified: '2026-02-15' },
+  { path: '/contact', lastModified: '2026-02-20' },
+  { path: '/apply', lastModified: '2026-03-01' },
+  { path: '/courses', lastModified: '2026-03-05' },
+  { path: '/coaching', lastModified: '2026-02-28' },
+  { path: '/premium', lastModified: '2026-02-10' },
+  { path: '/alumni', lastModified: '2026-01-20' },
+  { path: '/careers', lastModified: '2026-01-15' },
+  { path: '/fees', lastModified: '2026-03-01' },
+  { path: '/demo-class', lastModified: '2026-03-05' },
+  { path: '/centers', lastModified: '2026-02-25' },
+  { path: '/scholarship', lastModified: '2026-02-01' },
+  { path: '/youtube-reward', lastModified: '2026-01-10' },
+  { path: '/free-resources', lastModified: '2026-02-15' },
+  { path: '/previous-year-papers', lastModified: '2026-02-20' },
+  { path: '/nata-syllabus', lastModified: '2026-02-10' },
+  { path: '/nata-preparation-guide', lastModified: '2026-02-15' },
+  { path: '/nata-important-questions', lastModified: '2026-02-18' },
+  { path: '/jee-paper-2-preparation', lastModified: '2026-02-12' },
+  { path: '/best-books-nata-jee', lastModified: '2026-01-25' },
+  { path: '/how-to-score-150-in-nata', lastModified: '2026-01-30' },
+  { path: '/tools/cutoff-calculator', lastModified: '2026-03-01' },
+  { path: '/nata-app', lastModified: '2026-02-28' },
+  { path: '/best-nata-coaching-online', lastModified: '2026-02-20' },
+  { path: '/blog', lastModified: '2026-03-10' },  // Blog index - updated with new posts
+  { path: '/coaching/nata-coaching', lastModified: '2026-02-25' },
+  { path: '/privacy', lastModified: '2025-12-01' },
+  { path: '/terms', lastModified: '2025-12-01' },
+  { path: '/refund-policy', lastModified: '2025-12-01' },
   // NATA 2026 hub + spoke pages
-  '/nata-2026',
-  '/nata-2026/how-to-apply',
-  '/nata-2026/eligibility',
-  '/nata-2026/syllabus',
-  '/nata-2026/exam-centers',
-  '/nata-2026/fee-structure',
-  '/nata-2026/exam-pattern',
-  '/nata-2026/photo-signature-requirements',
-  '/nata-2026/important-dates',
-  '/nata-2026/scoring-and-results',
-  '/nata-2026/dos-and-donts',
-  '/nata-2026/cutoff-calculator',
+  { path: '/nata-2026', lastModified: '2026-03-08' },
+  { path: '/nata-2026/how-to-apply', lastModified: '2026-03-05' },
+  { path: '/nata-2026/eligibility', lastModified: '2026-03-05' },
+  { path: '/nata-2026/syllabus', lastModified: '2026-02-28' },
+  { path: '/nata-2026/exam-centers', lastModified: '2026-03-01' },
+  { path: '/nata-2026/fee-structure', lastModified: '2026-02-25' },
+  { path: '/nata-2026/exam-pattern', lastModified: '2026-02-25' },
+  { path: '/nata-2026/photo-signature-requirements', lastModified: '2026-02-20' },
+  { path: '/nata-2026/important-dates', lastModified: '2026-03-08' },
+  { path: '/nata-2026/scoring-and-results', lastModified: '2026-02-28' },
+  { path: '/nata-2026/dos-and-donts', lastModified: '2026-02-15' },
+  { path: '/nata-2026/cutoff-calculator', lastModified: '2026-03-01' },
 ];
 
 // Course slugs
@@ -85,7 +86,6 @@ const blogSlugs = [
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [];
-  const currentDate = new Date();
 
   // Helper: build URL respecting localePrefix: 'as-needed'
   // English (default locale) has no /en/ prefix; other locales do.
@@ -95,16 +95,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // ─── Static pages: all locales (these have i18n translations) ───
   for (const locale of locales) {
     for (const page of staticPages) {
-      const isHomepage = page === '';
-      const isHighPriority = page.includes('coaching') || page.includes('nata') || page.includes('jee');
+      const isHomepage = page.path === '';
+      const isHighPriority = page.path.includes('coaching') || page.path.includes('nata') || page.path.includes('jee');
       entries.push({
-        url: localeUrl(locale, page),
-        lastModified: currentDate,
+        url: localeUrl(locale, page.path),
+        lastModified: new Date(page.lastModified),
         changeFrequency: isHomepage ? 'daily' : isHighPriority ? 'weekly' : 'weekly',
         priority: isHomepage ? 1.0 : isHighPriority ? 0.9 : 0.8,
         alternates: {
           languages: Object.fromEntries(
-            locales.map((l) => [l, localeUrl(l, page)])
+            locales.map((l) => [l, localeUrl(l, page.path)])
           ),
         },
       });
@@ -115,7 +115,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const path = `/courses/${slug}`;
       entries.push({
         url: localeUrl(locale, path),
-        lastModified: currentDate,
+        lastModified: new Date('2026-03-01'),
         changeFrequency: 'weekly',
         priority: 0.8,
         alternates: {
@@ -152,7 +152,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const location of sitemapLocations) {
     entries.push({
       url: `${baseUrl}/coaching/nata-coaching/nata-coaching-centers-in-${location.city}`,
-      lastModified: currentDate,
+      lastModified: new Date('2026-02-20'),
       changeFrequency: 'monthly',
       priority: location.sitemapPriority === 'high' ? 0.7 : 0.5,
     });
@@ -164,7 +164,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const centerSlug of centerSlugs) {
       entries.push({
         url: `${baseUrl}/contact/${centerSlug}`,
-        lastModified: currentDate,
+        lastModified: new Date('2026-02-25'),
         changeFrequency: 'monthly',
         priority: 0.8,
       });

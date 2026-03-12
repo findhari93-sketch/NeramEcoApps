@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
         category: 'enrollment_issue',
         subject: ticketSubject,
         description: ticketDescription,
-        page_url: `${process.env.NEXT_PUBLIC_BASE_URL || ''}/en/enroll?token=${token}`,
+        page_url: `${process.env.NEXT_PUBLIC_BASE_URL || ''}/enroll?token=${token}`,
         source_app: 'marketing',
         enrollment_link_id: link?.id || undefined,
       },

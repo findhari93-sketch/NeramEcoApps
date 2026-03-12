@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 import CoachingPageContent from '@/components/CoachingPageContent';
 
 const baseUrl = 'https://neramclasses.com';
@@ -17,17 +18,7 @@ export async function generateMetadata({
       'Our proven NATA coaching methodology combines IIT/NIT faculty expertise, personalized study plans, daily drawing practice, and weekly mock tests for top scores.',
     keywords:
       'NATA coaching methodology, architecture entrance preparation, NATA teaching method, drawing coaching, aptitude coaching',
-    alternates: {
-      canonical: `${baseUrl}/${locale}/coaching`,
-      languages: {
-        en: `${baseUrl}/en/coaching`,
-        ta: `${baseUrl}/ta/coaching`,
-        hi: `${baseUrl}/hi/coaching`,
-        kn: `${baseUrl}/kn/coaching`,
-        ml: `${baseUrl}/ml/coaching`,
-        'x-default': `${baseUrl}/en/coaching`,
-      },
-    },
+    alternates: buildAlternates(locale, '/coaching'),
     openGraph: {
       title: 'NATA Coaching Methodology - Expert Architecture Entrance Preparation',
       description:
@@ -50,7 +41,7 @@ export default function CoachingPage({
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Coaching', url: `${baseUrl}/en/coaching` },
+          { name: 'Coaching', url: `${baseUrl}/coaching` },
         ])}
       />
       <CoachingPageContent />

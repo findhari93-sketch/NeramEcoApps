@@ -101,7 +101,7 @@ export default async function CareerDetailPage({
         data={[
           generateBreadcrumbSchema([
             { name: 'Home', url: baseUrl },
-            { name: 'Careers', url: `${baseUrl}/en/careers` },
+            { name: 'Careers', url: `${baseUrl}/careers` },
             { name: job.title },
           ]),
           generateJobPostingSchema(job),

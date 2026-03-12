@@ -5,6 +5,7 @@ import {
   generateBreadcrumbSchema,
   generateCourseSchema,
 } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 import CourseDetailContent, {
   coursesData,
 } from '@/components/CourseDetailContent';
@@ -39,17 +40,7 @@ export async function generateMetadata({
     title,
     description,
     keywords: `${course.title}, ${course.category}, NATA coaching, architecture entrance, Neram Classes`,
-    alternates: {
-      canonical: `${baseUrl}/${locale}/courses/${slug}`,
-      languages: {
-        en: `${baseUrl}/en/courses/${slug}`,
-        ta: `${baseUrl}/ta/courses/${slug}`,
-        hi: `${baseUrl}/hi/courses/${slug}`,
-        kn: `${baseUrl}/kn/courses/${slug}`,
-        ml: `${baseUrl}/ml/courses/${slug}`,
-        'x-default': `${baseUrl}/en/courses/${slug}`,
-      },
-    },
+    alternates: buildAlternates(locale, `/courses/${slug}`),
     openGraph: {
       title,
       description,
@@ -73,16 +64,16 @@ export default function CourseDetailPage({
     ? [
         generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Courses', url: `${baseUrl}/en/courses` },
+          { name: 'Courses', url: `${baseUrl}/courses` },
           {
             name: course.title,
-            url: `${baseUrl}/en/courses/${slug}`,
+            url: `${baseUrl}/courses/${slug}`,
           },
         ]),
         generateCourseSchema({
           name: course.title,
           description: course.description,
-          url: `${baseUrl}/en/courses/${slug}`,
+          url: `${baseUrl}/courses/${slug}`,
           duration: course.duration,
           price: course.price
             ? parseInt(course.price.replace(/,/g, ''), 10)

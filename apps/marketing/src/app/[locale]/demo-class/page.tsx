@@ -23,7 +23,7 @@ export default function DemoClassPage({ params: { locale } }: { params: { locale
     <>
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: baseUrl },
-        { name: 'Demo Class', url: `${baseUrl}/en/demo-class` },
+        { name: 'Demo Class', url: `${baseUrl}/demo-class` },
       ])} />
       <DemoClassPageContent />
     </>

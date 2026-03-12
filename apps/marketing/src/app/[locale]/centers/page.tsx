@@ -23,7 +23,7 @@ export default function CentersPage({ params: { locale } }: { params: { locale: 
     <>
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: baseUrl },
-        { name: 'Centers', url: `${baseUrl}/en/centers` },
+        { name: 'Centers', url: `${baseUrl}/centers` },
       ])} />
       <CentersPageContent />
     </>

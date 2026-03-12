@@ -38,8 +38,8 @@ export default function CallbackPage({
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Apply', url: `${baseUrl}/en/apply` },
-          { name: 'Callback', url: `${baseUrl}/en/apply/callback` },
+          { name: 'Apply', url: `${baseUrl}/apply` },
+          { name: 'Callback', url: `${baseUrl}/apply/callback` },
         ])}
       />
       <ApplyCallbackContent />

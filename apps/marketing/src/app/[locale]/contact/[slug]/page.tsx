@@ -24,6 +24,7 @@ import {
   generateBreadcrumbSchema,
   generateCourseSchema,
 } from '@/lib/seo/schemas';
+import { buildAlternates } from '@/lib/seo/metadata';
 import { locales } from '@/i18n';
 import CenterDetailPageContent from '@/components/CenterDetailPageContent';
 import { getCenterBySeoSlug, getAllCenterSeoSlugs } from '@neram/database/queries';
@@ -77,13 +78,7 @@ export async function generateMetadata({
     title,
     description,
     keywords: `NATA coaching ${cityName}, NATA classes ${cityName}, best NATA coaching in ${cityName}, JEE Paper 2 coaching ${cityName}, architecture coaching ${cityName}, NATA coaching near me ${cityName}${nearbyKeywords ? `, ${nearbyKeywords}` : ''}`,
-    alternates: {
-      canonical: `${baseUrl}/${locale}/contact/${slug}`,
-      languages: Object.fromEntries([
-        ...locales.map((l) => [l, `${baseUrl}/${l}/contact/${slug}`]),
-        ['x-default', `${baseUrl}/en/contact/${slug}`],
-      ]),
-    },
+    alternates: buildAlternates(locale, `/contact/${slug}`),
     openGraph: {
       title,
       description,

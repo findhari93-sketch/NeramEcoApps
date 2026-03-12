@@ -65,7 +65,7 @@ export default function YouTubeSection() {
 
   const handleSubscribeSuccess = ({ couponCode }: { couponCode: string; discount: number }) => {
     setSubscribeModalOpen(false);
-    router.push(`/en/youtube-reward?coupon=${couponCode}`);
+    router.push(`/youtube-reward?coupon=${couponCode}`);
   };
 
   if (loading) {

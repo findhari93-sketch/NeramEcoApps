@@ -164,8 +164,8 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Coaching', url: `${baseUrl}/en/coaching` },
-          { name: 'NATA Coaching', url: `${baseUrl}/en/coaching/nata-coaching` },
+          { name: 'Coaching', url: `${baseUrl}/coaching` },
+          { name: 'NATA Coaching', url: `${baseUrl}/coaching/nata-coaching` },
           { name: `NATA Coaching in ${location.cityDisplay}` },
         ])}
       />
@@ -173,7 +173,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
         data={generateCourseSchema({
           name: `NATA Coaching in ${location.cityDisplay}`,
           description: `Comprehensive NATA preparation course in ${location.cityDisplay}, ${location.stateDisplay}. Expert IIT/NIT alumni faculty, study materials, and mock tests.`,
-          url: `${baseUrl}/en/coaching/nata-coaching/${slug}`,
+          url: `${baseUrl}/coaching/nata-coaching/${slug}`,
           modes: isGulf ? ['online'] : ['online', 'onsite'],
         })}
       />

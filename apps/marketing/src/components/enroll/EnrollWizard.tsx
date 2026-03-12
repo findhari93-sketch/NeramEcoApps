@@ -140,16 +140,20 @@ export default function EnrollWizard() {
     validateToken(token);
   }, [token]);
 
-  // Auto-fill from Google login (skip fields already filled from restore)
+  // Auto-fill from Google login + linkData phone (skip fields already filled from restore)
   useEffect(() => {
     if (user && linkData) {
+      // Use phone from: Google account → linkData (admin-set) → existing form value
+      const adminPhone = linkData.studentPhone
+        ? (linkData.studentPhone.startsWith('+') ? linkData.studentPhone : `+91${linkData.studentPhone}`)
+        : '';
       setFormData((prev) => ({
         ...prev,
         personal: {
           ...prev.personal,
           firstName: prev.personal.firstName || user.name?.split(' ')[0] || '',
           email: user.email || prev.personal.email,
-          phone: user.phone || prev.personal.phone,
+          phone: user.phone || prev.personal.phone || adminPhone,
         },
       }));
     }
@@ -792,7 +796,7 @@ export default function EnrollWizard() {
           onClose={() => setShowPhoneModal(false)}
           phoneOnly
           apiBaseUrl=""
-          initialPhone={formData.personal.phone?.replace(/^\+91/, '')}
+          initialPhone={(formData.personal.phone || linkData?.studentPhone || '').replace(/^\+91/, '')}
           onAuthenticated={(verifiedPhoneNumber) => {
             setPhoneVerified(true);
             setPhoneVerifiedAt(new Date().toISOString());

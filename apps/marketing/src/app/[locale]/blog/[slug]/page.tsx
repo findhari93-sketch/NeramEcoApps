@@ -1075,7 +1075,7 @@ export default function BlogPostPage({ params: { locale, slug } }: PageProps) {
         data={generateArticleSchema({
           title: post.title,
           description: post.excerpt,
-          url: `${baseUrl}/en/blog/${slug}`,
+          url: `${baseUrl}/blog/${slug}`,
           publishedAt: post.publishedAt,
           author: post.author,
           category: post.category,
@@ -1084,7 +1084,7 @@ export default function BlogPostPage({ params: { locale, slug } }: PageProps) {
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
-          { name: 'Blog', url: `${baseUrl}/en/blog` },
+          { name: 'Blog', url: `${baseUrl}/blog` },
           { name: post.title },
         ])}
       />
