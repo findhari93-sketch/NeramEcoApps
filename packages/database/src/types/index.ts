@@ -4010,3 +4010,102 @@ export interface NexusChecklistItemWithResources extends NexusChecklistItem {
 export interface NexusChecklistItemWithProgress extends NexusChecklistItemWithResources {
   progress: NexusStudentChecklistProgress | null;
 }
+
+// ============================================
+// NEXUS DRAWING LEARNING PATH TYPES
+// ============================================
+
+export type NexusDrawingSubmissionStatus = 'pending' | 'approved' | 'redo' | 'graded';
+export type NexusDrawingAssignmentSubmissionStatus = 'pending' | 'submitted' | 'not_submitted' | 'excused';
+
+export interface NexusDrawingLevel {
+  id: string;
+  classroom_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface NexusDrawingCategory {
+  id: string;
+  level_id: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusDrawingExercise {
+  id: string;
+  category_id: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  dos_and_donts: string | null;
+  reference_images: Array<{ url: string; caption?: string }>;
+  demo_video_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface NexusDrawingSubmission {
+  id: string;
+  exercise_id: string;
+  student_id: string;
+  submission_url: string;
+  correction_url: string | null;
+  status: NexusDrawingSubmissionStatus;
+  grade: string | null;
+  teacher_notes: string | null;
+  evaluated_by: string | null;
+  evaluated_at: string | null;
+  attempt_number: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusDrawingAssignment {
+  id: string;
+  scheduled_class_id: string | null;
+  classroom_id: string;
+  exercise_id: string;
+  assigned_by: string | null;
+  assigned_at: string;
+  due_date: string | null;
+}
+
+export interface NexusDrawingAssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  submission_id: string | null;
+  status: NexusDrawingAssignmentSubmissionStatus;
+  submitted_at: string | null;
+  non_submission_reason: string | null;
+}
+
+// Drawing joined types
+export interface NexusDrawingCategoryWithExercises extends NexusDrawingCategory {
+  exercises: NexusDrawingExercise[];
+}
+
+export interface NexusDrawingLevelWithCategories extends NexusDrawingLevel {
+  categories: NexusDrawingCategoryWithExercises[];
+}
+
+export interface NexusDrawingExerciseWithSubmission extends NexusDrawingExercise {
+  submissions: NexusDrawingSubmission[];
+  latest_submission: NexusDrawingSubmission | null;
+}
+
+export interface NexusDrawingSubmissionWithDetails extends NexusDrawingSubmission {
+  exercise: NexusDrawingExercise;
+  student: Pick<User, 'id' | 'name' | 'email' | 'avatar_url'>;
+}
+
+export interface NexusDrawingAssignmentWithExercise extends NexusDrawingAssignment {
+  exercise: NexusDrawingExercise;
+}
