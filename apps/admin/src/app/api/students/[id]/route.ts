@@ -117,6 +117,7 @@ export async function DELETE(
       'user_notifications',
       'score_calculations',
       'prediction_logs',
+      'post_enrollment_details', // FK user_id → users(id) NO CASCADE — must clean before RPC
     ];
     for (const table of extraTables) {
       const { error: cleanErr } = await supabase.from(table).delete().eq('user_id', id);

@@ -193,6 +193,7 @@ export default function StudentsPage() {
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Filters
   const [search, setSearch] = useState('');
@@ -283,16 +284,18 @@ export default function StudentsPage() {
   const handleDeleteStudent = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setDeleteError('');
     try {
       const res = await fetch(`/api/students/${deleteTarget.user_id}`, { method: 'DELETE' });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || 'Failed to delete');
       }
       setDeleteTarget(null);
-      fetchStudents();
+      setDeleteError('');
+      await fetchStudents();
     } catch (err: any) {
-      setError(err.message || 'Failed to delete student');
+      setDeleteError(err.message || 'Failed to delete student');
     } finally {
       setDeleting(false);
     }
@@ -632,9 +635,14 @@ export default function StudentsPage() {
           <Typography variant="body2" color="error" sx={{ mt: 1 }}>
             This will delete the student profile, lead profile, payments, onboarding progress, and user account. This action cannot be undone.
           </Typography>
+          {deleteError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {deleteError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+          <Button onClick={() => { setDeleteTarget(null); setDeleteError(''); }} disabled={deleting}>
             Cancel
           </Button>
           <Button
