@@ -534,51 +534,6 @@ export default function DirectEnrollmentPage() {
         />
       </Box>
 
-      {/* Filters */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 2,
-          borderRadius: 1,
-          border: '1px solid',
-          borderColor: 'grey.200',
-          display: 'flex',
-          gap: 2,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
-        <TextField
-          size="small"
-          placeholder="Search by student name, phone, email..."
-          value={searchQuery}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          sx={{ minWidth: 300, flex: 1 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" color="action" />
-              </InputAdornment>
-            ),
-          }}
-        />
-        <TextField
-          select
-          size="small"
-          value={statusFilter}
-          onChange={(e) => handleStatusChange(e.target.value)}
-          sx={{ minWidth: 160 }}
-          label="Status"
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <MenuItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Paper>
-
       {/* Data Table */}
       <Paper
         elevation={0}
@@ -589,6 +544,38 @@ export default function DirectEnrollmentPage() {
           overflow: 'hidden',
         }}
       >
+        {/* Inline Filters */}
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', p: 1.5, borderBottom: '1px solid', borderColor: 'grey.200' }}>
+          <TextField
+            size="small"
+            placeholder="Search name, phone, email..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            sx={{ flex: 1, '& .MuiOutlinedInput-root': { bgcolor: 'grey.50' } }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <TextField
+            select
+            size="small"
+            value={statusFilter}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            sx={{ minWidth: 140, '& .MuiOutlinedInput-root': { bgcolor: 'grey.50' } }}
+            label="Status"
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
+
         {loading && links.length === 0 ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
             <CircularProgress />

@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       .select(
         `
         id,
+        student_id,
         user_id,
         enrollment_date,
         batch_id,
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
 
       return {
         id: sp.id,
+        student_id: sp.student_id || null,
         user_id: sp.user_id || user?.id,
         first_name: user?.first_name || '',
         last_name: user?.last_name || '',

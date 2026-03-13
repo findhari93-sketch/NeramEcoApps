@@ -5,6 +5,8 @@ import {
   BottomNavigation,
   BottomNavigationAction,
   Paper,
+  Box,
+  alpha,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
@@ -20,9 +22,8 @@ interface BottomNavProps {
 }
 
 /**
- * Mobile-first bottom navigation bar.
- * Only visible on screens smaller than md breakpoint.
- * Touch targets are 48px minimum per Material 3 guidelines.
+ * Mobile bottom navigation with Material 3 active indicator pill.
+ * Hidden on desktop (md+) where DesktopSidebar takes over.
  */
 export default function BottomNav({ items }: BottomNavProps) {
   const pathname = usePathname();
@@ -32,7 +33,6 @@ export default function BottomNav({ items }: BottomNavProps) {
 
   if (!isMobile) return null;
 
-  // Find the active tab by matching the current path
   const activeIndex = items.findIndex(
     (item) => pathname === item.path || pathname.startsWith(item.path + '/')
   );
@@ -45,9 +45,10 @@ export default function BottomNav({ items }: BottomNavProps) {
         left: 0,
         right: 0,
         zIndex: theme.zIndex.appBar,
-        borderTop: `1px solid ${theme.palette.divider}`,
+        borderTop: 'none',
+        boxShadow: `0 -1px 12px ${alpha(theme.palette.common.black, 0.06)}`,
       }}
-      elevation={3}
+      elevation={0}
     >
       <BottomNavigation
         value={activeIndex >= 0 ? activeIndex : 0}
@@ -56,34 +57,65 @@ export default function BottomNav({ items }: BottomNavProps) {
         }}
         showLabels
         sx={{
-          height: 56,
+          height: 64,
+          bgcolor: alpha(theme.palette.background.paper, 0.95),
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           '& .MuiBottomNavigationAction-root': {
             minWidth: 0,
-            padding: '4px 0',
+            padding: '6px 0 4px',
             minHeight: 48,
             color: 'text.secondary',
+            transition: 'color 200ms ease',
+            position: 'relative',
             '&.Mui-selected': {
               color: 'primary.main',
             },
             '& .MuiSvgIcon-root': {
-              fontSize: '1.35rem',
+              fontSize: '1.3rem',
+              position: 'relative',
+              zIndex: 1,
             },
             '& .MuiBottomNavigationAction-label': {
               fontSize: '0.6875rem',
               fontWeight: 500,
+              marginTop: '2px',
+              position: 'relative',
+              zIndex: 1,
+              transition: 'font-weight 200ms ease',
               '&.Mui-selected': {
                 fontSize: '0.6875rem',
-                fontWeight: 600,
+                fontWeight: 700,
               },
             },
           },
         }}
       >
-        {items.map((item) => (
+        {items.map((item, index) => (
           <BottomNavigationAction
             key={item.path}
             label={item.label}
-            icon={item.icon}
+            icon={
+              <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {/* M3 Active Indicator Pill */}
+                {activeIndex === index && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      width: 56,
+                      height: 28,
+                      borderRadius: 14,
+                      bgcolor: alpha(theme.palette.primary.main, 0.12),
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      transition: 'all 250ms cubic-bezier(0.2, 0, 0, 1)',
+                    }}
+                  />
+                )}
+                {item.icon}
+              </Box>
+            }
           />
         ))}
       </BottomNavigation>

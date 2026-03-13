@@ -122,6 +122,7 @@ export default function Header() {
   const { status: appStatus } = useApplicationStatus();
   const { goToApp } = useGoToApp();
   const ctaConfig = getCtaConfig(appStatus, t);
+  const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -312,6 +313,29 @@ export default function Header() {
 
             {/* Spacer for mobile */}
             <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
+
+            {/* My Enrollment link for enrolled students */}
+            {isEnrolled && (
+              <Button
+                component={Link}
+                href="/my-enrollment"
+                size="small"
+                sx={{
+                  display: { xs: 'none', md: 'inline-flex' },
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  px: 2,
+                  mr: 0.5,
+                  textTransform: 'none',
+                  color: 'white',
+                  opacity: pathname === '/my-enrollment' ? 1 : 0.8,
+                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', opacity: 1 },
+                }}
+              >
+                My Enrollment
+              </Button>
+            )}
 
             {/* CTA Button: "Need Help?" on /apply, dynamic status-aware button elsewhere */}
             {isApplyPage ? (
@@ -541,6 +565,22 @@ export default function Header() {
               );
             })}
           </List>
+
+          {/* Mobile: My Enrollment link for enrolled students */}
+          {isEnrolled && (
+            <Box sx={{ px: 2, pb: 1 }}>
+              <Button
+                component={Link}
+                href="/my-enrollment"
+                variant="outlined"
+                fullWidth
+                onClick={toggleMobileMenu}
+                sx={{ borderRadius: '6px', fontWeight: 600, textTransform: 'none', py: 1 }}
+              >
+                My Enrollment
+              </Button>
+            </Box>
+          )}
 
           {/* Mobile CTA Button */}
           {!isApplyPage && (

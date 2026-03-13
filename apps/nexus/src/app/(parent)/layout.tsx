@@ -7,6 +7,7 @@ import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
+import DesktopSidebar, { SIDEBAR_WIDTH } from '@/components/DesktopSidebar';
 
 const parentNavItems = [
   { label: 'Dashboard', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
@@ -17,21 +18,36 @@ const parentNavItems = [
 export default function ParentLayout({ children }: { children: React.ReactNode }) {
   return (
     <RoleGuard allowedRoles={['parent']}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', flexDirection: 'column' }}>
-        <TopBar />
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        <DesktopSidebar items={parentNavItems} />
+
         <Box
-          component="main"
           sx={{
-            flexGrow: 1,
-            backgroundColor: 'background.default',
-            pt: { xs: 1.5, md: 2.5 },
-            pb: { xs: 8, md: 2.5 },
-            px: { xs: 1.5, sm: 2.5 },
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: '100vh',
+            ml: { md: `${SIDEBAR_WIDTH}px` },
+            transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1)',
           }}
         >
-          <Container maxWidth="md" disableGutters sx={{ px: { sm: 1 } }}>{children}</Container>
+          <TopBar />
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
+              pt: { xs: 2, md: 3 },
+              pb: { xs: 10, md: 3 },
+              px: { xs: 2, sm: 3, md: 4 },
+            }}
+          >
+            <Container maxWidth="md" disableGutters>
+              {children}
+            </Container>
+          </Box>
+          <BottomNav items={parentNavItems} />
         </Box>
-        <BottomNav items={parentNavItems} />
       </Box>
     </RoleGuard>
   );

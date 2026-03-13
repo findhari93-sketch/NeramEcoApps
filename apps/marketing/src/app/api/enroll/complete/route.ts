@@ -109,8 +109,39 @@ export async function POST(request: NextRequest) {
       onboarding_completed: false, // Triggers onboarding in student app
     }, supabase);
 
-    // 3. Create lead profile entry (for record-keeping)
-    const applicationNumber = `NERAM-DE-${Date.now().toString(36).toUpperCase()}`;
+    // 3. Create student profile first (to get DB-generated student_id)
+    let studentProfile;
+    try {
+      studentProfile = await createStudentProfile({
+        user_id: auth.userId,
+        enrollment_date: new Date().toISOString().split('T')[0],
+        batch_id: link.batch_id || null,
+        course_id: link.course_id || null,
+        ms_teams_id: null,
+        ms_teams_email: null,
+        payment_status: link.amount_paid >= link.final_fee ? 'paid' : 'pending',
+        total_fee: link.final_fee,
+        fee_paid: link.amount_paid,
+        fee_due: Math.max(0, link.final_fee - link.amount_paid),
+        next_payment_date: null,
+        lessons_completed: 0,
+        assignments_completed: 0,
+        total_watch_time: 0,
+        last_activity_at: null,
+        parent_contact: parentPhone || null,
+        emergency_contact: null,
+        notes: null,
+      }, supabase);
+    } catch (spError: any) {
+      console.error('[Direct Enrollment] Failed to create student_profile:', spError?.message, spError?.details);
+      return NextResponse.json(
+        { error: 'Failed to create student profile. Please contact support.', details: spError?.message },
+        { status: 500 }
+      );
+    }
+
+    // Use DB-generated student_id as the canonical application number
+    const applicationNumber = studentProfile.student_id;
 
     const { data: leadProfile, error: leadProfileError } = await supabase
       .from('lead_profiles')
@@ -162,38 +193,7 @@ export async function POST(request: NextRequest) {
       // Don't block enrollment — lead_profile is for record-keeping
     }
 
-    // 4. Create student profile
-    let studentProfile;
-    try {
-      studentProfile = await createStudentProfile({
-        user_id: auth.userId,
-        enrollment_date: new Date().toISOString().split('T')[0],
-        batch_id: link.batch_id || null,
-        course_id: link.course_id || null,
-        ms_teams_id: null,
-        ms_teams_email: null,
-        payment_status: link.amount_paid >= link.final_fee ? 'paid' : 'pending',
-        total_fee: link.final_fee,
-        fee_paid: link.amount_paid,
-        fee_due: Math.max(0, link.final_fee - link.amount_paid),
-        next_payment_date: null,
-        lessons_completed: 0,
-        assignments_completed: 0,
-        total_watch_time: 0,
-        last_activity_at: null,
-        parent_contact: parentPhone || null,
-        emergency_contact: null,
-        notes: `Direct enrollment. Application: ${applicationNumber}`,
-      }, supabase);
-    } catch (spError: any) {
-      console.error('[Direct Enrollment] Failed to create student_profile:', spError?.message, spError?.details);
-      return NextResponse.json(
-        { error: 'Failed to create student profile. Please contact support.', details: spError?.message },
-        { status: 500 }
-      );
-    }
-
-    // 5. Create payment record for the direct payment
+    // 4. Create payment record for the direct payment
     const receiptNumber = `NR-DE-${Date.now().toString(36).toUpperCase()}`;
     await supabase
       .from('payments')
@@ -265,6 +265,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         applicationNumber,
+        studentId: studentProfile.student_id,
         studentProfileId: studentProfile.id,
         message: 'Enrollment completed successfully! Welcome to Neram Classes.',
       },

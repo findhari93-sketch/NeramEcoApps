@@ -13,15 +13,24 @@ import {
   Box,
   Divider,
   Chip,
+  alpha,
+  useTheme,
 } from '@neram/ui';
+import LogoutIcon from '@mui/icons-material/LogoutOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import CheckIcon from '@mui/icons-material/Check';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { SIDEBAR_WIDTH } from './DesktopSidebar';
 
 /**
- * Top app bar for Nexus. Shows branding, active classroom, and profile menu.
- * Compact on mobile, expanded on desktop.
+ * Top app bar for Nexus with glassmorphism effect.
+ * On desktop: slim bar offset by sidebar width.
+ * On mobile: full-width translucent bar.
  */
 export default function TopBar() {
   const router = useRouter();
+  const theme = useTheme();
   const {
     user,
     nexusRole,
@@ -40,21 +49,38 @@ export default function TopBar() {
     router.push('/login');
   };
 
+  const roleColor = nexusRole === 'teacher' || nexusRole === 'admin' ? 'primary' : 'default';
+
   return (
     <AppBar
       position="sticky"
+      elevation={0}
       sx={{
-        backgroundColor: 'background.paper',
+        bgcolor: alpha(theme.palette.background.paper, 0.8),
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         color: 'text.primary',
-        boxShadow: 1,
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        ml: { md: `${SIDEBAR_WIDTH}px` },
+        width: { md: `calc(100% - ${SIDEBAR_WIDTH}px)` },
+        transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1), width 250ms cubic-bezier(0.2, 0, 0, 1)',
       }}
     >
-      <Toolbar sx={{ minHeight: { xs: 48, sm: 56 } }}>
-        {/* Brand */}
+      <Toolbar sx={{ minHeight: { xs: 52, sm: 56 }, px: { xs: 1.5, sm: 2 } }}>
+        {/* Brand - Mobile only (desktop has sidebar) */}
         <Typography
           variant="h6"
           component="div"
-          sx={{ fontWeight: 700, color: 'primary.main', mr: 1 }}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            fontWeight: 800,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mr: 1.5,
+            letterSpacing: '-0.3px',
+          }}
         >
           Nexus
         </Typography>
@@ -64,37 +90,73 @@ export default function TopBar() {
           <Chip
             label={activeClassroom.name}
             size="small"
+            icon={<SwapHorizIcon sx={{ fontSize: '0.9rem !important' }} />}
             onClick={(e) => setClassroomAnchor(e.currentTarget)}
             sx={{
               cursor: 'pointer',
-              maxWidth: { xs: 120, sm: 200 },
+              maxWidth: { xs: 140, sm: 220 },
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+              color: 'primary.main',
+              fontWeight: 500,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+              '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.14) },
               '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+              transition: 'background-color 200ms ease',
             }}
           />
         )}
         {activeClassroom && classrooms.length <= 1 && (
-          <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: { xs: 120, sm: 200 } }}>
+          <Typography
+            variant="body2"
+            noWrap
+            sx={{
+              maxWidth: { xs: 140, sm: 220 },
+              color: 'text.secondary',
+              fontWeight: 500,
+            }}
+          >
             {activeClassroom.name}
           </Typography>
         )}
 
         <Box sx={{ flexGrow: 1 }} />
 
-        {/* Role Badge */}
+        {/* Role Badge - Desktop only */}
         {nexusRole && (
           <Chip
             label={nexusRole}
             size="small"
-            color={nexusRole === 'teacher' || nexusRole === 'admin' ? 'primary' : 'default'}
+            color={roleColor}
             variant="outlined"
-            sx={{ mr: 1, display: { xs: 'none', sm: 'flex' }, textTransform: 'capitalize' }}
+            sx={{
+              mr: 1.5,
+              display: { xs: 'none', sm: 'flex' },
+              textTransform: 'capitalize',
+              fontWeight: 500,
+              height: 26,
+              fontSize: '0.75rem',
+            }}
           />
         )}
 
         {/* Profile Avatar */}
-        <IconButton onClick={(e) => setProfileAnchor(e.currentTarget)} sx={{ p: 0 }}>
+        <IconButton
+          onClick={(e) => setProfileAnchor(e.currentTarget)}
+          sx={{ p: 0.5 }}
+        >
           <Avatar
-            sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: '0.875rem' }}
+            sx={{
+              width: 34,
+              height: 34,
+              bgcolor: 'primary.main',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              border: `2px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+              transition: 'box-shadow 200ms ease',
+              '&:hover': {
+                boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`,
+              },
+            }}
           >
             {user?.name?.charAt(0)?.toUpperCase() || '?'}
           </Avatar>
@@ -107,20 +169,41 @@ export default function TopBar() {
           onClose={() => setProfileAnchor(null)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 1,
+                minWidth: 220,
+                borderRadius: 2.5,
+                border: `1px solid ${theme.palette.divider}`,
+                boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+              },
+            },
+          }}
         >
-          <Box sx={{ px: 2, py: 1, minWidth: 200 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {user?.name || 'User'}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
               {user?.email || ''}
             </Typography>
           </Box>
-          <Divider />
-          <MenuItem onClick={() => { setProfileAnchor(null); router.push(`/${nexusRole}/profile`); }}>
-            Profile
+          <Divider sx={{ my: 0.5 }} />
+          <MenuItem
+            onClick={() => {
+              setProfileAnchor(null);
+              router.push(`/${nexusRole}/profile`);
+            }}
+            sx={{ py: 1, px: 2, gap: 1.5 }}
+          >
+            <PersonOutlinedIcon sx={{ fontSize: '1.15rem', color: 'text.secondary' }} />
+            <Typography variant="body2">Profile</Typography>
           </MenuItem>
-          <MenuItem onClick={handleLogout}>Logout</MenuItem>
+          <MenuItem onClick={handleLogout} sx={{ py: 1, px: 2, gap: 1.5 }}>
+            <LogoutIcon sx={{ fontSize: '1.15rem', color: 'error.main' }} />
+            <Typography variant="body2" color="error.main">Logout</Typography>
+          </MenuItem>
         </Menu>
 
         {/* Classroom Switcher Menu */}
@@ -128,24 +211,60 @@ export default function TopBar() {
           anchorEl={classroomAnchor}
           open={Boolean(classroomAnchor)}
           onClose={() => setClassroomAnchor(null)}
+          slotProps={{
+            paper: {
+              sx: {
+                mt: 1,
+                minWidth: 240,
+                borderRadius: 2.5,
+                border: `1px solid ${theme.palette.divider}`,
+                boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+              },
+            },
+          }}
         >
-          {classrooms.map((c) => (
-            <MenuItem
-              key={c.id}
-              selected={c.id === activeClassroom?.id}
-              onClick={() => {
-                setActiveClassroom(c);
-                setClassroomAnchor(null);
-              }}
-            >
-              <Box>
-                <Typography variant="body2">{c.name}</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-                  {c.type} &middot; {c.enrollmentRole}
-                </Typography>
-              </Box>
-            </MenuItem>
-          ))}
+          <Box sx={{ px: 2, py: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.625rem' }}>
+              Switch Classroom
+            </Typography>
+          </Box>
+          {classrooms.map((c) => {
+            const selected = c.id === activeClassroom?.id;
+            return (
+              <MenuItem
+                key={c.id}
+                selected={selected}
+                onClick={() => {
+                  setActiveClassroom(c);
+                  setClassroomAnchor(null);
+                }}
+                sx={{
+                  py: 1,
+                  px: 2,
+                  borderRadius: 1.5,
+                  mx: 0.5,
+                  gap: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: selected ? 'primary.main' : 'divider',
+                    flexShrink: 0,
+                  }}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: selected ? 600 : 400 }}>{c.name}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                    {c.type} &middot; {c.enrollmentRole}
+                  </Typography>
+                </Box>
+                {selected && <CheckIcon sx={{ fontSize: '1rem', color: 'primary.main' }} />}
+              </MenuItem>
+            );
+          })}
         </Menu>
       </Toolbar>
     </AppBar>

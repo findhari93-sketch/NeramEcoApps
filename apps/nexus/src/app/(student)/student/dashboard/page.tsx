@@ -8,10 +8,21 @@ import {
   Paper,
   Skeleton,
   Chip,
-  LinearProgress,
   Button,
+  LinearProgress,
+  alpha,
+  useTheme,
 } from '@neram/ui';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import PageHeader from '@/components/PageHeader';
+import StatCard from '@/components/StatCard';
 
 interface UpcomingClass {
   id: string;
@@ -33,6 +44,7 @@ interface DashboardData {
 }
 
 export default function StudentDashboard() {
+  const theme = useTheme();
   const { user, activeClassroom, getToken } = useNexusAuthContext();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,181 +84,213 @@ export default function StudentDashboard() {
     return `${displayHour}:${m} ${ampm}`;
   };
 
+  const attendancePct = data?.attendanceSummary.percentage ?? 0;
+  const checklistPct = data?.checklistProgress.total
+    ? Math.round((data.checklistProgress.completed / data.checklistProgress.total) * 100)
+    : 0;
+
   return (
     <Box>
-      {/* Welcome Header */}
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
-          Welcome, {user?.name?.split(' ')[0] || 'Student'}
+      <PageHeader
+        title={`Welcome, ${user?.name?.split(' ')[0] || 'Student'}`}
+        subtitle={activeClassroom?.name || 'No classroom selected'}
+      />
+
+      {/* Progress Stats */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}>
+          {loading ? (
+            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
+          ) : (
+            <StatCard
+              title="Attendance"
+              value={`${attendancePct}%`}
+              icon={<SchoolOutlinedIcon />}
+              variant="gradient"
+              subtitle={`${data?.attendanceSummary.attended ?? 0} of ${data?.attendanceSummary.total ?? 0} classes`}
+              delay={0}
+            />
+          )}
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          {loading ? (
+            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
+          ) : (
+            <StatCard
+              title="Checklist"
+              value={`${data?.checklistProgress.completed ?? 0}/${data?.checklistProgress.total ?? 0}`}
+              icon={<ChecklistOutlinedIcon />}
+              variant="surface"
+              color={theme.palette.success.main}
+              delay={80}
+            />
+          )}
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          {loading ? (
+            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
+          ) : (
+            <StatCard
+              title="Topics Done"
+              value={`${data?.topicProgress.completed ?? 0}/${data?.topicProgress.total ?? 0}`}
+              icon={<MenuBookOutlinedIcon />}
+              variant="surface"
+              color={theme.palette.warning.main}
+              delay={160}
+            />
+          )}
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          {loading ? (
+            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
+          ) : (
+            <StatCard
+              title="Classes Attended"
+              value={data?.attendanceSummary.attended ?? 0}
+              icon={<EventAvailableOutlinedIcon />}
+              variant="outlined"
+              color={theme.palette.info.main}
+              delay={240}
+            />
+          )}
+        </Grid>
+      </Grid>
+
+      {/* Upcoming Classes */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          borderRadius: 3,
+          border: `1px solid ${theme.palette.divider}`,
+          mb: 2.5,
+        }}
+      >
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+          Upcoming Classes
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {activeClassroom?.name || 'No classroom selected'}
-        </Typography>
-      </Box>
 
-      <Grid container spacing={2}>
-        {/* Progress Summary Cards */}
-        <Grid item xs={6} sm={4} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            {loading ? (
-              <Skeleton variant="circular" width={48} height={48} sx={{ mx: 'auto', mb: 1 }} />
-            ) : (
-              <>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                  {data?.attendanceSummary.percentage ?? 0}%
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Attendance
-                </Typography>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={6} sm={4} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            {loading ? (
-              <Skeleton variant="circular" width={48} height={48} sx={{ mx: 'auto', mb: 1 }} />
-            ) : (
-              <>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
-                  {data?.checklistProgress.completed ?? 0}/{data?.checklistProgress.total ?? 0}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Checklist
-                </Typography>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={6} sm={4} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            {loading ? (
-              <Skeleton variant="circular" width={48} height={48} sx={{ mx: 'auto', mb: 1 }} />
-            ) : (
-              <>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
-                  {data?.topicProgress.completed ?? 0}/{data?.topicProgress.total ?? 0}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Topics Done
-                </Typography>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid item xs={6} sm={4} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            {loading ? (
-              <Skeleton variant="circular" width={48} height={48} sx={{ mx: 'auto', mb: 1 }} />
-            ) : (
-              <>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.main' }}>
-                  {data?.attendanceSummary.attended ?? 0}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Classes Attended
-                </Typography>
-              </>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Upcoming Classes */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: { xs: 2, sm: 3 } }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-              Upcoming Classes
+        {loading ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rounded" height={72} sx={{ borderRadius: 2.5 }} />
+            ))}
+          </Box>
+        ) : !data?.upcomingClasses.length ? (
+          <Box sx={{ py: 3, textAlign: 'center' }}>
+            <CalendarTodayOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              No upcoming classes scheduled
             </Typography>
-
-            {loading ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} variant="rectangular" height={64} sx={{ borderRadius: 1 }} />
-                ))}
-              </Box>
-            ) : !data?.upcomingClasses.length ? (
-              <Typography variant="body2" color="text.secondary">
-                No upcoming classes scheduled.
-              </Typography>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {data.upcomingClasses.map((cls) => (
-                  <Paper
-                    key={cls.id}
-                    variant="outlined"
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {data.upcomingClasses.map((cls, i) => (
+              <Paper
+                key={cls.id}
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: 2.5,
+                  bgcolor: alpha(theme.palette.background.default, 0.5),
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderLeft: `4px solid ${cls.status === 'completed' ? theme.palette.success.main : theme.palette.primary.main}`,
+                  display: 'flex',
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  gap: 1.5,
+                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 60}ms both`,
+                  '@keyframes fadeInUp': {
+                    from: { opacity: 0, transform: 'translateY(8px)' },
+                    to: { opacity: 1, transform: 'translateY(0)' },
+                  },
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {cls.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                    <AccessTimeIcon sx={{ fontSize: '0.8rem', color: 'text.disabled' }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {cls.scheduled_date} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
+                    </Typography>
+                  </Box>
+                  {cls.topic && (
+                    <Chip
+                      label={cls.topic.title}
+                      size="small"
+                      sx={{
+                        mt: 0.75,
+                        height: 22,
+                        fontSize: '0.675rem',
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                        color: 'primary.main',
+                        fontWeight: 500,
+                      }}
+                    />
+                  )}
+                </Box>
+                {cls.teams_meeting_url && cls.status !== 'completed' && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    href={cls.teams_meeting_url}
+                    target="_blank"
+                    startIcon={<VideocamOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
                     sx={{
-                      p: 2,
-                      display: 'flex',
-                      alignItems: { xs: 'flex-start', sm: 'center' },
-                      flexDirection: { xs: 'column', sm: 'row' },
-                      gap: 1,
+                      textTransform: 'none',
+                      minHeight: 40,
+                      borderRadius: 2,
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      px: 2.5,
+                      boxShadow: 'none',
+                      '&:hover': { boxShadow: 'none' },
                     }}
                   >
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                        {cls.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {cls.scheduled_date} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
-                      </Typography>
-                      {cls.topic && (
-                        <Chip
-                          label={cls.topic.title}
-                          size="small"
-                          sx={{ mt: 0.5, textTransform: 'capitalize' }}
-                        />
-                      )}
-                    </Box>
-                    {cls.teams_meeting_url && cls.status !== 'completed' && (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        href={cls.teams_meeting_url}
-                        target="_blank"
-                        sx={{
-                          minWidth: 100,
-                          textTransform: 'none',
-                          minHeight: 40,
-                        }}
-                      >
-                        Join Class
-                      </Button>
-                    )}
-                  </Paper>
-                ))}
-              </Box>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Checklist Progress Bar */}
-        {data && data.checklistProgress.total > 0 && (
-          <Grid item xs={12}>
-            <Paper sx={{ p: { xs: 2, sm: 3 } }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                  Theory Checklist
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {data.checklistProgress.completed}/{data.checklistProgress.total} completed
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={
-                  data.checklistProgress.total > 0
-                    ? (data.checklistProgress.completed / data.checklistProgress.total) * 100
-                    : 0
-                }
-                sx={{ height: 8, borderRadius: 4 }}
-              />
-            </Paper>
-          </Grid>
+                    Join Class
+                  </Button>
+                )}
+              </Paper>
+            ))}
+          </Box>
         )}
-      </Grid>
+      </Paper>
+
+      {/* Checklist Progress Bar */}
+      {data && data.checklistProgress.total > 0 && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 2, sm: 2.5 },
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Theory Checklist
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {data.checklistProgress.completed}/{data.checklistProgress.total}
+            </Typography>
+          </Box>
+          <LinearProgress
+            variant="determinate"
+            value={checklistPct}
+            sx={{
+              height: 10,
+              borderRadius: 5,
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+              '& .MuiLinearProgress-bar': { borderRadius: 5 },
+            }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+            {checklistPct}% completed
+          </Typography>
+        </Paper>
+      )}
     </Box>
   );
 }

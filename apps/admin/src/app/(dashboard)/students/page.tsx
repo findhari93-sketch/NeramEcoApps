@@ -51,6 +51,7 @@ interface StudentRow {
   fee_paid: number;
   fee_due: number;
   interest_course: string | null;
+  student_id: string | null;
   application_number: string | null;
   final_fee: number | null;
   full_payment_discount: number | null;
@@ -303,6 +304,16 @@ export default function StudentsPage() {
 
   // Column definitions for DataTable
   const columns = [
+    {
+      field: 'student_id',
+      headerName: 'Student ID',
+      width: 150,
+      renderCell: ({ row }: { row: StudentRow; value: any }) => (
+        <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: 13 }}>
+          {row.student_id || '-'}
+        </Typography>
+      ),
+    },
     {
       field: 'name',
       headerName: 'Name',

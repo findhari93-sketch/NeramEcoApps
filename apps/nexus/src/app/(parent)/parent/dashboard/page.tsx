@@ -7,13 +7,18 @@ import {
   Paper,
   Skeleton,
   Avatar,
-  LinearProgress,
+  alpha,
+  useTheme,
+  Grid,
 } from '@neram/ui';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import StatCard from '@/components/StatCard';
 
 interface ProgressData {
   child: { id: string; name: string; avatar_url: string | null } | null;
@@ -24,7 +29,8 @@ interface ProgressData {
 }
 
 export default function ParentDashboard() {
-  const { user, activeClassroom, getToken } = useNexusAuthContext();
+  const theme = useTheme();
+  const { activeClassroom, getToken } = useNexusAuthContext();
   const [data, setData] = useState<ProgressData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,32 +67,59 @@ export default function ParentDashboard() {
     new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 
   const progressColor = (pct: number) => {
-    if (pct >= 75) return 'success';
-    if (pct >= 50) return 'warning';
-    return 'error';
+    if (pct >= 75) return theme.palette.success.main;
+    if (pct >= 50) return theme.palette.warning.main;
+    return theme.palette.error.main;
   };
 
   if (loading) {
     return (
       <Box>
-        <Skeleton variant="rectangular" height={80} sx={{ borderRadius: 1, mb: 2 }} />
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5, mb: 2 }}>
+        <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3, mb: 2 }} />
+        <Grid container spacing={2} sx={{ mb: 2 }}>
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={100} sx={{ borderRadius: 1 }} />
+            <Grid item xs={4} key={i}>
+              <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
+            </Grid>
           ))}
-        </Box>
-        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
+        </Grid>
+        <Skeleton variant="rounded" height={120} sx={{ borderRadius: 3 }} />
       </Box>
     );
   }
 
   return (
     <Box>
-      {/* Child info header */}
-      <Paper sx={{ p: 2, mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+      {/* Child Header Card */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: 2.5,
+          mb: 2.5,
+          borderRadius: 3,
+          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          animation: 'fadeInUp 400ms cubic-bezier(0.05, 0.7, 0.1, 1) both',
+          '@keyframes fadeInUp': {
+            from: { opacity: 0, transform: 'translateY(12px)' },
+            to: { opacity: 1, transform: 'translateY(0)' },
+          },
+        }}
+      >
         <Avatar
           src={data?.child?.avatar_url || undefined}
-          sx={{ width: 48, height: 48, bgcolor: 'primary.main' }}
+          sx={{
+            width: 56,
+            height: 56,
+            bgcolor: alpha('#fff', 0.2),
+            color: '#fff',
+            fontSize: '1.5rem',
+            fontWeight: 700,
+            border: `3px solid ${alpha('#fff', 0.3)}`,
+          }}
         >
           {data?.child?.name?.[0] || 'S'}
         </Avatar>
@@ -94,102 +127,116 @@ export default function ParentDashboard() {
           <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {data?.child?.name || 'Your Child'}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="body2" sx={{ color: alpha('#fff', 0.7), mt: 0.25 }}>
             {activeClassroom?.name || 'Classroom'}
           </Typography>
         </Box>
       </Paper>
 
-      {/* Progress cards */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5, mb: 2 }}>
-        {/* Attendance */}
-        <Paper sx={{ p: 1.5, textAlign: 'center' }}>
-          <SchoolOutlinedIcon sx={{ fontSize: 24, color: 'primary.main', mb: 0.5 }} />
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            {data?.attendance.percentage || 0}%
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-            Attendance
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={data?.attendance.percentage || 0}
-            color={progressColor(data?.attendance.percentage || 0) as any}
-            sx={{ height: 4, borderRadius: 2 }}
+      {/* Progress StatCards */}
+      <Grid container spacing={2} sx={{ mb: 2.5 }}>
+        <Grid item xs={4}>
+          <StatCard
+            title="Attendance"
+            value={`${data?.attendance.percentage || 0}%`}
+            icon={<SchoolOutlinedIcon />}
+            variant="surface"
+            color={progressColor(data?.attendance.percentage || 0)}
+            subtitle={`${data?.attendance.present}/${data?.attendance.total}`}
+            delay={80}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-            {data?.attendance.present}/{data?.attendance.total}
-          </Typography>
-        </Paper>
-
-        {/* Checklist */}
-        <Paper sx={{ p: 1.5, textAlign: 'center' }}>
-          <ChecklistOutlinedIcon sx={{ fontSize: 24, color: 'info.main', mb: 0.5 }} />
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            {data?.checklist.percentage || 0}%
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-            Checklist
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={data?.checklist.percentage || 0}
-            color={progressColor(data?.checklist.percentage || 0) as any}
-            sx={{ height: 4, borderRadius: 2 }}
+        </Grid>
+        <Grid item xs={4}>
+          <StatCard
+            title="Checklist"
+            value={`${data?.checklist.percentage || 0}%`}
+            icon={<ChecklistOutlinedIcon />}
+            variant="surface"
+            color={progressColor(data?.checklist.percentage || 0)}
+            subtitle={`${data?.checklist.completed}/${data?.checklist.total}`}
+            delay={160}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-            {data?.checklist.completed}/{data?.checklist.total}
-          </Typography>
-        </Paper>
-
-        {/* Drawings */}
-        <Paper sx={{ p: 1.5, textAlign: 'center' }}>
-          <BrushOutlinedIcon sx={{ fontSize: 24, color: 'success.main', mb: 0.5 }} />
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            {data?.drawings.percentage || 0}%
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-            Drawings
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={data?.drawings.percentage || 0}
-            color={progressColor(data?.drawings.percentage || 0) as any}
-            sx={{ height: 4, borderRadius: 2 }}
+        </Grid>
+        <Grid item xs={4}>
+          <StatCard
+            title="Drawings"
+            value={`${data?.drawings.percentage || 0}%`}
+            icon={<BrushOutlinedIcon />}
+            variant="surface"
+            color={progressColor(data?.drawings.percentage || 0)}
+            subtitle={`${data?.drawings.approved}/${data?.drawings.total}`}
+            delay={240}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-            {data?.drawings.approved}/{data?.drawings.total}
-          </Typography>
-        </Paper>
-      </Box>
+        </Grid>
+      </Grid>
 
-      {/* Upcoming classes */}
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-        Upcoming Classes
-      </Typography>
-      {data?.upcomingClasses && data.upcomingClasses.length > 0 ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {data.upcomingClasses.map((cls) => (
-            <Paper key={cls.id} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <EventOutlinedIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={600} noWrap>
-                  {cls.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {formatDate(cls.start_time)} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
-                </Typography>
-              </Box>
-            </Paper>
-          ))}
-        </Box>
-      ) : (
-        <Paper sx={{ p: 2, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            No upcoming classes this week.
-          </Typography>
-        </Paper>
-      )}
+      {/* Upcoming Classes */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 2, sm: 2.5 },
+          borderRadius: 3,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+          Upcoming Classes
+        </Typography>
+
+        {data?.upcomingClasses && data.upcomingClasses.length > 0 ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {data.upcomingClasses.map((cls, i) => (
+              <Paper
+                key={cls.id}
+                elevation={0}
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  bgcolor: alpha(theme.palette.background.default, 0.5),
+                  border: `1px solid ${theme.palette.divider}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 50}ms both`,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 2,
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <EventOutlinedIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" fontWeight={600} noWrap>
+                    {cls.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <AccessTimeIcon sx={{ fontSize: '0.7rem', color: 'text.disabled' }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(cls.start_time)} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+        ) : (
+          <Box sx={{ py: 3, textAlign: 'center' }}>
+            <CalendarTodayOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              No upcoming classes this week
+            </Typography>
+          </Box>
+        )}
+      </Paper>
     </Box>
   );
 }

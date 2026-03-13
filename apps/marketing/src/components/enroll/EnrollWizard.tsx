@@ -130,7 +130,6 @@ export default function EnrollWizard() {
   // Session persistence
   const { restoredState, isResuming, saveProgress, clearProgress, dismissResume } = useEnrollmentProgress(token);
   const initializedFromRestore = useRef(false);
-  const ownerCheckAttempted = useRef(false);
 
   // Token validation state
   const [tokenStatus, setTokenStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used'>('loading');
@@ -202,24 +201,24 @@ export default function EnrollWizard() {
     }
   }, [currentStep, formData, phoneVerified, phoneVerifiedAt, verifiedPhone, termsAccepted, tokenStatus, saveProgress]);
 
-  // Validate token on mount
+  // Validate token — wait for auth to finish loading so we can include the token for ownership check
   useEffect(() => {
     if (!token) {
       setTokenStatus('invalid');
       setTokenError('No enrollment token provided. Please use the link shared by your admin.');
       return;
     }
-    validateToken(token);
-  }, [token]);
+    if (authLoading) return; // Wait for Firebase auth to hydrate
+    // Call validate with auth if user is already signed in
+    validateToken(token, user ? (user.raw as any) : undefined);
+  }, [token, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-validate token when user signs in (to get ownership data for used tokens)
+  // Re-validate when user signs in AFTER initial validate already returned 'used' without owner info
   useEffect(() => {
-    if (user && token && tokenStatus === 'used' && usedLinkData && !usedLinkData.isOwner && !ownerCheckAttempted.current) {
-      // User just signed in — re-validate with their Firebase token to check ownership (once)
-      ownerCheckAttempted.current = true;
+    if (user && token && tokenStatus === 'used' && usedLinkData && !usedLinkData.isOwner) {
       validateToken(token, (user.raw as any));
     }
-  }, [user, tokenStatus, usedLinkData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Populate form data from lead profile when owner revisits
   useEffect(() => {

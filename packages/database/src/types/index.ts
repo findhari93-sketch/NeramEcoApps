@@ -1034,8 +1034,9 @@ export const SCHOLARSHIP_STATUS_CONFIG: Record<ScholarshipApplicationStatus, { l
  */
 export interface StudentProfile extends Timestamps {
   id: string;
+  student_id: string;
   user_id: string;
-  
+
   // Enrollment
   enrollment_date: string;
   batch_id: string | null;
