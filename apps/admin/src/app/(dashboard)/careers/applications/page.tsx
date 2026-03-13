@@ -138,7 +138,7 @@ export default function ApplicationsPage() {
 
   // Render screening answer
   const renderAnswer = (answer: ScreeningAnswer, questions: ScreeningQuestion[]) => {
-    const question = questions.find(q => q.question_id === answer.question_id || q.id === answer.question_id);
+    const question = questions.find(q => q.id === answer.question_id);
     const questionText = question?.question || `Question ${answer.question_id}`;
     let answerText: string;
     if (Array.isArray(answer.answer)) {
