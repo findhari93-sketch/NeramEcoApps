@@ -9,7 +9,6 @@ import {
   deleteUserExamPreferences,
   getUserReward,
   grantReward,
-
 } from '@neram/database';
 import type { ExamPhase, ExamTimeSlot } from '@neram/database';
 import { verifyIdToken } from '@/lib/firebase-admin';
@@ -143,14 +142,9 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-        { status: 404 }
-      );
-    }
-
     // Save preferences
     const preferences = await saveUserExamPreferences(
       userId,
-      
       phase,
       selections,
       supabase
