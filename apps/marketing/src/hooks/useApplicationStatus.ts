@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { useFirebaseAuth } from '@neram/auth';
 
 export type AppStatusSummary =
@@ -85,6 +86,8 @@ export function useApplicationStatus(): {
   loading: boolean;
 } {
   const { user, loading: authLoading } = useFirebaseAuth();
+  const pathname = usePathname();
+  const isEnrollPage = pathname?.includes('/enroll');
   const [status, setStatus] = useState<AppStatusSummary>(null);
   const [loading, setLoading] = useState(true);
   const fetchedForUid = useRef<string | null>(null);
@@ -105,6 +108,12 @@ export function useApplicationStatus(): {
     if (authLoading) return;
 
     if (!user) {
+      // On enroll page without auth, skip silently (avoids 401 errors)
+      if (isEnrollPage) {
+        setStatus(null);
+        setLoading(false);
+        return;
+      }
       setStatus(null);
       setLoading(false);
       clearCachedStatus();
@@ -132,7 +141,10 @@ export function useApplicationStatus(): {
     async function fetchStatus() {
       try {
         const idToken = await (user!.raw as any)?.getIdToken?.();
-        if (!idToken || cancelled) return;
+        if (!idToken || cancelled) {
+          if (!cancelled) setLoading(false);
+          return;
+        }
 
         const res = await fetch('/api/application', {
           headers: { Authorization: `Bearer ${idToken}` },
@@ -173,7 +185,7 @@ export function useApplicationStatus(): {
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading, invalidated]);
+  }, [user, authLoading, invalidated, isEnrollPage]);
 
   return { status, loading };
 }

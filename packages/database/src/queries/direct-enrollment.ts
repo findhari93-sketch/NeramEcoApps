@@ -169,8 +169,17 @@ export async function listDirectEnrollmentLinks(
     );
   }
 
+  // When no status filter, sort by status (active first, used last) then by date
+  // Alphabetical ascending: active < cancelled < expired < used — gives desired priority
+  if (!filters.status) {
+    query = query
+      .order('status', { ascending: true })
+      .order('created_at', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+
   const { data, error, count } = await query
-    .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw error;

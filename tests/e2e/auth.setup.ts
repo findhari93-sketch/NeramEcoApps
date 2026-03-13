@@ -75,40 +75,59 @@ setup('authenticate as student', async ({ page }) => {
  * Setup: Authenticate as Teacher (Microsoft)
  *
  * This runs once before all teacher/nexus tests.
- * Microsoft OAuth is complex to automate - consider using a test endpoint.
+ * Uses the /api/auth/test-login endpoint on Nexus (port 3012) to bypass
+ * Microsoft OAuth and generate a test token for E2E testing.
  */
 setup('authenticate as teacher', async ({ page }) => {
-  const testEmail = process.env.E2E_TEST_TEACHER_EMAIL;
-  const testPassword = process.env.E2E_TEST_TEACHER_PASSWORD;
-
-  if (!testEmail || !testPassword) {
-    console.log('⚠️  No teacher test credentials found. Skipping teacher auth setup.');
-    return;
-  }
+  const testEmail = process.env.E2E_TEST_TEACHER_EMAIL || 'e2e-teacher@neramclasses.com';
 
   console.log(`🔐 Authenticating as teacher: ${testEmail}`);
 
-  // Go to nexus login
-  await page.goto('http://localhost:3011/login');
-
-  // Microsoft OAuth flow is complex to automate
-  // Option 1: Use a test endpoint that generates tokens
-  // Option 2: Use Microsoft test tenant with known credentials
-  // Option 3: Mock authentication for E2E tests
-
-  // For now, check if there's a test login endpoint
-  const testLoginResponse = await page.request.post('http://localhost:3011/api/auth/test-login', {
-    data: { email: testEmail, password: testPassword },
-  }).catch(() => null);
+  // Use Nexus test-login endpoint to get a test token
+  const testLoginResponse = await page.request.post('http://localhost:3012/api/auth/test-login', {
+    data: { email: testEmail, role: 'teacher' },
+  }).catch((err: Error) => {
+    console.error('❌ Failed to reach Nexus test-login endpoint:', err.message);
+    return null;
+  });
 
   if (testLoginResponse?.ok()) {
-    // Test endpoint worked
-    await page.goto('http://localhost:3011/dashboard');
-    await page.waitForLoadState('networkidle');
-    console.log('✅ Teacher authentication successful via test endpoint');
+    const authData = await testLoginResponse.json();
+    const { user, nexusRole, classrooms, testToken } = authData;
+
+    console.log(`✅ Teacher auth successful: ${user.name} (${nexusRole})`);
+    console.log(`   Classrooms: ${classrooms.length}`);
+
+    // Navigate to Nexus and inject auth state into localStorage
+    await page.goto('http://localhost:3012/login');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Inject MSAL-like state and Nexus auth data into localStorage
+    await page.evaluate(({ user, nexusRole, classrooms, testToken }) => {
+      // Store the test token for API calls
+      localStorage.setItem('nexus_test_token', testToken);
+
+      // Store active classroom
+      if (classrooms.length > 0) {
+        localStorage.setItem('nexus_active_classroom_id', classrooms[0].id);
+      }
+
+      // Store auth data that useNexusAuth reads
+      localStorage.setItem('nexus_auth_user', JSON.stringify(user));
+      localStorage.setItem('nexus_auth_role', nexusRole);
+      localStorage.setItem('nexus_auth_classrooms', JSON.stringify(classrooms));
+    }, { user, nexusRole, classrooms, testToken });
+
+    // Set the Authorization header for all API requests in this context
+    await page.context().setExtraHTTPHeaders({
+      'Authorization': `Bearer ${testToken}`,
+    });
+
+    console.log('✅ Teacher auth state injected into browser context');
   } else {
-    console.log('⚠️  Teacher authentication requires manual setup or test endpoint.');
-    console.log('   Consider implementing /api/auth/test-login for E2E tests.');
+    const status = testLoginResponse ? testLoginResponse.status() : 'no response';
+    console.log(`⚠️  Teacher test-login failed (status: ${status}).`);
+    console.log('   Make sure Nexus is running on port 3012: pnpm dev:nexus');
   }
 
   // Save authentication state

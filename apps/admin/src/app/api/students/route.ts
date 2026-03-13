@@ -90,6 +90,8 @@ export async function GET(request: NextRequest) {
 
     const { data: students, error, count } = await query;
 
+    console.log('[Students API] Query result:', { count, studentsLength: students?.length, error: error?.message });
+
     if (error) {
       console.error('Students query error:', error);
       throw new Error(error.message);
@@ -134,24 +136,55 @@ export async function GET(request: NextRequest) {
       : flatStudents;
 
     // Fetch stats separately for accuracy (not affected by pagination)
-    const { data: allProfiles, error: statsError } = await supabase
-      .from('student_profiles')
-      .select('payment_status, fee_paid, total_fee, fee_due');
-
-    if (statsError) {
-      console.error('Stats query error:', statsError);
-    }
-
-    const stats = {
-      totalStudents: allProfiles?.length || 0,
-      fullyPaid: allProfiles?.filter((p: any) => p.payment_status === 'paid').length || 0,
-      partialPayment:
-        allProfiles?.filter(
-          (p: any) => p.payment_status === 'pending' && (p.fee_paid || 0) > 0
-        ).length || 0,
-      totalRevenue:
-        allProfiles?.reduce((sum: number, p: any) => sum + (p.fee_paid || 0), 0) || 0,
+    let stats = {
+      totalStudents: 0,
+      fullyPaid: 0,
+      partialPayment: 0,
+      totalRevenue: 0,
     };
+
+    try {
+      const { data: allProfiles, error: statsError } = await supabase
+        .from('student_profiles')
+        .select('payment_status, fee_paid, total_fee, fee_due');
+
+      if (statsError) {
+        console.error('Stats query error:', statsError.message, statsError.details);
+      }
+
+      if (allProfiles && allProfiles.length > 0) {
+        stats = {
+          totalStudents: allProfiles.length,
+          fullyPaid: allProfiles.filter((p: any) => p.payment_status === 'paid').length,
+          partialPayment: allProfiles.filter(
+            (p: any) => p.payment_status === 'pending' && (p.fee_paid || 0) > 0
+          ).length,
+          totalRevenue: allProfiles.reduce((sum: number, p: any) => sum + (p.fee_paid || 0), 0),
+        };
+      } else if (!statsError) {
+        // Stats query succeeded but returned empty — compute from main query results
+        const allStudents = flatStudents;
+        stats = {
+          totalStudents: count || allStudents.length,
+          fullyPaid: allStudents.filter((s: any) => s.payment_status === 'paid').length,
+          partialPayment: allStudents.filter(
+            (s: any) => s.payment_status === 'pending' && (s.fee_paid || 0) > 0
+          ).length,
+          totalRevenue: allStudents.reduce((sum: number, s: any) => sum + (s.fee_paid || 0), 0),
+        };
+      }
+    } catch (e: any) {
+      console.error('Stats computation error:', e.message);
+      // Fallback: compute from the main query results
+      stats = {
+        totalStudents: count || flatStudents.length,
+        fullyPaid: flatStudents.filter((s: any) => s.payment_status === 'paid').length,
+        partialPayment: flatStudents.filter(
+          (s: any) => s.payment_status === 'pending' && (s.fee_paid || 0) > 0
+        ).length,
+        totalRevenue: flatStudents.reduce((sum: number, s: any) => sum + (s.fee_paid || 0), 0),
+      };
+    }
 
     return NextResponse.json({
       students: filteredStudents,

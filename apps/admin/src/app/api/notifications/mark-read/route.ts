@@ -23,14 +23,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (notificationId) {
-      // Mark single notification as read
       await markNotificationRead(notificationId, readBy);
     } else {
-      // Mark all notifications as read
       await markAllNotificationsRead(readBy);
     }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    });
   } catch (error) {
     console.error('Error marking notification(s) as read:', error);
     return NextResponse.json(

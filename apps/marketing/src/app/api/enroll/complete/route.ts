@@ -163,26 +163,35 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Create student profile
-    const studentProfile = await createStudentProfile({
-      user_id: auth.userId,
-      enrollment_date: new Date().toISOString().split('T')[0],
-      batch_id: link.batch_id || null,
-      course_id: link.course_id || null,
-      ms_teams_id: null,
-      ms_teams_email: null,
-      payment_status: link.amount_paid >= link.final_fee ? 'paid' : 'pending',
-      total_fee: link.final_fee,
-      fee_paid: link.amount_paid,
-      fee_due: Math.max(0, link.final_fee - link.amount_paid),
-      next_payment_date: null,
-      lessons_completed: 0,
-      assignments_completed: 0,
-      total_watch_time: 0,
-      last_activity_at: null,
-      parent_contact: parentPhone || null,
-      emergency_contact: null,
-      notes: `Direct enrollment. Application: ${applicationNumber}`,
-    }, supabase);
+    let studentProfile;
+    try {
+      studentProfile = await createStudentProfile({
+        user_id: auth.userId,
+        enrollment_date: new Date().toISOString().split('T')[0],
+        batch_id: link.batch_id || null,
+        course_id: link.course_id || null,
+        ms_teams_id: null,
+        ms_teams_email: null,
+        payment_status: link.amount_paid >= link.final_fee ? 'paid' : 'pending',
+        total_fee: link.final_fee,
+        fee_paid: link.amount_paid,
+        fee_due: Math.max(0, link.final_fee - link.amount_paid),
+        next_payment_date: null,
+        lessons_completed: 0,
+        assignments_completed: 0,
+        total_watch_time: 0,
+        last_activity_at: null,
+        parent_contact: parentPhone || null,
+        emergency_contact: null,
+        notes: `Direct enrollment. Application: ${applicationNumber}`,
+      }, supabase);
+    } catch (spError: any) {
+      console.error('[Direct Enrollment] Failed to create student_profile:', spError?.message, spError?.details);
+      return NextResponse.json(
+        { error: 'Failed to create student profile. Please contact support.', details: spError?.message },
+        { status: 500 }
+      );
+    }
 
     // 5. Create payment record for the direct payment
     const receiptNumber = `NR-DE-${Date.now().toString(36).toUpperCase()}`;

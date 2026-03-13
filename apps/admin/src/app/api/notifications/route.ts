@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await listAdminNotifications(options);
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    });
   } catch (error) {
     console.error('Error listing admin notifications:', error);
     return NextResponse.json(

@@ -128,7 +128,9 @@ export default function NotificationBell() {
 
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications?isRead=false&limit=1&offset=0');
+      const res = await fetch(`/api/notifications?isRead=false&limit=1&offset=0&_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (!res.ok) {
         setUnreadCount(0);
         return;
@@ -144,11 +146,11 @@ export default function NotificationBell() {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/notifications?limit=10&offset=0');
+      const res = await fetch(`/api/notifications?limit=10&offset=0&_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       const data = await res.json();
-      // Mark all as read in local state since opening the popover marks them read
-      const notifs = (data.notifications || []).map((n: AdminNotification) => ({ ...n, is_read: true }));
-      setNotifications(notifs);
+      setNotifications(data.notifications || []);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -156,35 +158,61 @@ export default function NotificationBell() {
     }
   }, []);
 
+  const startPolling = useCallback(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(fetchUnreadCount, 30000);
+  }, [fetchUnreadCount]);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
   // Initial fetch and polling
   useEffect(() => {
     fetchUnreadCount();
-
-    // Poll every 30 seconds
-    intervalRef.current = setInterval(fetchUnreadCount, 30000);
+    startPolling();
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      stopPolling();
     };
-  }, [fetchUnreadCount]);
+  }, [fetchUnreadCount, startPolling, stopPolling]);
 
-  const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleOpen = async (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
     // Optimistically clear badge immediately
     setUnreadCount(0);
+    // Pause polling while popover is open
+    stopPolling();
     fetchNotifications();
-    // Auto-mark all as read when opening the popover (works with or without supabaseUserId)
-    fetch('/api/notifications/mark-read', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: supabaseUserId || undefined }),
-    }).then(() => fetchUnreadCount()).catch(() => {});
+    // Auto-mark all as read when opening the popover
+    try {
+      const res = await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: supabaseUserId || undefined }),
+      });
+      if (!res.ok) {
+        console.error('Failed to mark notifications as read on open:', res.status);
+      }
+      // Refresh count from server to confirm
+      await fetchUnreadCount();
+      // Re-fetch notifications to show actual read state
+      fetchNotifications();
+    } catch (error) {
+      console.error('Error marking notifications as read on open:', error);
+      // Refresh count in case optimistic clear was wrong
+      fetchUnreadCount();
+    }
   };
 
   const handleClose = () => {
     setAnchorEl(null);
+    // Refresh count from server and restart polling
+    fetchUnreadCount();
+    startPolling();
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
@@ -335,14 +363,14 @@ export default function NotificationBell() {
                     </Typography>
                   }
                   secondary={
-                    <Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    <span>
+                      <Typography variant="caption" color="text.secondary" component="span" sx={{ display: 'block' }}>
                         {notification.message}
                       </Typography>
-                      <Typography variant="caption" color="text.disabled">
+                      <Typography variant="caption" color="text.disabled" component="span">
                         {timeAgo(notification.created_at)}
                       </Typography>
-                    </Box>
+                    </span>
                   }
                 />
               </ListItem>

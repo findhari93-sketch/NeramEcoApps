@@ -256,29 +256,38 @@ export async function listAdminNotifications(
   const supabase = client || getSupabaseAdminClient();
   const { isRead, eventType, limit = 20, offset = 0 } = options;
 
-  let query = supabase
+  // Use separate count query (head:true) to avoid incorrect count
+  // when .range() is combined with count:'exact' through Cloudflare proxy
+  let countQuery = supabase
     .from('admin_notifications')
-    .select('*', { count: 'exact' });
+    .select('*', { count: 'exact', head: true });
+
+  let dataQuery = supabase
+    .from('admin_notifications')
+    .select('*');
 
   if (isRead !== undefined) {
-    query = query.eq('is_read', isRead);
+    countQuery = countQuery.eq('is_read', isRead);
+    dataQuery = dataQuery.eq('is_read', isRead);
   }
 
   if (eventType) {
-    query = query.eq('event_type', eventType);
+    countQuery = countQuery.eq('event_type', eventType);
+    dataQuery = dataQuery.eq('event_type', eventType);
   }
 
-  query = query
+  dataQuery = dataQuery
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
-  const { data, error, count } = await query;
+  const [countResult, dataResult] = await Promise.all([countQuery, dataQuery]);
 
-  if (error) throw error;
+  if (countResult.error) throw countResult.error;
+  if (dataResult.error) throw dataResult.error;
 
   return {
-    notifications: data || [],
-    count: count || 0,
+    notifications: dataResult.data || [],
+    count: countResult.count || 0,
   };
 }
 

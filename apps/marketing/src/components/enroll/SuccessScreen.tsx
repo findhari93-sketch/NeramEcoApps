@@ -1,15 +1,42 @@
 'use client';
 
-import { Box, Container, Typography, Button, Paper } from '@neram/ui';
+import { Box, Container, Typography, Button, Paper, Divider } from '@neram/ui';
 import { CheckCircleOutlined, ArrowForward, Check } from '@mui/icons-material';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
 
-interface SuccessScreenProps {
-  applicationNumber: string;
+interface EnrollmentSummary {
+  studentName?: string | null;
+  courseName?: string | null;
+  totalFee?: number | null;
+  amountPaid?: number | null;
+  enrolledAt?: string | null;
 }
 
-export default function SuccessScreen({ applicationNumber }: SuccessScreenProps) {
+interface SuccessScreenProps {
+  applicationNumber: string;
+  enrollmentSummary?: EnrollmentSummary;
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  try {
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function formatCurrency(amount: number | null | undefined): string {
+  if (amount == null) return '';
+  return `\u20B9${Number(amount).toLocaleString('en-IN')}`;
+}
+
+export default function SuccessScreen({ applicationNumber, enrollmentSummary }: SuccessScreenProps) {
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
       <Box textAlign="center">
@@ -37,6 +64,59 @@ export default function SuccessScreen({ applicationNumber }: SuccessScreenProps)
         >
           {applicationNumber}
         </Typography>
+
+        {/* Enrollment Summary (shown on revisit) */}
+        {enrollmentSummary && (enrollmentSummary.studentName || enrollmentSummary.courseName) && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              mb: 3,
+              border: '1px solid',
+              borderColor: 'success.light',
+              borderRadius: 2,
+              bgcolor: 'success.50',
+              textAlign: 'left',
+            }}
+          >
+            <Typography variant="subtitle2" fontWeight={600} color="success.dark" mb={1.5}>
+              Enrollment Details
+            </Typography>
+            {enrollmentSummary.studentName && (
+              <Box display="flex" justifyContent="space-between" mb={0.75}>
+                <Typography variant="body2" color="text.secondary">Student</Typography>
+                <Typography variant="body2" fontWeight={600}>{enrollmentSummary.studentName}</Typography>
+              </Box>
+            )}
+            {enrollmentSummary.courseName && (
+              <Box display="flex" justifyContent="space-between" mb={0.75}>
+                <Typography variant="body2" color="text.secondary">Course</Typography>
+                <Typography variant="body2" fontWeight={600}>{enrollmentSummary.courseName}</Typography>
+              </Box>
+            )}
+            {enrollmentSummary.totalFee != null && (
+              <Box display="flex" justifyContent="space-between" mb={0.75}>
+                <Typography variant="body2" color="text.secondary">Total Fee</Typography>
+                <Typography variant="body2" fontWeight={600}>{formatCurrency(enrollmentSummary.totalFee)}</Typography>
+              </Box>
+            )}
+            {enrollmentSummary.amountPaid != null && (
+              <Box display="flex" justifyContent="space-between" mb={0.75}>
+                <Typography variant="body2" color="text.secondary">Amount Paid</Typography>
+                <Typography variant="body2" fontWeight={600} color="success.main">{formatCurrency(enrollmentSummary.amountPaid)}</Typography>
+              </Box>
+            )}
+            {enrollmentSummary.enrolledAt && (
+              <>
+                <Divider sx={{ my: 1 }} />
+                <Box display="flex" justifyContent="space-between">
+                  <Typography variant="body2" color="text.secondary">Enrolled On</Typography>
+                  <Typography variant="body2">{formatDate(enrollmentSummary.enrolledAt)}</Typography>
+                </Box>
+              </>
+            )}
+          </Paper>
+        )}
 
         {/* What's next */}
         <Paper

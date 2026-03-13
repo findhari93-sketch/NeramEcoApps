@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -19,6 +19,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useUserNotifications } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useRouter } from '@/i18n/routing';
+import { usePathname } from 'next/navigation';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -49,6 +50,8 @@ function timeAgo(dateStr: string): string {
 export default function UserNotificationBell() {
   const { user } = useFirebaseAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isEnrollPage = pathname?.includes('/enroll');
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
 
   const getIdToken = async () => {
@@ -72,11 +75,11 @@ export default function UserNotificationBell() {
   } = useUserNotifications({
     apiBaseUrl: APP_URL,
     getIdToken,
-    enabled: !!user,
+    enabled: !!user && !isEnrollPage,
   });
 
-  // Don't render if user is not logged in
-  if (!user) return null;
+  // Don't render on enroll page or if user is not logged in
+  if (!user || isEnrollPage) return null;
 
   const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);

@@ -124,6 +124,20 @@ export default defineConfig({
     },
 
     // =====================================================
+    // NEXUS MOBILE TESTS (Teacher mobile viewport)
+    // =====================================================
+    {
+      name: 'nexus-mobile',
+      use: {
+        ...devices['Pixel 5'],
+        baseURL: 'http://localhost:3012',
+        storageState: TEACHER_AUTH_FILE,
+      },
+      testMatch: /.*nexus-mobile.*\.spec\.ts/,
+      dependencies: ['setup'],
+    },
+
+    // =====================================================
     // ADMIN TESTS (Microsoft Auth Required)
     // =====================================================
     {
@@ -167,13 +181,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
     },
-    // Uncomment when you have tests for nexus
-    // {
-    //   command: 'pnpm dev:nexus',
-    //   url: 'http://localhost:3012',
-    //   reuseExistingServer: !process.env.CI,
-    //   timeout: 120 * 1000,
-    // },
+    {
+      command: 'pnpm dev:nexus',
+      url: 'http://localhost:3012',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
     {
       command: 'pnpm dev:admin',
       url: 'http://localhost:3013',
