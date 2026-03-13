@@ -55,7 +55,12 @@ export async function GET(request: NextRequest) {
       // Check if the requesting user is the owner (optional auth)
       let isOwner = false;
       let fullLeadProfile: Record<string, unknown> | null = null;
-      const auth = await verifyFirebaseToken(request).catch(() => null);
+      const auth = await verifyFirebaseToken(request).catch((e) => {
+        console.error('[Validate] Firebase token verification failed:', e?.message || e);
+        return null;
+      });
+
+      console.log('[Validate] Auth result:', auth ? { userId: auth.userId } : 'null', 'enrolledByFirebaseUid:', enrolledByFirebaseUid);
 
       if (link.lead_profile_id) {
         try {

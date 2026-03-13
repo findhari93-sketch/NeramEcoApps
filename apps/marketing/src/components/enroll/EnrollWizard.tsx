@@ -130,6 +130,7 @@ export default function EnrollWizard() {
   // Session persistence
   const { restoredState, isResuming, saveProgress, clearProgress, dismissResume } = useEnrollmentProgress(token);
   const initializedFromRestore = useRef(false);
+  const ownerCheckAttempted = useRef(false);
 
   // Token validation state
   const [tokenStatus, setTokenStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used'>('loading');
@@ -213,8 +214,9 @@ export default function EnrollWizard() {
 
   // Re-validate token when user signs in (to get ownership data for used tokens)
   useEffect(() => {
-    if (user && token && tokenStatus === 'used' && usedLinkData && !usedLinkData.isOwner) {
-      // User just signed in — re-validate with their Firebase token to check ownership
+    if (user && token && tokenStatus === 'used' && usedLinkData && !usedLinkData.isOwner && !ownerCheckAttempted.current) {
+      // User just signed in — re-validate with their Firebase token to check ownership (once)
+      ownerCheckAttempted.current = true;
       validateToken(token, (user.raw as any));
     }
   }, [user, tokenStatus, usedLinkData]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1037,9 +1039,7 @@ export default function EnrollWizard() {
               )}
               <Button
                 variant="contained"
-                href={APP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`/sso?redirect=${encodeURIComponent(APP_URL)}`}
                 sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
               >
                 Go to Student App
@@ -1104,9 +1104,7 @@ export default function EnrollWizard() {
         </Typography>
         <Button
           variant="contained"
-          href={process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com'}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={`/sso?redirect=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com')}`}
           size="large"
           sx={{ borderRadius: 1, fontWeight: 600, mt: 2 }}
         >

@@ -143,9 +143,12 @@ export async function initializeMsal(): Promise<PublicClientApplication> {
     return msalInstance;
   }
 
-  // Clear any stale interaction state from a previous failed redirect
-  // (e.g., user clicked back from Microsoft login, or redirect URI was rejected)
-  clearInteractionState();
+  // IMPORTANT: Do NOT clear interaction state here.
+  // When the user returns from Microsoft's login redirect, the auth response data
+  // is stored in localStorage. Clearing it before handleRedirectPromise() reads it
+  // destroys the login callback — causing the user to land back on the login page
+  // as if they never authenticated.
+  // Only clear state in the catch block below (when we know the data is corrupt/stale).
 
   msalInstance = new PublicClientApplication(msalConfig);
   await msalInstance.initialize();
@@ -159,8 +162,9 @@ export async function initializeMsal(): Promise<PublicClientApplication> {
       redirectResult = result;
     }
   } catch (error) {
-    // If handleRedirectPromise fails (e.g., interaction_in_progress), clear state and continue
-    console.warn('[MSAL] handleRedirectPromise failed, clearing state:', error);
+    // handleRedirectPromise failed — the interaction state is stale or corrupt.
+    // NOW it's safe to clear, since we know the redirect data was unusable.
+    console.warn('[MSAL] handleRedirectPromise failed, clearing stale state:', error);
     clearInteractionState();
   }
 
@@ -319,23 +323,12 @@ export async function getAccessToken(
     return result.accessToken;
   } catch (error) {
     if (error instanceof InteractionRequiredAuthError) {
-      try {
-        const result = await msal.acquireTokenPopup({ scopes });
-        return result.accessToken;
-      } catch (popupError) {
-        if (
-          popupError instanceof BrowserAuthError &&
-          popupError.errorCode === BrowserAuthErrorCodes.interactionInProgress
-        ) {
-          clearInteractionState();
-          msalInstance = null;
-          msalInitialized = false;
-          const freshMsal = await initializeMsal();
-          const result = await freshMsal.acquireTokenPopup({ scopes });
-          return result.accessToken;
-        }
-        throw popupError;
-      }
+      // Use redirect instead of popup to avoid interaction_in_progress conflicts.
+      // Popup-based token acquisition often gets blocked by browsers and conflicts
+      // with the redirect-based login flow, causing BrowserAuthError.
+      await msal.acquireTokenRedirect({ scopes, account });
+      // acquireTokenRedirect navigates away — this line won't execute
+      return null;
     }
     throw error;
   }

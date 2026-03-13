@@ -168,9 +168,7 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
           variant="contained"
           size="large"
           fullWidth
-          href={`${APP_URL}/login`}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={`/sso?redirect=${encodeURIComponent(APP_URL)}`}
           endIcon={<ArrowForward />}
           sx={{
             py: 1.5,
@@ -184,7 +182,7 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
         </Button>
 
         <Typography variant="caption" color="text.secondary">
-          Sign in with the same Google account to access your student dashboard and complete onboarding.
+          You&apos;ll be automatically signed in to the Student App with your Google account.
         </Typography>
       </Box>
     </Container>
