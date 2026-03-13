@@ -38,6 +38,7 @@ const staticPages: Array<{ path: string; lastModified: string }> = [
   { path: '/best-nata-coaching-online', lastModified: '2026-02-20' },
   { path: '/blog', lastModified: '2026-03-10' },  // Blog index - updated with new posts
   { path: '/coaching/nata-coaching', lastModified: '2026-02-25' },
+  { path: '/coaching/nata-coaching-center-in-tamil-nadu', lastModified: '2026-03-13' },
   { path: '/privacy', lastModified: '2025-12-01' },
   { path: '/terms', lastModified: '2025-12-01' },
   { path: '/refund-policy', lastModified: '2025-12-01' },

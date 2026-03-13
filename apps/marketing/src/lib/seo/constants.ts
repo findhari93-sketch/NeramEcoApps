@@ -18,9 +18,10 @@ export const ORG_ADDRESS = {
 };
 
 export const SOCIAL_PROFILES = [
-  'https://www.youtube.com/@neramclasses',
-  'https://www.instagram.com/neramclasses',
+  'https://www.youtube.com/@neramclassesnata',
+  'https://www.instagram.com/neramclasses/',
   'https://www.facebook.com/neramclasses',
+  'https://www.linkedin.com/company/neramclasses',
 ];
 
 export const SUPPORTED_LOCALES = ['en', 'ta', 'hi', 'kn', 'ml'] as const;

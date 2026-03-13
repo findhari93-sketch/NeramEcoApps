@@ -31,7 +31,7 @@ export default function AppTopBar({ onMenuToggle, phoneVerified }: AppTopBarProp
           component={Link}
           href="/dashboard"
           sx={{
-            fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+            fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
             fontSize: '1.15rem',
             fontWeight: 700,
             color: 'text.primary',

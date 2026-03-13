@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Poppins, Inter, Noto_Sans_Tamil, Cormorant_Garamond, DM_Sans, Space_Mono } from 'next/font/google';
+import { Poppins, Inter, Noto_Sans_Tamil } from 'next/font/google';
 import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
 import { locales } from '@/i18n';
 import Header from '@/components/Header';
@@ -12,48 +12,28 @@ import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import '@/styles/globals.css';
 
-// Font loading - Next.js preloads these automatically, eliminating font swap flash
+// Font loading - reduced to 2-3 fonts for faster FCP on 3G
+// Removed: Cormorant_Garamond, DM_Sans (→ Inter), Space_Mono (→ system monospace)
 const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800'],
+  weight: ['500', '600', '700'],
   display: 'swap',
   variable: '--font-poppins',
 });
 
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-inter',
 });
 
+// Only loaded when locale is Tamil — conditional application in layout below
 const notoSansTamil = Noto_Sans_Tamil({
   subsets: ['tamil'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-noto-tamil',
-});
-
-// aiArchitek Era 2026 fonts
-const cormorantGaramond = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['400', '600', '700'],
-  display: 'swap',
-  variable: '--font-cormorant',
-});
-
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  display: 'swap',
-  variable: '--font-dm-sans',
-});
-
-const spaceMono = Space_Mono({
-  subsets: ['latin'],
-  weight: ['400', '700'],
-  display: 'swap',
-  variable: '--font-space-mono',
 });
 
 export function generateStaticParams() {
@@ -78,7 +58,11 @@ export async function generateMetadata({
     keywords:
       'NATA coaching, JEE Paper 2 coaching, architecture entrance exam, NATA preparation, best NATA coaching India, online NATA classes, NATA coaching Tamil Nadu, architecture entrance coaching',
     icons: {
-      icon: '/favicon.ico',
+      icon: [
+        { url: '/favicon.ico', sizes: '32x32' },
+        { url: '/icon.svg', type: 'image/svg+xml' },
+      ],
+      apple: '/favicon.ico',
     },
     alternates: {
       canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
@@ -97,7 +81,7 @@ export async function generateMetadata({
       type: 'website',
       images: [
         {
-          url: '/og-default.png',
+          url: '/og-default.svg',
           width: 1200,
           height: 630,
           alt: 'Neram Classes - Best NATA & JEE Paper 2 Coaching in India',
@@ -150,7 +134,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${poppins.variable} ${inter.variable} ${notoSansTamil.variable} ${cormorantGaramond.variable} ${dmSans.variable} ${spaceMono.variable}`}
+      className={`${poppins.variable} ${inter.variable}${locale === 'ta' ? ` ${notoSansTamil.variable}` : ''}`}
       suppressHydrationWarning
     >
       <head />

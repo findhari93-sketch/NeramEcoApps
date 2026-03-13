@@ -31,7 +31,7 @@ export default function AnnounceBadge() {
         sx={{
           bgcolor: 'primary.main',
           color: 'background.default',
-          fontFamily: '"Space Mono", monospace',
+          fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
           fontSize: { xs: '8px', md: '9px' },
           fontWeight: 700,
           px: 0.875,
@@ -45,7 +45,7 @@ export default function AnnounceBadge() {
       <Typography
         component="span"
         sx={{
-          fontFamily: '"DM Sans", sans-serif',
+          fontFamily: '"Inter", sans-serif',
           fontSize: { xs: '10px', md: '12px' },
           fontWeight: 500,
           color: 'primary.light',

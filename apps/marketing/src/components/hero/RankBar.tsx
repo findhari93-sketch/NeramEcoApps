@@ -57,7 +57,7 @@ export default function RankBar() {
         >
           <Typography
             sx={{
-              fontFamily: '"Space Mono", monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: { xs: '16px', md: '22px' },
               fontWeight: 700,
               color: 'primary.main',
@@ -68,7 +68,7 @@ export default function RankBar() {
           </Typography>
           <Typography
             sx={{
-              fontFamily: '"DM Sans", sans-serif',
+              fontFamily: '"Inter", sans-serif',
               fontSize: { xs: '8px', md: '10px' },
               fontWeight: 400,
               color: 'text.secondary',

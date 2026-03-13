@@ -161,6 +161,75 @@ export const locationSeoContent: LocationSeoContent[] = [
       'Thanjavur is the crown jewel of Chola architectural heritage, centred around the UNESCO World Heritage Brihadeeswara Temple (Big Temple) — a thousand-year-old granite marvel with the world\'s first complete granite structure rising to 66 metres. The city and its surrounding delta region contain three UNESCO-listed Great Living Chola Temples. NATA students in Thanjavur study architecture at its most monumental, gaining appreciation for structural engineering, proportional systems, and sculptural integration that few cities in the world can match.',
   },
 
+  {
+    city: 'erode',
+    nearbyColleges: [
+      { name: 'Kongu Engineering College, Department of Architecture', type: 'private' },
+      { name: 'Nandha Engineering College, School of Architecture', type: 'private' },
+      { name: 'Karpagam Academy of Higher Education, School of Architecture, Coimbatore', type: 'deemed' },
+    ],
+    examCenters: ['Erode', 'Coimbatore', 'Salem'],
+    uniqueHighlights: [
+      'Sketching sessions along the Cauvery River banks for landscape and environmental drawing practice',
+      'Study of traditional Kongu Nadu architecture — distinctive tile-roofed houses and granary buildings',
+      'Strategic location between Coimbatore and Salem, combining benefits of both coaching ecosystems',
+      'Textile industry belt provides exposure to industrial and commercial building architecture',
+    ],
+    localContext:
+      'Erode, the turmeric capital of India, sits at the confluence of the Cauvery and Bhavani rivers in western Tamil Nadu. The city\'s Kongu Nadu heritage architecture — with its distinctive courtyard houses, ornate wooden pillars, and sloped tile roofs — offers unique drawing subjects for NATA aspirants. Erode\'s location on the Coimbatore-Salem corridor gives students access to coaching resources in both major cities while enjoying lower living costs.',
+  },
+  {
+    city: 'thoothukudi',
+    nearbyColleges: [
+      { name: 'National Engineering College, Department of Architecture, Kovilpatti', type: 'private' },
+      { name: 'Mepco Schlenk Engineering College, School of Architecture, Sivakasi', type: 'private' },
+      { name: 'Kalasalingam Academy of Research and Education, School of Architecture, Krishnankoil', type: 'deemed' },
+    ],
+    examCenters: ['Thoothukudi', 'Tirunelveli', 'Madurai'],
+    uniqueHighlights: [
+      'Coastal architecture study — port city with unique colonial warehouses, lighthouses, and salt pan structures',
+      'Sketching at Our Lady of Snows Basilica for Indo-Gothic church architecture',
+      'Study of V.O. Chidambaram Pillai-era mercantile buildings along the harbor front',
+      'Pearl City heritage walk covering Dutch, Portuguese, and British colonial architectural layers',
+    ],
+    localContext:
+      'Thoothukudi (Tuticorin), the Pearl City on the Gulf of Mannar, blends maritime heritage with colonial architecture from Dutch, Portuguese, and British periods. The city\'s port infrastructure, salt pan landscapes, and coral stone buildings offer distinctive drawing subjects not found in inland Tamil Nadu. NATA aspirants here develop a unique eye for coastal and industrial architecture.',
+  },
+  {
+    city: 'tiruppur',
+    nearbyColleges: [
+      { name: 'Kumaraguru College of Technology, School of Architecture, Coimbatore', type: 'private' },
+      { name: 'PSG College of Technology, Department of Architecture, Coimbatore', type: 'private' },
+      { name: 'Karpagam Academy of Higher Education, School of Architecture, Coimbatore', type: 'deemed' },
+    ],
+    examCenters: ['Tiruppur', 'Coimbatore', 'Erode'],
+    uniqueHighlights: [
+      'Study of rapid urbanization and modern commercial architecture in India\'s knitwear capital',
+      'Weekend sketching trips to Amaravathi Dam and surrounding Western Ghats foothills',
+      'Observation of sustainable factory design in the garment manufacturing belt',
+      'Close proximity to Coimbatore (50 km) for access to top architecture colleges and resources',
+    ],
+    localContext:
+      'Tiruppur, known as the Knitwear Capital of India, is one of Tamil Nadu\'s fastest-growing cities. Its rapid industrialization has created a fascinating mix of traditional Kongu Nadu architecture and modern commercial construction. NATA aspirants here witness firsthand how architecture adapts to industrial growth, with innovative factory designs, worker housing colonies, and urban planning challenges that make excellent case studies for the general aptitude section.',
+  },
+  {
+    city: 'dindigul',
+    nearbyColleges: [
+      { name: 'Thiagarajar College of Engineering, Department of Architecture, Madurai', type: 'government' },
+      { name: 'Kalasalingam Academy of Research and Education, School of Architecture', type: 'deemed' },
+      { name: 'Mepco Schlenk Engineering College, School of Architecture, Sivakasi', type: 'private' },
+    ],
+    examCenters: ['Dindigul', 'Madurai', 'Trichy'],
+    uniqueHighlights: [
+      'Sketching at the iconic Dindigul Rock Fort — a 17th-century hilltop fortification with panoramic views',
+      'Study of the transition zone architecture between the plains and the Western Ghats at Kodaikanal',
+      'Traditional lock-making industry area with heritage workshops and artisan buildings',
+      'Central Tamil Nadu location serving students from Madurai, Trichy, and hill station towns',
+    ],
+    localContext:
+      'Dindigul, the Lock City of India, is crowned by a dramatic rock fort built by Madurai Nayak kings in the 17th century. The fort\'s strategic hilltop placement and defensive architecture provide excellent perspective drawing subjects for NATA preparation. Dindigul\'s unique position at the gateway to Kodaikanal and the Palani Hills means students experience both plains and hill station architecture, understanding how climate and terrain shape building design.',
+  },
+
   // ═══════════════════════════════════════════════════════════════
   // KARNATAKA
   // ═══════════════════════════════════════════════════════════════

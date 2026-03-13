@@ -55,7 +55,7 @@ export default function FloatingToolBadge({ icon, label, position, href, sx }: F
         borderRadius: { xs: '8px', md: '10px' },
         px: { xs: 1.25, md: 2 },
         py: { xs: 0.75, md: 1.25 },
-        fontFamily: '"DM Sans", sans-serif',
+        fontFamily: '"Inter", sans-serif',
         fontSize: { xs: '10px', md: '12px' },
         fontWeight: 500,
         color: 'text.primary',

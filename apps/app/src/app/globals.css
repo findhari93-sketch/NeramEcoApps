@@ -84,6 +84,7 @@ body {
   background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
 }
 
+/* Blueprint grid (static — animation removed for performance) */
 .ai-blueprint-bg-animated {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
@@ -91,12 +92,6 @@ body {
     linear-gradient(rgba(232, 160, 32, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(232, 160, 32, 0.06) 1px, transparent 1px);
   background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
-  animation: aiGridShift 60s linear infinite;
-}
-
-@keyframes aiGridShift {
-  from { background-position: 0 0, 0 0, 0 0, 0 0; }
-  to { background-position: 40px 40px, 40px 40px, 200px 200px, 200px 200px; }
 }
 
 /* ============================================

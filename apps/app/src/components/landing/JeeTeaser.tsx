@@ -47,7 +47,7 @@ export default function JeeTeaser() {
             sx={{
               bgcolor: `${neramTokens.blue[500]}20`,
               color: neramTokens.blue[400],
-              fontFamily: 'var(--font-space-mono), monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: '0.65rem',
               fontWeight: 700,
               letterSpacing: '0.1em',
@@ -58,7 +58,7 @@ export default function JeeTeaser() {
           <Typography
             variant="h3"
             sx={{
-              fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+              fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
               fontSize: { xs: '1.75rem', md: '2.25rem' },
               fontWeight: 700,
               color: neramTokens.cream[100],

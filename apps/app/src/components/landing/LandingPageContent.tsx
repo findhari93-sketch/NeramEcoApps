@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Typography, Button, Stack, CircularProgress } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
@@ -25,15 +25,17 @@ export default function LandingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sso = useSSOToken();
+  const [redirecting, setRedirecting] = useState(false);
 
-  // Redirect to dashboard if already logged in
+  // Redirect to dashboard if already logged in (background check)
   useEffect(() => {
     if (!loading && user) {
+      setRedirecting(true);
       router.push('/dashboard');
     }
   }, [user, loading, router]);
 
-  // Try SSO with marketing app (once per session)
+  // Try SSO with marketing app (once per session, background)
   useEffect(() => {
     if (!loading && !user && !sso.processing && !sso.error) {
       const authToken = searchParams.get('authToken');
@@ -65,101 +67,83 @@ export default function LandingPageContent() {
     }
   }, [loading, user, sso.processing, sso.error, searchParams]);
 
-  // Loading state
-  if (loading || sso.processing) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          bgcolor: neramTokens.navy[900],
-          gap: 2,
-        }}
-      >
-        <CircularProgress sx={{ color: neramTokens.gold[500] }} />
-        <Typography sx={{ color: neramTokens.cream[300] }}>Loading...</Typography>
-      </Box>
-    );
-  }
-
-  // SSO error
-  if (sso.error) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          bgcolor: neramTokens.navy[900],
-          gap: 2,
-          p: 3,
-          textAlign: 'center',
-        }}
-      >
-        <Typography variant="h6" sx={{ color: neramTokens.error }}>
-          Sign-in Failed
-        </Typography>
-        <Typography variant="body2" sx={{ color: neramTokens.cream[300] }}>
-          Automatic sign-in from the main site didn&apos;t work. Please log in directly.
-        </Typography>
-        <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-          <Button
-            component={Link}
-            href="/login"
-            variant="contained"
-            sx={{
-              bgcolor: neramTokens.gold[500],
-              color: neramTokens.navy[950],
-              minHeight: 48,
-              '&:hover': { bgcolor: neramTokens.gold[400] },
-            }}
-          >
-            Login
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={sso.retrySSO}
-            sx={{
-              color: neramTokens.cream[100],
-              borderColor: `${neramTokens.cream[100]}30`,
-              minHeight: 48,
-            }}
-          >
-            Retry
-          </Button>
-        </Stack>
-      </Box>
-    );
-  }
-
-  // Already authenticated — spinner while redirecting
-  if (user) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          bgcolor: neramTokens.navy[900],
-          gap: 2,
-        }}
-      >
-        <CircularProgress sx={{ color: neramTokens.gold[500] }} />
-        <Typography sx={{ color: neramTokens.cream[300] }}>Loading...</Typography>
-      </Box>
-    );
-  }
-
-  // Landing page
+  // Always render the landing page content immediately.
+  // Auth checks and redirects happen in background via useEffect above.
   return (
-    <Box sx={{ bgcolor: neramTokens.navy[900], minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: neramTokens.navy[900], minHeight: '100vh', position: 'relative' }}>
+      {/* SSO error banner — shown as overlay on top of content, not replacing it */}
+      {sso.error && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1300,
+            bgcolor: neramTokens.navy[950],
+            borderBottom: `2px solid ${neramTokens.error}`,
+            p: 2,
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="body2" sx={{ color: neramTokens.error, fontWeight: 600 }}>
+            Automatic sign-in didn&apos;t work.
+          </Typography>
+          <Stack direction="row" spacing={2} justifyContent="center" sx={{ mt: 1 }}>
+            <Button
+              component={Link}
+              href="/login"
+              variant="contained"
+              size="small"
+              sx={{
+                bgcolor: neramTokens.gold[500],
+                color: neramTokens.navy[950],
+                minHeight: 36,
+                '&:hover': { bgcolor: neramTokens.gold[400] },
+              }}
+            >
+              Login
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={sso.retrySSO}
+              sx={{
+                color: neramTokens.cream[100],
+                borderColor: `${neramTokens.cream[100]}30`,
+                minHeight: 36,
+              }}
+            >
+              Retry
+            </Button>
+          </Stack>
+        </Box>
+      )}
+
+      {/* Subtle redirecting indicator — does NOT block content */}
+      {redirecting && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: 1300,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            bgcolor: `${neramTokens.navy[800]}ee`,
+            borderRadius: 2,
+            px: 2,
+            py: 1,
+          }}
+        >
+          <CircularProgress size={16} sx={{ color: neramTokens.gold[500] }} />
+          <Typography variant="caption" sx={{ color: neramTokens.cream[300] }}>
+            Redirecting to dashboard...
+          </Typography>
+        </Box>
+      )}
+
       <header>
         <LandingNavbar />
       </header>

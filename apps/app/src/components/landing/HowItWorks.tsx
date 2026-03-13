@@ -1,8 +1,9 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Box, Typography, Grid } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
-import { motion } from 'framer-motion';
+import { scrollRevealSx } from '@/hooks/useScrollAnimation';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import BoltIcon from '@mui/icons-material/Bolt';
@@ -14,9 +15,28 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Bolt: <BoltIcon sx={{ fontSize: 28 }} />,
 };
 
-const MotionBox = motion(Box);
-
 export default function HowItWorks() {
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = gridRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          const children = node.querySelectorAll('[data-reveal]');
+          children.forEach((child) => child.classList.add('is-visible'));
+          observer.unobserve(node);
+        }
+      },
+      { rootMargin: '-60px' },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Box
       component="section"
@@ -32,7 +52,7 @@ export default function HowItWorks() {
         <Box sx={{ textAlign: 'center', mb: { xs: 5, md: 7 } }}>
           <Typography
             sx={{
-              fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: '0.75rem',
               fontWeight: 700,
               color: neramTokens.blue[500],
@@ -46,7 +66,7 @@ export default function HowItWorks() {
           <Typography
             variant="h2"
             sx={{
-              fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+              fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
               fontSize: { xs: '2rem', md: '3rem' },
               fontWeight: 700,
               color: neramTokens.cream[100],
@@ -57,15 +77,15 @@ export default function HowItWorks() {
         </Box>
 
         {/* Steps */}
-        <Grid container spacing={{ xs: 4, md: 6 }} alignItems="stretch">
+        <Grid container spacing={{ xs: 4, md: 6 }} alignItems="stretch" ref={gridRef}>
           {STEPS.map((step, i) => (
             <Grid item xs={12} md={4} key={step.number}>
-              <MotionBox
-                initial={{ opacity: 0, y: 32 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-60px' }}
-                transition={{ duration: 0.5, delay: i * 0.15 }}
+              <Box
+                data-reveal
                 sx={{
+                  ...scrollRevealSx(i),
+                  // Override delay to use 150ms stagger like original
+                  transition: `opacity 0.5s ease ${i * 0.15}s, transform 0.5s ease ${i * 0.15}s`,
                   textAlign: 'center',
                   position: 'relative',
                   height: '100%',
@@ -88,7 +108,7 @@ export default function HowItWorks() {
                 >
                   <Typography
                     sx={{
-                      fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+                      fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                       fontSize: '1.25rem',
                       fontWeight: 700,
                       color: neramTokens.gold[500],
@@ -160,7 +180,7 @@ export default function HowItWorks() {
                     }}
                   />
                 )}
-              </MotionBox>
+              </Box>
             </Grid>
           ))}
         </Grid>

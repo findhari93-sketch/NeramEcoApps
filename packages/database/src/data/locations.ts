@@ -62,6 +62,10 @@ export const locations: Location[] = [
   { city: 'thiruvarur', cityDisplay: 'Thiruvarur', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'low' },
   { city: 'viluppuram', cityDisplay: 'Viluppuram', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'low' },
   { city: 'virudhunagar', cityDisplay: 'Virudhunagar', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'low' },
+  { city: 'namakkal', cityDisplay: 'Namakkal', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'medium' },
+  { city: 'cuddalore', cityDisplay: 'Cuddalore', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'medium' },
+  { city: 'tiruvallur', cityDisplay: 'Tiruvallur', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'low' },
+  { city: 'tirupattur', cityDisplay: 'Tirupattur', state: 'tamil-nadu', stateDisplay: 'Tamil Nadu', country: 'india', region: 'south-india', sitemapPriority: 'low' },
   { city: 'pondicherry', cityDisplay: 'Pondicherry', state: 'puducherry', stateDisplay: 'Puducherry', country: 'india', region: 'south-india', sitemapPriority: 'medium' },
 
   // Karnataka - All 31 districts

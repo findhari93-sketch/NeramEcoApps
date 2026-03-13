@@ -196,7 +196,7 @@ export default function HomePageContent() {
             <Typography
               align="center"
               sx={{
-                fontFamily: '"Space Mono", monospace',
+                fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                 fontSize: '11px',
                 fontWeight: 700,
                 letterSpacing: '0.2em',
@@ -258,7 +258,7 @@ export default function HomePageContent() {
             <Typography
               align="center"
               sx={{
-                fontFamily: '"Space Mono", monospace',
+                fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                 fontSize: '11px',
                 fontWeight: 700,
                 letterSpacing: '0.2em',
@@ -378,7 +378,7 @@ export default function HomePageContent() {
             <Typography
               align="center"
               sx={{
-                fontFamily: '"Space Mono", monospace',
+                fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                 fontSize: '11px',
                 fontWeight: 700,
                 letterSpacing: '0.2em',
@@ -464,7 +464,7 @@ export default function HomePageContent() {
           <Container maxWidth="md" sx={{ position: 'relative' }}>
             <Typography
               sx={{
-                fontFamily: '"Space Mono", monospace',
+                fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                 fontSize: '11px',
                 fontWeight: 700,
                 letterSpacing: '0.2em',

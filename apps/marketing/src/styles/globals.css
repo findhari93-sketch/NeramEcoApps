@@ -225,7 +225,7 @@ body::after {
   background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
 }
 
-/* Blueprint grid with slow animation */
+/* Blueprint grid (static — animation removed for performance) */
 .neram-blueprint-bg-animated {
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
@@ -233,17 +233,6 @@ body::after {
     linear-gradient(rgba(232, 160, 32, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(232, 160, 32, 0.06) 1px, transparent 1px);
   background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
-  animation: neramGridShift 60s linear infinite;
-}
-
-@keyframes neramGridShift {
-  from {
-    background-position: 0 0, 0 0, 0 0, 0 0;
-  }
-
-  to {
-    background-position: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
-  }
 }
 
 /* Glass card utility */

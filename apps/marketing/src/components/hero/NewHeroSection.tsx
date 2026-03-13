@@ -76,7 +76,7 @@ export default function NewHeroSection() {
                   opacity: 0,
                   transform: 'translateY(20px)',
                   animation: 'neramFadeUp 0.9s ease forwards',
-                  animationDelay: '0.45s',
+                  animationDelay: '0s',
                   '& em': {
                     fontStyle: 'italic',
                     color: 'primary.main',
@@ -120,7 +120,7 @@ export default function NewHeroSection() {
                   opacity: 0,
                   transform: 'translateY(16px)',
                   animation: 'neramFadeUp 0.9s ease forwards',
-                  animationDelay: '0.65s',
+                  animationDelay: '0.15s',
                   '& strong': {
                     color: 'text.primary',
                     fontWeight: 500,
@@ -146,7 +146,7 @@ export default function NewHeroSection() {
                   opacity: 0,
                   transform: 'translateY(16px)',
                   animation: 'neramFadeUp 0.9s ease forwards',
-                  animationDelay: '1.0s',
+                  animationDelay: '0.3s',
                 }}
               >
                 <Button

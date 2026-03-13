@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { locations, type Location } from '@neram/database';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateCourseSchema, generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
+import { BASE_URL, ORG_NAME, SOCIAL_PROFILES } from '@/lib/seo/constants';
 import { buildAlternates } from '@/lib/seo/metadata';
 
 export async function generateMetadata({
@@ -29,9 +30,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Coaching - Best Online & Offline NATA Classes | Neram Classes',
-    description: 'Join the best NATA coaching institute in India. Online and offline classes with expert faculty, comprehensive study material, and proven results.',
-    keywords: 'NATA coaching, NATA classes, best NATA coaching, NATA preparation, online NATA coaching',
+    title: 'Best Online NATA Coaching in Tamil Nadu | Neram Classes 2026',
+    description: 'Neram Classes offers the best online NATA coaching in Tamil Nadu with 99.9% success rate. Expert IIT/NIT faculty, live classes, daily drawing practice. Online & offline NATA 2026 preparation from Chennai, Coimbatore, Madurai & across India.',
+    keywords: 'best online NATA coaching Tamil Nadu, NATA coaching Tamil Nadu, online NATA classes, NATA 2026 coaching, NATA preparation Tamil Nadu, NATA coaching Chennai, NATA coaching Coimbatore, best NATA coaching institute India, NATA online classes, Neram Classes NATA',
     alternates: buildAlternates(locale, '/coaching/nata-coaching'),
   };
 }
@@ -74,28 +75,89 @@ const popularCities = [
 export default function NataCoachingPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
-  const baseUrl = 'https://neramclasses.com';
   const faqs = [
-    { question: 'What is the best NATA coaching in India?', answer: 'Neram Classes is consistently rated as one of the best NATA coaching institutes in India with a 99.9% success rate, IIT/NIT alumni faculty, and comprehensive online and offline programs covering all three sections of the NATA exam.' },
-    { question: 'How much does NATA coaching cost?', answer: 'NATA coaching fees at Neram Classes range from ₹15,000 for a 3-month crash course to ₹75,000 for a premium year-long program with 1-on-1 mentoring. Scholarships and EMI options are available for deserving students.' },
-    { question: 'Can I prepare for NATA online?', answer: 'Yes, Neram Classes offers comprehensive online NATA coaching with live interactive sessions, recorded lectures, daily drawing practice, and personal mentoring. Our online program maintains the same 99.9% success rate as our offline classes.' },
-    { question: 'How long should I prepare for NATA?', answer: 'Ideally, 6-12 months of dedicated preparation is recommended for NATA. However, our 3-month crash course is designed for students who need intensive last-minute preparation and covers all essential topics effectively.' },
+    { question: 'What is the best online NATA coaching in Tamil Nadu?', answer: 'Neram Classes is the top-rated online NATA coaching institute in Tamil Nadu with a 99.9% success rate. Based in Tamil Nadu, we offer live interactive online classes, daily drawing practice sessions, 100+ mock tests, and personal mentoring from IIT/NIT alumni faculty. Students from Chennai, Coimbatore, Madurai, Trichy, and across Tamil Nadu trust Neram Classes for NATA preparation.' },
+    { question: 'How much does NATA coaching cost at Neram Classes?', answer: 'NATA coaching fees at Neram Classes range from ₹15,000 for a 3-month crash course to ₹75,000 for a premium year-long program with 1-on-1 mentoring. We also offer scholarships for meritorious students and flexible EMI payment options. Our pricing is competitive compared to other NATA coaching institutes in Tamil Nadu.' },
+    { question: 'Does Neram Classes offer online NATA classes?', answer: 'Yes, Neram Classes offers comprehensive online NATA coaching with live interactive sessions, recorded lectures, daily supervised drawing practice, and personal mentoring. Our online program delivers the same 99.9% success rate as our offline classes. Students can attend from anywhere in Tamil Nadu, India, or even abroad.' },
+    { question: 'What is Neram Classes\' success rate for NATA?', answer: 'Neram Classes maintains a 99.9% success rate for NATA exam preparation. Over 10,000 students have successfully cleared NATA through our coaching programs. Our students consistently score 150+ marks, with many achieving top ranks in Tamil Nadu and across India. We have produced multiple state toppers and national rankers.' },
+    { question: 'Can I join Neram Classes from outside Tamil Nadu?', answer: 'Absolutely! While Neram Classes is headquartered in Tamil Nadu, our online NATA coaching program is accessible from anywhere in India and internationally. We have students from 90+ cities including Chennai, Bangalore, Hyderabad, Mumbai, Delhi, and Gulf countries. All online students get the same curriculum, faculty access, and study materials as our Tamil Nadu students.' },
+    { question: 'How long should I prepare for NATA 2026?', answer: 'Ideally, 6-12 months of dedicated preparation is recommended for NATA 2026. Neram Classes offers a 12-month premium course, a 6-month regular course, and a 3-month crash course for last-minute preparation. Early starters can join our foundation batch starting from Class 11. The key is consistent daily practice, especially for the drawing section which carries 80 marks.' },
   ];
 
   return (
     <>
       <JsonLd data={generateCourseSchema({
-        name: 'NATA Coaching - Online & Offline Classes',
-        description: 'Comprehensive NATA preparation course with expert IIT/NIT alumni faculty. Covers Mathematics, General Aptitude, and Drawing. Online and offline classes available.',
-        url: `${baseUrl}/coaching/nata-coaching`,
+        name: 'NATA 2026 Coaching Program - Online & Offline Classes',
+        description: 'Best online NATA coaching in Tamil Nadu. Comprehensive NATA 2026 preparation course with expert IIT/NIT alumni faculty. Covers Mathematics, General Aptitude, and Drawing. Online and offline classes available across Tamil Nadu and India.',
+        url: `${BASE_URL}/coaching/nata-coaching`,
         modes: ['online', 'onsite'],
+        price: 15000,
       })} />
       <JsonLd data={generateBreadcrumbSchema([
-        { name: 'Home', url: baseUrl },
-        { name: 'Coaching', url: `${baseUrl}/coaching` },
+        { name: 'Home', url: BASE_URL },
+        { name: 'Coaching', url: `${BASE_URL}/coaching` },
         { name: 'NATA Coaching' },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />
+      <JsonLd data={{
+        '@context': 'https://schema.org',
+        '@type': 'EducationalOrganization',
+        '@id': `${BASE_URL}/#coaching-nata`,
+        name: ORG_NAME,
+        url: BASE_URL,
+        description: 'Best online NATA coaching institute in Tamil Nadu, India. Expert IIT/NIT alumni faculty, 99.9% success rate, 10,000+ successful students.',
+        areaServed: [
+          { '@type': 'State', name: 'Tamil Nadu' },
+          { '@type': 'Country', name: 'India' },
+        ],
+        sameAs: SOCIAL_PROFILES,
+        hasOfferCatalog: {
+          '@type': 'OfferCatalog',
+          name: 'NATA 2026 Coaching Programs',
+          itemListElement: [
+            {
+              '@type': 'Course',
+              name: 'NATA 2026 Crash Course',
+              description: 'Intensive 3-month NATA preparation crash course for quick preparation. Covers Mathematics, General Aptitude, and Drawing.',
+              provider: { '@type': 'EducationalOrganization', name: ORG_NAME, areaServed: 'Tamil Nadu, India' },
+              educationalLevel: '12th Pass',
+              timeRequired: 'P3M',
+              teaches: ['Mathematics', 'General Aptitude', 'Drawing', 'Architecture Awareness'],
+              hasCourseInstance: { '@type': 'CourseInstance', courseMode: ['online', 'onsite'] },
+              offers: { '@type': 'Offer', price: '15000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
+            },
+            {
+              '@type': 'Course',
+              name: 'NATA 2026 Regular Course',
+              description: 'Comprehensive 6-month NATA coaching with complete syllabus coverage, daily drawing practice, and 100+ mock tests.',
+              provider: { '@type': 'EducationalOrganization', name: ORG_NAME, areaServed: 'Tamil Nadu, India' },
+              educationalLevel: '12th Pass',
+              timeRequired: 'P6M',
+              teaches: ['Mathematics', 'General Aptitude', 'Drawing', 'Architecture Awareness'],
+              hasCourseInstance: { '@type': 'CourseInstance', courseMode: ['online', 'onsite'] },
+              offers: { '@type': 'Offer', price: '35000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
+            },
+            {
+              '@type': 'Course',
+              name: 'NATA 2026 Premium Course',
+              description: '12-month premium NATA coaching with 1-on-1 mentoring, personalized study plans, and guaranteed result.',
+              provider: { '@type': 'EducationalOrganization', name: ORG_NAME, areaServed: 'Tamil Nadu, India' },
+              educationalLevel: '12th Pass',
+              timeRequired: 'P12M',
+              teaches: ['Mathematics', 'General Aptitude', 'Drawing', 'Architecture Awareness'],
+              hasCourseInstance: { '@type': 'CourseInstance', courseMode: ['online', 'onsite'] },
+              offers: { '@type': 'Offer', price: '75000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
+            },
+          ],
+        },
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: '4.8',
+          reviewCount: '2500',
+          bestRating: '5',
+          worstRating: '1',
+        },
+      }} />
       <Box>
         {/* Hero Section */}
         <Box
@@ -110,7 +172,7 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
               <Grid item xs={12} md={7}>
                 <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2 }} />
                 <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2.5rem', md: '3.5rem' } }}>
-                  Best NATA Coaching in India
+                  Best Online NATA Coaching in Tamil Nadu & India
                 </Typography>
                 <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
                   Join 10,000+ successful architects who started their journey with Neram Classes.
@@ -243,8 +305,17 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
             </Box>
 
             <Box sx={{ textAlign: 'center', mt: 4 }}>
-              <Typography variant="body1" color="text.secondary">
-                Don't see your city? We offer online coaching accessible from anywhere!
+              <Button
+                component={Link}
+                href="/coaching/nata-coaching-center-in-tamil-nadu"
+                variant="contained"
+                size="large"
+                sx={{ mr: 2, mb: 1 }}
+              >
+                NATA Coaching in Tamil Nadu — All 38 Districts
+              </Button>
+              <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
+                Don&apos;t see your city? We offer online coaching accessible from anywhere!
               </Typography>
             </Box>
           </Container>
@@ -337,6 +408,64 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
                 </Accordion>
               ));
             })()}
+          </Container>
+        </Box>
+
+        {/* FAQ Section - Visible for crawlers and users */}
+        <Box sx={{ py: { xs: 6, md: 10 } }}>
+          <Container maxWidth="lg">
+            <Typography
+              variant="h2"
+              component="h2"
+              align="center"
+              gutterBottom
+              sx={{ mb: 2, fontWeight: 700 }}
+            >
+              Frequently Asked Questions about NATA Coaching
+            </Typography>
+            <Typography
+              variant="h6"
+              align="center"
+              color="text.secondary"
+              sx={{ mb: 6 }}
+            >
+              Common questions about NATA 2026 coaching at Neram Classes, Tamil Nadu
+            </Typography>
+
+            {faqs.map((faq, index) => (
+              <Accordion
+                key={index}
+                defaultExpanded={index === 0}
+                disableGutters
+                sx={{
+                  '&:before': { display: 'none' },
+                  mb: 1.5,
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={
+                    <Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>
+                  }
+                  sx={{
+                    bgcolor: 'white',
+                    '&:hover': { bgcolor: 'grey.50' },
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 600, fontSize: { xs: '0.95rem', md: '1.1rem' } }}>
+                    {faq.question}
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails sx={{ bgcolor: 'white', pt: 0, pb: 3, px: 3 }}>
+                  <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.8 }}>
+                    {faq.answer}
+                  </Typography>
+                </AccordionDetails>
+              </Accordion>
+            ))}
           </Container>
         </Box>
 

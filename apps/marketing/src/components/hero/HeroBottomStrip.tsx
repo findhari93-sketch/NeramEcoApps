@@ -39,7 +39,7 @@ export default function HeroBottomStrip() {
         <Box sx={{ width: { xs: 24, md: 40 }, height: '1px', bgcolor: 'rgba(255,255,255,0.15)' }} />
         <Typography
           sx={{
-            fontFamily: '"Space Mono", monospace',
+            fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
             fontSize: { xs: '9px', md: '11px' },
             color: 'text.secondary',
             letterSpacing: '0.1em',
@@ -53,7 +53,7 @@ export default function HeroBottomStrip() {
       <Typography
         sx={{
           display: { xs: 'none', sm: 'block' },
-          fontFamily: '"Space Mono", monospace',
+          fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
           fontSize: '11px',
           color: 'text.secondary',
           letterSpacing: '0.08em',

@@ -1,28 +1,19 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Cormorant_Garamond, DM_Sans, Space_Mono } from 'next/font/google';
+import { Inter, DM_Sans } from 'next/font/google';
 import { NeramThemeProvider } from '@neram/ui';
 import { enterpriseLightTheme, enterpriseDarkTheme } from '@/lib/theme';
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const cormorant = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-cormorant',
-});
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-inter' });
 const dmSans = DM_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-dm-sans',
 });
-const spaceMono = Space_Mono({
-  subsets: ['latin'],
-  weight: ['400', '700'],
-  variable: '--font-space-mono',
-});
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://app.neramclasses.com'),
   title: {
     default: 'aiArchitek | From Cutoffs to Colleges — Your Architecture Exam Companion',
     template: '%s | aiArchitek by Neram Classes',
@@ -80,7 +71,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${cormorant.variable} ${dmSans.variable} ${spaceMono.variable}`}>
+    <html lang="en" className={`${inter.variable} ${dmSans.variable}`}>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="mobile-web-app-capable" content="yes" />

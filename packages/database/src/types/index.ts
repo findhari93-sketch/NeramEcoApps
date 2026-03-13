@@ -3222,6 +3222,39 @@ export interface ExamDetailAuditLog {
   created_at: string;
 }
 
+// Exam Planner types (migration 20260314)
+export type ExamPhase = 'phase_1' | 'phase_2';
+export type ExamTimeSlot = 'morning' | 'afternoon';
+
+export interface UserExamSessionPreference {
+  id: string;
+  user_id: string;
+  exam_schedule_id: string | null;
+  phase: ExamPhase;
+  exam_date: string;
+  time_slot: ExamTimeSlot;
+  session_label: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface UserReward {
+  id: string;
+  user_id: string;
+  reward_type: string;
+  points_awarded: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PlannerSession {
+  date: string;
+  day: string;
+  phase: ExamPhase;
+  timeSlot: ExamTimeSlot;
+  timeLabel: string;
+}
+
 // Phase 4: Contribution Tracking (migration 20260305)
 export interface UserQBStats {
   id: string;
@@ -3697,6 +3730,16 @@ interface _LegacyDatabase {
         Row: UserExamAttempt;
         Insert: Omit<UserExamAttempt, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<UserExamAttempt, 'id' | 'created_at'>>;
+      };
+      user_exam_session_preferences: {
+        Row: UserExamSessionPreference;
+        Insert: Omit<UserExamSessionPreference, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<UserExamSessionPreference, 'id' | 'created_at'>>;
+      };
+      user_rewards: {
+        Row: UserReward;
+        Insert: Omit<UserReward, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<UserReward, 'id' | 'created_at'>>;
       };
       user_qb_stats: {
         Row: UserQBStats;

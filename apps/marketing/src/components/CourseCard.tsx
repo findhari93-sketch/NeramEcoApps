@@ -1,10 +1,10 @@
 'use client';
 
 import { useParams } from 'next/navigation';
+import Image from 'next/image';
 import {
   Card,
   CardContent,
-  CardMedia,
   CardActions,
   Typography,
   Button,
@@ -52,20 +52,32 @@ export default function CourseCard({ course }: CourseCardProps) {
       }}
     >
       {/* Course Image */}
-      <CardMedia
-        component="div"
+      <Box
         sx={{
           height: 200,
           bgcolor: 'rgba(11,22,41,0.9)',
           position: 'relative',
           overflow: 'hidden',
-          backgroundImage: `linear-gradient(to top, rgba(11,22,41,0.6) 0%, transparent 50%), url(${course.image})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
         }}
       >
+        <Image
+          src={course.image}
+          alt={course.title}
+          fill
+          sizes="(max-width: 600px) 100vw, (max-width: 900px) 50vw, 33vw"
+          style={{ objectFit: 'cover', objectPosition: 'center' }}
+        />
+        {/* Gradient overlay */}
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to top, rgba(11,22,41,0.6) 0%, transparent 50%)',
+            pointerEvents: 'none',
+          }}
+        />
         {/* Level Badge */}
-        <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
+        <Box sx={{ position: 'absolute', top: 12, right: 12, zIndex: 1 }}>
           <Chip
             label={course.level}
             size="small"
@@ -78,7 +90,7 @@ export default function CourseCard({ course }: CourseCardProps) {
             }}
           />
         </Box>
-      </CardMedia>
+      </Box>
 
       {/* Course Content */}
       <CardContent sx={{ flexGrow: 1, p: 3 }}>

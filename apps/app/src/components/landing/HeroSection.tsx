@@ -55,7 +55,7 @@ export default function HeroSection() {
         >
           <Typography
             sx={{
-              fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: { xs: '0.65rem', md: '0.75rem' },
               fontWeight: 700,
               color: neramTokens.gold[400],
@@ -72,7 +72,7 @@ export default function HeroSection() {
           variant="h1"
           className="ai-animate-fade-up ai-stagger-2"
           sx={{
-            fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+            fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
             fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
             fontWeight: 700,
             lineHeight: 1.1,
@@ -179,7 +179,7 @@ export default function HeroSection() {
             <Box key={stat.label} sx={{ textAlign: 'center' }}>
               <Typography
                 sx={{
-                  fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+                  fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                   fontSize: { xs: '1.25rem', md: '1.5rem' },
                   fontWeight: 700,
                   color: neramTokens.gold[500],

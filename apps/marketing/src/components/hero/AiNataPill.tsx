@@ -53,7 +53,7 @@ export default function aiArchitekPill() {
       />
       <Typography
         sx={{
-          fontFamily: '"Space Mono", monospace',
+          fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
           fontSize: '11px',
           fontWeight: 700,
           color: 'secondary.light',

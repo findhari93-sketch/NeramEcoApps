@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Box, Typography, Grid, Chip } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
-import { motion, useInView } from 'framer-motion';
+import { scrollRevealSx } from '@/hooks/useScrollAnimation';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import SchoolIcon from '@mui/icons-material/School';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -22,15 +22,41 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Crop: <CropIcon sx={{ fontSize: 28 }} />,
 };
 
-const MotionBox = motion(Box);
+/**
+ * Observe a parent container and reveal children with staggered delays.
+ * Each direct child with `data-reveal` gets 'is-visible' class added
+ * when the parent scrolls into view.
+ */
+function useStaggerReveal(margin = '-60px') {
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          const children = node.querySelectorAll('[data-reveal]');
+          children.forEach((child) => child.classList.add('is-visible'));
+          observer.unobserve(node);
+        }
+      },
+      { rootMargin: margin },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [margin]);
+
+  return ref;
+}
 
 function ToolCard({ tool, index }: { tool: Tool; index: number }) {
   return (
-    <MotionBox
-      initial={{ opacity: 0, y: 32 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-60px' }}
-      transition={{ duration: 0.5, delay: index * 0.08 }}
+    <Box
+      data-reveal
+      sx={scrollRevealSx(index)}
     >
       <Box
         component={Link}
@@ -82,7 +108,7 @@ function ToolCard({ tool, index }: { tool: Tool; index: number }) {
               right: 16,
               bgcolor: `${tool.color}20`,
               color: tool.color,
-              fontFamily: 'var(--font-space-mono), monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: '0.65rem',
               fontWeight: 700,
               letterSpacing: '0.05em',
@@ -123,19 +149,17 @@ function ToolCard({ tool, index }: { tool: Tool; index: number }) {
           <ArrowForwardIcon sx={{ fontSize: 16 }} />
         </Box>
       </Box>
-    </MotionBox>
+    </Box>
   );
 }
 
 export default function ToolsShowcase() {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-100px' });
+  const gridRef = useStaggerReveal('-60px');
 
   return (
     <Box
       component="section"
       id="tools"
-      ref={ref}
       sx={{
         bgcolor: neramTokens.navy[900],
         py: { xs: 8, md: 12 },
@@ -147,7 +171,7 @@ export default function ToolsShowcase() {
         <Box sx={{ textAlign: 'center', mb: { xs: 5, md: 7 } }}>
           <Typography
             sx={{
-              fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: '0.75rem',
               fontWeight: 700,
               color: neramTokens.gold[500],
@@ -161,7 +185,7 @@ export default function ToolsShowcase() {
           <Typography
             variant="h2"
             sx={{
-              fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+              fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
               fontSize: { xs: '2rem', md: '3rem' },
               fontWeight: 700,
               color: neramTokens.cream[100],
@@ -172,7 +196,7 @@ export default function ToolsShowcase() {
         </Box>
 
         {/* Tools grid */}
-        <Grid container spacing={3}>
+        <Grid container spacing={3} ref={gridRef}>
           {TOOLS.map((tool, i) => (
             <Grid
               item
@@ -187,11 +211,9 @@ export default function ToolsShowcase() {
 
           {/* Coming Soon card */}
           <Grid item xs={12} sm={6} md={4}>
-            <MotionBox
-              initial={{ opacity: 0, y: 32 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.5, delay: TOOLS.length * 0.08 }}
+            <Box
+              data-reveal
+              sx={scrollRevealSx(TOOLS.length)}
             >
               <Box
                 sx={{
@@ -237,7 +259,7 @@ export default function ToolsShowcase() {
                   ))}
                 </Box>
               </Box>
-            </MotionBox>
+            </Box>
           </Grid>
         </Grid>
       </Box>

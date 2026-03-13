@@ -45,7 +45,7 @@ export default function ArchitecturalSVG() {
 
         {/* Dimension arrows */}
         <line x1="200" y1="420" x2="520" y2="420" stroke="#e8a020" strokeWidth="0.4" strokeDasharray="2 6" />
-        <text x="350" y="416" fill="#e8a020" fontSize="8" textAnchor="middle" fontFamily="Space Mono">3200mm</text>
+        <text x="350" y="416" fill="#e8a020" fontSize="8" textAnchor="middle" fontFamily="SFMono-Regular, Cascadia Code, Consolas, monospace">3200mm</text>
 
         {/* Section lines */}
         <line x1="150" y1="100" x2="150" y2="750" stroke="#1a8fff" strokeWidth="0.4" strokeDasharray="8 4" />

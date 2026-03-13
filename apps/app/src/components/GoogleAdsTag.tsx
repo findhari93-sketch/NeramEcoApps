@@ -12,9 +12,9 @@ export default function GoogleAdsTag() {
     <>
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_ADS_ID}`}
-        strategy="afterInteractive"
+        strategy="lazyOnload"
       />
-      <Script id="google-ads-init" strategy="afterInteractive">
+      <Script id="google-ads-init" strategy="lazyOnload">
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}

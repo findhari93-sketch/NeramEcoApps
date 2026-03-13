@@ -51,7 +51,7 @@ export default function MicrosoftBadge() {
         <Typography
           component="span"
           sx={{
-            fontFamily: '"DM Sans", sans-serif',
+            fontFamily: '"Inter", sans-serif',
             fontSize: { xs: '9px', md: '11px' },
             fontWeight: 400,
             color: 'text.secondary',

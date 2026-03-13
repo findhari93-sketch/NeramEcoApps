@@ -11,6 +11,7 @@ import {
 } from '@neram/ui';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CalculateIcon from '@mui/icons-material/Calculate';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CropIcon from '@mui/icons-material/Crop';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -32,6 +33,7 @@ export interface ToolNavItem {
 }
 
 export const NATA_TOOLS: ToolNavItem[] = [
+  { title: 'Exam Planner', href: '/tools/nata/exam-planner', icon: <CalendarTodayIcon fontSize="small" /> },
   { title: 'Exam Centers', href: '/tools/nata/exam-centers', icon: <LocationOnIcon fontSize="small" /> },
   { title: 'Cutoff Calculator', href: '/tools/nata/cutoff-calculator', icon: <CalculateIcon fontSize="small" /> },
   { title: 'Question Bank', href: '/tools/nata/question-bank', icon: <BookIcon fontSize="small" /> },

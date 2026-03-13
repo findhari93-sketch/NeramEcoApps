@@ -295,7 +295,10 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
         setLoading(false);
       }
     }
-    fetchAchievements();
+    const timer = setTimeout(() => {
+      fetchAchievements();
+    }, 5000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Delayed entrance

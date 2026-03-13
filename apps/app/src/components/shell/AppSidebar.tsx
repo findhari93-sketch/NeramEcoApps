@@ -188,7 +188,7 @@ export default function AppSidebar({
                   component={Link}
                   href="/dashboard"
                   sx={{
-                    fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+                    fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
                     fontSize: '1.1rem',
                     fontWeight: 700,
                     color: 'text.primary',

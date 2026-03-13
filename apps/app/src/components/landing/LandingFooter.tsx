@@ -53,7 +53,7 @@ export default function LandingFooter() {
               />
               <Typography
                 sx={{
-                  fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+                  fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
                   fontSize: '1.5rem',
                   fontWeight: 700,
                   color: neramTokens.cream[100],

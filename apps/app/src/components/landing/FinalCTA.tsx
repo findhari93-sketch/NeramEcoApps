@@ -2,12 +2,12 @@
 
 import { Box, Typography, Button, Stack } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
-import { motion } from 'framer-motion';
+import { useScrollReveal } from '@/hooks/useScrollAnimation';
 import Link from 'next/link';
 
-const MotionBox = motion(Box);
-
 export default function FinalCTA() {
+  const revealRef = useScrollReveal({ margin: '-60px' });
+
   return (
     <Box
       component="section"
@@ -40,17 +40,27 @@ export default function FinalCTA() {
         }}
       />
 
-      <MotionBox
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-60px' }}
-        transition={{ duration: 0.6 }}
-        sx={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: 600, mx: 'auto' }}
+      <Box
+        ref={revealRef}
+        sx={{
+          position: 'relative',
+          zIndex: 1,
+          textAlign: 'center',
+          maxWidth: 600,
+          mx: 'auto',
+          opacity: 0,
+          transform: 'translateY(24px)',
+          transition: 'opacity 0.6s ease, transform 0.6s ease',
+          '&.is-visible': {
+            opacity: 1,
+            transform: 'translateY(0)',
+          },
+        }}
       >
         <Typography
           variant="h2"
           sx={{
-            fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+            fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
             fontSize: { xs: '2rem', md: '3rem' },
             fontWeight: 700,
             color: neramTokens.cream[100],
@@ -102,7 +112,7 @@ export default function FinalCTA() {
             Start Free Now
           </Button>
         </Stack>
-      </MotionBox>
+      </Box>
     </Box>
   );
 }

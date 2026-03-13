@@ -73,7 +73,7 @@ export default function SocialProofSection() {
         <Typography
           align="center"
           sx={{
-            fontFamily: '"Space Mono", monospace',
+            fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
             fontSize: '11px',
             fontWeight: 700,
             letterSpacing: '0.2em',

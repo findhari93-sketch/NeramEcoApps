@@ -1,319 +1,30 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
 import { Box } from '@neram/ui';
 
 // Color palette
 const GOLD = '#e8a020';
-const GOLD_L = '#f4bf5a';
 const BLUE = '#1a8fff';
 const WHITE = 'rgba(245,240,232,0.9)';
 const NAVY = '#060d1f';
 
-const BASE_SIZE = 460;
+const BASE = 460;
+const CX = BASE / 2;
+const CY = BASE / 2;
+const R = 190; // (190 / 460) * 460
+
+// Fixed time: 10:10 (classic watch display)
+const HR = 10 + 10 / 60; // 10 hours 10 minutes
+const MIN = 10; // 10 minutes
+const hrAngle = (HR / 12) * 360 - 90;
+const minAngle = (MIN / 60) * 360 - 90;
 
 /**
- * ClockCanvas — Architectural live clock with blueprint ring, compass, and aiArchitek arc.
- * Shows real time. Responsive: 280px mobile, 340px tablet, 460px desktop.
+ * ClockCanvas — Static SVG architectural clock with blueprint ring, compass, and aiArchitek arc.
+ * Shows fixed 10:10 time. Responsive: 280px mobile, 340px tablet, 460px desktop.
+ * Zero animation loops — renders once.
  */
 export default function ClockCanvas() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
-  const ringAngleRef = useRef(0);
-  const innerRingAngleRef = useRef(0);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let size: number;
-    let CX: number;
-    let CY: number;
-    let R: number;
-
-    function setupCanvas() {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas!.getBoundingClientRect();
-      canvas!.width = rect.width * dpr;
-      canvas!.height = rect.height * dpr;
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      size = rect.width;
-      CX = size / 2;
-      CY = size / 2;
-      R = size * (190 / BASE_SIZE);
-    }
-
-    setupCanvas();
-
-    function drawGlow(x: number, y: number, r: number, color: string, a: number) {
-      const grad = ctx!.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, color.replace('rgb', 'rgba').replace(')', `,${a})`));
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx!.fillStyle = grad;
-      ctx!.beginPath();
-      ctx!.arc(x, y, r, 0, Math.PI * 2);
-      ctx!.fill();
-    }
-
-    function drawBlueprintRing() {
-      ctx!.save();
-      ctx!.translate(CX, CY);
-      ctx!.rotate(ringAngleRef.current);
-
-      // Outer dashed ring
-      ctx!.beginPath();
-      ctx!.arc(0, 0, R + 22, 0, Math.PI * 2);
-      ctx!.strokeStyle = 'rgba(26,143,255,0.25)';
-      ctx!.lineWidth = 1;
-      ctx!.setLineDash([4, 14]);
-      ctx!.stroke();
-      ctx!.setLineDash([]);
-
-      // Tick marks
-      for (let i = 0; i < 72; i++) {
-        const angle = (i / 72) * Math.PI * 2;
-        const len = i % 6 === 0 ? 12 : i % 3 === 0 ? 7 : 4;
-        const r1 = R + 28;
-        const r2 = r1 + len;
-        ctx!.beginPath();
-        ctx!.moveTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
-        ctx!.lineTo(Math.cos(angle) * r2, Math.sin(angle) * r2);
-        ctx!.strokeStyle = i % 6 === 0 ? 'rgba(232,160,32,0.6)' : 'rgba(255,255,255,0.12)';
-        ctx!.lineWidth = i % 6 === 0 ? 1.5 : 0.5;
-        ctx!.stroke();
-      }
-      ctx!.restore();
-    }
-
-    function drawCompassPoints() {
-      ctx!.save();
-      ctx!.translate(CX, CY);
-      const dirs = ['N', 'E', 'S', 'W'];
-      dirs.forEach((d, i) => {
-        const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
-        const rr = R + 50;
-        ctx!.font = `700 ${11 * (size / BASE_SIZE)}px "Space Mono", monospace`;
-        ctx!.fillStyle = d === 'N' ? GOLD : 'rgba(245,240,232,0.35)';
-        ctx!.textAlign = 'center';
-        ctx!.textBaseline = 'middle';
-        ctx!.fillText(d, Math.cos(angle) * rr, Math.sin(angle) * rr);
-      });
-      ctx!.restore();
-    }
-
-    function drawFaceDetails() {
-      // Spinning inner elements (anticlockwise)
-      ctx!.save();
-      ctx!.translate(CX, CY);
-      ctx!.rotate(innerRingAngleRef.current);
-
-      // Concentric circles
-      [R * 0.85, R * 0.55, R * 0.3].forEach((r) => {
-        ctx!.beginPath();
-        ctx!.arc(0, 0, r, 0, Math.PI * 2);
-        ctx!.strokeStyle = 'rgba(255,255,255,0.04)';
-        ctx!.lineWidth = 1;
-        ctx!.stroke();
-      });
-
-      // Hour markers
-      for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
-        const inner = R * 0.82;
-        const outer = R * 0.92;
-        ctx!.beginPath();
-        ctx!.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
-        ctx!.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
-        ctx!.strokeStyle = i === 0 ? GOLD : 'rgba(245,240,232,0.35)';
-        ctx!.lineWidth = i % 3 === 0 ? 2.5 : 1;
-        ctx!.stroke();
-      }
-
-      // Minute dots
-      for (let i = 0; i < 60; i++) {
-        if (i % 5 === 0) continue;
-        const angle = (i / 60) * Math.PI * 2 - Math.PI / 2;
-        const rr = R * 0.87;
-        ctx!.beginPath();
-        ctx!.arc(Math.cos(angle) * rr, Math.sin(angle) * rr, 1, 0, Math.PI * 2);
-        ctx!.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx!.fill();
-      }
-
-      ctx!.restore();
-
-      // Center NERAM text (static, no rotation)
-      const scale = size / BASE_SIZE;
-      ctx!.font = `700 ${11 * scale}px "Space Mono", monospace`;
-      ctx!.fillStyle = GOLD;
-      ctx!.textAlign = 'center';
-      ctx!.textBaseline = 'middle';
-      ctx!.fillText('NERAM', CX, CY - 38 * scale);
-
-      ctx!.font = `300 ${9 * scale}px "DM Sans", sans-serif`;
-      ctx!.fillStyle = 'rgba(245,240,232,0.3)';
-      ctx!.fillText('நேரம்  ·  TIME', CX, CY + 44 * scale);
-    }
-
-    function drawHand(angle: number, length: number, width: number, color: string, hasCap: boolean) {
-      ctx!.save();
-      ctx!.translate(CX, CY);
-      ctx!.rotate(angle);
-
-      const w = width;
-      const l = length;
-      const tail = length * 0.2;
-
-      ctx!.beginPath();
-      ctx!.moveTo(-w / 2, tail);
-      ctx!.lineTo(-w / 2, -l * 0.7);
-      ctx!.lineTo(0, -l);
-      ctx!.lineTo(w / 2, -l * 0.7);
-      ctx!.lineTo(w / 2, tail);
-      ctx!.closePath();
-      ctx!.fillStyle = color;
-      ctx!.fill();
-
-      if (hasCap) {
-        ctx!.beginPath();
-        ctx!.arc(0, -l * 0.55, w / 2 + 2, 0, Math.PI * 2);
-        ctx!.fillStyle = 'rgba(6,13,31,0.8)';
-        ctx!.fill();
-        ctx!.beginPath();
-        ctx!.arc(0, -l * 0.55, 2, 0, Math.PI * 2);
-        ctx!.fillStyle = color;
-        ctx!.fill();
-      }
-
-      ctx!.restore();
-    }
-
-    function drawSecondHand(angle: number) {
-      ctx!.save();
-      ctx!.translate(CX, CY);
-      ctx!.rotate(angle);
-
-      ctx!.beginPath();
-      ctx!.moveTo(0, R * 0.25);
-      ctx!.lineTo(0, -R * 0.85);
-      ctx!.strokeStyle = BLUE;
-      ctx!.lineWidth = 1;
-      ctx!.stroke();
-
-      // Counterbalance circle
-      ctx!.beginPath();
-      ctx!.arc(0, R * 0.15, 4, 0, Math.PI * 2);
-      ctx!.fillStyle = BLUE;
-      ctx!.fill();
-
-      ctx!.restore();
-    }
-
-    function drawCenter() {
-      ctx!.beginPath();
-      ctx!.arc(CX, CY, 10, 0, Math.PI * 2);
-      ctx!.fillStyle = GOLD;
-      ctx!.fill();
-
-      ctx!.beginPath();
-      ctx!.arc(CX, CY, 4, 0, Math.PI * 2);
-      ctx!.fillStyle = NAVY;
-      ctx!.fill();
-
-      ctx!.beginPath();
-      ctx!.arc(CX, CY, 2, 0, Math.PI * 2);
-      ctx!.fillStyle = GOLD;
-      ctx!.fill();
-    }
-
-    function drawaiArchitekIndicator() {
-      ctx!.save();
-      ctx!.translate(CX, CY);
-
-      const now = new Date();
-      const aiProgress = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
-
-      ctx!.beginPath();
-      ctx!.arc(0, 0, R * 0.42, -Math.PI / 2, -Math.PI / 2 + aiProgress * Math.PI * 2);
-      ctx!.strokeStyle = 'rgba(26,143,255,0.5)';
-      ctx!.lineWidth = 2;
-      ctx!.stroke();
-
-      const scale = size / BASE_SIZE;
-      ctx!.font = `600 ${10 * scale}px "DM Sans", sans-serif`;
-      ctx!.fillStyle = 'rgba(62,184,255,0.6)';
-      ctx!.textAlign = 'center';
-      ctx!.textBaseline = 'middle';
-      ctx!.fillText('aiArchitek', 0, 0);
-
-      ctx!.restore();
-    }
-
-    function tick() {
-      ctx!.clearRect(0, 0, size, size);
-
-      const now = new Date();
-      const ms = now.getMilliseconds();
-      const sec = now.getSeconds() + ms / 1000;
-      const min = now.getMinutes() + sec / 60;
-      const hr = (now.getHours() % 12) + min / 60;
-
-      const secAngle = (sec / 60) * Math.PI * 2 - Math.PI / 2;
-      const minAngle = (min / 60) * Math.PI * 2 - Math.PI / 2;
-      const hrAngle = (hr / 12) * Math.PI * 2 - Math.PI / 2;
-
-      // Ambient glow
-      drawGlow(CX, CY, R + 60, 'rgb(232,160,32)', 0.06);
-
-      // Blueprint ring (clockwise)
-      ringAngleRef.current += 0.0008;
-      drawBlueprintRing();
-
-      // Inner face elements (anticlockwise)
-      innerRingAngleRef.current -= 0.0006;
-
-      // Clock face
-      ctx!.beginPath();
-      ctx!.arc(CX, CY, R, 0, Math.PI * 2);
-      ctx!.fillStyle = 'rgba(6,13,31,0.75)';
-      ctx!.fill();
-
-      // Face border
-      ctx!.beginPath();
-      ctx!.arc(CX, CY, R, 0, Math.PI * 2);
-      ctx!.strokeStyle = 'rgba(232,160,32,0.25)';
-      ctx!.lineWidth = 1.5;
-      ctx!.stroke();
-
-      drawFaceDetails();
-      drawCompassPoints();
-      drawaiArchitekIndicator();
-
-      // Hands — real time
-      drawHand(hrAngle, R * 0.52, 7, WHITE, true);
-      drawHand(minAngle, R * 0.72, 4.5, WHITE, false);
-      drawSecondHand(secAngle);
-      drawCenter();
-
-      rafRef.current = requestAnimationFrame(tick);
-    }
-
-    tick();
-
-    const resizeObserver = new ResizeObserver(() => {
-      setupCanvas();
-    });
-    resizeObserver.observe(canvas);
-
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      resizeObserver.disconnect();
-    };
-  }, []);
-
   return (
     <Box
       sx={{
@@ -323,21 +34,239 @@ export default function ClockCanvas() {
         position: 'relative',
         opacity: 0,
         animation: 'neramFadeUp 1.2s ease forwards',
-        animationDelay: '0.5s',
+        animationDelay: '0s',
         transform: 'translateY(16px)',
         maxWidth: { xs: 280, sm: 340, md: 460 },
         mx: 'auto',
       }}
     >
-      <canvas
-        ref={canvasRef}
-        style={{
-          width: '100%',
-          aspectRatio: '1 / 1',
-          display: 'block',
-          filter: 'drop-shadow(0 0 60px rgba(232,160,32,0.15))',
-        }}
-      />
+      <svg
+        viewBox={`0 0 ${BASE} ${BASE}`}
+        style={{ width: '100%', aspectRatio: '1 / 1', display: 'block' }}
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        aria-label="Neram architectural clock showing 10:10"
+      >
+        {/* Ambient glow */}
+        <defs>
+          <radialGradient id="clock-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(232,160,32,0.06)" />
+            <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+          </radialGradient>
+        </defs>
+        <circle cx={CX} cy={CY} r={R + 60} fill="url(#clock-glow)" />
+
+        {/* === Blueprint Ring === */}
+        {/* Outer dashed ring */}
+        <circle
+          cx={CX}
+          cy={CY}
+          r={R + 22}
+          fill="none"
+          stroke="rgba(26,143,255,0.25)"
+          strokeWidth={1}
+          strokeDasharray="4 14"
+        />
+
+        {/* Blueprint tick marks (72 ticks) */}
+        {Array.from({ length: 72 }, (_, i) => {
+          const angle = (i / 72) * Math.PI * 2;
+          const isMajor = i % 6 === 0;
+          const isMid = i % 3 === 0;
+          const len = isMajor ? 12 : isMid ? 7 : 4;
+          const r1 = R + 28;
+          const r2 = r1 + len;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          return (
+            <line
+              key={`bt-${i}`}
+              x1={CX + cos * r1}
+              y1={CY + sin * r1}
+              x2={CX + cos * r2}
+              y2={CY + sin * r2}
+              stroke={isMajor ? 'rgba(232,160,32,0.6)' : 'rgba(255,255,255,0.12)'}
+              strokeWidth={isMajor ? 1.5 : 0.5}
+            />
+          );
+        })}
+
+        {/* === Compass Points === */}
+        {(['N', 'E', 'S', 'W'] as const).map((d, i) => {
+          const angle = (i / 4) * Math.PI * 2 - Math.PI / 2;
+          const rr = R + 50;
+          return (
+            <text
+              key={d}
+              x={CX + Math.cos(angle) * rr}
+              y={CY + Math.sin(angle) * rr}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fill={d === 'N' ? GOLD : 'rgba(245,240,232,0.35)'}
+              fontFamily='"SFMono-Regular", "Cascadia Code", "Consolas", monospace'
+              fontWeight={700}
+              fontSize={11}
+            >
+              {d}
+            </text>
+          );
+        })}
+
+        {/* === Clock Face === */}
+        <circle cx={CX} cy={CY} r={R} fill="rgba(6,13,31,0.75)" />
+        <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(232,160,32,0.25)" strokeWidth={1.5} />
+
+        {/* === Face Details === */}
+        {/* Concentric circles */}
+        {[R * 0.85, R * 0.55, R * 0.3].map((r) => (
+          <circle
+            key={`cc-${r}`}
+            cx={CX}
+            cy={CY}
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.04)"
+            strokeWidth={1}
+          />
+        ))}
+
+        {/* Hour markers */}
+        {Array.from({ length: 12 }, (_, i) => {
+          const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+          const inner = R * 0.82;
+          const outer = R * 0.92;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          return (
+            <line
+              key={`hm-${i}`}
+              x1={CX + cos * inner}
+              y1={CY + sin * inner}
+              x2={CX + cos * outer}
+              y2={CY + sin * outer}
+              stroke={i === 0 ? GOLD : 'rgba(245,240,232,0.35)'}
+              strokeWidth={i % 3 === 0 ? 2.5 : 1}
+            />
+          );
+        })}
+
+        {/* Minute dots */}
+        {Array.from({ length: 60 }, (_, i) => {
+          if (i % 5 === 0) return null;
+          const angle = (i / 60) * Math.PI * 2 - Math.PI / 2;
+          const rr = R * 0.87;
+          return (
+            <circle
+              key={`md-${i}`}
+              cx={CX + Math.cos(angle) * rr}
+              cy={CY + Math.sin(angle) * rr}
+              r={1}
+              fill="rgba(255,255,255,0.15)"
+            />
+          );
+        })}
+
+        {/* NERAM text */}
+        <text
+          x={CX}
+          y={CY - 38}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill={GOLD}
+          fontFamily='"SFMono-Regular", "Cascadia Code", "Consolas", monospace'
+          fontWeight={700}
+          fontSize={11}
+        >
+          NERAM
+        </text>
+
+        {/* நேரம் · TIME text */}
+        <text
+          x={CX}
+          y={CY + 44}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="rgba(245,240,232,0.3)"
+          fontFamily='"Inter", sans-serif'
+          fontWeight={300}
+          fontSize={9}
+        >
+          {'நேரம்  ·  TIME'}
+        </text>
+
+        {/* === aiArchitek indicator === */}
+        {/* Arc at ~40% progress (static representation) */}
+        {(() => {
+          const arcR = R * 0.42;
+          const progress = 0.4; // fixed 40% progress
+          const startAngle = -Math.PI / 2;
+          const endAngle = startAngle + progress * Math.PI * 2;
+          const x1 = CX + Math.cos(startAngle) * arcR;
+          const y1 = CY + Math.sin(startAngle) * arcR;
+          const x2 = CX + Math.cos(endAngle) * arcR;
+          const y2 = CY + Math.sin(endAngle) * arcR;
+          const largeArc = progress > 0.5 ? 1 : 0;
+          return (
+            <path
+              d={`M ${x1} ${y1} A ${arcR} ${arcR} 0 ${largeArc} 1 ${x2} ${y2}`}
+              fill="none"
+              stroke="rgba(26,143,255,0.5)"
+              strokeWidth={2}
+            />
+          );
+        })()}
+
+        <text
+          x={CX}
+          y={CY}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="rgba(62,184,255,0.6)"
+          fontFamily='"Inter", sans-serif'
+          fontWeight={600}
+          fontSize={10}
+        >
+          aiArchitek
+        </text>
+
+        {/* === Clock Hands (10:10) === */}
+        {/* Hour hand */}
+        <g transform={`rotate(${hrAngle} ${CX} ${CY})`}>
+          <polygon
+            points={`${CX - 3.5},${CY + R * 0.52 * 0.2} ${CX - 3.5},${CY - R * 0.52 * 0.7} ${CX},${CY - R * 0.52} ${CX + 3.5},${CY - R * 0.52 * 0.7} ${CX + 3.5},${CY + R * 0.52 * 0.2}`}
+            fill={WHITE}
+          />
+          {/* Cap */}
+          <circle cx={CX} cy={CY - R * 0.52 * 0.55} r={5.5} fill="rgba(6,13,31,0.8)" />
+          <circle cx={CX} cy={CY - R * 0.52 * 0.55} r={2} fill={WHITE} />
+        </g>
+
+        {/* Minute hand */}
+        <g transform={`rotate(${minAngle} ${CX} ${CY})`}>
+          <polygon
+            points={`${CX - 2.25},${CY + R * 0.72 * 0.2} ${CX - 2.25},${CY - R * 0.72 * 0.7} ${CX},${CY - R * 0.72} ${CX + 2.25},${CY - R * 0.72 * 0.7} ${CX + 2.25},${CY + R * 0.72 * 0.2}`}
+            fill={WHITE}
+          />
+        </g>
+
+        {/* Second hand (at 0/12 o'clock position for static display) */}
+        <g transform={`rotate(-90 ${CX} ${CY})`}>
+          <line
+            x1={CX}
+            y1={CY + R * 0.25}
+            x2={CX}
+            y2={CY - R * 0.85}
+            stroke={BLUE}
+            strokeWidth={1}
+          />
+          <circle cx={CX} cy={CY + R * 0.15} r={4} fill={BLUE} />
+        </g>
+
+        {/* === Center Cap === */}
+        <circle cx={CX} cy={CY} r={10} fill={GOLD} />
+        <circle cx={CX} cy={CY} r={4} fill={NAVY} />
+        <circle cx={CX} cy={CY} r={2} fill={GOLD} />
+      </svg>
     </Box>
   );
 }

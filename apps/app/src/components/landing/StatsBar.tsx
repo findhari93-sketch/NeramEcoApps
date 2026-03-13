@@ -1,9 +1,8 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
 import { Box, Typography, Grid } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
-import { useInView } from 'framer-motion';
+import { useInView } from '@/hooks/useScrollAnimation';
 import { STATS } from '@/lib/landing-data';
 
 function AnimatedStat({ stat, isInView }: { stat: typeof STATS[number]; isInView: boolean }) {
@@ -11,7 +10,7 @@ function AnimatedStat({ stat, isInView }: { stat: typeof STATS[number]; isInView
     <Box sx={{ textAlign: 'center', py: { xs: 2, md: 3 } }}>
       <Typography
         sx={{
-          fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+          fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
           fontSize: { xs: '1.5rem', md: '2rem' },
           fontWeight: 700,
           color: neramTokens.gold[500],
@@ -38,8 +37,7 @@ function AnimatedStat({ stat, isInView }: { stat: typeof STATS[number]; isInView
 }
 
 export default function StatsBar() {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-80px' });
+  const [ref, isInView] = useInView({ once: true, margin: '-80px' });
 
   return (
     <Box

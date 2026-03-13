@@ -47,7 +47,7 @@ export default function LandingNavbar() {
               <Typography
                 variant="h6"
                 sx={{
-                  fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+                  fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
                   fontWeight: 700,
                   fontSize: { xs: '1.25rem', md: '1.5rem' },
                   color: neramTokens.cream[100],
@@ -70,7 +70,7 @@ export default function LandingNavbar() {
                 component="a"
                 href={link.href}
                 sx={{
-                  fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+                  fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                   fontSize: '0.8rem',
                   color: neramTokens.cream[200],
                   textTransform: 'uppercase',
@@ -156,7 +156,7 @@ export default function LandingNavbar() {
                 <ListItemText
                   primary={link.label}
                   primaryTypographyProps={{
-                    fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+                    fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
                     fontSize: '0.9rem',
                     color: neramTokens.cream[100],
                     textTransform: 'uppercase',

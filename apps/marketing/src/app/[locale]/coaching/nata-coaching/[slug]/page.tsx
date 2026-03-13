@@ -563,7 +563,17 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
                   </Grid>
                 ))}
               </Grid>
-              <Box sx={{ textAlign: 'center', mt: 4 }}>
+              <Box sx={{ textAlign: 'center', mt: 4, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+                {location.state === 'tamil-nadu' && (
+                  <Button
+                    component={Link}
+                    href={`/${locale}/coaching/nata-coaching-center-in-tamil-nadu`}
+                    variant="outlined"
+                    sx={{ textTransform: 'none', fontSize: '1rem' }}
+                  >
+                    View all 38 Tamil Nadu districts →
+                  </Button>
+                )}
                 <Button
                   component={Link}
                   href={`/${locale}/coaching/nata-coaching`}

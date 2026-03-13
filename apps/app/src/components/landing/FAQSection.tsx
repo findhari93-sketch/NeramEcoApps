@@ -21,7 +21,7 @@ export default function FAQSection() {
         <Box sx={{ textAlign: 'center', mb: { xs: 5, md: 7 } }}>
           <Typography
             sx={{
-              fontFamily: 'var(--font-space-mono), "Space Mono", monospace',
+              fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
               fontSize: '0.75rem',
               fontWeight: 700,
               color: neramTokens.gold[500],
@@ -35,7 +35,7 @@ export default function FAQSection() {
           <Typography
             variant="h2"
             sx={{
-              fontFamily: 'var(--font-cormorant), "Cormorant Garamond", serif',
+              fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
               fontSize: { xs: '2rem', md: '3rem' },
               fontWeight: 700,
               color: neramTokens.cream[100],

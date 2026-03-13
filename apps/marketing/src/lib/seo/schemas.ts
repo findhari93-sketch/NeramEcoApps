@@ -40,6 +40,10 @@ export function generateOrganizationSchema() {
       availableLanguage: ['English', 'Tamil', 'Hindi', 'Kannada', 'Malayalam'],
     },
     sameAs: SOCIAL_PROFILES,
+    areaServed: [
+      { '@type': 'Country', name: 'India' },
+      { '@type': 'State', name: 'Tamil Nadu' },
+    ],
     aggregateRating: {
       '@type': 'AggregateRating',
       ratingValue: '4.8',
@@ -511,6 +515,76 @@ export function generateReviewSchema(testimonial: {
         name: ORG_NAME,
         url: BASE_URL,
       },
+    },
+  };
+}
+
+// ─── TN Hub Page Schema (EducationalOrganization with areaServed) ───────────
+
+export function generateTNHubOrganizationSchema(districts: string[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    '@id': `${BASE_URL}/#organization`,
+    name: ORG_NAME,
+    alternateName: ORG_ALTERNATE_NAME,
+    url: BASE_URL,
+    logo: ORG_LOGO,
+    description: 'Premier NATA coaching center in Tamil Nadu offering online and offline classes across all 38 districts. Expert IIT/NIT alumni faculty with 99.9% success rate.',
+    foundingDate: ORG_FOUNDED,
+    address: {
+      '@type': 'PostalAddress',
+      ...ORG_ADDRESS,
+    },
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: ORG_PHONE,
+      email: ORG_EMAIL,
+      contactType: 'customer service',
+      availableLanguage: ['English', 'Tamil'],
+    },
+    sameAs: SOCIAL_PROFILES,
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.9',
+      reviewCount: '90',
+      bestRating: '5',
+      worstRating: '1',
+    },
+    areaServed: districts.map((d) => ({
+      '@type': 'City',
+      name: d,
+      containedInPlace: {
+        '@type': 'State',
+        name: 'Tamil Nadu',
+      },
+    })),
+    hasOfferCatalog: {
+      '@type': 'OfferCatalog',
+      name: 'NATA Coaching Courses in Tamil Nadu',
+      itemListElement: [
+        {
+          '@type': 'Course',
+          name: 'NATA Crash Course (3 Months)',
+          description: 'Intensive 3-month NATA preparation covering Mathematics, General Aptitude, and Drawing',
+          provider: { '@type': 'EducationalOrganization', name: ORG_NAME },
+          offers: { '@type': 'Offer', price: '15000', priceCurrency: 'INR' },
+        },
+        {
+          '@type': 'Course',
+          name: 'NATA Regular Course (6 Months)',
+          description: 'Comprehensive 6-month NATA coaching with daily drawing practice and mock tests',
+          provider: { '@type': 'EducationalOrganization', name: ORG_NAME },
+          offers: { '@type': 'Offer', price: '35000', priceCurrency: 'INR' },
+        },
+        {
+          '@type': 'Course',
+          name: 'NATA Premium Course (12 Months)',
+          description: '12-month premium NATA coaching with 1-on-1 mentoring and guaranteed results',
+          provider: { '@type': 'EducationalOrganization', name: ORG_NAME },
+          offers: { '@type': 'Offer', price: '75000', priceCurrency: 'INR' },
+        },
+      ],
     },
   };
 }
