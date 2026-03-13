@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import { getStudentOnboardingProgressByUserId } from '@neram/database/queries';
-import { verifyFirebaseToken } from '../../../_lib/auth';
+import { verifyFirebaseToken } from '../../_lib/auth';
 
 // GET /api/enroll/onboarding-steps - Get onboarding steps for the authenticated user
 export async function GET(request: NextRequest) {

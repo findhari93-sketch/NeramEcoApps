@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import { markOnboardingStepComplete, markOnboardingStepIncomplete } from '@neram/database/queries';
-import { verifyFirebaseToken } from '../../../../_lib/auth';
+import { verifyFirebaseToken } from '../../../_lib/auth';
 
 // PATCH /api/enroll/onboarding-steps/[progressId] - Toggle step completion
 export async function PATCH(
