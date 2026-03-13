@@ -17,6 +17,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -41,60 +42,60 @@ const steps = [
   {
     number: '01',
     title: 'Create Account on NATA Portal',
-    desc: 'Visit www.nata.in and click "New Registration". Enter your name, email, mobile number, and create a password. Verify your email and mobile to activate the account.',
+    desc: 'Visit www.nata.in and click "New Registration". Enter your name, email, mobile number, and create a password. Verify your email and mobile to activate the account. Registration opened on March 9, 2026.',
   },
   {
     number: '02',
-    title: 'Fill Personal & Academic Details',
-    desc: 'Log in to the NATA portal and fill the application form. Enter your personal details (name, DOB, address, category), academic qualifications (10th and 12th marks), and parent/guardian details.',
+    title: 'Fill Personal Details',
+    desc: 'Log in to the NATA portal and complete your personal details: name, date of birth, address, category, parent/guardian information. Choose whether you want to register for Phase 1 (up to 2 tests, for CAP admissions) or Phase 2 (1 test, for vacant seats). You cannot appear in both phases.',
   },
   {
     number: '03',
     title: 'Upload Documents',
-    desc: 'Upload scanned copies of your photo (3.5x4.5 cm, 4-100 KB, JPG), signature (3.5x1.5 cm, 1-30 KB, JPG), 10th marksheet, and category certificate (if applicable). Ensure all uploads meet the specified size requirements.',
+    desc: 'Upload scanned copies of your photo (3.5x4.5 cm, 4-100 KB, JPG/JPEG), signature (3.5x1.5 cm, 1-30 KB, JPG/JPEG), 10th marksheet, and category certificate (if applicable). Photo must be front-facing with both ears visible on white background.',
   },
   {
     number: '04',
     title: 'Pay Application Fee',
-    desc: 'Pay the application fee online via debit card, credit card, net banking, or UPI. General: Rs 1,750 | SC/ST: Rs 1,250 | Transgender: Rs 1,000 | Outside India: Rs 15,000.',
+    desc: 'Pay the application fee online via Electronic Payment Gateway (EPG) — debit card, credit card, or net banking. General/OBC (NCL): Rs 1,750 | SC/ST/EWS/PwD: Rs 1,250 | Transgender: Rs 1,000 | Outside India: Rs 15,000. Fee is per test and non-refundable.',
   },
   {
     number: '05',
     title: 'Print Application Confirmation',
-    desc: 'After successful payment, download and print the application confirmation page. Keep it safe — you will need it for verification later.',
+    desc: 'After successful payment, download and print the application confirmation page. Keep it safe — you will need it for verification later. You can initially register for one test and later opt for an additional test (max 2 in Phase 1).',
   },
   {
     number: '06',
     title: 'Select Exam City Preference',
-    desc: 'Choose up to 4 preferred exam center cities when the city selection window opens. Your actual center will be assigned based on availability in your chosen cities.',
+    desc: 'Choose up to 4 preferred exam center cities from the list of 80+ cities across 25 states/UTs (and Dubai). Your actual center will be assigned based on availability in your chosen cities.',
   },
   {
     number: '07',
     title: 'Download Appointment Card',
-    desc: 'Once your exam center and schedule are confirmed, download the appointment card from the NATA portal. This is your admit card for the exam day. Carry it along with a valid photo ID.',
+    desc: 'Once your exam center and schedule are confirmed, download the appointment card from the NATA portal. This is your admit card for the exam day. Carry it along with a valid photo ID. Report at 9:00 AM (Session 1) or 12:30 PM (Session 2).',
   },
 ];
 
 const faqs = [
   {
-    question: 'What is the last date to apply for NATA 2026?',
+    question: 'When did NATA 2026 registration open?',
     answer:
-      'The application dates for NATA 2026 will be announced by the Council of Architecture. Generally, registration opens 2-3 months before the exam. Check the NATA 2026 Important Dates page for the latest schedule.',
+      'NATA 2026 online registration opened on March 9, 2026 at www.nata.in. You can register for one or two tests during Phase 1 (April 4 – June 13), or one test during Phase 2 (August 7 & 8). Registration remains open during the exam period.',
   },
   {
-    question: 'Can I apply for NATA 2026 after the deadline?',
+    question: 'Can I apply for both Phase 1 and Phase 2?',
     answer:
-      'Late applications are generally not accepted. However, CoA sometimes extends the deadline with a late fee. It is best to apply well before the deadline.',
+      'No, you must choose either Phase 1 OR Phase 2. You cannot appear in both. Phase 1 allows up to 2 attempts and uses percentile scoring for CAP admissions. Phase 2 allows 1 attempt with raw scores for vacant seat admissions.',
   },
   {
-    question: 'How many times can I apply for NATA 2026?',
+    question: 'How many times can I take NATA 2026?',
     answer:
-      'You can register for up to 3 attempts in a single year. Each attempt requires a separate fee payment and city selection.',
+      'You can take a maximum of 2 tests in Phase 1, or 1 test in Phase 2. Each test requires a separate fee payment. You can initially register for one test and later opt for an additional test.',
   },
   {
     question: 'What documents are needed for NATA 2026 application?',
     answer:
-      'You need a scanned photo (3.5x4.5 cm, JPG, 4-100 KB), signature (3.5x1.5 cm, JPG, 1-30 KB), 10th marksheet, and category certificate (if applicable). All documents must be clear and legible.',
+      'You need a scanned photo (3.5x4.5 cm, JPG/JPEG, 4-100 KB, front-facing with both ears visible), signature (3.5x1.5 cm, JPG/JPEG, 1-30 KB), 10th marksheet, and category certificate (if applicable). All documents must be clear and legible.',
   },
 ];
 
@@ -153,6 +154,7 @@ export default function HowToApplyPage({ params: { locale } }: PageProps) {
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
               To apply for NATA 2026, visit www.nata.in, create an account, fill the application form, upload your photo and signature, pay the fee, and download your appointment card. The entire process takes about 30 minutes.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 

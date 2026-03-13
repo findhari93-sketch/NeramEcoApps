@@ -51,7 +51,7 @@ const stats = [
     useCounter: false,
   },
   {
-    value: 'Up to 3',
+    value: 'Up to 2',
     label: 'Attempts',
     icon: RefreshIcon,
     tint: m3Primary[90],
@@ -73,8 +73,8 @@ const quickFacts = [
   { icon: AccountBalanceIcon, label: 'Conducted By', value: 'CoA (Council of Architecture)' },
   { icon: AssignmentIcon, label: 'Total Marks', value: '200' },
   { icon: AccessTimeIcon, label: 'Duration', value: '3 Hours' },
-  { icon: RefreshIcon, label: 'Max Attempts', value: '3 per year' },
-  { icon: CalendarTodayIcon, label: 'Score Validity', value: '2 Years' },
+  { icon: RefreshIcon, label: 'Max Attempts', value: '2 (Phase 1)' },
+  { icon: CalendarTodayIcon, label: 'Score Validity', value: '1 Year' },
 ];
 
 // ============================================

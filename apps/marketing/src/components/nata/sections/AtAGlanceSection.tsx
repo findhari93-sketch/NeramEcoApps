@@ -38,8 +38,8 @@ const glanceData: GlanceItem[] = [
   { label: 'Medium', value: 'English and Hindi', icon: TranslateIcon, tint: m3Secondary[40] },
   { label: 'Total Marks', value: '200', subtext: 'Part A: 80 + Part B: 120', icon: AssignmentIcon, tint: m3Tertiary[40], featured: true },
   { label: 'Duration', value: '3 Hours', subtext: '90 min each part', icon: AccessTimeIcon, tint: m3Tertiary[40], featured: true },
-  { label: 'Maximum Attempts', value: '3 per year', icon: RefreshIcon, tint: m3Primary[40] },
-  { label: 'Score Validity', value: '2 academic years', icon: CalendarTodayIcon, tint: m3Secondary[40] },
+  { label: 'Maximum Attempts', value: '2 in Phase 1 or 1 in Phase 2', icon: RefreshIcon, tint: m3Primary[40] },
+  { label: 'Score Validity', value: '1 academic year (2026-2027)', icon: CalendarTodayIcon, tint: m3Secondary[40] },
   { label: 'Website', value: 'www.nata.in', icon: LanguageIcon, tint: m3Primary[40] },
 ];
 

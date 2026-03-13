@@ -56,21 +56,50 @@ Neram offers a free Progressive Web App (PWA) purpose-built for NATA exam prepar
 - Scholarship and EMI options available
 
 ## Courses & Pricing
-1. NATA Year-Long Coaching (12 months) - Starting ₹35,000
-2. NATA Crash Course (3 months) - Starting ₹15,000
-3. JEE Paper 2 Coaching (6-12 months) - Starting ₹25,000
-4. Revit Architecture Training (3 months) - Starting ₹10,000
+1. NATA Year-Long Coaching (12 months) - Starting Rs.35,000
+2. NATA Crash Course (3 months) - Starting Rs.15,000
+3. JEE Paper 2 Coaching (6-12 months) - Starting Rs.25,000
+4. Revit Architecture Training (3 months) - Starting Rs.10,000
+
+## NATA 2026 Complete Guide
+- Hub: https://neramclasses.com/nata-2026
+- Eligibility: https://neramclasses.com/nata-2026/eligibility
+- How to Apply: https://neramclasses.com/nata-2026/how-to-apply
+- Syllabus: https://neramclasses.com/nata-2026/syllabus
+- Exam Pattern: https://neramclasses.com/nata-2026/exam-pattern
+- Drawing Test Guide: https://neramclasses.com/nata-2026/drawing-test
+- Exam Centers: https://neramclasses.com/nata-2026/exam-centers
+- Fee Structure: https://neramclasses.com/nata-2026/fee-structure
+- Important Dates: https://neramclasses.com/nata-2026/important-dates
+- Scoring & Results: https://neramclasses.com/nata-2026/scoring-and-results
+- Preparation Tips: https://neramclasses.com/nata-2026/preparation-tips
+- Previous Year Papers: https://neramclasses.com/nata-2026/previous-year-papers
+- Best Books: https://neramclasses.com/nata-2026/best-books
+- Admit Card: https://neramclasses.com/nata-2026/admit-card
+- Do's & Don'ts: https://neramclasses.com/nata-2026/dos-and-donts
+- Photo & Signature: https://neramclasses.com/nata-2026/photo-signature-requirements
+- Cutoff Calculator: https://neramclasses.com/nata-2026/cutoff-calculator
+
+## NATA 2026 Exam Info
+- Total Marks: 200 (Part A Drawing: 80 marks offline, Part B MCQ/NCQ: 120 marks online)
+- Duration: 3 hours (135 min Part A + 45 min Part B)
+- Eligibility: 10+2 with Mathematics (no minimum percentage to appear)
+- For B.Arch Admission: Physics + Maths + one more subject, minimum 45% aggregate
+- Exam Window: April 4 to June 13, 2026 (Phase 1), August 7-8, 2026 (Phase 2)
+- Attempts: Up to 2 tests in Phase 1 OR 1 test in Phase 2
+- No negative marking
+- Drawing Test includes new 3D Composition section (25 marks, introduced 2025)
 
 ## NATA Coaching Centers (City-Wise)
-- Chennai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-chennai
-- Bangalore: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-bangalore
-- Coimbatore: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-coimbatore
-- Trichy: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-trichy
-- Madurai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-madurai
-- Hyderabad: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-hyderabad
-- Mumbai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-mumbai
-- Delhi: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-delhi
-- Dubai: https://neramclasses.com/en/coaching/nata-coaching/nata-coaching-centers-in-dubai
+- Chennai: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-chennai
+- Bangalore: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-bangalore
+- Coimbatore: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-coimbatore
+- Trichy: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-trichy
+- Madurai: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-madurai
+- Hyderabad: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-hyderabad
+- Mumbai: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-mumbai
+- Delhi: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-delhi
+- Dubai: https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-dubai
 - And 140+ more cities
 
 ## Free NATA Tools
@@ -78,17 +107,11 @@ Neram offers a free Progressive Web App (PWA) purpose-built for NATA exam prepar
 - College Predictor: https://app.neramclasses.com/tools/college-predictor
 - Exam Center Locator: https://app.neramclasses.com/tools/exam-centers
 
-## NATA 2026 Exam Info
-- Total Marks: 200 (Mathematics: 40, General Aptitude: 80, Drawing: 80)
-- Duration: 3 hours
-- Eligibility: 10+2 with Mathematics, minimum 50% marks
-- Exam Dates: April-May (Test 1), June-July (Test 2)
-
 ## Contact
 - Website: https://neramclasses.com
 - Student App: https://app.neramclasses.com
-- Apply: https://neramclasses.com/en/apply
-- Free Demo Class: https://neramclasses.com/en/demo-class
+- Apply: https://neramclasses.com/apply
+- Free Demo Class: https://neramclasses.com/demo-class
 - WhatsApp: +91-9176137043
 - YouTube: @neramclasses
 - Instagram: @neramclasses

@@ -16,6 +16,10 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
+
+// ISR: Revalidate hourly — dates change during exam season
+export const revalidate = 3600;
 
 export async function generateMetadata({
   params: { locale },
@@ -37,43 +41,38 @@ interface PageProps {
 }
 
 const dateEvents = [
-  { event: 'NATA 2026 Notification Released', date: 'Expected: January 2026', status: 'upcoming' },
-  { event: 'Online Registration Opens', date: 'Expected: February 2026', status: 'upcoming' },
-  { event: 'Attempt 1 — Registration Deadline', date: 'Expected: March 2026', status: 'upcoming' },
-  { event: 'Attempt 1 — City Slip Download', date: 'Expected: March 2026', status: 'upcoming' },
-  { event: 'Attempt 1 — Appointment Card Download', date: 'Expected: April 2026', status: 'upcoming' },
-  { event: 'Attempt 1 — Exam Date', date: 'Expected: April 2026', status: 'upcoming' },
-  { event: 'Attempt 1 — Result Declaration', date: 'Expected: May 2026', status: 'upcoming' },
-  { event: 'Attempt 2 — Registration Deadline', date: 'Expected: May 2026', status: 'upcoming' },
-  { event: 'Attempt 2 — Exam Date', date: 'Expected: June 2026', status: 'upcoming' },
-  { event: 'Attempt 2 — Result Declaration', date: 'Expected: June 2026', status: 'upcoming' },
-  { event: 'Attempt 3 — Registration Deadline', date: 'Expected: June 2026', status: 'upcoming' },
-  { event: 'Attempt 3 — Exam Date', date: 'Expected: July 2026', status: 'upcoming' },
-  { event: 'Attempt 3 — Result Declaration', date: 'Expected: July/August 2026', status: 'upcoming' },
-  { event: 'Score Card Download', date: 'Expected: August 2026', status: 'upcoming' },
-  { event: 'Counselling Process Begins', date: 'Expected: August/September 2026', status: 'upcoming' },
+  { event: 'NATA 2026 Brochure Released (V1.0)', date: 'March 8, 2026', status: 'completed' },
+  { event: 'Online Registration Opens (www.nata.in)', date: 'March 9, 2026', status: 'active' },
+  { event: 'Phase 1 — Exam Period Begins', date: 'April 4, 2026', status: 'confirmed' },
+  { event: 'Phase 1 — Exams on Fridays (1 session) & Saturdays (2 sessions)', date: 'April 4 – June 13, 2026', status: 'confirmed' },
+  { event: 'Phase 1 — Exam Period Ends', date: 'June 13, 2026', status: 'confirmed' },
+  { event: 'Phase 1 — Percentile Score Card Issued', date: 'After June 13, 2026', status: 'confirmed' },
+  { event: 'Centralized Admission Counselling (CAP) — Various States', date: 'June–August 2026 (varies by state)', status: 'upcoming' },
+  { event: 'Phase 2 — Exam Dates (for vacant seats)', date: 'August 7 & 8, 2026', status: 'confirmed' },
+  { event: 'Phase 2 — Raw Score Card Issued', date: 'After August 8, 2026', status: 'confirmed' },
+  { event: 'Admission Against Vacant Seats', date: 'August–September 2026', status: 'upcoming' },
 ];
 
 const faqs = [
   {
     question: 'When is NATA 2026 exam date?',
     answer:
-      'The exact NATA 2026 exam dates have not been announced yet. Based on previous years, Attempt 1 is expected in April 2026, Attempt 2 in June 2026, and Attempt 3 in July 2026. Check the official NATA website for confirmed dates.',
+      'NATA 2026 Phase 1 exams run from April 4 to June 13, 2026 on designated Fridays (1 afternoon session) and Saturdays (2 sessions), except public holidays. Phase 2 is on August 7 & 8, 2026.',
   },
   {
     question: 'How many attempts are there in NATA 2026?',
     answer:
-      'NATA 2026 will have 3 attempts. You can appear for any or all attempts. The best score among all attempts will be considered for admission.',
+      'You can take up to 2 attempts in Phase 1 (for CAP admissions) OR 1 attempt in Phase 2 (for vacant seats). You cannot appear in both phases. Your best raw score in Phase 1 is used for percentile calculation.',
   },
   {
-    question: 'When will NATA 2026 registration start?',
+    question: 'When did NATA 2026 registration start?',
     answer:
-      'NATA 2026 registration is expected to start in February 2026. The notification will be published on www.nata.in. We will update this page as soon as the official dates are announced.',
+      'NATA 2026 online registration opened on March 9, 2026 at www.nata.in. You can register for one or two tests during Phase 1, or one test during Phase 2.',
   },
   {
     question: 'When will NATA 2026 results be declared?',
     answer:
-      'Results are typically declared within 2-3 weeks after each attempt. Based on previous patterns, Attempt 1 results are expected in May 2026. Score cards can be downloaded from the NATA portal.',
+      'A Statement of Marks with the raw score is issued after every attempt. The Final Scorecard with Percentile Score is issued after all Phase 1 sessions end (after June 13, 2026). Phase 2 results have raw scores only.',
   },
 ];
 
@@ -96,8 +95,9 @@ export default function ImportantDatesPage({ params: { locale } }: PageProps) {
               NATA 2026 Important Dates
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 is expected to have 3 attempts between April and July 2026. Registration typically opens 2-3 months before the first attempt. Below are the expected dates based on the NATA 2025 schedule.
+              NATA 2026 registration opened March 9, 2026. Phase 1 exams run April 4 – June 13, 2026 on Fridays & Saturdays. Phase 2 is on August 7 & 8, 2026 for vacant seats.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 
@@ -108,9 +108,9 @@ export default function ImportantDatesPage({ params: { locale } }: PageProps) {
               NATA 2026 Schedule
             </Typography>
 
-            <Card sx={{ bgcolor: 'warning.light', mb: 4, p: 2 }}>
+            <Card sx={{ bgcolor: 'success.light', mb: 4, p: 2 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'center' }}>
-                Note: These are expected dates based on NATA 2025 pattern. Official dates will be updated once announced by CoA.
+                These dates are confirmed from the official NATA 2026 Brochure V1.0 (released March 8, 2026). Session-wise schedule will be published on www.nata.in.
               </Typography>
             </Card>
 
@@ -123,7 +123,7 @@ export default function ImportantDatesPage({ params: { locale } }: PageProps) {
                   <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{event.event}</Typography>
                   <Typography variant="body2" color="text.secondary">{event.date}</Typography>
                 </Box>
-                <Chip label="Expected" size="small" variant="outlined" sx={{ alignSelf: 'center' }} />
+                <Chip label={event.status === 'completed' ? 'Done' : event.status === 'active' ? 'Live' : event.status === 'confirmed' ? 'Confirmed' : 'Upcoming'} size="small" color={event.status === 'completed' ? 'success' : event.status === 'active' ? 'warning' : event.status === 'confirmed' ? 'primary' : 'default'} variant={event.status === 'upcoming' ? 'outlined' : 'filled'} sx={{ alignSelf: 'center' }} />
               </Box>
             ))}
           </Container>

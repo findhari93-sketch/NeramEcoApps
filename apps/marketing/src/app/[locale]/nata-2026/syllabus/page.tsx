@@ -22,6 +22,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -44,53 +45,72 @@ interface PageProps {
 
 const partATopics = [
   {
-    title: 'Question 1 — Drawing Based (25 marks)',
-    desc: 'Free-hand drawing of a given object or scene from memory. Tests observation, proportion, composition, and shading abilities.',
+    title: 'A1 — Composition and Color (25 marks)',
+    desc: 'Creating suitable compositions for various situations and coloring them appropriately. Re-arranging various shapes in a visually appealing manner and coloring it suitably. Tests your sense of color harmony and composition skills.',
   },
   {
-    title: 'Question 2 — Drawing Based (25 marks)',
-    desc: 'Drawing a composition using given geometric shapes and forms. Tests ability to create meaningful compositions with 2D/3D elements.',
+    title: 'A2 — Sketching & Composition, Black and White (25 marks)',
+    desc: 'Ability to draw, visualize, and depict a situation involving buildings/its components, people, environment, and products with an understanding of scale, proportions, textures, shades, and shadow.',
   },
   {
-    title: 'Question 3 — Drawing Based (30 marks)',
-    desc: 'Drawing based on a given situation or theme. Tests imagination, creativity, and ability to visualize and express ideas through drawing.',
+    title: 'A3 — 3D Composition (30 marks)',
+    desc: 'Creating interesting 3D compositions for a given situation using a kit provided at the test center. This is a new format that tests your spatial thinking and ability to work with physical materials in three dimensions.',
   },
 ];
 
 const partBTopics = [
   {
-    category: 'Mathematics (~20 questions)',
+    category: 'Visual Reasoning',
     topics: [
-      'Algebra — Logarithms, AP/GP, quadratic equations, permutations & combinations',
-      'Matrices — Types, operations, determinants, inverse',
-      'Trigonometry — Identities, heights & distances, properties of triangles',
-      'Coordinate Geometry — Straight lines, circles, conic sections',
-      'Calculus — Limits, differentiation, integration, applications',
-      'Statistics & Probability — Mean, median, mode, probability basics',
-      '3D Geometry — Direction cosines, planes, lines in space',
+      'Understanding and reconstructing 2D and 3D compositions',
+      'Knowledge about composition and technical concepts',
+      'Mirror images, paper folding, figure completion',
+      'Spatial visualization — 2D to 3D and vice versa',
     ],
   },
   {
-    category: 'General Aptitude (~15 questions)',
+    category: 'Logical Derivation',
     topics: [
-      'Logical Reasoning — Sequences, patterns, analogies, coding-decoding',
-      'Visual Reasoning — Mirror images, paper folding, figure completion',
-      'Numerical Ability — Ratio, proportion, percentages, number series',
-      'Sets and Relations — Venn diagrams, basic set operations',
-      'General Knowledge — Current affairs, general science, geography',
+      'Decoding a situation, composition, or context to generate meaning',
+      'Understanding minute information hidden in a particular situation',
+      'Drawing conclusions from given data or visual inputs',
+      'Pattern recognition and logical sequences',
     ],
   },
   {
-    category: 'Architecture Awareness (~15 questions)',
+    category: 'General Knowledge, Architecture & Design',
     topics: [
-      'Famous Buildings & Monuments — World and India heritage sites',
-      'Famous Architects — Works and contributions of notable architects',
-      'Architectural Terminology — Basic architectural terms and concepts',
-      'Building Materials — Properties, uses of common materials',
-      'Urban Planning Basics — City planning concepts, sustainability',
-      'Spatial Awareness — 2D to 3D visualization, plan and elevation reading',
-      'Color Theory — Primary, secondary, tertiary colors, color wheel',
-      'Textures and Patterns — Visual textures, natural patterns',
+      'General awareness of architecture and design, current issues',
+      'Knowledge about important buildings and historical progression',
+      'Innovation in materials and construction technology',
+      'Famous architects and their contributions',
+      'Urban planning basics and sustainability concepts',
+    ],
+  },
+  {
+    category: 'Language Interpretation',
+    topics: [
+      'Ability to correctly and logically generate meaning of words and sentences',
+      'Understanding of English grammar',
+      'Reading comprehension and inference',
+    ],
+  },
+  {
+    category: 'Design Sensitivity and Thinking',
+    topics: [
+      'Ability to observe, record, and analyse people, space, product, and environment',
+      'Critical thinking, reasoning, and identifying subtle communications',
+      'Understanding semantics and metaphors',
+      'Problem identification, definition, and analysis of given situations',
+    ],
+  },
+  {
+    category: 'Numerical Ability',
+    topics: [
+      'Basic Mathematics and its association with creative thinking',
+      'Unfolding space with use of geometry',
+      'Algebra, trigonometry, coordinate geometry, calculus basics',
+      'Statistics, probability, and number series',
     ],
   },
 ];
@@ -99,22 +119,27 @@ const faqs = [
   {
     question: 'Is NATA syllabus same as JEE Maths?',
     answer:
-      'The Mathematics portion of NATA syllabus overlaps significantly with JEE syllabus (11th and 12th Maths). However, NATA does not test Physics and Chemistry. NATA adds drawing, general aptitude, and architectural awareness which JEE does not cover.',
+      'NATA 2026 Part B includes Numerical Ability which overlaps with basic Maths (algebra, trigonometry, geometry). However, NATA focuses more on visual reasoning, design sensitivity, language interpretation, and architecture awareness — areas JEE does not cover. Part A is entirely drawing-based.',
   },
   {
-    question: 'How do I prepare for NATA drawing test?',
+    question: 'How do I prepare for the 3D Composition question (A3)?',
     answer:
-      'Practice free-hand sketching daily for at least 1 hour. Focus on proportion, shading, perspective, and composition. Draw from observation (objects, scenes, people). Practice creating compositions with geometric shapes. Time yourself to complete drawings within 30 minutes.',
+      'The 3D Composition question (30 marks) requires creating spatial compositions using a kit provided at the center. Practice with paper folding, origami, clay modeling, and geometric solids. Focus on understanding volume, space, and three-dimensional relationships.',
   },
   {
-    question: 'Is NCERT sufficient for NATA preparation?',
+    question: 'What is the difference between MCQ and NCQ in Part B?',
     answer:
-      'NCERT Mathematics (Class 11 & 12) covers most of the Math syllabus. However, for General Aptitude and Architecture Awareness, you will need additional resources and practice. Drawing practice needs a separate regimen.',
+      'MCQ (Multiple Choice Questions) have 4 options to choose from — there are 42 of these. NCQ (No Choice Questions) require you to type a numerical answer without any options — there are 8 of these. Both types have no negative marking.',
   },
   {
     question: 'Are there negative marks in NATA?',
     answer:
-      'No, there are no negative marks in NATA 2026. Both Part A (drawing) and Part B (MCQ/NCQ) do not penalize for wrong answers, so attempt all questions.',
+      'No, there are no negative marks in NATA 2026. Both Part A (drawing & composition) and Part B (MCQ/NCQ) do not penalize for wrong answers, so attempt all questions.',
+  },
+  {
+    question: 'What topics come under Design Sensitivity and Thinking?',
+    answer:
+      'This includes observation and analysis of people, space, products, and environment. Also covers critical thinking, reasoning, identifying subtle communications, understanding semantics and metaphors, problem identification and definition, and analysis of given situations.',
   },
 ];
 
@@ -139,6 +164,7 @@ export default function SyllabusPage({ params: { locale } }: PageProps) {
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
               NATA 2026 has two parts: Part A tests drawing skills (80 marks, offline) and Part B tests mathematics, general aptitude, and architecture awareness (120 marks, online). Here is the complete topic-wise syllabus.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 
@@ -149,7 +175,7 @@ export default function SyllabusPage({ params: { locale } }: PageProps) {
               Part A — Drawing Test (80 Marks)
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Part A is conducted offline on paper. You get 90 minutes to complete 3 drawing questions. Materials provided: A4 drawing sheets. You must bring your own pencils, erasers, colors, and drawing instruments.
+              Part A is conducted offline on paper. You get 90 minutes to complete 3 questions. The test center provides paper/base material. You must bring: pencils, erasers, dry colors, and scale (up to 15 cm). No geometry box or other instruments allowed.
             </Typography>
 
             <Grid container spacing={3}>
@@ -174,7 +200,7 @@ export default function SyllabusPage({ params: { locale } }: PageProps) {
               Part B — MCQ/NCQ (120 Marks)
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Part B is conducted online in an adaptive test format. You get 90 minutes to answer approximately 50 questions. Questions are Multiple Choice (MCQ) and Numerical Choice (NCQ) type. No negative marking.
+              Part B is conducted online in a computer-based adaptive test format. You get 90 minutes (108 seconds per question) to answer 50 questions — 42 MCQs (Multiple Choice) and 8 NCQs (No Choice / Numerical). No negative marking. Medium: English and Hindi.
             </Typography>
 
             {partBTopics.map((section, idx) => (

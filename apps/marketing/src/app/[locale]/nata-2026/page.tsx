@@ -25,6 +25,10 @@ import AssistanceSection from '@/components/nata/sections/AssistanceSection';
 import FaqSection from '@/components/nata/sections/FaqSection';
 import CtaBanner from '@/components/nata/sections/CtaBanner';
 import ContactSection from '@/components/nata/sections/ContactSection';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
+
+// ISR: Revalidate every hour since hub fetches dynamic data from Supabase
+export const revalidate = 3600;
 
 export async function generateMetadata({
   params: { locale },
@@ -55,7 +59,7 @@ const defaultFaqs = [
   {
     question: 'How many times can I attempt NATA 2026?',
     answer:
-      'You can attempt NATA up to 3 times in a single year. The best score among all attempts is considered for admission. Each attempt requires a separate registration and fee payment.',
+      'You can take up to 2 tests in Phase 1 (April–June 2026) or 1 test in Phase 2 (August 2026). You cannot appear in both phases. The best score among your attempts is considered for admission. Each test requires a separate fee payment.',
   },
   {
     question: 'What is the total marks for NATA 2026?',
@@ -70,12 +74,12 @@ const defaultFaqs = [
   {
     question: 'What is the minimum qualifying score for NATA 2026?',
     answer:
-      'To qualify in NATA 2026, you need a minimum of 20 marks in Part A, 20 marks in Part B, and 60 marks overall out of 200. Meeting all three criteria is mandatory.',
+      'NATA 2026 does not prescribe a minimum raw score for qualifying. Instead, Phase 1 uses percentile-based scoring calculated from all test-takers across both tests. Phase 2 uses raw marks. Admission eligibility depends on the participating institution\'s cutoff.',
   },
   {
     question: 'How long is the NATA 2026 score valid?',
     answer:
-      'The NATA score is valid for 2 academic years from the date of the result. This means your 2026 score can be used for admissions in both 2026-27 and 2027-28 academic sessions.',
+      'The NATA 2026 score is valid for 1 academic year (2026-2027 session only). However, valid NATA 2025 scores can also be used for 2026-27 admissions as per CoA rules.',
   },
 ];
 
@@ -124,6 +128,9 @@ export default async function Nata2026HubPage({ params: { locale } }: PageProps)
 
       <Box>
         <HeroSection locale={locale} />
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 1.5, bgcolor: 'background.paper' }}>
+          <LastUpdatedBadge date="March 13, 2026" variant="dark" />
+        </Box>
         <TopicNavigation locale={locale} />
         <WhatIsNataSection />
         <AtAGlanceSection />

@@ -18,6 +18,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -42,22 +43,27 @@ const faqs = [
   {
     question: 'What are the minimum qualifying marks for NATA 2026?',
     answer:
-      'To qualify in NATA 2026, you must score a minimum of 20 marks in Part A (out of 80), 20 marks in Part B (out of 120), and 60 marks overall (out of 200). All three criteria must be met simultaneously.',
+      'No minimum Raw Score is prescribed for qualifying in NATA 2026. The Final Scorecard issued by the Council, indicating the best Raw Score and the corresponding non-zero Percentile Score, shall be the valid qualifying NATA score.',
   },
   {
     question: 'If I attempt NATA multiple times, which score is considered?',
     answer:
-      'The best score among all your attempts is considered for admission. For example, if you score 100 in Attempt 1, 120 in Attempt 2, and 110 in Attempt 3, your score of 120 will be used.',
+      'In Phase 1, you can take up to 2 attempts. Your best raw score is used for percentile calculation. For example, if you score 100 in Attempt 1 and 120 in Attempt 2, your score of 120 will be used for percentile computation.',
   },
   {
     question: 'How long is the NATA 2026 score valid?',
     answer:
-      'The NATA score is valid for 2 academic years from the date of result declaration. So your NATA 2026 score can be used for admissions in both 2026-27 and 2027-28 academic sessions.',
+      'The NATA 2026 score is valid for the academic session 2026-2027 only. If you have a valid NATA 2025 score and do not appear in NATA 2026, the 2025 score remains valid for the 2026-27 session as well.',
   },
   {
-    question: 'Is there any normalized scoring in NATA?',
+    question: 'What is the percentile-based scoring system?',
     answer:
-      'Yes, since Part B is an adaptive test, the scores are normalized across different difficulty levels. The normalization ensures that candidates who get harder questions are not at a disadvantage compared to those who get easier ones.',
+      'NATA 2026 adopts percentile-based scoring for Phase 1. After all test sessions in Phase 1 (April–June 2026), the final percentile score is calculated based on your best raw score relative to the entire population of examinees. Phase 2 (August) uses only raw scores without percentile.',
+  },
+  {
+    question: 'Can I use my NATA 2025 score for 2026-27 admissions?',
+    answer:
+      'Yes, if you have a valid qualifying NATA 2025 score and have not taken admission during 2025-26, your score remains valid for 2026-27. However, if you take even one attempt in NATA 2026, your 2025 score becomes invalid.',
   },
 ];
 
@@ -80,37 +86,49 @@ export default function ScoringResultsPage({ params: { locale } }: PageProps) {
               NATA 2026 Scoring & Results
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              To qualify in NATA 2026, you need minimum 20 marks in Part A, minimum 20 marks in Part B, and minimum 60 marks overall out of 200. Your best score across all attempts is considered for admission.
+              NATA 2026 uses a percentile-based scoring system. No minimum Raw Score is prescribed. Your best raw score across attempts is used for percentile calculation. Score is valid for academic session 2026-2027.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 
-        {/* Qualifying Criteria */}
+        {/* Scoring System */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 6, fontWeight: 700 }}>
-              Qualifying Marks
+              Percentile-Based Scoring
             </Typography>
 
             <Grid container spacing={3}>
               {[
-                { part: 'Part A (Drawing)', total: 80, min: 20, color: 'primary.main' },
-                { part: 'Part B (MCQ/NCQ)', total: 120, min: 20, color: 'secondary.main' },
-                { part: 'Overall', total: 200, min: 60, color: 'success.main' },
+                { part: 'Part A (Drawing)', total: 80, label: '80 marks', color: 'primary.main' },
+                { part: 'Part B (MCQ/NCQ)', total: 120, label: '120 marks', color: 'secondary.main' },
+                { part: 'Total', total: 200, label: '200 marks', color: 'success.main' },
               ].map((item) => (
                 <Grid item xs={12} sm={4} key={item.part}>
                   <Card sx={{ textAlign: 'center', p: 3, border: '2px solid', borderColor: item.color }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{item.part}</Typography>
-                    <Typography variant="h3" sx={{ fontWeight: 800, color: item.color }}>{item.min}</Typography>
-                    <Typography variant="body2" color="text.secondary">out of {item.total}</Typography>
+                    <Typography variant="h3" sx={{ fontWeight: 800, color: item.color }}>{item.total}</Typography>
+                    <Typography variant="body2" color="text.secondary">{item.label}</Typography>
                   </Card>
                 </Grid>
               ))}
             </Grid>
 
-            <Card sx={{ mt: 4, bgcolor: 'warning.light', p: 3 }}>
+            <Card sx={{ mt: 4, bgcolor: 'success.light', p: 3 }}>
               <Typography variant="body1" sx={{ fontWeight: 600, textAlign: 'center' }}>
-                All three criteria must be met simultaneously. Failing even one means you do not qualify.
+                No minimum Raw Score is prescribed for qualifying in NATA 2026. The Final Scorecard with a non-zero Percentile Score is the valid qualifying NATA score.
+              </Typography>
+            </Card>
+
+            <Card sx={{ mt: 3, p: { xs: 3, md: 4 } }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>How Percentile Scoring Works</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
+                {'\u2022'} Phase 1 (April–June): Percentile score computed after all test sessions end, based on your best raw score relative to the entire population.{'\n'}
+                {'\u2022'} Phase 2 (August): Only Raw Scores issued — no percentile calculation.{'\n'}
+                {'\u2022'} Phase 1 scores (with Percentile) are used for Centralized Admission Counselling (CAP).{'\n'}
+                {'\u2022'} Phase 2 scores (Raw only) are used for admission against vacant seats after CAP.{'\n'}
+                {'\u2022'} Admission authorities may use either best Raw Score or Percentile Score per their rules.
               </Typography>
             </Card>
           </Container>
@@ -120,19 +138,20 @@ export default function ScoringResultsPage({ params: { locale } }: PageProps) {
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              Multiple Attempt Scoring
+              Attempt Structure & Scoring
             </Typography>
             <Card>
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 {[
-                  'You can attempt NATA up to 3 times per year.',
-                  'Each attempt is scored independently.',
-                  'Your BEST score among all attempts is considered for admission.',
-                  'Colleges use only the best score — they do not see individual attempt scores.',
-                  'Registering for all 3 attempts is optional — you can choose any number.',
-                  'Each attempt requires separate registration and fee payment.',
+                  'Phase 1 (April 4 – June 13, 2026): Up to 2 attempts for Centralized Admission Counselling (CAP).',
+                  'Phase 2 (August 7 & 8, 2026): 1 attempt only, for vacant seats after CAP.',
+                  'You can appear in only ONE phase — either Phase 1 or Phase 2, not both.',
+                  'Each attempt generates a raw score. A Statement of Marks is issued after each attempt.',
+                  'In Phase 1, your BEST raw score is used for final percentile computation.',
+                  'In Phase 2, only raw scores are issued — no percentile score.',
+                  'Each attempt requires separate fee payment.',
                 ].map((rule, idx) => (
-                  <Box key={idx} sx={{ display: 'flex', gap: 2, py: 1.5, borderBottom: idx < 5 ? '1px solid' : 'none', borderColor: 'divider' }}>
+                  <Box key={idx} sx={{ display: 'flex', gap: 2, py: 1.5, borderBottom: idx < 6 ? '1px solid' : 'none', borderColor: 'divider' }}>
                     <Typography sx={{ fontWeight: 700, color: 'primary.main', minWidth: 24 }}>{idx + 1}.</Typography>
                     <Typography variant="body1" color="text.secondary">{rule}</Typography>
                   </Box>
@@ -147,14 +166,16 @@ export default function ScoringResultsPage({ params: { locale } }: PageProps) {
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 3, fontWeight: 700 }}>Score Validity</Typography>
             <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-              The NATA score is valid for <strong>2 academic years</strong> from the date of the result. This means:
+              The NATA 2026 score is valid for <strong>the academic session 2026-2027 only</strong>.
             </Typography>
             <Card sx={{ mt: 3, p: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>NATA 2025 Score Carryover</Typography>
               <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                If you appear in NATA 2026 and get your result in May 2026, your score is valid for admissions in:{'\n\n'}
-                {'\u2022'} Academic year 2026-27 (immediate session){'\n'}
-                {'\u2022'} Academic year 2027-28 (next session){'\n\n'}
-                This gives you flexibility if you want to take a gap year or improve your score.
+                Candidates with a valid NATA 2025 score who have NOT taken admission during 2025-26 and do NOT appear in NATA 2026:{'\n\n'}
+                {'\u2022'} Will be assigned a Percentile Score for CAP round admissions in 2026-27.{'\n'}
+                {'\u2022'} For vacant seat admissions, the best NATA 2025 score is treated as Raw Score.{'\n\n'}
+                However, if you take any attempt in NATA 2026, your NATA 2025 score becomes invalid.{'\n'}
+                NATA 2025 scores are also invalid for candidates who already secured admission based on NATA 2025.
               </Typography>
             </Card>
           </Container>

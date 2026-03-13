@@ -17,6 +17,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -38,8 +39,8 @@ interface PageProps {
 }
 
 const feeData = [
-  { category: 'General / OBC / EWS', fee: '1,750', highlight: false },
-  { category: 'SC / ST', fee: '1,250', highlight: false },
+  { category: 'General / OBC (NCL)', fee: '1,750', highlight: false },
+  { category: 'SC / ST / EWS / PwD', fee: '1,250', highlight: false },
   { category: 'Transgender', fee: '1,000', highlight: false },
   { category: 'Candidates from Outside India', fee: '15,000', highlight: true },
 ];
@@ -48,12 +49,12 @@ const faqs = [
   {
     question: 'What is the NATA 2026 application fee for General category?',
     answer:
-      'The NATA 2026 application fee for General, OBC, and EWS category candidates is Rs 1,750 per attempt. This fee is non-refundable.',
+      'The NATA 2026 application fee for General and OBC (NCL) category candidates is Rs 1,750 per test. Note: EWS candidates pay only Rs 1,250 (grouped with SC/ST/PwD). The fee is non-refundable.',
   },
   {
     question: 'Do I have to pay separately for each NATA attempt?',
     answer:
-      'Yes, each NATA attempt requires a separate fee payment. If you register for all 3 attempts, you pay the fee 3 times. There is no bundled multi-attempt discount.',
+      'Yes, each test requires a separate fee payment. You can take maximum 2 tests in Phase 1 or 1 test in Phase 2. You can initially register for one test and later opt for an additional test.',
   },
   {
     question: 'What payment modes are accepted for NATA fee?',
@@ -86,8 +87,9 @@ export default function FeeStructurePage({ params: { locale } }: PageProps) {
               NATA 2026 Application Fee
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              The NATA 2026 application fee is Rs 1,750 for General/OBC/EWS candidates, Rs 1,250 for SC/ST candidates, Rs 1,000 for Transgender candidates, and Rs 15,000 for candidates from outside India. The fee is paid per attempt.
+              The NATA 2026 application fee is Rs 1,750 for General/OBC (NCL), Rs 1,250 for SC/ST/EWS/PwD, Rs 1,000 for Transgender, and Rs 15,000 for outside India. Fee is per test, non-refundable.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 
@@ -118,11 +120,11 @@ export default function FeeStructurePage({ params: { locale } }: PageProps) {
             <Card sx={{ mt: 4, p: { xs: 3, md: 4 } }}>
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>Important Notes</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                {'\u2022'} Fee is per attempt. For 3 attempts, pay 3 times.{'\n'}
-                {'\u2022'} Fee is non-refundable, even if you miss the exam.{'\n'}
-                {'\u2022'} Payment modes: Debit Card, Credit Card, Net Banking, UPI.{'\n'}
-                {'\u2022'} GST or other taxes may apply additionally.{'\n'}
-                {'\u2022'} Keep the payment receipt/transaction ID for future reference.
+                {'\u2022'} Fee is per test. Maximum 2 tests in Phase 1 or 1 test in Phase 2.{'\n'}
+                {'\u2022'} Fee is non-refundable in all cases.{'\n'}
+                {'\u2022'} Payment: Electronic Payment Gateway (EPG) — Debit Card, Credit Card, Net Banking.{'\n'}
+                {'\u2022'} Candidates initially opting for a single test may later opt for an additional test (not exceeding 2).{'\n'}
+                {'\u2022'} Multiple applications by the same candidate with changed credentials will be rejected without refund.
               </Typography>
             </Card>
           </Container>

@@ -17,6 +17,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -65,6 +66,7 @@ const examCenters: Record<string, string[]> = {
   'Chandigarh': ['Chandigarh'],
   'Jammu & Kashmir': ['Jammu', 'Srinagar'],
   'Puducherry': ['Puducherry'],
+  'Outside India': ['Dubai (UAE)'],
 };
 
 const faqs = [
@@ -86,7 +88,7 @@ const faqs = [
   {
     question: 'Is NATA conducted outside India?',
     answer:
-      'As per previous years, NATA is conducted only within India. International candidates need to travel to India for the exam. Check the official NATA website for the latest updates on international centers.',
+      'Yes, NATA 2026 has Dubai (UAE) as an international exam center. Candidates from outside India can appear at the Dubai center. The fee for candidates from outside India is Rs 15,000 per test.',
   },
 ];
 
@@ -110,8 +112,9 @@ export default function ExamCentersPage({ params: { locale } }: PageProps) {
               NATA 2026 Exam Centers
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 exam centers are available in 100+ cities across India. You can choose up to 4 preferred cities during registration. Here is the state-wise list of exam center cities.
+              NATA 2026 exam centers are available in 80+ cities across 25+ states/UTs in India and Dubai (UAE). You can choose up to 4 preferred cities during registration. Here is the state-wise list of exam center cities.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 

@@ -51,6 +51,12 @@ const staticPages: Array<{ path: string; lastModified: string }> = [
   { path: '/nata-2026/scoring-and-results', lastModified: '2026-02-28' },
   { path: '/nata-2026/dos-and-donts', lastModified: '2026-02-15' },
   { path: '/nata-2026/cutoff-calculator', lastModified: '2026-03-01' },
+  // New spoke pages (SEO/AEO expansion)
+  { path: '/nata-2026/drawing-test', lastModified: '2026-03-13' },
+  { path: '/nata-2026/preparation-tips', lastModified: '2026-03-13' },
+  { path: '/nata-2026/previous-year-papers', lastModified: '2026-03-13' },
+  { path: '/nata-2026/best-books', lastModified: '2026-03-13' },
+  { path: '/nata-2026/admit-card', lastModified: '2026-03-13' },
 ];
 
 // Course slugs

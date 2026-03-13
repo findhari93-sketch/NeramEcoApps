@@ -458,6 +458,30 @@ export function generateSoftwareApplicationSchema() {
   };
 }
 
+// ─── HowTo Schema (for step-by-step guides) ────────────────────────────────
+
+export function generateHowToSchema(howTo: {
+  name: string;
+  description: string;
+  steps: Array<{ name: string; text: string; image?: string }>;
+  totalTime?: string; // ISO 8601 duration, e.g. "PT30M"
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: howTo.name,
+    description: howTo.description,
+    ...(howTo.totalTime && { totalTime: howTo.totalTime }),
+    step: howTo.steps.map((step, i) => ({
+      '@type': 'HowToStep',
+      position: i + 1,
+      name: step.name,
+      text: step.text,
+      ...(step.image && { image: step.image }),
+    })),
+  };
+}
+
 // ─── Review Schema (for individual testimonials) ────────────────────────────
 
 export function generateReviewSchema(testimonial: {

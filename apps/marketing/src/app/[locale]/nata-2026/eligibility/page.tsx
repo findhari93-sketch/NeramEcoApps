@@ -21,6 +21,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -45,22 +46,22 @@ const faqs = [
   {
     question: 'Can I appear for NATA 2026 if I am in Class 12?',
     answer:
-      'Yes, students appearing (currently studying) in Class 12 with Mathematics as a subject are eligible to appear for NATA 2026. The final result will be valid only after you pass 12th with the required marks.',
+      'Yes, students appearing (currently studying) in Class 12 with the specified subjects are eligible to appear for NATA 2026. The final admission will be subject to passing 12th with the required marks and subjects.',
   },
   {
     question: 'Is there an age limit for NATA 2026?',
     answer:
-      'There is no upper age limit to appear for NATA. However, for B.Arch admission eligibility through CoA, the candidate should have completed 17 years of age as on the date specified by CoA.',
+      'There is no upper age limit to appear for NATA 2026.',
   },
   {
     question: 'Can Commerce or Arts students apply for NATA?',
     answer:
-      'No, to appear for NATA you must have studied Mathematics as a subject in 10+2. Students from Commerce or Arts stream without Mathematics are not eligible.',
+      'For B.Arch admission, you need Physics and Mathematics as compulsory subjects plus one from: Chemistry, Biology, Technical Vocational, CS, IT, Informatics Practices, Engineering Graphics, or Business Studies. Commerce students with Maths and Business Studies may be eligible.',
   },
   {
-    question: 'What is the minimum percentage required in 12th for NATA?',
+    question: 'What is the minimum percentage required in 12th for B.Arch admission?',
     answer:
-      'To appear for NATA, there is no minimum percentage. However, for B.Arch admission eligibility, you need at least 50% aggregate in 10+2 (45% for SC/ST/OBC/PwD) with Mathematics as a subject.',
+      'To appear for NATA, there is no minimum percentage. For B.Arch admission, you need at least 45% marks in aggregate in 10+2 with the required subjects. The same 45% applies to all categories. For 10+3 Diploma, 45% with Mathematics is required.',
   },
 ];
 
@@ -91,6 +92,7 @@ export default function EligibilityPage({ params: { locale } }: PageProps) {
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
               To appear for NATA 2026, you must have passed or be appearing in 10+2 (or equivalent) with Mathematics as a subject. For B.Arch admission, additional marks criteria apply.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 
@@ -107,12 +109,12 @@ export default function EligibilityPage({ params: { locale } }: PageProps) {
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 <List>
                   {[
-                    'Must have passed or be appearing in 10+2 (or equivalent exam) from a recognized board.',
-                    'Must have studied Mathematics as a mandatory subject in 10+2.',
+                    'Passed or appearing in 10+2 examination with subjects specified by CoA.',
+                    'Passed or appearing in 10+3 Diploma examination with Mathematics as a subject.',
                     'No minimum percentage required to appear for the NATA exam.',
                     'No upper age limit to appear for NATA.',
                     'Indian nationals, OCI, PIO holders, and foreign nationals are eligible.',
-                    'Diploma holders (10+3 Diploma) with Mathematics are also eligible.',
+                    'Qualifying in NATA does not guarantee admission — all eligibility criteria by respective authorities must be met.',
                   ].map((item, idx) => (
                     <ListItem key={idx} sx={{ px: 0 }}>
                       <ListItemIcon sx={{ minWidth: 32 }}>
@@ -140,13 +142,12 @@ export default function EligibilityPage({ params: { locale } }: PageProps) {
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 <List>
                   {[
-                    'Must have passed 10+2 with at least 50% aggregate marks (45% for SC/ST/OBC/PwD).',
-                    'Must have studied Mathematics as a mandatory subject.',
-                    'Must have passed in Physics, Chemistry, and Mathematics individually.',
-                    'Must have a valid NATA score (qualifying marks: minimum 20 in Part A, 20 in Part B, 60 overall).',
-                    'Must be at least 17 years of age as on the date specified by CoA.',
-                    'International Baccalaureate (IB) diploma holders with Maths are eligible.',
-                    'Lateral entry: B.Sc. graduates with Mathematics in all years may be eligible for direct second year (check college norms).',
+                    'Must have passed 10+2 with Physics and Mathematics as compulsory subjects.',
+                    'Along with Physics & Maths, must have one of: Chemistry, Biology, Technical Vocational subject, Computer Science, IT, Informatics Practices, Engineering Graphics, or Business Studies.',
+                    'Minimum 45% marks in aggregate in 10+2 (for all categories).',
+                    'OR passed 10+3 Diploma with Mathematics as compulsory subject with at least 45% aggregate.',
+                    'Must have a valid NATA score (no minimum raw score prescribed for 2026).',
+                    'Must qualify through NATA (conducted by CoA) or JEE (conducted by NTA).',
                   ].map((item, idx) => (
                     <ListItem key={idx} sx={{ px: 0 }}>
                       <ListItemIcon sx={{ minWidth: 32 }}>

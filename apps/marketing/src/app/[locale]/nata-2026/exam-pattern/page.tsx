@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -41,22 +42,32 @@ const faqs = [
   {
     question: 'How many questions are there in NATA 2026?',
     answer:
-      'NATA 2026 has 3 drawing questions in Part A (offline) and approximately 50 MCQ/NCQ questions in Part B (online). Part A is worth 80 marks and Part B is worth 120 marks, totaling 200 marks.',
+      'NATA 2026 has 3 questions in Part A (offline, 80 marks) and 50 questions in Part B (online, 120 marks) — 42 MCQs and 8 NCQs. The total is 200 marks. Part A tests drawing and composition skills while Part B is a computer-based adaptive test.',
   },
   {
     question: 'Is NATA 2026 Part B adaptive?',
     answer:
-      'Yes, Part B of NATA 2026 uses Computer Adaptive Testing (CAT). The difficulty of questions adjusts based on your performance — correct answers lead to harder questions (worth more marks) and incorrect ones lead to easier questions.',
+      'Yes, Part B of NATA 2026 uses Computer Adaptive Testing (CAT). You get 108 seconds per question. The difficulty adjusts based on your performance — correct answers lead to harder questions and incorrect ones lead to easier questions.',
   },
   {
     question: 'Can I use a calculator in NATA?',
     answer:
-      'No, calculators are not allowed in NATA. However, the online Part B interface may provide an on-screen basic calculator for numerical calculations. You should practice mental math.',
+      'No, calculators, mobile phones, Bluetooth devices, slide rules, log tables, and electronic watches with calculator facilities are strictly not allowed in the examination hall. Possession of such items may lead to cancellation of candidature.',
   },
   {
     question: 'What materials can I bring for Part A drawing?',
     answer:
-      'For Part A, you must bring your own drawing materials: HB/2B pencils, eraser, sharpener, geometry box (compass, scale, set squares, protractor), and coloring materials (color pencils, pastels, or watercolors). A4 drawing sheets are provided by the exam center.',
+      'For Part A, you must bring: pencils, erasers, dry colors, and a scale (up to 15 cm only). No geometry box, compass, set squares, or other instruments are allowed. The exam center provides drawing paper/material and rough sheets.',
+  },
+  {
+    question: 'How many attempts are available in NATA 2026?',
+    answer:
+      'You can take up to 2 attempts in Phase 1 (April–June 2026) for Centralized Admission Counselling, OR 1 attempt in Phase 2 (August 7–8, 2026) for vacant seats. You cannot appear in both phases. Your best raw score is used for percentile calculation.',
+  },
+  {
+    question: 'What is the new 3D Composition question in Part A?',
+    answer:
+      'Question A3 (30 marks) requires creating an interesting 3D composition for a given situation using a kit provided at the test center. This tests your ability to think in three dimensions and create spatial compositions.',
   },
 ];
 
@@ -79,8 +90,9 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
               NATA 2026 Exam Pattern
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 is a 200-mark exam divided into two parts: Part A (Drawing Test, 80 marks, offline, 90 minutes) and Part B (MCQ/NCQ, 120 marks, online adaptive, 90 minutes). There is no negative marking.
+              NATA 2026 is a 200-mark exam in two parts: Part A — Drawing & Composition (80 marks, offline, 90 minutes) and Part B — MCQ/NCQ (120 marks, online adaptive, 90 minutes). The medium is English and Hindi.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 
@@ -93,13 +105,13 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                 <Card sx={{ height: '100%', border: '2px solid', borderColor: 'primary.main' }}>
                   <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                     <Chip label="PART A" size="small" color="primary" sx={{ mb: 2 }} />
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>Drawing Test</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>Drawing & Composition Test</Typography>
                     {[
                       { label: 'Mode', value: 'Offline (Pen & Paper)' },
                       { label: 'Marks', value: '80' },
                       { label: 'Duration', value: '90 minutes' },
-                      { label: 'Questions', value: '3 drawing questions' },
-                      { label: 'Medium', value: 'English' },
+                      { label: 'Questions', value: '3 questions' },
+                      { label: 'Medium', value: 'English and Hindi' },
                       { label: 'Negative Marking', value: 'No' },
                     ].map((row, idx) => (
                       <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -107,8 +119,16 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.value}</Typography>
                       </Box>
                     ))}
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2, lineHeight: 1.8 }}>
-                      Questions test: free-hand sketching, composition with shapes, imaginative drawing, perspective, proportion, and shading.
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Question Breakdown:</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
+                        A1 — Composition & Color (25 marks): Create compositions and color them appropriately.{'\n'}
+                        A2 — Sketching & Composition B&W (25 marks): Draw buildings, people, environment with scale, proportion, shading.{'\n'}
+                        A3 — 3D Composition (30 marks): Create a 3D composition using a kit provided at the center.
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontStyle: 'italic' }}>
+                      Materials to bring: Pencils, erasers, dry colors, scale (up to 15 cm). No geometry box or other instruments allowed.
                     </Typography>
                   </CardContent>
                 </Card>
@@ -119,12 +139,12 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                 <Card sx={{ height: '100%', border: '2px solid', borderColor: 'secondary.main' }}>
                   <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                     <Chip label="PART B" size="small" color="secondary" sx={{ mb: 2 }} />
-                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>MCQ / NCQ</Typography>
+                    <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>MCQ / NCQ (Adaptive)</Typography>
                     {[
                       { label: 'Mode', value: 'Online (Computer Adaptive)' },
                       { label: 'Marks', value: '120' },
-                      { label: 'Duration', value: '90 minutes' },
-                      { label: 'Questions', value: '~50 (varies due to adaptive)' },
+                      { label: 'Duration', value: '90 minutes (108 sec/question)' },
+                      { label: 'Questions', value: '50 (42 MCQ + 8 NCQ)' },
                       { label: 'Medium', value: 'English and Hindi' },
                       { label: 'Negative Marking', value: 'No' },
                     ].map((row, idx) => (
@@ -133,9 +153,17 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.value}</Typography>
                       </Box>
                     ))}
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2, lineHeight: 1.8 }}>
-                      Topics: Mathematics, General Aptitude, Logical Reasoning, Architecture Awareness. MCQ = Multiple Choice, NCQ = Numerical Choice (type your answer).
-                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Topics Covered:</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
+                        {'\u2022'} Visual Reasoning — 2D/3D composition understanding{'\n'}
+                        {'\u2022'} Logical Derivation — Decoding situations and drawing conclusions{'\n'}
+                        {'\u2022'} GK, Architecture & Design — Buildings, history, materials{'\n'}
+                        {'\u2022'} Language Interpretation — Grammar, word meanings{'\n'}
+                        {'\u2022'} Design Sensitivity & Thinking — Observation, critical thinking{'\n'}
+                        {'\u2022'} Numerical Ability — Math with creative/geometric applications
+                      </Typography>
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -149,25 +177,51 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
               Exam Day Schedule
             </Typography>
-            <Card>
+
+            {/* Session 1 */}
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>Session 1 (Morning)</Typography>
+            <Card sx={{ mb: 4 }}>
               <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                 {[
-                  { time: '08:30 AM', event: 'Gate opens, reporting begins' },
-                  { time: '09:00 AM', event: 'Identity verification and seating' },
-                  { time: '09:30 AM', event: 'Part A (Drawing) starts' },
-                  { time: '11:00 AM', event: 'Part A ends, break begins' },
-                  { time: '11:30 AM', event: 'Part B (Online) starts' },
-                  { time: '01:00 PM', event: 'Part B ends, exam over' },
+                  { time: '09:00 AM', event: 'Report to Examination Centre' },
+                  { time: '09:15 AM', event: 'Gate opens to examination hall' },
+                  { time: '09:45 AM', event: 'Registration must be completed' },
+                  { time: '10:00 AM', event: 'Gate closes, examination begins (Part A + Part B)' },
+                  { time: '10:15 AM', event: 'Late entry cutoff — no entry after this' },
+                  { time: '01:00 PM', event: 'Examination ends, exit allowed' },
                 ].map((row, idx) => (
                   <Box key={idx} sx={{ display: 'flex', gap: 3, py: 1.5, borderBottom: idx < 5 ? '1px solid' : 'none', borderColor: 'divider' }}>
                     <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 100, color: 'primary.main' }}>{row.time}</Typography>
                     <Typography variant="body2" color="text.secondary">{row.event}</Typography>
                   </Box>
                 ))}
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                  * Approximate schedule based on NATA 2025. Actual timings may vary. Check your appointment card for exact schedule.
-                </Typography>
               </CardContent>
+            </Card>
+
+            {/* Session 2 */}
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, color: 'secondary.main' }}>Session 2 (Afternoon)</Typography>
+            <Card>
+              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+                {[
+                  { time: '12:30 PM', event: 'Report to Examination Centre' },
+                  { time: '12:45 PM', event: 'Gate opens to examination hall' },
+                  { time: '01:15 PM', event: 'Registration must be completed' },
+                  { time: '01:30 PM', event: 'Gate closes, examination begins (Part A + Part B)' },
+                  { time: '01:45 PM', event: 'Late entry cutoff — no entry after this' },
+                  { time: '04:30 PM', event: 'Examination ends, exit allowed' },
+                ].map((row, idx) => (
+                  <Box key={idx} sx={{ display: 'flex', gap: 3, py: 1.5, borderBottom: idx < 5 ? '1px solid' : 'none', borderColor: 'divider' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 100, color: 'secondary.main' }}>{row.time}</Typography>
+                    <Typography variant="body2" color="text.secondary">{row.event}</Typography>
+                  </Box>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card sx={{ mt: 3, bgcolor: 'warning.light', p: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'center' }}>
+                Fridays: 1 session (afternoon only). Saturdays: 2 sessions. Total duration: 3 hours (Part A 90 min + Part B 90 min). No exit before exam ends.
+              </Typography>
             </Card>
           </Container>
         </Box>

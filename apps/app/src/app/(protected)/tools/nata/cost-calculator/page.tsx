@@ -115,7 +115,7 @@ interface CostBreakdown {
 }
 
 const TIPS = [
-  'Apply for all 3 attempts upfront during registration to avoid last-minute rush.',
+  'Register early — you can initially opt for 1 test and add a 2nd test later (max 2 in Phase 1).',
   'Exam fees are non-refundable. Plan your attempts wisely.',
   'Book accommodation early near your exam center for better rates.',
   'Consider online study materials which are often more affordable.',
@@ -239,11 +239,7 @@ export default function NataCostCalculatorPage() {
                   control={<Radio size="small" />}
                   label={<Typography variant="body2">2</Typography>}
                 />
-                <FormControlLabel
-                  value="3"
-                  control={<Radio size="small" />}
-                  label={<Typography variant="body2">3</Typography>}
-                />
+                {/* NATA 2026: Max 2 attempts in Phase 1, or 1 in Phase 2. "3 attempts" option removed. */}
               </RadioGroup>
             </FormControl>
 
@@ -512,8 +508,8 @@ export default function NataCostCalculatorPage() {
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
               NATA exam fees are set by the Council of Architecture (COA) and vary based on category.
-              You can appear for up to 3 attempts in a single year, and each attempt requires a
-              separate fee.
+              You can take up to 2 tests in Phase 1 (April–June, for CAP admissions) or 1 test in Phase 2
+              (August, for vacant seats). You cannot appear in both phases. Each test requires a separate fee.
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
               Additional costs like travel, accommodation, and study materials vary significantly

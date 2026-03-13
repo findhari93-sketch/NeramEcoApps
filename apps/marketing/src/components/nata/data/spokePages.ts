@@ -9,6 +9,11 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import RuleIcon from '@mui/icons-material/Rule';
 import CalculateIcon from '@mui/icons-material/Calculate';
+import BrushIcon from '@mui/icons-material/Brush';
+import TipsAndUpdatesIcon from '@mui/icons-material/TipsAndUpdates';
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories';
+import BadgeIcon from '@mui/icons-material/Badge';
 import { m3Primary, m3Secondary, m3Tertiary, m3Neutral } from '@neram/ui';
 
 export interface SpokePage {
@@ -119,6 +124,51 @@ export const spokePages: SpokePage[] = [
     icon: CalculateIcon,
     tint: m3Primary[90],
     tintDark: m3Primary[40],
+    featured: false,
+  },
+  {
+    slug: 'drawing-test',
+    title: 'Drawing Test',
+    desc: 'Complete guide to Part A (80 marks)',
+    icon: BrushIcon,
+    tint: m3Tertiary[90],
+    tintDark: m3Tertiary[40],
+    featured: true,
+  },
+  {
+    slug: 'preparation-tips',
+    title: 'Preparation Tips',
+    desc: 'Expert strategy & month-wise study plan',
+    icon: TipsAndUpdatesIcon,
+    tint: m3Secondary[90],
+    tintDark: m3Secondary[40],
+    featured: true,
+  },
+  {
+    slug: 'previous-year-papers',
+    title: 'Previous Year Papers',
+    desc: 'PYQ analysis & question trends (2020-2025)',
+    icon: HistoryEduIcon,
+    tint: m3Neutral[90],
+    tintDark: m3Neutral[40],
+    featured: false,
+  },
+  {
+    slug: 'best-books',
+    title: 'Best Books',
+    desc: 'Section-wise book recommendations',
+    icon: AutoStoriesIcon,
+    tint: m3Primary[90],
+    tintDark: m3Primary[40],
+    featured: false,
+  },
+  {
+    slug: 'admit-card',
+    title: 'Admit Card',
+    desc: 'Download steps & exam day documents',
+    icon: BadgeIcon,
+    tint: m3Secondary[90],
+    tintDark: m3Secondary[40],
     featured: false,
   },
 ];

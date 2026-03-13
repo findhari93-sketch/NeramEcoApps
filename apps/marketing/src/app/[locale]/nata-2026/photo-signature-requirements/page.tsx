@@ -18,6 +18,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -44,6 +45,7 @@ const photoSpecs = [
   { label: 'Format', value: 'JPG / JPEG only' },
   { label: 'Background', value: 'White or light-colored' },
   { label: 'Face Coverage', value: '80% of the frame' },
+  { label: 'Pose', value: 'Front-facing, both ears visible' },
   { label: 'Recency', value: 'Taken within last 6 months' },
 ];
 
@@ -100,6 +102,7 @@ export default function PhotoSignaturePage({ params: { locale } }: PageProps) {
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
               Your NATA 2026 application requires a passport-size photo (3.5x4.5 cm, 4-100 KB, JPG) and a signature scan (3.5x1.5 cm, 1-30 KB, JPG). Both must be on white background.
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 

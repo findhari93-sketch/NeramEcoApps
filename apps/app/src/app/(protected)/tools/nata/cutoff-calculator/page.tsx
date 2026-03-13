@@ -130,9 +130,10 @@ function checkBoardEligibility(marksSecured: number, maxMarks: number): boolean 
 
 function checkNataAttempt(partA: number, partB: number): NataAttemptResult {
   const total = partA + partB;
-  const isPartAEligible = partA >= 20;
-  const isPartBEligible = partB >= 30;
-  const isTotalEligible = total >= 70;
+  // NATA 2026: No minimum raw score prescribed. Any non-zero score is valid.
+  const isPartAEligible = partA > 0;
+  const isPartBEligible = partB > 0;
+  const isTotalEligible = total > 0;
   return {
     total,
     isPartAEligible,
@@ -181,10 +182,10 @@ function calculateBestNataScore(
       prevYearInvalid: false,
     };
   } else {
-    // 3 attempts — previous year becomes INVALID
+    // NATA 2026: Max 2 attempts in Phase 1. If you appear in current year at all, previous year is invalid.
     return {
       bestScore: bestCurrentYear,
-      explanation: `With 3 current year attempts, previous year score is invalidated. Best of current year only.`,
+      explanation: `Best of ${validCurrentScores.length} attempt(s) in Phase 1. Previous year score becomes invalid when you take any NATA 2026 attempt.`,
       prevYearInvalid: true,
     };
   }
@@ -517,7 +518,6 @@ function NataExamSection({
         >
           <ToggleButton value={1}>1 Attempt</ToggleButton>
           <ToggleButton value={2}>2 Attempts</ToggleButton>
-          <ToggleButton value={3}>3 Attempts</ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
@@ -678,11 +678,11 @@ function PreviousYearSection({
 }) {
   const getCrossYearRule = () => {
     if (attemptCount === 1) {
-      return 'Better of previous year and current year 1st attempt will be considered.';
+      return 'If you did NOT take admission in 2025-26, your 2025 score remains valid. Taking any 2026 attempt invalidates the 2025 score.';
     } else if (attemptCount === 2) {
-      return 'Best of three scores (previous year + 2 current year attempts) will be considered.';
+      return 'Taking any NATA 2026 attempt invalidates your 2025 score. Best of your 2 Phase 1 attempts will be used for percentile calculation.';
     }
-    return 'With 3 current year attempts, previous year score will be INVALIDATED. Only best of 3 current year scores will be counted.';
+    return 'Taking any NATA 2026 attempt invalidates your previous year score.';
   };
 
   return (
@@ -1033,34 +1033,39 @@ function InfoSection() {
       </Typography>
 
       <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-        NATA Qualifying Criteria
+        NATA 2026 Scoring
       </Typography>
       <ul style={{ marginLeft: '1.5rem', marginTop: 0 }}>
         <li>
           <Typography variant="body2" color="text.secondary">
-            Minimum 20 marks in Part A (MCQ)
+            No minimum Raw Score is prescribed for qualifying in NATA 2026
           </Typography>
         </li>
         <li>
           <Typography variant="body2" color="text.secondary">
-            Minimum 30 marks in Part B (Drawing)
+            Phase 1: Percentile-based scoring (best raw score used for percentile)
           </Typography>
         </li>
         <li>
           <Typography variant="body2" color="text.secondary">
-            Overall qualifying marks: 70 out of 200
+            Phase 2: Raw scores only (no percentile)
+          </Typography>
+        </li>
+        <li>
+          <Typography variant="body2" color="text.secondary">
+            Score valid for academic session 2026-2027 only
           </Typography>
         </li>
       </ul>
 
       <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mt: 2 }}>
-        Multi-Attempt & Cross-Year Rules
+        Attempt Structure & Cross-Year Rules
       </Typography>
       <Typography variant="body2" color="text.secondary" paragraph>
-        Candidates can appear for up to 3 NATA attempts per year. The best score is taken as valid. If
-        you have a valid previous year score and take 1 or 2 attempts this year, the best score across
-        all attempts (including previous year) is considered. However, if you take all 3 attempts this
-        year, the previous year score becomes invalid.
+        Phase 1 (April–June 2026): Up to 2 attempts for Centralized Admission Counselling (CAP).
+        Phase 2 (August 2026): 1 attempt only, for vacant seats. You cannot appear in both phases.
+        If you have a valid NATA 2025 score and do NOT take any NATA 2026 attempt, the 2025 score
+        remains valid for 2026-27. However, taking any NATA 2026 attempt invalidates your 2025 score.
       </Typography>
 
       <Alert severity="info" sx={{ mt: 2 }}>

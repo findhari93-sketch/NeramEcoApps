@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 export async function generateMetadata({
   params: { locale },
@@ -44,25 +45,26 @@ interface PageProps {
 const dos = [
   'Carry your appointment card (printed) to the exam center.',
   'Carry a valid government photo ID (Aadhaar, Passport, PAN, Voter ID).',
-  'Bring your own drawing materials: HB/2B pencils, eraser, sharpener, geometry box, color pencils.',
-  'Reach the exam center at least 1 hour before the exam time.',
+  'Bring your own drawing materials: pencils (HB/2B), erasers, dry colors (color pencils, pastels, crayons), and a scale (up to 15 cm only).',
+  'Report at the exam center by 9:00 AM (Session 1) or 12:30 PM (Session 2). Late entry cutoff is 10:15 AM / 1:45 PM.',
   'Wear comfortable clothes (avoid clothing with large logos or text).',
   'Carry a transparent water bottle.',
-  'Read all drawing questions carefully before starting.',
-  'Manage time wisely: allocate 30 minutes per drawing question.',
-  'For Part B, attempt all questions (no negative marking).',
-  'Keep your drawing sheets clean and smudge-free.',
+  'Read all Part A drawing questions carefully — you have 90 minutes for 3 questions.',
+  'For Part B (online), attempt all 50 questions — no negative marking for MCQ or NCQ.',
+  'Keep your drawing sheets and 3D composition materials clean.',
+  'Follow all instructions from the invigilator regarding the 3D composition kit provided at the center.',
 ];
 
 const donts = [
   'Do NOT carry mobile phones, smartwatches, or any electronic devices.',
   'Do NOT carry calculators (even basic ones).',
   'Do NOT bring printed or written notes, textbooks, or reference materials.',
+  'Do NOT bring a geometry box, compass, set squares, protractor, or any instruments other than pencils, erasers, dry colors, and scale (up to 15 cm).',
+  'Do NOT bring blades, cutters, or sharp instruments.',
   'Do NOT use erasing fluid (correction fluid/whitener) on drawing sheets.',
   'Do NOT communicate with other candidates during the exam.',
   'Do NOT leave the exam hall without permission from the invigilator.',
   'Do NOT attempt to copy or use unfair means — leads to disqualification.',
-  'Do NOT bring food items (only water bottle allowed).',
   'Do NOT bring bags, wallets, or purses inside the exam hall.',
   'Do NOT write your name on the drawing sheet (use only the roll number).',
 ];
@@ -71,17 +73,17 @@ const faqs = [
   {
     question: 'Can I bring my own drawing sheets for NATA?',
     answer:
-      'No, drawing sheets are provided by the exam center. You should NOT bring your own drawing sheets. However, you must bring your own drawing instruments (pencils, eraser, colors, geometry box).',
+      'No, drawing sheets and base material for the 3D composition are provided by the exam center. You should NOT bring your own. You must bring only: pencils, erasers, dry colors (color pencils, pastels, crayons), and a scale up to 15 cm.',
   },
   {
     question: 'What happens if I arrive late for NATA exam?',
     answer:
-      'Late entry may not be allowed after the gate closes. Typically, the gate closes 30 minutes before the exam starts. If you arrive after the gate closure, you will not be permitted to take the exam and your fee will not be refunded.',
+      'Late entry is not allowed after the cutoff time. For Session 1, the late entry cutoff is 10:15 AM (exam starts 10:00 AM). For Session 2, the cutoff is 1:45 PM (exam starts 1:30 PM). If you arrive after the cutoff, you will not be permitted to take the exam and your fee will not be refunded.',
   },
   {
-    question: 'Can I use watercolors in NATA Part A?',
+    question: 'Can I bring a geometry box or compass to NATA?',
     answer:
-      'Yes, you can use watercolors, color pencils, pastels, or crayons for the drawing test. However, oil paints and acrylic paints are generally not recommended as they may take too long to dry.',
+      'No. NATA 2026 explicitly prohibits geometry boxes, compasses, set squares, protractors, and blades. You are allowed ONLY pencils, erasers, dry colors (color pencils, pastels, crayons), and a scale up to 15 cm.',
   },
   {
     question: 'What if I get caught using unfair means in NATA?',
@@ -109,8 +111,9 @@ export default function DosAndDontsPage({ params: { locale } }: PageProps) {
               NATA 2026 Exam Day Do&apos;s and Don&apos;ts
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              On NATA exam day, carry your appointment card, photo ID, and drawing materials. Do NOT bring mobile phones, calculators, or electronic devices. Arrive at least 1 hour early.
+              On NATA exam day, carry your appointment card, photo ID, and drawing materials (pencils, erasers, dry colors, scale up to 15 cm). Do NOT bring mobile phones, geometry boxes, or electronic devices. Report by 9:00 AM (Session 1) or 12:30 PM (Session 2).
             </Typography>
+            <LastUpdatedBadge date="March 13, 2026" />
           </Container>
         </Box>
 

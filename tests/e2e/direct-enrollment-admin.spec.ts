@@ -264,7 +264,7 @@ test.describe('Direct Enrollment API - CRUD Operations', () => {
     });
     expect(deleteRes.status()).toBe(400);
     const deleteBody = await deleteRes.json();
-    expect(deleteBody.error).toContain('cancelled or expired');
+    expect(deleteBody.error).toContain('cannot be deleted');
 
     // Cleanup: cancel then delete
     await request.patch(`/api/direct-enrollment/${activeId}`, {
