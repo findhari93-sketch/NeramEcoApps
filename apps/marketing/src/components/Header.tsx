@@ -107,6 +107,7 @@ const navigationLinks = [
   { labelKey: 'counseling' as const, href: '/counseling' as const },
   { labelKey: 'fees' as const, href: '/fees' as const },
   { labelKey: 'contact' as const, href: '/contact' as const },
+  { labelKey: 'careers' as const, href: '/careers' as const },
 ];
 
 export default function Header() {

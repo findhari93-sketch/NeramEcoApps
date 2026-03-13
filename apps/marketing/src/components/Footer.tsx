@@ -25,6 +25,7 @@ const footerLinks = {
     { label: 'Contact', href: '/contact' },
     { label: 'Fees', href: '/fees' },
     { label: 'Scholarships', href: '/scholarship' },
+    { label: 'Careers', href: '/careers' },
   ],
   resources: [
     { label: 'NATA Syllabus 2026', href: '/nata-syllabus' },

@@ -322,6 +322,12 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 
 ---
 
+### Deployment Rule (CRITICAL - HIGHEST PRIORITY)
+
+> **NEVER deploy automatically after making changes. Claude must NEVER run deploy commands, push to git, or trigger deployments on its own — not even after completing a feature, fixing a bug, or finishing a task. Deployment happens ONLY when the user explicitly says "deploy", "push", "deploy to staging", "deploy to prod", or similar deploy commands. Until then, just make the code changes and stop. The user will test locally first and decide when to deploy.**
+>
+> **Reason:** Vercel has limited deployments per day. Deploying after every small change exhausts the quota. The user needs to batch changes and deploy on their own schedule.
+
 ### One-Command Deploy (CRITICAL - READ THIS)
 
 > **When the user says "deploy to staging", "deploy to production", "deploy all", "push to staging", "push to prod", or similar — follow this playbook.**
