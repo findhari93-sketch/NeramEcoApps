@@ -30,7 +30,8 @@ function SSOInner() {
         const currentUser = auth.currentUser;
         if (currentUser) {
           const idToken = await currentUser.getIdToken();
-          const response = await fetch(`${APP_URL}/api/auth/exchange-token`, {
+          // Call our own API (same origin) to avoid CORS and Firebase project mismatch
+          const response = await fetch('/api/auth/exchange-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idToken }),
@@ -41,6 +42,9 @@ function SSOInner() {
             url.searchParams.set('authToken', customToken);
             window.location.href = url.toString();
             return;
+          } else {
+            const errData = await response.json().catch(() => ({}));
+            console.error('SSO exchange failed:', response.status, errData);
           }
         }
       } catch (error) {
