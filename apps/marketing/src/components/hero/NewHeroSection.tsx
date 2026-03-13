@@ -100,9 +100,9 @@ export default function NewHeroSection() {
                   },
                 }}
               >
-                Your Time to Master
+                Your Time to Master{' '}
                 <br />
-                <em>Architecture</em>
+                <em>Architecture</em>{' '}
                 <br />
                 with <span className="ai-word">AI</span>
               </Typography>
@@ -110,6 +110,7 @@ export default function NewHeroSection() {
               {/* Subhead */}
               <Typography
                 variant="subtitle1"
+                component="p"
                 sx={{
                   color: 'text.secondary',
                   maxWidth: { xs: '100%', md: 480 },

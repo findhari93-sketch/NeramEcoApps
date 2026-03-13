@@ -31,9 +31,7 @@ export default function robots(): MetadataRoute.Robots {
           '/register/*',
           '/members/*',
           '/NATA_Application_Form_*',
-          // Special characters
-          '/&',
-          '/$',
+          // Note: removed '/&' and '/$' — '/$' was blocking the homepage for generic crawlers
         ],
       },
       // AI Crawlers — ALLOW for AEO (AI Engine Optimization)

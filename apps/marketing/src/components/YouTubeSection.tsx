@@ -199,7 +199,7 @@ export default function YouTubeSection() {
             border: '1px solid rgba(255,255,255,0.08)',
           }}
         >
-          <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+          <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
             {t('ctaTitle')}
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3 }}>

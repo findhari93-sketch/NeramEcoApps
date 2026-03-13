@@ -50,10 +50,31 @@ const nextConfig = {
           },
         ],
       },
+      // Cache static assets (images, fonts, SVGs) for 1 year
+      {
+        source: '/images/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/icons/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
     ];
   },
   async redirects() {
     return [
+      // www → non-www canonical redirect (SEO: prevent duplicate content)
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'www.neramclasses.com' }],
+        destination: 'https://neramclasses.com/:path*',
+        permanent: true,
+      },
+
       // City-specific coaching pages — MUST be first (more specific than /coaching)
       // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper
       { source: '/coaching/:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },

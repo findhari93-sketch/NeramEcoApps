@@ -32,7 +32,7 @@ const courses = [
     duration: '2-3 Months',
     level: 'All Levels',
     category: 'Architecture Entrance',
-    image: '/images/courses/architecture-crash.jpg',
+    image: '/images/courses/architecture-crash.svg',
     features: [
       'NATA + JEE Paper 2',
       'Intensive Training',
@@ -49,7 +49,7 @@ const courses = [
     duration: '3 Months',
     level: 'Beginner to Advanced',
     category: 'Software Training',
-    image: '/images/courses/revit.jpg',
+    image: '/images/courses/revit.svg',
     features: [
       'Hands-on Projects',
       'BIM Concepts',

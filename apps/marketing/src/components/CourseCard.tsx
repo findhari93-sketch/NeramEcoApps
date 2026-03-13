@@ -163,7 +163,7 @@ export default function CourseCard({ course }: CourseCardProps) {
             },
           }}
         >
-          Learn More
+          Explore {course.title}
         </Button>
       </CardActions>
     </Card>

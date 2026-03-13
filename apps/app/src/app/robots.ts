@@ -11,6 +11,10 @@ export default function robots(): MetadataRoute.Robots {
           '/',
           '/tools',
           '/tools/',
+          '/tools/cutoff-calculator',
+          '/tools/college-predictor',
+          '/tools/exam-centers',
+          '/tools/question-bank',
           '/login',
         ],
         disallow: [
@@ -26,14 +30,9 @@ export default function robots(): MetadataRoute.Robots {
           '/*.json$',
         ],
       },
-      {
-        userAgent: 'Googlebot',
-        allow: '/',
-      },
-      {
-        userAgent: 'Bingbot',
-        allow: '/',
-      },
+      // Note: Do NOT add specific Googlebot/Bingbot rules — in robots.txt spec,
+      // user-agent-specific rules OVERRIDE the '*' rules entirely,
+      // which would make Googlebot ignore all disallow entries above.
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
   };

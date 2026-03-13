@@ -105,7 +105,7 @@ const coursesData: Record<string, any> = {
     duration: '2-3 Months',
     level: 'All Levels',
     category: 'Architecture Entrance',
-    image: '/images/courses/architecture-crash.jpg',
+    image: '/images/courses/architecture-crash.svg',
     price: '15,000',
     curriculum: [
       {
@@ -170,7 +170,7 @@ const coursesData: Record<string, any> = {
     duration: '3 Months',
     level: 'Beginner to Advanced',
     category: 'Software Training',
-    image: '/images/courses/revit.jpg',
+    image: '/images/courses/revit.svg',
     price: '25,000',
     curriculum: [
       {

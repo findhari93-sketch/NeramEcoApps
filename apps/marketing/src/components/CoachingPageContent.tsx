@@ -251,7 +251,7 @@ export default function CoachingPageContent() {
                         href={`/courses/${program.slug}`}
                         fullWidth
                       >
-                        Learn More
+                        Explore {program.title}
                       </Button>
                     </Box>
                   </CardContent>

@@ -31,6 +31,9 @@ const staticPages: Array<{ path: string; lastModified: string }> = [
   { path: '/best-books-nata-jee', lastModified: '2026-01-25' },
   { path: '/how-to-score-150-in-nata', lastModified: '2026-01-30' },
   { path: '/tools/cutoff-calculator', lastModified: '2026-03-01' },
+  { path: '/tools/college-predictor', lastModified: '2026-03-13' },
+  { path: '/tools/exam-centers', lastModified: '2026-03-13' },
+  { path: '/tools/question-bank', lastModified: '2026-03-13' },
   { path: '/nata-app', lastModified: '2026-02-28' },
   { path: '/best-nata-coaching-online', lastModified: '2026-02-20' },
   { path: '/blog', lastModified: '2026-03-10' },  // Blog index - updated with new posts

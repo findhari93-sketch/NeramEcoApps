@@ -2,18 +2,30 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import { ThemeProvider } from '@mui/material/styles';
 import { Box, Container, Typography, Grid, Card, CardContent, Button } from '@neram/ui';
 import { neramaiArchitekDarkTheme } from '@neram/ui';
 import { NewHeroSection } from '@/components/hero';
 import CourseCard from '@/components/CourseCard';
-import YouTubeSection from '@/components/YouTubeSection';
-import { AnnouncementsSection } from '@/components/marketing-content';
 import SectionDivider from '@/components/SectionDivider';
-import { SocialProofSection } from '@/components/social-proof';
-import { TestimonialsColumn } from '@/components/ui/testimonials-columns';
-import type { Testimonial } from '@/components/ui/testimonials-columns';
 import { APP_URL } from '@/lib/seo/constants';
+import type { Testimonial } from '@/components/ui/testimonials-columns';
+
+// Lazy-load below-fold components to reduce initial JS bundle
+const YouTubeSection = dynamic(() => import('@/components/YouTubeSection'), { ssr: false });
+const AnnouncementsSection = dynamic(
+  () => import('@/components/marketing-content').then((mod) => ({ default: mod.AnnouncementsSection })),
+  { ssr: false }
+);
+const SocialProofSection = dynamic(
+  () => import('@/components/social-proof').then((mod) => ({ default: mod.SocialProofSection })),
+  { ssr: false }
+);
+const TestimonialsColumn = dynamic(
+  () => import('@/components/ui/testimonials-columns').then((mod) => ({ default: mod.TestimonialsColumn })),
+  { ssr: false }
+);
 
 // Featured courses offered by Neram Classes
 const featuredCourses = [
@@ -33,7 +45,7 @@ const featuredCourses = [
     description: 'Intensive NATA & JEE Paper 2 crash course for quick preparation',
     duration: '2-3 Months',
     level: 'All Levels',
-    image: '/images/courses/architecture-crash.jpg',
+    image: '/images/courses/architecture-crash.svg',
   },
   {
     id: 3,
@@ -42,7 +54,7 @@ const featuredCourses = [
     description: 'Professional Autodesk Revit training for architects and designers',
     duration: '3 Months',
     level: 'Beginner to Advanced',
-    image: '/images/courses/revit.jpg',
+    image: '/images/courses/revit.svg',
   },
 ];
 
@@ -467,6 +479,7 @@ export default function HomePageContent() {
             </Typography>
             <Typography
               variant="h6"
+              component="p"
               sx={{ mb: 5, color: 'text.secondary', maxWidth: 520, mx: 'auto' }}
             >
               Join thousands of successful students who chose Neram Classes

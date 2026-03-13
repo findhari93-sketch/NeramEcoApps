@@ -543,18 +543,18 @@ function NataExamSection({
               <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <TextField
-                    label="Part A (MCQ)"
+                    label="Part A (Drawing)"
                     type="number"
                     value={attempt.partA}
                     onChange={(e) => onUpdateAttempt(index, 'partA', e.target.value)}
                     fullWidth
                     size="small"
-                    inputProps={{ min: 0, max: 200 }}
+                    inputProps={{ min: 0, max: 80 }}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
                           <Typography variant="caption" color="text.secondary">
-                            min 20
+                            / 80
                           </Typography>
                         </InputAdornment>
                       ),
@@ -563,18 +563,18 @@ function NataExamSection({
                 </Grid>
                 <Grid item xs={6}>
                   <TextField
-                    label="Part B (Drawing)"
+                    label="Part B (MCQ/NCQ)"
                     type="number"
                     value={attempt.partB}
                     onChange={(e) => onUpdateAttempt(index, 'partB', e.target.value)}
                     fullWidth
                     size="small"
-                    inputProps={{ min: 0, max: 200 }}
+                    inputProps={{ min: 0, max: 120 }}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
                           <Typography variant="caption" color="text.secondary">
-                            min 30
+                            / 120
                           </Typography>
                         </InputAdornment>
                       ),
@@ -607,21 +607,21 @@ function NataExamSection({
                     <Chip
                       size="small"
                       icon={result.isPartAEligible ? <CheckCircleIcon /> : <CancelIcon />}
-                      label={`A: ${partANum}${result.isPartAEligible ? '' : ' (min 20)'}`}
+                      label={`A: ${partANum}/80`}
                       color={result.isPartAEligible ? 'success' : 'error'}
                       variant="outlined"
                     />
                     <Chip
                       size="small"
                       icon={result.isPartBEligible ? <CheckCircleIcon /> : <CancelIcon />}
-                      label={`B: ${partBNum}${result.isPartBEligible ? '' : ' (min 30)'}`}
+                      label={`B: ${partBNum}/120`}
                       color={result.isPartBEligible ? 'success' : 'error'}
                       variant="outlined"
                     />
                     <Chip
                       size="small"
                       icon={result.isTotalEligible ? <CheckCircleIcon /> : <CancelIcon />}
-                      label={result.isTotalEligible ? 'Qualified' : `Total < 70`}
+                      label={result.isTotalEligible ? 'Qualified' : 'Not Qualified'}
                       color={result.isTotalEligible ? 'success' : 'error'}
                       variant="outlined"
                     />
@@ -885,17 +885,17 @@ function ResultsPanel({
             met: boardEligible,
           },
           {
-            label: `NATA Part A (min 20)`,
+            label: 'NATA Part A (Drawing, 80 marks): scored',
             met: bestAttemptResult.isPartAEligible,
             show: bestAttemptResult.total > 0,
           },
           {
-            label: `NATA Part B (min 30)`,
+            label: 'NATA Part B (MCQ/NCQ, 120 marks): scored',
             met: bestAttemptResult.isPartBEligible,
             show: bestAttemptResult.total > 0,
           },
           {
-            label: `NATA Total: ${bestAttemptResult.total}/200 (min 70)`,
+            label: `NATA Total: ${bestAttemptResult.total}/200`,
             met: bestAttemptResult.isTotalEligible,
             show: bestAttemptResult.total > 0,
           },
@@ -919,7 +919,7 @@ function ResultsPanel({
       {/* Previous Year Note */}
       {bestNata.prevYearInvalid && (
         <Alert severity="warning" icon={<InfoIcon />}>
-          Previous year NATA score has been invalidated due to 3 current year attempts.
+          Previous year NATA score has been invalidated because you took a NATA 2026 attempt.
         </Alert>
       )}
 

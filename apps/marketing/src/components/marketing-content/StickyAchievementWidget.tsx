@@ -378,6 +378,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
             <IconButton
               size="small"
               onClick={handleDismiss}
+              aria-label="Dismiss achievement"
               sx={{
                 position: 'absolute',
                 top: 6,
@@ -506,6 +507,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
           {/* Close button */}
           <IconButton
             onClick={() => setDialogOpen(false)}
+            aria-label="Close achievement details"
             sx={{
               position: 'absolute',
               top: 8,
@@ -659,6 +661,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
           <IconButton
             size="small"
             onClick={handleDismiss}
+            aria-label="Dismiss achievement"
             sx={{ flexShrink: 0, ml: 0.5 }}
           >
             <CloseIcon sx={{ fontSize: 18 }} />
@@ -694,6 +697,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
         {/* Close button */}
         <IconButton
           onClick={() => setMobileOpen(false)}
+          aria-label="Close achievement details"
           sx={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}
         >
           <CloseIcon />
