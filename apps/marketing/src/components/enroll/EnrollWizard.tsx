@@ -979,7 +979,7 @@ export default function EnrollWizard() {
                               {step.description}
                             </Typography>
                           )}
-                          {step.actionType === 'link' && step.actionConfig?.url && (
+                          {step.actionType === 'link' && !!(step.actionConfig?.url) && (
                             <Button
                               size="small"
                               variant="outlined"
@@ -992,7 +992,7 @@ export default function EnrollWizard() {
                               Open
                             </Button>
                           )}
-                          {step.actionType === 'in_app' && step.actionConfig?.route && (
+                          {step.actionType === 'in_app' && !!(step.actionConfig?.route) && (
                             <Button
                               size="small"
                               variant="outlined"
