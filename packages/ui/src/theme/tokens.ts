@@ -352,15 +352,30 @@ export const nexusTokens = {
 
 /**
  * Admin Panel (admin.neramclasses.com)
- * Professional, data-focused, efficient
+ * Cloudflare-inspired: clean, minimal, data-forward
  */
 export const adminTokens = {
-  sidebarBg: '#1A2027',
-  sidebarText: neutralColors.white,
-  headerBg: neutralColors.surface,
-  tableBorder: neutralColors.border,
-  tableRowHover: neutralColors.surfaceVariant,
-  statusPending: secondaryColors[500],
-  statusApproved: semanticColors.success.main,
-  statusRejected: semanticColors.error.main,
+  // Sidebar
+  sidebarBg: '#FFFFFF',
+  sidebarText: '#1A1A1A',
+  sidebarTextSecondary: '#6B7280',
+  sidebarSectionLabel: '#9CA3AF',
+  sidebarActiveBg: '#EBF5FF',
+  sidebarActiveText: '#0051C3',
+  sidebarActiveBorder: '#0051C3',
+  sidebarHoverBg: '#F3F4F6',
+  sidebarBorder: '#E5E7EB',
+  // Content
+  headerBg: '#FFFFFF',
+  cardBorder: '#E5E7EB',
+  tableBorder: '#E5E7EB',
+  tableRowHover: '#F9FAFB',
+  tableHeaderBg: '#F9FAFB',
+  // Brand
+  cfOrange: '#F6821F',
+  cfBlue: '#0051C3',
+  // Status
+  statusPending: '#F59E0B',
+  statusApproved: '#16A34A',
+  statusRejected: '#DC2626',
 } as const;

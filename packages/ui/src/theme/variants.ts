@@ -682,111 +682,113 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
 // ============================================
 
 /**
- * Admin panel theme - Professional, data-focused, efficient
- * Optimized for data management and admin workflows
- * Material 3 compliant with mobile-first responsive design
- * Note: 40% desktop users, but quick reviews on mobile
+ * Admin panel theme - Cloudflare-inspired
+ * Clean, minimal, data-forward design
+ * Light sidebar, subtle borders, no heavy shadows
  */
 export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
   const baseTheme = mode === 'light' ? lightTheme : darkTheme;
   const scheme = mode === 'light' ? m3LightScheme : m3DarkScheme;
+  const cf = adminTokens;
 
   return createTheme(baseTheme, {
     palette: {
       primary: {
-        main: scheme.primary,
-        light: scheme.primaryContainer,
-        contrastText: scheme.onPrimary,
+        main: cf.cfBlue,
+        light: cf.sidebarActiveBg,
+        dark: '#003D99',
+        contrastText: '#FFFFFF',
       },
       secondary: {
-        main: m3AdminAccent.base,
-        light: m3AdminAccent.light,
-        dark: m3AdminAccent.dark,
+        main: cf.cfOrange,
+        light: '#FEF3C7',
+        dark: '#C2410C',
         contrastText: '#FFFFFF',
       },
       error: {
-        main: scheme.error,
-        light: scheme.errorContainer,
-        contrastText: scheme.onError,
+        main: cf.statusRejected,
+        light: '#FEE2E2',
+        contrastText: '#FFFFFF',
+      },
+      success: {
+        main: cf.statusApproved,
+        light: '#DCFCE7',
+        contrastText: '#FFFFFF',
+      },
+      warning: {
+        main: cf.statusPending,
+        light: '#FEF3C7',
+        contrastText: '#FFFFFF',
       },
       background: {
-        default: scheme.background,
-        paper: scheme.surface,
+        default: '#F8F8F8',
+        paper: '#FFFFFF',
       },
+      text: {
+        primary: cf.sidebarText,
+        secondary: cf.sidebarTextSecondary,
+      },
+      divider: cf.sidebarBorder,
     },
     // Compact typography for desktop-only admin
     typography: {
-      h4: { fontSize: '1.125rem', lineHeight: 1.3 },
-      h5: { fontSize: '1rem', lineHeight: 1.35 },
-      h6: { fontSize: '0.875rem', lineHeight: 1.35 },
+      fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
+      h4: { fontSize: '1.125rem', lineHeight: 1.3, fontWeight: 600 },
+      h5: { fontSize: '1rem', lineHeight: 1.35, fontWeight: 600 },
+      h6: { fontSize: '0.875rem', lineHeight: 1.35, fontWeight: 600 },
       body1: { fontSize: '0.875rem', lineHeight: 1.5 },
       body2: { fontSize: '0.8125rem', lineHeight: 1.45 },
-      caption: { fontSize: '0.6875rem', lineHeight: 1.4 },
-      button: { fontSize: '0.8125rem', lineHeight: 1.4 },
+      caption: { fontSize: '0.6875rem', lineHeight: 1.4, color: cf.sidebarTextSecondary },
+      button: { fontSize: '0.8125rem', lineHeight: 1.4, fontWeight: 500 },
       subtitle1: { fontSize: '0.875rem', lineHeight: 1.45 },
       subtitle2: { fontSize: '0.8125rem', lineHeight: 1.4 },
     },
     components: {
-      // Admin sidebar
+      // Sidebar — light, clean, Cloudflare-style
       MuiDrawer: {
         styleOverrides: {
           paper: {
-            borderRight: 'none',
-            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.emphasized}`,
+            backgroundColor: cf.sidebarBg,
+            color: cf.sidebarText,
+            borderRight: `1px solid ${cf.sidebarBorder}`,
+            boxShadow: 'none',
+            transition: `width ${m3Motion.duration.medium2}ms ${m3Motion.easing.emphasized}`,
           },
         },
-        variants: [
-          {
-            props: { className: 'admin-sidebar' },
-            style: {
-              '& .MuiDrawer-paper': {
-                backgroundColor: scheme.surfaceContainer,
-                color: scheme.onSurface,
-                width: 200,
-              },
-            },
-          },
-        ],
       },
-      // Admin header
+      // Header — white, border-bottom only
       MuiAppBar: {
         styleOverrides: {
           root: {
-            backgroundColor: scheme.surface,
-            color: scheme.onSurface,
+            backgroundColor: cf.headerBg,
+            color: cf.sidebarText,
             boxShadow: 'none',
+            borderBottom: `1px solid ${cf.sidebarBorder}`,
           },
         },
-        variants: [
-          {
-            props: { className: 'admin-header' },
-            style: {
-              backgroundColor: scheme.surface,
-              borderBottom: `1px solid ${scheme.outlineVariant}`,
-            },
-          },
-        ],
       },
-      // Compact data tables
+      // Data tables — clean borders, subtle headers
       MuiTableContainer: {
         styleOverrides: {
           root: {
-            borderRadius: 6,
-            border: `1px solid ${scheme.outlineVariant}`,
-            backgroundColor: scheme.surface,
+            borderRadius: 8,
+            border: `1px solid ${cf.tableBorder}`,
+            backgroundColor: '#FFFFFF',
+            boxShadow: 'none',
           },
         },
       },
       MuiTableHead: {
         styleOverrides: {
           root: {
-            backgroundColor: scheme.surfaceContainerLow,
+            backgroundColor: cf.tableHeaderBg,
             '& .MuiTableCell-root': {
               fontWeight: 600,
               fontSize: '0.75rem',
-              color: scheme.onSurface,
+              color: cf.sidebarTextSecondary,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
+              borderColor: cf.tableBorder,
             },
           },
         },
@@ -794,9 +796,9 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiTableRow: {
         styleOverrides: {
           root: {
-            transition: `background-color ${m3Motion.duration.short4}ms`,
+            transition: `background-color 150ms`,
             '&:hover': {
-              backgroundColor: alpha(scheme.primary, m3StateLayer.hover),
+              backgroundColor: cf.tableRowHover,
             },
           },
         },
@@ -804,33 +806,25 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiTableCell: {
         styleOverrides: {
           root: {
-            borderColor: scheme.outlineVariant,
-            padding: '8px 12px',
+            borderColor: cf.tableBorder,
+            padding: '10px 16px',
             fontSize: '0.8125rem',
           },
         },
       },
       MuiTablePagination: {
         styleOverrides: {
-          root: {
-            fontSize: '0.8125rem',
-          },
-          selectLabel: {
-            fontSize: '0.8125rem',
-          },
-          displayedRows: {
-            fontSize: '0.8125rem',
-          },
-          toolbar: {
-            minHeight: 40,
-          },
+          root: { fontSize: '0.8125rem' },
+          selectLabel: { fontSize: '0.8125rem' },
+          displayedRows: { fontSize: '0.8125rem' },
+          toolbar: { minHeight: 40 },
         },
       },
-      // Compact status chips
+      // Status chips — pill-shaped with tinted backgrounds
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 4,
+            borderRadius: 9999,
             fontWeight: 500,
             height: 22,
             fontSize: '0.75rem',
@@ -840,61 +834,41 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           {
             props: { className: 'status-pending' },
             style: {
-              backgroundColor: alpha('#F59E0B', 0.12),
-              color: '#B45309',
+              backgroundColor: '#FEF3C7',
+              color: '#92400E',
             },
           },
           {
             props: { className: 'status-approved' },
             style: {
-              backgroundColor: scheme.tertiaryContainer,
-              color: scheme.onTertiaryContainer,
+              backgroundColor: '#DCFCE7',
+              color: '#166534',
             },
           },
           {
             props: { className: 'status-rejected' },
             style: {
-              backgroundColor: scheme.errorContainer,
-              color: scheme.onErrorContainer,
+              backgroundColor: '#FEE2E2',
+              color: '#991B1B',
             },
           },
         ],
       },
-      // Compact stat cards
+      // Cards — white, border only, no shadow (Cloudflare style)
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 6,
-            boxShadow: m3Elevation.level1,
-            transition: `all ${m3Motion.duration.medium2}ms ${m3Motion.easing.standard}`,
+            borderRadius: 8,
+            border: `1px solid ${cf.cardBorder}`,
+            boxShadow: 'none',
+            backgroundColor: '#FFFFFF',
           },
         },
         variants: [
           {
             props: { className: 'stat-card' },
             style: {
-              padding: '12px',
-            },
-          },
-          {
-            props: { className: 'stat-card-primary' },
-            style: {
-              background: `linear-gradient(135deg, ${scheme.primary} 0%, ${scheme.primary}dd 100%)`,
-              color: scheme.onPrimary,
-            },
-          },
-          {
-            props: { className: 'stat-card-secondary' },
-            style: {
-              backgroundColor: scheme.secondaryContainer,
-              color: scheme.onSecondaryContainer,
-            },
-          },
-          {
-            props: { className: 'stat-card-accent' },
-            style: {
-              background: `linear-gradient(135deg, ${m3AdminAccent.base} 0%, ${m3AdminAccent.dark} 100%)`,
-              color: '#FFFFFF',
+              padding: '16px',
             },
           },
         ],
@@ -902,52 +876,61 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiCardContent: {
         styleOverrides: {
           root: {
-            padding: '12px 16px',
+            padding: '16px',
             '&:last-child': {
-              paddingBottom: '12px',
+              paddingBottom: '16px',
             },
           },
         },
       },
-      // Compact buttons (desktop-only)
+      // Buttons — flat, clean, no gradients or hover transforms
       MuiButton: {
         styleOverrides: {
           root: {
             textTransform: 'none',
-            fontWeight: 600,
+            fontWeight: 500,
             borderRadius: 6,
             minHeight: 32,
             padding: '6px 12px',
             fontSize: '0.8125rem',
-            transition: `all ${m3Motion.duration.short4}ms ${m3Motion.easing.standard}`,
+            boxShadow: 'none',
+            '&:hover': {
+              boxShadow: 'none',
+            },
+          },
+          outlined: {
+            borderColor: cf.cardBorder,
+            color: cf.sidebarText,
+            '&:hover': {
+              borderColor: '#D1D5DB',
+              backgroundColor: cf.tableRowHover,
+            },
           },
         },
         variants: [
           {
             props: { className: 'action-approve' },
             style: {
-              backgroundColor: scheme.tertiary,
-              color: scheme.onTertiary,
+              backgroundColor: cf.statusApproved,
+              color: '#FFFFFF',
               '&:hover': {
-                backgroundColor: alpha(scheme.tertiary, 0.9),
-                boxShadow: m3Elevation.level2,
+                backgroundColor: '#15803D',
               },
             },
           },
           {
             props: { className: 'action-reject' },
             style: {
-              backgroundColor: scheme.error,
-              color: scheme.onError,
+              backgroundColor: cf.statusRejected,
+              color: '#FFFFFF',
               '&:hover': {
-                backgroundColor: alpha(scheme.error, 0.9),
-                boxShadow: m3Elevation.level2,
+                backgroundColor: '#B91C1C',
               },
             },
           },
         ],
       },
-      // Compact sidebar navigation
+      // Sidebar navigation — Cloudflare active state
       MuiListItemButton: {
         styleOverrides: {
           root: {
@@ -956,29 +939,37 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
             minHeight: 36,
             paddingTop: 4,
             paddingBottom: 4,
-            transition: `all ${m3Motion.duration.short4}ms`,
+            color: '#374151',
+            transition: `all 150ms`,
             '&.Mui-selected': {
-              backgroundColor: scheme.secondaryContainer,
-              color: scheme.onSecondaryContainer,
+              backgroundColor: cf.sidebarActiveBg,
+              color: cf.sidebarActiveText,
+              borderLeft: `3px solid ${cf.sidebarActiveBorder}`,
               '&:hover': {
-                backgroundColor: alpha(scheme.secondaryContainer, 0.9),
+                backgroundColor: cf.sidebarActiveBg,
+              },
+              '& .MuiListItemIcon-root': {
+                color: cf.sidebarActiveText,
               },
             },
             '&:hover': {
-              backgroundColor: alpha(scheme.onSurface, m3StateLayer.hover),
+              backgroundColor: cf.sidebarHoverBg,
             },
+          },
+        },
+      },
+      MuiListItemIcon: {
+        styleOverrides: {
+          root: {
+            color: cf.sidebarTextSecondary,
           },
         },
       },
       // Compact tabs
       MuiTabs: {
         styleOverrides: {
-          root: {
-            minHeight: 36,
-          },
-          indicator: {
-            height: 2,
-          },
+          root: { minHeight: 36 },
+          indicator: { height: 2, backgroundColor: cf.cfBlue },
         },
       },
       MuiTab: {
@@ -990,68 +981,78 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         },
       },
-      // Compact inputs (desktop-only)
+      // Inputs — clean borders
       MuiInputBase: {
         styleOverrides: {
-          root: {
-            fontSize: '0.8125rem',
-          },
-          input: {
-            padding: '8px 12px',
-          },
+          root: { fontSize: '0.8125rem' },
+          input: { padding: '8px 12px' },
         },
       },
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
             borderRadius: 6,
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: cf.cardBorder,
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#D1D5DB',
+            },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: cf.cfBlue,
+            },
           },
         },
       },
       MuiInputLabel: {
         styleOverrides: {
-          root: {
-            fontSize: '0.8125rem',
-          },
+          root: { fontSize: '0.8125rem' },
         },
       },
-      // Compact dialogs
+      // Dialogs
       MuiDialog: {
         styleOverrides: {
           paper: {
             borderRadius: 8,
+            border: `1px solid ${cf.cardBorder}`,
+            boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
           },
         },
       },
       MuiDialogTitle: {
         styleOverrides: {
-          root: {
-            fontSize: '1rem',
-            padding: '16px 20px 12px',
-          },
+          root: { fontSize: '1rem', padding: '16px 20px 12px' },
         },
       },
       MuiDialogContent: {
         styleOverrides: {
-          root: {
-            padding: '12px 20px',
-          },
+          root: { padding: '12px 20px' },
         },
       },
       MuiDialogActions: {
         styleOverrides: {
-          root: {
-            padding: '12px 20px 16px',
-            gap: 8,
-          },
+          root: { padding: '12px 20px 16px', gap: 8 },
         },
       },
-      // Compact alerts
+      // Alerts
       MuiAlert: {
         styleOverrides: {
           root: {
             padding: '6px 12px',
             fontSize: '0.8125rem',
+            borderRadius: 6,
+          },
+        },
+      },
+      // Paper — no shadow by default
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            boxShadow: 'none',
+          },
+          elevation1: {
+            boxShadow: 'none',
+            border: `1px solid ${cf.cardBorder}`,
           },
         },
       },
@@ -1059,12 +1060,11 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
       MuiFab: {
         styleOverrides: {
           root: {
-            backgroundColor: scheme.primaryContainer,
-            color: scheme.onPrimaryContainer,
-            boxShadow: m3Elevation.level3,
+            backgroundColor: cf.cfBlue,
+            color: '#FFFFFF',
+            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
             '&:hover': {
-              backgroundColor: scheme.primaryContainer,
-              boxShadow: m3Elevation.level4,
+              backgroundColor: '#003D99',
             },
           },
         },

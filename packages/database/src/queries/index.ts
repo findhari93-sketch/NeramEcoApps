@@ -44,3 +44,4 @@ export * from './diagnostics';
 export * from './nexus';
 export * from './careers';
 export * from './exam-planner';
+export * from './app-feedback';

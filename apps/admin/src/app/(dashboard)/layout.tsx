@@ -45,7 +45,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 2,
+          p: 3,
           width: `calc(100% - ${sidebarWidth}px)`,
           bgcolor: 'background.default',
           transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',

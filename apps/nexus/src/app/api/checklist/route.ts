@@ -23,19 +23,33 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
 
     if (mode === 'manage') {
-      // Teacher view: items with completion counts
-      const { data: items, error } = await supabase
-        .from('nexus_checklist_items')
-        .select('*, topic:nexus_topics(id, title, category)')
-        .eq('classroom_id', classroomId)
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true });
+      // Teacher view: items with completion counts, resource counts, total students
+      const [itemsResult, enrollmentResult] = await Promise.all([
+        supabase
+          .from('nexus_checklist_items')
+          .select('*, topic:nexus_topics(id, title, category), resources:nexus_checklist_resources(id)')
+          .eq('classroom_id', classroomId)
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true }),
 
-      if (error) throw error;
+        // Count active students in this classroom
+        supabase
+          .from('nexus_enrollments')
+          .select('id')
+          .eq('classroom_id', classroomId)
+          .eq('role', 'student')
+          .eq('is_active', true),
+      ]);
+
+      if (itemsResult.error) throw itemsResult.error;
+      if (enrollmentResult.error) throw enrollmentResult.error;
+
+      const items = itemsResult.data || [];
+      const totalStudents = (enrollmentResult.data || []).length;
 
       // Get completion counts per item
-      const itemIds = (items || []).map((i) => i.id);
+      const itemIds = items.map((i) => i.id);
       let completionCounts: Record<string, number> = {};
 
       if (itemIds.length > 0) {
@@ -56,9 +70,12 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const itemsWithCounts = (items || []).map((item) => ({
+      const itemsWithCounts = items.map((item) => ({
         ...item,
-        completion_count: completionCounts[item.id] || 0,
+        resource_count: (item.resources as { id: string }[] | null)?.length || 0,
+        resources: undefined, // Don't send full resource objects in manage mode
+        completed_count: completionCounts[item.id] || 0,
+        total_students: totalStudents,
       }));
 
       return NextResponse.json({ items: itemsWithCounts });
@@ -78,7 +95,7 @@ export async function GET(request: NextRequest) {
     const [itemsResult, progressResult] = await Promise.all([
       supabase
         .from('nexus_checklist_items')
-        .select('*, topic:nexus_topics(id, title, category)')
+        .select('*, topic:nexus_topics(id, title, category), resources:nexus_checklist_resources(id, url, resource_type)')
         .eq('classroom_id', classroomId)
         .eq('is_active', true)
         .order('sort_order', { ascending: true })
@@ -101,6 +118,12 @@ export async function GET(request: NextRequest) {
       const progress = progressMap.get(item.id);
       return {
         ...item,
+        // Map resource_type to type for frontend consistency
+        resources: ((item.resources as { id: string; url: string; resource_type: string }[] | null) || []).map((r) => ({
+          id: r.id,
+          url: r.url,
+          type: r.resource_type,
+        })),
         is_completed: progress?.is_completed || false,
         completed_at: progress?.completed_at || null,
       };
@@ -118,14 +141,14 @@ export async function GET(request: NextRequest) {
  * POST /api/checklist
  *
  * Create a new checklist item (teacher only).
- * Body: { classroom_id, topic_id, title, description?, sort_order? }
+ * Body: { classroom_id, topic_id, title, description?, sort_order?, resource_urls?: string[] }
  */
 export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
 
     const body = await request.json();
-    const { classroom_id, topic_id, title, description, sort_order } = body;
+    const { classroom_id, topic_id, title, description, sort_order, resource_urls } = body;
 
     if (!classroom_id || !title) {
       return NextResponse.json({ error: 'Missing required fields: classroom_id, title' }, { status: 400 });
@@ -172,7 +195,28 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ item }, { status: 201 });
+    // Save resource URLs if provided
+    if (resource_urls && Array.isArray(resource_urls) && resource_urls.length > 0) {
+      const resources = resource_urls.map((url: string, i: number) => {
+        // Detect resource type from URL
+        let resource_type = 'link';
+        if (url.includes('youtube.com') || url.includes('youtu.be')) resource_type = 'youtube';
+        else if (url.endsWith('.pdf')) resource_type = 'pdf';
+        else if (/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(url)) resource_type = 'image';
+        else if (url.includes('onenote.com') || url.includes('onenote:')) resource_type = 'onenote';
+
+        return {
+          checklist_item_id: item.id,
+          resource_type,
+          url,
+          sort_order: i,
+        };
+      });
+
+      await supabase.from('nexus_checklist_resources').insert(resources);
+    }
+
+    return NextResponse.json({ item: { ...item, completed_count: 0, total_students: 0, resource_count: resource_urls?.length || 0 } }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create checklist item';
     console.error('Checklist POST error:', message);

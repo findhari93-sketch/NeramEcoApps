@@ -2652,6 +2652,53 @@ export interface ListSupportTicketsFilters {
   limit?: number;
 }
 
+// ============================================
+// APP FEEDBACK (Play Store Testers)
+// ============================================
+
+export type AppFeedbackCategory = 'bug_report' | 'feature_request' | 'ui_ux_issue' | 'performance' | 'other';
+export type AppFeedbackStatus = 'new' | 'reviewed' | 'in_progress' | 'resolved' | 'wont_fix';
+
+export interface AppFeedback extends Timestamps {
+  id: string;
+  feedback_number: string;
+  user_id: string | null;
+  email: string | null;
+  rating: number;
+  category: AppFeedbackCategory;
+  description: string;
+  app_version: string | null;
+  device_info: Record<string, unknown>;
+  status: AppFeedbackStatus;
+  admin_notes: string | null;
+  source: string;
+}
+
+export interface CreateAppFeedbackInput {
+  user_id?: string;
+  email?: string;
+  rating: number;
+  category: AppFeedbackCategory;
+  description: string;
+  app_version?: string;
+  device_info?: Record<string, unknown>;
+  source?: string;
+}
+
+export interface UpdateAppFeedbackInput {
+  status?: AppFeedbackStatus;
+  admin_notes?: string;
+}
+
+export interface ListAppFeedbackFilters {
+  status?: AppFeedbackStatus;
+  category?: AppFeedbackCategory;
+  rating?: number;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
 /**
  * Input types for onboarding
  */

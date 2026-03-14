@@ -1,48 +1,74 @@
 'use client';
 
-import { Grid, Paper, Box, Typography } from '@neram/ui';
+import { Grid, Box, Typography } from '@neram/ui';
 import PeopleIcon from '@mui/icons-material/People';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import PaymentIcon from '@mui/icons-material/Payment';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 interface StatCardProps {
   title: string;
   value: string | number;
   icon: React.ReactNode;
-  color: string;
   trend?: string;
+  trendDirection?: 'up' | 'down';
 }
 
-function StatCard({ title, value, icon, color, trend }: StatCardProps) {
+function StatCard({ title, value, icon, trend, trendDirection = 'up' }: StatCardProps) {
+  const trendColor = trendDirection === 'up' ? '#16A34A' : '#DC2626';
+
   return (
-    <Paper
+    <Box
       sx={{
         p: 2,
-        display: 'flex',
-        flexDirection: 'column',
+        bgcolor: '#FFFFFF',
+        border: '1px solid #E5E7EB',
+        borderRadius: 2,
         height: '100%',
       }}
     >
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography
+            sx={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: '#6B7280',
+              textTransform: 'uppercase',
+              letterSpacing: '0.03em',
+              mb: 0.75,
+            }}
+          >
             {title}
           </Typography>
-          <Typography variant="h4" component="div" fontWeight="bold">
+          <Typography
+            sx={{
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              color: '#1A1A1A',
+              lineHeight: 1.2,
+            }}
+          >
             {value}
           </Typography>
           {trend && (
-            <Typography variant="body2" color="success.main" sx={{ mt: 1 }}>
-              {trend}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
+              {trendDirection === 'up' ? (
+                <ArrowUpwardIcon sx={{ fontSize: 14, color: trendColor }} />
+              ) : (
+                <ArrowDownwardIcon sx={{ fontSize: 14, color: trendColor }} />
+              )}
+              <Typography sx={{ fontSize: 12, color: trendColor, fontWeight: 500 }}>
+                {trend}
+              </Typography>
+            </Box>
           )}
         </Box>
         <Box
           sx={{
-            bgcolor: color,
-            borderRadius: 1,
-            p: 0.75,
+            color: '#9CA3AF',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -51,7 +77,7 @@ function StatCard({ title, value, icon, color, trend }: StatCardProps) {
           {icon}
         </Box>
       </Box>
-    </Paper>
+    </Box>
   );
 }
 
@@ -60,30 +86,30 @@ export default function DashboardStats() {
     {
       title: 'Total Students',
       value: '1,234',
-      icon: <PeopleIcon sx={{ color: 'white' }} />,
-      color: 'primary.main',
+      icon: <PeopleIcon sx={{ fontSize: 22 }} />,
       trend: '+12% from last month',
+      trendDirection: 'up' as const,
     },
     {
       title: 'Pending Leads',
       value: '45',
-      icon: <AssignmentIcon sx={{ color: 'white' }} />,
-      color: 'warning.main',
+      icon: <AssignmentIcon sx={{ fontSize: 22 }} />,
       trend: '8 new today',
+      trendDirection: 'up' as const,
     },
     {
       title: 'Pending Payments',
       value: '23',
-      icon: <PaymentIcon sx={{ color: 'white' }} />,
-      color: 'error.main',
+      icon: <PaymentIcon sx={{ fontSize: 22 }} />,
       trend: '5 need verification',
+      trendDirection: 'down' as const,
     },
     {
       title: 'Revenue (This Month)',
       value: '₹4.5L',
-      icon: <TrendingUpIcon sx={{ color: 'white' }} />,
-      color: 'success.main',
+      icon: <TrendingUpIcon sx={{ fontSize: 22 }} />,
       trend: '+18% from last month',
+      trendDirection: 'up' as const,
     },
   ];
 

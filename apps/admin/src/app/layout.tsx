@@ -15,7 +15,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  themeColor: '#1A73E8', // Admin blue theme
+  themeColor: '#0051C3', // Cloudflare-inspired admin blue
 };
 
 export default function RootLayout({

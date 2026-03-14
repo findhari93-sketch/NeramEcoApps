@@ -9,9 +9,24 @@ import {
   Skeleton,
   Checkbox,
   LinearProgress,
-  IconButton,
+  alpha,
+  useTheme,
 } from '@neram/ui';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
+import NoteOutlinedIcon from '@mui/icons-material/NoteOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
+import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import PageHeader from '@/components/PageHeader';
 
 interface ChecklistItem {
   id: string;
@@ -21,8 +36,39 @@ interface ChecklistItem {
   resources?: { id: string; url: string; type: string }[];
 }
 
+const categoryConfig: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  mathematics: { icon: <CalculateOutlinedIcon />, color: '#1976D2', label: 'Mathematics' },
+  aptitude: { icon: <PsychologyOutlinedIcon />, color: '#E65100', label: 'Aptitude' },
+  drawing: { icon: <BrushOutlinedIcon />, color: '#7B1FA2', label: 'Drawing' },
+  architecture_awareness: { icon: <AccountBalanceOutlinedIcon />, color: '#00695C', label: 'Architecture' },
+  general: { icon: <FolderOutlinedIcon />, color: '#546E7A', label: 'General' },
+};
+
+const getCategoryConfig = (category: string) =>
+  categoryConfig[category] || categoryConfig.general;
+
+const resourceIcon = (type: string) => {
+  switch (type) {
+    case 'youtube': return <PlayCircleOutlinedIcon sx={{ fontSize: '1.1rem' }} />;
+    case 'pdf': return <PictureAsPdfOutlinedIcon sx={{ fontSize: '1.1rem' }} />;
+    case 'onenote': return <NoteOutlinedIcon sx={{ fontSize: '1.1rem' }} />;
+    case 'image': return <ImageOutlinedIcon sx={{ fontSize: '1.1rem' }} />;
+    default: return <LinkOutlinedIcon sx={{ fontSize: '1.1rem' }} />;
+  }
+};
+
+const resourceColor = (type: string) => {
+  switch (type) {
+    case 'youtube': return '#FF0000';
+    case 'pdf': return '#D32F2F';
+    case 'onenote': return '#7B1FA2';
+    default: return '#1976D2';
+  }
+};
+
 export default function StudentChecklist() {
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  const theme = useTheme();
+  const { user, activeClassroom, getToken } = useNexusAuthContext();
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
@@ -78,7 +124,6 @@ export default function StudentChecklist() {
       });
 
       if (!res.ok) {
-        // Revert on failure
         setItems((prev) =>
           prev.map((item) =>
             item.id === itemId ? { ...item, is_completed: !completed } : item
@@ -87,7 +132,6 @@ export default function StudentChecklist() {
       }
     } catch (err) {
       console.error('Failed to toggle checklist item:', err);
-      // Revert on error
       setItems((prev) =>
         prev.map((item) =>
           item.id === itemId ? { ...item, is_completed: !completed } : item
@@ -104,7 +148,7 @@ export default function StudentChecklist() {
 
   // Group items by topic category
   const groupedItems = items.reduce<Record<string, ChecklistItem[]>>((acc, item) => {
-    const category = item.topic?.category || 'General';
+    const category = item.topic?.category || 'general';
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
     return acc;
@@ -112,119 +156,223 @@ export default function StudentChecklist() {
 
   const completedCount = items.filter((i) => i.is_completed).length;
   const totalCount = items.length;
-  const progressPercent = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const allDone = totalCount > 0 && completedCount === totalCount;
 
   return (
-    <Box>
-      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 2 }}>
-        Theory Checklist
-      </Typography>
+    <Box sx={{ pb: 4 }}>
+      <PageHeader
+        title="My Checklist"
+        subtitle={`${user?.name?.split(' ')[0] || 'Student'}'s learning tasks`}
+      />
 
-      {/* Progress Summary */}
+      {/* Progress Card */}
       {!loading && totalCount > 0 && (
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Progress
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {completedCount} of {totalCount} completed
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            mb: 2.5,
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            background: allDone
+              ? `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.08)} 0%, ${alpha('#FFD700', 0.06)} 100%)`
+              : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, transparent 100%)`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {allDone ? (
+                <EmojiEventsOutlinedIcon sx={{ fontSize: '1.3rem', color: '#FFB300' }} />
+              ) : (
+                <CheckCircleOutlinedIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
+              )}
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {allDone ? 'All Done!' : 'Your Progress'}
+              </Typography>
+            </Box>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 800,
+                color: allDone ? 'success.main' : 'primary.main',
+                fontSize: '1.1rem',
+              }}
+            >
+              {progressPercent}%
             </Typography>
           </Box>
           <LinearProgress
             variant="determinate"
             value={progressPercent}
-            sx={{ height: 8, borderRadius: 4 }}
+            sx={{
+              height: 10,
+              borderRadius: 5,
+              bgcolor: alpha(allDone ? theme.palette.success.main : theme.palette.primary.main, 0.1),
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 5,
+                background: allDone
+                  ? `linear-gradient(90deg, ${theme.palette.success.main}, #FFB300)`
+                  : undefined,
+              },
+            }}
           />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block', fontWeight: 500 }}>
+            {completedCount} of {totalCount} items completed
+          </Typography>
         </Paper>
       )}
 
       {/* Loading State */}
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1 }} />
+          <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
           {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={56} sx={{ borderRadius: 1 }} />
+            <Skeleton key={i} variant="rounded" height={64} sx={{ borderRadius: 2.5 }} />
           ))}
         </Box>
       ) : totalCount === 0 ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 3, sm: 4 },
+            textAlign: 'center',
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <CheckCircleOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1.5 }} />
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
+            No Checklist Items
+          </Typography>
           <Typography variant="body2" color="text.secondary">
-            No checklist items available for this classroom.
+            Your teacher hasn&apos;t added any checklist items yet. Check back soon!
           </Typography>
         </Paper>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {Object.entries(groupedItems)
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([category, categoryItems]) => (
-              <Box key={category}>
-                <Typography
-                  variant="subtitle2"
-                  sx={{ fontWeight: 600, mb: 1, color: 'text.secondary', textTransform: 'capitalize' }}
-                >
-                  {category}
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {categoryItems.map((item) => (
-                    <Paper
-                      key={item.id}
-                      variant="outlined"
+            .map(([category, categoryItems]) => {
+              const config = getCategoryConfig(category);
+              const catCompleted = categoryItems.filter((i) => i.is_completed).length;
+              const catPct = Math.round((catCompleted / categoryItems.length) * 100);
+
+              return (
+                <Box key={category}>
+                  {/* Category Header */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, px: 0.5 }}>
+                    <Box
                       sx={{
-                        p: 1.5,
+                        width: 28,
+                        height: 28,
+                        borderRadius: 1.5,
+                        bgcolor: alpha(config.color, 0.1),
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 1,
-                        opacity: item.is_completed ? 0.7 : 1,
+                        justifyContent: 'center',
+                        '& .MuiSvgIcon-root': { fontSize: '0.95rem', color: config.color },
                       }}
                     >
-                      <Checkbox
-                        checked={item.is_completed}
-                        onChange={(e) => handleToggle(item.id, e.target.checked)}
-                        disabled={togglingIds.has(item.id)}
-                        sx={{ minWidth: 48, minHeight: 48, p: 0 }}
-                      />
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: 500,
-                            textDecoration: item.is_completed ? 'line-through' : 'none',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {item.title}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                        {item.resources?.map((res) => (
-                          <IconButton
-                            key={res.id}
-                            component="a"
-                            href={res.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            size="small"
+                      {config.icon}
+                    </Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1, color: config.color }}>
+                      {config.label}
+                    </Typography>
+                    <Chip
+                      label={`${catCompleted}/${categoryItems.length}`}
+                      size="small"
+                      sx={{
+                        height: 22,
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        bgcolor: catPct === 100 ? alpha(theme.palette.success.main, 0.1) : alpha(config.color, 0.08),
+                        color: catPct === 100 ? 'success.main' : config.color,
+                      }}
+                    />
+                  </Box>
+
+                  {/* Items */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {categoryItems.map((item, idx) => (
+                      <Paper
+                        key={item.id}
+                        elevation={0}
+                        sx={{
+                          px: 1.5,
+                          py: 1.5,
+                          borderRadius: 2.5,
+                          border: `1px solid ${item.is_completed ? alpha(theme.palette.success.main, 0.3) : theme.palette.divider}`,
+                          bgcolor: item.is_completed ? alpha(theme.palette.success.main, 0.03) : 'background.paper',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 1,
+                          transition: 'all 250ms ease',
+                          animation: `fadeIn 300ms ease ${idx * 30}ms both`,
+                          '@keyframes fadeIn': {
+                            from: { opacity: 0, transform: 'translateY(4px)' },
+                            to: { opacity: 1, transform: 'translateY(0)' },
+                          },
+                        }}
+                      >
+                        {/* Custom Checkbox */}
+                        <Checkbox
+                          checked={item.is_completed}
+                          onChange={(e) => handleToggle(item.id, e.target.checked)}
+                          disabled={togglingIds.has(item.id)}
+                          icon={<RadioButtonUncheckedIcon sx={{ fontSize: '1.4rem', color: alpha(config.color, 0.4) }} />}
+                          checkedIcon={<CheckCircleOutlinedIcon sx={{ fontSize: '1.4rem', color: 'success.main' }} />}
+                          sx={{ p: 0.5, mt: -0.25 }}
+                        />
+
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            variant="body2"
                             sx={{
-                              minWidth: 48,
-                              minHeight: 48,
-                              color: res.type === 'youtube' ? 'error.main' : 'primary.main',
+                              fontWeight: item.is_completed ? 500 : 600,
+                              textDecoration: item.is_completed ? 'line-through' : 'none',
+                              color: item.is_completed ? 'text.secondary' : 'text.primary',
+                              lineHeight: 1.4,
                             }}
-                            aria-label={`Open ${res.type} resource`}
                           >
-                            <Typography variant="caption" sx={{ fontSize: 14, fontWeight: 700 }}>
-                              {res.type === 'youtube' ? '▶' : res.type.toUpperCase()}
-                            </Typography>
-                          </IconButton>
-                        ))}
-                      </Box>
-                    </Paper>
-                  ))}
+                            {item.title}
+                          </Typography>
+
+                          {/* Resources row */}
+                          {item.resources && item.resources.length > 0 && (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
+                              {item.resources.map((res) => (
+                                <Chip
+                                  key={res.id}
+                                  component="a"
+                                  href={res.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  clickable
+                                  icon={resourceIcon(res.type)}
+                                  label={res.type === 'youtube' ? 'Video' : res.type.toUpperCase()}
+                                  size="small"
+                                  sx={{
+                                    height: 26,
+                                    fontSize: '0.675rem',
+                                    fontWeight: 600,
+                                    bgcolor: alpha(resourceColor(res.type), 0.08),
+                                    color: resourceColor(res.type),
+                                    border: `1px solid ${alpha(resourceColor(res.type), 0.15)}`,
+                                    '& .MuiChip-icon': { color: resourceColor(res.type) },
+                                    '&:hover': { bgcolor: alpha(resourceColor(res.type), 0.14) },
+                                  }}
+                                />
+                              ))}
+                            </Box>
+                          )}
+                        </Box>
+                      </Paper>
+                    ))}
+                  </Box>
                 </Box>
-              </Box>
-            ))}
+              );
+            })}
         </Box>
       )}
     </Box>

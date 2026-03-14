@@ -41,35 +41,89 @@ import EventNoteIcon from '@mui/icons-material/EventNote';
 import GavelIcon from '@mui/icons-material/Gavel';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WorkIcon from '@mui/icons-material/Work';
+import FeedbackIcon from '@mui/icons-material/Feedback';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
 
-const TRANSITION = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
 
-const menuItems = [
-  { text: 'Dashboard', icon: DashboardIcon, path: '/' },
-  { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
-  { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
-  { text: 'Students', icon: SchoolIcon, path: '/students' },
-  { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
-  { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
-  { text: 'Payments', icon: PaymentIcon, path: '/payments' },
-  { text: 'Courses', icon: BookIcon, path: '/courses' },
-  { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },
-  { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
-  { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
-  { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
-  { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' as any },
-  { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
-  { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
-  { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
-  { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
-  { text: 'Exam Centers', icon: LocationOnIcon, path: '/exam-centers' },
-  { text: 'Exam Schedule', icon: EventNoteIcon, path: '/exam-schedule' },
-  { text: 'NATA Content', icon: ArchitectureIcon, path: '/nata' },
-  { text: 'Counseling', icon: GavelIcon, path: '/counseling' },
-  { text: 'Settings', icon: SettingsIcon, path: '/settings' },
+interface MenuItem {
+  text: string;
+  icon: typeof DashboardIcon;
+  path: string;
+  hasBadge?: boolean | string;
+}
+
+interface MenuGroup {
+  label: string;
+  items: MenuItem[];
+}
+
+const menuGroups: MenuGroup[] = [
+  {
+    label: 'Overview',
+    items: [
+      { text: 'Dashboard', icon: DashboardIcon, path: '/' },
+    ],
+  },
+  {
+    label: 'People & CRM',
+    items: [
+      { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
+      { text: 'Students', icon: SchoolIcon, path: '/students' },
+      { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
+      { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
+      { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
+    ],
+  },
+  {
+    label: 'Academics',
+    items: [
+      { text: 'Courses', icon: BookIcon, path: '/courses' },
+      { text: 'Onboarding', icon: QuizIcon, path: '/onboarding' },
+      { text: 'NATA Content', icon: ArchitectureIcon, path: '/nata' },
+      { text: 'Counseling', icon: GavelIcon, path: '/counseling' },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { text: 'Payments', icon: PaymentIcon, path: '/payments' },
+      { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
+    ],
+  },
+  {
+    label: 'Exams',
+    items: [
+      { text: 'Exam Centers', icon: LocationOnIcon, path: '/exam-centers' },
+      { text: 'Exam Schedule', icon: EventNoteIcon, path: '/exam-schedule' },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
+      { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
+      { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback' },
+      { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
+      { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
+      { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
+      { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { text: 'Settings', icon: SettingsIcon, path: '/settings' },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -126,6 +180,19 @@ export default function Sidebar() {
     router.push('/login');
   };
 
+  const renderIcon = (item: MenuItem) => {
+    const Icon = item.icon;
+    const iconEl = <Icon sx={{ fontSize: 18 }} />;
+
+    if (item.hasBadge === true && messageUnreadCount > 0) {
+      return <Badge badgeContent={messageUnreadCount} color="error" max={99}>{iconEl}</Badge>;
+    }
+    if (item.hasBadge === 'careers' && careersNewCount > 0) {
+      return <Badge badgeContent={careersNewCount} color="error" max={99}>{iconEl}</Badge>;
+    }
+    return iconEl;
+  };
+
   return (
     <Drawer
       variant="permanent"
@@ -136,22 +203,22 @@ export default function Sidebar() {
         '& .MuiDrawer-paper': {
           width: sidebarWidth,
           boxSizing: 'border-box',
-          borderRight: '1px solid',
-          borderColor: 'divider',
           transition: TRANSITION,
           overflowX: 'hidden',
         },
       }}
     >
-      {/* Compact header row — logo + bell + collapse chevron */}
+      {/* Header — brand + bell + collapse toggle */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: collapsed ? 'center' : 'space-between',
-          px: collapsed ? 0.5 : 1.5,
-          py: 1,
-          minHeight: 40,
+          px: collapsed ? 0.5 : 2,
+          py: 1.5,
+          minHeight: 48,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
           transition: TRANSITION,
         }}
       >
@@ -161,140 +228,161 @@ export default function Sidebar() {
               variant="body2"
               component="h1"
               fontWeight={700}
-              color="primary"
               noWrap
-              sx={{ fontSize: 13 }}
+              sx={{ fontSize: 14, color: 'text.primary' }}
             >
               Neram Classes
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <NotificationBell />
               <IconButton
                 onClick={toggleSidebar}
                 size="small"
-                sx={{ width: 22, height: 22 }}
+                sx={{ width: 24, height: 24, color: 'text.secondary' }}
               >
-                <ChevronLeftIcon sx={{ fontSize: 14 }} />
+                <ChevronLeftIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Box>
           </>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
-            <IconButton
-              onClick={toggleSidebar}
-              size="small"
-              sx={{ width: 22, height: 22 }}
-            >
-              <ChevronRightIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Box>
+          <IconButton
+            onClick={toggleSidebar}
+            size="small"
+            sx={{ width: 28, height: 28, color: 'text.secondary' }}
+          >
+            <ChevronRightIcon sx={{ fontSize: 16 }} />
+          </IconButton>
         )}
       </Box>
 
-      {/* Navigation — no dividers, tight items */}
-      <List sx={{ px: collapsed ? 0.25 : 0.5, py: 0.25, flexGrow: 1 }}>
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            pathname === item.path ||
-            (item.path !== '/' && pathname.startsWith(item.path));
-
-          const button = (
-            <ListItemButton
-              onClick={() => router.push(item.path)}
-              selected={isActive}
-              sx={{
-                borderRadius: 1,
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                px: collapsed ? 0.75 : 1,
-                transition: TRANSITION,
-                '&.Mui-selected': {
-                  bgcolor: 'primary.main',
-                  color: 'primary.contrastText',
-                  '&:hover': {
-                    bgcolor: 'primary.dark',
-                  },
-                  '& .MuiListItemIcon-root': {
-                    color: 'primary.contrastText',
-                  },
-                },
-              }}
-            >
-              <ListItemIcon
+      {/* Grouped navigation */}
+      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
+        {menuGroups.map((group) => (
+          <Box key={group.label} sx={{ mb: 0.5 }}>
+            {/* Section label — hidden when collapsed */}
+            {!collapsed && (
+              <Typography
                 sx={{
-                  minWidth: collapsed ? 'auto' : 28,
-                  justifyContent: 'center',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: '#9CA3AF',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  px: 2,
+                  pt: 1.5,
+                  pb: 0.5,
+                  userSelect: 'none',
                 }}
               >
-                {item.hasBadge === true && messageUnreadCount > 0 ? (
-                  <Badge badgeContent={messageUnreadCount} color="error" max={99}>
-                    <Icon sx={{ fontSize: 16 }} />
-                  </Badge>
-                ) : (item.hasBadge as any) === 'careers' && careersNewCount > 0 ? (
-                  <Badge badgeContent={careersNewCount} color="error" max={99}>
-                    <Icon sx={{ fontSize: 16 }} />
-                  </Badge>
-                ) : (
-                  <Icon sx={{ fontSize: 16 }} />
-                )}
-              </ListItemIcon>
-              {!collapsed && (
-                <ListItemText
-                  primary={item.text}
-                  primaryTypographyProps={{ fontSize: 13 }}
-                />
-              )}
-            </ListItemButton>
-          );
+                {group.label}
+              </Typography>
+            )}
+            <List disablePadding sx={{ px: collapsed ? 0.5 : 0.75 }}>
+              {group.items.map((item) => {
+                const isActive =
+                  pathname === item.path ||
+                  (item.path !== '/' && pathname.startsWith(item.path));
 
-          return (
-            <ListItem key={item.text} disablePadding>
-              {collapsed ? (
-                <Tooltip title={item.text} placement="right" arrow>
-                  {button}
-                </Tooltip>
-              ) : (
-                button
-              )}
-            </ListItem>
-          );
-        })}
-      </List>
+                const button = (
+                  <ListItemButton
+                    onClick={() => router.push(item.path)}
+                    selected={isActive}
+                    sx={{
+                      borderRadius: 1.5,
+                      justifyContent: collapsed ? 'center' : 'flex-start',
+                      px: collapsed ? 1 : 1.5,
+                      py: 0.5,
+                      minHeight: 34,
+                      transition: TRANSITION,
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: collapsed ? 'auto' : 32,
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {renderIcon(item)}
+                    </ListItemIcon>
+                    {!collapsed && (
+                      <ListItemText
+                        primary={item.text}
+                        primaryTypographyProps={{
+                          fontSize: 13,
+                          fontWeight: isActive ? 600 : 400,
+                        }}
+                      />
+                    )}
+                  </ListItemButton>
+                );
 
-      {/* Compact user row at bottom — Vercel style */}
+                return (
+                  <ListItem key={item.text} disablePadding sx={{ mb: '1px' }}>
+                    {collapsed ? (
+                      <Tooltip title={item.text} placement="right" arrow>
+                        {button}
+                      </Tooltip>
+                    ) : (
+                      button
+                    )}
+                  </ListItem>
+                );
+              })}
+            </List>
+          </Box>
+        ))}
+      </Box>
+
+      {/* User row at bottom */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: collapsed ? 'center' : 'space-between',
-          px: collapsed ? 0.5 : 1.5,
-          py: 0.75,
+          px: collapsed ? 0.5 : 2,
+          py: 1,
           borderTop: '1px solid',
           borderColor: 'divider',
-          minHeight: 36,
+          minHeight: 44,
           transition: TRANSITION,
         }}
       >
         {!collapsed ? (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
-              <Avatar sx={{ width: 24, height: 24, fontSize: 11 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
+              <Avatar
+                sx={{
+                  width: 28,
+                  height: 28,
+                  fontSize: 12,
+                  bgcolor: '#E5E7EB',
+                  color: '#374151',
+                }}
+              >
                 {user?.name?.charAt(0) || 'A'}
               </Avatar>
-              <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
                 {user?.name || 'Admin'}
               </Typography>
             </Box>
             <Tooltip title="Logout" placement="top" arrow>
-              <IconButton onClick={handleLogout} size="small" sx={{ width: 22, height: 22, color: 'text.secondary' }}>
+              <IconButton onClick={handleLogout} size="small" sx={{ width: 24, height: 24, color: 'text.secondary' }}>
                 <LogoutIcon sx={{ fontSize: 14 }} />
               </IconButton>
             </Tooltip>
           </>
         ) : (
           <Tooltip title={`${user?.name || 'Admin'} — Logout`} placement="right" arrow>
-            <IconButton onClick={handleLogout} size="small" sx={{ width: 28, height: 28 }}>
-              <Avatar sx={{ width: 24, height: 24, fontSize: 11 }}>
+            <IconButton onClick={handleLogout} size="small" sx={{ width: 32, height: 32 }}>
+              <Avatar
+                sx={{
+                  width: 28,
+                  height: 28,
+                  fontSize: 12,
+                  bgcolor: '#E5E7EB',
+                  color: '#374151',
+                }}
+              >
                 {user?.name?.charAt(0) || 'A'}
               </Avatar>
             </IconButton>
