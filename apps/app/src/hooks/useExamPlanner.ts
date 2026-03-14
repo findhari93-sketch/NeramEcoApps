@@ -72,7 +72,7 @@ export function useExamPlanner(): UseExamPlannerReturn {
           const phase = prefs[0].phase as ExamPhase;
           setSavedPhase(phase);
           setSelectedPhase(phase);
-          const keys = new Set(prefs.map((p: UserExamSessionPreference) => getSessionKey(p.exam_date, p.time_slot as ExamTimeSlot)));
+          const keys = new Set<string>(prefs.map((p: UserExamSessionPreference) => getSessionKey(p.exam_date, p.time_slot as ExamTimeSlot)));
           setSelectedSessions(keys);
           setInitialKeys(keys);
         }

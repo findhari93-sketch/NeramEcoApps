@@ -77,8 +77,8 @@ export default function FeedbackForm() {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       try {
-        const { getAuth } = await import('firebase/auth');
-        const auth = getAuth();
+        const { getFirebaseAuth } = await import('@neram/auth');
+        const auth = getFirebaseAuth();
         if (auth.currentUser) {
           const token = await auth.currentUser.getIdToken();
           headers['Authorization'] = `Bearer ${token}`;
