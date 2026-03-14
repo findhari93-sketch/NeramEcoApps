@@ -45,12 +45,17 @@ interface DashboardData {
 
 export default function StudentDashboard() {
   const theme = useTheme();
-  const { user, activeClassroom, getToken } = useNexusAuthContext();
+  const { user, activeClassroom, getToken, loading: authLoading, classrooms } = useNexusAuthContext();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const noClassrooms = !authLoading && classrooms.length === 0;
+
   useEffect(() => {
-    if (!activeClassroom) return;
+    if (!activeClassroom) {
+      if (!authLoading) setLoading(false);
+      return;
+    }
 
     async function fetchDashboard() {
       setLoading(true);
@@ -88,6 +93,34 @@ export default function StudentDashboard() {
   const checklistPct = data?.checklistProgress.total
     ? Math.round((data.checklistProgress.completed / data.checklistProgress.total) * 100)
     : 0;
+
+  if (noClassrooms) {
+    return (
+      <Box>
+        <PageHeader
+          title={`Welcome, ${user?.name?.split(' ')[0] || 'Student'}`}
+          subtitle="Getting Started"
+        />
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 3, sm: 4 },
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            textAlign: 'center',
+          }}
+        >
+          <SchoolOutlinedIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            No Classrooms Yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 400, mx: 'auto' }}>
+            You haven&apos;t been enrolled in any classrooms yet. Your teacher or administrator will add you to a classroom soon.
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box>

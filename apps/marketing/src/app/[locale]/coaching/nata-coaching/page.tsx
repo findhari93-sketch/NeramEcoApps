@@ -479,7 +479,7 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
           }}
         >
           <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
+            <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
               Start Your NATA Journey Today
             </Typography>
             <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>

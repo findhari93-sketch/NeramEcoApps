@@ -42,6 +42,14 @@
       "command": "cmd",
       "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-memory"],
       "description": "Persistent memory for context retention across sessions"
+    },
+    "cloudflare": {
+      "command": "C:\\Users\\Haribabu\\AppData\\Roaming\\npm\\mcp-server-cloudflare.cmd",
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "FJvel89MDyUxgJkHAp-RsM_NyIu3GieW82yEAT1F",
+        "CLOUDFLARE_ACCOUNT_ID": "2ded5f54d55033ec99a15cf99bccc972"
+      },
+      "description": "Cloudflare Workers, DNS, and zone management"
     }
   }
 }

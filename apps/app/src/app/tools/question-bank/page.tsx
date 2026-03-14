@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema } from '@/lib/seo/schemas';
 import { APP_URL, ORG_NAME, MARKETING_URL, SOCIAL_PROFILES } from '@/lib/seo/constants';
+import { RelatedTools } from '@/components/seo/RelatedTools';
 
 const TOOL_NAME = 'NATA Question Bank 2026';
 const TOOL_URL = `${APP_URL}/tools/question-bank`;
@@ -437,6 +438,8 @@ export default function QuestionBankPage() {
             ))}
           </Box>
         </Box>
+
+        <RelatedTools currentHref="/tools/question-bank" />
 
         {/* Final CTA */}
         <Box

@@ -5,6 +5,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  trailingSlash: false,
   typescript: {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
@@ -77,7 +78,8 @@ const nextConfig = {
 
       // City-specific coaching pages — MUST be first (more specific than /coaching)
       // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper
-      { source: '/coaching/:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      // Exclude 'nata-coaching' to avoid catching the real page at /coaching/nata-coaching
+      { source: '/coaching/:city((?!nata-coaching).*)', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
 
       // Core pages (coaching, premium, alumni, careers are handled natively by next-intl)
       { source: '/askSeniors', destination: '/alumni', permanent: true },

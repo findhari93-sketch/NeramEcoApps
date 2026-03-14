@@ -46,12 +46,18 @@ interface TeacherDashboardData {
 export default function TeacherDashboard() {
   const router = useRouter();
   const theme = useTheme();
-  const { user, activeClassroom, getToken } = useNexusAuthContext();
+  const { user, activeClassroom, getToken, loading: authLoading, classrooms } = useNexusAuthContext();
   const [data, setData] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // If auth is done loading and there are no classrooms, stop showing skeletons
+  const noClassrooms = !authLoading && classrooms.length === 0;
+
   useEffect(() => {
-    if (!activeClassroom) return;
+    if (!activeClassroom) {
+      if (!authLoading) setLoading(false);
+      return;
+    }
 
     async function fetchDashboard() {
       setLoading(true);
@@ -94,6 +100,40 @@ export default function TeacherDashboard() {
       default: return theme.palette.primary.main;
     }
   };
+
+  if (noClassrooms) {
+    return (
+      <Box>
+        <PageHeader
+          title={`Good ${getGreeting()}, ${firstName}`}
+          subtitle="Welcome to Nexus"
+        />
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 3, sm: 4 },
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            textAlign: 'center',
+          }}
+        >
+          <SchoolOutlinedIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            No Classrooms Assigned
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 400, mx: 'auto', mb: 2 }}>
+            You haven&apos;t been enrolled in any classrooms yet. Ask your administrator to assign you to a classroom, or check back later.
+          </Typography>
+          <Chip
+            label="Contact Admin"
+            color="primary"
+            variant="outlined"
+            sx={{ fontWeight: 600 }}
+          />
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box>

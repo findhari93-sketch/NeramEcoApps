@@ -21,7 +21,6 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CheckIcon from '@mui/icons-material/Check';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { SIDEBAR_WIDTH } from './DesktopSidebar';
 
 /**
  * Top app bar for Nexus with glassmorphism effect.
@@ -61,9 +60,7 @@ export default function TopBar() {
         WebkitBackdropFilter: 'blur(12px)',
         color: 'text.primary',
         borderBottom: `1px solid ${theme.palette.divider}`,
-        ml: { md: `${SIDEBAR_WIDTH}px` },
-        width: { md: `calc(100% - ${SIDEBAR_WIDTH}px)` },
-        transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1), width 250ms cubic-bezier(0.2, 0, 0, 1)',
+        width: '100%',
       }}
     >
       <Toolbar sx={{ minHeight: { xs: 52, sm: 56 }, px: { xs: 1.5, sm: 2 } }}>

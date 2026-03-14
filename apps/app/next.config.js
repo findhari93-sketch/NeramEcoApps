@@ -8,6 +8,7 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  trailingSlash: false,
   typescript: {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,

@@ -33,6 +33,15 @@ export default function robots(): MetadataRoute.Robots {
       // Note: Do NOT add specific Googlebot/Bingbot rules — in robots.txt spec,
       // user-agent-specific rules OVERRIDE the '*' rules entirely,
       // which would make Googlebot ignore all disallow entries above.
+
+      // AI Crawlers — ALLOW for AEO (AI Engine Optimization)
+      { userAgent: 'GPTBot', allow: '/' },
+      { userAgent: 'ChatGPT-User', allow: '/' },
+      { userAgent: 'Google-Extended', allow: '/' },
+      { userAgent: 'PerplexityBot', allow: '/' },
+      { userAgent: 'ClaudeBot', allow: '/' },
+      { userAgent: 'Applebot-Extended', allow: '/' },
+      { userAgent: 'CCBot', allow: '/' },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
   };

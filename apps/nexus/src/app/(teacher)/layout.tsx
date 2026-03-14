@@ -8,6 +8,7 @@ import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -21,6 +22,7 @@ const teacherNavItems = [
   { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
   { label: 'Checklist', path: '/teacher/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
+  { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
 ];
 
 const bottomNavItems = [
