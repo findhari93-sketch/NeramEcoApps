@@ -76,10 +76,8 @@ const getCategoryConfig = (category: string) =>
   categoryConfig[category] || categoryConfig.uncategorized;
 
 // Mobile bottom-sheet style transition
-const SlideTransition = React.forwardRef(function Transition(
-  props: { children: React.ReactElement } & Record<string, unknown>,
-  ref: React.Ref<unknown>,
-) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SlideTransition = React.forwardRef(function Transition(props: any, ref: React.Ref<unknown>) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
 
