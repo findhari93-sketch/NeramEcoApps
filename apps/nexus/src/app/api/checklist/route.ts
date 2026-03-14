@@ -207,6 +207,7 @@ export async function POST(request: NextRequest) {
 
         return {
           checklist_item_id: item.id,
+          title: url.split('/').pop() || 'Resource',
           resource_type,
           url,
           sort_order: i,

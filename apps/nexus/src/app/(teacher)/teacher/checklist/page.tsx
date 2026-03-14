@@ -33,7 +33,6 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
-import { TransitionProps } from '@mui/material/transitions';
 import React from 'react';
 
 interface ChecklistItem {
@@ -78,7 +77,7 @@ const getCategoryConfig = (category: string) =>
 
 // Mobile bottom-sheet style transition
 const SlideTransition = React.forwardRef(function Transition(
-  props: TransitionProps & { children: React.ReactElement },
+  props: { children: React.ReactElement } & Record<string, unknown>,
   ref: React.Ref<unknown>,
 ) {
   return <Slide direction="up" ref={ref} {...props} />;
