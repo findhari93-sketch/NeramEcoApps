@@ -23,9 +23,9 @@ export async function POST(
 
     const { id: questionId } = await params;
 
-    const result = await toggleQBStudyMark(supabase, questionId, caller.id);
+    const isStudied = await toggleQBStudyMark(caller.id, questionId);
 
-    return NextResponse.json({ data: { is_studied: result.is_studied } }, { status: 200 });
+    return NextResponse.json({ data: { is_studied: isStudied } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', message);

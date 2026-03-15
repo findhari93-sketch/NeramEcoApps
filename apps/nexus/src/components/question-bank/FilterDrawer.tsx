@@ -30,7 +30,7 @@ interface FilterDrawerProps {
 
 const EXAM_OPTIONS: { value: QBExamRelevance; label: string }[] = [
   { value: 'NATA', label: 'NATA' },
-  { value: 'JEE_PAPER_2', label: 'JEE Paper 2' },
+  { value: 'JEE', label: 'JEE Paper 2' },
   { value: 'BOTH', label: 'Both' },
 ];
 
@@ -43,7 +43,8 @@ const DIFFICULTY_OPTIONS: { value: QBDifficulty; label: string }[] = [
 const FORMAT_OPTIONS: { value: QBQuestionFormat; label: string }[] = [
   { value: 'MCQ', label: 'MCQ' },
   { value: 'NUMERICAL', label: 'Numerical' },
-  { value: 'MSQ', label: 'Multi-Select' },
+  { value: 'DRAWING_PROMPT', label: 'Drawing' },
+  { value: 'IMAGE_BASED', label: 'Image Based' },
 ];
 
 const STATUS_OPTIONS: { value: NonNullable<QBFilterState['attempt_status']>; label: string }[] = [

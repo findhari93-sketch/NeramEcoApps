@@ -27,7 +27,7 @@ export async function GET(
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const { id } = await params;
-    const data = await getQBQuestionDetail(supabase, id, caller.id);
+    const data = await getQBQuestionDetail(id, caller.id);
 
     if (!data) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 });
@@ -60,14 +60,14 @@ export async function PATCH(
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    if (!['teacher', 'admin'].includes(caller.user_type)) {
+    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
     const body = await request.json();
 
-    const data = await updateQBQuestion(supabase, id, body);
+    const data = await updateQBQuestion(id, body);
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
@@ -96,12 +96,12 @@ export async function DELETE(
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    if (!['teacher', 'admin'].includes(caller.user_type)) {
+    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
-    await softDeleteQBQuestion(supabase, id);
+    await softDeleteQBQuestion(id);
 
     return NextResponse.json({ data: { success: true } }, { status: 200 });
   } catch (err) {

@@ -23,7 +23,7 @@ export async function DELETE(
 
     const { id } = await params;
 
-    await deleteQBPreset(supabase, id, caller.id);
+    await deleteQBPreset(id, caller.id);
 
     return NextResponse.json({ data: { success: true } }, { status: 200 });
   } catch (err) {

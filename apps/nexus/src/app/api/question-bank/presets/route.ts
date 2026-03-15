@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const data = await getStudentQBPresets(supabase, caller.id);
+    const data = await getStudentQBPresets(caller.id);
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
@@ -55,12 +55,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name and filters are required' }, { status: 400 });
     }
 
-    const data = await createQBPreset(supabase, {
-      student_id: caller.id,
-      name,
-      filters,
-      is_pinned: is_pinned || false,
-    });
+    const data = await createQBPreset(caller.id, name, filters);
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {

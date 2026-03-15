@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, getStudentQBStats } from '@neram/database';
+import { getSupabaseAdminClient, getStudentQBStats, type QBExamRelevance } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const examRelevance = params.get('exam_relevance') || undefined;
 
-    const data = await getStudentQBStats(supabase, caller.id, caller.user_type, examRelevance);
+    const data = await getStudentQBStats(caller.id, examRelevance as QBExamRelevance | undefined);
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {

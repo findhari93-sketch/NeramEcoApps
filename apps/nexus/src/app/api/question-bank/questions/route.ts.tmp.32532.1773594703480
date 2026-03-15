@@ -35,21 +35,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const page = params.get('page') ? parseInt(params.get('page')!, 10) : 1;
-    const pageSize = params.get('page_size') ? parseInt(params.get('page_size')!, 10) : 20;
-
-    const filters: import('@neram/database').QBFilterState = {
-      exam_relevance: (params.get('exam_relevance') as any) || undefined,
-      exam_years: params.get('years') ? params.get('years')!.split(',').map(Number) : undefined,
+    const filters = {
+      exam_relevance: params.get('exam_relevance') || undefined,
+      years: params.get('years') ? params.get('years')!.split(',').map(Number) : undefined,
       categories: params.get('categories') ? params.get('categories')!.split(',') : undefined,
-      difficulty: params.get('difficulty') ? params.get('difficulty')!.split(',') as any : undefined,
-      question_format: params.get('format') ? params.get('format')!.split(',') as any : undefined,
-      attempt_status: (params.get('status') as any) || undefined,
-      search_text: params.get('search') || undefined,
-      topic_ids: params.get('topic_ids') ? params.get('topic_ids')!.split(',') : undefined,
+      difficulty: params.get('difficulty') || undefined,
+      format: params.get('format') || undefined,
+      status: params.get('status') || undefined,
+      search: params.get('search') || undefined,
+      page: params.get('page') ? parseInt(params.get('page')!, 10) : 1,
+      page_size: params.get('page_size') ? parseInt(params.get('page_size')!, 10) : 20,
+      classroom_id: classroomId,
     };
 
-    const data = await getQBQuestions(filters, page, pageSize, caller.id);
+    const data = await getQBQuestions(filters, filters.page || 1, filters.page_size || 20, caller.id);
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
+    if (!['teacher', 'admin'].includes(caller.user_type)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -91,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Add sources if provided
     if (sources && Array.isArray(sources) && sources.length > 0) {
       for (const source of sources) {
-        await addQuestionSource({
+        await addQuestionSource(supabase, {
           question_id: question.id,
           ...source,
         });

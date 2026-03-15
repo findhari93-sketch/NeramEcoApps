@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Avatar, Badge, type SxProps, type Theme } from '@mui/material';
+import { Avatar, Badge, type SxProps, type Theme } from '@neram/ui';
 import { useNexusAuth } from '@/hooks/useNexusAuth';
 
 // Module-level cache for blob URLs to avoid refetching across re-renders

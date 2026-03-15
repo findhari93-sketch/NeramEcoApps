@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'classroom_id is required' }, { status: 400 });
     }
 
-    const enabled = await isQBEnabledForClassroom(supabase, classroomId);
+    const enabled = await isQBEnabledForClassroom(classroomId);
 
     return NextResponse.json({ data: { enabled } }, { status: 200 });
   } catch (err) {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    if (!['teacher', 'admin'].includes(caller.user_type)) {
+    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'classroom_id is required' }, { status: 400 });
     }
 
-    await enableQBForClassroom(supabase, classroom_id);
+    await enableQBForClassroom(classroom_id, caller.id);
 
     return NextResponse.json({ data: { enabled: true } }, { status: 200 });
   } catch (err) {
@@ -91,7 +91,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    if (!['teacher', 'admin'].includes(caller.user_type)) {
+    if (!['teacher', 'admin'].includes(caller.user_type ?? '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -102,7 +102,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'classroom_id is required' }, { status: 400 });
     }
 
-    await disableQBForClassroom(supabase, classroom_id);
+    await disableQBForClassroom(classroom_id);
 
     return NextResponse.json({ data: { enabled: false } }, { status: 200 });
   } catch (err) {

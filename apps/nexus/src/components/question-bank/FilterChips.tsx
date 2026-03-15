@@ -17,7 +17,7 @@ function getFilterChips(filters: QBFilterState): { key: keyof QBFilterState; lab
   if (filters.exam_relevance) {
     chips.push({
       key: 'exam_relevance',
-      label: filters.exam_relevance === 'NATA' ? 'NATA' : filters.exam_relevance === 'JEE_PAPER_2' ? 'JEE' : 'Both',
+      label: filters.exam_relevance === 'NATA' ? 'NATA' : filters.exam_relevance === 'JEE' ? 'JEE' : 'Both',
     });
   }
   if (filters.exam_years?.length) {
@@ -49,7 +49,7 @@ function getFilterChips(filters: QBFilterState): { key: keyof QBFilterState; lab
   }
   if (filters.question_format?.length) {
     for (const f of filters.question_format) {
-      chips.push({ key: 'question_format', label: f === 'MCQ' ? 'MCQ' : f === 'NUMERICAL' ? 'Numerical' : 'MSQ', value: f });
+      chips.push({ key: 'question_format', label: f === 'MCQ' ? 'MCQ' : f === 'NUMERICAL' ? 'Numerical' : f === 'DRAWING_PROMPT' ? 'Drawing' : 'Image Based', value: f });
     }
   }
 

@@ -33,22 +33,20 @@ export async function POST(
       return NextResponse.json({ error: 'selected_answer is required' }, { status: 400 });
     }
 
-    // Get the question to check correct answer
-    const question = await getQBQuestionDetail(supabase, questionId, caller.id);
+    // Submit the attempt (the function checks correctness internally)
+    const { attempt, isCorrect } = await submitQBAttempt(
+      caller.id,
+      questionId,
+      selected_answer,
+      time_spent_seconds || null,
+      mode || 'practice',
+    );
+
+    // Get the question detail to return explanation
+    const question = await getQBQuestionDetail(questionId, caller.id);
     if (!question) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 });
     }
-
-    const isCorrect = selected_answer === question.correct_answer;
-
-    const attempt = await submitQBAttempt(supabase, {
-      question_id: questionId,
-      student_id: caller.id,
-      selected_answer,
-      is_correct: isCorrect,
-      time_spent_seconds: time_spent_seconds || null,
-      mode: mode || 'practice',
-    });
 
     return NextResponse.json({
       data: {
