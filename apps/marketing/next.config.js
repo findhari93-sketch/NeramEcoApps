@@ -49,10 +49,6 @@ const nextConfig = {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin-allow-popups',
           },
-          {
-            key: 'Vary',
-            value: 'RSC, Next-Router-State-Tree, Next-Router-Prefetch',
-          },
         ],
       },
       // Cache static assets (images, fonts, SVGs) for 1 year
