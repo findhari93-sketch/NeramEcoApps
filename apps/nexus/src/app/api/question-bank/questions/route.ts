@@ -1,0 +1,106 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyMsToken } from '@/lib/ms-verify';
+import { getSupabaseAdminClient } from '@neram/database';
+import {
+  getQBQuestions,
+  createQBQuestion,
+  addQuestionSource,
+  isQBEnabledForClassroom,
+} from '@neram/database/src/queries/nexus/question-bank';
+
+export async function GET(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const msUser = await verifyMsToken(authHeader);
+    const supabase = getSupabaseAdminClient();
+
+    const { data: caller } = await supabase
+      .from('users')
+      .select('id, user_type')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    const params = request.nextUrl.searchParams;
+
+    // If student, verify classroom has QB enabled
+    const classroomId = params.get('classroom_id') || undefined;
+    if (caller.user_type === 'student' && classroomId) {
+      const enabled = await isQBEnabledForClassroom(supabase, classroomId);
+      if (!enabled) {
+        return NextResponse.json({ error: 'Question Bank is not enabled for this classroom' }, { status: 403 });
+      }
+    }
+
+    const filters = {
+      exam_relevance: params.get('exam_relevance') || undefined,
+      years: params.get('years') ? params.get('years')!.split(',').map(Number) : undefined,
+      categories: params.get('categories') ? params.get('categories')!.split(',') : undefined,
+      difficulty: params.get('difficulty') || undefined,
+      format: params.get('format') || undefined,
+      status: params.get('status') || undefined,
+      search: params.get('search') || undefined,
+      page: params.get('page') ? parseInt(params.get('page')!, 10) : 1,
+      page_size: params.get('page_size') ? parseInt(params.get('page_size')!, 10) : 20,
+      classroom_id: classroomId,
+    };
+
+    const data = await getQBQuestions(supabase, filters, caller.id);
+
+    return NextResponse.json({ data }, { status: 200 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[QB API] Error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const msUser = await verifyMsToken(authHeader);
+    const supabase = getSupabaseAdminClient();
+
+    const { data: caller } = await supabase
+      .from('users')
+      .select('id, user_type')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    if (!['teacher', 'admin'].includes(caller.user_type)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { sources, ...questionData } = body;
+
+    // Create the question
+    const question = await createQBQuestion(supabase, {
+      ...questionData,
+      created_by: caller.id,
+    });
+
+    // Add sources if provided
+    if (sources && Array.isArray(sources) && sources.length > 0) {
+      for (const source of sources) {
+        await addQuestionSource(supabase, {
+          question_id: question.id,
+          ...source,
+        });
+      }
+    }
+
+    return NextResponse.json({ data: question }, { status: 201 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[QB API] Error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

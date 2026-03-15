@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
   Paper,
+  Button,
   Skeleton,
   Chip,
   alpha,
@@ -12,6 +14,7 @@ import {
   Avatar,
   LinearProgress,
 } from '@neram/ui';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 
@@ -25,6 +28,7 @@ interface StudentProgress {
 
 export default function TeacherFoundationDashboard() {
   const theme = useTheme();
+  const router = useRouter();
   const { activeClassroom, getToken, loading: authLoading } = useNexusAuthContext();
   const [students, setStudents] = useState<StudentProgress[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +104,16 @@ export default function TeacherFoundationDashboard() {
       <PageHeader
         title="Foundation Progress"
         subtitle="Track students' self-paced learning progress"
+        action={
+          <Button
+            variant="outlined"
+            startIcon={<SettingsOutlinedIcon />}
+            onClick={() => router.push('/teacher/foundation/manage')}
+            sx={{ textTransform: 'none', borderRadius: 2 }}
+          >
+            Manage Content
+          </Button>
+        }
       />
 
       {/* Summary Stats */}

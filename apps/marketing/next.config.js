@@ -49,6 +49,10 @@ const nextConfig = {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin-allow-popups',
           },
+          {
+            key: 'Vary',
+            value: 'RSC, Next-Router-State-Tree, Next-Router-Prefetch',
+          },
         ],
       },
       // Cache static assets (images, fonts, SVGs) for 1 year
@@ -75,6 +79,13 @@ const nextConfig = {
         destination: 'https://neramclasses.com/:path*',
         permanent: true,
       },
+
+      // /en/* → /* redirect (English is default locale, no prefix needed)
+      { source: '/en', destination: '/', permanent: true },
+      { source: '/en/:path*', destination: '/:path*', permanent: true },
+
+      // Old zombie page still indexed by Google
+      { source: '/inner-page', destination: '/about', permanent: true },
 
       // City-specific coaching pages — MUST be first (more specific than /coaching)
       // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper

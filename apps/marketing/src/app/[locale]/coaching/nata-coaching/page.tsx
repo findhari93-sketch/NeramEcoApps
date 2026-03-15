@@ -31,7 +31,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best Online NATA Coaching in Tamil Nadu | Neram Classes 2026',
+    title: 'Best Online NATA Coaching in Tamil Nadu 2026',
     description: 'Neram Classes offers the best online NATA coaching in Tamil Nadu with 99.9% success rate. Expert IIT/NIT faculty, live classes, daily drawing practice. Online & offline NATA 2026 preparation from Chennai, Coimbatore, Madurai & across India.',
     keywords: 'best online NATA coaching Tamil Nadu, NATA coaching Tamil Nadu, online NATA classes, NATA 2026 coaching, NATA preparation Tamil Nadu, NATA coaching Chennai, NATA coaching Coimbatore, best NATA coaching institute India, NATA online classes, Neram Classes NATA',
     alternates: buildAlternates(locale, '/coaching/nata-coaching'),

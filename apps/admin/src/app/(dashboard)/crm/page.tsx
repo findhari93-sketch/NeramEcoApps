@@ -42,6 +42,9 @@ export default function CRMPage() {
   const [showDeadLeads, setShowDeadLeads] = useState(
     searchParams.get('dead_leads') === 'true'
   );
+  const [showIrrelevant, setShowIrrelevant] = useState(
+    searchParams.get('irrelevant') === 'true'
+  );
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -67,6 +70,7 @@ export default function CRMPage() {
 
       if (activeStage) params.set('pipeline_stage', activeStage);
       if (showDeadLeads) params.set('is_dead_lead', 'true');
+      if (showIrrelevant) params.set('is_irrelevant', 'true');
       if (globalFilter) params.set('search', globalFilter);
 
       if (sorting.length > 0) {
@@ -86,7 +90,7 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads]);
+  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant]);
 
   useEffect(() => {
     fetchUsers();
@@ -116,6 +120,21 @@ export default function CRMPage() {
       params.set('dead_leads', 'true');
     } else {
       params.delete('dead_leads');
+    }
+    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    window.history.replaceState(null, '', newUrl);
+  };
+
+  const handleToggleIrrelevant = () => {
+    const next = !showIrrelevant;
+    setShowIrrelevant(next);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+    const params = new URLSearchParams(window.location.search);
+    if (next) {
+      params.set('irrelevant', 'true');
+    } else {
+      params.delete('irrelevant');
     }
     const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
     window.history.replaceState(null, '', newUrl);
@@ -207,6 +226,22 @@ export default function CRMPage() {
               borderColor: showDeadLeads ? 'grey.700' : 'grey.300',
               '&:hover': {
                 bgcolor: showDeadLeads ? 'grey.800' : 'grey.100',
+              },
+            }}
+          />
+          <Chip
+            label="Irrelevant"
+            onClick={handleToggleIrrelevant}
+            onDelete={showIrrelevant ? handleToggleIrrelevant : undefined}
+            variant={showIrrelevant ? 'filled' : 'outlined'}
+            size="small"
+            sx={{
+              fontWeight: 500,
+              bgcolor: showIrrelevant ? '#E65100' : undefined,
+              color: showIrrelevant ? 'common.white' : 'text.secondary',
+              borderColor: showIrrelevant ? '#E65100' : 'grey.300',
+              '&:hover': {
+                bgcolor: showIrrelevant ? '#BF360C' : 'grey.100',
               },
             }}
           />

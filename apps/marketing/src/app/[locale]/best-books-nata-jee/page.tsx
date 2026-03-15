@@ -23,7 +23,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best Books for NATA & JEE Paper 2 2026 - Recommended Books | Neram Classes',
+    title: 'Best Books for NATA & JEE Paper 2 2026 - Recommended Books',
     description: 'Complete list of best books for NATA and JEE Paper 2 2026 preparation. Subject-wise book recommendations for Mathematics, Aptitude, and Drawing.',
     keywords: 'best books for NATA, NATA books, JEE Paper 2 books, NATA preparation books, architecture entrance books',
     alternates: buildAlternates(locale, '/best-books-nata-jee'),

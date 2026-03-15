@@ -23,7 +23,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA & JEE Paper 2 Previous Year Papers 2015-2024 | Neram Classes',
+    title: 'NATA & JEE Paper 2 Previous Year Papers 2015-2024',
     description: 'Download NATA and JEE Paper 2 previous year question papers with solutions. Get 10 years of papers for practice and preparation.',
     keywords: 'NATA previous year papers, JEE Paper 2 previous papers, NATA question papers with solutions, NATA past papers',
     alternates: buildAlternates(locale, '/previous-year-papers'),

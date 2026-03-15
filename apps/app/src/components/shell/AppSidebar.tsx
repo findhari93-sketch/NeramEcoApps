@@ -40,6 +40,8 @@ import {
   type ToolNavItem,
   type GeneralNavItem,
 } from '@/lib/navigation-data';
+import type { AccountTier } from '@neram/database';
+import AvatarWithRing from '@/components/AvatarWithRing';
 
 const TRANSITION = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
 
@@ -50,6 +52,7 @@ interface AppSidebarProps {
   onSignOut: () => void;
   onItemClick?: () => void;
   forceExpanded?: boolean;
+  accountTier: AccountTier;
 }
 
 export default function AppSidebar({
@@ -59,6 +62,7 @@ export default function AppSidebar({
   onSignOut,
   onItemClick,
   forceExpanded,
+  accountTier,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -395,12 +399,13 @@ export default function AppSidebar({
         {!collapsed ? (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
-              <Avatar
-                src={userAvatar || undefined}
-                sx={{ width: 24, height: 24, fontSize: 11 }}
-              >
-                {userName?.charAt(0)?.toUpperCase() || 'S'}
-              </Avatar>
+              <AvatarWithRing
+                src={userAvatar}
+                name={userName}
+                size={24}
+                tier={accountTier}
+                sx={{ fontSize: 11 }}
+              />
               <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0 }}>
                 {userName || 'Student'}
               </Typography>
@@ -414,12 +419,13 @@ export default function AppSidebar({
         ) : (
           <Tooltip title={`${userName || 'Student'} — Sign out`} placement="right" arrow>
             <IconButton onClick={onSignOut} size="small" sx={{ width: 28, height: 28 }}>
-              <Avatar
-                src={userAvatar || undefined}
-                sx={{ width: 24, height: 24, fontSize: 11 }}
-              >
-                {userName?.charAt(0)?.toUpperCase() || 'S'}
-              </Avatar>
+              <AvatarWithRing
+                src={userAvatar}
+                name={userName}
+                size={24}
+                tier={accountTier}
+                sx={{ fontSize: 11 }}
+              />
             </IconButton>
           </Tooltip>
         )}

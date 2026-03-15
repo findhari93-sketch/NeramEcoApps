@@ -18,10 +18,13 @@ import {
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface SearchUser {
-  id: string;
+  id?: string;
+  ms_oid: string;
   name: string;
   email: string;
   avatar_url: string | null;
+  user_type?: string;
+  source: 'local' | 'directory';
 }
 
 interface AddStudentDialogProps {
@@ -42,10 +45,11 @@ export default function AddStudentDialog({
   const { getToken } = useNexusAuthContext();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchUser[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set()); // keyed by ms_oid
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'student' | 'teacher'>('student');
   const [hasSearched, setHasSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -63,7 +67,7 @@ export default function AddStudentDialog({
         if (!token) return;
 
         const res = await fetch(
-          `/api/users/search?q=${encodeURIComponent(q)}&exclude_classroom=${classroomId}`,
+          `/api/users/search?q=${encodeURIComponent(q)}&exclude_classroom=${classroomId}&include_directory=true`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
@@ -87,14 +91,18 @@ export default function AddStudentDialog({
     debounceRef.current = setTimeout(() => searchUsers(value), 400);
   };
 
-  const toggleSelect = (userId: string) => {
+  const toggleSelect = (msOid: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
+      if (next.has(msOid)) next.delete(msOid);
+      else next.add(msOid);
       return next;
     });
   };
+
+  const hasDirectorySelected = results.some(
+    (u) => u.source === 'directory' && selected.has(u.ms_oid)
+  );
 
   const handleAdd = async () => {
     if (selected.size === 0) return;
@@ -104,27 +112,39 @@ export default function AddStudentDialog({
       const token = await getToken();
       if (!token) return;
 
-      // Enroll each selected student
-      const promises = Array.from(selected).map((userId) =>
-        fetch(`/api/classrooms/${classroomId}/enrollments`, {
+      const selectedUsers = results.filter((u) => selected.has(u.ms_oid));
+
+      const promises = selectedUsers.map((user) => {
+        const body: Record<string, any> = {
+          role: selectedRole,
+          batch_id: selectedBatch,
+        };
+
+        if (user.source === 'local' && user.id) {
+          body.user_id = user.id;
+        } else {
+          // Directory user — send ms_oid for auto-creation
+          body.ms_oid = user.ms_oid;
+          body.name = user.name;
+          body.email = user.email;
+          body.user_type = selectedRole;
+        }
+
+        return fetch(`/api/classrooms/${classroomId}/enrollments`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            user_id: userId,
-            role: 'student',
-            batch_id: selectedBatch,
-          }),
-        })
-      );
+          body: JSON.stringify(body),
+        });
+      });
 
       await Promise.all(promises);
       onStudentsAdded();
       handleClose();
     } catch (err) {
-      console.error('Failed to add students:', err);
+      console.error('Failed to add users:', err);
     } finally {
       setAdding(false);
     }
@@ -135,6 +155,7 @@ export default function AddStudentDialog({
     setResults([]);
     setSelected(new Set());
     setSelectedBatch(null);
+    setSelectedRole('student');
     setHasSearched(false);
     onClose();
   };
@@ -144,7 +165,7 @@ export default function AddStudentDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add Students to Classroom</DialogTitle>
+      <DialogTitle>Add Users to Classroom</DialogTitle>
       <DialogContent>
         <TextField
           fullWidth
@@ -156,6 +177,31 @@ export default function AddStudentDialog({
           sx={{ mt: 1, mb: 2 }}
           inputProps={{ style: { minHeight: 24 } }}
         />
+
+        {/* Role selector */}
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            Enroll as
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Chip
+              label="Student"
+              size="small"
+              variant={selectedRole === 'student' ? 'filled' : 'outlined'}
+              color={selectedRole === 'student' ? 'primary' : 'default'}
+              onClick={() => setSelectedRole('student')}
+              sx={{ minHeight: 32 }}
+            />
+            <Chip
+              label="Teacher"
+              size="small"
+              variant={selectedRole === 'teacher' ? 'filled' : 'outlined'}
+              color={selectedRole === 'teacher' ? 'primary' : 'default'}
+              onClick={() => setSelectedRole('teacher')}
+              sx={{ minHeight: 32 }}
+            />
+          </Box>
+        </Box>
 
         {/* Optional batch selection */}
         {batches.length > 0 && (
@@ -196,7 +242,7 @@ export default function AddStudentDialog({
 
         {!searching && hasSearched && results.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
-            No students found. Make sure they have signed in to Nexus at least once.
+            No users found in the system or organization directory.
           </Typography>
         )}
 
@@ -205,13 +251,18 @@ export default function AddStudentDialog({
             <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
               {selected.size > 0
                 ? `${selected.size} selected`
-                : `${results.length} student${results.length !== 1 ? 's' : ''} found`}
+                : `${results.length} user${results.length !== 1 ? 's' : ''} found`}
+              {hasDirectorySelected && (
+                <Typography component="span" variant="caption" color="info.main">
+                  {' '}(new users will be created automatically)
+                </Typography>
+              )}
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, maxHeight: 300, overflow: 'auto' }}>
               {results.map((user) => (
                 <Box
-                  key={user.id}
-                  onClick={() => toggleSelect(user.id)}
+                  key={user.ms_oid}
+                  onClick={() => toggleSelect(user.ms_oid)}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
@@ -219,13 +270,13 @@ export default function AddStudentDialog({
                     p: 1.5,
                     borderRadius: 2,
                     cursor: 'pointer',
-                    bgcolor: selected.has(user.id) ? 'action.selected' : 'transparent',
+                    bgcolor: selected.has(user.ms_oid) ? 'action.selected' : 'transparent',
                     '&:hover': { bgcolor: 'action.hover' },
                     minHeight: 48,
                   }}
                 >
                   <Checkbox
-                    checked={selected.has(user.id)}
+                    checked={selected.has(user.ms_oid)}
                     size="small"
                     sx={{ p: 0 }}
                   />
@@ -236,9 +287,18 @@ export default function AddStudentDialog({
                     {getInitials(user.name)}
                   </Avatar>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                      {user.name}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                        {user.name}
+                      </Typography>
+                      <Chip
+                        label={user.source === 'local' ? 'In System' : 'Directory'}
+                        size="small"
+                        color={user.source === 'local' ? 'success' : 'info'}
+                        variant="outlined"
+                        sx={{ height: 20, fontSize: '0.65rem' }}
+                      />
+                    </Box>
                     {user.email && (
                       <Typography variant="caption" color="text.secondary" noWrap>
                         {user.email}
@@ -262,7 +322,7 @@ export default function AddStudentDialog({
         >
           {adding
             ? 'Adding...'
-            : `Add ${selected.size > 0 ? `${selected.size} Student${selected.size !== 1 ? 's' : ''}` : ''}`}
+            : `Add ${selected.size > 0 ? `${selected.size} User${selected.size !== 1 ? 's' : ''}` : ''}`}
         </Button>
       </DialogActions>
     </Dialog>

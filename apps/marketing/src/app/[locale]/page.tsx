@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching India 2026 | Neram Classes',
+    title: 'Best NATA Coaching India 2026',
     description:
       "India's top NATA & JEE Paper 2 coaching. IIT/NIT alumni faculty, 99.9% success rate. Online & offline classes across India. Free demo available.",
     keywords:

@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'B.Arch Counseling Guide 2026 — TNEA, KEAM, JoSAA & More | Neram Classes',
+    title: 'B.Arch Counseling Guide 2026 — TNEA, KEAM, JoSAA & More',
     description:
       'Complete guide to B.Arch admission counseling across India. TNEA, KEAM, JoSAA — eligibility, cutoffs, seat matrix, college predictions, and free tools.',
     keywords:

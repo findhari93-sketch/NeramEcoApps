@@ -4,20 +4,23 @@ import { Box, Container } from '@neram/ui';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
-import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
-import DesktopSidebar, { SIDEBAR_WIDTH } from '@/components/DesktopSidebar';
+import DesktopSidebar from '@/components/DesktopSidebar';
+import { useSidebarContext } from '@/components/SidebarProvider';
 
 const parentNavItems = [
   { label: 'Dashboard', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/parent/timetable', icon: <CalendarTodayOutlinedIcon /> },
-  { label: 'Foundation', path: '/parent/foundation', icon: <MenuBookOutlinedIcon /> },
+  { label: 'Checklist', path: '/parent/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'Tickets', path: '/parent/tickets', icon: <SupportAgentOutlinedIcon /> },
 ];
 
 export default function ParentLayout({ children }: { children: React.ReactNode }) {
+  const { sidebarWidth } = useSidebarContext();
+
   return (
     <RoleGuard allowedRoles={['parent']}>
       <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -29,7 +32,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
             flexDirection: 'column',
             flex: 1,
             minHeight: '100vh',
-            ml: { md: `${SIDEBAR_WIDTH}px` },
+            ml: { md: `${sidebarWidth}px` },
             transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1)',
           }}
         >

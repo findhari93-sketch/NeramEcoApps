@@ -24,14 +24,14 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Student Reviews & Success Stories | Neram Classes',
+    title: 'Student Reviews & Success Stories',
     description:
       'Read reviews from 2500+ students across India who achieved their architecture dreams with Neram Classes. Filter by city, course, year, and learning mode.',
     keywords:
       'Neram Classes reviews, NATA coaching reviews, student testimonials, architecture coaching success stories, NATA student results',
     alternates: buildAlternates(locale, '/testimonials'),
     openGraph: {
-      title: 'Student Success Stories | Neram Classes',
+      title: 'Student Success Stories',
       description:
         'Real reviews from NATA & JEE Paper 2 students who achieved top ranks with Neram Classes coaching.',
       type: 'website',

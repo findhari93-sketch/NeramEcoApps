@@ -24,6 +24,8 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import PageHeader from '@/components/PageHeader';
 
 interface GuideSection {
@@ -216,6 +218,49 @@ export default function GuidePage() {
         'Each invite code can only be used once.',
         'Parents have read-only access — they cannot modify anything.',
         'A student can have multiple parents linked.',
+      ],
+    },
+    {
+      title: 'Foundation Content',
+      icon: <MenuBookOutlinedIcon />,
+      color: '#5C6BC0',
+      summary: 'Create self-paced learning chapters with videos, sections, and quizzes for students.',
+      steps: [
+        'Go to Foundation from the sidebar to see student progress across all chapters.',
+        'Click "Manage Content" to open the content management dashboard.',
+        'Click "+ Add Chapter" to create a new chapter — enter a title, YouTube video ID, chapter number, and pass score %.',
+        'Tap a chapter card to open the chapter editor with a video preview.',
+        'Add sections by clicking "+ Add Section" — set a title and start/end timestamps using the video preview\'s "Use current time" buttons.',
+        'For each section, add quiz questions: enter the question text, four answer options (A–D), select the correct answer, and optionally add an explanation.',
+        'Use the Publish toggle on each chapter to make it visible to students. Unpublished chapters show a "Draft" badge.',
+        'Back on the Foundation Progress page, monitor which students have completed chapters, who is in progress, and who hasn\'t started.',
+      ],
+      tips: [
+        'Use the embedded video preview to play the video and capture exact timestamps for sections.',
+        'Students must watch the full section video before the quiz appears — they cannot skip ahead.',
+        'If a student fails the quiz, they must rewatch the section before retrying.',
+        'The pass score % controls how many questions a student must answer correctly to proceed.',
+        'Students are sorted by status: stuck students (red) appear first so you can follow up with them.',
+      ],
+    },
+    {
+      title: 'Student Issues',
+      icon: <BugReportOutlinedIcon />,
+      color: '#E65100',
+      summary: 'Review and resolve issues reported by students during their learning experience.',
+      steps: [
+        'Go to Issues from the sidebar to see all student-reported issues.',
+        'Issues can be about: video problems, incorrect quiz questions, confusing content, or technical bugs.',
+        'Filter issues by status: Open, In Progress, or Resolved.',
+        'Click on an issue to view the full details including the student\'s description and context.',
+        'Mark an issue as "In Progress" when you start working on it.',
+        'Resolve the issue by adding resolution notes explaining what was fixed or clarified.',
+        'Students are notified when their reported issue is resolved.',
+      ],
+      tips: [
+        'Check issues regularly — quick responses build student trust.',
+        'If a quiz question is reported as incorrect, update it in Foundation → Manage Content.',
+        'Resolution notes are visible to the student, so be clear and helpful.',
       ],
     },
   ];

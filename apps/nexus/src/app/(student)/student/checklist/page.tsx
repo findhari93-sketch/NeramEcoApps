@@ -189,6 +189,11 @@ export default function StudentChecklist() {
     return acc;
   }, {});
 
+  // Ensure aptitude category exists if we have foundation chapters
+  if (foundationChapters && foundationChapters.length > 0 && !groupedItems['aptitude']) {
+    groupedItems['aptitude'] = [];
+  }
+
   const completedCount = items.filter((i) => i.is_completed).length;
   const totalCount = items.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -199,14 +204,6 @@ export default function StudentChecklist() {
       <PageHeader
         title="My Checklist"
         subtitle={`${user?.name?.split(' ')[0] || 'Student'}'s learning tasks`}
-      />
-
-      {/* Foundation Module Card */}
-      <FoundationOverviewCard
-        chapters={foundationChapters}
-        loading={foundationLoading}
-        onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
-        onViewAll={() => router.push('/student/foundation')}
       />
 
       {/* Progress Card */}
@@ -274,7 +271,7 @@ export default function StudentChecklist() {
             <Skeleton key={i} variant="rounded" height={64} sx={{ borderRadius: 2.5 }} />
           ))}
         </Box>
-      ) : totalCount === 0 ? (
+      ) : totalCount === 0 && Object.keys(groupedItems).length === 0 ? (
         <Paper
           elevation={0}
           sx={{
@@ -322,18 +319,32 @@ export default function StudentChecklist() {
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1, color: config.color }}>
                       {config.label}
                     </Typography>
-                    <Chip
-                      label={`${catCompleted}/${categoryItems.length}`}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        bgcolor: catPct === 100 ? alpha(theme.palette.success.main, 0.1) : alpha(config.color, 0.08),
-                        color: catPct === 100 ? 'success.main' : config.color,
-                      }}
-                    />
+                    {categoryItems.length > 0 && (
+                      <Chip
+                        label={`${catCompleted}/${categoryItems.length}`}
+                        size="small"
+                        sx={{
+                          height: 22,
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          bgcolor: catPct === 100 ? alpha(theme.palette.success.main, 0.1) : alpha(config.color, 0.08),
+                          color: catPct === 100 ? 'success.main' : config.color,
+                        }}
+                      />
+                    )}
                   </Box>
+
+                  {/* Foundation Module (inside Aptitude) */}
+                  {category === 'aptitude' && (
+                    <Box sx={{ mb: 1.5 }}>
+                      <FoundationOverviewCard
+                        chapters={foundationChapters}
+                        loading={foundationLoading}
+                        onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
+                        onViewAll={() => router.push('/student/foundation')}
+                      />
+                    </Box>
+                  )}
 
                   {/* Items */}
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

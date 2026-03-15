@@ -13,6 +13,8 @@ import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
+import type { AccountTier } from '@neram/database';
+
 // Supabase user type from API response
 interface SupabaseUser {
   id: string;
@@ -25,6 +27,7 @@ interface SupabaseUser {
   user_type: string;
   status: string;
   onboarding_completed: boolean;
+  account_tier: AccountTier;
 }
 
 function ProtectedLayoutInner({
@@ -341,6 +344,7 @@ function ProtectedLayoutInner({
         phoneVerified={phoneVerified}
         onboardingCompleted={onboardingCompleted}
         onSignOut={handleSignOut}
+        accountTier={supabaseUser?.account_tier || 'visitor'}
       >
         {children}
       </AppShell>

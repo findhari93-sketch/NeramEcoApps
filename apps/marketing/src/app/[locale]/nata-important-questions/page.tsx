@@ -22,7 +22,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Important Questions 2026 - Sample Questions & Practice | Neram Classes',
+    title: 'NATA Important Questions 2026 - Sample Questions & Practice',
     description: 'Practice NATA 2026 important questions with solutions. Get sample questions for Mathematics, Aptitude, and Drawing sections with detailed explanations.',
     keywords: 'NATA questions, NATA sample questions, NATA practice questions, NATA important questions 2026',
     alternates: buildAlternates(locale, '/nata-important-questions'),

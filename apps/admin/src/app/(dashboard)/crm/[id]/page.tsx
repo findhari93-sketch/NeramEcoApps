@@ -106,6 +106,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         onAddNoteClick={() => {
           document.getElementById('admin-notes-section')?.scrollIntoView({ behavior: 'smooth' });
         }}
+        adminId={adminId}
+        onStatusChange={fetchDetail}
       />
 
       <Grid container spacing={2}>

@@ -34,7 +34,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best Online NATA Coaching 2026 - Live Classes by IIT/NIT Faculty | Neram Classes',
+    title: 'Best Online NATA Coaching 2026 - Live Classes by IIT/NIT Faculty',
     description:
       'Join the best online NATA coaching in India. Live interactive classes by IIT/NIT alumni, daily drawing practice, small batches of 25, 100+ mock tests, and 99.9% success rate. Enroll now.',
     keywords:

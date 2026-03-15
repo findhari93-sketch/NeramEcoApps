@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -58,6 +58,12 @@ export async function POST(req: NextRequest) {
       last_login_at: new Date().toISOString(),
     }, adminClient);
 
+    // Compute account tier from user_type + classroom link
+    const accountTier = computeAccountTier(
+      user.user_type,
+      (user as any).linked_classroom_email ?? null
+    );
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -70,6 +76,7 @@ export async function POST(req: NextRequest) {
         user_type: user.user_type,
         status: user.status,
         onboarding_completed: (user as any).onboarding_completed ?? false,
+        account_tier: accountTier,
       },
       isNewUser,
     }, { headers: corsHeaders });

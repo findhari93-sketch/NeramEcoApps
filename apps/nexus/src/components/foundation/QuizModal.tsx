@@ -5,7 +5,7 @@ import {
   Box,
   Typography,
   Button,
-  Dialog,
+  Drawer,
   SwipeableDrawer,
   alpha,
   useTheme,
@@ -92,14 +92,18 @@ export default function QuizModal({
   const allAnswered = Object.keys(answers).length >= questions.length;
 
   const content = (
-    <Box sx={{ p: { xs: 2.5, sm: 3 }, maxHeight: '80vh', overflow: 'auto' }}>
+    <Box sx={{ p: { xs: 2.5, sm: 3 }, height: '100%', overflow: 'auto' }}>
       {/* Header */}
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '1.1rem' }}>
-        Section Quiz
-      </Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2.5, fontSize: '0.85rem' }}>
-        {sectionTitle}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2.5 }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '1.1rem' }}>
+            Section Quiz
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
+            {sectionTitle}
+          </Typography>
+        </Box>
+      </Box>
 
       {/* Result banner */}
       {result && (
@@ -134,17 +138,22 @@ export default function QuizModal({
       )}
 
       {/* Questions */}
-      {questions.map((q, i) => (
-        <QuizQuestion
-          key={q.id}
-          question={q}
-          selectedAnswer={answers[q.id]}
-          correctAnswer={result?.questions.find(rq => rq.id === q.id)?.correct_option}
-          showResult={!!result}
-          onChange={handleAnswerChange}
-          questionNumber={i + 1}
-        />
-      ))}
+      {questions.map((q, i) => {
+        const matchedResult = result?.questions.find(rq => rq.id === q.id);
+        // Fallback to index-based matching if ID lookup fails
+        const correctOption = matchedResult?.correct_option ?? result?.questions[i]?.correct_option;
+        return (
+          <QuizQuestion
+            key={q.id}
+            question={q}
+            selectedAnswer={answers[q.id]}
+            correctAnswer={correctOption}
+            showResult={!!result}
+            onChange={handleAnswerChange}
+            questionNumber={i + 1}
+          />
+        );
+      })}
 
       {/* Explanation after result */}
       {result && result.questions.some(q => q.explanation) && (
@@ -233,9 +242,11 @@ export default function QuizModal({
       <SwipeableDrawer
         anchor="bottom"
         open={open}
-        onClose={onClose}
+        onClose={() => {}}
         onOpen={() => {}}
         disableSwipeToOpen
+        disableDiscovery
+        ModalProps={{ disableEscapeKeyDown: true }}
         PaperProps={{
           sx: {
             borderTopLeftRadius: 20,
@@ -261,19 +272,21 @@ export default function QuizModal({
   }
 
   return (
-    <Dialog
+    <Drawer
+      anchor="right"
       open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
+      onClose={() => {}}
+      ModalProps={{ disableEscapeKeyDown: true }}
       PaperProps={{
         sx: {
-          borderRadius: 3,
-          maxHeight: '85vh',
+          width: { md: 420, lg: 460 },
+          maxWidth: '100vw',
+          borderTopLeftRadius: 16,
+          borderBottomLeftRadius: 16,
         },
       }}
     >
       {content}
-    </Dialog>
+    </Drawer>
   );
 }

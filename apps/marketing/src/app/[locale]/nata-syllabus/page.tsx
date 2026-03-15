@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Syllabus 2026 - Complete Subject-wise Syllabus | Neram Classes',
+    title: 'NATA Syllabus 2026 - Complete Subject-wise Syllabus',
     description: 'Complete NATA 2026 syllabus with subject-wise breakdown. Learn about Mathematics, General Aptitude, and Drawing Test syllabus for NATA exam preparation.',
     keywords: 'NATA syllabus, NATA 2026 syllabus, NATA subjects, NATA exam pattern, NATA preparation',
     alternates: buildAlternates(locale, '/nata-syllabus'),

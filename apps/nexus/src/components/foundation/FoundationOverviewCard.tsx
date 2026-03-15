@@ -62,7 +62,7 @@ export default function FoundationOverviewCard({
         borderRadius: 3,
         border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
         background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${alpha(theme.palette.primary.main, 0.01)} 100%)`,
-        mb: 3,
+        mb: 0,
         position: 'relative',
         overflow: 'hidden',
       }}

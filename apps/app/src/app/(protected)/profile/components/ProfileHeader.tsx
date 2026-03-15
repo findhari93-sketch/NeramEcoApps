@@ -4,7 +4,8 @@ import { Box, Typography, Button, Chip, useTheme, useMediaQuery } from '@neram/u
 import { useFirebaseAuth } from '@neram/auth';
 import ProfilePictureUpload from '@/components/ProfilePictureUpload';
 import type { CropData } from '@/components/ProfilePictureUpload';
-import type { User } from '@neram/database';
+import type { User, AccountTier } from '@neram/database';
+import { computeAccountTier } from '@neram/database';
 
 interface ProfileHeaderProps {
   profile: User | null;
@@ -64,6 +65,18 @@ export default function ProfileHeader({
             size="small"
             color="primary"
             variant="outlined"
+          />
+        )}
+        {profile && computeAccountTier(profile.user_type, profile.linked_classroom_email ?? null) === 'enrolled_student' && (
+          <Chip
+            label="Neram Student"
+            size="small"
+            sx={{
+              background: 'linear-gradient(135deg, #FFD700, #FFA000)',
+              color: '#000',
+              fontWeight: 700,
+              fontSize: 11,
+            }}
           />
         )}
       </Box>

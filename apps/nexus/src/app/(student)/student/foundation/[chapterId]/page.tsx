@@ -17,7 +17,9 @@ import VideoPlayer from '@/components/foundation/VideoPlayer';
 import SectionList from '@/components/foundation/SectionList';
 import QuizModal from '@/components/foundation/QuizModal';
 import NoteEditor from '@/components/foundation/NoteEditor';
+import ChapterFeedback from '@/components/foundation/ChapterFeedback';
 import FoundationProgressBar from '@/components/foundation/ProgressBar';
+import Transcript from '@/components/foundation/Transcript';
 import type {
   NexusFoundationChapter,
   NexusFoundationSectionWithQuiz,
@@ -45,9 +47,11 @@ export default function ChapterLearningView() {
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
+  const videoWrapperRef = useRef<HTMLDivElement>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
 
-  const fetchChapter = useCallback(async () => {
-    setLoading(true);
+  const fetchChapter = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
@@ -60,18 +64,21 @@ export default function ChapterLearningView() {
         const chapterData = await res.json();
         setData(chapterData);
 
-        // Determine starting section (resume or first incomplete)
-        if (chapterData.progress?.last_section_id) {
-          const idx = chapterData.sections.findIndex(
-            (s: any) => s.id === chapterData.progress.last_section_id
-          );
-          if (idx >= 0) setCurrentSectionIndex(idx);
-        } else {
-          // Find first section without a passing attempt
-          const firstIncomplete = chapterData.sections.findIndex(
-            (s: any) => !s.quiz_attempt?.passed
-          );
-          if (firstIncomplete >= 0) setCurrentSectionIndex(firstIncomplete);
+        // Only update section index on initial load, not silent refreshes
+        if (!silent) {
+          // Determine starting section (resume or first incomplete)
+          if (chapterData.progress?.last_section_id) {
+            const idx = chapterData.sections.findIndex(
+              (s: any) => s.id === chapterData.progress.last_section_id
+            );
+            if (idx >= 0) setCurrentSectionIndex(idx);
+          } else {
+            // Find first section without a passing attempt
+            const firstIncomplete = chapterData.sections.findIndex(
+              (s: any) => !s.quiz_attempt?.passed
+            );
+            if (firstIncomplete >= 0) setCurrentSectionIndex(firstIncomplete);
+          }
         }
 
         // Mark chapter as in_progress if not already
@@ -89,7 +96,7 @@ export default function ChapterLearningView() {
     } catch (err) {
       console.error('Failed to load chapter:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [chapterId, getToken]);
 
@@ -123,9 +130,81 @@ export default function ChapterLearningView() {
   }, [chapterId, getToken, currentSectionIndex, data]);
 
   const handleTimeUpdate = useCallback((seconds: number) => {
+    setCurrentVideoTime(seconds);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => saveProgress(seconds), 30000);
   }, [saveProgress]);
+
+  // Coursera-style video shrink using ONLY transform (no layout changes).
+  // Key: transform doesn't trigger reflow, so no feedback loop.
+  // We scale the entire wrapper with transformOrigin: top center,
+  // and use negative margin-bottom (set once per frame) to pull content up.
+  useEffect(() => {
+    const wrapper = videoWrapperRef.current;
+    if (!wrapper) return;
+
+    const MIN_SCALE = 0.5;
+    const SCROLL_RANGE = 300;
+    let lastScale = 1;
+    let ticking = false;
+    // Cache the wrapper's offset from document top and its full height
+    let wrapperTop = 0;
+    let wrapperHeight = 0;
+
+    const measure = () => {
+      // Temporarily reset transform to get true dimensions
+      const prevTransform = wrapper.style.transform;
+      const prevMargin = wrapper.style.marginBottom;
+      wrapper.style.transform = 'none';
+      wrapper.style.marginBottom = '0px';
+      wrapperTop = wrapper.getBoundingClientRect().top + window.scrollY;
+      wrapperHeight = wrapper.getBoundingClientRect().height;
+      wrapper.style.transform = prevTransform;
+      wrapper.style.marginBottom = prevMargin;
+    };
+
+    // Measure on init (after a frame so layout is settled)
+    requestAnimationFrame(measure);
+
+    const handleScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        // Use window.scrollY (absolute, not affected by layout changes)
+        const scrolledPast = window.scrollY - wrapperTop;
+
+        let scale: number;
+        if (scrolledPast <= 0) {
+          scale = 1;
+        } else {
+          const ratio = Math.min(scrolledPast / SCROLL_RANGE, 1);
+          scale = 1 - ratio * (1 - MIN_SCALE);
+        }
+
+        if (Math.abs(scale - lastScale) > 0.003) {
+          lastScale = scale;
+          // transform: only visual, no reflow
+          wrapper.style.transform = `scaleY(${scale})`;
+          // Negative margin pulls content up to fill the gap left by visual shrink
+          wrapper.style.marginBottom = `${-(1 - scale) * wrapperHeight}px`;
+        }
+        ticking = false;
+      });
+    };
+
+    const handleResize = () => {
+      measure();
+      // Re-apply current scale with new dimensions
+      wrapper.style.marginBottom = `${-(1 - lastScale) * wrapperHeight}px`;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [loading]);
 
   // Save position on unmount
   useEffect(() => {
@@ -175,19 +254,23 @@ export default function ChapterLearningView() {
     if (!res.ok) throw new Error('Failed to submit quiz');
     const result = await res.json();
 
-    // Refresh chapter data to update section statuses
-    await fetchChapter();
+    // Silently refresh chapter data to update section statuses (no loading skeleton)
+    await fetchChapter(true);
 
     return result;
   }, [data, quizSectionIndex, getToken, fetchChapter]);
 
   const handleQuizRetry = useCallback(() => {
     setQuizOpen(false);
-    // Seek back to section start
     const section = data?.sections[quizSectionIndex];
     if (section) {
       const player = (window as any).__foundationPlayer;
-      if (player?.seekTo) {
+      if (player) {
+        // Clear the triggered flag so quiz can re-trigger at section end
+        player.resetSectionTrigger?.(quizSectionIndex);
+        // Enable rewatch mode — prevents seeking past section end
+        player.setRewatchMode?.(true, section.end_timestamp_seconds);
+        // Seek to section start and play
         player.seekTo(section.start_timestamp_seconds);
         player.play();
       }
@@ -273,15 +356,44 @@ export default function ChapterLearningView() {
         </Box>
       </Box>
 
-      {/* Video Player */}
-      <VideoPlayer
-        videoId={chapter.youtube_video_id}
-        sections={sections}
-        currentSectionIndex={currentSectionIndex}
-        resumePosition={progress?.last_video_position_seconds}
-        onSectionEnd={handleSectionEnd}
-        onTimeUpdate={handleTimeUpdate}
-      />
+      {/* Sticky video — uses transform: scaleY() to shrink on scroll.
+          Transform doesn't cause reflow, so no feedback loop.
+          Negative margin-bottom pulls content up to fill the visual gap. */}
+      <Box
+        ref={videoWrapperRef}
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          overflow: 'hidden',
+          borderRadius: { xs: 0, sm: 2 },
+          bgcolor: '#000',
+          // Fixed 16:9 aspect ratio — never changes via JS
+          height: 0,
+          paddingTop: '56.25%',
+          transformOrigin: 'top center',
+          willChange: 'transform, margin-bottom',
+        }}
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          <VideoPlayer
+            videoId={chapter.youtube_video_id}
+            sections={sections}
+            currentSectionIndex={currentSectionIndex}
+            resumePosition={progress?.last_video_position_seconds}
+            onSectionEnd={handleSectionEnd}
+            onTimeUpdate={handleTimeUpdate}
+          />
+        </Box>
+      </Box>
 
       {/* Content below video */}
       <Box sx={{ px: { xs: 2, sm: 0 }, mt: 2 }}>
@@ -302,6 +414,20 @@ export default function ChapterLearningView() {
           />
         </Box>
 
+        {/* Transcript */}
+        <Transcript
+          chapterId={chapterId}
+          currentTime={currentVideoTime}
+          getToken={getToken}
+          onSeek={(seconds) => {
+            const player = (window as any).__foundationPlayer;
+            if (player?.seekTo) {
+              player.seekTo(seconds);
+              player.play();
+            }
+          }}
+        />
+
         {/* Note Editor for current section */}
         {currentSection && (
           <NoteEditor
@@ -311,6 +437,13 @@ export default function ChapterLearningView() {
             onSave={handleNoteSave}
           />
         )}
+
+        {/* Feedback: like/dislike + report issue */}
+        <ChapterFeedback
+          chapterId={chapterId}
+          sections={sections}
+          getToken={getToken}
+        />
       </Box>
 
       {/* Quiz Modal */}

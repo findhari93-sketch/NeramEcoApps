@@ -26,12 +26,12 @@ export async function generateMetadata({
 
   if (!course) {
     return {
-      title: 'Course Not Found - Neram Classes',
+      title: 'Course Not Found',
       description: 'The course you are looking for could not be found.',
     };
   }
 
-  const title = `${course.title} | Neram Classes`;
+  const title = course.title;
   const description = course.longDescription
     ? course.longDescription.slice(0, 160)
     : course.description;

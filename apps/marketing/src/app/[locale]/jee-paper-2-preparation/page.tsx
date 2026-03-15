@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'JEE Paper 2 Preparation Guide 2026 - B.Arch & B.Planning | Neram Classes',
+    title: 'JEE Paper 2 Preparation Guide 2026 - B.Arch & B.Planning',
     description: 'Complete JEE Main Paper 2 (B.Arch/B.Planning) 2026 preparation guide. Learn about exam pattern, syllabus, preparation strategy, and tips to crack JEE Paper 2.',
     keywords: 'JEE Paper 2 preparation, JEE B.Arch, JEE B.Planning, JEE Paper 2 syllabus, JEE Paper 2 tips',
     alternates: buildAlternates(locale, '/jee-paper-2-preparation'),

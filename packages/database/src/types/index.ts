@@ -58,7 +58,10 @@ export type LearningMode = 'hybrid' | 'online_only';
 export type SchoolType = 'private_school' | 'government_aided' | 'government_school';
 
 // Admin application management (migration 015)
-export type ContactedStatus = 'talked' | 'unreachable' | 'callback_scheduled' | 'dead_lead';
+export type ContactedStatus = 'talked' | 'unreachable' | 'callback_scheduled' | 'dead_lead' | 'irrelevant';
+
+// Account tier (computed, not stored) — used for avatar ring and CRM badges
+export type AccountTier = 'enrolled_student' | 'active_lead' | 'visitor';
 export type PaymentRecommendation = 'full' | 'installment';
 
 // Scholarship application status enum (migration 010)
@@ -121,6 +124,11 @@ export interface User extends Timestamps {
 
   // Preferences
   preferred_language: string;       // 'en' | 'ta' | 'hi' | 'kn' | 'ml'
+
+  // Classroom linking (admin links tools app user to Nexus classroom email)
+  linked_classroom_email: string | null;
+  linked_classroom_at: string | null;
+  linked_classroom_by: string | null;
 
   // Metadata
   last_login_at: string | null;
@@ -2396,7 +2404,40 @@ export type NotificationEventType =
   | 'direct_enrollment_completed'
   | 'ticket_created'
   | 'ticket_resolved'
-  | 'link_regeneration_requested';
+  | 'link_regeneration_requested'
+  | 'classroom_enrolled'
+  | 'batch_assigned'
+  | 'batch_changed'
+  | 'foundation_issue_resolved'
+  | 'foundation_issue_reported'
+  | 'foundation_issue_assigned'
+  | 'foundation_issue_in_progress'
+  | 'foundation_issue_delegated'
+  | 'classroom_access_requested';
+
+// Classroom access request types
+export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ClassroomAccessRequest {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string | null;
+  status: ClassroomAccessRequestStatus;
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Nexus settings (key-value store)
+export interface NexusSetting {
+  key: string;
+  value: unknown;
+  updated_by: string | null;
+  updated_at: string;
+}
 
 // Refund request enums & constants
 export type RefundRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -2818,6 +2859,7 @@ export interface UserJourney {
   updated_at: string;
   last_login_at: string | null;
   preferred_language: string;
+  linked_classroom_email: string | null;
 
   // Computed pipeline stage
   pipeline_stage: PipelineStage;
@@ -2898,6 +2940,7 @@ export interface UserJourneyListOptions {
   hasDemoRegistration?: boolean;
   contactedStatus?: ContactedStatus;
   isDeadLead?: boolean;
+  isIrrelevant?: boolean;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -4388,3 +4431,432 @@ export interface NexusFoundationSectionWithQuiz extends NexusFoundationSection {
   quiz_attempt: NexusFoundationQuizAttempt | null;
   note: NexusFoundationStudentNote | null;
 }
+
+// Foundation feedback & issues
+
+export type FoundationReactionType = 'like' | 'dislike';
+export type FoundationIssueStatus = 'open' | 'in_progress' | 'resolved';
+
+export interface NexusFoundationReaction {
+  id: string;
+  student_id: string;
+  chapter_id: string;
+  reaction: FoundationReactionType;
+  created_at: string;
+  updated_at: string;
+}
+
+export type FoundationIssuePriority = 'low' | 'medium' | 'high';
+
+export type FoundationIssueAction =
+  | 'created'
+  | 'assigned'
+  | 'accepted'
+  | 'delegated'
+  | 'returned'
+  | 'marked_in_progress'
+  | 'resolved'
+  | 'reopened'
+  | 'comment';
+
+export interface NexusFoundationIssue {
+  id: string;
+  student_id: string;
+  chapter_id: string;
+  section_id: string | null;
+  title: string;
+  description: string;
+  status: FoundationIssueStatus;
+  priority: FoundationIssuePriority;
+  assigned_to: string | null;
+  assigned_by: string | null;
+  assigned_at: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusFoundationIssueWithDetails extends NexusFoundationIssue {
+  student_name: string;
+  student_avatar: string | null;
+  chapter_title: string;
+  chapter_number: number;
+  section_title: string | null;
+  resolved_by_name: string | null;
+  assigned_to_name: string | null;
+  assigned_by_name: string | null;
+}
+
+export interface NexusFoundationIssueActivity {
+  id: string;
+  issue_id: string;
+  actor_id: string;
+  action: FoundationIssueAction;
+  target_user_id: string | null;
+  reason: string | null;
+  old_status: string | null;
+  new_status: string | null;
+  created_at: string;
+  // Joined fields
+  actor_name?: string;
+  target_user_name?: string;
+}
+
+export interface NexusFoundationReactionCounts {
+  chapter_id: string;
+  like_count: number;
+  dislike_count: number;
+}
+
+// Foundation transcript types
+export interface TranscriptEntry {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface NexusFoundationTranscript {
+  id: string;
+  chapter_id: string;
+  language: string;
+  entries: TranscriptEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
+// Foundation admin types (for teacher CMS)
+
+export interface NexusFoundationChapterInsert {
+  title: string;
+  description?: string | null;
+  youtube_video_id: string;
+  video_duration_seconds?: number | null;
+  chapter_number: number;
+  min_quiz_score_pct?: number;
+  is_published?: boolean;
+  created_by?: string | null;
+}
+
+export interface NexusFoundationChapterUpdate {
+  title?: string;
+  description?: string | null;
+  youtube_video_id?: string;
+  video_duration_seconds?: number | null;
+  chapter_number?: number;
+  min_quiz_score_pct?: number;
+  is_published?: boolean;
+}
+
+export interface NexusFoundationSectionInsert {
+  chapter_id: string;
+  title: string;
+  description?: string | null;
+  start_timestamp_seconds: number;
+  end_timestamp_seconds: number;
+  sort_order: number;
+}
+
+export interface NexusFoundationSectionUpdate {
+  title?: string;
+  description?: string | null;
+  start_timestamp_seconds?: number;
+  end_timestamp_seconds?: number;
+  sort_order?: number;
+}
+
+export interface NexusFoundationQuizQuestionInsert {
+  section_id: string;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: 'a' | 'b' | 'c' | 'd';
+  explanation?: string | null;
+  sort_order: number;
+}
+
+export interface NexusFoundationQuizQuestionUpdate {
+  question_text?: string;
+  option_a?: string;
+  option_b?: string;
+  option_c?: string;
+  option_d?: string;
+  correct_option?: 'a' | 'b' | 'c' | 'd';
+  explanation?: string | null;
+  sort_order?: number;
+}
+
+export interface NexusFoundationChapterAdmin extends NexusFoundationChapter {
+  section_count: number;
+  question_count: number;
+}
+
+// ============================================
+// QUESTION BANK (PYQ Learning System)
+// ============================================
+
+// QB Enums
+export type QBQuestionFormat = 'MCQ' | 'NUMERICAL' | 'DRAWING_PROMPT' | 'IMAGE_BASED';
+export type QBDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
+export type QBExamType = 'JEE_PAPER_2' | 'NATA';
+export type QBExamRelevance = 'JEE' | 'NATA' | 'BOTH';
+export type QBAttemptMode = 'practice' | 'year_paper';
+
+export type QBCategory =
+  | 'mathematics'
+  | 'history_of_architecture'
+  | 'general_knowledge'
+  | 'aptitude'
+  | 'drawing'
+  | 'puzzle'
+  | 'perspective'
+  | 'building_materials'
+  | 'building_services'
+  | 'planning'
+  | 'sustainability'
+  | 'famous_architects'
+  | 'current_affairs'
+  | 'visualization_3d';
+
+// QB Interfaces
+
+export interface NexusQBTopic {
+  id: string;
+  name: string;
+  slug: string;
+  parent_id: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  children?: NexusQBTopic[];
+}
+
+export interface NexusQBQuestionOption {
+  id: string;
+  text: string;
+  image_url?: string;
+}
+
+export interface NexusQBQuestion {
+  id: string;
+  question_text: string | null;
+  question_image_url: string | null;
+  question_format: QBQuestionFormat;
+  options: NexusQBQuestionOption[] | null;
+  correct_answer: string;
+  answer_tolerance: number | null;
+  explanation_brief: string;
+  explanation_detailed: string | null;
+  solution_image_url: string | null;
+  solution_video_url: string | null;
+  difficulty: QBDifficulty;
+  exam_relevance: QBExamRelevance;
+  categories: string[];
+  topic_id: string | null;
+  sub_topic: string | null;
+  repeat_group_id: string | null;
+  original_paper_id: string | null;
+  original_paper_page: number | null;
+  display_order: number | null;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusQBQuestionSource {
+  id: string;
+  question_id: string;
+  exam_type: QBExamType;
+  year: number;
+  session: string | null;
+  question_number: number | null;
+  created_at: string;
+}
+
+export interface NexusQBStudentAttempt {
+  id: string;
+  student_id: string;
+  question_id: string;
+  selected_answer: string;
+  is_correct: boolean;
+  time_spent_seconds: number | null;
+  mode: QBAttemptMode;
+  created_at: string;
+}
+
+export interface NexusQBStudyMark {
+  id: string;
+  student_id: string;
+  question_id: string;
+  created_at: string;
+}
+
+export interface NexusQBSavedPreset {
+  id: string;
+  student_id: string;
+  name: string;
+  filters: QBFilterState;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusQBOriginalPaper {
+  id: string;
+  exam_type: QBExamType;
+  year: number;
+  session: string | null;
+  pdf_url: string;
+  total_questions: number | null;
+  total_marks: number | null;
+  duration_minutes: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface NexusQBClassroomLink {
+  id: string;
+  classroom_id: string;
+  is_active: boolean;
+  enabled_at: string;
+  enabled_by: string | null;
+}
+
+// QB Joined/Computed Types
+
+export interface QBAttemptSummary {
+  total_attempts: number;
+  last_attempt_at: string | null;
+  last_was_correct: boolean | null;
+  best_result: boolean;
+}
+
+export interface NexusQBQuestionWithSources extends NexusQBQuestion {
+  sources: NexusQBQuestionSource[];
+  topic: NexusQBTopic | null;
+}
+
+export interface NexusQBQuestionListItem extends NexusQBQuestion {
+  sources: NexusQBQuestionSource[];
+  topic: NexusQBTopic | null;
+  attempt_summary: QBAttemptSummary | null;
+}
+
+export interface NexusQBQuestionDetail extends NexusQBQuestionWithSources {
+  attempts: NexusQBStudentAttempt[];
+  repeat_sources: NexusQBQuestionSource[];
+  is_studied: boolean;
+}
+
+// QB Filter & Stats Types
+
+export interface QBFilterState {
+  exam_relevance?: QBExamRelevance;
+  exam_years?: number[];
+  exam_sessions?: string[];
+  topic_ids?: string[];
+  categories?: string[];
+  difficulty?: QBDifficulty[];
+  question_format?: QBQuestionFormat[];
+  attempt_status?: 'all' | 'unattempted' | 'correct' | 'incorrect';
+  search_text?: string;
+}
+
+export interface QBProgressStats {
+  total_questions: number;
+  attempted_count: number;
+  correct_count: number;
+  incorrect_count: number;
+  accuracy_percentage: number;
+  by_category: Record<string, { attempted: number; correct: number; total: number }>;
+  by_difficulty: Record<string, { attempted: number; correct: number; total: number }>;
+}
+
+// QB Input Types
+
+export interface NexusQBQuestionInsert {
+  question_text?: string | null;
+  question_image_url?: string | null;
+  question_format: QBQuestionFormat;
+  options?: NexusQBQuestionOption[] | null;
+  correct_answer: string;
+  answer_tolerance?: number | null;
+  explanation_brief: string;
+  explanation_detailed?: string | null;
+  solution_image_url?: string | null;
+  solution_video_url?: string | null;
+  difficulty: QBDifficulty;
+  exam_relevance: QBExamRelevance;
+  categories: string[];
+  topic_id?: string | null;
+  sub_topic?: string | null;
+  repeat_group_id?: string | null;
+  original_paper_id?: string | null;
+  original_paper_page?: number | null;
+  display_order?: number | null;
+  created_by?: string | null;
+}
+
+export interface NexusQBQuestionUpdate {
+  question_text?: string | null;
+  question_image_url?: string | null;
+  question_format?: QBQuestionFormat;
+  options?: NexusQBQuestionOption[] | null;
+  correct_answer?: string;
+  answer_tolerance?: number | null;
+  explanation_brief?: string;
+  explanation_detailed?: string | null;
+  solution_image_url?: string | null;
+  solution_video_url?: string | null;
+  difficulty?: QBDifficulty;
+  exam_relevance?: QBExamRelevance;
+  categories?: string[];
+  topic_id?: string | null;
+  sub_topic?: string | null;
+  repeat_group_id?: string | null;
+  is_active?: boolean;
+}
+
+export interface NexusQBQuestionSourceInsert {
+  question_id: string;
+  exam_type: QBExamType;
+  year: number;
+  session?: string | null;
+  question_number?: number | null;
+}
+
+// QB Constants
+
+export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
+  mathematics: 'Mathematics',
+  history_of_architecture: 'History of Architecture',
+  general_knowledge: 'General Knowledge',
+  aptitude: 'Aptitude',
+  drawing: 'Drawing',
+  puzzle: 'Puzzles & Logic',
+  perspective: 'Perspective',
+  building_materials: 'Building Materials',
+  building_services: 'Building Services',
+  planning: 'Planning & Urban Design',
+  sustainability: 'Sustainability',
+  famous_architects: 'Famous Architects',
+  current_affairs: 'Current Affairs',
+  visualization_3d: '3D Visualization',
+};
+
+export const QB_CATEGORIES: QBCategory[] = Object.keys(QB_CATEGORY_LABELS) as QBCategory[];
+
+export const QB_DIFFICULTY_COLORS: Record<QBDifficulty, string> = {
+  EASY: '#22C55E',
+  MEDIUM: '#F59E0B',
+  HARD: '#EF4444',
+};
+
+export const QB_EXAM_TYPE_LABELS: Record<QBExamType, string> = {
+  JEE_PAPER_2: 'JEE Paper 2',
+  NATA: 'NATA',
+};

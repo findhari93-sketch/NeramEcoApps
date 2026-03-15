@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import NoClassroomWelcome from '@/components/NoClassroomWelcome';
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -21,7 +22,7 @@ export default function RoleGuard({
   redirectTo,
 }: RoleGuardProps) {
   const router = useRouter();
-  const { user, nexusRole, loading } = useNexusAuthContext();
+  const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
@@ -60,6 +61,11 @@ export default function RoleGuard({
 
   if (!user || !nexusRole || !allowedRoles.includes(nexusRole)) {
     return null;
+  }
+
+  // User is authenticated but has no classrooms — show welcome/onboarding page
+  if (classrooms.length === 0) {
+    return <NoClassroomWelcome />;
   }
 
   return <>{children}</>;

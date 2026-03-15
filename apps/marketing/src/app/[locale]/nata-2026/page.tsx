@@ -37,7 +37,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   return {
     title:
-      'NATA 2026 — Complete Exam Guide, Dates, Syllabus, Eligibility & Free Tools | Neram Classes',
+      'NATA 2026 — Complete Exam Guide, Dates, Syllabus, Eligibility & Free Tools',
     description:
       'Everything about NATA 2026 exam — eligibility, syllabus, exam pattern, fee structure, exam centers, how to apply, cutoff calculator & free preparation tools.',
     keywords:

@@ -43,6 +43,7 @@ export async function listUserJourneys(
     hasDemoRegistration,
     contactedStatus,
     isDeadLead,
+    isIrrelevant,
     dateFrom,
     dateTo,
     limit = 25,
@@ -92,6 +93,10 @@ export async function listUserJourneys(
 
   if (isDeadLead) {
     query = query.eq('contacted_status', 'dead_lead');
+  }
+
+  if (isIrrelevant) {
+    query = query.eq('contacted_status', 'irrelevant');
   }
 
   if (dateFrom) {
@@ -875,6 +880,79 @@ export async function markUserAsDeadLead(
     })
     .eq('user_id', userId)
     .in('status', ['pending', 'scheduled', 'attempted']);
+}
+
+/**
+ * Mark a user as irrelevant (casual browser, not in pipeline).
+ */
+export async function markUserAsIrrelevant(
+  userId: string,
+  adminId: string,
+  reason: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Update lead_profiles
+  await (supabase as any)
+    .from('lead_profiles')
+    .update({
+      contacted_status: 'irrelevant',
+      contacted_at: new Date().toISOString(),
+      contacted_by: adminId,
+    })
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+
+  // Close any open callback_requests
+  await (supabase as any)
+    .from('callback_requests')
+    .update({
+      status: 'cancelled',
+      call_notes: `Marked irrelevant: ${reason}`,
+    })
+    .eq('user_id', userId)
+    .in('status', ['pending', 'scheduled', 'attempted']);
+}
+
+/**
+ * Link a tools app user to their Nexus classroom email.
+ */
+export async function linkUserToClassroom(
+  userId: string,
+  classroomEmail: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  await (supabase as any)
+    .from('users')
+    .update({
+      linked_classroom_email: classroomEmail,
+      linked_classroom_at: new Date().toISOString(),
+      linked_classroom_by: adminId,
+    })
+    .eq('id', userId);
+}
+
+/**
+ * Unlink a user from their Nexus classroom email.
+ */
+export async function unlinkUserFromClassroom(
+  userId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  await (supabase as any)
+    .from('users')
+    .update({
+      linked_classroom_email: null,
+      linked_classroom_at: null,
+      linked_classroom_by: null,
+    })
+    .eq('id', userId);
 }
 
 /**

@@ -7,3 +7,7 @@ export * from './attendance';
 export * from './checklist';
 export * from './drawings';
 export * from './foundation';
+export * from './foundation-admin';
+export * from './question-bank';
+export * from './classroom-access';
+export * from './settings';

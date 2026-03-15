@@ -83,6 +83,7 @@ export {
   notifyNewCallback,
   notifyDemoRegistration,
   notifyContactMessageReceived,
+  notifyClassroomAccessRequested,
 } from './services/notifications';
 
 // Utils

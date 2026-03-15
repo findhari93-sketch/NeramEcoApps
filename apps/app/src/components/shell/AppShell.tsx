@@ -7,6 +7,7 @@ import AppTopBar from './AppTopBar';
 import AppSidebar from './AppSidebar';
 import MobileBottomNav from './MobileBottomNav';
 import PendingEnrollmentBanner from '@/components/PendingEnrollmentBanner';
+import type { AccountTier } from '@neram/database';
 
 const TRANSITION = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
 
@@ -18,6 +19,7 @@ interface AppShellProps {
   phoneVerified: boolean;
   onboardingCompleted: boolean;
   onSignOut: () => void;
+  accountTier: AccountTier;
 }
 
 export default function AppShell({
@@ -27,6 +29,7 @@ export default function AppShell({
   phoneVerified,
   onboardingCompleted,
   onSignOut,
+  accountTier,
 }: AppShellProps) {
   const { sidebarWidth } = useSidebar();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,6 +61,7 @@ export default function AppShell({
           userAvatar={userAvatar}
           phoneVerified={phoneVerified}
           onSignOut={onSignOut}
+          accountTier={accountTier}
           onItemClick={() => setMobileOpen(false)}
           forceExpanded
         />
@@ -86,6 +90,7 @@ export default function AppShell({
           userAvatar={userAvatar}
           phoneVerified={phoneVerified}
           onSignOut={onSignOut}
+          accountTier={accountTier}
         />
       </Drawer>
 

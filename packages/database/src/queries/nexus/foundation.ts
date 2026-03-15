@@ -9,6 +9,17 @@ import type {
   NexusFoundationStudentNote,
   NexusFoundationSectionWithQuiz,
   FoundationChapterStatus,
+  NexusFoundationReaction,
+  NexusFoundationReactionCounts,
+  NexusFoundationIssue,
+  NexusFoundationIssueWithDetails,
+  NexusFoundationIssueActivity,
+  FoundationReactionType,
+  FoundationIssueStatus,
+  FoundationIssueAction,
+  FoundationIssuePriority,
+  NexusFoundationTranscript,
+  TranscriptEntry,
 } from '../../types';
 
 // ============================================
@@ -540,4 +551,523 @@ export async function getStudentFoundationDetail(
 ) {
   // Reuse the existing function
   return getFoundationChaptersWithProgress(studentId, client);
+}
+
+// ============================================
+// REACTIONS (like/dislike)
+// ============================================
+
+export async function getChapterReaction(
+  studentId: string,
+  chapterId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationReaction | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from('nexus_foundation_reactions')
+    .select('*')
+    .eq('student_id', studentId)
+    .eq('chapter_id', chapterId)
+    .maybeSingle();
+  return data;
+}
+
+export async function upsertChapterReaction(
+  studentId: string,
+  chapterId: string,
+  reaction: FoundationReactionType,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationReaction> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_reactions')
+    .upsert(
+      { student_id: studentId, chapter_id: chapterId, reaction, updated_at: new Date().toISOString() },
+      { onConflict: 'student_id,chapter_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removeChapterReaction(
+  studentId: string,
+  chapterId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  await supabase
+    .from('nexus_foundation_reactions')
+    .delete()
+    .eq('student_id', studentId)
+    .eq('chapter_id', chapterId);
+}
+
+// ============================================
+// REACTION COUNTS (for chapter feedback stats)
+// ============================================
+
+export async function getChapterReactionCounts(
+  chapterIds: string[],
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationReactionCounts[]> {
+  if (chapterIds.length === 0) return [];
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_reactions')
+    .select('chapter_id, reaction')
+    .in('chapter_id', chapterIds);
+  if (error) throw error;
+
+  const countsMap = new Map<string, { like_count: number; dislike_count: number }>();
+  for (const id of chapterIds) {
+    countsMap.set(id, { like_count: 0, dislike_count: 0 });
+  }
+  for (const row of data || []) {
+    const entry = countsMap.get(row.chapter_id);
+    if (entry) {
+      if (row.reaction === 'like') entry.like_count++;
+      else if (row.reaction === 'dislike') entry.dislike_count++;
+    }
+  }
+  return chapterIds.map(id => ({
+    chapter_id: id,
+    ...(countsMap.get(id) || { like_count: 0, dislike_count: 0 }),
+  }));
+}
+
+export async function getSingleChapterReactionCounts(
+  chapterId: string,
+  client?: TypedSupabaseClient
+): Promise<{ like_count: number; dislike_count: number }> {
+  const results = await getChapterReactionCounts([chapterId], client);
+  return results[0] || { like_count: 0, dislike_count: 0 };
+}
+
+export async function getChapterReactionDetails(
+  chapterId: string,
+  client?: TypedSupabaseClient
+): Promise<Array<{ student_id: string; student_name: string; reaction: string; created_at: string }>> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_reactions')
+    .select('student_id, reaction, created_at, student:users!nexus_foundation_reactions_student_id_fkey(name)')
+    .eq('chapter_id', chapterId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    student_id: row.student_id,
+    student_name: row.student?.name || 'Unknown',
+    reaction: row.reaction,
+    created_at: row.created_at,
+  }));
+}
+
+// ============================================
+// ISSUE REPORTS
+// ============================================
+
+const ISSUE_SELECT_WITH_DETAILS = `
+  *,
+  student:users!nexus_foundation_issues_student_id_fkey(name, avatar_url),
+  chapter:nexus_foundation_chapters!nexus_foundation_issues_chapter_id_fkey(title, chapter_number),
+  section:nexus_foundation_sections!nexus_foundation_issues_section_id_fkey(title),
+  resolver:users!nexus_foundation_issues_resolved_by_fkey(name),
+  assignee:users!nexus_foundation_issues_assigned_to_fkey(name),
+  assigner:users!nexus_foundation_issues_assigned_by_fkey(name)
+`;
+
+function mapIssueRow(row: any): NexusFoundationIssueWithDetails {
+  return {
+    ...row,
+    student_name: row.student?.name || 'Unknown',
+    student_avatar: row.student?.avatar_url || null,
+    chapter_title: row.chapter?.title || '',
+    chapter_number: row.chapter?.chapter_number || 0,
+    section_title: row.section?.title || null,
+    resolved_by_name: row.resolver?.name || null,
+    assigned_to_name: row.assignee?.name || null,
+    assigned_by_name: row.assigner?.name || null,
+    student: undefined,
+    chapter: undefined,
+    section: undefined,
+    resolver: undefined,
+    assignee: undefined,
+    assigner: undefined,
+  };
+}
+
+export async function createFoundationIssue(
+  data: {
+    student_id: string;
+    chapter_id: string;
+    section_id?: string;
+    title: string;
+    description: string;
+  },
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: issue, error } = await supabase
+    .from('nexus_foundation_issues')
+    .insert({
+      student_id: data.student_id,
+      chapter_id: data.chapter_id,
+      section_id: data.section_id || null,
+      title: data.title,
+      description: data.description,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  // Log the creation activity
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issue.id,
+    actor_id: data.student_id,
+    action: 'created',
+    new_status: 'open',
+  });
+
+  return issue;
+}
+
+export async function getStudentFoundationIssues(
+  studentId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssueWithDetails[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .select(ISSUE_SELECT_WITH_DETAILS)
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapIssueRow);
+}
+
+export async function getAllFoundationIssues(
+  filters?: { status?: FoundationIssueStatus; assigned_to?: string },
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssueWithDetails[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let query = supabase
+    .from('nexus_foundation_issues')
+    .select(ISSUE_SELECT_WITH_DETAILS)
+    .order('created_at', { ascending: false });
+
+  if (filters?.status) {
+    query = query.eq('status', filters.status);
+  }
+  if (filters?.assigned_to) {
+    query = query.eq('assigned_to', filters.assigned_to);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map(mapIssueRow);
+}
+
+export async function getFoundationIssueById(
+  issueId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssueWithDetails> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .select(ISSUE_SELECT_WITH_DETAILS)
+    .eq('id', issueId)
+    .single();
+  if (error) throw error;
+  return mapIssueRow(data);
+}
+
+export async function assignFoundationIssue(
+  issueId: string,
+  assignedTo: string,
+  assignedBy: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      assigned_to: assignedTo,
+      assigned_by: assignedBy,
+      assigned_at: new Date().toISOString(),
+      status: 'in_progress' as FoundationIssueStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: assignedBy,
+    action: 'assigned',
+    target_user_id: assignedTo,
+    old_status: 'open',
+    new_status: 'in_progress',
+  });
+
+  return data;
+}
+
+export async function delegateFoundationIssue(
+  issueId: string,
+  delegatedTo: string,
+  delegatedBy: string,
+  reason: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      assigned_to: delegatedTo,
+      assigned_by: delegatedBy,
+      assigned_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: delegatedBy,
+    action: 'delegated',
+    target_user_id: delegatedTo,
+    reason,
+  });
+
+  return data;
+}
+
+export async function returnFoundationIssue(
+  issueId: string,
+  returnedBy: string,
+  reason: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      assigned_to: null,
+      assigned_by: null,
+      assigned_at: null,
+      status: 'open' as FoundationIssueStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: returnedBy,
+    action: 'returned',
+    reason,
+    old_status: 'in_progress',
+    new_status: 'open',
+  });
+
+  return data;
+}
+
+export async function resolveFoundationIssue(
+  issueId: string,
+  resolvedBy: string,
+  resolutionNote: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: 'resolved' as FoundationIssueStatus,
+      resolved_by: resolvedBy,
+      resolved_at: new Date().toISOString(),
+      resolution_note: resolutionNote,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: resolvedBy,
+    action: 'resolved',
+    old_status: 'in_progress',
+    new_status: 'resolved',
+    reason: resolutionNote,
+  });
+
+  return data;
+}
+
+export async function updateFoundationIssueStatus(
+  issueId: string,
+  status: FoundationIssueStatus,
+  actorId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get current status for activity log
+  const { data: current } = await supabase
+    .from('nexus_foundation_issues')
+    .select('status')
+    .eq('id', issueId)
+    .single();
+
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  const action: FoundationIssueAction = status === 'in_progress' ? 'marked_in_progress' : status === 'open' ? 'reopened' : 'resolved';
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: actorId,
+    action,
+    old_status: current?.status || null,
+    new_status: status,
+  });
+
+  return data;
+}
+
+export async function updateFoundationIssuePriority(
+  issueId: string,
+  priority: FoundationIssuePriority,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({ priority, updated_at: new Date().toISOString() })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
+// ISSUE ACTIVITY LOG
+// ============================================
+
+export async function getIssueActivityLog(
+  issueId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssueActivity[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issue_activity')
+    .select(`
+      *,
+      actor:users!nexus_foundation_issue_activity_actor_id_fkey(name),
+      target:users!nexus_foundation_issue_activity_target_user_id_fkey(name)
+    `)
+    .eq('issue_id', issueId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    ...row,
+    actor_name: row.actor?.name || 'Unknown',
+    target_user_name: row.target?.name || null,
+    actor: undefined,
+    target: undefined,
+  }));
+}
+
+export async function addIssueComment(
+  issueId: string,
+  actorId: string,
+  comment: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssueActivity> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issue_activity')
+    .insert({
+      issue_id: issueId,
+      actor_id: actorId,
+      action: 'comment',
+      reason: comment,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
+// TRANSCRIPTS
+// ============================================
+
+export async function getChapterTranscript(
+  chapterId: string,
+  language: string = 'en',
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationTranscript | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_transcripts')
+    .select('*')
+    .eq('chapter_id', chapterId)
+    .eq('language', language)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getChapterTranscriptLanguages(
+  chapterId: string,
+  client?: TypedSupabaseClient
+): Promise<string[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_transcripts')
+    .select('language')
+    .eq('chapter_id', chapterId);
+  if (error) throw error;
+  return (data || []).map((r: any) => r.language);
+}
+
+export async function upsertChapterTranscript(
+  chapterId: string,
+  language: string,
+  entries: TranscriptEntry[],
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationTranscript> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_transcripts')
+    .upsert(
+      {
+        chapter_id: chapterId,
+        language,
+        entries: entries as any,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'chapter_id,language' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }

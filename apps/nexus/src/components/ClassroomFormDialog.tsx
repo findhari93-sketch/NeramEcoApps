@@ -79,7 +79,7 @@ export default function ClassroomFormDialog({
             inputProps={{ style: { minHeight: 24 } }}
           />
           <FormControl fullWidth>
-            <InputLabel>Type</InputLabel>
+            <InputLabel shrink>Type</InputLabel>
             <Select
               value={type}
               label="Type"

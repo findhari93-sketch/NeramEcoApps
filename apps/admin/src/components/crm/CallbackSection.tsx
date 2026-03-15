@@ -105,6 +105,7 @@ export default function CallbackSection({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
   const [deadLeadOpen, setDeadLeadOpen] = useState(false);
+  const [irrelevantOpen, setIrrelevantOpen] = useState(false);
 
   // Form states
   const [scheduledAt, setScheduledAt] = useState('');
@@ -114,11 +115,13 @@ export default function CallbackSection({
   const [rescheduledTo, setRescheduledTo] = useState('');
   const [selectedCallbackId, setSelectedCallbackId] = useState('');
   const [deadLeadReason, setDeadLeadReason] = useState('');
+  const [irrelevantReason, setIrrelevantReason] = useState('');
 
   // Loading states
   const [scheduling, setScheduling] = useState(false);
   const [recording, setRecording] = useState(false);
   const [markingDead, setMarkingDead] = useState(false);
+  const [markingIrrelevant, setMarkingIrrelevant] = useState(false);
   const [error, setError] = useState('');
 
   const userIsDeadLead = isDeadLead(callbackRequests);
@@ -220,6 +223,30 @@ export default function CallbackSection({
       setError(err.message);
     } finally {
       setMarkingDead(false);
+    }
+  };
+
+  const handleMarkIrrelevant = async () => {
+    if (!irrelevantReason.trim()) return;
+    setMarkingIrrelevant(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/crm/users/${detail.user.id}/irrelevant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: irrelevantReason, adminId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to mark as irrelevant');
+      }
+      setIrrelevantOpen(false);
+      setIrrelevantReason('');
+      onStatusChange();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setMarkingIrrelevant(false);
     }
   };
 
@@ -385,6 +412,25 @@ export default function CallbackSection({
               }}
             >
               Mark as Dead Lead
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              color="warning"
+              startIcon={<BlockIcon sx={{ fontSize: 16 }} />}
+              onClick={() => {
+                setIrrelevantReason('');
+                setError('');
+                setIrrelevantOpen(true);
+              }}
+              sx={{
+                borderRadius: 0.75,
+                textTransform: 'none',
+                fontWeight: 500,
+                px: 2,
+              }}
+            >
+              Mark as Irrelevant
             </Button>
           </Stack>
         )}
@@ -808,6 +854,55 @@ export default function CallbackSection({
           >
             {markingDead ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
             {markingDead ? 'Marking...' : 'Confirm Dead Lead'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ===== Mark as Irrelevant Dialog ===== */}
+      <Dialog
+        open={irrelevantOpen}
+        onClose={() => setIrrelevantOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: 16, color: 'warning.main' }}>
+          Mark as Irrelevant
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2, borderRadius: 0.75 }}>
+            This will mark the user as irrelevant (casual browser, not part of the pipeline) and close
+            any open callback requests.
+          </Alert>
+          <TextField
+            label="Reason"
+            value={irrelevantReason}
+            onChange={(e) => setIrrelevantReason(e.target.value)}
+            fullWidth
+            size="small"
+            multiline
+            rows={2}
+            placeholder="Why is this user irrelevant?"
+            required
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setIrrelevantOpen(false)}
+            size="small"
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleMarkIrrelevant}
+            disabled={!irrelevantReason.trim() || markingIrrelevant}
+            size="small"
+            sx={{ textTransform: 'none', boxShadow: 'none' }}
+          >
+            {markingIrrelevant ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+            {markingIrrelevant ? 'Marking...' : 'Confirm Irrelevant'}
           </Button>
         </DialogActions>
       </Dialog>

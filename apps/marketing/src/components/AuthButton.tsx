@@ -20,6 +20,7 @@ import {
 } from '@neram/ui';
 import { useFirebaseAuth, firebaseSignOut, signInWithCustomToken } from '@neram/auth';
 import { useGoToApp } from '@/hooks/useGoToApp';
+import { useAccountTier } from '@/contexts/AccountTierContext';
 import { usePathname, useRouter } from '@/i18n/routing';
 import { useParams } from 'next/navigation';
 import { locales, localeLabels, type Locale } from '@/i18n';
@@ -27,9 +28,12 @@ import { locales, localeLabels, type Locale } from '@/i18n';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 // Inner component that uses useSearchParams
+const GOLD_GRADIENT = 'linear-gradient(135deg, #FFD700, #FFA000, #FFD700)';
+
 function AuthButtonInner() {
   const { user, loading } = useFirebaseAuth();
   const { goToApp } = useGoToApp();
+  const accountTier = useAccountTier();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
@@ -166,25 +170,69 @@ function AuthButtonInner() {
   }
 
   // Authenticated - show avatar menu
+  const isEnrolled = accountTier === 'enrolled_student';
+
   return (
     <Box sx={{ ml: 2 }}>
-      <Avatar
-        src={user.avatar || undefined}
-        alt={user.name || user.email || 'User'}
-        imgProps={{ referrerPolicy: 'no-referrer' }}
-        onClick={handleMenuOpen}
-        sx={{
-          cursor: 'pointer',
-          width: 36,
-          height: 36,
-          bgcolor: 'secondary.main',
-          '&:hover': {
-            boxShadow: 2,
-          },
-        }}
-      >
-        {user.name?.[0] || user.email?.[0] || 'U'}
-      </Avatar>
+      {isEnrolled ? (
+        <Box
+          onClick={handleMenuOpen}
+          sx={{
+            cursor: 'pointer',
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            background: GOLD_GRADIENT,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            '&:hover': { boxShadow: 2 },
+          }}
+        >
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              bgcolor: 'background.paper',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Avatar
+              src={user.avatar || undefined}
+              alt={user.name || user.email || 'User'}
+              imgProps={{ referrerPolicy: 'no-referrer' }}
+              sx={{
+                width: 32,
+                height: 32,
+                bgcolor: 'secondary.main',
+              }}
+            >
+              {user.name?.[0] || user.email?.[0] || 'U'}
+            </Avatar>
+          </Box>
+        </Box>
+      ) : (
+        <Avatar
+          src={user.avatar || undefined}
+          alt={user.name || user.email || 'User'}
+          imgProps={{ referrerPolicy: 'no-referrer' }}
+          onClick={handleMenuOpen}
+          sx={{
+            cursor: 'pointer',
+            width: 36,
+            height: 36,
+            bgcolor: 'secondary.main',
+            '&:hover': {
+              boxShadow: 2,
+            },
+          }}
+        >
+          {user.name?.[0] || user.email?.[0] || 'U'}
+        </Avatar>
+      )}
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}

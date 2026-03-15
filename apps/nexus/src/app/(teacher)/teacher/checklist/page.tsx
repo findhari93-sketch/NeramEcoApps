@@ -31,6 +31,9 @@ import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 import React from 'react';
@@ -82,6 +85,7 @@ const SlideTransition = React.forwardRef(function Transition(props: any, ref: Re
 
 export default function TeacherChecklist() {
   const theme = useTheme();
+  const router = useRouter();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { activeClassroom, getToken } = useNexusAuthContext();
   const [items, setItems] = useState<ChecklistItem[]>([]);
@@ -197,6 +201,11 @@ export default function TeacherChecklist() {
     return acc;
   }, {});
 
+  // Ensure aptitude category always exists (for Foundation module)
+  if (!groupedItems['aptitude']) {
+    groupedItems['aptitude'] = [];
+  }
+
   // Overall stats
   const totalItems = items.length;
   const fullyCompleted = items.filter((i) => i.total_students > 0 && i.completed_count === i.total_students).length;
@@ -253,7 +262,7 @@ export default function TeacherChecklist() {
             <Skeleton key={i} variant="rounded" height={80} sx={{ borderRadius: 2.5 }} />
           ))}
         </Box>
-      ) : totalItems === 0 ? (
+      ) : totalItems === 0 && Object.keys(groupedItems).length === 0 ? (
         <Paper
           elevation={0}
           sx={{
@@ -318,18 +327,80 @@ export default function TeacherChecklist() {
                     <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1, color: config.color }}>
                       {config.label}
                     </Typography>
-                    <Chip
-                      label={`${categoryCompleted}/${categoryItems.length}`}
-                      size="small"
-                      sx={{
-                        height: 22,
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        bgcolor: alpha(config.color, 0.08),
-                        color: config.color,
-                      }}
-                    />
+                    {categoryItems.length > 0 && (
+                      <Chip
+                        label={`${categoryCompleted}/${categoryItems.length}`}
+                        size="small"
+                        sx={{
+                          height: 22,
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          bgcolor: alpha(config.color, 0.08),
+                          color: config.color,
+                        }}
+                      />
+                    )}
                   </Box>
+
+                  {/* Foundation Module (inside Aptitude) */}
+                  {category === 'aptitude' && (
+                    <Paper
+                      elevation={0}
+                      onClick={() => router.push('/teacher/foundation')}
+                      sx={{
+                        p: 2,
+                        mb: 1,
+                        borderRadius: 2.5,
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${alpha(theme.palette.primary.main, 0.01)} 100%)`,
+                        cursor: 'pointer',
+                        transition: 'all 200ms ease',
+                        '&:hover': { borderColor: alpha(theme.palette.primary.main, 0.4) },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 2,
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <MenuBookOutlinedIcon sx={{ fontSize: '1.2rem', color: theme.palette.primary.main }} />
+                        </Box>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            Foundation Module
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            Track student progress &amp; manage content
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<SettingsOutlinedIcon sx={{ fontSize: '0.9rem !important' }} />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push('/teacher/foundation/manage');
+                          }}
+                          sx={{
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            fontSize: '0.75rem',
+                            minHeight: 32,
+                          }}
+                        >
+                          Manage
+                        </Button>
+                      </Box>
+                    </Paper>
+                  )}
 
                   {/* Category Items */}
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

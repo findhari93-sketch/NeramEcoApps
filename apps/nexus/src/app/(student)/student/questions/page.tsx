@@ -284,6 +284,7 @@ export default function StudentQuestions() {
             size="small"
             fullWidth
             select
+            InputLabelProps={{ shrink: true }}
             sx={{ mb: 1.5 }}
           >
             {DIFFICULTY_OPTIONS.map((d) => (

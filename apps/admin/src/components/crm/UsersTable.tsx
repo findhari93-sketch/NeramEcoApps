@@ -124,19 +124,60 @@ export default function UsersTable({
         enableColumnFilter: false,
         Cell: ({ row }) => (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0 }}>
-            <Avatar
-              src={row.original.avatar_url || undefined}
-              sx={{
-                width: 28,
-                height: 28,
-                fontSize: 11,
-                fontWeight: 600,
-                bgcolor: row.original.avatar_url ? 'transparent' : 'primary.light',
-                color: 'primary.contrastText',
-              }}
-            >
-              {row.original.name?.charAt(0)?.toUpperCase() || '?'}
-            </Avatar>
+            {(row.original.pipeline_stage === 'enrolled' || row.original.linked_classroom_email) ? (
+              <Box
+                sx={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #FFD700, #FFA000, #FFD700)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    bgcolor: 'background.paper',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Avatar
+                    src={row.original.avatar_url || undefined}
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      bgcolor: row.original.avatar_url ? 'transparent' : 'primary.light',
+                      color: 'primary.contrastText',
+                    }}
+                  >
+                    {row.original.name?.charAt(0)?.toUpperCase() || '?'}
+                  </Avatar>
+                </Box>
+              </Box>
+            ) : (
+              <Avatar
+                src={row.original.avatar_url || undefined}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  bgcolor: row.original.avatar_url ? 'transparent' : 'primary.light',
+                  color: 'primary.contrastText',
+                }}
+              >
+                {row.original.name?.charAt(0)?.toUpperCase() || '?'}
+              </Avatar>
+            )}
             <Box sx={{ minWidth: 0 }}>
               <Typography
                 variant="body2"
@@ -162,6 +203,21 @@ export default function UsersTable({
                     fontWeight: 700,
                     bgcolor: '#9E9E9E14',
                     color: '#757575',
+                    borderRadius: 0.75,
+                    mt: 0.25,
+                  }}
+                />
+              )}
+              {row.original.contacted_status === 'irrelevant' && (
+                <Chip
+                  label="Irrelevant"
+                  size="small"
+                  sx={{
+                    height: 18,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    bgcolor: '#FF980014',
+                    color: '#E65100',
                     borderRadius: 0.75,
                     mt: 0.25,
                   }}
@@ -596,6 +652,8 @@ export default function UsersTable({
 
     muiTableBodyRowProps: ({ row }) => {
       const isDeadLead = row.original.contacted_status === 'dead_lead';
+      const isIrrelevant = row.original.contacted_status === 'irrelevant';
+      const isDimmed = isDeadLead || isIrrelevant;
       return {
         onClick: (e: React.MouseEvent) => {
           const target = e.target as HTMLElement;
@@ -610,13 +668,13 @@ export default function UsersTable({
         sx: {
           cursor: 'pointer',
           transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-          ...(isDeadLead && {
+          ...(isDimmed && {
             opacity: 0.5,
             bgcolor: 'grey.50',
           }),
           '&:hover': {
-            bgcolor: isDeadLead ? 'grey.100' : 'primary.50',
-            opacity: isDeadLead ? 0.7 : 1,
+            bgcolor: isDimmed ? 'grey.100' : 'primary.50',
+            opacity: isDimmed ? 0.7 : 1,
           },
           '&:hover td': {
             bgcolor: 'transparent',

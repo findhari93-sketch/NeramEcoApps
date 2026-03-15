@@ -630,6 +630,16 @@ function formatTelegramMessage(event: NotificationEvent): string | null {
         `<b>Phone:</b> ${data.phone || 'N/A'}`,
       ].join('\n');
 
+    case 'classroom_access_requested':
+      return [
+        '<b>🏫 Classroom Access Request</b>',
+        '',
+        `<b>Name:</b> ${data.user_name || 'Unknown'}`,
+        `<b>Email:</b> ${data.user_email || 'N/A'}`,
+        '',
+        '<i>A Nexus user without classroom access is requesting to be added. Review in Nexus Admin.</i>',
+      ].join('\n');
+
     default:
       return null;
   }
@@ -664,6 +674,15 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     ticket_created: null, // In-app + Telegram only
     ticket_resolved: null, // In-app only (user notification)
     link_regeneration_requested: null, // In-app + Telegram only
+    classroom_enrolled: null, // In-app only (Nexus)
+    batch_assigned: null, // In-app only (Nexus)
+    batch_changed: null, // In-app only (Nexus)
+    foundation_issue_resolved: null, // In-app only (Nexus)
+    foundation_issue_reported: null, // In-app only (Nexus)
+    foundation_issue_assigned: null, // In-app only (Nexus)
+    foundation_issue_in_progress: null, // In-app only (Nexus)
+    foundation_issue_delegated: null, // In-app only (Nexus)
+    classroom_access_requested: null, // Telegram + admin in-app only
   };
 
   return map[eventType];
@@ -1305,6 +1324,34 @@ export async function notifyContactMessageReceived(
         message: data.message,
         source: data.source || 'contact_page',
         center_id: data.centerId || '',
+      },
+    },
+    client
+  );
+}
+
+/**
+ * Dispatch classroom access request notification (Telegram + admin in-app)
+ */
+export async function notifyClassroomAccessRequested(
+  data: {
+    userId: string;
+    userName: string;
+    userEmail: string | null;
+    requestId: string;
+  },
+  client?: TypedSupabaseClient
+): Promise<void> {
+  await dispatchNotification(
+    {
+      type: 'classroom_access_requested',
+      title: 'Classroom Access Request',
+      message: `${data.userName} (${data.userEmail || 'no email'}) is requesting classroom access`,
+      data: {
+        user_id: data.userId,
+        user_name: data.userName,
+        user_email: data.userEmail || '',
+        request_id: data.requestId,
       },
     },
     client

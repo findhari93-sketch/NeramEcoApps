@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'TNEA B.Arch Counseling 2026 — Complete Guide, Cutoffs, Colleges & Free Tools | Neram Classes',
+    title: 'TNEA B.Arch Counseling 2026 — Complete Guide, Cutoffs, Colleges & Free Tools',
     description:
       'Complete guide to TNEA B.Arch counseling 2026. Merit formula, eligibility, 32 participating colleges, category-wise cutoffs, rank predictor, and college predictor tools.',
     keywords:

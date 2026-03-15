@@ -105,7 +105,7 @@ export default function BatchAssignDialog({
       <DialogTitle>Assign Students to Batch</DialogTitle>
       <DialogContent sx={{ px: { xs: 1.5, sm: 3 } }}>
         <FormControl fullWidth size="small" sx={{ mb: 2, mt: 1 }}>
-          <InputLabel>Target Batch</InputLabel>
+          <InputLabel shrink>Target Batch</InputLabel>
           <Select
             value={targetBatchId}
             label="Target Batch"

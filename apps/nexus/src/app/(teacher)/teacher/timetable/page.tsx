@@ -427,6 +427,7 @@ export default function TeacherTimetable() {
               value={formData.topic_id}
               onChange={(e) => setFormData((f) => ({ ...f, topic_id: e.target.value }))}
               SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
             >
               <option value="">-- Select Topic --</option>
               {topics.map((t) => (

@@ -363,6 +363,7 @@ export default function TeacherQuestions() {
                       size="small"
                       fullWidth
                       select
+                      InputLabelProps={{ shrink: true }}
                       sx={{ mb: 2 }}
                     >
                       {['easy', 'medium', 'hard'].map((d) => (
@@ -467,6 +468,7 @@ export default function TeacherQuestions() {
                 onChange={(e) => setFilterDifficulty(e.target.value)}
                 size="small"
                 select
+                InputLabelProps={{ shrink: true }}
                 sx={{ minWidth: 120 }}
               >
                 <MenuItem value="">All</MenuItem>

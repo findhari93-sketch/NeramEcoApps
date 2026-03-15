@@ -183,7 +183,7 @@ Regular practice of these techniques will significantly improve your NATA drawin
   },
   'best-nata-coaching-chennai': {
     slug: 'best-nata-coaching-chennai',
-    title: 'Best NATA Coaching in Chennai 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Chennai 2026 - Complete Guide',
     excerpt: 'Discover the best NATA coaching in Chennai with expert faculty, proven results, and comprehensive preparation. Learn why Neram Classes is the top choice for architecture aspirants in Chennai.',
     content: `
 ## Introduction
@@ -301,7 +301,7 @@ A: We provide comprehensive study materials as part of your course fee. For draw
   },
   'best-nata-coaching-coimbatore': {
     slug: 'best-nata-coaching-coimbatore',
-    title: 'Best NATA Coaching in Coimbatore 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Coimbatore 2026 - Complete Guide',
     excerpt: 'Looking for the best NATA coaching in Coimbatore? Explore why Neram Classes is the top-rated choice for architecture aspirants in the Manchester of South India.',
     content: `
 ## Introduction
@@ -419,7 +419,7 @@ A: Yes, our support extends well beyond the NATA exam. We provide comprehensive 
   },
   'best-nata-coaching-madurai': {
     slug: 'best-nata-coaching-madurai',
-    title: 'Best NATA Coaching in Madurai 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Madurai 2026 - Complete Guide',
     excerpt: 'Find the best NATA coaching in Madurai. Neram Classes offers expert-led preparation with proven results for architecture aspirants in the Temple City of India.',
     content: `
 ## Introduction
@@ -535,7 +535,7 @@ A: While Neram Classes does not directly provide hostel facilities, we maintain 
   },
   'best-nata-coaching-trichy': {
     slug: 'best-nata-coaching-trichy',
-    title: 'Best NATA Coaching in Trichy 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Trichy 2026 - Complete Guide',
     excerpt: 'Discover the best NATA coaching in Trichy, the education hub of Tamil Nadu. Neram Classes offers expert coaching near NIT Trichy with proven results for B.Arch aspirants.',
     content: `
 ## Introduction
@@ -653,7 +653,7 @@ A: Yes, our coaching covers both NATA and JEE Paper 2 (B.Arch) preparation. Sinc
   },
   'best-nata-coaching-pudukkottai': {
     slug: 'best-nata-coaching-pudukkottai',
-    title: 'Best NATA Coaching in Pudukkottai 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Pudukkottai 2026 - Complete Guide',
     excerpt: 'Looking for NATA coaching in Pudukkottai? As the headquarters of Neram Classes, Pudukkottai students get direct access to our expert faculty and personalized coaching for architecture entrance exams.',
     content: `
 ## Introduction
@@ -771,7 +771,7 @@ A: Architecture is a profession where your portfolio and skills matter far more 
   },
   'best-nata-coaching-salem': {
     slug: 'best-nata-coaching-salem',
-    title: 'Best NATA Coaching in Salem 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Salem 2026 - Complete Guide',
     excerpt: 'Find the best NATA coaching in Salem, the Steel City of India. Neram Classes offers expert architecture entrance preparation with flexible online and offline options for Salem students.',
     content: `
 ## Introduction
@@ -889,7 +889,7 @@ A: Our Salem students consistently perform at par with students from Chennai, Ba
   },
   'best-nata-coaching-tiruppur': {
     slug: 'best-nata-coaching-tiruppur',
-    title: 'Best NATA Coaching in Tiruppur 2026 - Complete Guide | Neram Classes',
+    title: 'Best NATA Coaching in Tiruppur 2026 - Complete Guide',
     excerpt: 'Discover the best NATA coaching for Tiruppur students. Neram Classes brings world-class architecture entrance preparation to the Knitwear Capital through expert online and offline coaching.',
     content: `
 ## Introduction
@@ -1040,7 +1040,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   if (!post) return {};
 
   return {
-    title: `${post.title} | Neram Classes Blog`,
+    title: post.title,
     description: post.excerpt,
     keywords: post.tags.join(', '),
     alternates: buildAlternates(params.locale, `/blog/${params.slug}`),

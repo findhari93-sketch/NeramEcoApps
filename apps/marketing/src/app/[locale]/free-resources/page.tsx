@@ -23,7 +23,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Free NATA & JEE Paper 2 Resources 2026 - Study Materials | Neram Classes',
+    title: 'Free NATA & JEE Paper 2 Resources 2026 - Study Materials',
     description: 'Download free NATA and JEE Paper 2 study materials, e-books, practice papers, and resources. Get free access to quality preparation materials.',
     keywords: 'free NATA books, free JEE Paper 2 resources, NATA study material PDF, free architecture entrance resources',
     alternates: buildAlternates(locale, '/free-resources'),

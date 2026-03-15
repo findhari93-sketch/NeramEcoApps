@@ -16,11 +16,15 @@ import {
   useTheme,
 } from '@neram/ui';
 import GraphAvatar from '@/components/GraphAvatar';
+import NotificationBell from '@/components/NotificationBell';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import CheckIcon from '@mui/icons-material/Check';
+import MenuIcon from '@mui/icons-material/Menu';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useSidebarContext } from '@/components/SidebarProvider';
+import { usePanelContext } from '@/components/PanelProvider';
 
 /**
  * Top app bar for Nexus with glassmorphism effect.
@@ -39,6 +43,8 @@ export default function TopBar() {
     signOut,
   } = useNexusAuthContext();
 
+  const { sidebarState, expand } = useSidebarContext();
+  const { activePanel, setActivePanel, availablePanels } = usePanelContext();
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const [classroomAnchor, setClassroomAnchor] = useState<null | HTMLElement>(null);
 
@@ -64,6 +70,21 @@ export default function TopBar() {
       }}
     >
       <Toolbar sx={{ minHeight: { xs: 52, sm: 56 }, px: { xs: 1.5, sm: 2 } }}>
+        {/* Hamburger - desktop only, when sidebar is hidden */}
+        {sidebarState === 'hidden' && (
+          <IconButton
+            onClick={expand}
+            size="small"
+            sx={{
+              display: { xs: 'none', md: 'flex' },
+              mr: 1,
+              color: 'text.secondary',
+            }}
+          >
+            <MenuIcon />
+          </IconButton>
+        )}
+
         {/* Brand - Mobile only (desktop has sidebar) */}
         <Typography
           variant="h6"
@@ -82,8 +103,8 @@ export default function TopBar() {
           Nexus
         </Typography>
 
-        {/* Active Classroom Chip */}
-        {activeClassroom && classrooms.length > 1 && (
+        {/* Active Classroom Chip - only in teaching panel */}
+        {activePanel === 'teaching' && activeClassroom && classrooms.length > 1 && (
           <Chip
             label={activeClassroom.name}
             size="small"
@@ -102,7 +123,7 @@ export default function TopBar() {
             }}
           />
         )}
-        {activeClassroom && classrooms.length <= 1 && (
+        {activePanel === 'teaching' && activeClassroom && classrooms.length <= 1 && (
           <Typography
             variant="body2"
             noWrap
@@ -117,6 +138,9 @@ export default function TopBar() {
         )}
 
         <Box sx={{ flexGrow: 1 }} />
+
+        {/* Notification Bell */}
+        <NotificationBell />
 
         {/* Role Badge - Desktop only */}
         {nexusRole && (
@@ -182,6 +206,65 @@ export default function TopBar() {
               {user?.email || ''}
             </Typography>
           </Box>
+          {/* Panel Switcher */}
+          {availablePanels.length > 1 && (
+            <>
+              <Divider sx={{ my: 0.5 }} />
+              <Box sx={{ px: 2, py: 0.75 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    fontSize: '0.625rem',
+                  }}
+                >
+                  Panels
+                </Typography>
+              </Box>
+              {availablePanels.map((panel) => {
+                const isActive = panel.id === activePanel;
+                return (
+                  <MenuItem
+                    key={panel.id}
+                    onClick={() => {
+                      setProfileAnchor(null);
+                      if (!isActive) setActivePanel(panel.id);
+                    }}
+                    sx={{
+                      py: 1,
+                      px: 2,
+                      gap: 1.5,
+                      bgcolor: isActive ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                      '&:hover': {
+                        bgcolor: isActive
+                          ? alpha(theme.palette.primary.main, 0.12)
+                          : undefined,
+                      },
+                    }}
+                  >
+                    <Box sx={{ color: isActive ? 'primary.main' : 'text.secondary', display: 'flex' }}>
+                      {panel.icon}
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        flex: 1,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? 'primary.main' : 'text.primary',
+                      }}
+                    >
+                      {panel.label}
+                    </Typography>
+                    {isActive && <CheckIcon sx={{ fontSize: '1rem', color: 'primary.main' }} />}
+                  </MenuItem>
+                );
+              })}
+            </>
+          )}
+
           <Divider sx={{ my: 0.5 }} />
           <MenuItem
             onClick={() => {

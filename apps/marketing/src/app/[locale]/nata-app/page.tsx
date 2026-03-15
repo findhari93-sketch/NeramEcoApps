@@ -29,7 +29,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best Free NATA Exam Preparation App 2026 | Neram Classes',
+    title: 'Best Free NATA Exam Preparation App 2026',
     description:
       'Download the best free NATA preparation app by Neram Classes. Cutoff calculator, college predictor for 5000+ colleges, exam center locator, and study tools. Used by 5000+ students across India.',
     keywords:

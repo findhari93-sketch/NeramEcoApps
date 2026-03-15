@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Preparation Guide 2026 - How to Prepare for NATA | Neram Classes',
+    title: 'NATA Preparation Guide 2026 - How to Prepare for NATA',
     description: 'Complete NATA 2026 preparation guide with month-wise study plan, tips, strategies, and expert advice. Learn how to crack NATA exam effectively.',
     keywords: 'NATA preparation, how to prepare for NATA, NATA study plan, NATA tips, NATA strategy',
     alternates: buildAlternates(locale, '/nata-preparation-guide'),

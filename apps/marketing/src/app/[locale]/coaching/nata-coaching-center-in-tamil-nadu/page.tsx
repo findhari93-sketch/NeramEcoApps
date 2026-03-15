@@ -201,7 +201,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = 'Best NATA Coaching Center in Tamil Nadu 2026 — Online & Offline Classes in All 38 Districts | Neram Classes';
+  const title = 'Best NATA Coaching Center in Tamil Nadu 2026 — Online & Offline Classes in All 38 Districts';
   const description = 'Join the #1 rated NATA coaching center in Tamil Nadu. Expert IIT/NIT faculty, online & offline classes across Chennai, Coimbatore, Madurai, Trichy & all 38 districts. 4.9★ Google rating, 99.9% success rate.';
 
   return {
@@ -224,7 +224,7 @@ export async function generateMetadata({
     ].join(', '),
     alternates: buildAlternates(locale, PAGE_PATH),
     openGraph: {
-      title: 'Best NATA Coaching Center in Tamil Nadu 2026 | Neram Classes',
+      title: 'Best NATA Coaching Center in Tamil Nadu 2026',
       description,
       type: 'website',
       url: `${BASE_URL}${PAGE_PATH}`,
@@ -239,7 +239,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'Best NATA Coaching Center in Tamil Nadu 2026 | Neram Classes',
+      title: 'Best NATA Coaching Center in Tamil Nadu 2026',
       description,
     },
   };

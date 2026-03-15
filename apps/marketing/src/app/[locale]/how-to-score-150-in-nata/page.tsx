@@ -26,7 +26,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'How to Score 150+ in NATA 2026 - Tips & Strategy | Neram Classes',
+    title: 'How to Score 150+ in NATA 2026 - Tips & Strategy',
     description: 'Learn proven strategies and tips to score 150+ marks in NATA 2026 exam. Expert guidance on section-wise preparation and time management for top scores.',
     keywords: 'NATA score, how to score in NATA, NATA tips, NATA 150 marks, NATA strategy',
     alternates: buildAlternates(locale, '/how-to-score-150-in-nata'),
