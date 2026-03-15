@@ -4,6 +4,7 @@ import { Box, Container } from '@neram/ui';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -12,6 +13,7 @@ import DesktopSidebar, { SIDEBAR_WIDTH } from '@/components/DesktopSidebar';
 const parentNavItems = [
   { label: 'Dashboard', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/parent/timetable', icon: <CalendarTodayOutlinedIcon /> },
+  { label: 'Foundation', path: '/parent/foundation', icon: <MenuBookOutlinedIcon /> },
   { label: 'Tickets', path: '/parent/tickets', icon: <SupportAgentOutlinedIcon /> },
 ];
 

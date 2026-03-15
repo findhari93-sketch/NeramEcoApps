@@ -8,6 +8,7 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Neram Classes - Admin Panel',
   description: 'Administrative dashboard for Neram Classes',
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {

@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RelatedContent from '@/components/seo/RelatedContent';
 
 export async function generateMetadata({
   params: { locale },
@@ -269,6 +270,16 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
           </Button>
         </Container>
       </Box>
+      <RelatedContent
+        heading="Continue Your NATA Preparation"
+        locale={locale}
+        links={[
+          { title: 'NATA Coaching', description: 'Join India\'s top NATA coaching with IIT/NIT alumni faculty', href: '/coaching/nata-coaching' },
+          { title: 'Best Books for NATA & JEE', description: 'Recommended study materials for NATA and JEE Paper 2', href: '/best-books-nata-jee' },
+          { title: 'NATA Preparation Guide', description: 'Month-wise 6-month study plan for NATA 2026', href: '/nata-preparation-guide' },
+          { title: 'JEE Paper 2 Preparation', description: 'Alternative architecture entrance via JEE', href: '/jee-paper-2-preparation' },
+        ]}
+      />
     </Box>
     </>
   );

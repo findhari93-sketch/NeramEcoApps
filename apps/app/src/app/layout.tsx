@@ -46,11 +46,13 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://app.neramclasses.com',
     siteName: 'aiArchitek by Neram Classes',
+    images: [{ url: '/og-default.svg', width: 1200, height: 630, alt: 'aiArchitek — Free NATA Exam Preparation Tools by Neram Classes' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'aiArchitek — From Cutoffs to Colleges',
     description: 'Your architecture exam companion. Cutoff calculator, college predictor, exam centers & more. By Neram Classes.',
+    images: ['/og-default.svg'],
   },
   alternates: {
     canonical: 'https://app.neramclasses.com',

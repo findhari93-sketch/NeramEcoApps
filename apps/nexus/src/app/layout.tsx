@@ -9,6 +9,7 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Nexus - Neram Classroom',
   description: 'Classroom management platform for Neram Classes',
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {

@@ -9,6 +9,8 @@ import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -16,11 +18,13 @@ import DesktopSidebar, { SIDEBAR_WIDTH } from '@/components/DesktopSidebar';
 
 const teacherNavItems = [
   { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
+  { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
   { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
   { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
   { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
   { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
   { label: 'Checklist', path: '/teacher/checklist', icon: <ChecklistOutlinedIcon /> },
+  { label: 'Foundation', path: '/teacher/foundation', icon: <MenuBookOutlinedIcon /> },
   { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
   { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
 ];

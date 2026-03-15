@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RelatedContent from '@/components/seo/RelatedContent';
 
 export async function generateMetadata({
   params: { locale },
@@ -414,6 +415,16 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
           </Box>
         </Container>
       </Box>
+      <RelatedContent
+        heading="Related Preparation Resources"
+        locale={locale}
+        links={[
+          { title: 'NATA Syllabus 2026', description: 'Know exactly what topics to cover', href: '/nata-syllabus' },
+          { title: 'NATA Preparation Guide', description: '6-month study plan with monthly milestones', href: '/nata-preparation-guide' },
+          { title: 'NATA Coaching', description: 'Expert guidance from IIT/NIT alumni', href: '/coaching/nata-coaching' },
+          { title: 'Drawing Test Guide', description: 'Master the NATA drawing section', href: '/nata-2026/drawing-test' },
+        ]}
+      />
     </Box>
     </>
   );

@@ -33,6 +33,7 @@ import {
   generateCourseSchema,
 } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RelatedContent from '@/components/seo/RelatedContent';
 
 interface PageProps {
   params: { locale: string; slug: string };
@@ -191,7 +192,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             Best NATA Coaching in {location.cityDisplay}
           </Typography>
-          <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h5" component="p" sx={{ mb: 4, opacity: 0.9 }}>
             Join {location.cityDisplay}&apos;s top-rated NATA coaching institute. Expert faculty, proven results,
             and comprehensive preparation for NATA 2026.
           </Typography>
@@ -251,7 +252,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
             </Typography>
 
             {/* City-specific highlights */}
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mt: 4 }}>
+            <Typography variant="h3" gutterBottom sx={{ fontWeight: 600, mt: 4, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
               What Makes Our {location.cityDisplay} Program Special
             </Typography>
             <List>
@@ -294,7 +295,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent sx={{ p: 4 }}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+                  <Typography variant="h3" gutterBottom sx={{ fontWeight: 600, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
                     What We Offer
                   </Typography>
                   <List>
@@ -353,7 +354,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
             {/* NATA Exam Centers */}
             {seoContent.examCenters.length > 0 && (
               <Box sx={{ mt: 4 }}>
-                <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+                <Typography variant="h3" gutterBottom sx={{ fontWeight: 600, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
                   NATA Exam Centers Near {location.cityDisplay}
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -378,7 +379,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
               <Grid item xs={12} md={4} key={index}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent sx={{ p: 4, textAlign: 'center' }}>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>{plan.name}</Typography>
+                    <Typography variant="h3" gutterBottom sx={{ fontWeight: 600, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>{plan.name}</Typography>
                     <Typography variant="h4" color="primary" sx={{ fontWeight: 700, my: 2 }}>{plan.duration}</Typography>
                     <Chip label={plan.mode} size="small" variant="outlined" sx={{ mb: 3 }} />
                     <List dense>
@@ -425,7 +426,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
                 including dedicated drawing studios, regular mock test facilities, and a supportive learning environment.
                 Students from {location.cityDisplay} and nearby areas have consistently secured top ranks in NATA through our coaching.
               </Typography>
-              <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mt: 4 }}>
+              <Typography variant="h3" gutterBottom sx={{ fontWeight: 600, mt: 4, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
                 Why {location.cityDisplay} Students Choose Us
               </Typography>
               <List>
@@ -445,7 +446,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
             <Grid item xs={12} md={4}>
               <Card sx={{ bgcolor: 'primary.main', color: 'white' }}>
                 <CardContent sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+                  <Typography variant="h3" gutterBottom sx={{ fontWeight: 600, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
                     Start Learning Today!
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 3, opacity: 0.9 }}>
@@ -587,6 +588,18 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
           </Box>
         );
       })()}
+
+      {/* Related Content */}
+      <RelatedContent
+        heading="Prepare for NATA 2026"
+        locale={locale}
+        links={[
+          { title: 'NATA Syllabus 2026', description: 'Complete section-wise syllabus for NATA exam', href: '/nata-syllabus' },
+          { title: 'NATA Preparation Guide', description: 'Step-by-step study plan for NATA 2026', href: '/nata-preparation-guide' },
+          { title: 'Best Books for NATA', description: 'Recommended books and study materials', href: '/best-books-nata-jee' },
+          { title: 'Previous Year Papers', description: 'Practice with past NATA exam papers', href: '/nata-2026/previous-year-papers' },
+        ]}
+      />
 
       {/* CTA Section */}
       <Box

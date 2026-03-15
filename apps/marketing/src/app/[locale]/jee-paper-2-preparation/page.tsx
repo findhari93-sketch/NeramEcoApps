@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RelatedContent from '@/components/seo/RelatedContent';
 
 export async function generateMetadata({
   params: { locale },
@@ -318,6 +319,18 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
           </Grid>
         </Container>
       </Box>
+
+      {/* Related Content */}
+      <RelatedContent
+        heading="Related Exam Resources"
+        locale={locale}
+        links={[
+          { title: 'NATA Syllabus 2026', description: 'Complete NATA exam syllabus and topics', href: '/nata-syllabus' },
+          { title: 'NATA Coaching', description: 'Expert NATA coaching with IIT/NIT alumni', href: '/coaching/nata-coaching' },
+          { title: 'TNEA B.Arch Counseling', description: 'Guide to Tamil Nadu architecture admission counseling', href: '/counseling/tnea-barch' },
+          { title: 'Best Books for NATA & JEE', description: 'Top books for architecture entrance preparation', href: '/best-books-nata-jee' },
+        ]}
+      />
 
       {/* CTA Section */}
       <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'primary.main', color: 'white', textAlign: 'center' }}>

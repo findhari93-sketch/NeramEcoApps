@@ -4070,10 +4070,19 @@ export interface NexusClassroom extends Timestamps {
   created_by: string | null;
 }
 
+export interface NexusBatch extends Timestamps {
+  id: string;
+  classroom_id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+}
+
 export interface NexusEnrollment {
   id: string;
   user_id: string;
   classroom_id: string;
+  batch_id: string | null;
   role: NexusEnrollmentRole;
   enrolled_at: string;
   is_active: boolean;
@@ -4284,4 +4293,98 @@ export interface NexusDrawingSubmissionWithDetails extends NexusDrawingSubmissio
 
 export interface NexusDrawingAssignmentWithExercise extends NexusDrawingAssignment {
   exercise: NexusDrawingExercise;
+}
+
+// ============================================
+// NEXUS FOUNDATION MODULE TYPES
+// ============================================
+
+export type FoundationChapterStatus = 'locked' | 'in_progress' | 'completed';
+
+export interface NexusFoundationChapter {
+  id: string;
+  title: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  youtube_video_id: string;
+  video_duration_seconds: number | null;
+  chapter_number: number;
+  min_quiz_score_pct: number;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusFoundationSection {
+  id: string;
+  chapter_id: string;
+  title: string;
+  description: string | null;
+  start_timestamp_seconds: number;
+  end_timestamp_seconds: number;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusFoundationQuizQuestion {
+  id: string;
+  section_id: string;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: 'a' | 'b' | 'c' | 'd';
+  explanation: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusFoundationStudentProgress {
+  id: string;
+  student_id: string;
+  chapter_id: string;
+  status: FoundationChapterStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  last_section_id: string | null;
+  last_video_position_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusFoundationQuizAttempt {
+  id: string;
+  student_id: string;
+  section_id: string;
+  score_pct: number;
+  answers: Record<string, string>;
+  passed: boolean;
+  attempt_number: number;
+  created_at: string;
+}
+
+export interface NexusFoundationStudentNote {
+  id: string;
+  student_id: string;
+  section_id: string;
+  note_text: string;
+  video_timestamp_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Foundation joined types
+
+export interface NexusFoundationChapterWithProgress extends NexusFoundationChapter {
+  progress: NexusFoundationStudentProgress | null;
+  section_count: number;
+  completed_sections: number;
+}
+
+export interface NexusFoundationSectionWithQuiz extends NexusFoundationSection {
+  quiz_questions: NexusFoundationQuizQuestion[];
+  quiz_attempt: NexusFoundationQuizAttempt | null;
+  note: NexusFoundationStudentNote | null;
 }

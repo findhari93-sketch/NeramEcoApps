@@ -100,6 +100,9 @@ const nextConfig = {
       { source: '/nata-coaching-online', destination: '/coaching/nata-coaching', permanent: true },
       { source: '/jee-paper-2-coaching', destination: '/courses/jee-paper-2-coaching', permanent: true },
 
+      // Blog post year update: 2025 → 2026
+      { source: '/blog/nata-2025-preparation-strategy', destination: '/blog/nata-2026-preparation-strategy', permanent: true },
+
       // Blog posts that were renamed (old slug had -online suffix, new site dropped it)
       { source: '/blog/best-nata-coaching-chennai-online', destination: '/blog/best-nata-coaching-chennai', permanent: true },
       { source: '/blog/best-nata-coaching-coimbatore-online', destination: '/blog/best-nata-coaching-coimbatore', permanent: true },

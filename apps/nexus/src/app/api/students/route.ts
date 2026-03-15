@@ -3,7 +3,7 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
- * GET /api/students?classroom={id}&search={query}
+ * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}
  *
  * List enrolled students for a classroom with attendance and checklist stats.
  */
@@ -13,22 +13,31 @@ export async function GET(request: NextRequest) {
 
     const classroomId = request.nextUrl.searchParams.get('classroom');
     const search = request.nextUrl.searchParams.get('search');
+    const batchFilter = request.nextUrl.searchParams.get('batch');
 
     if (!classroomId) {
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdminClient();
+    const supabase = getSupabaseAdminClient() as any;
 
-    // Get student enrollments with user info
+    // Get student enrollments with user info and batch
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('user_id, enrolled_at, user:users!inner(id, name, email, avatar_url)')
+      .select('user_id, enrolled_at, batch_id, user:users!inner(id, name, email, avatar_url, ms_oid), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student');
 
     if (search) {
       enrollmentQuery = enrollmentQuery.ilike('users.name', `%${search}%`);
+    }
+
+    if (batchFilter) {
+      if (batchFilter === 'unassigned') {
+        enrollmentQuery = enrollmentQuery.is('batch_id', null);
+      } else {
+        enrollmentQuery = enrollmentQuery.eq('batch_id', batchFilter);
+      }
     }
 
     const { data: enrollments, error: enrollmentError } = await enrollmentQuery;
@@ -39,7 +48,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ students: [] });
     }
 
-    const studentIds = enrollments.map((e) => e.user_id);
+    const studentIds = enrollments.map((e: any) => e.user_id);
 
     // Fetch stats in parallel
     const [attendanceResult, totalClassesResult, checklistTotalResult, checklistProgressResult] =
@@ -83,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     // Build attendance stats per student
     const attendanceByStudent = (attendanceResult.data || []).reduce(
-      (acc: Record<string, { attended: number; total: number }>, row) => {
+      (acc: Record<string, { attended: number; total: number }>, row: any) => {
         if (!acc[row.student_id]) acc[row.student_id] = { attended: 0, total: 0 };
         acc[row.student_id].total += 1;
         if (row.attended) acc[row.student_id].attended += 1;
@@ -94,29 +103,34 @@ export async function GET(request: NextRequest) {
 
     // Build checklist stats per student
     const checklistByStudent = (checklistProgressResult.data || []).reduce(
-      (acc: Record<string, number>, row) => {
+      (acc: Record<string, number>, row: any) => {
         acc[row.student_id] = (acc[row.student_id] || 0) + 1;
         return acc;
       },
       {} as Record<string, number>,
     );
 
-    const students = enrollments.map((enrollment) => {
+    const students = enrollments.map((enrollment: any) => {
       const userId = enrollment.user_id;
       const user = enrollment.user as unknown as {
         id: string;
         name: string;
         email: string;
         avatar_url: string | null;
+        ms_oid: string | null;
       };
       const attendance = attendanceByStudent[userId] || { attended: 0, total: 0 };
+
+      const batch = (enrollment as any).batch as { id: string; name: string } | null;
 
       return {
         id: user.id,
         name: user.name,
         email: user.email,
         avatar_url: user.avatar_url,
+        ms_oid: user.ms_oid,
         enrolled_at: enrollment.enrolled_at,
+        batch: batch ? { id: batch.id, name: batch.name } : null,
         attendance: {
           attended: attendance.attended,
           total: totalClasses,
@@ -130,7 +144,15 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ students });
+    // Fetch batches for this classroom
+    const { data: batches } = await supabase
+      .from('nexus_batches')
+      .select('id, name')
+      .eq('classroom_id', classroomId)
+      .eq('is_active', true)
+      .order('name');
+
+    return NextResponse.json({ students, batches: batches || [] });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load students';
     console.error('Students GET error:', message);

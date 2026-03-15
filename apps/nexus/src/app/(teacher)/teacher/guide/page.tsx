@@ -22,6 +22,7 @@ import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import PageHeader from '@/components/PageHeader';
 
@@ -83,17 +84,20 @@ export default function GuidePage() {
       title: 'Students',
       icon: <PeopleOutlinedIcon />,
       color: theme.palette.success.main,
-      summary: 'View all enrolled students, their attendance, and checklist progress.',
+      summary: 'View all enrolled students, filter by batch, and track their progress.',
       steps: [
         'See all students enrolled in your active classroom.',
-        'Use the search bar to find students by name.',
+        'Use the search bar to find students by name or email.',
+        'Filter students by batch using the chip bar (All, batch names, Unassigned).',
+        'Each student card shows attendance % and checklist completion %.',
         'Click on a student to view their detailed profile.',
         'View per-student: attendance percentage, checklist completion, topic progress.',
         'Check student documents (Aadhaar, marksheets) if uploaded.',
       ],
       tips: [
         'Students are auto-created when they first sign in with Microsoft.',
-        'Enrollment is managed by the admin — you can view but not add students directly.',
+        'Use "Add Student" in Classrooms → Students tab to search and enroll students into a classroom.',
+        'Use batch filters to quickly review a specific group of students.',
       ],
     },
     {
@@ -174,20 +178,26 @@ export default function GuidePage() {
       ],
     },
     {
-      title: 'Classroom Management',
-      icon: <SwapHorizIcon />,
+      title: 'Classrooms & Batches',
+      icon: <SchoolOutlinedIcon />,
       color: '#607D8B',
-      summary: 'Switch between classrooms and understand enrollment.',
+      summary: 'Create classrooms, organize students into batches, and manage enrollments.',
       steps: [
-        'If you teach multiple classrooms, use the classroom switcher in the top bar.',
-        'Click the classroom chip to see all your assigned classrooms.',
-        'Select a different classroom — the entire app updates to show that classroom\'s data.',
-        'Each classroom has its own topics, schedule, students, and checklist.',
+        'Navigate to Classrooms from the sidebar to see all your classrooms.',
+        'Tap "+ New Classroom" to create a classroom — set the name, type (NATA, JEE, Revit, Other), and description.',
+        'Tap a classroom card to view its details with 3 tabs: Overview, Batches, Students.',
+        'In the Batches tab, create batches (e.g., "Batch A", "Batch B") to organize students.',
+        'In the Students tab, click "Add Student" to search and enroll students by name or email.',
+        'Filter enrolled students by batch using the chip bar.',
+        'Select multiple students and use "Assign Batch" to move them between batches.',
+        'Switch your active classroom using the chip in the top bar — all app data updates accordingly.',
       ],
       tips: [
-        'Your last selected classroom is remembered when you return.',
-        'Classrooms are created and managed by the admin.',
+        'Batches are for organizing students only — all students see the same content (checklist, timetable, topics) regardless of batch.',
+        'You can move students between batches at any time without affecting their progress.',
+        'Batch names must be unique within a classroom.',
         'Classroom types: NATA, JEE, Revit, Other.',
+        'Your last selected classroom is remembered when you return.',
       ],
     },
     {

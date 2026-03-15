@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RelatedContent from '@/components/seo/RelatedContent';
 
 export async function generateMetadata({
   params: { locale },
@@ -356,6 +357,16 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
           </Box>
         </Container>
       </Box>
+      <RelatedContent
+        heading="Explore More Resources"
+        locale={locale}
+        links={[
+          { title: 'NATA Syllabus 2026', description: 'Complete breakdown of Mathematics, Aptitude & Drawing sections', href: '/nata-syllabus' },
+          { title: 'Best Books for NATA', description: 'Top recommended books and study materials', href: '/best-books-nata-jee' },
+          { title: 'NATA Coaching', description: 'Expert coaching with proven 99.9% success rate', href: '/coaching/nata-coaching' },
+          { title: 'Previous Year Papers', description: 'Practice with past NATA exam papers', href: '/nata-2026/previous-year-papers' },
+        ]}
+      />
     </Box>
     </>
   );

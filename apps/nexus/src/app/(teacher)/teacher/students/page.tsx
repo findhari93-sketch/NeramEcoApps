@@ -9,25 +9,35 @@ import {
   Chip,
   Skeleton,
   TextField,
-  Avatar,
 } from '@neram/ui';
+import GraphAvatar from '@/components/GraphAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { usePresence } from '@/hooks/usePresence';
+
+interface StudentBatch {
+  id: string;
+  name: string;
+}
 
 interface EnrolledStudent {
   id: string;
   name: string;
   email: string | null;
   avatar_url: string | null;
-  attendance_percentage: number;
-  checklist_percentage: number;
+  ms_oid: string | null;
+  batch: StudentBatch | null;
+  attendance: { attended: number; total: number; percentage: number };
+  checklist: { completed: number; total: number };
 }
 
 export default function TeacherStudents() {
   const router = useRouter();
   const { activeClassroom, getToken } = useNexusAuthContext();
   const [students, setStudents] = useState<EnrolledStudent[]>([]);
+  const [batches, setBatches] = useState<StudentBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [batchFilter, setBatchFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeClassroom) return;
@@ -38,14 +48,17 @@ export default function TeacherStudents() {
         const token = await getToken();
         if (!token) return;
 
-        const res = await fetch(
-          `/api/students?classroom=${activeClassroom!.id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        let url = `/api/students?classroom=${activeClassroom!.id}`;
+        if (batchFilter) url += `&batch=${batchFilter}`;
+
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         if (res.ok) {
           const data = await res.json();
           setStudents(data.students || []);
+          if (data.batches) setBatches(data.batches);
         }
       } catch (err) {
         console.error('Failed to load students:', err);
@@ -55,7 +68,10 @@ export default function TeacherStudents() {
     }
 
     fetchStudents();
-  }, [activeClassroom, getToken]);
+  }, [activeClassroom, getToken, batchFilter]);
+
+  // Bulk presence for all loaded students
+  const { presenceMap } = usePresence(students.map((s) => s.ms_oid));
 
   const filteredStudents = students.filter((s) => {
     const query = searchQuery.toLowerCase();
@@ -64,15 +80,6 @@ export default function TeacherStudents() {
       (s.email && s.email.toLowerCase().includes(query))
     );
   });
-
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
 
   return (
     <Box>
@@ -87,9 +94,42 @@ export default function TeacherStudents() {
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         size="small"
-        sx={{ mb: 2 }}
+        sx={{ mb: 1.5 }}
         inputProps={{ style: { minHeight: 24 } }}
       />
+
+      {/* Batch filter chips */}
+      {batches.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 1, mb: 2, overflowX: 'auto', pb: 0.5 }}>
+          <Chip
+            label="All"
+            size="small"
+            variant={batchFilter === null ? 'filled' : 'outlined'}
+            color={batchFilter === null ? 'primary' : 'default'}
+            onClick={() => setBatchFilter(null)}
+            sx={{ minHeight: 32 }}
+          />
+          {batches.map((b) => (
+            <Chip
+              key={b.id}
+              label={b.name}
+              size="small"
+              variant={batchFilter === b.id ? 'filled' : 'outlined'}
+              color={batchFilter === b.id ? 'primary' : 'default'}
+              onClick={() => setBatchFilter(b.id)}
+              sx={{ minHeight: 32 }}
+            />
+          ))}
+          <Chip
+            label="Unassigned"
+            size="small"
+            variant={batchFilter === 'unassigned' ? 'filled' : 'outlined'}
+            color={batchFilter === 'unassigned' ? 'warning' : 'default'}
+            onClick={() => setBatchFilter('unassigned')}
+            sx={{ minHeight: 32 }}
+          />
+        </Box>
+      )}
 
       {/* Student List */}
       {loading ? (
@@ -101,7 +141,11 @@ export default function TeacherStudents() {
       ) : filteredStudents.length === 0 ? (
         <Paper sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            {searchQuery ? 'No students match your search.' : 'No students enrolled.'}
+            {searchQuery
+              ? 'No students match your search.'
+              : batchFilter
+                ? 'No students in this batch.'
+                : 'No students enrolled.'}
           </Typography>
         </Paper>
       ) : (
@@ -122,16 +166,26 @@ export default function TeacherStudents() {
                 '&:active': { backgroundColor: 'action.selected' },
               }}
             >
-              <Avatar
-                src={student.avatar_url || undefined}
-                sx={{ width: 48, height: 48 }}
-              >
-                {getInitials(student.name)}
-              </Avatar>
+              <GraphAvatar
+                msOid={student.ms_oid}
+                name={student.name}
+                size={48}
+                presenceStatus={student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined}
+              />
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
-                  {student.name}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                    {student.name}
+                  </Typography>
+                  {student.batch && (
+                    <Chip
+                      label={student.batch.name}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
                 {student.email && (
                   <Typography variant="body2" color="text.secondary" noWrap>
                     {student.email}
@@ -140,15 +194,15 @@ export default function TeacherStudents() {
               </Box>
               <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                 <Chip
-                  label={`${Math.round(student.attendance_percentage)}% att`}
+                  label={`${student.attendance.percentage}% att`}
                   size="small"
-                  color={student.attendance_percentage >= 75 ? 'success' : 'warning'}
+                  color={student.attendance.percentage >= 75 ? 'success' : 'warning'}
                   variant="outlined"
                 />
                 <Chip
-                  label={`${Math.round(student.checklist_percentage)}% done`}
+                  label={`${student.checklist.total > 0 ? Math.round((student.checklist.completed / student.checklist.total) * 100) : 0}% done`}
                   size="small"
-                  color={student.checklist_percentage >= 50 ? 'info' : 'default'}
+                  color={student.checklist.total > 0 && (student.checklist.completed / student.checklist.total) >= 0.5 ? 'info' : 'default'}
                   variant="outlined"
                 />
               </Box>

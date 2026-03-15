@@ -23,6 +23,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateCourseSchema, generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { BASE_URL, ORG_NAME, SOCIAL_PROFILES } from '@/lib/seo/constants';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RelatedContent from '@/components/seo/RelatedContent';
 
 export async function generateMetadata({
   params: { locale },
@@ -468,6 +469,18 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
             ))}
           </Container>
         </Box>
+
+        {/* Related Content */}
+        <RelatedContent
+          heading="Helpful Resources for NATA"
+          locale={locale}
+          links={[
+            { title: 'NATA Syllabus 2026', description: 'Complete section-wise syllabus breakdown', href: '/nata-syllabus' },
+            { title: 'Best Books for NATA & JEE', description: 'Recommended study materials and reference books', href: '/best-books-nata-jee' },
+            { title: 'JEE Paper 2 Preparation', description: 'Alternative path to top architecture colleges', href: '/jee-paper-2-preparation' },
+            { title: 'NATA Preparation Guide', description: 'Step-by-step 6-month preparation strategy', href: '/nata-preparation-guide' },
+          ]}
+        />
 
         {/* CTA Section */}
         <Box

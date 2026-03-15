@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
 
     const body = await request.json();
-    const { classroom_id, topic_id, title, description, sort_order, resource_urls } = body;
+    const { classroom_id, topic_id, title, description, learning_outcome, sort_order, resource_urls } = body;
 
     if (!classroom_id || !title) {
       return NextResponse.json({ error: 'Missing required fields: classroom_id, title' }, { status: 400 });
@@ -187,6 +187,7 @@ export async function POST(request: NextRequest) {
         topic_id: topic_id || null,
         title,
         description: description || null,
+        learning_outcome: learning_outcome || null,
         sort_order: sort_order ?? 0,
         is_active: true,
       })
@@ -221,6 +222,73 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create checklist item';
     console.error('Checklist POST error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/checklist?id={itemId}
+ *
+ * Soft-delete a checklist item (teacher only). Sets is_active = false.
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const itemId = request.nextUrl.searchParams.get('id');
+
+    if (!itemId) {
+      return NextResponse.json({ error: 'Missing item id' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdminClient();
+
+    // Look up user
+    const { data: user } = await supabase
+      .from('users')
+      .select('id')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Get the item to find its classroom
+    const { data: item } = await supabase
+      .from('nexus_checklist_items')
+      .select('classroom_id')
+      .eq('id', itemId)
+      .single();
+
+    if (!item) {
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    }
+
+    // Verify user is a teacher in this classroom
+    const { data: enrollment } = await supabase
+      .from('nexus_enrollments')
+      .select('role')
+      .eq('classroom_id', item.classroom_id)
+      .eq('user_id', user.id)
+      .eq('role', 'teacher')
+      .single();
+
+    if (!enrollment) {
+      return NextResponse.json({ error: 'Only teachers can delete checklist items' }, { status: 403 });
+    }
+
+    // Soft delete
+    const { error } = await supabase
+      .from('nexus_checklist_items')
+      .update({ is_active: false })
+      .eq('id', itemId);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to delete checklist item';
+    console.error('Checklist DELETE error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

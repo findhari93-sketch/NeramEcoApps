@@ -27,17 +27,17 @@ export const blogPosts: Record<string, BlogPost> = {
   // EXISTING POSTS
   // ─────────────────────────────────────────────
 
-  'nata-2025-preparation-strategy': {
-    slug: 'nata-2025-preparation-strategy',
-    title: 'NATA 2025 Preparation Strategy: Complete Guide for Aspirants',
+  'nata-2026-preparation-strategy': {
+    slug: 'nata-2026-preparation-strategy',
+    title: 'NATA 2026 Preparation Strategy: Complete Guide for Aspirants',
     excerpt:
-      'Learn the complete preparation strategy for NATA 2025 with expert tips on drawing, aptitude, and mathematics preparation.',
+      'Learn the complete preparation strategy for NATA 2026 with expert tips on drawing, aptitude, and mathematics preparation.',
     content: `
 ## Introduction
 
-The National Aptitude Test in Architecture (NATA) is the gateway to pursuing a career in architecture. With proper preparation and strategy, you can crack NATA with a top rank. This guide will help you understand the complete preparation strategy for NATA 2025.
+The National Aptitude Test in Architecture (NATA) is the gateway to pursuing a career in architecture. With proper preparation and strategy, you can crack NATA with a top rank. This guide will help you understand the complete preparation strategy for NATA 2026.
 
-## Understanding NATA 2025
+## Understanding NATA 2026
 
 NATA tests your aptitude for architecture through three main sections:
 - **Mathematics (40 marks)**: Tests your mathematical ability
@@ -73,13 +73,13 @@ NATA tests your aptitude for architecture through three main sections:
 
 ## Conclusion
 
-With dedicated preparation and the right strategy, you can achieve a top rank in NATA 2025. Join Neram Classes for expert guidance and comprehensive preparation.
+With dedicated preparation and the right strategy, you can achieve a top rank in NATA 2026. Join Neram Classes for expert guidance and comprehensive preparation.
     `,
     category: 'Preparation',
     author: 'Neram Classes',
-    publishedAt: '2025-01-15',
+    publishedAt: '2026-01-15',
     readTime: '8 min read',
-    tags: ['NATA 2025', 'Preparation Strategy', 'Study Tips'],
+    tags: ['NATA 2026', 'Preparation Strategy', 'Study Tips'],
     featured: true,
   },
 

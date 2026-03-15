@@ -6,11 +6,12 @@ import {
   Typography,
   Paper,
   Skeleton,
-  Avatar,
   Chip,
   LinearProgress,
 } from '@neram/ui';
+import GraphAvatar from '@/components/GraphAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useGraphProfile } from '@/hooks/useGraphProfile';
 
 interface DashboardData {
   attendanceSummary: { total: number; attended: number; percentage: number };
@@ -19,12 +20,16 @@ interface DashboardData {
 }
 
 export default function StudentProfile() {
-  const { user, activeClassroom, getToken } = useNexusAuthContext();
+  const { user, activeClassroom, getToken, loading: authLoading } = useNexusAuthContext();
+  const { profile: graphProfile, loading: profileLoading } = useGraphProfile(undefined, true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!activeClassroom) return;
+    if (!activeClassroom) {
+      if (!authLoading) setLoading(false);
+      return;
+    }
 
     async function fetchDashboard() {
       setLoading(true);
@@ -50,16 +55,6 @@ export default function StudentProfile() {
     fetchDashboard();
   }, [activeClassroom, getToken]);
 
-  const getInitials = (name?: string) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
   return (
     <Box>
       <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 3 }}>
@@ -76,13 +71,11 @@ export default function StudentProfile() {
             gap: 2,
           }}
         >
-          <Avatar
-            src={user?.avatar_url || undefined}
-            alt={user?.name || 'User'}
-            sx={{ width: 80, height: 80, fontSize: 28, fontWeight: 700 }}
-          >
-            {getInitials(user?.name)}
-          </Avatar>
+          <GraphAvatar
+            self
+            name={user?.name}
+            size={80}
+          />
 
           <Box sx={{ textAlign: { xs: 'center', sm: 'left' }, flex: 1 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
@@ -103,6 +96,76 @@ export default function StudentProfile() {
           </Box>
         </Box>
       </Paper>
+
+      {/* Microsoft Profile Details */}
+      {graphProfile && (
+        <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Profile Details
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+              gap: 1.5,
+            }}
+          >
+            {graphProfile.department && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">Batch / Group</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.department}</Typography>
+              </Box>
+            )}
+            {graphProfile.jobTitle && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">Role</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.jobTitle}</Typography>
+              </Box>
+            )}
+            {graphProfile.officeLocation && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">Center</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.officeLocation}</Typography>
+              </Box>
+            )}
+            {graphProfile.city && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">City</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.city}</Typography>
+              </Box>
+            )}
+            {graphProfile.state && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">State</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.state}</Typography>
+              </Box>
+            )}
+            {graphProfile.country && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">Country</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.country}</Typography>
+              </Box>
+            )}
+            {graphProfile.employeeId && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">Student ID</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.employeeId}</Typography>
+              </Box>
+            )}
+            {graphProfile.mobilePhone && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">Mobile</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{graphProfile.mobilePhone}</Typography>
+              </Box>
+            )}
+          </Box>
+        </Paper>
+      )}
+      {profileLoading && (
+        <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>
+          <Skeleton variant="rectangular" height={80} sx={{ borderRadius: 1 }} />
+        </Paper>
+      )}
 
       {/* Active Classroom */}
       <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2 }}>

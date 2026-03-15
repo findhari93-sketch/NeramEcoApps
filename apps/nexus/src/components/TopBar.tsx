@@ -7,7 +7,6 @@ import {
   Toolbar,
   Typography,
   IconButton,
-  Avatar,
   Menu,
   MenuItem,
   Box,
@@ -16,6 +15,7 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
+import GraphAvatar from '@/components/GraphAvatar';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
@@ -141,22 +141,18 @@ export default function TopBar() {
           onClick={(e) => setProfileAnchor(e.currentTarget)}
           sx={{ p: 0.5 }}
         >
-          <Avatar
+          <GraphAvatar
+            self
+            name={user?.name}
+            size={34}
             sx={{
-              width: 34,
-              height: 34,
-              bgcolor: 'primary.main',
-              fontSize: '0.8rem',
-              fontWeight: 700,
               border: `2px solid ${alpha(theme.palette.primary.main, 0.3)}`,
               transition: 'box-shadow 200ms ease',
               '&:hover': {
                 boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`,
               },
             }}
-          >
-            {user?.name?.charAt(0)?.toUpperCase() || '?'}
-          </Avatar>
+          />
         </IconButton>
 
         {/* Profile Menu */}

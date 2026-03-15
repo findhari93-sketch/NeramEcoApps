@@ -77,12 +77,12 @@ const courseSlugs = [
 
 // Blog post slugs (static until database integration)
 const blogSlugs = [
-  { slug: 'nata-2025-preparation-strategy', date: '2025-01-15', isCityGuide: false },
-  { slug: 'top-10-drawing-techniques-nata', date: '2025-01-10', isCityGuide: false },
-  { slug: 'best-nata-coaching-chennai', date: '2025-01-05', isCityGuide: true },
-  { slug: 'best-nata-coaching-coimbatore', date: '2025-01-03', isCityGuide: true },
-  { slug: 'best-nata-coaching-madurai', date: '2025-01-02', isCityGuide: true },
-  { slug: 'best-nata-coaching-trichy', date: '2025-01-01', isCityGuide: true },
+  { slug: 'nata-2026-preparation-strategy', date: '2026-01-15', isCityGuide: false },
+  { slug: 'top-10-drawing-techniques-nata', date: '2026-01-10', isCityGuide: false },
+  { slug: 'best-nata-coaching-chennai', date: '2026-01-05', isCityGuide: true },
+  { slug: 'best-nata-coaching-coimbatore', date: '2026-01-03', isCityGuide: true },
+  { slug: 'best-nata-coaching-madurai', date: '2026-01-02', isCityGuide: true },
+  { slug: 'best-nata-coaching-trichy', date: '2026-01-01', isCityGuide: true },
   { slug: 'best-nata-coaching-pudukkottai', date: '2026-01-10', isCityGuide: true },
   { slug: 'best-nata-coaching-salem', date: '2026-01-08', isCityGuide: true },
   { slug: 'best-nata-coaching-tiruppur', date: '2026-01-05', isCityGuide: true },

@@ -281,7 +281,7 @@ export default function TneaBarchPage({ params: { locale } }: PageProps) {
       </Box>
 
       {/* 7. Colleges */}
-      <SectionTitle id="colleges">Participating Colleges (2025)</SectionTitle>
+      <SectionTitle id="colleges">Participating Colleges (2026)</SectionTitle>
       <Typography variant="body1" paragraph>
         32 architecture colleges in Tamil Nadu participate in TNEA B.Arch counseling.
         Use our College Predictor tool to find colleges that match your score.

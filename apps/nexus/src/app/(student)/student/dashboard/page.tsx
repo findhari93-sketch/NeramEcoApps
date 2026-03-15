@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -23,6 +24,8 @@ import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 import StatCard from '@/components/StatCard';
+import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
+import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
 
 interface UpcomingClass {
   id: string;
@@ -45,11 +48,40 @@ interface DashboardData {
 
 export default function StudentDashboard() {
   const theme = useTheme();
+  const router = useRouter();
   const { user, activeClassroom, getToken, loading: authLoading, classrooms } = useNexusAuthContext();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [foundationChapters, setFoundationChapters] = useState<NexusFoundationChapterWithProgress[] | null>(null);
+  const [foundationLoading, setFoundationLoading] = useState(true);
 
   const noClassrooms = !authLoading && classrooms.length === 0;
+
+  // Fetch foundation progress
+  const fetchFoundation = useCallback(async () => {
+    setFoundationLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/foundation/chapters', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const fData = await res.json();
+        setFoundationChapters(fData.chapters || []);
+      }
+    } catch (err) {
+      console.error('Failed to load foundation:', err);
+    } finally {
+      setFoundationLoading(false);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!authLoading) fetchFoundation();
+  }, [authLoading, fetchFoundation]);
 
   useEffect(() => {
     if (!activeClassroom) {
@@ -127,6 +159,14 @@ export default function StudentDashboard() {
       <PageHeader
         title={`Welcome, ${user?.name?.split(' ')[0] || 'Student'}`}
         subtitle={activeClassroom?.name || 'No classroom selected'}
+      />
+
+      {/* Foundation Progress */}
+      <FoundationOverviewCard
+        chapters={foundationChapters}
+        loading={foundationLoading}
+        onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
+        onViewAll={() => router.push('/student/foundation')}
       />
 
       {/* Progress Stats */}

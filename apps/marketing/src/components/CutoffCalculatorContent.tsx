@@ -80,7 +80,7 @@ export default function CutoffCalculatorContent() {
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            NATA Cutoff Calculator 2025
+            NATA Cutoff Calculator 2026
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
             Estimate your rank and eligible colleges based on your expected score

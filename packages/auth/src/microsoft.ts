@@ -54,6 +54,8 @@ export const loginScopes = {
   admin: ['openid', 'profile', 'email', 'User.Read', 'User.ReadWrite.All', 'Directory.Read.All'],
   nexus: [
     'openid', 'profile', 'email', 'User.Read',
+    'User.ReadBasic.All',
+    'Presence.Read.All',
     'OnlineMeetings.ReadWrite',
     'OnlineMeetingArtifact.Read.All',
     'Files.ReadWrite',

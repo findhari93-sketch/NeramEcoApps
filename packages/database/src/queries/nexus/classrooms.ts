@@ -39,7 +39,7 @@ export async function getEnrollmentsByClassroom(
   const supabase = client || getSupabaseAdminClient();
   let query = supabase
     .from('nexus_enrollments')
-    .select('*, user:users(id, name, email, phone, avatar_url, user_type)')
+    .select('*, user:users(id, name, email, phone, avatar_url, user_type), batch:nexus_batches(id, name)')
     .eq('classroom_id', classroomId)
     .eq('is_active', true);
   if (role) query = query.eq('role', role);
@@ -91,8 +91,36 @@ export async function createClassroom(
   return classroom;
 }
 
+export async function getAllClassrooms(
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_classrooms')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function updateClassroom(
+  classroomId: string,
+  data: { name?: string; type?: string; description?: string; ms_team_id?: string; is_active?: boolean },
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: classroom, error } = await supabase
+    .from('nexus_classrooms')
+    .update(data)
+    .eq('id', classroomId)
+    .select()
+    .single();
+  if (error) throw error;
+  return classroom;
+}
+
 export async function enrollUser(
-  data: { user_id: string; classroom_id: string; role: 'teacher' | 'student' },
+  data: { user_id: string; classroom_id: string; role: 'teacher' | 'student'; batch_id?: string },
   client?: TypedSupabaseClient
 ) {
   const supabase = client || getSupabaseAdminClient();
@@ -103,4 +131,35 @@ export async function enrollUser(
     .single();
   if (error) throw error;
   return enrollment;
+}
+
+export async function updateEnrollmentBatch(
+  enrollmentId: string,
+  batchId: string | null,
+  client?: TypedSupabaseClient
+) {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data, error } = await supabase
+    .from('nexus_enrollments')
+    .update({ batch_id: batchId })
+    .eq('id', enrollmentId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function bulkUpdateEnrollmentBatch(
+  enrollmentIds: string[],
+  batchId: string | null,
+  client?: TypedSupabaseClient
+) {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data, error } = await supabase
+    .from('nexus_enrollments')
+    .update({ batch_id: batchId })
+    .in('id', enrollmentIds)
+    .select();
+  if (error) throw error;
+  return data;
 }

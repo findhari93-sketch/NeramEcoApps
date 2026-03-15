@@ -25,8 +25,11 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
+import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
+import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
 
 interface ChecklistItem {
   id: string;
@@ -68,13 +71,45 @@ const resourceColor = (type: string) => {
 
 export default function StudentChecklist() {
   const theme = useTheme();
-  const { user, activeClassroom, getToken } = useNexusAuthContext();
+  const router = useRouter();
+  const { user, activeClassroom, getToken, loading: authLoading } = useNexusAuthContext();
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  const [foundationChapters, setFoundationChapters] = useState<NexusFoundationChapterWithProgress[] | null>(null);
+  const [foundationLoading, setFoundationLoading] = useState(true);
+
+  // Fetch foundation chapters
+  const fetchFoundation = useCallback(async () => {
+    setFoundationLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/foundation/chapters', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setFoundationChapters(data.chapters || []);
+      }
+    } catch (err) {
+      console.error('Failed to load foundation:', err);
+    } finally {
+      setFoundationLoading(false);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!authLoading) fetchFoundation();
+  }, [authLoading, fetchFoundation]);
 
   const fetchChecklist = useCallback(async () => {
-    if (!activeClassroom) return;
+    if (!activeClassroom) {
+      if (!authLoading) setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const token = await getToken();
@@ -164,6 +199,14 @@ export default function StudentChecklist() {
       <PageHeader
         title="My Checklist"
         subtitle={`${user?.name?.split(' ')[0] || 'Student'}'s learning tasks`}
+      />
+
+      {/* Foundation Module Card */}
+      <FoundationOverviewCard
+        chapters={foundationChapters}
+        loading={foundationLoading}
+        onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
+        onViewAll={() => router.push('/student/foundation')}
       />
 
       {/* Progress Card */}

@@ -100,9 +100,9 @@ export default function NewHeroSection() {
                   },
                 }}
               >
-                Your Time to Master{' '}
+                Your Time to Crack{' '}
                 <br />
-                <em>Architecture</em>{' '}
+                <em>NATA & JEE Paper 2</em>{' '}
                 <br />
                 with <span className="ai-word">AI</span>
               </Typography>

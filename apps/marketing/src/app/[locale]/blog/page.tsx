@@ -35,12 +35,12 @@ interface PageProps {
 // Static blog posts data (will be replaced with database fetch)
 const blogPosts = [
   {
-    slug: 'nata-2025-preparation-strategy',
-    title: 'NATA 2025 Preparation Strategy: Complete Guide for Aspirants',
-    excerpt: 'Learn the complete preparation strategy for NATA 2025 with expert tips on drawing, aptitude, and mathematics preparation.',
+    slug: 'nata-2026-preparation-strategy',
+    title: 'NATA 2026 Preparation Strategy: Complete Guide for Aspirants',
+    excerpt: 'Learn the complete preparation strategy for NATA 2026 with expert tips on drawing, aptitude, and mathematics preparation.',
     category: 'Preparation',
     author: 'Neram Classes',
-    publishedAt: '2025-01-15',
+    publishedAt: '2026-01-15',
     readTime: '8 min read',
     featured: true,
   },

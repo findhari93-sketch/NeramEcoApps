@@ -104,13 +104,13 @@ const fallbackTestimonials: Testimonial[] = [
     text: 'The drawing and sketching workshops completely transformed my approach to design problems. I scored 145+ in NATA drawing section.',
     image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop&crop=face',
     name: 'Arjun Menon',
-    role: 'NATA 2025 - AIR 42',
+    role: 'NATA 2026 - AIR 42',
   },
   {
     text: 'From zero knowledge to AIR under 500 — all thanks to the systematic approach and mentorship at Neram. The crash course is worth every rupee.',
     image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=face',
     name: 'Priya Venkat',
-    role: 'JEE Paper 2 2025 - IIT Kharagpur',
+    role: 'JEE Paper 2 2026 - IIT Kharagpur',
   },
   {
     text: 'Mock tests with detailed analysis helped me identify my weak areas. The faculty is always available for doubt clearing even after class hours.',
@@ -128,7 +128,7 @@ const fallbackTestimonials: Testimonial[] = [
     text: 'The online classes are just as effective as offline. I could study from my hometown and still cracked NATA in my first attempt with 140+ marks.',
     image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=80&h=80&fit=crop&crop=face',
     name: 'Rahul Prakash',
-    role: 'NATA 2025 - First Attempt Clear',
+    role: 'NATA 2026 - First Attempt Clear',
   },
   {
     text: 'The AutoCAD and Revit combo course gave me a huge edge. I got an internship at a top firm even before graduating from architecture college.',

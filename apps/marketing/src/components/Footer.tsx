@@ -67,7 +67,7 @@ export default function Footer() {
   const isEnrolled = status === 'enrolled' || status === 'partial_payment';
 
   const getLocalizedPath = (path: string) => {
-    return `/${locale}${path}`;
+    return locale === 'en' ? path : `/${locale}${path}`;
   };
 
   const linkStyle = { opacity: 0.7, color: '#f5f0e8', '&:hover': { opacity: 1, color: '#e8a020' }, fontSize: '0.85rem', transition: 'color 0.2s' };
