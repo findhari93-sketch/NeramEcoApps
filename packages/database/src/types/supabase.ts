@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.4"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -195,6 +195,72 @@ export type Database = {
             columns: ["counseling_system_id"]
             isOneToOne: false
             referencedRelation: "counseling_systems"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_feedback: {
+        Row: {
+          admin_notes: string | null
+          app_version: string | null
+          category: Database["public"]["Enums"]["app_feedback_category"]
+          created_at: string
+          description: string
+          device_info: Json | null
+          email: string | null
+          feedback_number: string
+          id: string
+          rating: number
+          source: string | null
+          status: Database["public"]["Enums"]["app_feedback_status"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          app_version?: string | null
+          category?: Database["public"]["Enums"]["app_feedback_category"]
+          created_at?: string
+          description: string
+          device_info?: Json | null
+          email?: string | null
+          feedback_number: string
+          id?: string
+          rating: number
+          source?: string | null
+          status?: Database["public"]["Enums"]["app_feedback_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          app_version?: string | null
+          category?: Database["public"]["Enums"]["app_feedback_category"]
+          created_at?: string
+          description?: string
+          device_info?: Json | null
+          email?: string | null
+          feedback_number?: string
+          id?: string
+          rating?: number
+          source?: string | null
+          status?: Database["public"]["Enums"]["app_feedback_status"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -893,6 +959,74 @@ export type Database = {
           },
           {
             foreignKeyName: "chatbot_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classroom_access_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_email: string | null
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_email?: string | null
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_email?: string | null
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classroom_access_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classroom_access_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classroom_access_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classroom_access_requests_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -3497,6 +3631,44 @@ export type Database = {
           },
         ]
       }
+      nexus_batches: {
+        Row: {
+          classroom_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          classroom_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          classroom_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_batches_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_checklist_items: {
         Row: {
           classroom_id: string
@@ -3504,6 +3676,7 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean | null
+          learning_outcome: string | null
           sort_order: number | null
           title: string
           topic_id: string | null
@@ -3515,6 +3688,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          learning_outcome?: string | null
           sort_order?: number | null
           title: string
           topic_id?: string | null
@@ -3526,6 +3700,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          learning_outcome?: string | null
           sort_order?: number | null
           title?: string
           topic_id?: string | null
@@ -3971,6 +4146,7 @@ export type Database = {
       }
       nexus_enrollments: {
         Row: {
+          batch_id: string | null
           classroom_id: string
           enrolled_at: string | null
           id: string
@@ -3979,6 +4155,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          batch_id?: string | null
           classroom_id: string
           enrolled_at?: string | null
           id?: string
@@ -3987,6 +4164,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          batch_id?: string | null
           classroom_id?: string
           enrolled_at?: string | null
           id?: string
@@ -3995,6 +4173,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "nexus_enrollments_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "nexus_enrollments_classroom_id_fkey"
             columns: ["classroom_id"]
@@ -4014,6 +4199,616 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_chapters: {
+        Row: {
+          chapter_number: number
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_published: boolean
+          min_quiz_score_pct: number
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          video_duration_seconds: number | null
+          youtube_video_id: string
+        }
+        Insert: {
+          chapter_number: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          min_quiz_score_pct?: number
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          video_duration_seconds?: number | null
+          youtube_video_id: string
+        }
+        Update: {
+          chapter_number?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          min_quiz_score_pct?: number
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          video_duration_seconds?: number | null
+          youtube_video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_chapters_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_chapters_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_issue_activity: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          id: string
+          issue_id: string
+          new_status: string | null
+          old_status: string | null
+          reason: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string
+          id?: string
+          issue_id: string
+          new_status?: string | null
+          old_status?: string | null
+          reason?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          id?: string
+          issue_id?: string
+          new_status?: string | null
+          old_status?: string | null
+          reason?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_issue_activity_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issue_activity_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issue_activity_issue_id_fkey"
+            columns: ["issue_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_issues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issue_activity_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issue_activity_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_issues: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          assigned_to: string | null
+          chapter_id: string
+          created_at: string
+          description: string
+          id: string
+          priority: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          section_id: string | null
+          status: string
+          student_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          assigned_to?: string | null
+          chapter_id: string
+          created_at?: string
+          description?: string
+          id?: string
+          priority?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          section_id?: string | null
+          status?: string
+          student_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          assigned_to?: string | null
+          chapter_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          priority?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          section_id?: string | null
+          status?: string
+          student_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_issues_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_issues_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_quiz_attempts: {
+        Row: {
+          answers: Json
+          attempt_number: number
+          created_at: string
+          id: string
+          passed: boolean
+          score_pct: number
+          section_id: string
+          student_id: string
+        }
+        Insert: {
+          answers?: Json
+          attempt_number?: number
+          created_at?: string
+          id?: string
+          passed: boolean
+          score_pct: number
+          section_id: string
+          student_id: string
+        }
+        Update: {
+          answers?: Json
+          attempt_number?: number
+          created_at?: string
+          id?: string
+          passed?: boolean
+          score_pct?: number
+          section_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_quiz_attempts_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_quiz_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_quiz_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_quiz_questions: {
+        Row: {
+          correct_option: string
+          created_at: string
+          explanation: string | null
+          id: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          section_id: string
+          sort_order: number
+        }
+        Insert: {
+          correct_option: string
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          section_id: string
+          sort_order?: number
+        }
+        Update: {
+          correct_option?: string
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          option_a?: string
+          option_b?: string
+          option_c?: string
+          option_d?: string
+          question_text?: string
+          section_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_quiz_questions_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_reactions: {
+        Row: {
+          chapter_id: string
+          created_at: string
+          id: string
+          reaction: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          chapter_id: string
+          created_at?: string
+          id?: string
+          reaction: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          chapter_id?: string
+          created_at?: string
+          id?: string
+          reaction?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_reactions_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_reactions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_reactions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_sections: {
+        Row: {
+          chapter_id: string
+          created_at: string
+          description: string | null
+          end_timestamp_seconds: number
+          id: string
+          sort_order: number
+          start_timestamp_seconds: number
+          title: string
+        }
+        Insert: {
+          chapter_id: string
+          created_at?: string
+          description?: string | null
+          end_timestamp_seconds: number
+          id?: string
+          sort_order: number
+          start_timestamp_seconds: number
+          title: string
+        }
+        Update: {
+          chapter_id?: string
+          created_at?: string
+          description?: string | null
+          end_timestamp_seconds?: number
+          id?: string
+          sort_order?: number
+          start_timestamp_seconds?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_sections_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_chapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_student_notes: {
+        Row: {
+          created_at: string
+          id: string
+          note_text: string
+          section_id: string
+          student_id: string
+          updated_at: string
+          video_timestamp_seconds: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note_text?: string
+          section_id: string
+          student_id: string
+          updated_at?: string
+          video_timestamp_seconds?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note_text?: string
+          section_id?: string
+          student_id?: string
+          updated_at?: string
+          video_timestamp_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_student_notes_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_student_notes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_student_notes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_student_progress: {
+        Row: {
+          chapter_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          last_section_id: string | null
+          last_video_position_seconds: number
+          started_at: string | null
+          status: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          chapter_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_section_id?: string | null
+          last_video_position_seconds?: number
+          started_at?: string | null
+          status?: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          chapter_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          last_section_id?: string | null
+          last_video_position_seconds?: number
+          started_at?: string | null
+          status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_student_progress_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_student_progress_last_section_id_fkey"
+            columns: ["last_section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_student_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_foundation_student_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_foundation_transcripts: {
+        Row: {
+          chapter_id: string
+          created_at: string
+          entries: Json
+          id: string
+          language: string
+          updated_at: string
+        }
+        Insert: {
+          chapter_id: string
+          created_at?: string
+          entries?: Json
+          id?: string
+          language?: string
+          updated_at?: string
+        }
+        Update: {
+          chapter_id?: string
+          created_at?: string
+          entries?: Json
+          id?: string
+          language?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_foundation_transcripts_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_chapters"
             referencedColumns: ["id"]
           },
         ]
@@ -4148,6 +4943,435 @@ export type Database = {
             columns: ["student_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_classroom_links: {
+        Row: {
+          classroom_id: string
+          enabled_at: string
+          enabled_by: string | null
+          id: string
+          is_active: boolean
+        }
+        Insert: {
+          classroom_id: string
+          enabled_at?: string
+          enabled_by?: string | null
+          id?: string
+          is_active?: boolean
+        }
+        Update: {
+          classroom_id?: string
+          enabled_at?: string
+          enabled_by?: string | null
+          id?: string
+          is_active?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_classroom_links_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: true
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_classroom_links_enabled_by_fkey"
+            columns: ["enabled_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_classroom_links_enabled_by_fkey"
+            columns: ["enabled_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_original_papers: {
+        Row: {
+          created_at: string
+          duration_minutes: number | null
+          exam_type: string
+          id: string
+          pdf_url: string
+          session: string | null
+          total_marks: number | null
+          total_questions: number | null
+          uploaded_by: string | null
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes?: number | null
+          exam_type: string
+          id?: string
+          pdf_url: string
+          session?: string | null
+          total_marks?: number | null
+          total_questions?: number | null
+          uploaded_by?: string | null
+          year: number
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number | null
+          exam_type?: string
+          id?: string
+          pdf_url?: string
+          session?: string | null
+          total_marks?: number | null
+          total_questions?: number | null
+          uploaded_by?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_original_papers_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_original_papers_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_question_sources: {
+        Row: {
+          created_at: string
+          exam_type: string
+          id: string
+          question_id: string
+          question_number: number | null
+          session: string | null
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          exam_type: string
+          id?: string
+          question_id: string
+          question_number?: number | null
+          session?: string | null
+          year: number
+        }
+        Update: {
+          created_at?: string
+          exam_type?: string
+          id?: string
+          question_id?: string
+          question_number?: number | null
+          session?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_question_sources_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_questions: {
+        Row: {
+          answer_tolerance: number | null
+          categories: string[]
+          correct_answer: string
+          created_at: string
+          created_by: string | null
+          difficulty: string
+          display_order: number | null
+          exam_relevance: string
+          explanation_brief: string
+          explanation_detailed: string | null
+          id: string
+          is_active: boolean
+          options: Json | null
+          original_paper_id: string | null
+          original_paper_page: number | null
+          question_format: string
+          question_image_url: string | null
+          question_text: string | null
+          repeat_group_id: string | null
+          solution_image_url: string | null
+          solution_video_url: string | null
+          sub_topic: string | null
+          topic_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          answer_tolerance?: number | null
+          categories?: string[]
+          correct_answer: string
+          created_at?: string
+          created_by?: string | null
+          difficulty?: string
+          display_order?: number | null
+          exam_relevance?: string
+          explanation_brief: string
+          explanation_detailed?: string | null
+          id?: string
+          is_active?: boolean
+          options?: Json | null
+          original_paper_id?: string | null
+          original_paper_page?: number | null
+          question_format?: string
+          question_image_url?: string | null
+          question_text?: string | null
+          repeat_group_id?: string | null
+          solution_image_url?: string | null
+          solution_video_url?: string | null
+          sub_topic?: string | null
+          topic_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          answer_tolerance?: number | null
+          categories?: string[]
+          correct_answer?: string
+          created_at?: string
+          created_by?: string | null
+          difficulty?: string
+          display_order?: number | null
+          exam_relevance?: string
+          explanation_brief?: string
+          explanation_detailed?: string | null
+          id?: string
+          is_active?: boolean
+          options?: Json | null
+          original_paper_id?: string | null
+          original_paper_page?: number | null
+          question_format?: string
+          question_image_url?: string | null
+          question_text?: string | null
+          repeat_group_id?: string | null
+          solution_image_url?: string | null
+          solution_video_url?: string | null
+          sub_topic?: string | null
+          topic_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_questions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_questions_original_paper_id_fkey"
+            columns: ["original_paper_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_original_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_questions_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_saved_presets: {
+        Row: {
+          created_at: string
+          filters: Json
+          id: string
+          is_pinned: boolean
+          name: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          filters: Json
+          id?: string
+          is_pinned?: boolean
+          name: string
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          filters?: Json
+          id?: string
+          is_pinned?: boolean
+          name?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_saved_presets_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_saved_presets_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_student_attempts: {
+        Row: {
+          created_at: string
+          id: string
+          is_correct: boolean
+          mode: string
+          question_id: string
+          selected_answer: string
+          student_id: string
+          time_spent_seconds: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_correct: boolean
+          mode?: string
+          question_id: string
+          selected_answer: string
+          student_id: string
+          time_spent_seconds?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_correct?: boolean
+          mode?: string
+          question_id?: string
+          selected_answer?: string
+          student_id?: string
+          time_spent_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_student_attempts_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_student_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_student_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_study_marks: {
+        Row: {
+          created_at: string
+          id: string
+          question_id: string
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          question_id: string
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          question_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_study_marks_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_study_marks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_study_marks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_topics: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          parent_id: string | null
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          parent_id?: string | null
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          parent_id?: string | null
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_topics_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_topics"
             referencedColumns: ["id"]
           },
         ]
@@ -4394,6 +5618,42 @@ export type Database = {
             columns: ["topic_id"]
             isOneToOne: false
             referencedRelation: "nexus_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -4988,6 +6248,7 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           name: string
+          nearby_cities: Json | null
           operating_hours: Json | null
           photos: Json | null
           pincode: string | null
@@ -5021,6 +6282,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name: string
+          nearby_cities?: Json | null
           operating_hours?: Json | null
           photos?: Json | null
           pincode?: string | null
@@ -5054,6 +6316,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name?: string
+          nearby_cities?: Json | null
           operating_hours?: Json | null
           photos?: Json | null
           pincode?: string | null
@@ -6881,6 +8144,7 @@ export type Database = {
           notes: string | null
           parent_contact: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
+          student_id: string | null
           total_fee: number | null
           total_watch_time: number | null
           updated_at: string | null
@@ -6904,6 +8168,7 @@ export type Database = {
           notes?: string | null
           parent_contact?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          student_id?: string | null
           total_fee?: number | null
           total_watch_time?: number | null
           updated_at?: string | null
@@ -6927,6 +8192,7 @@ export type Database = {
           notes?: string | null
           parent_contact?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
+          student_id?: string | null
           total_fee?: number | null
           total_watch_time?: number | null
           updated_at?: string | null
@@ -7633,6 +8899,57 @@ export type Database = {
           },
         ]
       }
+      user_exam_session_preferences: {
+        Row: {
+          created_at: string | null
+          exam_date: string
+          exam_schedule_id: string | null
+          id: string
+          notes: string | null
+          phase: string
+          session_label: string
+          time_slot: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          exam_date: string
+          exam_schedule_id?: string | null
+          id?: string
+          notes?: string | null
+          phase: string
+          session_label: string
+          time_slot: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          exam_date?: string
+          exam_schedule_id?: string | null
+          id?: string
+          notes?: string | null
+          phase?: string
+          session_label?: string
+          time_slot?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_exam_session_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_exam_session_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_notifications: {
         Row: {
           created_at: string | null
@@ -7806,6 +9123,48 @@ export type Database = {
           },
         ]
       }
+      user_rewards: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          points_awarded: number
+          reward_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          points_awarded?: number
+          reward_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          points_awarded?: number
+          reward_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_rewards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_rewards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           area_of_interest: string[] | null
@@ -7823,6 +9182,9 @@ export type Database = {
           id: string
           last_login_at: string | null
           last_name: string | null
+          linked_classroom_at: string | null
+          linked_classroom_by: string | null
+          linked_classroom_email: string | null
           metadata: Json | null
           ms_oid: string | null
           name: string
@@ -7854,6 +9216,9 @@ export type Database = {
           id?: string
           last_login_at?: string | null
           last_name?: string | null
+          linked_classroom_at?: string | null
+          linked_classroom_by?: string | null
+          linked_classroom_email?: string | null
           metadata?: Json | null
           ms_oid?: string | null
           name: string
@@ -7885,6 +9250,9 @@ export type Database = {
           id?: string
           last_login_at?: string | null
           last_name?: string | null
+          linked_classroom_at?: string | null
+          linked_classroom_by?: string | null
+          linked_classroom_email?: string | null
           metadata?: Json | null
           ms_oid?: string | null
           name?: string
@@ -7900,7 +9268,22 @@ export type Database = {
           user_type?: Database["public"]["Enums"]["user_type"] | null
           username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_linked_classroom_by_fkey"
+            columns: ["linked_classroom_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "users_linked_classroom_by_fkey"
+            columns: ["linked_classroom_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       youtube_subscription_coupons: {
         Row: {
@@ -8155,6 +9538,7 @@ export type Database = {
             | null
           lead_profile_id: string | null
           learning_mode: Database["public"]["Enums"]["learning_mode"] | null
+          linked_classroom_email: string | null
           name: string | null
           onboarding_completed_at: string | null
           onboarding_questions_answered: number | null
@@ -8242,41 +9626,12 @@ export type Database = {
         Args: { p_exclude_user_id?: string; p_username: string }
         Returns: boolean
       }
-      cleanup_old_sessions: {
-        Args: { p_days_to_keep?: number }
-        Returns: number
-      }
       clone_centers_to_new_year: {
         Args: { source_year: number; target_year: number }
         Returns: number
       }
       create_lead_profile: { Args: { payload: Json }; Returns: Json }
-      create_notification: {
-        Args: {
-          p_data?: Json
-          p_message: string
-          p_priority?: string
-          p_title: string
-          p_type: string
-          p_user_id: string
-        }
-        Returns: string
-      }
-      end_user_session: {
-        Args: { p_metadata?: Json; p_session_id: string }
-        Returns: undefined
-      }
       ensure_qb_stats: { Args: { p_user_id: string }; Returns: undefined }
-      get_active_sessions: {
-        Args: { p_user_id: string }
-        Returns: {
-          app_section: string
-          device_info: Json
-          duration_so_far: string
-          session_id: string
-          session_start: string
-        }[]
-      }
       get_allotment_college_stats: {
         Args: { p_system_id: string; p_year: number }
         Returns: {
@@ -8369,17 +9724,6 @@ export type Database = {
           year: number
         }[]
       }
-      get_user_session_stats: {
-        Args: { p_days_back?: number; p_user_id: string }
-        Returns: {
-          active_sessions: number
-          avg_session_duration: string
-          last_session_start: string
-          most_used_sections: Json
-          total_sessions: number
-          total_time: string
-        }[]
-      }
       initialize_student_onboarding: {
         Args: {
           p_enrollment_type?: string
@@ -8387,14 +9731,6 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
-      }
-      log_session_event: {
-        Args: {
-          p_event_data?: Json
-          p_event_type: string
-          p_session_id: string
-        }
-        Returns: string
       }
       record_profile_change: {
         Args: {
@@ -8450,21 +9786,24 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      start_user_session: {
-        Args: { p_device_info?: Json; p_section?: string; p_user_id: string }
-        Returns: string
-      }
       suggest_usernames: {
         Args: { p_base_username: string; p_count?: number }
         Returns: string[]
       }
-      update_session_section: {
-        Args: { p_metadata?: Json; p_new_section: string; p_session_id: string }
-        Returns: undefined
-      }
     }
     Enums: {
-      account_type_t: "Free" | "Paid" | "Admin"
+      app_feedback_category:
+        | "bug_report"
+        | "feature_request"
+        | "ui_ux_issue"
+        | "performance"
+        | "other"
+      app_feedback_status:
+        | "new"
+        | "reviewed"
+        | "in_progress"
+        | "resolved"
+        | "wont_fix"
       applicant_category:
         | "school_student"
         | "diploma_student"
@@ -8524,7 +9863,6 @@ export type Database = {
       direct_enrollment_link_status: "active" | "used" | "expired" | "cancelled"
       enrollment_interest: "yes" | "maybe" | "no"
       exam_type: "NATA" | "JEE_PAPER_2" | "BOTH"
-      gender_t: "male" | "female" | "nonbinary" | "prefer_not_to_say"
       learning_mode: "hybrid" | "online_only"
       location_source: "geolocation" | "pincode" | "manual"
       marketing_content_status: "draft" | "published" | "archived"
@@ -8562,15 +9900,25 @@ export type Database = {
         | "refund_requested"
         | "refund_approved"
         | "refund_rejected"
+        | "contact_message_received"
         | "direct_enrollment_completed"
         | "question_submitted"
         | "question_edit_requested"
         | "question_delete_requested"
         | "callback_reminder"
-        | "contact_message_received"
         | "ticket_created"
         | "ticket_resolved"
         | "link_regeneration_requested"
+        | "feedback_submitted"
+        | "classroom_enrolled"
+        | "batch_assigned"
+        | "batch_changed"
+        | "foundation_issue_resolved"
+        | "foundation_issue_reported"
+        | "foundation_issue_assigned"
+        | "foundation_issue_in_progress"
+        | "foundation_issue_delegated"
+        | "classroom_access_requested"
       notification_recipient_role: "admin" | "team_lead" | "team_member"
       onboarding_question_type: "single_select" | "multi_select" | "scale"
       onboarding_session_status:
@@ -8741,7 +10089,20 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      account_type_t: ["Free", "Paid", "Admin"],
+      app_feedback_category: [
+        "bug_report",
+        "feature_request",
+        "ui_ux_issue",
+        "performance",
+        "other",
+      ],
+      app_feedback_status: [
+        "new",
+        "reviewed",
+        "in_progress",
+        "resolved",
+        "wont_fix",
+      ],
       applicant_category: [
         "school_student",
         "diploma_student",
@@ -8809,7 +10170,6 @@ export const Constants = {
       direct_enrollment_link_status: ["active", "used", "expired", "cancelled"],
       enrollment_interest: ["yes", "maybe", "no"],
       exam_type: ["NATA", "JEE_PAPER_2", "BOTH"],
-      gender_t: ["male", "female", "nonbinary", "prefer_not_to_say"],
       learning_mode: ["hybrid", "online_only"],
       location_source: ["geolocation", "pincode", "manual"],
       marketing_content_status: ["draft", "published", "archived"],
@@ -8850,15 +10210,25 @@ export const Constants = {
         "refund_requested",
         "refund_approved",
         "refund_rejected",
+        "contact_message_received",
         "direct_enrollment_completed",
         "question_submitted",
         "question_edit_requested",
         "question_delete_requested",
         "callback_reminder",
-        "contact_message_received",
         "ticket_created",
         "ticket_resolved",
         "link_regeneration_requested",
+        "feedback_submitted",
+        "classroom_enrolled",
+        "batch_assigned",
+        "batch_changed",
+        "foundation_issue_resolved",
+        "foundation_issue_reported",
+        "foundation_issue_assigned",
+        "foundation_issue_in_progress",
+        "foundation_issue_delegated",
+        "classroom_access_requested",
       ],
       notification_recipient_role: ["admin", "team_lead", "team_member"],
       onboarding_question_type: ["single_select", "multi_select", "scale"],
