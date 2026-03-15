@@ -16,9 +16,8 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import type { NexusQBQuestionListItem } from '@neram/database/src/types';
-import { QB_DIFFICULTY_COLORS } from '@neram/database/src/types';
-import type { QBProgressStats } from '@neram/database/src/types';
+import type { NexusQBQuestionListItem, QBProgressStats } from '@neram/database';
+import { QB_DIFFICULTY_COLORS } from '@neram/database';
 import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 
@@ -232,7 +231,7 @@ export default function QuestionBankDashboard() {
             <Skeleton variant="text" width="80%" />
           ) : stats?.by_difficulty ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-              {Object.entries(stats.by_difficulty).map(([diff, data]) => (
+              {Object.entries(stats.by_difficulty).map(([diff, data]: [string, { attempted: number; correct: number; total: number }]) => (
                 <Typography key={diff} variant="body2">
                   <Box
                     component="span"

@@ -786,16 +786,14 @@ export default function TeacherIssuesPage() {
           label="Search teacher or admin"
           placeholder="Start typing a name..."
           size="small"
-          slotProps={{
-            input: {
-              ...params.InputProps,
-              endAdornment: (
-                <>
-                  {staffSearching ? <CircularProgress size={18} /> : null}
-                  {params.InputProps.endAdornment}
-                </>
-              ),
-            },
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {staffSearching ? <CircularProgress size={18} /> : null}
+                {params.InputProps.endAdornment}
+              </>
+            ),
           }}
         />
       )}

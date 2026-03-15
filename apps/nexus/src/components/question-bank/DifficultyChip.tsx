@@ -1,8 +1,8 @@
 'use client';
 
 import { Chip } from '@neram/ui';
-import type { QBDifficulty } from '@neram/database/src/types';
-import { QB_DIFFICULTY_COLORS } from '@neram/database/src/types';
+import type { QBDifficulty } from '@neram/database';
+import { QB_DIFFICULTY_COLORS } from '@neram/database';
 
 interface DifficultyChipProps {
   difficulty: QBDifficulty;

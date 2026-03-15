@@ -2,8 +2,8 @@
 
 import { Box, Chip } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
-import type { QBFilterState } from '@neram/database/src/types';
-import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database/src/types';
+import type { QBFilterState } from '@neram/database';
+import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
 
 interface FilterChipsProps {
   filters: QBFilterState;

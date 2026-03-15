@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Paper, Typography, alpha, useTheme } from '@neram/ui';
-import type { NexusQBQuestionListItem } from '@neram/database/src/types';
+import type { NexusQBQuestionListItem } from '@neram/database';
 import SourceBadges from './SourceBadges';
 import DifficultyChip from './DifficultyChip';
 import CategoryChips from './CategoryChips';

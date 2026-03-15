@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
 import {
+  getSupabaseAdminClient,
   getStudentQBPresets,
   createQBPreset,
-} from '@neram/database/src/queries/nexus/question-bank';
+} from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {

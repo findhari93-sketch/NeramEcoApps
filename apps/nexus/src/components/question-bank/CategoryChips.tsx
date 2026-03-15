@@ -1,8 +1,8 @@
 'use client';
 
 import { Chip, Box, useTheme } from '@neram/ui';
-import { QB_CATEGORY_LABELS } from '@neram/database/src/types';
-import type { QBCategory } from '@neram/database/src/types';
+import { QB_CATEGORY_LABELS } from '@neram/database';
+import type { QBCategory } from '@neram/database';
 
 interface CategoryChipsProps {
   categories: string[];

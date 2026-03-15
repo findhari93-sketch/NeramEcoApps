@@ -35,9 +35,9 @@ import type {
   QBExamRelevance,
   QBExamType,
   NexusQBQuestionOption,
-} from '@neram/database/src/types';
-import { QB_CATEGORIES, QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS } from '@neram/database/src/types';
-import type { QBCategory } from '@neram/database/src/types';
+} from '@neram/database';
+import { QB_CATEGORIES, QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS } from '@neram/database';
+import type { QBCategory } from '@neram/database';
 import QuestionCard from './QuestionCard';
 
 interface QuestionFormWizardProps {
@@ -416,7 +416,7 @@ export default function QuestionFormWizard({
                 Categories
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {QB_CATEGORIES.map((cat) => {
+                {QB_CATEGORIES.map((cat: string) => {
                   const selected = form.categories.includes(cat);
                   return (
                     <Chip

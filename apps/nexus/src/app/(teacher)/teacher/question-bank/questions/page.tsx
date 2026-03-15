@@ -22,8 +22,8 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import type { NexusQBQuestionListItem } from '@neram/database/src/types';
-import { QB_CATEGORY_LABELS, QB_CATEGORIES } from '@neram/database/src/types';
+import type { NexusQBQuestionListItem } from '@neram/database';
+import { QB_CATEGORY_LABELS, QB_CATEGORIES } from '@neram/database';
 import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
@@ -194,12 +194,10 @@ export default function QuestionsListPage() {
         onChange={(e) => setSearch(e.target.value)}
         size="small"
         fullWidth
-        slotProps={{
-          input: {
-            startAdornment: (
-              <SearchOutlinedIcon sx={{ color: 'text.secondary', mr: 1 }} fontSize="small" />
-            ),
-          },
+        InputProps={{
+          startAdornment: (
+            <SearchOutlinedIcon sx={{ color: 'text.secondary', mr: 1 }} fontSize="small" />
+          ),
         }}
         sx={{ mb: 1.5 }}
       />
@@ -235,9 +233,9 @@ export default function QuestionsListPage() {
           sx={{ minWidth: 160 }}
         >
           <MenuItem value="">All Categories</MenuItem>
-          {QB_CATEGORIES.map((cat) => (
+          {QB_CATEGORIES.map((cat: string) => (
             <MenuItem key={cat} value={cat}>
-              {QB_CATEGORY_LABELS[cat]}
+              {QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS]}
             </MenuItem>
           ))}
         </TextField>

@@ -16,7 +16,7 @@ import type {
   NexusQBTopic,
   NexusQBQuestion,
   NexusQBQuestionSource,
-} from '@neram/database/src/types';
+} from '@neram/database';
 import QuestionFormWizard from '@/components/question-bank/QuestionFormWizard';
 
 export default function AddQuestionPage() {

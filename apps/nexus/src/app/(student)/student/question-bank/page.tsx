@@ -24,7 +24,7 @@ import type {
   NexusQBSavedPreset,
   QBProgressStats,
   NexusQBClassroomLink,
-} from '@neram/database/src/types';
+} from '@neram/database';
 
 export default function QuestionBankHome() {
   const router = useRouter();

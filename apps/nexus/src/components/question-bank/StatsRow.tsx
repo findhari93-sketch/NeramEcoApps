@@ -4,7 +4,7 @@ import { Box, Paper, Typography, Skeleton, alpha, useTheme } from '@neram/ui';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import PercentIcon from '@mui/icons-material/Percent';
-import type { QBProgressStats } from '@neram/database/src/types';
+import type { QBProgressStats } from '@neram/database';
 
 interface StatsRowProps {
   stats: QBProgressStats | null;

@@ -47,7 +47,9 @@ export default function ChapterLearningView() {
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
+  const videoPlaceholderRef = useRef<HTMLDivElement>(null);
   const videoWrapperRef = useRef<HTMLDivElement>(null);
+  const videoInnerRef = useRef<HTMLDivElement>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
 
   const fetchChapter = useCallback(async (silent = false) => {
@@ -135,67 +137,108 @@ export default function ChapterLearningView() {
     saveTimerRef.current = setTimeout(() => saveProgress(seconds), 30000);
   }, [saveProgress]);
 
-  // Coursera-style video shrink using ONLY transform (no layout changes).
-  // Key: transform doesn't trigger reflow, so no feedback loop.
-  // We scale the entire wrapper with transformOrigin: top center,
-  // and use negative margin-bottom (set once per frame) to pull content up.
+  // Coursera-style video shrink using position:fixed when scrolled.
+  // Fixed elements are OUT of document flow — changing their height
+  // has ZERO effect on document layout, so no feedback loop is possible.
   useEffect(() => {
+    const placeholder = videoPlaceholderRef.current;
     const wrapper = videoWrapperRef.current;
-    if (!wrapper) return;
+    const inner = videoInnerRef.current;
+    if (!placeholder || !wrapper || !inner) return;
 
-    const MIN_SCALE = 0.5;
+    const MIN_RATIO = 0.5;
     const SCROLL_RANGE = 300;
-    let lastScale = 1;
+    let isFixed = false;
     let ticking = false;
-    // Cache the wrapper's offset from document top and its full height
-    let wrapperTop = 0;
-    let wrapperHeight = 0;
+    // Cached measurements (updated on mount + resize only)
+    let pTop = 0;
+    let pLeft = 0;
+    let pWidth = 0;
+    let fullH = 0;
+    let lastH = 0;
 
-    const measure = () => {
-      // Temporarily reset transform to get true dimensions
-      const prevTransform = wrapper.style.transform;
-      const prevMargin = wrapper.style.marginBottom;
-      wrapper.style.transform = 'none';
-      wrapper.style.marginBottom = '0px';
-      wrapperTop = wrapper.getBoundingClientRect().top + window.scrollY;
-      wrapperHeight = wrapper.getBoundingClientRect().height;
-      wrapper.style.transform = prevTransform;
-      wrapper.style.marginBottom = prevMargin;
+    const cacheMeasurements = () => {
+      const rect = placeholder.getBoundingClientRect();
+      pTop = rect.top + window.scrollY;
+      pLeft = rect.left;
+      pWidth = rect.width;
+      fullH = rect.height;
+      lastH = fullH;
     };
 
-    // Measure on init (after a frame so layout is settled)
-    requestAnimationFrame(measure);
+    // Measure after first paint
+    requestAnimationFrame(cacheMeasurements);
 
     const handleScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
-        // Use window.scrollY (absolute, not affected by layout changes)
-        const scrolledPast = window.scrollY - wrapperTop;
+        const scrolledPast = window.scrollY - pTop;
 
-        let scale: number;
         if (scrolledPast <= 0) {
-          scale = 1;
+          // Video in normal flow
+          if (isFixed) {
+            wrapper.style.position = 'absolute';
+            wrapper.style.top = '0';
+            wrapper.style.left = '0';
+            wrapper.style.width = '100%';
+            wrapper.style.height = '100%';
+            wrapper.style.borderRadius = '';
+            inner.style.transform = 'none';
+            inner.style.width = '100%';
+            inner.style.height = '100%';
+            isFixed = false;
+          }
         } else {
+          // Scrolled past — position: fixed, shrink height
           const ratio = Math.min(scrolledPast / SCROLL_RANGE, 1);
-          scale = 1 - ratio * (1 - MIN_SCALE);
-        }
+          const scale = 1 - ratio * (1 - MIN_RATIO);
+          const h = Math.round(fullH * scale);
 
-        if (Math.abs(scale - lastScale) > 0.003) {
-          lastScale = scale;
-          // transform: only visual, no reflow
-          wrapper.style.transform = `scaleY(${scale})`;
-          // Negative margin pulls content up to fill the gap left by visual shrink
-          wrapper.style.marginBottom = `${-(1 - scale) * wrapperHeight}px`;
+          if (!isFixed) {
+            // Cache fresh left/width at the moment of switching
+            const freshRect = placeholder.getBoundingClientRect();
+            pLeft = freshRect.left;
+            pWidth = freshRect.width;
+            wrapper.style.position = 'fixed';
+            wrapper.style.top = '0px';
+            wrapper.style.left = `${pLeft}px`;
+            wrapper.style.width = `${pWidth}px`;
+            wrapper.style.borderRadius = '0px';
+            isFixed = true;
+          }
+
+          if (h !== lastH) {
+            wrapper.style.height = `${h}px`;
+            // Inner stays at full size, scaled down with transformOrigin: top center
+            inner.style.width = `${pWidth}px`;
+            inner.style.height = `${fullH}px`;
+            inner.style.transform = `scale(${scale})`;
+            lastH = h;
+          }
         }
         ticking = false;
       });
     };
 
     const handleResize = () => {
-      measure();
-      // Re-apply current scale with new dimensions
-      wrapper.style.marginBottom = `${-(1 - lastScale) * wrapperHeight}px`;
+      // Temporarily return to flow to re-measure
+      if (isFixed) {
+        wrapper.style.position = 'absolute';
+        wrapper.style.top = '0';
+        wrapper.style.left = '0';
+        wrapper.style.width = '100%';
+        wrapper.style.height = '100%';
+        inner.style.transform = 'none';
+        inner.style.width = '100%';
+        inner.style.height = '100%';
+        isFixed = false;
+      }
+      requestAnimationFrame(() => {
+        cacheMeasurements();
+        // Re-evaluate scroll position
+        handleScroll();
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -356,42 +399,54 @@ export default function ChapterLearningView() {
         </Box>
       </Box>
 
-      {/* Sticky video — uses transform: scaleY() to shrink on scroll.
-          Transform doesn't cause reflow, so no feedback loop.
-          Negative margin-bottom pulls content up to fill the visual gap. */}
+      {/* Placeholder — stays in document flow, constant 16:9 height.
+          Video wrapper lives inside it (absolute) and switches to fixed on scroll. */}
       <Box
-        ref={videoWrapperRef}
+        ref={videoPlaceholderRef}
         sx={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-          overflow: 'hidden',
-          borderRadius: { xs: 0, sm: 2 },
-          bgcolor: '#000',
-          // Fixed 16:9 aspect ratio — never changes via JS
+          position: 'relative',
+          width: '100%',
           height: 0,
           paddingTop: '56.25%',
-          transformOrigin: 'top center',
-          willChange: 'transform, margin-bottom',
+          borderRadius: { xs: 0, sm: 2 },
+          bgcolor: '#000',
+          overflow: 'visible',
         }}
       >
+        {/* Video wrapper — absolute initially, switches to position:fixed on scroll.
+            Fixed elements are out of document flow, so height changes cause no reflow. */}
         <Box
+          ref={videoWrapperRef}
           sx={{
             position: 'absolute',
             top: 0,
             left: 0,
             width: '100%',
             height: '100%',
+            overflow: 'hidden',
+            bgcolor: '#000',
+            borderRadius: { xs: 0, sm: 2 },
+            zIndex: 10,
           }}
         >
-          <VideoPlayer
-            videoId={chapter.youtube_video_id}
-            sections={sections}
-            currentSectionIndex={currentSectionIndex}
-            resumePosition={progress?.last_video_position_seconds}
-            onSectionEnd={handleSectionEnd}
-            onTimeUpdate={handleTimeUpdate}
-          />
+          {/* Inner content — scaled proportionally when wrapper shrinks */}
+          <Box
+            ref={videoInnerRef}
+            sx={{
+              width: '100%',
+              height: '100%',
+              transformOrigin: 'top center',
+            }}
+          >
+            <VideoPlayer
+              videoId={chapter.youtube_video_id}
+              sections={sections}
+              currentSectionIndex={currentSectionIndex}
+              resumePosition={progress?.last_video_position_seconds}
+              onSectionEnd={handleSectionEnd}
+              onTimeUpdate={handleTimeUpdate}
+            />
+          </Box>
         </Box>
       </Box>
 

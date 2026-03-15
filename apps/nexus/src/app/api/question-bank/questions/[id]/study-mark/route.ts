@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
-import { toggleQBStudyMark } from '@neram/database/src/queries/nexus/question-bank';
+import { getSupabaseAdminClient, toggleQBStudyMark } from '@neram/database';
 
 export async function POST(
   request: NextRequest,

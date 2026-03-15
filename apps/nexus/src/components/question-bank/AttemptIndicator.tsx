@@ -4,7 +4,7 @@ import { Box, Badge } from '@neram/ui';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
-import type { QBAttemptSummary } from '@neram/database/src/types';
+import type { QBAttemptSummary } from '@neram/database';
 
 interface AttemptIndicatorProps {
   summary: QBAttemptSummary | null;

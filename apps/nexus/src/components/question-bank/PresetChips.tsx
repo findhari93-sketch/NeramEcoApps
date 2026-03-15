@@ -2,7 +2,7 @@
 
 import { Box, Chip, Skeleton, Typography } from '@neram/ui';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
-import type { NexusQBSavedPreset } from '@neram/database/src/types';
+import type { NexusQBSavedPreset } from '@neram/database';
 
 interface PresetChipsProps {
   presets: NexusQBSavedPreset[];

@@ -26,7 +26,7 @@ import type {
   QBDifficulty,
   QBExamRelevance,
   QBQuestionFormat,
-} from '@neram/database/src/types';
+} from '@neram/database';
 
 const PAGE_SIZE = 20;
 
@@ -231,7 +231,7 @@ export default function QuestionListPage() {
   }
 
   function handleFilterRemove(key: keyof QBFilterState, value?: string | number) {
-    setFilters((prev) => {
+    setFilters((prev: QBFilterState) => {
       const next = { ...prev };
       if (key === 'exam_relevance' || key === 'attempt_status' || key === 'search_text') {
         delete next[key];
@@ -242,7 +242,7 @@ export default function QuestionListPage() {
           if (filtered.length === 0) {
             delete next[key];
           } else {
-            (next as Record<string, unknown>)[key] = filtered;
+            (next as Record<string, unknown>)[key as string] = filtered;
           }
         } else {
           delete next[key];

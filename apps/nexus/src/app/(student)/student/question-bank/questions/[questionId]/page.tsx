@@ -12,7 +12,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import QuestionDetail from '@/components/question-bank/QuestionDetail';
-import type { NexusQBQuestionDetail } from '@neram/database/src/types';
+import type { NexusQBQuestionDetail } from '@neram/database';
 
 export default function QuestionDetailPage() {
   const router = useRouter();
@@ -106,7 +106,7 @@ export default function QuestionDetailPage() {
         },
       );
       if (!res.ok) throw new Error('Failed to toggle study mark');
-      setQuestion((prev) =>
+      setQuestion((prev: NexusQBQuestionDetail | null) =>
         prev ? { ...prev, is_studied: !prev.is_studied } : prev,
       );
     } catch (err) {

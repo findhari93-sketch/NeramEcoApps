@@ -25,7 +25,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
-import type { NexusQBQuestionDetail } from '@neram/database/src/types';
+import type { NexusQBQuestionDetail } from '@neram/database';
 import SourceBadges from './SourceBadges';
 import RepeatBadges from './RepeatBadges';
 import DifficultyChip from './DifficultyChip';

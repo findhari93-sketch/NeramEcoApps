@@ -12,7 +12,7 @@ import {
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CloseIcon from '@mui/icons-material/Close';
-import type { NexusQBQuestionDetail } from '@neram/database/src/types';
+import type { NexusQBQuestionDetail } from '@neram/database';
 
 interface SolutionSectionProps {
   question: NexusQBQuestionDetail;

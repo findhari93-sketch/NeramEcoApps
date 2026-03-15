@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Chip, Typography } from '@neram/ui';
-import type { NexusQBQuestionSource } from '@neram/database/src/types';
+import type { NexusQBQuestionSource } from '@neram/database';
 
 interface RepeatBadgesProps {
   sources: NexusQBQuestionSource[];

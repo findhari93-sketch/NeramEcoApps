@@ -276,7 +276,7 @@ export async function getSectionQuizQuestions(
     .eq('section_id', sectionId)
     .order('sort_order', { ascending: true });
   if (error) throw error;
-  return (data || []) as NexusFoundationQuizQuestion[];
+  return (data || []) as unknown as NexusFoundationQuizQuestion[];
 }
 
 export async function submitQuizAttempt(
@@ -569,7 +569,7 @@ export async function getChapterReaction(
     .eq('student_id', studentId)
     .eq('chapter_id', chapterId)
     .maybeSingle();
-  return data;
+  return data as unknown as NexusFoundationReaction | null;
 }
 
 export async function upsertChapterReaction(
@@ -588,7 +588,7 @@ export async function upsertChapterReaction(
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return data as unknown as NexusFoundationReaction;
 }
 
 export async function removeChapterReaction(
@@ -730,7 +730,7 @@ export async function createFoundationIssue(
     new_status: 'open',
   });
 
-  return issue;
+  return issue as unknown as NexusFoundationIssue;
 }
 
 export async function getStudentFoundationIssues(
@@ -814,7 +814,7 @@ export async function assignFoundationIssue(
     new_status: 'in_progress',
   });
 
-  return data;
+  return data as unknown as NexusFoundationIssue;
 }
 
 export async function delegateFoundationIssue(

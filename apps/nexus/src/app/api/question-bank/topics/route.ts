@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
-import { getQBTopicTree } from '@neram/database/src/queries/nexus/question-bank';
+import { getSupabaseAdminClient, getQBTopicTree } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {

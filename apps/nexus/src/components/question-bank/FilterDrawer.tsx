@@ -17,8 +17,8 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
-import type { QBFilterState, NexusQBTopic, QBDifficulty, QBExamRelevance, QBQuestionFormat } from '@neram/database/src/types';
-import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database/src/types';
+import type { QBFilterState, NexusQBTopic, QBDifficulty, QBExamRelevance, QBQuestionFormat } from '@neram/database';
+import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
 
 interface FilterDrawerProps {
   open: boolean;

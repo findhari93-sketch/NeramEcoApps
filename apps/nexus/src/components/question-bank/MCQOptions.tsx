@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Paper, Typography, alpha, useTheme } from '@neram/ui';
-import type { NexusQBQuestionOption } from '@neram/database/src/types';
+import type { NexusQBQuestionOption } from '@neram/database';
 
 interface MCQOptionsProps {
   options: NexusQBQuestionOption[];
