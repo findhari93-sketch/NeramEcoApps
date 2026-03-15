@@ -49,6 +49,13 @@ const nextConfig = {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin-allow-popups',
           },
+          // Prevent Cloudflare CDN from caching HTML/RSC responses
+          // (Cloudflare sits in front of Vercel and can serve stale RSC payloads on hard refresh)
+          // Vercel's own ISR cache is unaffected by this header
+          {
+            key: 'CDN-Cache-Control',
+            value: 'no-store',
+          },
         ],
       },
       // Cache static assets (images, fonts, SVGs) for 1 year
