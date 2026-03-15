@@ -846,7 +846,7 @@ export async function delegateFoundationIssue(
     reason,
   });
 
-  return data;
+  return data as unknown as NexusFoundationIssue;
 }
 
 export async function returnFoundationIssue(
@@ -879,7 +879,7 @@ export async function returnFoundationIssue(
     new_status: 'open',
   });
 
-  return data;
+  return data as unknown as NexusFoundationIssue;
 }
 
 export async function resolveFoundationIssue(
@@ -912,7 +912,7 @@ export async function resolveFoundationIssue(
     reason: resolutionNote,
   });
 
-  return data;
+  return data as unknown as NexusFoundationIssue;
 }
 
 export async function updateFoundationIssueStatus(
@@ -947,7 +947,7 @@ export async function updateFoundationIssueStatus(
     new_status: status,
   });
 
-  return data;
+  return data as unknown as NexusFoundationIssue;
 }
 
 export async function updateFoundationIssuePriority(
@@ -963,7 +963,7 @@ export async function updateFoundationIssuePriority(
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return data as unknown as NexusFoundationIssue;
 }
 
 // ============================================
@@ -1012,7 +1012,7 @@ export async function addIssueComment(
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return data as unknown as NexusFoundationIssueActivity;
 }
 
 // ============================================
@@ -1032,7 +1032,7 @@ export async function getChapterTranscript(
     .eq('language', language)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return data as unknown as NexusFoundationTranscript | null;
 }
 
 export async function getChapterTranscriptLanguages(
@@ -1069,5 +1069,5 @@ export async function upsertChapterTranscript(
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return data as unknown as NexusFoundationTranscript;
 }

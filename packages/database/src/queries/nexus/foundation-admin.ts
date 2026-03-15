@@ -241,7 +241,7 @@ export async function createFoundationQuizQuestion(
     .select()
     .single();
   if (error) throw error;
-  return question;
+  return question as unknown as NexusFoundationQuizQuestion;
 }
 
 export async function updateFoundationQuizQuestion(
@@ -257,7 +257,7 @@ export async function updateFoundationQuizQuestion(
     .select()
     .single();
   if (error) throw error;
-  return question;
+  return question as unknown as NexusFoundationQuizQuestion;
 }
 
 export async function deleteFoundationQuizQuestion(
