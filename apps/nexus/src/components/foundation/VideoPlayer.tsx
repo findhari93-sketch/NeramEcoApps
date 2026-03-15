@@ -88,13 +88,8 @@ export default function VideoPlayer({
       if (dur > 0) setDuration(dur);
       onTimeUpdateRef.current?.(Math.floor(time));
 
-      // Anti-gaming: prevent seeking past section end during rewatch
-      if (isRewatchingRef.current && time > rewatchMaxTimeRef.current) {
-        playerRef.current?.seekTo?.(rewatchMaxTimeRef.current - 2, true);
-        return;
-      }
-
-      // Check if we've reached a section end
+      // Check if we've reached a section end — MUST run before anti-gaming
+      // so the quiz can trigger when the section naturally finishes
       const idx = currentSectionIndexRef.current;
       const currentSection = sectionsRef.current[idx];
       if (
@@ -107,6 +102,13 @@ export default function VideoPlayer({
         rewatchMaxTimeRef.current = 0;
         playerRef.current?.pauseVideo?.();
         onSectionEndRef.current(idx);
+        return;
+      }
+
+      // Anti-gaming: prevent seeking past section end during rewatch
+      if (isRewatchingRef.current && time > rewatchMaxTimeRef.current) {
+        playerRef.current?.seekTo?.(rewatchMaxTimeRef.current - 2, true);
+        return;
       }
     }, 500);
   }, []); // No dependencies — reads from refs
