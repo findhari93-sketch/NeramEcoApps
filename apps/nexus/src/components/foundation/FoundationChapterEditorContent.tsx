@@ -425,130 +425,137 @@ export default function FoundationChapterEditorContent({
         </Box>
       </Box>
 
-      {/* Chapter Details Form */}
+      {/* Chapter Details Form + Video Preview */}
       <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: `1px solid ${theme.palette.divider}`, mb: 2 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField
-            label="Chapter Title"
-            value={form.title}
-            onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
-            fullWidth
-            size="small"
-          />
-          <TextField
-            label="Description (optional)"
-            value={form.description}
-            onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-            fullWidth
-            size="small"
-            multiline
-            rows={2}
-          />
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', mb: 0.5, display: 'block' }}>
-              Video Source
-            </Typography>
-            <ToggleButtonGroup
-              value={form.video_source}
-              exclusive
-              onChange={(_, val) => val && setForm(prev => ({ ...prev, video_source: val }))}
-              size="small"
-              sx={{ mb: 1 }}
-            >
-              <ToggleButton value="youtube" sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
-                <OndemandVideoOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} /> YouTube
-              </ToggleButton>
-              <ToggleButton value="sharepoint" sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
-                <CloudOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} /> SharePoint
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            {form.video_source === 'youtube' ? (
-              <TextField
-                label="YouTube Video ID"
-                value={form.youtube_video_id}
-                onChange={(e) => setForm(prev => ({ ...prev, youtube_video_id: e.target.value }))}
-                size="small"
-                sx={{ flex: 1, minWidth: 180 }}
-              />
-            ) : (
-              <TextField
-                label="SharePoint Video URL"
-                placeholder="Paste the video URL from SharePoint"
-                value={form.sharepoint_video_url}
-                onChange={(e) => setForm(prev => ({ ...prev, sharepoint_video_url: e.target.value }))}
-                size="small"
-                sx={{ flex: 1, minWidth: 180 }}
-                helperText="Copy the video link from SharePoint/Stream"
-              />
-            )}
+        <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
+          {/* Left: Form Fields */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <TextField
-              label="Chapter #"
-              type="number"
-              value={form.chapter_number}
-              onChange={(e) => {
-                const val = parseInt(e.target.value);
-                setForm(prev => ({ ...prev, chapter_number: isNaN(val) ? 0 : val }));
-              }}
-              size="small"
-              sx={{ width: 100 }}
-              inputProps={{ min: 0 }}
-            />
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Switch
-              checked={form.is_published}
-              onChange={(e) => setForm(prev => ({ ...prev, is_published: e.target.checked }))}
+              label="Chapter Title"
+              value={form.title}
+              onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
+              fullWidth
               size="small"
             />
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {form.is_published ? 'Published (visible to students)' : 'Draft (hidden from students)'}
-            </Typography>
-          </Box>
-        </Box>
-      </Paper>
-
-      {/* Video Preview */}
-      {form.video_source === 'youtube' && form.youtube_video_id && (
-        <Paper elevation={0} sx={{ borderRadius: 2.5, border: `1px solid ${theme.palette.divider}`, mb: 2, overflow: 'hidden' }}>
-          <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
-            <Box
-              ref={playerContainerRef}
-              sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+            <TextField
+              label="Description (optional)"
+              value={form.description}
+              onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
+              fullWidth
+              size="small"
+              multiline
+              rows={2}
             />
-          </Box>
-          <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-            <AccessTimeIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
-            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-              {formatTime(currentTime)}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-              {form.video_duration_seconds ? `/ ${formatTime(form.video_duration_seconds)}` : ''}
-            </Typography>
-          </Box>
-        </Paper>
-      )}
-      {form.video_source === 'sharepoint' && form.sharepoint_video_url && (
-        <Paper elevation={0} sx={{ borderRadius: 2.5, border: `1px solid ${theme.palette.divider}`, mb: 2, overflow: 'hidden' }}>
-          <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
-            <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
-              <iframe
-                src={toEmbedUrl(form.sharepoint_video_url)}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                allow="autoplay; encrypted-media; fullscreen"
-                allowFullScreen
-                title="SharePoint Preview"
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', mb: 0.5, display: 'block' }}>
+                Video Source
+              </Typography>
+              <ToggleButtonGroup
+                value={form.video_source}
+                exclusive
+                onChange={(_, val) => val && setForm(prev => ({ ...prev, video_source: val }))}
+                size="small"
+                sx={{ mb: 1 }}
+              >
+                <ToggleButton value="youtube" sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <OndemandVideoOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} /> YouTube
+                </ToggleButton>
+                <ToggleButton value="sharepoint" sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <CloudOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} /> SharePoint
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              {form.video_source === 'youtube' ? (
+                <TextField
+                  label="YouTube Video ID"
+                  value={form.youtube_video_id}
+                  onChange={(e) => setForm(prev => ({ ...prev, youtube_video_id: e.target.value }))}
+                  size="small"
+                  sx={{ flex: 1, minWidth: 180 }}
+                />
+              ) : (
+                <TextField
+                  label="SharePoint Video URL"
+                  placeholder="Paste the video URL from SharePoint"
+                  value={form.sharepoint_video_url}
+                  onChange={(e) => setForm(prev => ({ ...prev, sharepoint_video_url: e.target.value }))}
+                  size="small"
+                  sx={{ flex: 1, minWidth: 180 }}
+                  helperText="Copy the video link from SharePoint/Stream"
+                />
+              )}
+              <TextField
+                label="Chapter #"
+                type="number"
+                value={form.chapter_number}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setForm(prev => ({ ...prev, chapter_number: isNaN(val) ? 0 : val }));
+                }}
+                size="small"
+                sx={{ width: 100 }}
+                inputProps={{ min: 0 }}
               />
             </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Switch
+                checked={form.is_published}
+                onChange={(e) => setForm(prev => ({ ...prev, is_published: e.target.checked }))}
+                size="small"
+              />
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {form.is_published ? 'Published (visible to students)' : 'Draft (hidden from students)'}
+              </Typography>
+            </Box>
           </Box>
-          <Box sx={{ px: 2, py: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              SharePoint video — enter section timestamps manually (mm:ss) below
-            </Typography>
-          </Box>
-        </Paper>
-      )}
+
+          {/* Right: Video Preview */}
+          {((form.video_source === 'youtube' && form.youtube_video_id) || (form.video_source === 'sharepoint' && form.sharepoint_video_url)) && (
+            <Box sx={{ width: { xs: '100%', md: 320 }, flexShrink: 0 }}>
+              {form.video_source === 'youtube' && form.youtube_video_id && (
+                <Box sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
+                  <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
+                    <Box
+                      ref={playerContainerRef}
+                      sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                    />
+                  </Box>
+                  <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                    <AccessTimeIcon sx={{ fontSize: '0.875rem', color: 'text.secondary' }} />
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.7rem' }}>
+                      {formatTime(currentTime)}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
+                      {form.video_duration_seconds ? `/ ${formatTime(form.video_duration_seconds)}` : ''}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              {form.video_source === 'sharepoint' && form.sharepoint_video_url && (
+                <Box sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
+                  <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
+                    <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+                      <iframe
+                        src={toEmbedUrl(form.sharepoint_video_url)}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                        allow="autoplay; encrypted-media; fullscreen"
+                        allowFullScreen
+                        title="SharePoint Preview"
+                      />
+                    </Box>
+                  </Box>
+                  <Box sx={{ px: 1.5, py: 1, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                      SharePoint — enter timestamps manually below
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      </Paper>
 
       {/* Sections */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>

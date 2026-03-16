@@ -23,7 +23,12 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionListItem } from '@neram/database';
-import { QB_CATEGORY_LABELS, QB_CATEGORIES } from '@neram/database';
+import {
+  QB_CATEGORY_LABELS,
+  QB_CATEGORIES,
+  QB_QUESTION_STATUS_LABELS,
+  QB_QUESTION_STATUS_COLORS,
+} from '@neram/database';
 import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
@@ -58,6 +63,7 @@ export default function QuestionsListPage() {
   const [difficulty, setDifficulty] = useState('');
   const [category, setCategory] = useState('');
   const [examRelevance, setExamRelevance] = useState('');
+  const [questionStatus, setQuestionStatus] = useState('');
 
   // Debounce search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +101,7 @@ export default function QuestionsListPage() {
         if (difficulty) params.set('difficulty', difficulty);
         if (category) params.set('categories', category);
         if (examRelevance) params.set('exam_relevance', examRelevance);
+        if (questionStatus) params.set('question_status', questionStatus);
 
         const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -118,14 +125,14 @@ export default function QuestionsListPage() {
         setLoadingMore(false);
       }
     },
-    [getToken, debouncedSearch, difficulty, category, examRelevance]
+    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus]
   );
 
   // Reset page and fetch when filters change
   useEffect(() => {
     setPage(1);
     fetchQuestions(1, false);
-  }, [debouncedSearch, difficulty, category, examRelevance, fetchQuestions]);
+  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, fetchQuestions]);
 
   function handleLoadMore() {
     const nextPage = page + 1;
@@ -253,6 +260,20 @@ export default function QuestionsListPage() {
             </MenuItem>
           ))}
         </TextField>
+
+        <TextField
+          value={questionStatus}
+          onChange={(e) => setQuestionStatus(e.target.value)}
+          select
+          size="small"
+          sx={{ minWidth: 130 }}
+        >
+          <MenuItem value="">All Statuses</MenuItem>
+          <MenuItem value="active">Active</MenuItem>
+          <MenuItem value="complete">Complete</MenuItem>
+          <MenuItem value="answer_keyed">Answer Keyed</MenuItem>
+          <MenuItem value="draft">Draft</MenuItem>
+        </TextField>
       </Box>
 
       {/* Results count */}
@@ -309,7 +330,7 @@ export default function QuestionsListPage() {
                   lineHeight: 1.5,
                 }}
               >
-                {q.question_text || 'Image-based question'}
+                {q.question_text || (q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question')}
               </Typography>
 
               {/* Source badges */}
@@ -322,7 +343,20 @@ export default function QuestionsListPage() {
                 <DifficultyChip difficulty={q.difficulty} size="small" />
                 <CategoryChips categories={q.categories.slice(0, 2)} size="small" />
 
-                {!q.is_active && (
+                {q.status && q.status !== 'active' && (
+                  <Chip
+                    label={QB_QUESTION_STATUS_LABELS[q.status as keyof typeof QB_QUESTION_STATUS_LABELS] || q.status}
+                    size="small"
+                    sx={{
+                      height: 22,
+                      fontSize: '0.65rem',
+                      bgcolor: (QB_QUESTION_STATUS_COLORS[q.status as keyof typeof QB_QUESTION_STATUS_COLORS] || '#999') + '20',
+                      color: QB_QUESTION_STATUS_COLORS[q.status as keyof typeof QB_QUESTION_STATUS_COLORS] || '#999',
+                      fontWeight: 600,
+                    }}
+                  />
+                )}
+                {!q.is_active && q.status === 'active' && (
                   <Chip label="Inactive" size="small" color="default" sx={{ height: 22, fontSize: '0.65rem' }} />
                 )}
 

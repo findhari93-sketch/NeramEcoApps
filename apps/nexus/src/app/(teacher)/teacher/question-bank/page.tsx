@@ -15,6 +15,8 @@ import {
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionListItem, QBProgressStats } from '@neram/database';
 import { QB_DIFFICULTY_COLORS } from '@neram/database';
@@ -257,13 +259,19 @@ export default function QuestionBankDashboard() {
       </Box>
 
       {/* Quick Actions */}
-      <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5 }}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr 1fr', md: '1fr 1fr 1fr 1fr' },
+          gap: 1.5,
+          mb: 2.5,
+        }}
+      >
         <Paper
           variant="outlined"
           onClick={() => router.push('/teacher/question-bank/new')}
           sx={{
             p: 2,
-            flex: 1,
             cursor: 'pointer',
             textAlign: 'center',
             transition: 'all 0.2s',
@@ -278,7 +286,6 @@ export default function QuestionBankDashboard() {
           onClick={() => router.push('/teacher/question-bank/questions')}
           sx={{
             p: 2,
-            flex: 1,
             cursor: 'pointer',
             textAlign: 'center',
             transition: 'all 0.2s',
@@ -286,7 +293,35 @@ export default function QuestionBankDashboard() {
           }}
         >
           <ListAltOutlinedIcon color="primary" sx={{ fontSize: 32, mb: 0.5 }} />
-          <Typography variant="subtitle2">View All Questions</Typography>
+          <Typography variant="subtitle2">All Questions</Typography>
+        </Paper>
+        <Paper
+          variant="outlined"
+          onClick={() => router.push('/teacher/question-bank/bulk-upload')}
+          sx={{
+            p: 2,
+            cursor: 'pointer',
+            textAlign: 'center',
+            transition: 'all 0.2s',
+            '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+          }}
+        >
+          <UploadFileOutlinedIcon color="primary" sx={{ fontSize: 32, mb: 0.5 }} />
+          <Typography variant="subtitle2">Bulk Upload</Typography>
+        </Paper>
+        <Paper
+          variant="outlined"
+          onClick={() => router.push('/teacher/question-bank/papers')}
+          sx={{
+            p: 2,
+            cursor: 'pointer',
+            textAlign: 'center',
+            transition: 'all 0.2s',
+            '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+          }}
+        >
+          <DescriptionOutlinedIcon color="primary" sx={{ fontSize: 32, mb: 0.5 }} />
+          <Typography variant="subtitle2">Papers</Typography>
         </Paper>
       </Box>
 

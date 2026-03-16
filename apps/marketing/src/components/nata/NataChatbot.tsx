@@ -6,15 +6,15 @@ import {
   Typography,
   IconButton,
   TextField,
-  Paper,
   Fab,
   CircularProgress,
+  SwipeableDrawer,
 } from '@neram/ui';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
-import MinimizeIcon from '@mui/icons-material/Minimize';
 import Image from 'next/image';
+import ReactMarkdown from 'react-markdown';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
 
@@ -54,13 +54,59 @@ function BotAvatar({ size = 40 }: { size?: number }) {
     >
       <Image
         src={ASSISTANT_IMG}
-        alt="NATA AI Assistant"
+        alt="Aintra - NATA Assistant"
         width={size}
         height={size}
         style={{ objectFit: 'cover' }}
         onError={() => setImgError(true)}
       />
     </Box>
+  );
+}
+
+/** Renders bot message text with markdown formatting */
+function BotMessageContent({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        p: ({ children }) => (
+          <Typography
+            component="p"
+            sx={{ fontSize: '0.9375rem', lineHeight: 1.65, mb: 1, '&:last-child': { mb: 0 } }}
+          >
+            {children}
+          </Typography>
+        ),
+        strong: ({ children }) => (
+          <Typography component="span" sx={{ fontWeight: 700, fontSize: 'inherit' }}>
+            {children}
+          </Typography>
+        ),
+        em: ({ children }) => (
+          <Typography component="span" sx={{ fontStyle: 'italic', fontSize: 'inherit' }}>
+            {children}
+          </Typography>
+        ),
+        ul: ({ children }) => (
+          <Box
+            component="ul"
+            sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}
+          >
+            {children}
+          </Box>
+        ),
+        ol: ({ children }) => (
+          <Box
+            component="ol"
+            sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}
+          >
+            {children}
+          </Box>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   );
 }
 
@@ -89,8 +135,6 @@ function generateSessionId() {
 
 /** Default bottom offset for the FAB */
 const FAB_BOTTOM = 24;
-/** Extra offset when achievement widget is visible (card height + gap) */
-const FAB_BOTTOM_SHIFTED = 120;
 
 export default function NataChatbot({ userId }: NataChatbotProps = {}) {
   const [open, setOpen] = useState(false);
@@ -217,317 +261,325 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
     }
   };
 
-  if (!open) {
-    return (
-      <Box
-        sx={{
-          position: 'fixed',
-          bottom: achievementVisible
-            ? { xs: 60, md: FAB_BOTTOM }
-            : FAB_BOTTOM,
-          right: 24,
-          zIndex: 1300,
-          transition: { xs: 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)', md: 'none' },
-        }}
-      >
-        {/* FAB with online indicator */}
-        <Box sx={{ position: 'relative', width: 56, height: 56 }}>
-          <Fab
-            onClick={() => setOpen(true)}
-            sx={{
-              width: 56,
-              height: 56,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-              p: 0,
-              overflow: 'hidden',
-              bgcolor: '#f5f5f5',
-              border: '2px solid',
-              borderColor: 'rgba(0,0,0,0.08)',
-              '&:hover': {
-                bgcolor: '#ebebeb',
-                boxShadow: '0 6px 24px rgba(0,0,0,0.28)',
-              },
-            }}
-          >
-            <BotAvatar size={56} />
-          </Fab>
-          {/* Online dot */}
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 0,
-              right: 0,
-              width: 16,
-              height: 16,
-              borderRadius: '50%',
-              bgcolor: '#44b700',
-              border: '2.5px solid white',
-              boxShadow: '0 0 0 0 rgba(68,183,0,0.4)',
-              zIndex: 1200,
-              '@keyframes onlinePulse': {
-                '0%': { boxShadow: '0 0 0 0 rgba(68,183,0,0.45)' },
-                '70%': { boxShadow: '0 0 0 7px rgba(68,183,0,0)' },
-                '100%': { boxShadow: '0 0 0 0 rgba(68,183,0,0)' },
-              },
-              animation: 'onlinePulse 2s ease-out infinite',
-            }}
-          />
-        </Box>
-      </Box>
-    );
-  }
-
   return (
-    <Paper
-      elevation={8}
-      sx={{
-        position: 'fixed',
-        bottom: { xs: 0, sm: 24 },
-        right: { xs: 0, sm: 24 },
-        width: { xs: '100%', sm: 380 },
-        height: { xs: '100dvh', sm: 520 },
-        maxHeight: { xs: '100dvh', sm: '80vh' },
-        zIndex: 1300,
-        display: 'flex',
-        flexDirection: 'column',
-        borderRadius: { xs: 0, sm: 2 },
-        overflow: 'hidden',
-      }}
-    >
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 2,
-          py: 1.5,
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <BotAvatar size={32} />
-          <Box>
-            <Typography variant="subtitle2" fontWeight={600} sx={{ lineHeight: 1.2 }}>
-              Sherine
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#44b700' }} />
-              <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.65rem' }}>
-                Online
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-        <Box>
-          <IconButton size="small" onClick={() => setOpen(false)} sx={{ color: 'inherit' }}>
-            <MinimizeIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-          <IconButton size="small" onClick={() => { setOpen(false); setMessages([]); setQuestionCount(0); }} sx={{ color: 'inherit' }}>
-            <CloseIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Box>
-      </Box>
-
-      {/* Messages */}
-      <Box
-        sx={{
-          flex: 1,
-          overflowY: 'auto',
-          px: 2,
-          py: 1.5,
-          bgcolor: '#f8f9fa',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-        }}
-      >
-        {messages.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
-              <BotAvatar size={56} />
-            </Box>
-            <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
-              Sherine
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              NATA 2026 Exam Assistant
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Hi! I can answer your questions about NATA 2026 — eligibility, exam pattern, fees, dates, and more.
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center', mt: 2 }}>
-              {SUGGESTED_QUESTIONS.map((q) => (
-                <Box
-                  key={q}
-                  onClick={() => sendMessage(q)}
-                  sx={{
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'primary.main',
-                    color: 'primary.main',
-                    fontSize: '0.75rem',
-                    cursor: 'pointer',
-                    transition: '0.2s',
-                    '&:hover': { bgcolor: 'primary.main', color: 'white' },
-                  }}
-                >
-                  {q}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        )}
-
-        {messages.map((msg, i) => (
-          <Box
-            key={i}
-            sx={{
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '85%',
-              display: 'flex',
-              gap: 1,
-              alignItems: 'flex-start',
-            }}
-          >
-            {msg.role === 'model' && <BotAvatar size={24} />}
-            <Box
+    <>
+      {/* FAB button — always visible when drawer is closed */}
+      {!open && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: achievementVisible
+              ? { xs: 60, md: FAB_BOTTOM }
+              : FAB_BOTTOM,
+            right: 24,
+            zIndex: 1300,
+            transition: { xs: 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)', md: 'none' },
+          }}
+        >
+          <Box sx={{ position: 'relative', width: 56, height: 56 }}>
+            <Fab
+              onClick={() => setOpen(true)}
               sx={{
-                px: 1.5,
-                py: 1,
-                borderRadius: 2,
-                bgcolor: msg.role === 'user' ? 'primary.main' : 'white',
-                color: msg.role === 'user' ? 'primary.contrastText' : 'text.primary',
-                boxShadow: msg.role === 'model' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                fontSize: '0.85rem',
-                lineHeight: 1.5,
-                whiteSpace: 'pre-wrap',
+                width: 56,
+                height: 56,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                p: 0,
+                overflow: 'hidden',
+                bgcolor: '#f5f5f5',
+                border: '2px solid',
+                borderColor: 'rgba(0,0,0,0.08)',
+                '&:hover': {
+                  bgcolor: '#ebebeb',
+                  boxShadow: '0 6px 24px rgba(0,0,0,0.28)',
+                },
               }}
             >
-              {msg.text}
-            </Box>
-          </Box>
-        ))}
-
-        {loading && (
-          <Box sx={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 1, px: 1 }}>
-            <CircularProgress size={16} />
-            <Typography variant="caption" color="text.secondary">Thinking...</Typography>
-          </Box>
-        )}
-
-        {/* Lead capture card */}
-        {showLeadCapture && !leadCaptured && (
-          <Box
-            sx={{
-              p: 1.5,
-              borderRadius: 2,
-              bgcolor: 'white',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-              border: '1px solid',
-              borderColor: 'primary.light',
-            }}
-          >
-            <Typography variant="caption" fontWeight={600} color="primary.main" gutterBottom display="block">
-              Want personalized guidance?
-            </Typography>
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="Your name"
-              value={leadName}
-              onChange={(e) => setLeadName(e.target.value)}
-              sx={{ mb: 1 }}
-              inputProps={{ style: { fontSize: '0.8rem' } }}
+              <BotAvatar size={56} />
+            </Fab>
+            {/* Online dot */}
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                bgcolor: '#44b700',
+                border: '2.5px solid white',
+                boxShadow: '0 0 0 0 rgba(68,183,0,0.4)',
+                zIndex: 1200,
+                '@keyframes onlinePulse': {
+                  '0%': { boxShadow: '0 0 0 0 rgba(68,183,0,0.45)' },
+                  '70%': { boxShadow: '0 0 0 7px rgba(68,183,0,0)' },
+                  '100%': { boxShadow: '0 0 0 0 rgba(68,183,0,0)' },
+                },
+                animation: 'onlinePulse 2s ease-out infinite',
+              }}
             />
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="Phone number"
-              value={leadPhone}
-              onChange={(e) => setLeadPhone(e.target.value)}
-              sx={{ mb: 1 }}
-              inputProps={{ style: { fontSize: '0.8rem' }, inputMode: 'tel' }}
-            />
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Box
-                component="button"
-                onClick={handleLeadSubmit}
-                disabled={leadSubmitting || !leadName.trim() || !leadPhone.trim()}
-                sx={{
-                  flex: 1,
-                  py: 0.5,
-                  px: 1.5,
-                  border: 'none',
-                  borderRadius: 1,
-                  bgcolor: 'primary.main',
-                  color: 'white',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  '&:disabled': { opacity: 0.5, cursor: 'not-allowed' },
-                }}
-              >
-                {leadSubmitting ? 'Sending...' : 'Get Help'}
-              </Box>
-              <Box
-                component="button"
-                onClick={() => setShowLeadCapture(false)}
-                sx={{
-                  py: 0.5,
-                  px: 1.5,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  bgcolor: 'transparent',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                }}
-              >
-                Skip
-              </Box>
-            </Box>
           </Box>
-        )}
-
-        <div ref={messagesEndRef} />
-      </Box>
-
-      {/* Remaining questions counter */}
-      {questionCount > 0 && (
-        <Box sx={{ px: 2, py: 0.25, bgcolor: '#f0f0f0', textAlign: 'center' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-            {MAX_QUESTIONS_PER_SESSION - questionCount} questions remaining in this session
-          </Typography>
         </Box>
       )}
 
-      {/* Input */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
-        <TextField
-          inputRef={inputRef}
-          size="small"
-          fullWidth
-          placeholder="Ask about NATA 2026..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
-          inputProps={{ maxLength: 500, style: { fontSize: '0.85rem' } }}
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
-        />
-        <IconButton
-          color="primary"
-          onClick={() => sendMessage(input)}
-          disabled={!input.trim() || loading}
-          size="small"
+      {/* Full-height right side drawer */}
+      <SwipeableDrawer
+        anchor="right"
+        open={open}
+        onClose={() => setOpen(false)}
+        onOpen={() => setOpen(true)}
+        disableSwipeToOpen
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 440 },
+            display: 'flex',
+            flexDirection: 'column',
+          },
+        }}
+      >
+        {/* Header */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: 2,
+            py: 1.5,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            flexShrink: 0,
+          }}
         >
-          <SendIcon sx={{ fontSize: 20 }} />
-        </IconButton>
-      </Box>
-    </Paper>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <BotAvatar size={36} />
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600} sx={{ lineHeight: 1.2 }}>
+                Aintra
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#44b700' }} />
+                <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.7rem' }}>
+                  NATA Assistant
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+          <IconButton
+            size="small"
+            onClick={() => setOpen(false)}
+            sx={{ color: 'inherit' }}
+          >
+            <CloseIcon sx={{ fontSize: 20 }} />
+          </IconButton>
+        </Box>
+
+        {/* Messages */}
+        <Box
+          sx={{
+            flex: 1,
+            overflowY: 'auto',
+            px: { xs: 2, sm: 2.5 },
+            py: 2,
+            bgcolor: '#f8f9fa',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+          }}
+        >
+          {messages.length === 0 && (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
+                <BotAvatar size={64} />
+              </Box>
+              <Typography variant="h6" fontWeight={600} sx={{ mb: 0.25 }}>
+                Aintra
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                NATA Assistant
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2 }}>
+                Hey there! I&apos;m here to help you with everything about NATA — eligibility, exam pattern, fees, important dates, and more. Ask me anything!
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'center' }}>
+                {SUGGESTED_QUESTIONS.map((q) => (
+                  <Box
+                    key={q}
+                    onClick={() => sendMessage(q)}
+                    sx={{
+                      px: 2,
+                      py: 0.75,
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: 'primary.main',
+                      color: 'primary.main',
+                      fontSize: '0.8125rem',
+                      cursor: 'pointer',
+                      transition: '0.2s',
+                      minHeight: 36,
+                      display: 'flex',
+                      alignItems: 'center',
+                      '&:hover': { bgcolor: 'primary.main', color: 'white' },
+                    }}
+                  >
+                    {q}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+
+          {messages.map((msg, i) => (
+            <Box
+              key={i}
+              sx={{
+                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '90%',
+                display: 'flex',
+                gap: 1,
+                alignItems: 'flex-start',
+              }}
+            >
+              {msg.role === 'model' && <BotAvatar size={28} />}
+              <Box
+                sx={{
+                  px: 2,
+                  py: 1.5,
+                  borderRadius: 2,
+                  bgcolor: msg.role === 'user' ? 'primary.main' : 'white',
+                  color: msg.role === 'user' ? 'primary.contrastText' : 'text.primary',
+                  boxShadow: msg.role === 'model' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  ...(msg.role === 'user' && {
+                    fontSize: '0.9375rem',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                  }),
+                }}
+              >
+                {msg.role === 'model' ? (
+                  <BotMessageContent text={msg.text} />
+                ) : (
+                  msg.text
+                )}
+              </Box>
+            </Box>
+          ))}
+
+          {loading && (
+            <Box sx={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 1, px: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="caption" color="text.secondary">Thinking...</Typography>
+            </Box>
+          )}
+
+          {/* Lead capture card */}
+          {showLeadCapture && !leadCaptured && (
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                bgcolor: 'white',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                border: '1px solid',
+                borderColor: 'primary.light',
+              }}
+            >
+              <Typography variant="body2" fontWeight={600} color="primary.main" gutterBottom>
+                Want personalized guidance?
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Your name"
+                value={leadName}
+                onChange={(e) => setLeadName(e.target.value)}
+                sx={{ mb: 1 }}
+                inputProps={{ style: { fontSize: '0.875rem' } }}
+              />
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Phone number"
+                value={leadPhone}
+                onChange={(e) => setLeadPhone(e.target.value)}
+                sx={{ mb: 1 }}
+                inputProps={{ style: { fontSize: '0.875rem' }, inputMode: 'tel' }}
+              />
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box
+                  component="button"
+                  onClick={handleLeadSubmit}
+                  disabled={leadSubmitting || !leadName.trim() || !leadPhone.trim()}
+                  sx={{
+                    flex: 1,
+                    py: 0.75,
+                    px: 1.5,
+                    border: 'none',
+                    borderRadius: 1,
+                    bgcolor: 'primary.main',
+                    color: 'white',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    '&:disabled': { opacity: 0.5, cursor: 'not-allowed' },
+                  }}
+                >
+                  {leadSubmitting ? 'Sending...' : 'Get Help'}
+                </Box>
+                <Box
+                  component="button"
+                  onClick={() => setShowLeadCapture(false)}
+                  sx={{
+                    py: 0.75,
+                    px: 1.5,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    bgcolor: 'transparent',
+                    fontSize: '0.8125rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Skip
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          <div ref={messagesEndRef} />
+        </Box>
+
+        {/* Remaining questions counter */}
+        {questionCount > 0 && (
+          <Box sx={{ px: 2, py: 0.5, bgcolor: '#f0f0f0', textAlign: 'center', flexShrink: 0 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+              {MAX_QUESTIONS_PER_SESSION - questionCount} questions remaining in this session
+            </Typography>
+          </Box>
+        )}
+
+        {/* Input */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+          <TextField
+            inputRef={inputRef}
+            size="small"
+            fullWidth
+            placeholder="Ask about NATA 2026..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
+            inputProps={{ maxLength: 500, style: { fontSize: '0.9375rem' } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+          />
+          <IconButton
+            color="primary"
+            onClick={() => sendMessage(input)}
+            disabled={!input.trim() || loading}
+            size="small"
+          >
+            <SendIcon sx={{ fontSize: 20 }} />
+          </IconButton>
+        </Box>
+      </SwipeableDrawer>
+    </>
   );
 }

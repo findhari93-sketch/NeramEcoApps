@@ -4801,6 +4801,8 @@ export type QBDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
 export type QBExamType = 'JEE_PAPER_2' | 'NATA';
 export type QBExamRelevance = 'JEE' | 'NATA' | 'BOTH';
 export type QBAttemptMode = 'practice' | 'year_paper';
+export type QBQuestionStatus = 'draft' | 'answer_keyed' | 'complete' | 'active';
+export type QBPaperUploadStatus = 'pending' | 'parsed' | 'answer_keyed' | 'complete';
 
 export type QBCategory =
   | 'mathematics'
@@ -4835,6 +4837,7 @@ export interface NexusQBQuestionOption {
   id: string;
   text: string;
   image_url?: string;
+  nta_id?: string;
 }
 
 export interface NexusQBQuestion {
@@ -4843,9 +4846,9 @@ export interface NexusQBQuestion {
   question_image_url: string | null;
   question_format: QBQuestionFormat;
   options: NexusQBQuestionOption[] | null;
-  correct_answer: string;
+  correct_answer: string | null;
   answer_tolerance: number | null;
-  explanation_brief: string;
+  explanation_brief: string | null;
   explanation_detailed: string | null;
   solution_image_url: string | null;
   solution_video_url: string | null;
@@ -4858,6 +4861,8 @@ export interface NexusQBQuestion {
   original_paper_id: string | null;
   original_paper_page: number | null;
   display_order: number | null;
+  status: QBQuestionStatus;
+  nta_question_id: string | null;
   is_active: boolean;
   created_by: string | null;
   created_at: string;
@@ -4907,11 +4912,15 @@ export interface NexusQBOriginalPaper {
   exam_type: QBExamType;
   year: number;
   session: string | null;
-  pdf_url: string;
+  pdf_url: string | null;
   total_questions: number | null;
   total_marks: number | null;
   duration_minutes: number | null;
   uploaded_by: string | null;
+  upload_status: QBPaperUploadStatus;
+  questions_parsed: number;
+  questions_answer_keyed: number;
+  questions_complete: number;
   created_at: string;
 }
 
@@ -4980,9 +4989,9 @@ export interface NexusQBQuestionInsert {
   question_image_url?: string | null;
   question_format: QBQuestionFormat;
   options?: NexusQBQuestionOption[] | null;
-  correct_answer: string;
+  correct_answer?: string | null;
   answer_tolerance?: number | null;
-  explanation_brief: string;
+  explanation_brief?: string | null;
   explanation_detailed?: string | null;
   solution_image_url?: string | null;
   solution_video_url?: string | null;
@@ -4995,6 +5004,8 @@ export interface NexusQBQuestionInsert {
   original_paper_id?: string | null;
   original_paper_page?: number | null;
   display_order?: number | null;
+  status?: QBQuestionStatus;
+  nta_question_id?: string | null;
   created_by?: string | null;
 }
 
@@ -5003,9 +5014,9 @@ export interface NexusQBQuestionUpdate {
   question_image_url?: string | null;
   question_format?: QBQuestionFormat;
   options?: NexusQBQuestionOption[] | null;
-  correct_answer?: string;
+  correct_answer?: string | null;
   answer_tolerance?: number | null;
-  explanation_brief?: string;
+  explanation_brief?: string | null;
   explanation_detailed?: string | null;
   solution_image_url?: string | null;
   solution_video_url?: string | null;
@@ -5015,6 +5026,8 @@ export interface NexusQBQuestionUpdate {
   topic_id?: string | null;
   sub_topic?: string | null;
   repeat_group_id?: string | null;
+  status?: QBQuestionStatus;
+  nta_question_id?: string | null;
   is_active?: boolean;
 }
 
@@ -5057,3 +5070,40 @@ export const QB_EXAM_TYPE_LABELS: Record<QBExamType, string> = {
   JEE_PAPER_2: 'JEE Paper 2',
   NATA: 'NATA',
 };
+
+export const QB_QUESTION_STATUS_LABELS: Record<QBQuestionStatus, string> = {
+  draft: 'Draft',
+  answer_keyed: 'Answer Keyed',
+  complete: 'Complete',
+  active: 'Active',
+};
+
+export const QB_QUESTION_STATUS_COLORS: Record<QBQuestionStatus, string> = {
+  draft: '#9E9E9E',
+  answer_keyed: '#F59E0B',
+  complete: '#3B82F6',
+  active: '#22C55E',
+};
+
+// Bulk Upload Types
+
+export interface NTAParsedQuestion {
+  question_number: number;
+  nta_question_id: string;
+  question_format: QBQuestionFormat;
+  options: { nta_id: string }[];
+  section: 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing';
+  categories: string[];
+}
+
+export interface NTAParsedPaper {
+  questions: NTAParsedQuestion[];
+  total: number;
+  sections: { name: string; count: number }[];
+  warnings: string[];
+}
+
+export interface NexusQBAnswerKeyEntry {
+  question_number: number;
+  correct_answer: string;
+}

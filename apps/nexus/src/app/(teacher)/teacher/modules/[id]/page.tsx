@@ -99,8 +99,6 @@ export default function ModuleDetailPage() {
   const [newItem, setNewItem] = useState({
     title: '',
     item_type: 'video' as string,
-    content_url: '',
-    youtube_video_id: '',
   });
 
   // Edit item dialog
@@ -224,18 +222,12 @@ export default function ModuleDetailPage() {
         body: JSON.stringify({
           title: newItem.title.trim(),
           item_type: newItem.item_type,
-          content_url: newItem.content_url.trim() || null,
-          youtube_video_id: newItem.item_type === 'video' ? (newItem.youtube_video_id.trim() || null) : null,
           sort_order: currentItems.length,
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        setModuleData((prev) =>
-          prev ? { ...prev, items: [...prev.items, data.item] } : prev
-        );
-        setAddOpen(false);
-        setNewItem({ title: '', item_type: 'video', content_url: '', youtube_video_id: '' });
+        router.push(`/teacher/modules/${moduleId}/items/${data.item.id}`);
       }
     } catch (err) {
       console.error('Failed to add item:', err);
@@ -665,7 +657,7 @@ export default function ModuleDetailPage() {
       )}
 
       {/* Add Item Dialog */}
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={addOpen} onClose={() => { setAddOpen(false); setNewItem({ title: '', item_type: 'video' }); }} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Add Item</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
@@ -692,28 +684,10 @@ export default function ModuleDetailPage() {
                 ))}
               </Select>
             </FormControl>
-            <TextField
-              label="Content URL"
-              placeholder="https://..."
-              value={newItem.content_url}
-              onChange={(e) => setNewItem((prev) => ({ ...prev, content_url: e.target.value }))}
-              fullWidth
-              size="small"
-            />
-            {newItem.item_type === 'video' && (
-              <TextField
-                label="YouTube Video ID"
-                placeholder="e.g. dQw4w9WgXcQ"
-                value={newItem.youtube_video_id}
-                onChange={(e) => setNewItem((prev) => ({ ...prev, youtube_video_id: e.target.value }))}
-                fullWidth
-                size="small"
-              />
-            )}
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setAddOpen(false)} sx={{ textTransform: 'none' }}>
+          <Button onClick={() => { setAddOpen(false); setNewItem({ title: '', item_type: 'video' }); }} sx={{ textTransform: 'none' }}>
             Cancel
           </Button>
           <Button
@@ -722,7 +696,7 @@ export default function ModuleDetailPage() {
             disabled={addingItem || !newItem.title.trim()}
             sx={{ textTransform: 'none' }}
           >
-            {addingItem ? 'Adding...' : 'Add'}
+            {addingItem ? 'Creating...' : 'Create & Edit'}
           </Button>
         </DialogActions>
       </Dialog>

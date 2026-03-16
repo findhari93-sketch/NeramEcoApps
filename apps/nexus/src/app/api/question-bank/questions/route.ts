@@ -4,9 +4,11 @@ import { verifyQBAccess } from '@/lib/qb-auth';
 import {
   getSupabaseAdminClient,
   getQBQuestions,
+  getTeacherQBQuestions,
   createQBQuestion,
   addQuestionSource,
 } from '@neram/database';
+import type { QBQuestionStatus } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,7 +34,17 @@ export async function GET(request: NextRequest) {
       topic_ids: params.get('topic_ids') ? params.get('topic_ids')!.split(',') : undefined,
     };
 
-    const data = await getQBQuestions(filters, page, pageSize, caller.id);
+    // Teachers see all statuses; students only see active questions
+    const isTeacher = ['teacher', 'admin'].includes(caller.user_type ?? '');
+    let data;
+    if (isTeacher) {
+      const statusFilter = params.get('question_status')
+        ? params.get('question_status')!.split(',') as QBQuestionStatus[]
+        : undefined;
+      data = await getTeacherQBQuestions({ ...filters, status: statusFilter }, page, pageSize);
+    } else {
+      data = await getQBQuestions(filters, page, pageSize, caller.id);
+    }
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {

@@ -3,7 +3,9 @@ import type {
   QBQuestionFormat,
   QBDifficulty,
   QBExamRelevance,
+  QBExamType,
   QBAttemptMode,
+  QBQuestionStatus,
   QBFilterState,
   QBProgressStats,
   QBAttemptSummary,
@@ -14,11 +16,14 @@ import type {
   NexusQBStudyMark,
   NexusQBSavedPreset,
   NexusQBClassroomLink,
+  NexusQBOriginalPaper,
   NexusQBQuestionListItem,
   NexusQBQuestionDetail,
   NexusQBQuestionInsert,
   NexusQBQuestionUpdate,
   NexusQBQuestionSourceInsert,
+  NTAParsedQuestion,
+  NexusQBAnswerKeyEntry,
 } from '../../types';
 
 // ============================================
@@ -84,7 +89,8 @@ export async function getQBQuestions(
   let query = supabase
     .from('nexus_qb_questions')
     .select('*', { count: 'exact' })
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('status' as any, 'active');
 
   // Apply filters
   if (filters.exam_relevance) {
@@ -401,6 +407,9 @@ export async function submitQBAttempt(
   if (questionError) throw questionError;
 
   const q = question as Pick<NexusQBQuestion, 'correct_answer' | 'question_format' | 'answer_tolerance'>;
+  if (!q.correct_answer) {
+    throw new Error('Cannot submit attempt: question has no correct answer set');
+  }
   const isCorrect = checkQBAnswer(q.question_format, answer, q.correct_answer, q.answer_tolerance);
 
   // Insert attempt
@@ -485,7 +494,8 @@ export async function getStudentQBStats(
   let totalQuery = supabase
     .from('nexus_qb_questions')
     .select('id, categories, difficulty', { count: 'exact' })
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('status' as any, 'active');
   if (examRelevance) {
     totalQuery = totalQuery.eq('exam_relevance', examRelevance);
   }
@@ -776,4 +786,410 @@ export async function isQBEnabledForClassroom(
     .maybeSingle();
   if (error) throw error;
   return data?.is_active === true;
+}
+
+// ============================================
+// BULK UPLOAD - ORIGINAL PAPERS
+// ============================================
+
+/**
+ * Get or create an original paper record. Returns existing if duplicate.
+ */
+export async function getOrCreateOriginalPaper(
+  examType: QBExamType,
+  year: number,
+  session: string | null,
+  uploadedBy: string,
+  client?: TypedSupabaseClient
+): Promise<{ paper: NexusQBOriginalPaper; isNew: boolean }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Check if paper already exists
+  let query = supabase
+    .from('nexus_qb_original_papers')
+    .select('*')
+    .eq('exam_type', examType)
+    .eq('year', year);
+
+  if (session) {
+    query = query.eq('session', session);
+  } else {
+    query = query.is('session', null);
+  }
+
+  const { data: existing, error: findError } = await query.maybeSingle();
+  if (findError) throw findError;
+
+  if (existing) {
+    return { paper: existing as NexusQBOriginalPaper, isNew: false };
+  }
+
+  // Create new paper
+  const { data: paper, error: insertError } = await supabase
+    .from('nexus_qb_original_papers')
+    .insert({
+      exam_type: examType,
+      year,
+      session,
+      uploaded_by: uploadedBy,
+      upload_status: 'pending',
+      questions_parsed: 0,
+      questions_answer_keyed: 0,
+      questions_complete: 0,
+    } as any)
+    .select()
+    .single();
+  if (insertError) throw insertError;
+
+  return { paper: paper as NexusQBOriginalPaper, isNew: true };
+}
+
+/**
+ * Bulk insert question shells from parsed NTA data.
+ */
+export async function bulkCreateDraftQuestions(
+  paperId: string,
+  examType: QBExamType,
+  year: number,
+  session: string | null,
+  questions: NTAParsedQuestion[],
+  createdBy: string,
+  client?: TypedSupabaseClient
+): Promise<{ created: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Build question inserts
+  const questionInserts = questions.map((q) => ({
+    question_format: q.question_format,
+    options: q.question_format === 'MCQ'
+      ? q.options.map((opt, i) => ({
+          id: String.fromCharCode(97 + i), // a, b, c, d
+          text: '',
+          nta_id: opt.nta_id,
+        }))
+      : null,
+    correct_answer: null,
+    explanation_brief: null,
+    difficulty: 'MEDIUM' as QBDifficulty,
+    exam_relevance: (examType === 'JEE_PAPER_2' ? 'JEE' : 'NATA') as QBExamRelevance,
+    categories: q.categories,
+    original_paper_id: paperId,
+    display_order: q.question_number,
+    status: 'draft' as QBQuestionStatus,
+    nta_question_id: q.nta_question_id,
+    is_active: false,
+    created_by: createdBy,
+  }));
+
+  // Batch insert questions
+  const { data: createdQuestions, error: insertError } = await supabase
+    .from('nexus_qb_questions')
+    .insert(questionInserts as any)
+    .select('id, display_order');
+  if (insertError) throw insertError;
+
+  // Build source inserts
+  const sourceInserts = (createdQuestions || []).map((cq: any) => ({
+    question_id: cq.id,
+    exam_type: examType,
+    year,
+    session,
+    question_number: cq.display_order,
+  }));
+
+  if (sourceInserts.length > 0) {
+    const { error: sourceError } = await supabase
+      .from('nexus_qb_question_sources')
+      .insert(sourceInserts as any);
+    if (sourceError) throw sourceError;
+  }
+
+  // Update paper stats
+  const count = createdQuestions?.length || 0;
+  await supabase
+    .from('nexus_qb_original_papers')
+    .update({
+      upload_status: 'parsed',
+      questions_parsed: count,
+      total_questions: count,
+    } as any)
+    .eq('id', paperId);
+
+  return { created: count };
+}
+
+/**
+ * Apply answer key to a paper's draft questions.
+ */
+export async function applyAnswerKey(
+  paperId: string,
+  answers: NexusQBAnswerKeyEntry[],
+  client?: TypedSupabaseClient
+): Promise<{ updated: number; errors: string[] }> {
+  const supabase = client || getSupabaseAdminClient();
+  const errors: string[] = [];
+  let updated = 0;
+
+  // Get all questions for this paper
+  const { data: questions, error: fetchError } = await supabase
+    .from('nexus_qb_questions')
+    .select('id, display_order, question_format')
+    .eq('original_paper_id', paperId)
+    .order('display_order', { ascending: true });
+  if (fetchError) throw fetchError;
+
+  // Build a map of question_number -> question
+  const questionMap = new Map<number, any>();
+  for (const q of (questions || []) as any[]) {
+    if (q.display_order != null) {
+      questionMap.set(q.display_order, q);
+    }
+  }
+
+  // Apply each answer
+  for (const entry of answers) {
+    const q = questionMap.get(entry.question_number);
+    if (!q) {
+      errors.push(`Q${entry.question_number}: not found in paper`);
+      continue;
+    }
+
+    // Determine the new status
+    const newStatus: QBQuestionStatus = 'answer_keyed';
+
+    const { error: updateError } = await supabase
+      .from('nexus_qb_questions')
+      .update({
+        correct_answer: entry.correct_answer,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', q.id);
+
+    if (updateError) {
+      errors.push(`Q${entry.question_number}: ${updateError.message}`);
+    } else {
+      updated++;
+    }
+  }
+
+  // Refresh paper stats
+  await refreshPaperStats(paperId, supabase);
+
+  return { updated, errors };
+}
+
+/**
+ * Get all questions for a paper (for answer key grid, completion tracking).
+ */
+export async function getQuestionsByPaper(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusQBQuestion[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('*')
+    .eq('original_paper_id', paperId)
+    .order('display_order', { ascending: true });
+  if (error) throw error;
+  return (data || []) as NexusQBQuestion[];
+}
+
+/**
+ * List all original papers with upload stats.
+ */
+export async function listOriginalPapers(
+  client?: TypedSupabaseClient
+): Promise<NexusQBOriginalPaper[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_qb_original_papers')
+    .select('*')
+    .order('year', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []) as NexusQBOriginalPaper[];
+}
+
+/**
+ * Get a single paper with stats.
+ */
+export async function getOriginalPaperWithStats(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusQBOriginalPaper | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_qb_original_papers')
+    .select('*')
+    .eq('id', paperId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as NexusQBOriginalPaper | null;
+}
+
+/**
+ * Recalculate and update paper stats based on question statuses.
+ */
+export async function refreshPaperStats(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: questions, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('*')
+    .eq('original_paper_id', paperId);
+  if (error) throw error;
+
+  const statuses = (questions || []) as unknown as { status: QBQuestionStatus }[];
+  const parsed = statuses.length;
+  const answerKeyed = statuses.filter(
+    (q) => q.status === 'answer_keyed' || q.status === 'complete' || q.status === 'active'
+  ).length;
+  const complete = statuses.filter(
+    (q) => q.status === 'complete' || q.status === 'active'
+  ).length;
+
+  // Determine paper upload_status
+  let uploadStatus: string = 'parsed';
+  if (complete === parsed && parsed > 0) {
+    uploadStatus = 'complete';
+  } else if (answerKeyed > 0) {
+    uploadStatus = 'answer_keyed';
+  }
+
+  await supabase
+    .from('nexus_qb_original_papers')
+    .update({
+      questions_parsed: parsed,
+      questions_answer_keyed: answerKeyed,
+      questions_complete: complete,
+      upload_status: uploadStatus,
+    } as any)
+    .eq('id', paperId);
+}
+
+/**
+ * Bulk activate complete questions in a paper.
+ */
+export async function bulkActivateQuestions(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<{ activated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Only activate questions that are 'complete'
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .update({
+      status: 'active',
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('original_paper_id', paperId)
+    .eq('status' as any, 'complete')
+    .select('id');
+  if (error) throw error;
+
+  const activated = data?.length || 0;
+
+  // Refresh paper stats
+  await refreshPaperStats(paperId, supabase);
+
+  return { activated };
+}
+
+/**
+ * Get teacher-view questions for a paper (all statuses, for management).
+ */
+export async function getTeacherQBQuestions(
+  filters: QBFilterState & { status?: QBQuestionStatus[] },
+  page: number,
+  pageSize: number,
+  client?: TypedSupabaseClient
+): Promise<{ questions: NexusQBQuestionListItem[]; total: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const offset = (page - 1) * pageSize;
+
+  let query = supabase
+    .from('nexus_qb_questions')
+    .select('*', { count: 'exact' });
+
+  // Teacher can see all statuses, or filter by specific ones
+  if (filters.status && filters.status.length > 0) {
+    query = query.in('status' as any, filters.status);
+  }
+
+  // Standard filters
+  if (filters.exam_relevance) {
+    query = query.eq('exam_relevance', filters.exam_relevance);
+  }
+  if (filters.categories && filters.categories.length > 0) {
+    query = query.overlaps('categories', filters.categories);
+  }
+  if (filters.difficulty && filters.difficulty.length > 0) {
+    query = query.in('difficulty', filters.difficulty);
+  }
+  if (filters.question_format && filters.question_format.length > 0) {
+    query = query.in('question_format', filters.question_format);
+  }
+  if (filters.topic_ids && filters.topic_ids.length > 0) {
+    query = query.in('topic_id', filters.topic_ids);
+  }
+  if (filters.search_text) {
+    query = query.ilike('question_text', `%${filters.search_text}%`);
+  }
+
+  query = query
+    .order('created_at', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  const { data: questionsRaw, error: questionsError, count } = await query;
+  if (questionsError) throw questionsError;
+
+  const questions = (questionsRaw || []) as NexusQBQuestion[];
+  if (questions.length === 0) {
+    return { questions: [], total: count || 0 };
+  }
+
+  const questionIds = questions.map((q) => q.id);
+
+  // Fetch sources
+  const { data: sourcesRaw } = await supabase
+    .from('nexus_qb_question_sources')
+    .select('*')
+    .in('question_id', questionIds);
+
+  const sourcesMap = new Map<string, NexusQBQuestionSource[]>();
+  for (const s of (sourcesRaw || []) as NexusQBQuestionSource[]) {
+    if (!sourcesMap.has(s.question_id)) {
+      sourcesMap.set(s.question_id, []);
+    }
+    sourcesMap.get(s.question_id)!.push(s);
+  }
+
+  // Fetch topics
+  const topicIds = [...new Set(questions.map((q) => q.topic_id).filter(Boolean))] as string[];
+  const topicMap = new Map<string, NexusQBTopic>();
+  if (topicIds.length > 0) {
+    const { data: topicsRaw } = await supabase
+      .from('nexus_qb_topics')
+      .select('*')
+      .in('id', topicIds);
+    for (const t of (topicsRaw || []) as NexusQBTopic[]) {
+      topicMap.set(t.id, t);
+    }
+  }
+
+  const result: NexusQBQuestionListItem[] = questions.map((q) => ({
+    ...q,
+    sources: sourcesMap.get(q.id) || [],
+    topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
+    attempt_summary: null,
+  }));
+
+  return { questions: result, total: count || 0 };
 }
