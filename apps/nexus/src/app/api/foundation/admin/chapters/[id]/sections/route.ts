@@ -63,6 +63,7 @@ export async function POST(
       start_timestamp_seconds: body.start_timestamp_seconds,
       end_timestamp_seconds: body.end_timestamp_seconds,
       sort_order: body.sort_order ?? 0,
+      min_questions_to_pass: body.min_questions_to_pass ?? null,
     });
 
     return NextResponse.json({ section }, { status: 201 });

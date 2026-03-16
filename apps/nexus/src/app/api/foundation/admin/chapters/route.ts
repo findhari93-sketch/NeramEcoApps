@@ -53,9 +53,22 @@ export async function POST(request: NextRequest) {
     const user = await verifyTeacher(request);
     const body = await request.json();
 
-    if (!body.title?.trim() || !body.youtube_video_id?.trim() || !body.chapter_number) {
+    const videoSource = body.video_source || 'youtube';
+    if (!body.title?.trim() || body.chapter_number == null) {
       return NextResponse.json(
-        { error: 'title, youtube_video_id, and chapter_number are required' },
+        { error: 'title and chapter_number are required' },
+        { status: 400 }
+      );
+    }
+    if (videoSource === 'youtube' && !body.youtube_video_id?.trim()) {
+      return NextResponse.json(
+        { error: 'youtube_video_id is required for YouTube chapters' },
+        { status: 400 }
+      );
+    }
+    if (videoSource === 'sharepoint' && !body.sharepoint_video_url?.trim()) {
+      return NextResponse.json(
+        { error: 'sharepoint_video_url is required for SharePoint chapters' },
         { status: 400 }
       );
     }
@@ -63,7 +76,9 @@ export async function POST(request: NextRequest) {
     const chapter = await createFoundationChapter({
       title: body.title.trim(),
       description: body.description?.trim() || null,
-      youtube_video_id: body.youtube_video_id.trim(),
+      video_source: videoSource,
+      youtube_video_id: videoSource === 'youtube' ? body.youtube_video_id.trim() : null,
+      sharepoint_video_url: videoSource === 'sharepoint' ? body.sharepoint_video_url.trim() : null,
       video_duration_seconds: body.video_duration_seconds || null,
       chapter_number: body.chapter_number,
       min_quiz_score_pct: body.min_quiz_score_pct ?? 90,

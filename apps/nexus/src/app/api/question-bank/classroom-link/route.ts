@@ -5,6 +5,7 @@ import {
   enableQBForClassroom,
   disableQBForClassroom,
   isQBEnabledForClassroom,
+  getUserRoleInClassroom,
 } from '@neram/database';
 
 export async function GET(request: NextRequest) {
@@ -26,6 +27,14 @@ export async function GET(request: NextRequest) {
     const classroomId = request.nextUrl.searchParams.get('classroom_id');
     if (!classroomId) {
       return NextResponse.json({ error: 'classroom_id is required' }, { status: 400 });
+    }
+
+    // Students must be enrolled in the classroom to check QB status
+    if (caller.user_type === 'student') {
+      const role = await getUserRoleInClassroom(caller.id, classroomId);
+      if (!role) {
+        return NextResponse.json({ error: 'Not enrolled in this classroom' }, { status: 403 });
+      }
     }
 
     const enabled = await isQBEnabledForClassroom(classroomId);

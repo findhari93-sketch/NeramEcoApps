@@ -4240,6 +4240,194 @@ export interface NexusChecklistItemWithProgress extends NexusChecklistItemWithRe
 }
 
 // ============================================
+// NEXUS MODULAR CHECKLISTS TYPES
+// ============================================
+
+export type NexusModuleType = 'foundation' | 'custom';
+export type NexusModuleItemType = 'video' | 'document' | 'quiz_paper' | 'link' | 'chapter';
+export type NexusChecklistEntryType = 'module' | 'simple_item';
+
+export interface NexusModule {
+  id: string;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  module_type: NexusModuleType;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusModuleItem {
+  id: string;
+  module_id: string;
+  title: string;
+  item_type: NexusModuleItemType;
+  content_url: string | null;
+  youtube_video_id: string | null;
+  video_source: 'youtube' | 'sharepoint';
+  sharepoint_video_url: string | null;
+  video_duration_seconds: number | null;
+  chapter_number: number | null;
+  is_published: boolean;
+  sort_order: number;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusModuleItemSection {
+  id: string;
+  module_item_id: string;
+  title: string;
+  description: string | null;
+  start_timestamp_seconds: number;
+  end_timestamp_seconds: number;
+  sort_order: number;
+  min_questions_to_pass: number | null;
+  created_at: string;
+}
+
+export interface NexusModuleItemQuizQuestion {
+  id: string;
+  section_id: string;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string;
+  option_d: string;
+  correct_option: 'a' | 'b' | 'c' | 'd';
+  explanation: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusModuleStudentProgress {
+  id: string;
+  student_id: string;
+  module_item_id: string;
+  status: 'locked' | 'in_progress' | 'completed';
+  started_at: string | null;
+  completed_at: string | null;
+  last_section_id: string | null;
+  last_video_position_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusModuleQuizAttempt {
+  id: string;
+  student_id: string;
+  section_id: string;
+  score_pct: number;
+  answers: Record<string, string>;
+  passed: boolean;
+  attempt_number: number;
+  created_at: string;
+}
+
+export interface NexusModuleStudentNote {
+  id: string;
+  student_id: string;
+  section_id: string;
+  note_text: string;
+  video_timestamp_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusModuleItemSectionWithQuiz extends NexusModuleItemSection {
+  quiz_questions: NexusModuleItemQuizQuestion[];
+  quiz_attempt: NexusModuleQuizAttempt | null;
+  note: NexusModuleStudentNote | null;
+}
+
+export interface NexusModuleItemWithSections extends NexusModuleItem {
+  sections: NexusModuleItemSectionWithQuiz[];
+  progress: NexusModuleStudentProgress | null;
+  section_count: number;
+  completed_sections: number;
+}
+
+export interface NexusChecklist {
+  id: string;
+  title: string;
+  description: string | null;
+  created_by: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusChecklistEntry {
+  id: string;
+  checklist_id: string;
+  entry_type: NexusChecklistEntryType;
+  module_id: string | null;
+  title: string | null;
+  topic_id: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusChecklistEntryResource {
+  id: string;
+  entry_id: string;
+  resource_type: string;
+  url: string;
+  created_at: string;
+}
+
+export interface NexusChecklistClassroom {
+  id: string;
+  checklist_id: string;
+  classroom_id: string;
+  created_at: string;
+}
+
+export interface NexusStudentEntryProgress {
+  id: string;
+  student_id: string;
+  entry_id: string;
+  is_completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface NexusStudentModuleItemProgress {
+  id: string;
+  student_id: string;
+  module_item_id: string;
+  is_completed: boolean;
+  completed_at: string | null;
+  created_at: string;
+}
+
+// Composite types
+export interface NexusModuleWithItems extends NexusModule {
+  items: NexusModuleItem[];
+}
+
+export interface NexusChecklistEntryWithDetails extends NexusChecklistEntry {
+  module: NexusModuleWithItems | null;
+  resources: NexusChecklistEntryResource[];
+}
+
+export interface NexusChecklistWithEntries extends NexusChecklist {
+  entries: NexusChecklistEntryWithDetails[];
+  classrooms: NexusChecklistClassroom[];
+}
+
+export interface NexusChecklistForStudent extends NexusChecklist {
+  entries: (NexusChecklistEntryWithDetails & {
+    progress: NexusStudentEntryProgress | null;
+    module_item_progress?: NexusStudentModuleItemProgress[];
+  })[];
+}
+
+// ============================================
 // NEXUS DRAWING LEARNING PATH TYPES
 // ============================================
 
@@ -4349,7 +4537,9 @@ export interface NexusFoundationChapter {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
-  youtube_video_id: string;
+  video_source: 'youtube' | 'sharepoint';
+  youtube_video_id: string | null;
+  sharepoint_video_url: string | null;
   video_duration_seconds: number | null;
   chapter_number: number;
   min_quiz_score_pct: number;
@@ -4367,6 +4557,7 @@ export interface NexusFoundationSection {
   start_timestamp_seconds: number;
   end_timestamp_seconds: number;
   sort_order: number;
+  min_questions_to_pass: number | null;
   created_at: string;
 }
 
@@ -4531,7 +4722,9 @@ export interface NexusFoundationTranscript {
 export interface NexusFoundationChapterInsert {
   title: string;
   description?: string | null;
-  youtube_video_id: string;
+  video_source?: 'youtube' | 'sharepoint';
+  youtube_video_id?: string | null;
+  sharepoint_video_url?: string | null;
   video_duration_seconds?: number | null;
   chapter_number: number;
   min_quiz_score_pct?: number;
@@ -4542,7 +4735,9 @@ export interface NexusFoundationChapterInsert {
 export interface NexusFoundationChapterUpdate {
   title?: string;
   description?: string | null;
-  youtube_video_id?: string;
+  video_source?: 'youtube' | 'sharepoint';
+  youtube_video_id?: string | null;
+  sharepoint_video_url?: string | null;
   video_duration_seconds?: number | null;
   chapter_number?: number;
   min_quiz_score_pct?: number;
@@ -4556,6 +4751,7 @@ export interface NexusFoundationSectionInsert {
   start_timestamp_seconds: number;
   end_timestamp_seconds: number;
   sort_order: number;
+  min_questions_to_pass?: number | null;
 }
 
 export interface NexusFoundationSectionUpdate {
@@ -4564,6 +4760,7 @@ export interface NexusFoundationSectionUpdate {
   start_timestamp_seconds?: number;
   end_timestamp_seconds?: number;
   sort_order?: number;
+  min_questions_to_pass?: number | null;
 }
 
 export interface NexusFoundationQuizQuestionInsert {

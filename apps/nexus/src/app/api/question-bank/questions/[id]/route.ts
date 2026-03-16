@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyQBAccess } from '@/lib/qb-auth';
 import {
   getSupabaseAdminClient,
   getQBQuestionDetail,
@@ -12,19 +13,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const classroomId = request.nextUrl.searchParams.get('classroom_id') || null;
 
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Verify QB access (enrollment + QB enabled for students)
+    const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);
+    if (!access.ok) return access.response;
+    const caller = access.caller;
 
     const { id } = await params;
     const data = await getQBQuestionDetail(id, caller.id);

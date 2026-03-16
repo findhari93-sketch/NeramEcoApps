@@ -307,22 +307,17 @@ export async function submitQuizAttempt(
   }
   const scorePct = Math.round((correct / questions.length) * 100);
 
-  // Get section to find chapter and min score
+  // Get section to find chapter and per-section pass criteria
   const { data: section, error: sectionError } = await supabase
     .from('nexus_foundation_sections')
-    .select('chapter_id')
+    .select('chapter_id, min_questions_to_pass')
     .eq('id', sectionId)
     .single();
   if (sectionError) throw sectionError;
 
-  const { data: chapter, error: chapterError } = await supabase
-    .from('nexus_foundation_chapters')
-    .select('min_quiz_score_pct')
-    .eq('id', (section as any).chapter_id)
-    .single();
-  if (chapterError) throw chapterError;
-
-  const passed = scorePct >= (chapter as any).min_quiz_score_pct;
+  // Per-section pass criteria: null/0 means all questions must be correct
+  const minToPass = (section as any).min_questions_to_pass || questions.length;
+  const passed = correct >= minToPass;
 
   // Get attempt number
   const { count } = await supabase
@@ -367,6 +362,7 @@ export async function submitQuizAttempt(
     passed,
     correct_count: correct,
     total_count: questions.length,
+    min_questions_to_pass: minToPass,
   };
 }
 

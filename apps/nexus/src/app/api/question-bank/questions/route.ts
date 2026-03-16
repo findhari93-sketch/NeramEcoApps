@@ -1,39 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyQBAccess } from '@/lib/qb-auth';
 import {
   getSupabaseAdminClient,
   getQBQuestions,
   createQBQuestion,
   addQuestionSource,
-  isQBEnabledForClassroom,
 } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-
     const params = request.nextUrl.searchParams;
+    const classroomId = params.get('classroom_id') || null;
 
-    // If student, verify classroom has QB enabled
-    const classroomId = params.get('classroom_id') || undefined;
-    if (caller.user_type === 'student' && classroomId) {
-      const enabled = await isQBEnabledForClassroom(classroomId);
-      if (!enabled) {
-        return NextResponse.json({ error: 'Question Bank is not enabled for this classroom' }, { status: 403 });
-      }
-    }
+    // Verify QB access (enrollment + QB enabled for students)
+    const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);
+    if (!access.ok) return access.response;
+    const caller = access.caller;
 
     const page = params.get('page') ? parseInt(params.get('page')!, 10) : 1;
     const pageSize = params.get('page_size') ? parseInt(params.get('page_size')!, 10) : 20;

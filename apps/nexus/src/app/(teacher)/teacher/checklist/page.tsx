@@ -33,6 +33,7 @@ import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlin
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
@@ -214,6 +215,43 @@ export default function TeacherChecklist() {
   return (
     <Box sx={{ position: 'relative', minHeight: '60vh', pb: 10 }}>
       <PageHeader title="Checklist" subtitle={`${totalItems} items across ${Object.keys(groupedItems).length} categories`} />
+
+      {/* Link to new Checklist Builder */}
+      <Paper
+        elevation={0}
+        onClick={() => router.push('/teacher/checklists')}
+        sx={{
+          p: 2,
+          mb: 2.5,
+          borderRadius: 3,
+          border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+          background: alpha(theme.palette.info.main, 0.04),
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          transition: 'all 200ms ease',
+          '&:hover': { borderColor: alpha(theme.palette.info.main, 0.4) },
+        }}
+      >
+        <PlaylistAddCheckOutlinedIcon sx={{ color: 'info.main' }} />
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            Checklist Builder
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Create reusable checklists with modules &amp; assign to classrooms
+          </Typography>
+        </Box>
+        <Button
+          size="small"
+          variant="outlined"
+          color="info"
+          sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', minHeight: 32 }}
+        >
+          Manage
+        </Button>
+      </Paper>
 
       {/* Overall Progress Card */}
       {!loading && totalItems > 0 && (

@@ -29,6 +29,10 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="emotion-insertion-point" content="" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/icon?family=Material+Icons"
+        />
       </head>
       <body className={inter.className}>
         <NeramThemeProvider

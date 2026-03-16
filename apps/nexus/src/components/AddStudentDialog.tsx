@@ -33,6 +33,7 @@ interface AddStudentDialogProps {
   classroomId: string;
   batches: { id: string; name: string }[];
   onStudentsAdded: () => void;
+  defaultRole?: 'student' | 'teacher';
 }
 
 export default function AddStudentDialog({
@@ -41,6 +42,7 @@ export default function AddStudentDialog({
   classroomId,
   batches,
   onStudentsAdded,
+  defaultRole = 'student',
 }: AddStudentDialogProps) {
   const { getToken } = useNexusAuthContext();
   const [query, setQuery] = useState('');
@@ -49,7 +51,7 @@ export default function AddStudentDialog({
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<'student' | 'teacher'>('student');
+  const [selectedRole, setSelectedRole] = useState<'student' | 'teacher'>(defaultRole);
   const [hasSearched, setHasSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -155,7 +157,7 @@ export default function AddStudentDialog({
     setResults([]);
     setSelected(new Set());
     setSelectedBatch(null);
-    setSelectedRole('student');
+    setSelectedRole(defaultRole);
     setHasSearched(false);
     onClose();
   };
@@ -165,7 +167,7 @@ export default function AddStudentDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add Users to Classroom</DialogTitle>
+      <DialogTitle>{defaultRole === 'teacher' ? 'Add Teacher to Classroom' : 'Add Student to Classroom'}</DialogTitle>
       <DialogContent>
         <TextField
           fullWidth
@@ -178,33 +180,35 @@ export default function AddStudentDialog({
           inputProps={{ style: { minHeight: 24 } }}
         />
 
-        {/* Role selector */}
-        <Box sx={{ mb: 1.5 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-            Enroll as
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Chip
-              label="Student"
-              size="small"
-              variant={selectedRole === 'student' ? 'filled' : 'outlined'}
-              color={selectedRole === 'student' ? 'primary' : 'default'}
-              onClick={() => setSelectedRole('student')}
-              sx={{ minHeight: 32 }}
-            />
-            <Chip
-              label="Teacher"
-              size="small"
-              variant={selectedRole === 'teacher' ? 'filled' : 'outlined'}
-              color={selectedRole === 'teacher' ? 'primary' : 'default'}
-              onClick={() => setSelectedRole('teacher')}
-              sx={{ minHeight: 32 }}
-            />
+        {/* Role selector — hidden when defaultRole is set from context */}
+        {!defaultRole && (
+          <Box sx={{ mb: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              Enroll as
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Chip
+                label="Student"
+                size="small"
+                variant={selectedRole === 'student' ? 'filled' : 'outlined'}
+                color={selectedRole === 'student' ? 'primary' : 'default'}
+                onClick={() => setSelectedRole('student')}
+                sx={{ minHeight: 32 }}
+              />
+              <Chip
+                label="Teacher"
+                size="small"
+                variant={selectedRole === 'teacher' ? 'filled' : 'outlined'}
+                color={selectedRole === 'teacher' ? 'primary' : 'default'}
+                onClick={() => setSelectedRole('teacher')}
+                sx={{ minHeight: 32 }}
+              />
+            </Box>
           </Box>
-        </Box>
+        )}
 
-        {/* Optional batch selection */}
-        {batches.length > 0 && (
+        {/* Optional batch selection — only for students */}
+        {selectedRole === 'student' && batches.length > 0 && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
               Assign to batch (optional)

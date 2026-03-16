@@ -63,7 +63,7 @@ export function useNexusAuth(): NexusAuthState {
   const [nexusRole, setNexusRole] = useState<NexusRole | null>(null);
   const [classrooms, setClassrooms] = useState<NexusClassroom[]>([]);
   const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(null);
-  const [dbLoading, setDbLoading] = useState(false);
+  const [dbLoading, setDbLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const getToken = useCallback(async () => {
@@ -77,6 +77,9 @@ export function useNexusAuth(): NexusAuthState {
       setNexusRole(null);
       setClassrooms([]);
       setActiveClassroomState(null);
+      // Only clear dbLoading if MS auth is definitively done (not loading)
+      // so we don't briefly show loading=false with user=null
+      if (!msLoading) setDbLoading(false);
       return;
     }
 

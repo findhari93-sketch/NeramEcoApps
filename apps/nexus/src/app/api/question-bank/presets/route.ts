@@ -1,26 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyQBAccess } from '@/lib/qb-auth';
 import {
-  getSupabaseAdminClient,
   getStudentQBPresets,
   createQBPreset,
 } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const classroomId = request.nextUrl.searchParams.get('classroom_id') || null;
 
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    // Verify QB access (enrollment + QB enabled for students)
+    const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);
+    if (!access.ok) return access.response;
+    const caller = access.caller;
 
     const data = await getStudentQBPresets(caller.id);
 
@@ -34,22 +26,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-
     const body = await request.json();
-    const { name, filters, is_pinned } = body;
+    const { name, filters, is_pinned, classroom_id } = body;
+
+    // Verify QB access (enrollment + QB enabled for students)
+    const access = await verifyQBAccess(request.headers.get('Authorization'), classroom_id || null);
+    if (!access.ok) return access.response;
+    const caller = access.caller;
 
     if (!name || !filters) {
       return NextResponse.json({ error: 'name and filters are required' }, { status: 400 });

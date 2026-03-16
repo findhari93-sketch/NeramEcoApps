@@ -32,6 +32,7 @@ interface QuizResult {
   score_pct: number;
   correct_count: number;
   total_count: number;
+  min_questions_to_pass?: number;
   questions: Array<QuizQuestionData & { correct_option: string; explanation: string | null }>;
 }
 
@@ -131,7 +132,11 @@ export default function QuizModal({
               {result.passed ? 'Great job! You passed!' : 'Not quite. Try again!'}
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Score: {result.correct_count}/{result.total_count} ({result.score_pct}%)
+              {result.correct_count}/{result.total_count} correct
+              {result.min_questions_to_pass
+                ? ` (needed ${result.min_questions_to_pass} to pass)`
+                : ` (needed all ${result.total_count} to pass)`
+              }
             </Typography>
           </Box>
         </Box>

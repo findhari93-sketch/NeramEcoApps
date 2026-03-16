@@ -70,7 +70,9 @@ export async function createFoundationChapter(
     .insert({
       title: data.title,
       description: data.description || null,
-      youtube_video_id: data.youtube_video_id,
+      video_source: data.video_source || 'youtube',
+      youtube_video_id: data.youtube_video_id || null,
+      sharepoint_video_url: data.sharepoint_video_url || null,
       video_duration_seconds: data.video_duration_seconds || null,
       chapter_number: data.chapter_number,
       min_quiz_score_pct: data.min_quiz_score_pct ?? 90,
@@ -80,7 +82,7 @@ export async function createFoundationChapter(
     .select()
     .single();
   if (error) throw error;
-  return chapter;
+  return chapter as unknown as NexusFoundationChapter;
 }
 
 export async function updateFoundationChapter(
@@ -91,12 +93,12 @@ export async function updateFoundationChapter(
   const supabase = client || getSupabaseAdminClient();
   const { data: chapter, error } = await supabase
     .from('nexus_foundation_chapters')
-    .update({ ...data, updated_at: new Date().toISOString() })
+    .update({ ...data as any, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
   if (error) throw error;
-  return chapter;
+  return chapter as unknown as NexusFoundationChapter;
 }
 
 export async function deleteFoundationChapter(
@@ -176,7 +178,7 @@ export async function createFoundationSection(
     .select()
     .single();
   if (error) throw error;
-  return section;
+  return section as unknown as NexusFoundationSection;
 }
 
 export async function updateFoundationSection(
@@ -192,7 +194,7 @@ export async function updateFoundationSection(
     .select()
     .single();
   if (error) throw error;
-  return section;
+  return section as unknown as NexusFoundationSection;
 }
 
 export async function deleteFoundationSection(

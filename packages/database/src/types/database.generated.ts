@@ -4212,11 +4212,13 @@ export type Database = {
           id: string
           is_published: boolean
           min_quiz_score_pct: number
+          sharepoint_video_url: string | null
           thumbnail_url: string | null
           title: string
           updated_at: string
           video_duration_seconds: number | null
-          youtube_video_id: string
+          video_source: string
+          youtube_video_id: string | null
         }
         Insert: {
           chapter_number: number
@@ -4226,11 +4228,13 @@ export type Database = {
           id?: string
           is_published?: boolean
           min_quiz_score_pct?: number
+          sharepoint_video_url?: string | null
           thumbnail_url?: string | null
           title: string
           updated_at?: string
           video_duration_seconds?: number | null
-          youtube_video_id: string
+          video_source?: string
+          youtube_video_id?: string | null
         }
         Update: {
           chapter_number?: number
@@ -4240,11 +4244,13 @@ export type Database = {
           id?: string
           is_published?: boolean
           min_quiz_score_pct?: number
+          sharepoint_video_url?: string | null
           thumbnail_url?: string | null
           title?: string
           updated_at?: string
           video_duration_seconds?: number | null
-          youtube_video_id?: string
+          video_source?: string
+          youtube_video_id?: string | null
         }
         Relationships: [
           {

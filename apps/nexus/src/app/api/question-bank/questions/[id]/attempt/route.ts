@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyQBAccess } from '@/lib/qb-auth';
 import {
-  getSupabaseAdminClient,
   submitQBAttempt,
   getQBQuestionDetail,
 } from '@neram/database';
@@ -11,23 +10,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-
     const { id: questionId } = await params;
     const body = await request.json();
-    const { selected_answer, time_spent_seconds, mode } = body;
+    const { selected_answer, time_spent_seconds, mode, classroom_id } = body;
+
+    // Verify QB access (enrollment + QB enabled for students)
+    const access = await verifyQBAccess(request.headers.get('Authorization'), classroom_id || null);
+    if (!access.ok) return access.response;
+    const caller = access.caller;
 
     if (selected_answer === undefined || selected_answer === null) {
       return NextResponse.json({ error: 'selected_answer is required' }, { status: 400 });

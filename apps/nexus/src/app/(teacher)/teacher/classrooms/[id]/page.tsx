@@ -12,20 +12,23 @@ import {
   Tab,
   Button,
   IconButton,
-  Avatar,
   Fab,
   AddIcon,
   EditIcon,
   DeleteIcon,
   ArrowBackIcon,
+  Switch,
+  CircularProgress,
 } from '@neram/ui';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ClassroomFormDialog from '@/components/ClassroomFormDialog';
 import BatchFormDialog from '@/components/BatchFormDialog';
 import BatchAssignDialog from '@/components/BatchAssignDialog';
 import AddStudentDialog from '@/components/AddStudentDialog';
+import GraphAvatar from '@/components/GraphAvatar';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 
 interface ClassroomDetail {
@@ -51,7 +54,7 @@ interface Enrollment {
   user_id: string;
   role: string;
   batch_id: string | null;
-  user: { id: string; name: string; email: string; avatar_url: string | null };
+  user: { id: string; name: string; email: string; avatar_url: string | null; ms_oid?: string | null };
   batch: { id: string; name: string } | null;
 }
 
@@ -80,6 +83,10 @@ export default function ClassroomDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [batchFilter, setBatchFilter] = useState<string | null>(null);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const [addTeacherOpen, setAddTeacherOpen] = useState(false);
+  const [teacherEnrollments, setTeacherEnrollments] = useState<Enrollment[]>([]);
+  const [qbEnabled, setQbEnabled] = useState<boolean | null>(null);
+  const [qbToggling, setQbToggling] = useState(false);
 
   const fetchClassroom = useCallback(async () => {
     try {
@@ -124,13 +131,70 @@ export default function ClassroomDetailPage() {
     }
   }, [id, batchFilter, getToken]);
 
-  useEffect(() => {
-    fetchClassroom();
-  }, [fetchClassroom]);
+  const fetchTeacherEnrollments = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/classrooms/${id}/enrollments?role=teacher`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setTeacherEnrollments(data.enrollments || []);
+      }
+    } catch (err) {
+      console.error('Failed to load teacher enrollments:', err);
+    }
+  }, [id, getToken]);
+
+  const fetchQBStatus = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/classroom-link?classroom_id=${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setQbEnabled(json.data?.enabled === true);
+      }
+    } catch (err) {
+      console.error('Failed to fetch QB status:', err);
+    }
+  }, [id, getToken]);
+
+  const handleQBToggle = async () => {
+    setQbToggling(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const newEnabled = !qbEnabled;
+      const res = await fetch('/api/question-bank/classroom-link', {
+        method: newEnabled ? 'POST' : 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classroom_id: id }),
+      });
+      if (res.ok) {
+        setQbEnabled(newEnabled);
+      }
+    } catch (err) {
+      console.error('Failed to toggle QB:', err);
+    } finally {
+      setQbToggling(false);
+    }
+  };
 
   useEffect(() => {
-    if (tab === 2) fetchEnrollments();
-  }, [tab, fetchEnrollments]);
+    fetchClassroom();
+    fetchQBStatus();
+  }, [fetchClassroom, fetchQBStatus]);
+
+  useEffect(() => {
+    if (tab === 2) fetchTeacherEnrollments();
+    if (tab === 3) fetchEnrollments();
+  }, [tab, fetchEnrollments, fetchTeacherEnrollments]);
 
   const handleEditClassroom = async (formData: { name: string; type: string; description: string }) => {
     const token = await getToken();
@@ -206,9 +270,6 @@ export default function ClassroomDetailPage() {
     await Promise.all([fetchClassroom(), fetchEnrollments()]);
   };
 
-  const getInitials = (name: string) =>
-    name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
-
   if (loading) {
     return (
       <Box>
@@ -260,6 +321,12 @@ export default function ClassroomDetailPage() {
       {/* Stats row */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <Paper variant="outlined" sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SchoolOutlinedIcon color="secondary" fontSize="small" />
+          <Typography variant="body2">
+            <strong>{stats.totalTeachers}</strong> teachers
+          </Typography>
+        </Paper>
+        <Paper variant="outlined" sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <PeopleOutlinedIcon color="primary" fontSize="small" />
           <Typography variant="body2">
             <strong>{stats.totalStudents}</strong> students
@@ -287,6 +354,7 @@ export default function ClassroomDetailPage() {
       >
         <Tab label="Overview" sx={{ minHeight: 48 }} />
         <Tab label="Batches" sx={{ minHeight: 48 }} />
+        <Tab label="Teachers" sx={{ minHeight: 48 }} />
         <Tab label="Students" sx={{ minHeight: 48 }} />
       </Tabs>
 
@@ -319,6 +387,19 @@ export default function ClassroomDetailPage() {
                   size="small"
                   color={classroom.is_active ? 'success' : 'default'}
                 />
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Question Bank</Typography>
+                {qbToggling ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <Switch
+                    checked={qbEnabled === true}
+                    onChange={handleQBToggle}
+                    disabled={qbEnabled === null}
+                    size="small"
+                  />
+                )}
               </Box>
             </Box>
           </Paper>
@@ -390,8 +471,63 @@ export default function ClassroomDetailPage() {
         </Box>
       )}
 
-      {/* Tab: Students */}
+      {/* Tab: Teachers */}
       {tab === 2 && (
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<PersonAddAltOutlinedIcon />}
+              onClick={() => setAddTeacherOpen(true)}
+            >
+              Add Teacher
+            </Button>
+          </Box>
+
+          {teacherEnrollments.length === 0 ? (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                No teachers assigned to this classroom.
+              </Typography>
+            </Paper>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {teacherEnrollments.map((enrollment) => (
+                <Paper
+                  key={enrollment.id}
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    minHeight: 48,
+                  }}
+                >
+                  <GraphAvatar
+                    msOid={enrollment.user.ms_oid}
+                    name={enrollment.user.name}
+                    size={40}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                      {enrollment.user.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {enrollment.user.email}
+                    </Typography>
+                  </Box>
+                  <Chip label="Teacher" size="small" color="secondary" variant="outlined" />
+                </Paper>
+              ))}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Tab: Students */}
+      {tab === 3 && (
         <Box>
           {/* Batch filter chips */}
           <Box sx={{ display: 'flex', gap: 1, mb: 2, overflowX: 'auto', pb: 1 }}>
@@ -467,12 +603,11 @@ export default function ClassroomDetailPage() {
                     minHeight: 48,
                   }}
                 >
-                  <Avatar
-                    src={enrollment.user.avatar_url || undefined}
-                    sx={{ width: 40, height: 40 }}
-                  >
-                    {getInitials(enrollment.user.name)}
-                  </Avatar>
+                  <GraphAvatar
+                    msOid={enrollment.user.ms_oid}
+                    name={enrollment.user.name}
+                    size={40}
+                  />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
                       {enrollment.user.name}
@@ -547,9 +682,22 @@ export default function ClassroomDetailPage() {
         onClose={() => setAddStudentOpen(false)}
         classroomId={id}
         batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+        defaultRole="student"
         onStudentsAdded={() => {
           fetchClassroom();
-          if (tab === 2) fetchEnrollments();
+          if (tab === 3) fetchEnrollments();
+        }}
+      />
+
+      <AddStudentDialog
+        open={addTeacherOpen}
+        onClose={() => setAddTeacherOpen(false)}
+        classroomId={id}
+        batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+        defaultRole="teacher"
+        onStudentsAdded={() => {
+          fetchClassroom();
+          if (tab === 2) fetchTeacherEnrollments();
         }}
       />
     </Box>

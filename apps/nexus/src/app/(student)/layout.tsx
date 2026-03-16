@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Box, Container } from '@neram/ui';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
@@ -8,33 +9,49 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
+import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
 import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
+import { useQBAccess } from '@/hooks/useQBAccess';
 
-const studentNavItems = [
+const QB_PATH = '/student/question-bank';
+
+const allStudentNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
+  { label: 'Modules', path: '/student/modules', icon: <ViewModuleOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
-  { label: 'QB', path: '/student/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+  { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
 ];
 
-const bottomNavItems = [
+const allBottomNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
+  { label: 'Modules', path: '/student/modules', icon: <ViewModuleOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
-  { label: 'QB', path: '/student/question-bank', icon: <LibraryBooksOutlinedIcon /> },
-  { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
+  { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
+  const { isQBEnabled } = useQBAccess();
+
+  const studentNavItems = useMemo(
+    () => isQBEnabled ? allStudentNavItems : allStudentNavItems.filter((i) => i.path !== QB_PATH),
+    [isQBEnabled],
+  );
+
+  const bottomNavItems = useMemo(
+    () => isQBEnabled ? allBottomNavItems : allBottomNavItems.filter((i) => i.path !== QB_PATH),
+    [isQBEnabled],
+  );
 
   return (
     <RoleGuard allowedRoles={['student']}>

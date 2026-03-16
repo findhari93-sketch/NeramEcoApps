@@ -33,11 +33,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ users: [] });
     }
 
-    // Search local users (all types, not just students)
+    // Search local users — only org users (those with ms_oid)
     const { data: localUsers, error } = await supabase
       .from('users')
       .select('id, name, email, avatar_url, ms_oid, user_type')
       .eq('status', 'active')
+      .not('ms_oid', 'is', null)
       .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
       .order('name')
       .limit(20);

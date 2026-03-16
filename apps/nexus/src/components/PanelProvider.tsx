@@ -16,6 +16,8 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
+import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -71,7 +73,8 @@ const PANELS: PanelConfig[] = [
     sidebarItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
-      { label: 'Foundation', path: '/teacher/foundation', icon: <AutoStoriesOutlinedIcon /> },
+      { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
+      { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
@@ -80,8 +83,8 @@ const PANELS: PanelConfig[] = [
     bottomNavItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
-      { label: 'Foundation', path: '/teacher/foundation', icon: <AutoStoriesOutlinedIcon /> },
-      { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
+      { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
     ],
   },
@@ -117,6 +120,8 @@ function detectPanelFromPath(pathname: string): PanelId | null {
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
+  // Foundation pages are still accessible via Module Library (management panel)
+  if (pathname.startsWith('/teacher/foundation')) return 'management';
 
   for (const [path, panelId] of Object.entries(PATH_TO_PANEL)) {
     if (pathname.startsWith(path + '/')) return panelId;

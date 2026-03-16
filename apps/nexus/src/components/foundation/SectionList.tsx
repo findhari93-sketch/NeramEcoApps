@@ -11,6 +11,7 @@ import type { NexusFoundationSectionWithQuiz } from '@neram/database/types';
 interface SectionListProps {
   sections: NexusFoundationSectionWithQuiz[];
   currentSectionIndex: number;
+  chapterNumber?: number;
   onSectionClick: (index: number) => void;
 }
 
@@ -25,6 +26,7 @@ function formatDuration(startSec: number, endSec: number): string {
 export default function SectionList({
   sections,
   currentSectionIndex,
+  chapterNumber,
   onSectionClick,
 }: SectionListProps) {
   const theme = useTheme();
@@ -97,6 +99,19 @@ export default function SectionList({
                   color: isLocked ? 'text.disabled' : 'text.primary',
                 }}
               >
+                {chapterNumber != null && (
+                  <Typography
+                    component="span"
+                    sx={{
+                      fontWeight: 700,
+                      color: isCurrent ? 'primary.main' : 'text.secondary',
+                      mr: 0.5,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    {chapterNumber}{String.fromCharCode(65 + index)}
+                  </Typography>
+                )}
                 {section.title}
               </Typography>
               <Typography
@@ -131,7 +146,12 @@ export default function SectionList({
                     fontWeight: isPassed ? 600 : 400,
                   }}
                 >
-                  {isPassed ? 'Passed' : `${section.quiz_questions.length}Q`}
+                  {isPassed
+                    ? 'Passed'
+                    : section.min_questions_to_pass
+                      ? `${section.min_questions_to_pass}/${section.quiz_questions.length}`
+                      : `${section.quiz_questions.length}Q`
+                  }
                 </Typography>
               </Box>
             )}

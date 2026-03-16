@@ -20,7 +20,7 @@ export async function GET(
 
     let query = supabase
       .from('nexus_enrollments')
-      .select('*, user:users(id, name, email, avatar_url, user_type), batch:nexus_batches(id, name)')
+      .select('*, user:users(id, name, email, avatar_url, user_type, ms_oid), batch:nexus_batches(id, name)')
       .eq('classroom_id', id)
       .eq('is_active', true);
 
