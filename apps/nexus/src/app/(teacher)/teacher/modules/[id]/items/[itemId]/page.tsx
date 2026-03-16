@@ -442,7 +442,11 @@ export default function ModuleItemEditorPage() {
       setAutoGenStatus('Analyzing transcript & generating sections...');
       const res = await fetch(`/api/modules/${moduleId}/items/${itemId}/auto-generate`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sharepoint_video_url: form.sharepoint_video_url,
+          title: form.title,
+        }),
       });
 
       const data = await res.json();

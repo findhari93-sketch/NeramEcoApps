@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -62,33 +62,28 @@ const EVENT_SECTION_MAP: Record<string, string> = {
 };
 
 function getNavigationUrl(notification: AdminNotification): string | null {
-  // Demo registrations navigate to the demo class slot detail page
   if (notification.event_type === 'demo_registration') {
     const slotId = notification.metadata?.slot_id as string;
     if (slotId) return `/demo-classes/${slotId}`;
     return '/demo-classes';
   }
 
-  // Question moderation events navigate to the moderation page
   if (['question_submitted', 'question_edit_requested', 'question_delete_requested'].includes(notification.event_type)) {
     return '/question-moderation';
   }
 
-  // Link regeneration requests navigate to direct enrollment with highlight
   if (notification.event_type === 'link_regeneration_requested') {
     const enrollmentLinkId = notification.metadata?.enrollment_link_id as string;
     if (enrollmentLinkId) return `/direct-enrollment?highlight=${enrollmentLinkId}`;
     return '/direct-enrollment';
   }
 
-  // Support tickets navigate to the ticket management page
   if (notification.event_type === 'ticket_created') {
     const ticketId = notification.metadata?.ticket_id as string;
     if (ticketId) return `/support-tickets?highlight=${ticketId}`;
     return '/support-tickets';
   }
 
-  // Direct enrollment completed
   if (notification.event_type === 'direct_enrollment_completed') {
     return '/direct-enrollment';
   }
@@ -117,6 +112,21 @@ function timeAgo(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
+function getDateGroup(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const weekAgo = new Date(today.getTime() - 7 * 86400000);
+
+  if (date >= today) return 'Today';
+  if (date >= yesterday) return 'Yesterday';
+  if (date >= weekAgo) return 'This Week';
+  return 'Earlier';
+}
+
+const PAGE_SIZE = 15;
+
 export default function NotificationBell() {
   const { supabaseUserId } = useAdminProfile();
   const router = useRouter();
@@ -124,7 +134,10 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const popoverOpenRef = useRef(false);
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -143,82 +156,92 @@ export default function NotificationBell() {
     }
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (loadMore = false) => {
     try {
-      setLoading(true);
-      const res = await fetch(`/api/notifications?limit=10&offset=0&_t=${Date.now()}`, {
+      if (loadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      const currentOffset = loadMore ? notifications.length : 0;
+      const res = await fetch(`/api/notifications?limit=${PAGE_SIZE}&offset=${currentOffset}&_t=${Date.now()}`, {
         cache: 'no-store',
       });
       const data = await res.json();
-      setNotifications(data.notifications || []);
+      const newNotifs: AdminNotification[] = data.notifications || [];
+      if (loadMore) {
+        setNotifications(prev => [...prev, ...newNotifs]);
+      } else {
+        setNotifications(newNotifs);
+      }
+      setHasMore(currentOffset + newNotifs.length < (data.count || 0));
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifications.length]);
 
+  // Polling: always fetch unread count, also refresh list if popover is open
   const startPolling = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(fetchUnreadCount, 30000);
+    intervalRef.current = setInterval(() => {
+      fetchUnreadCount();
+      if (popoverOpenRef.current) {
+        // Refresh the list silently (don't reset pagination — just refresh the current visible set)
+        fetch(`/api/notifications?limit=${PAGE_SIZE}&offset=0&_t=${Date.now()}`, { cache: 'no-store' })
+          .then(res => res.json())
+          .then(data => {
+            if (data.notifications) {
+              setNotifications(prev => {
+                // Merge: prepend any new notifications, keep existing ones for pagination
+                const existingIds = new Set(prev.map(n => n.id));
+                const newOnes = (data.notifications as AdminNotification[]).filter(n => !existingIds.has(n.id));
+                if (newOnes.length > 0) {
+                  return [...newOnes, ...prev];
+                }
+                // Also update read state of visible notifications
+                const updatedMap = new Map((data.notifications as AdminNotification[]).map(n => [n.id, n]));
+                return prev.map(n => updatedMap.get(n.id) || n);
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    }, 30000);
   }, [fetchUnreadCount]);
 
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  // Initial fetch and polling
   useEffect(() => {
     fetchUnreadCount();
     startPolling();
-
     return () => {
-      stopPolling();
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchUnreadCount, startPolling, stopPolling]);
+  }, [fetchUnreadCount, startPolling]);
 
-  const handleOpen = async (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
-    // Optimistically clear badge immediately
-    setUnreadCount(0);
-    // Pause polling while popover is open
-    stopPolling();
+    popoverOpenRef.current = true;
     fetchNotifications();
-    // Auto-mark all as read when opening the popover
-    try {
-      const res = await fetch('/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: supabaseUserId || undefined }),
-      });
-      if (!res.ok) {
-        console.error('Failed to mark notifications as read on open:', res.status);
-      }
-      // Refresh count from server to confirm
-      await fetchUnreadCount();
-      // Re-fetch notifications to show actual read state
-      fetchNotifications();
-    } catch (error) {
-      console.error('Error marking notifications as read on open:', error);
-      // Refresh count in case optimistic clear was wrong
-      fetchUnreadCount();
-    }
   };
 
   const handleClose = () => {
     setAnchorEl(null);
-    // Refresh count from server and restart polling
+    popoverOpenRef.current = false;
     fetchUnreadCount();
-    startPolling();
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
     if (!supabaseUserId) return;
 
     try {
+      // Optimistic update
+      setNotifications(prev =>
+        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
+      );
+
       const res = await fetch('/api/notifications/mark-read', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,23 +250,20 @@ export default function NotificationBell() {
 
       if (!res.ok) {
         console.error('Failed to mark notification as read:', res.status);
-        return;
       }
-
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === notificationId ? { ...n, is_read: true } : n
-        )
-      );
-      // Refresh authoritative count from server
       fetchUnreadCount();
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      fetchUnreadCount();
     }
   };
 
   const handleMarkAllAsRead = async () => {
     if (!supabaseUserId) return;
+
+    // Optimistic update
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
 
     try {
       const res = await fetch('/api/notifications/mark-read', {
@@ -254,18 +274,15 @@ export default function NotificationBell() {
 
       if (!res.ok) {
         console.error('Failed to mark all notifications as read:', res.status);
-        return;
       }
-
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      // Refresh authoritative count from server
       fetchUnreadCount();
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+      fetchUnreadCount();
     }
   };
 
-  const handleNotificationClick = async (notification: AdminNotification) => {
+  const handleNotificationClick = (notification: AdminNotification) => {
     if (!notification.is_read) {
       handleMarkAsRead(notification.id);
     }
@@ -277,6 +294,31 @@ export default function NotificationBell() {
   };
 
   const open = Boolean(anchorEl);
+
+  // Group notifications by date
+  const groupedNotifications = React.useMemo(() => {
+    const groups: { label: string; items: AdminNotification[] }[] = [];
+    const groupMap = new Map<string, AdminNotification[]>();
+
+    notifications.forEach(n => {
+      const group = getDateGroup(n.created_at);
+      if (!groupMap.has(group)) {
+        groupMap.set(group, []);
+      }
+      groupMap.get(group)!.push(n);
+    });
+
+    // Maintain order: Today, Yesterday, This Week, Earlier
+    const order = ['Today', 'Yesterday', 'This Week', 'Earlier'];
+    order.forEach(label => {
+      const items = groupMap.get(label);
+      if (items && items.length > 0) {
+        groups.push({ label, items });
+      }
+    });
+
+    return groups;
+  }, [notifications]);
 
   return (
     <>
@@ -298,7 +340,7 @@ export default function NotificationBell() {
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{
           paper: {
-            sx: { width: 360, maxHeight: 480 },
+            sx: { width: 400, maxHeight: 520 },
           },
         }}
       >
@@ -306,7 +348,7 @@ export default function NotificationBell() {
           <Typography variant="subtitle1" fontWeight="bold">
             Notifications
           </Typography>
-          {unreadCount > 0 && (
+          {notifications.some(n => !n.is_read) && (
             <Button size="small" onClick={handleMarkAllAsRead}>
               Mark all as read
             </Button>
@@ -326,55 +368,92 @@ export default function NotificationBell() {
             </Typography>
           </Box>
         ) : (
-          <List dense sx={{ p: 0, maxHeight: 360, overflow: 'auto' }}>
-            {notifications.map((notification) => (
-              <ListItem
-                key={notification.id}
-                onClick={() => handleNotificationClick(notification)}
-                sx={{
-                  cursor: 'pointer',
-                  bgcolor: notification.is_read ? 'transparent' : 'action.hover',
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                  },
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <Box
+          <List dense sx={{ p: 0, maxHeight: 420, overflow: 'auto' }}>
+            {groupedNotifications.map(({ label, items }) => (
+              <React.Fragment key={label}>
+                <Typography
+                  variant="overline"
                   sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    bgcolor: EVENT_TYPE_COLORS[notification.event_type] || '#757575',
-                    mr: 1.5,
-                    flexShrink: 0,
-                    mt: 0.5,
+                    px: 2,
+                    pt: 1.5,
+                    pb: 0.5,
+                    display: 'block',
+                    color: 'text.disabled',
+                    fontSize: '0.6875rem',
+                    letterSpacing: '0.08em',
                   }}
-                />
-                <ListItemText
-                  primary={
-                    <Typography
-                      variant="body2"
-                      fontWeight={notification.is_read ? 'normal' : 'bold'}
-                      noWrap
-                    >
-                      {notification.title}
-                    </Typography>
-                  }
-                  secondary={
-                    <span>
-                      <Typography variant="caption" color="text.secondary" component="span" sx={{ display: 'block' }}>
-                        {notification.message}
-                      </Typography>
-                      <Typography variant="caption" color="text.disabled" component="span">
-                        {timeAgo(notification.created_at)}
-                      </Typography>
-                    </span>
-                  }
-                />
-              </ListItem>
+                >
+                  {label}
+                </Typography>
+                {items.map(notification => (
+                  <ListItem
+                    key={notification.id}
+                    onClick={() => handleNotificationClick(notification)}
+                    sx={{
+                      cursor: 'pointer',
+                      bgcolor: notification.is_read ? 'transparent' : 'action.hover',
+                      '&:hover': { bgcolor: 'action.selected' },
+                      borderBottom: '1px solid',
+                      borderColor: 'divider',
+                      py: 1.5,
+                      px: 2,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        bgcolor: notification.is_read
+                          ? 'transparent'
+                          : (EVENT_TYPE_COLORS[notification.event_type] || '#2196f3'),
+                        mr: 1.5,
+                        flexShrink: 0,
+                        alignSelf: 'flex-start',
+                        mt: 1,
+                      }}
+                    />
+                    <ListItemText
+                      primary={
+                        <Typography
+                          variant="body2"
+                          fontWeight={notification.is_read ? 'normal' : 600}
+                          sx={{ mb: 0.25 }}
+                        >
+                          {notification.title}
+                        </Typography>
+                      }
+                      secondary={
+                        <span>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            component="span"
+                            sx={{ display: 'block', fontSize: '0.8125rem' }}
+                          >
+                            {notification.message}
+                          </Typography>
+                          <Typography variant="caption" color="text.disabled" component="span">
+                            {timeAgo(notification.created_at)}
+                          </Typography>
+                        </span>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </React.Fragment>
             ))}
+            {hasMore && (
+              <Box sx={{ p: 1.5, textAlign: 'center' }}>
+                <Button
+                  size="small"
+                  onClick={() => fetchNotifications(true)}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? 'Loading...' : 'Load more'}
+                </Button>
+              </Box>
+            )}
           </List>
         )}
       </Popover>

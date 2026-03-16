@@ -143,7 +143,15 @@ export async function POST(
       return NextResponse.json({ error: 'Missing authorization token' }, { status: 401 });
     }
 
-    // Get the module item to retrieve SharePoint URL
+    // Parse body for client-provided URL (works even if item not yet saved)
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      // No body — will fall back to DB lookup
+    }
+
+    // Get the module item from DB
     const supabase = getSupabaseAdminClient() as any;
     const { data: item, error: itemError } = await supabase
       .from('nexus_module_items')
@@ -155,7 +163,11 @@ export async function POST(
       return NextResponse.json({ error: 'Module item not found' }, { status: 404 });
     }
 
-    if (!item.sharepoint_video_url) {
+    // Use client-provided URL first (handles unsaved form state), then DB
+    const sharepointUrl = body.sharepoint_video_url || item.sharepoint_video_url;
+    const itemTitle = body.title || item.title;
+
+    if (!sharepointUrl) {
       return NextResponse.json(
         { error: 'No SharePoint video URL configured for this item' },
         { status: 400 }
@@ -165,7 +177,7 @@ export async function POST(
     // Fetch transcript from SharePoint
     let vttText: string;
     try {
-      vttText = await fetchTranscript(item.sharepoint_video_url, msToken);
+      vttText = await fetchTranscript(sharepointUrl, msToken);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       if (message === 'NO_ACCESS') {
@@ -200,7 +212,7 @@ export async function POST(
     }
 
     // Generate sections and questions via AI
-    const generated = await generateSectionsAndQuestions(transcript, item.title);
+    const generated = await generateSectionsAndQuestions(transcript, itemTitle);
 
     return NextResponse.json({
       generated: {

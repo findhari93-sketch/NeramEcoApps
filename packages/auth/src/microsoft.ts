@@ -59,6 +59,7 @@ export const loginScopes = {
     'OnlineMeetings.ReadWrite',
     'OnlineMeetingArtifact.Read.All',
     'Files.ReadWrite',
+    'Sites.Read.All',
   ],
 };
 
