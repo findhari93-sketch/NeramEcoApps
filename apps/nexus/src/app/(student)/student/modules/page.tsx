@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Paper, Skeleton, alpha, useTheme, LinearProgress, Chip } from '@neram/ui';
-import Icon from '@mui/material/Icon';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
@@ -137,7 +136,7 @@ export default function StudentModuleLibrary() {
                           flexShrink: 0,
                         }}
                       >
-                        <Icon sx={{ fontSize: '1.25rem' }}>{mod.icon || 'menu_book'}</Icon>
+                        <span className="material-icons" style={{ fontSize: '1.25rem', lineHeight: 1 }}>{mod.icon || 'menu_book'}</span>
                       </Box>
 
                       {mod.module_type === 'foundation' && (

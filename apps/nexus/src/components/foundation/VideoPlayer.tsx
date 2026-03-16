@@ -9,6 +9,8 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import type { NexusFoundationSection } from '@neram/database/types';
 
 declare global {
+  // eslint-disable-next-line no-var
+  var onYouTubeIframeAPIReady: (() => void) | undefined;
   interface Window {
     YT: any;
     onYouTubeIframeAPIReady: (() => void) | undefined;

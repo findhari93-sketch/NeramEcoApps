@@ -55,7 +55,7 @@ export async function verifyQBAccess(
 
   // Teachers and admins can access QB without enrollment checks
   if (['teacher', 'admin'].includes(caller.user_type ?? '')) {
-    return { ok: true, caller: { id: caller.id, user_type: caller.user_type } };
+    return { ok: true, caller: { id: caller.id, user_type: caller.user_type ?? 'student' } };
   }
 
   // Students require classroom_id
@@ -87,5 +87,5 @@ export async function verifyQBAccess(
     };
   }
 
-  return { ok: true, caller: { id: caller.id, user_type: caller.user_type } };
+  return { ok: true, caller: { id: caller.id, user_type: caller.user_type ?? 'student' } };
 }

@@ -248,7 +248,7 @@ export async function getModuleItemsWithProgress(
   let previousCompleted = true;
 
   for (const item of (items || []) as any[]) {
-    const progress = progressMap.get(item.id);
+    const progress = progressMap.get(item.id) as any;
     const sectionCount = sectionCountMap.get(item.id) || 0;
     const completedSections = completedSectionMap.get(item.id) || 0;
 
@@ -604,7 +604,7 @@ export async function deleteModuleItemSection(
   if (error) throw error;
 }
 
-export async function getSectionQuestionsAdmin(
+export async function getModuleSectionQuestionsAdmin(
   sectionId: string,
   client?: TypedSupabaseClient
 ) {

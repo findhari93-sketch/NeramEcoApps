@@ -99,39 +99,7 @@ interface ItemDetail {
   notes: Note[];
 }
 
-// ─── YouTube IFrame API type augmentation ────────────────────────────
-
-declare global {
-  interface Window {
-    YT: {
-      Player: new (
-        elementId: string | HTMLElement,
-        config: {
-          videoId: string;
-          playerVars?: Record<string, number | string>;
-          events?: {
-            onReady?: (event: { target: YTPlayer }) => void;
-            onStateChange?: (event: { data: number; target: YTPlayer }) => void;
-          };
-        }
-      ) => YTPlayer;
-      PlayerState: {
-        PLAYING: number;
-        PAUSED: number;
-        ENDED: number;
-      };
-    };
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
-
-interface YTPlayer {
-  seekTo: (seconds: number, allowSeekAhead?: boolean) => void;
-  getCurrentTime: () => number;
-  getDuration: () => number;
-  getPlayerState: () => number;
-  destroy: () => void;
-}
+// YouTube IFrame API types are declared in VideoPlayer.tsx
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -172,7 +140,7 @@ export default function StudentItemLearningPage() {
   const [noteSaving, setNoteSaving] = useState<Record<string, boolean>>({});
 
   // YouTube refs
-  const ytPlayerRef = useRef<YTPlayer | null>(null);
+  const ytPlayerRef = useRef<any>(null);
   const ytContainerRef = useRef<HTMLDivElement>(null);
   const timeUpdateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -990,7 +958,7 @@ interface SectionsListProps {
   onSectionClick: (index: number) => void;
   onQuizOpen: (section: Section) => void;
   getSectionQuizStatus: (sectionId: string) => 'passed' | 'failed' | 'not_attempted';
-  theme: ReturnType<typeof useTheme>;
+  theme: any;
 }
 
 function SectionsList({
@@ -1153,7 +1121,7 @@ interface NotesListProps {
   noteTexts: Record<string, string>;
   noteSaving: Record<string, boolean>;
   onNoteChange: (sectionId: string, text: string) => void;
-  theme: ReturnType<typeof useTheme>;
+  theme: any;
 }
 
 function NotesList({

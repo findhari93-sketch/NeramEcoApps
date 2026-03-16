@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
           .in('section_id', sectionIds)
           .eq('passed', true);
 
-        const passedSectionIds = new Set((passedAttempts || []).map((a: any) => a.section_id));
+        const passedSectionIds = new Set<string>((passedAttempts || []).map((a: any) => a.section_id));
 
         // Map section_id back to chapter_id to count completed sections per chapter
         const sectionToChapter: Record<string, string> = {};
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
           sectionToChapter[s.id] = s.chapter_id;
         });
 
-        passedSectionIds.forEach((sectionId: string) => {
+        passedSectionIds.forEach((sectionId) => {
           const chapterId = sectionToChapter[sectionId];
           if (chapterId) {
             completedSectionsMap[chapterId] = (completedSectionsMap[chapterId] || 0) + 1;

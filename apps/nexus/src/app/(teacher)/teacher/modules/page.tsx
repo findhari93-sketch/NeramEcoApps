@@ -21,7 +21,6 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
-import Icon from '@mui/material/Icon';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 
@@ -287,7 +286,7 @@ export default function ModulesPage() {
                 {/* Icon + Title row */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   {mod.icon && (
-                    <Icon sx={{ fontSize: '1.4rem', lineHeight: 1 }}>{mod.icon}</Icon>
+                    <span className="material-icons" style={{ fontSize: '1.4rem', lineHeight: 1 }}>{mod.icon}</span>
                   )}
                   <Typography
                     variant="body1"
