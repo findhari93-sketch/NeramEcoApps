@@ -41,7 +41,6 @@ interface PDFReaderProps {
 
 type ReadingMode = 'light' | 'dark' | 'sepia';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PDFDocumentProxy = any;
 
 // ---------------------------------------------------------------------------
