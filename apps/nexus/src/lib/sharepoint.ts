@@ -12,6 +12,185 @@
 
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB — threshold for upload sessions
 
+/** Cache for app-only tokens (client credentials flow) */
+let appTokenCache: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Get an app-only (client credentials) Graph API token.
+ * Requires AZ_CLIENT_ID, AZ_CLIENT_SECRET, AZ_TENANT_ID env vars.
+ */
+export async function getAppOnlyToken(): Promise<string> {
+  // Return cached token if still valid (with 60s buffer)
+  if (appTokenCache && Date.now() < appTokenCache.expiresAt - 60_000) {
+    return appTokenCache.token;
+  }
+
+  const clientId = process.env.AZ_CLIENT_ID;
+  const clientSecret = process.env.AZ_CLIENT_SECRET;
+  const tenantId = process.env.AZ_TENANT_ID;
+
+  if (!clientId || !clientSecret || !tenantId) {
+    throw new Error('AZ_CLIENT_ID, AZ_CLIENT_SECRET, and AZ_TENANT_ID are required for app-only auth');
+  }
+
+  const res = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: 'https://graph.microsoft.com/.default',
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`Failed to get app-only token: ${res.status} ${err}`);
+  }
+
+  const data = await res.json();
+  appTokenCache = {
+    token: data.access_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
+
+  return data.access_token;
+}
+
+/**
+ * Encode a sharing URL for the Graph API /shares endpoint.
+ * Format: "u!" + base64url(sharingUrl)
+ */
+function encodeSharingUrl(url: string): string {
+  const base64 = Buffer.from(url, 'utf-8').toString('base64');
+  const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `u!${base64url}`;
+}
+
+/**
+ * Resolve a SharePoint video URL to a temporary streaming URL.
+ * Works with sharing links, stream.aspx URLs, and direct webUrls.
+ * Returns a pre-authenticated download URL that can be used in <video> elements.
+ */
+export async function getSharePointStreamUrl(sharepointUrl: string): Promise<string> {
+  const token = await getAppOnlyToken();
+  const u = new URL(sharepointUrl);
+
+  // For sharing links (/:v:/), use the /shares endpoint
+  if (u.pathname.match(/\/:v:\//)) {
+    const encoded = encodeSharingUrl(sharepointUrl);
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,@microsoft.graph.downloadUrl`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data['@microsoft.graph.downloadUrl']) {
+        return data['@microsoft.graph.downloadUrl'];
+      }
+    }
+
+    // If /shares fails, try resolving the driveItem content URL
+    const contentRes = await fetch(
+      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content`,
+      { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
+    );
+    if (contentRes.status === 302) {
+      const location = contentRes.headers.get('Location');
+      if (location) return location;
+    }
+  }
+
+  // For stream.aspx or embed.aspx URLs, extract the file path and use site drive
+  if (u.pathname.includes('stream.aspx') || u.pathname.includes('embed.aspx')) {
+    // stream.aspx?id=/sites/siteName/Shared Documents/file.mp4
+    const filePath = u.searchParams.get('id');
+    if (filePath) {
+      // Extract site name from path: /sites/siteName/...
+      const siteMatch = filePath.match(/\/sites\/([^/]+)/);
+      if (siteMatch) {
+        const siteName = siteMatch[1];
+        // Get the site
+        const siteRes = await fetch(
+          `https://graph.microsoft.com/v1.0/sites/${u.hostname}:/sites/${siteName}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (siteRes.ok) {
+          const site = await siteRes.json();
+          // Get file by path relative to site
+          const relativePath = filePath.replace(`/sites/${siteName}`, '');
+          const fileRes = await fetch(
+            `https://graph.microsoft.com/v1.0/sites/${site.id}/drive/root:${relativePath}?$select=id,@microsoft.graph.downloadUrl`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (fileRes.ok) {
+            const fileData = await fileRes.json();
+            if (fileData['@microsoft.graph.downloadUrl']) {
+              return fileData['@microsoft.graph.downloadUrl'];
+            }
+          }
+        }
+      }
+    }
+
+    // For embed.aspx?UniqueId=GUID, try resolving via search
+    const uniqueId = u.searchParams.get('UniqueId');
+    if (uniqueId) {
+      // Extract site name from path: /sites/siteName/_layouts/...
+      const siteMatch = u.pathname.match(/\/sites\/([^/]+)/);
+      if (siteMatch) {
+        const siteName = siteMatch[1];
+        const siteRes = await fetch(
+          `https://graph.microsoft.com/v1.0/sites/${u.hostname}:/sites/${siteName}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (siteRes.ok) {
+          const site = await siteRes.json();
+          // Search by UniqueId
+          const searchRes = await fetch(
+            `https://graph.microsoft.com/v1.0/sites/${site.id}/drive/root/search(q='${uniqueId}')?$select=id,@microsoft.graph.downloadUrl`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            const match = searchData.value?.[0];
+            if (match?.['@microsoft.graph.downloadUrl']) {
+              return match['@microsoft.graph.downloadUrl'];
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // For direct file webUrls (e.g., .../Shared Documents/file.mp4)
+  if (u.hostname.includes('sharepoint.com') && !u.pathname.includes('_layouts')) {
+    const encoded = encodeSharingUrl(sharepointUrl);
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,@microsoft.graph.downloadUrl`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data['@microsoft.graph.downloadUrl']) {
+        return data['@microsoft.graph.downloadUrl'];
+      }
+    }
+  }
+
+  throw new Error('Could not resolve SharePoint URL to a streaming URL');
+}
+
 interface SharePointUploadResult {
   /** SharePoint/OneDrive item ID (for deletion) */
   itemId: string;

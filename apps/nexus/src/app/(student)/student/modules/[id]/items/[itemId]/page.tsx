@@ -152,6 +152,10 @@ export default function StudentItemLearningPage() {
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [quizResult, setQuizResult] = useState<{ score_pct: number; passed: boolean; answers: QuizAttemptAnswer[] } | null>(null);
 
+  // SharePoint streaming state
+  const [spStreamUrl, setSpStreamUrl] = useState<string | null>(null);
+  const [spStreamLoading, setSpStreamLoading] = useState(false);
+
   // Notes state
   const [noteTexts, setNoteTexts] = useState<Record<string, string>>({});
   const [noteSaving, setNoteSaving] = useState<Record<string, boolean>>({});
@@ -224,6 +228,38 @@ export default function StudentItemLearningPage() {
   useEffect(() => {
     if (!authLoading) fetchItem();
   }, [authLoading, fetchItem]);
+
+  // ─── SharePoint Streaming URL ───────────────────────────────────────
+
+  useEffect(() => {
+    if (!item?.sharepoint_video_url || item.youtube_video_id) return;
+
+    let cancelled = false;
+    setSpStreamLoading(true);
+
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+
+        const res = await fetch(
+          `/api/sharepoint/stream?url=${encodeURIComponent(item.sharepoint_video_url!)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setSpStreamUrl(data.streamUrl);
+        }
+      } catch (err) {
+        console.error('Failed to get SharePoint stream URL:', err);
+      } finally {
+        if (!cancelled) setSpStreamLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [item?.sharepoint_video_url, item?.youtube_video_id, getToken]);
 
   // ─── YouTube Player ─────────────────────────────────────────────────
 
@@ -636,26 +672,65 @@ export default function StudentItemLearningPage() {
               sx={{
                 position: 'relative',
                 width: '100%',
-                paddingTop: '56.25%',
+                paddingTop: spStreamUrl ? 0 : '56.25%',
                 bgcolor: '#000',
                 borderRadius: { xs: 0, lg: 2 },
                 overflow: 'hidden',
               }}
             >
-              <iframe
-                src={item.sharepoint_video_url!}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  border: 'none',
-                }}
-                allow="autoplay; fullscreen"
-                allowFullScreen
-                title={item.title}
-              />
+              {spStreamLoading ? (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    gap: 1,
+                  }}
+                >
+                  <Skeleton variant="rectangular" width="100%" height="100%" sx={{ position: 'absolute', top: 0, left: 0 }} />
+                  <Typography variant="body2" sx={{ color: 'grey.400', position: 'relative', zIndex: 1 }}>
+                    Loading video...
+                  </Typography>
+                </Box>
+              ) : spStreamUrl ? (
+                <video
+                  src={spStreamUrl}
+                  controls
+                  controlsList="nodownload"
+                  playsInline
+                  style={{
+                    width: '100%',
+                    maxHeight: '70vh',
+                    backgroundColor: '#000',
+                  }}
+                  title={item.title}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    gap: 1,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ color: 'grey.400' }}>
+                    Video unavailable
+                  </Typography>
+                </Box>
+              )}
             </Box>
           )}
 
