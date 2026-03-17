@@ -1,130 +1,66 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import {
   Box,
   Typography,
-  Paper,
-  Button,
   IconButton,
+  Button,
   Skeleton,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  FormControl,
-  alpha,
-  useTheme,
   Tabs,
   Tab,
-  LinearProgress,
+  alpha,
+  useTheme,
 } from '@neram/ui';
-import { useRouter, useParams } from 'next/navigation';
-import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import NoteOutlinedIcon from '@mui/icons-material/NoteOutlined';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CloseIcon from '@mui/icons-material/Close';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import VideoPlayer from '@/components/foundation/VideoPlayer';
+import SectionTimer from '@/components/foundation/SectionTimer';
+import SectionList from '@/components/foundation/SectionList';
+import QuizModal from '@/components/foundation/QuizModal';
+import AllSectionsQuizModal from '@/components/foundation/AllSectionsQuizModal';
+import NoteEditor from '@/components/foundation/NoteEditor';
+import ChapterFeedback from '@/components/foundation/ChapterFeedback';
+import FoundationProgressBar from '@/components/foundation/ProgressBar';
 import PDFReader from '@/components/reader/PDFReader';
 import AudioPlayer from '@/components/reader/AudioPlayer';
+import type {
+  NexusFoundationSectionWithQuiz,
+  NexusFoundationSection,
+  NexusAudioTrack,
+} from '@neram/database/types';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-interface QuizQuestion {
-  id: string;
-  question_text: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  sort_order: number;
-}
-
-interface Section {
-  id: string;
-  title: string;
-  description: string | null;
-  start_time_seconds: number | null;
-  end_time_seconds: number | null;
-  sort_order: number;
-  quiz_questions: QuizQuestion[];
-}
-
-interface QuizAttemptAnswer {
-  question_id: string;
-  selected_option: string;
-  is_correct: boolean;
-}
-
-interface QuizAttempt {
-  id: string;
-  section_id: string;
-  score_pct: number;
-  passed: boolean;
-  answers: QuizAttemptAnswer[];
-  created_at: string;
-}
-
-interface Note {
-  id: string;
-  section_id: string;
-  note_text: string;
-  video_timestamp_seconds: number | null;
-}
-
-interface ItemProgress {
-  status: 'not_started' | 'in_progress' | 'completed';
-  last_video_position_seconds: number | null;
-  last_section_id: string | null;
-  last_pdf_page: number | null;
-  last_audio_position_seconds: number | null;
-  last_audio_language: string | null;
-}
-
-interface ItemDetail {
+interface ModuleItemData {
   id: string;
   title: string;
   description: string | null;
   item_type: string;
-  video_source: string | null;
+  video_source: 'youtube' | 'sharepoint' | null;
   youtube_video_id: string | null;
   sharepoint_video_url: string | null;
   chapter_number: number | null;
   pdf_url: string | null;
   pdf_page_count: number | null;
-  audio_tracks: Array<{
-    id: string;
-    language: string;
-    language_label: string;
-    audio_url: string;
-    audio_duration_seconds: number | null;
-  }>;
-  sections: Section[];
-  progress: ItemProgress | null;
-  quiz_attempts: QuizAttempt[];
-  notes: Note[];
+  sections: NexusFoundationSectionWithQuiz[];
+  progress: {
+    status: string;
+    last_video_position_seconds: number | null;
+    last_section_id: string | null;
+    last_pdf_page: number | null;
+    last_audio_position_seconds: number | null;
+    last_audio_language: string | null;
+  } | null;
+  audio_tracks: NexusAudioTrack[];
 }
 
-// YouTube IFrame API types are declared in VideoPlayer.tsx
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function formatTime(seconds: number | null | undefined): string {
-  if (seconds == null || isNaN(seconds)) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+type ContentTab = 'watch' | 'read';
 
 // ─── Component ───────────────────────────────────────────────────────
 
@@ -136,41 +72,31 @@ export default function StudentItemLearningPage() {
   const itemId = params.itemId as string;
   const { getToken, loading: authLoading } = useNexusAuthContext();
 
-  // State
-  const [item, setItem] = useState<ItemDetail | null>(null);
+  const [data, setData] = useState<ModuleItemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
-  const [mobileTab, setMobileTab] = useState(0); // 0=sections 1=notes
-  const [currentVideoTime, setCurrentVideoTime] = useState(0);
-  const [contentTab, setContentTab] = useState<'watch' | 'read'>('watch');
-
-  // Quiz state
   const [quizOpen, setQuizOpen] = useState(false);
-  const [quizSectionId, setQuizSectionId] = useState<string | null>(null);
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
-  const [quizSubmitting, setQuizSubmitting] = useState(false);
-  const [quizResult, setQuizResult] = useState<{ score_pct: number; passed: boolean; answers: QuizAttemptAnswer[] } | null>(null);
+  const [quizSectionIndex, setQuizSectionIndex] = useState(0);
+  const [allQuizMode, setAllQuizMode] = useState(false);
+  const [contentTab, setContentTab] = useState<ContentTab>('watch');
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
 
-  // SharePoint streaming state
+  // SharePoint streaming
   const [spStreamUrl, setSpStreamUrl] = useState<string | null>(null);
   const [spStreamLoading, setSpStreamLoading] = useState(false);
+  const spVideoRef = useRef<HTMLVideoElement>(null);
+  const spQuizTriggeredRef = useRef<Set<number>>(new Set());
 
-  // Notes state
-  const [noteTexts, setNoteTexts] = useState<Record<string, string>>({});
-  const [noteSaving, setNoteSaving] = useState<Record<string, boolean>>({});
-
-  // YouTube refs
-  const ytPlayerRef = useRef<any>(null);
-  const ytContainerRef = useRef<HTMLDivElement>(null);
-  const timeUpdateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const autoSaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastSavedTimeRef = useRef(0);
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedPosRef = useRef(0);
+  const videoPlaceholderRef = useRef<HTMLDivElement>(null);
+  const videoWrapperRef = useRef<HTMLDivElement>(null);
+  const videoInnerRef = useRef<HTMLDivElement>(null);
 
   // ─── Data fetching ──────────────────────────────────────────────────
 
-  const fetchItem = useCallback(async () => {
-    setLoading(true);
+  const fetchItem = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
@@ -178,50 +104,43 @@ export default function StudentItemLearningPage() {
       const res = await fetch(`/api/modules/${moduleId}/items/${itemId}/detail`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (!res.ok) throw new Error('Failed to load item');
 
-      const data = await res.json();
-      const itemData = data.item as ItemDetail;
-      setItem(itemData);
+      const json = await res.json();
+      const item = json.item as ModuleItemData;
+      setData(item);
 
-      // Initialize notes from existing data
-      const notes: Record<string, string> = {};
-      (itemData.notes || []).forEach((n: Note) => {
-        notes[n.section_id] = n.note_text;
-      });
-      setNoteTexts(notes);
+      if (!silent) {
+        // Set default content tab
+        const hasVideo = item.video_source && (item.youtube_video_id || item.sharepoint_video_url);
+        if (!hasVideo && item.pdf_url) setContentTab('read');
 
-      // Set default content tab based on available content
-      const hasVideo = !!(itemData.youtube_video_id || itemData.sharepoint_video_url);
-      if (!hasVideo && itemData.pdf_url) setContentTab('read');
-
-      // Resume from last section
-      if (itemData.progress?.last_section_id && itemData.sections.length > 0) {
-        const idx = itemData.sections.findIndex(
-          (s: Section) => s.id === itemData.progress!.last_section_id
-        );
-        if (idx >= 0) setCurrentSectionIndex(idx);
+        // Resume from last section
+        if (item.progress?.last_section_id) {
+          const idx = item.sections.findIndex((s) => s.id === item.progress!.last_section_id);
+          if (idx >= 0) setCurrentSectionIndex(idx);
+        } else {
+          // Find first section without a passing attempt
+          const firstIncomplete = item.sections.findIndex((s) => !s.quiz_attempt?.passed);
+          if (firstIncomplete >= 0) setCurrentSectionIndex(firstIncomplete);
+        }
       }
 
       // Mark as in_progress if not started
-      if (!itemData.progress || itemData.progress.status === 'not_started') {
-        const progressToken = await getToken();
-        if (progressToken) {
-          fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${progressToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ status: 'in_progress' }),
-          }).catch(() => {});
-        }
+      if (!item.progress || item.progress.status === 'not_started') {
+        fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'in_progress' }),
+        }).catch(() => {});
       }
     } catch (err) {
       console.error('Failed to load item detail:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [getToken, moduleId, itemId]);
 
@@ -229,11 +148,10 @@ export default function StudentItemLearningPage() {
     if (!authLoading) fetchItem();
   }, [authLoading, fetchItem]);
 
-  // ─── SharePoint Streaming URL ───────────────────────────────────────
+  // ─── SharePoint Streaming URL ──────────────────────────────────────
 
   useEffect(() => {
-    if (!item?.sharepoint_video_url || item.youtube_video_id) return;
-
+    if (!data?.sharepoint_video_url || data.youtube_video_id) return;
     let cancelled = false;
     setSpStreamLoading(true);
 
@@ -241,15 +159,13 @@ export default function StudentItemLearningPage() {
       try {
         const token = await getToken();
         if (!token || cancelled) return;
-
         const res = await fetch(
-          `/api/sharepoint/stream?url=${encodeURIComponent(item.sharepoint_video_url!)}`,
+          `/api/sharepoint/stream?url=${encodeURIComponent(data.sharepoint_video_url!)}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-
         if (res.ok && !cancelled) {
-          const data = await res.json();
-          setSpStreamUrl(data.streamUrl);
+          const json = await res.json();
+          setSpStreamUrl(json.streamUrl);
         }
       } catch (err) {
         console.error('Failed to get SharePoint stream URL:', err);
@@ -259,268 +175,350 @@ export default function StudentItemLearningPage() {
     })();
 
     return () => { cancelled = true; };
-  }, [item?.sharepoint_video_url, item?.youtube_video_id, getToken]);
+  }, [data?.sharepoint_video_url, data?.youtube_video_id, getToken]);
 
-  // ─── YouTube Player ─────────────────────────────────────────────────
+  // ─── SharePoint video time tracking ────────────────────────────────
 
   useEffect(() => {
-    if (!item?.youtube_video_id || loading) return;
+    const video = spVideoRef.current;
+    if (!video || !data?.sections.length) return;
 
-    let mounted = true;
+    const onTimeUpdate = () => {
+      const time = video.currentTime;
+      setCurrentVideoTime(time);
 
-    function initPlayer() {
-      if (!mounted || !window.YT?.Player) return;
-
-      // Destroy previous player if exists
-      if (ytPlayerRef.current) {
-        try { ytPlayerRef.current.destroy(); } catch { /* ignore */ }
-        ytPlayerRef.current = null;
+      // Auto-detect current section
+      for (let i = data.sections.length - 1; i >= 0; i--) {
+        if (time >= data.sections[i].start_timestamp_seconds) {
+          if (i !== currentSectionIndex) setCurrentSectionIndex(i);
+          break;
+        }
       }
 
-      const startTime = item!.progress?.last_video_position_seconds || 0;
+      // Auto-trigger quiz when section ends
+      for (let i = 0; i < data.sections.length; i++) {
+        const section = data.sections[i];
+        if (
+          time >= section.end_timestamp_seconds &&
+          section.quiz_questions.length > 0 &&
+          !section.quiz_attempt?.passed &&
+          !spQuizTriggeredRef.current.has(i)
+        ) {
+          spQuizTriggeredRef.current.add(i);
+          setQuizSectionIndex(i);
+          setQuizOpen(true);
+          video.pause();
+          break;
+        }
+      }
+    };
 
-      ytPlayerRef.current = new window.YT.Player('yt-player-container', {
-        videoId: item!.youtube_video_id!,
-        playerVars: {
-          autoplay: 0,
-          modestbranding: 1,
-          rel: 0,
-          start: Math.floor(startTime),
+    video.addEventListener('timeupdate', onTimeUpdate);
+    return () => video.removeEventListener('timeupdate', onTimeUpdate);
+  }, [data?.sections, currentSectionIndex]);
+
+  // ─── Auto-save video position every 30 seconds ─────────────────────
+
+  const saveProgress = useCallback(async (seconds: number) => {
+    if (Math.abs(seconds - lastSavedPosRef.current) < 10) return;
+    lastSavedPosRef.current = seconds;
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      await fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        events: {
-          onReady: () => {
-            // Start time tracking
-            if (timeUpdateIntervalRef.current) clearInterval(timeUpdateIntervalRef.current);
-            timeUpdateIntervalRef.current = setInterval(() => {
-              if (ytPlayerRef.current) {
-                try {
-                  const time = ytPlayerRef.current.getCurrentTime();
-                  if (typeof time === 'number' && !isNaN(time)) {
-                    setCurrentVideoTime(time);
-                  }
-                } catch { /* player may not be ready */ }
-              }
-            }, 1000);
-          },
-        },
+        body: JSON.stringify({
+          last_video_position_seconds: Math.floor(seconds),
+          last_section_id: data?.sections[currentSectionIndex]?.id,
+        }),
       });
+    } catch {
+      // Silent fail
     }
+  }, [getToken, moduleId, itemId, currentSectionIndex, data]);
 
-    // Load YT API if not loaded
-    if (window.YT?.Player) {
-      initPlayer();
-    } else {
-      const existingScript = document.querySelector('script[src*="youtube.com/iframe_api"]');
-      if (!existingScript) {
-        const tag = document.createElement('script');
-        tag.src = 'https://www.youtube.com/iframe_api';
-        document.head.appendChild(tag);
+  const handleTimeUpdate = useCallback((seconds: number) => {
+    setCurrentVideoTime(seconds);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => saveProgress(seconds), 30000);
+  }, [saveProgress]);
+
+  // Coursera-style video shrink
+  useEffect(() => {
+    const placeholder = videoPlaceholderRef.current;
+    const wrapper = videoWrapperRef.current;
+    const inner = videoInnerRef.current;
+    if (!placeholder || !wrapper || !inner) return;
+
+    const MIN_RATIO = 0.5;
+    const SCROLL_RANGE = 300;
+    let isFixed = false;
+    let ticking = false;
+    let pTop = 0;
+    let pLeft = 0;
+    let pWidth = 0;
+    let fullH = 0;
+    let lastH = 0;
+
+    const cacheMeasurements = () => {
+      const rect = placeholder.getBoundingClientRect();
+      pTop = rect.top + window.scrollY;
+      pLeft = rect.left;
+      pWidth = rect.width;
+      fullH = rect.height;
+      lastH = fullH;
+    };
+
+    requestAnimationFrame(cacheMeasurements);
+
+    const handleScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const scrolledPast = window.scrollY - pTop;
+        if (scrolledPast <= 0) {
+          if (isFixed) {
+            wrapper.style.position = 'absolute';
+            wrapper.style.top = '0';
+            wrapper.style.left = '0';
+            wrapper.style.width = '100%';
+            wrapper.style.height = '100%';
+            wrapper.style.borderRadius = '';
+            inner.style.transform = 'none';
+            inner.style.width = '100%';
+            inner.style.height = '100%';
+            isFixed = false;
+          }
+        } else {
+          const ratio = Math.min(scrolledPast / SCROLL_RANGE, 1);
+          const scale = 1 - ratio * (1 - MIN_RATIO);
+          const h = Math.round(fullH * scale);
+
+          if (!isFixed) {
+            const freshRect = placeholder.getBoundingClientRect();
+            pLeft = freshRect.left;
+            pWidth = freshRect.width;
+            wrapper.style.position = 'fixed';
+            wrapper.style.top = '0px';
+            wrapper.style.left = `${pLeft}px`;
+            wrapper.style.width = `${pWidth}px`;
+            wrapper.style.borderRadius = '0px';
+            isFixed = true;
+          }
+
+          if (h !== lastH) {
+            wrapper.style.height = `${h}px`;
+            inner.style.width = `${pWidth}px`;
+            inner.style.height = `${fullH}px`;
+            inner.style.transform = `scale(${scale})`;
+            lastH = h;
+          }
+        }
+        ticking = false;
+      });
+    };
+
+    const handleResize = () => {
+      if (isFixed) {
+        wrapper.style.position = 'absolute';
+        wrapper.style.top = '0';
+        wrapper.style.left = '0';
+        wrapper.style.width = '100%';
+        wrapper.style.height = '100%';
+        inner.style.transform = 'none';
+        inner.style.width = '100%';
+        inner.style.height = '100%';
+        isFixed = false;
       }
-      window.onYouTubeIframeAPIReady = () => {
-        if (mounted) initPlayer();
-      };
-    }
+      requestAnimationFrame(() => {
+        cacheMeasurements();
+        handleScroll();
+      });
+    };
 
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
     return () => {
-      mounted = false;
-      if (timeUpdateIntervalRef.current) clearInterval(timeUpdateIntervalRef.current);
-      if (ytPlayerRef.current) {
-        try { ytPlayerRef.current.destroy(); } catch { /* ignore */ }
-        ytPlayerRef.current = null;
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [loading]);
+
+  // Save position on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      const player = (window as any).__foundationPlayer;
+      if (player?.getCurrentTime) {
+        const pos = player.getCurrentTime();
+        if (pos > 0) saveProgress(pos);
+      }
+      if (spVideoRef.current) {
+        const pos = spVideoRef.current.currentTime;
+        if (pos > 0) saveProgress(pos);
       }
     };
-  }, [item?.youtube_video_id, loading]);
-
-  // ─── Auto-save progress every 30s ──────────────────────────────────
-
-  useEffect(() => {
-    if (!item || !item.youtube_video_id) return;
-
-    autoSaveIntervalRef.current = setInterval(async () => {
-      const time = currentVideoTime;
-      // Only save if time changed significantly (>5s)
-      if (Math.abs(time - lastSavedTimeRef.current) < 5) return;
-
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        const currentSection = item.sections[currentSectionIndex];
-
-        await fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            last_video_position_seconds: Math.floor(time),
-            last_section_id: currentSection?.id || null,
-          }),
-        });
-
-        lastSavedTimeRef.current = time;
-      } catch { /* silent */ }
-    }, 30000);
-
-    return () => {
-      if (autoSaveIntervalRef.current) clearInterval(autoSaveIntervalRef.current);
-    };
-  }, [item, currentVideoTime, currentSectionIndex, getToken, moduleId, itemId]);
-
-  // ─── Auto-detect current section from video time ───────────────────
-
-  useEffect(() => {
-    if (!item?.sections.length) return;
-
-    const sections = item.sections;
-    for (let i = sections.length - 1; i >= 0; i--) {
-      const start = sections[i].start_time_seconds;
-      if (start != null && currentVideoTime >= start) {
-        if (i !== currentSectionIndex) setCurrentSectionIndex(i);
-        break;
-      }
-    }
-  }, [currentVideoTime, item?.sections]);
-
-  // ─── Section click → seek video ────────────────────────────────────
-
-  const handleSectionClick = (index: number) => {
-    setCurrentSectionIndex(index);
-    const section = item?.sections[index];
-    if (section?.start_time_seconds != null && ytPlayerRef.current) {
-      ytPlayerRef.current.seekTo(section.start_time_seconds, true);
-    }
-  };
+  }, [saveProgress]);
 
   // ─── Quiz handlers ─────────────────────────────────────────────────
 
-  const openQuiz = (section: Section) => {
-    setQuizSectionId(section.id);
-    setQuizQuestions(section.quiz_questions);
-    setQuizAnswers({});
-    setQuizResult(null);
+  const handleSectionEnd = useCallback((sectionIndex: number) => {
+    setQuizSectionIndex(sectionIndex);
     setQuizOpen(true);
-  };
+  }, []);
 
-  const handleQuizSubmit = async () => {
-    if (!quizSectionId) return;
-
-    // Validate all questions answered
-    const unanswered = quizQuestions.filter((q) => !quizAnswers[q.id]);
-    if (unanswered.length > 0) return;
-
-    setQuizSubmitting(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-
-      const res = await fetch(
-        `/api/modules/${moduleId}/items/${itemId}/sections/${quizSectionId}/quiz`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ answers: quizAnswers }),
+  const handleSectionClick = useCallback((index: number) => {
+    setCurrentSectionIndex(index);
+    if (data?.video_source === 'sharepoint') {
+      if (spVideoRef.current && data.sections[index]) {
+        spVideoRef.current.currentTime = data.sections[index].start_timestamp_seconds;
+        spVideoRef.current.play().catch(() => {});
+      }
+    } else {
+      const section = data?.sections[index];
+      if (section) {
+        const player = (window as any).__foundationPlayer;
+        if (player?.seekTo) {
+          player.seekTo(section.start_timestamp_seconds);
+          player.play();
         }
-      );
-
-      if (!res.ok) throw new Error('Quiz submission failed');
-
-      const data = await res.json();
-      setQuizResult({
-        score_pct: data.attempt.score_pct,
-        passed: data.attempt.passed,
-        answers: data.attempt.answers,
-      });
-
-      // Refresh item to get updated quiz attempts
-      fetchItem();
-    } catch (err) {
-      console.error('Quiz submit error:', err);
-    } finally {
-      setQuizSubmitting(false);
+      }
     }
-  };
+  }, [data]);
 
-  // ─── Note handlers ─────────────────────────────────────────────────
+  const handleQuizSubmit = useCallback(async (answers: Record<string, string>) => {
+    const section = data?.sections[quizSectionIndex];
+    if (!section) throw new Error('Section not found');
 
-  const saveNoteDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const token = await getToken();
+    if (!token) throw new Error('Not authenticated');
 
-  const handleNoteChange = (sectionId: string, text: string) => {
-    setNoteTexts((prev) => ({ ...prev, [sectionId]: text }));
+    const res = await fetch(
+      `/api/modules/${moduleId}/items/${itemId}/sections/${section.id}/quiz`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answers }),
+      }
+    );
 
-    // Debounced auto-save
-    if (saveNoteDebounceRef.current[sectionId]) {
-      clearTimeout(saveNoteDebounceRef.current[sectionId]);
-    }
-    saveNoteDebounceRef.current[sectionId] = setTimeout(() => {
-      saveNote(sectionId, text);
-    }, 1500);
-  };
+    if (!res.ok) throw new Error('Failed to submit quiz');
+    const result = await res.json();
 
-  const saveNote = async (sectionId: string, text: string) => {
-    setNoteSaving((prev) => ({ ...prev, [sectionId]: true }));
-    try {
-      const token = await getToken();
-      if (!token) return;
+    await fetchItem(true);
 
-      await fetch(
-        `/api/modules/${moduleId}/items/${itemId}/sections/${sectionId}/notes`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            note_text: text,
-            video_timestamp_seconds: Math.floor(currentVideoTime),
-          }),
+    return result.attempt;
+  }, [data, quizSectionIndex, getToken, fetchItem, moduleId, itemId]);
+
+  const handleQuizRetry = useCallback(() => {
+    setQuizOpen(false);
+    const section = data?.sections[quizSectionIndex];
+    if (section) {
+      if (data?.video_source === 'sharepoint') {
+        spQuizTriggeredRef.current.delete(quizSectionIndex);
+        if (spVideoRef.current) {
+          spVideoRef.current.currentTime = section.start_timestamp_seconds;
+          spVideoRef.current.play().catch(() => {});
         }
-      );
-    } catch (err) {
-      console.error('Note save error:', err);
-    } finally {
-      setNoteSaving((prev) => ({ ...prev, [sectionId]: false }));
+        setCurrentSectionIndex(quizSectionIndex);
+      } else {
+        const player = (window as any).__foundationPlayer;
+        if (player) {
+          player.resetSectionTrigger?.(quizSectionIndex);
+          player.setRewatchMode?.(true, section.end_timestamp_seconds);
+          player.seekTo(section.start_timestamp_seconds);
+          player.play();
+        }
+      }
     }
-  };
+  }, [data, quizSectionIndex]);
 
-  // ─── Helpers ────────────────────────────────────────────────────────
+  const handleQuizContinue = useCallback(() => {
+    setQuizOpen(false);
+    const nextIndex = quizSectionIndex + 1;
+    if (nextIndex < (data?.sections.length || 0)) {
+      setCurrentSectionIndex(nextIndex);
+      if (data?.video_source === 'sharepoint') {
+        if (spVideoRef.current && data.sections[nextIndex]) {
+          spVideoRef.current.currentTime = data.sections[nextIndex].start_timestamp_seconds;
+          spVideoRef.current.play().catch(() => {});
+        }
+      } else {
+        const player = (window as any).__foundationPlayer;
+        if (player?.play) player.play();
+      }
+    }
+  }, [quizSectionIndex, data]);
 
-  const getSectionQuizStatus = (sectionId: string): 'passed' | 'failed' | 'not_attempted' => {
-    if (!item) return 'not_attempted';
-    const attempts = item.quiz_attempts.filter((a) => a.section_id === sectionId);
-    if (attempts.length === 0) return 'not_attempted';
-    const passed = attempts.some((a) => a.passed);
-    return passed ? 'passed' : 'failed';
-  };
+  const handleAllQuizSubmitSection = useCallback(async (sectionId: string, answers: Record<string, string>) => {
+    const token = await getToken();
+    if (!token) throw new Error('Not authenticated');
 
-  const allQuestionsAnswered =
-    quizQuestions.length > 0 && quizQuestions.every((q) => quizAnswers[q.id]);
+    const res = await fetch(
+      `/api/modules/${moduleId}/items/${itemId}/sections/${sectionId}/quiz`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answers }),
+      }
+    );
 
-  // ─── Loading skeleton ──────────────────────────────────────────────
+    if (!res.ok) throw new Error('Failed to submit quiz');
+    return res.json().then((r) => r.attempt);
+  }, [getToken, moduleId, itemId]);
+
+  const handleAllQuizComplete = useCallback(() => {
+    setAllQuizMode(false);
+    fetchItem(true);
+  }, [fetchItem]);
+
+  const handleNoteSave = useCallback(async (sectionId: string, noteText: string) => {
+    const token = await getToken();
+    if (!token) return;
+
+    await fetch(
+      `/api/modules/${moduleId}/items/${itemId}/sections/${sectionId}/notes`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ note_text: noteText }),
+      }
+    );
+  }, [getToken, moduleId, itemId]);
+
+  // ─── Loading / Error ────────────────────────────────────────────────
 
   if (loading || authLoading) {
     return (
-      <Box sx={{ p: { xs: 2, sm: 3 } }}>
-        <Skeleton variant="rectangular" height={40} width={120} sx={{ mb: 2, borderRadius: 1 }} />
-        <Skeleton variant="rectangular" height={240} sx={{ mb: 3, borderRadius: 2 }} />
-        <Skeleton variant="text" width="60%" height={32} sx={{ mb: 1 }} />
-        <Skeleton variant="text" width="40%" height={24} sx={{ mb: 3 }} />
+      <Box>
+        <Skeleton variant="rectangular" height={200} sx={{ borderRadius: { xs: 0, sm: 2 }, mb: 2 }} />
+        <Skeleton variant="text" width={200} height={32} sx={{ mb: 1, mx: 2 }} />
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} variant="rectangular" height={64} sx={{ mb: 1.5, borderRadius: 2 }} />
+          <Skeleton key={i} variant="rectangular" height={56} sx={{ borderRadius: 2, mb: 0.5, mx: 2 }} />
         ))}
       </Box>
     );
   }
 
-  if (!item) {
+  if (!data) {
     return (
-      <Box sx={{ p: { xs: 2, sm: 3 }, textAlign: 'center', py: 8 }}>
-        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
           Item not found
         </Typography>
         <Button
@@ -535,78 +533,58 @@ export default function StudentItemLearningPage() {
     );
   }
 
-  const currentSection = item.sections[currentSectionIndex] || null;
-  const hasYouTube = !!item.youtube_video_id;
-  const hasSharePoint = !!item.sharepoint_video_url;
+  const { sections, progress, audio_tracks } = data;
+  const currentSection = sections[currentSectionIndex];
+  const completedSections = sections.filter((s) => s.quiz_attempt?.passed).length;
+
+  const hasYouTube = !!data.youtube_video_id;
+  const hasSharePoint = !!data.sharepoint_video_url && !hasYouTube;
   const hasVideo = hasYouTube || hasSharePoint;
-  const hasPdf = !!item.pdf_url;
-  const hasAudio = (item.audio_tracks?.length ?? 0) > 0;
-  const showContentTabs = hasVideo && hasPdf;
+  const hasPdf = !!data.pdf_url;
+  const hasAudio = (audio_tracks?.length ?? 0) > 0;
+  const showTabs = hasVideo && hasPdf;
 
   // ─── Render ─────────────────────────────────────────────────────────
 
   return (
-    <Box sx={{ pb: 4 }}>
-      {/* ─── Back button + Title ─────────────────────────────────── */}
+    <Box sx={{ mx: { xs: -2, sm: 0 } }}>
+      {/* Back button + breadcrumb */}
       <Box
         sx={{
-          px: { xs: 2, sm: 3 },
-          pt: { xs: 1.5, sm: 2 },
-          pb: 1,
           display: 'flex',
           alignItems: 'center',
           gap: 1,
+          mb: 1.5,
+          px: { xs: 2, sm: 0 },
         }}
       >
         <IconButton
+          size="small"
           onClick={() => router.push(`/student/modules/${moduleId}`)}
-          sx={{
-            minWidth: 48,
-            minHeight: 48,
-            color: 'text.secondary',
-          }}
+          sx={{ mr: 0.5 }}
         >
           <ArrowBackIcon />
         </IconButton>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="subtitle1"
-            sx={{
-              fontWeight: 700,
-              lineHeight: 1.3,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {item.chapter_number != null ? `${item.chapter_number}. ` : ''}
-            {item.title}
-          </Typography>
-          {item.description && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{
-                display: '-webkit-box',
-                WebkitLineClamp: 1,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {item.description}
+        <Box sx={{ minWidth: 0 }}>
+          {data.chapter_number != null && (
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+              Lesson {data.chapter_number}
             </Typography>
           )}
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+            {data.title}
+          </Typography>
         </Box>
       </Box>
 
-      {/* ─── Content Tabs (Watch / Read) ─────────────────────────── */}
-      {showContentTabs && (
+      {/* Content tabs (Watch / Read) */}
+      {showTabs && (
         <Tabs
           value={contentTab}
           onChange={(_, v) => setContentTab(v)}
           sx={{
             mb: 1,
-            px: { xs: 2, lg: 3 },
+            px: { xs: 2, sm: 0 },
             '& .MuiTab-root': {
               textTransform: 'none',
               fontWeight: 600,
@@ -630,184 +608,130 @@ export default function StudentItemLearningPage() {
         </Tabs>
       )}
 
-      {/* ─── Video Player ────────────────────────────────────────── */}
+      {/* Video Player (Watch tab or only content) */}
       {((contentTab === 'watch' && hasVideo) || (!hasPdf && hasVideo)) && (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', lg: 'row' },
-          gap: { xs: 0, lg: 3 },
-          px: { xs: 0, lg: 3 },
-        }}
-      >
-        {/* Video column */}
-        <Box sx={{ flex: { lg: '0 0 60%' }, minWidth: 0 }}>
-          {hasYouTube && (
-            <Box
-              ref={ytContainerRef}
-              sx={{
-                position: 'relative',
-                width: '100%',
-                paddingTop: '56.25%', // 16:9
-                bgcolor: '#000',
-                borderRadius: { xs: 0, lg: 2 },
-                overflow: 'hidden',
-              }}
-            >
-              <Box
-                id="yt-player-container"
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                }}
-              />
-            </Box>
-          )}
-
-          {hasSharePoint && !hasYouTube && (
-            <Box
-              sx={{
-                position: 'relative',
-                width: '100%',
-                paddingTop: spStreamUrl ? 0 : '56.25%',
-                bgcolor: '#000',
-                borderRadius: { xs: 0, lg: 2 },
-                overflow: 'hidden',
-              }}
-            >
-              {spStreamLoading ? (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    gap: 1,
-                  }}
-                >
-                  <Skeleton variant="rectangular" width="100%" height="100%" sx={{ position: 'absolute', top: 0, left: 0 }} />
-                  <Typography variant="body2" sx={{ color: 'grey.400', position: 'relative', zIndex: 1 }}>
-                    Loading video...
-                  </Typography>
-                </Box>
-              ) : spStreamUrl ? (
-                <video
-                  src={spStreamUrl}
-                  controls
-                  controlsList="nodownload"
-                  playsInline
-                  style={{
-                    width: '100%',
-                    maxHeight: '70vh',
-                    backgroundColor: '#000',
-                  }}
-                  title={item.title}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    gap: 1,
-                  }}
-                >
-                  <Typography variant="body2" sx={{ color: 'grey.400' }}>
-                    Video unavailable
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* Current video time indicator (mobile) */}
-          {hasYouTube && (
-            <Box
-              sx={{
-                display: { xs: 'flex', lg: 'none' },
-                alignItems: 'center',
-                gap: 0.5,
-                px: 2,
-                py: 1,
-                bgcolor: alpha(theme.palette.background.default, 0.9),
-              }}
-            >
-              <AccessTimeIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
-              <Typography
-                variant="caption"
-                sx={{
-                  fontFamily: 'monospace',
-                  fontWeight: 600,
-                  color: 'text.secondary',
-                }}
-              >
-                {formatTime(currentVideoTime)}
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
-        {/* ─── Right column: Sections + Notes (desktop) ──────────── */}
         <Box
+          ref={videoPlaceholderRef}
           sx={{
-            flex: { lg: '1 1 40%' },
-            minWidth: 0,
-            display: { xs: 'none', lg: 'block' },
-            maxHeight: { lg: 'calc(56.25vw * 0.6 + 80px)' },
-            overflowY: 'auto',
+            position: 'relative',
+            width: '100%',
+            height: 0,
+            paddingTop: hasSharePoint && spStreamUrl ? 0 : '56.25%',
+            borderRadius: { xs: 0, sm: 2 },
+            bgcolor: '#000',
+            overflow: 'visible',
           }}
         >
-          <DesktopSidebar
-            sections={item.sections}
-            currentSectionIndex={currentSectionIndex}
-            onSectionClick={handleSectionClick}
-            onQuizOpen={openQuiz}
-            getSectionQuizStatus={getSectionQuizStatus}
-            noteTexts={noteTexts}
-            noteSaving={noteSaving}
-            onNoteChange={handleNoteChange}
-            theme={theme}
-          />
+          <Box
+            ref={videoWrapperRef}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              bgcolor: '#000',
+              borderRadius: { xs: 0, sm: 2 },
+              zIndex: 10,
+            }}
+          >
+            <Box
+              ref={videoInnerRef}
+              sx={{
+                width: '100%',
+                height: '100%',
+                transformOrigin: 'top center',
+              }}
+            >
+              {hasYouTube ? (
+                <VideoPlayer
+                  videoId={data.youtube_video_id!}
+                  sections={sections as NexusFoundationSection[]}
+                  currentSectionIndex={currentSectionIndex}
+                  resumePosition={progress?.last_video_position_seconds || undefined}
+                  onSectionEnd={handleSectionEnd}
+                  onTimeUpdate={handleTimeUpdate}
+                />
+              ) : hasSharePoint ? (
+                spStreamLoading ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ color: 'grey.400' }}>
+                      Loading video...
+                    </Typography>
+                  </Box>
+                ) : spStreamUrl ? (
+                  <video
+                    ref={spVideoRef}
+                    src={spStreamUrl}
+                    controls
+                    controlsList="nodownload"
+                    playsInline
+                    style={{
+                      width: '100%',
+                      maxHeight: '70vh',
+                      backgroundColor: '#000',
+                    }}
+                    title={data.title}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ color: 'grey.400' }}>
+                      Video unavailable
+                    </Typography>
+                  </Box>
+                )
+              ) : null}
+            </Box>
+          </Box>
         </Box>
-      </Box>
       )}
 
-      {/* ─── PDF Reader (Read tab or only content) ─────────────────── */}
+      {/* PDF Reader (Read tab or only content) */}
       {((contentTab === 'read' && hasPdf) || (!hasVideo && hasPdf)) && (
         <Box
           sx={{
             height: { xs: 'calc(100vh - 200px)', sm: 'calc(100vh - 180px)' },
-            borderRadius: 2,
+            borderRadius: { xs: 0, sm: 2 },
             overflow: 'hidden',
-            border: '1px solid',
-            borderColor: 'divider',
-            mx: { xs: 2, lg: 3 },
+            border: `1px solid ${theme.palette.divider}`,
           }}
         >
           <PDFReader
-            pdfUrl={item.pdf_url!}
-            initialPage={item.progress?.last_pdf_page || 1}
-            totalPages={item.pdf_page_count || undefined}
+            pdfUrl={data.pdf_url!}
+            initialPage={progress?.last_pdf_page || 1}
+            totalPages={data.pdf_page_count || undefined}
             onPageChange={(page) => {
               getToken().then((token) => {
                 if (!token) return;
                 fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
                   method: 'POST',
-                  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
                   body: JSON.stringify({ last_pdf_page: page }),
                 });
               });
@@ -816,13 +740,12 @@ export default function StudentItemLearningPage() {
         </Box>
       )}
 
-      {/* ─── No content fallback ───────────────────────────────────── */}
+      {/* No content fallback */}
       {!hasVideo && !hasPdf && (
-        <Paper
-          elevation={0}
+        <Box
           sx={{
             p: 4,
-            mx: { xs: 2, lg: 3 },
+            mx: { xs: 2, sm: 0 },
             mt: 1,
             textAlign: 'center',
             borderRadius: 3,
@@ -836,605 +759,149 @@ export default function StudentItemLearningPage() {
           <Typography variant="caption" color="text.disabled">
             This item contains text-based content and quizzes.
           </Typography>
-        </Paper>
+        </Box>
       )}
 
-      {/* ─── Mobile: Tabs for Sections / Notes ───────────────────── */}
-      <Box sx={{ display: { xs: 'block', lg: 'none' }, mt: 1, px: 2 }}>
-        <Tabs
-          value={mobileTab}
-          onChange={(_, v) => setMobileTab(v)}
-          variant="fullWidth"
-          sx={{
-            mb: 2,
-            '& .MuiTab-root': {
-              minHeight: 48,
-              fontWeight: 600,
-              fontSize: '0.85rem',
-            },
-          }}
-        >
-          <Tab
-            label="Sections"
-            icon={<PlayArrowIcon sx={{ fontSize: 18 }} />}
-            iconPosition="start"
-          />
-          <Tab
-            label="Notes"
-            icon={<NoteOutlinedIcon sx={{ fontSize: 18 }} />}
-            iconPosition="start"
-          />
-        </Tabs>
-
-        {mobileTab === 0 && (
-          <SectionsList
-            sections={item.sections}
-            currentSectionIndex={currentSectionIndex}
-            onSectionClick={handleSectionClick}
-            onQuizOpen={openQuiz}
-            getSectionQuizStatus={getSectionQuizStatus}
-            theme={theme}
+      {/* Content below video */}
+      <Box sx={{ px: { xs: 2, sm: 0 }, mt: 2 }}>
+        {/* Section progress */}
+        {sections.length > 0 && (
+          <FoundationProgressBar
+            completed={completedSections}
+            total={sections.length}
+            label="Section Progress"
+            size="small"
           />
         )}
 
-        {mobileTab === 1 && (
-          <NotesList
-            sections={item.sections}
-            noteTexts={noteTexts}
-            noteSaving={noteSaving}
-            onNoteChange={handleNoteChange}
-            theme={theme}
+        {/* SharePoint-only actions (when no streaming URL available) */}
+        {hasSharePoint && !spStreamUrl && (
+          <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
+            {data.sharepoint_video_url && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<OpenInNewIcon />}
+                href={data.sharepoint_video_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ textTransform: 'none', borderRadius: 2, fontSize: '0.8rem' }}
+              >
+                Watch in SharePoint
+              </Button>
+            )}
+            {sections.some((s) => s.quiz_questions.length > 0 && !s.quiz_attempt?.passed) && (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<PlaylistPlayIcon />}
+                onClick={() => setAllQuizMode(true)}
+                sx={{ textTransform: 'none', borderRadius: 2, fontSize: '0.8rem' }}
+              >
+                Attempt All Quizzes
+              </Button>
+            )}
+          </Box>
+        )}
+
+        {/* Section Timer (SharePoint without streaming URL — when streaming URL exists, timeupdate handles it) */}
+        {hasSharePoint && !spStreamUrl && (
+          <Box sx={{ mt: 2 }}>
+            <SectionTimer
+              sections={sections}
+              currentSectionIndex={currentSectionIndex}
+              onSectionEnd={handleSectionEnd}
+              isActive={!quizOpen}
+            />
+          </Box>
+        )}
+
+        {/* Section List */}
+        {sections.length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <SectionList
+              sections={sections}
+              currentSectionIndex={currentSectionIndex}
+              chapterNumber={data.chapter_number || undefined}
+              onSectionClick={handleSectionClick}
+            />
+          </Box>
+        )}
+
+        {/* Note Editor for current section */}
+        {currentSection && (
+          <NoteEditor
+            sectionId={currentSection.id}
+            sectionTitle={currentSection.title}
+            initialNote={currentSection.note?.note_text}
+            onSave={handleNoteSave}
           />
         )}
+
+        {/* Feedback: like/dislike + report issue */}
+        <ChapterFeedback
+          chapterId={itemId}
+          sections={sections}
+          getToken={getToken}
+          feedbackApiUrl={`/api/modules/${moduleId}/items/${itemId}/feedback`}
+          issuesApiUrl={`/api/modules/${moduleId}/items/${itemId}/issues`}
+          issueItemKey="module_item_id"
+        />
       </Box>
 
-      {/* ─── Quiz Dialog ─────────────────────────────────────────── */}
-      <Dialog
-        open={quizOpen}
-        onClose={() => !quizSubmitting && setQuizOpen(false)}
-        fullWidth
-        maxWidth="sm"
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            mx: { xs: 1, sm: 2 },
-            maxHeight: '90vh',
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            pb: 1,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <QuizOutlinedIcon sx={{ color: theme.palette.primary.main }} />
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Section Quiz
-            </Typography>
-          </Box>
-          <IconButton
-            onClick={() => setQuizOpen(false)}
-            disabled={quizSubmitting}
-            sx={{ minWidth: 48, minHeight: 48 }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
+      {/* Quiz Modal */}
+      {sections[quizSectionIndex] && (
+        <QuizModal
+          open={quizOpen}
+          sectionTitle={sections[quizSectionIndex].title}
+          questions={sections[quizSectionIndex].quiz_questions}
+          onClose={() => setQuizOpen(false)}
+          onSubmit={handleQuizSubmit}
+          onRetry={handleQuizRetry}
+          onContinue={handleQuizContinue}
+        />
+      )}
 
-        <DialogContent dividers sx={{ px: { xs: 2, sm: 3 } }}>
-          {quizResult ? (
-            /* ─── Quiz Result ─────────────────────────────────── */
-            <Box sx={{ textAlign: 'center', py: 3 }}>
-              <Box
-                sx={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: '50%',
-                  bgcolor: quizResult.passed
-                    ? alpha(theme.palette.success.main, 0.1)
-                    : alpha(theme.palette.error.main, 0.1),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  mx: 'auto',
-                  mb: 2,
-                }}
-              >
-                <Typography
-                  variant="h4"
-                  sx={{
-                    fontWeight: 800,
-                    color: quizResult.passed
-                      ? theme.palette.success.main
-                      : theme.palette.error.main,
-                  }}
-                >
-                  {quizResult.score_pct}%
-                </Typography>
-              </Box>
+      {/* All Sections Quiz Modal (SharePoint without streaming URL) */}
+      {hasSharePoint && !spStreamUrl && (
+        <AllSectionsQuizModal
+          open={allQuizMode}
+          sections={sections}
+          chapterNumber={data.chapter_number || 0}
+          onClose={() => setAllQuizMode(false)}
+          onSubmitSection={handleAllQuizSubmitSection}
+          onComplete={handleAllQuizComplete}
+        />
+      )}
 
-              <Chip
-                label={quizResult.passed ? 'PASSED' : 'NOT PASSED'}
-                color={quizResult.passed ? 'success' : 'error'}
-                sx={{ fontWeight: 700, fontSize: '0.85rem', height: 32, mb: 2 }}
-              />
-
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {quizResult.passed
-                  ? 'Great job! You passed this quiz.'
-                  : 'Review the section and try again.'}
-              </Typography>
-
-              {/* Show each answer result */}
-              <Box sx={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {quizQuestions.map((q, idx) => {
-                  const answerResult = quizResult.answers.find((a) => a.question_id === q.id);
-                  const isCorrect = answerResult?.is_correct;
-
-                  return (
-                    <Paper
-                      key={q.id}
-                      elevation={0}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 2,
-                        border: `1px solid ${
-                          isCorrect
-                            ? alpha(theme.palette.success.main, 0.3)
-                            : alpha(theme.palette.error.main, 0.3)
-                        }`,
-                        bgcolor: isCorrect
-                          ? alpha(theme.palette.success.main, 0.03)
-                          : alpha(theme.palette.error.main, 0.03),
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {idx + 1}. {q.question_text}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: isCorrect
-                            ? theme.palette.success.main
-                            : theme.palette.error.main,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {isCorrect ? 'Correct' : `Incorrect — Your answer: ${answerResult?.selected_option?.toUpperCase()}`}
-                      </Typography>
-                    </Paper>
-                  );
-                })}
-              </Box>
-            </Box>
-          ) : (
-            /* ─── Quiz Questions ──────────────────────────────── */
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 1 }}>
-              {quizQuestions.map((q, qIdx) => (
-                <Box key={q.id}>
-                  <Typography
-                    variant="body1"
-                    sx={{ fontWeight: 600, mb: 1.5, lineHeight: 1.5 }}
-                  >
-                    {qIdx + 1}. {q.question_text}
-                  </Typography>
-                  <FormControl component="fieldset">
-                    <RadioGroup
-                      value={quizAnswers[q.id] || ''}
-                      onChange={(e) =>
-                        setQuizAnswers((prev) => ({
-                          ...prev,
-                          [q.id]: e.target.value,
-                        }))
-                      }
-                    >
-                      {(['a', 'b', 'c', 'd'] as const).map((opt) => {
-                        const optionKey = `option_${opt}` as keyof QuizQuestion;
-                        const optionText = q[optionKey] as string;
-                        if (!optionText) return null;
-
-                        return (
-                          <FormControlLabel
-                            key={opt}
-                            value={opt}
-                            control={
-                              <Radio
-                                sx={{
-                                  '&.Mui-checked': {
-                                    color: theme.palette.primary.main,
-                                  },
-                                }}
-                              />
-                            }
-                            label={
-                              <Typography variant="body2" sx={{ py: 0.5 }}>
-                                <strong>{opt.toUpperCase()}.</strong> {optionText}
-                              </Typography>
-                            }
-                            sx={{
-                              mx: 0,
-                              mb: 0.5,
-                              px: 1.5,
-                              py: 0.5,
-                              borderRadius: 2,
-                              border: `1px solid ${
-                                quizAnswers[q.id] === opt
-                                  ? alpha(theme.palette.primary.main, 0.4)
-                                  : theme.palette.divider
-                              }`,
-                              bgcolor:
-                                quizAnswers[q.id] === opt
-                                  ? alpha(theme.palette.primary.main, 0.04)
-                                  : 'transparent',
-                              transition: 'all 150ms',
-                              minHeight: 48,
-                              '&:active': {
-                                bgcolor: alpha(theme.palette.primary.main, 0.08),
-                              },
-                            }}
-                          />
-                        );
-                      })}
-                    </RadioGroup>
-                  </FormControl>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </DialogContent>
-
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          {quizResult ? (
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={() => setQuizOpen(false)}
-              sx={{ minHeight: 48, fontWeight: 700, borderRadius: 2 }}
-            >
-              Close
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={handleQuizSubmit}
-              disabled={!allQuestionsAnswered || quizSubmitting}
-              sx={{ minHeight: 48, fontWeight: 700, borderRadius: 2 }}
-            >
-              {quizSubmitting ? 'Submitting...' : `Submit (${Object.keys(quizAnswers).length}/${quizQuestions.length})`}
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
-
-      {/* ─── Audio Player ──────────────────────────────────────────── */}
-      {hasAudio && item.audio_tracks && (
+      {/* Audio Player */}
+      {hasAudio && audio_tracks && (
         <AudioPlayer
-          tracks={item.audio_tracks}
-          initialPosition={item.progress?.last_audio_position_seconds || 0}
-          initialLanguage={item.progress?.last_audio_language || 'en'}
+          tracks={audio_tracks.map((t) => ({
+            id: t.id,
+            language: t.language,
+            language_label: t.language_label,
+            audio_url: t.audio_url,
+            audio_duration_seconds: t.audio_duration_seconds,
+          }))}
+          initialPosition={progress?.last_audio_position_seconds || 0}
+          initialLanguage={progress?.last_audio_language || 'en'}
           onPositionChange={(seconds, language) => {
             getToken().then((token) => {
               if (!token) return;
               fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ last_audio_position_seconds: seconds, last_audio_language: language }),
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  last_audio_position_seconds: seconds,
+                  last_audio_language: language,
+                }),
               });
             });
           }}
-        />
-      )}
-    </Box>
-  );
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────
-
-interface SectionsListProps {
-  sections: Section[];
-  currentSectionIndex: number;
-  onSectionClick: (index: number) => void;
-  onQuizOpen: (section: Section) => void;
-  getSectionQuizStatus: (sectionId: string) => 'passed' | 'failed' | 'not_attempted';
-  theme: any;
-}
-
-function SectionsList({
-  sections,
-  currentSectionIndex,
-  onSectionClick,
-  onQuizOpen,
-  getSectionQuizStatus,
-  theme,
-}: SectionsListProps) {
-  if (sections.length === 0) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 4 }}>
-        <Typography variant="body2" color="text.disabled">
-          No sections available.
-        </Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      {sections.map((section, idx) => {
-        const isCurrent = idx === currentSectionIndex;
-        const quizStatus = getSectionQuizStatus(section.id);
-        const hasQuiz = section.quiz_questions.length > 0;
-
-        return (
-          <Paper
-            key={section.id}
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: 2.5,
-              border: `1px solid ${
-                isCurrent
-                  ? alpha(theme.palette.primary.main, 0.4)
-                  : theme.palette.divider
-              }`,
-              bgcolor: isCurrent
-                ? alpha(theme.palette.primary.main, 0.04)
-                : 'background.paper',
-              cursor: 'pointer',
-              transition: 'all 150ms',
-              minHeight: 48,
-              '&:active': {
-                transform: 'scale(0.99)',
-              },
-            }}
-            onClick={() => onSectionClick(idx)}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-              {/* Section number */}
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  bgcolor: isCurrent
-                    ? theme.palette.primary.main
-                    : alpha(theme.palette.text.disabled, 0.08),
-                  color: isCurrent ? '#fff' : 'text.secondary',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                }}
-              >
-                {quizStatus === 'passed' ? (
-                  <CheckCircleIcon sx={{ fontSize: 18, color: isCurrent ? '#fff' : theme.palette.success.main }} />
-                ) : (
-                  idx + 1
-                )}
-              </Box>
-
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontWeight: isCurrent ? 700 : 600,
-                    lineHeight: 1.3,
-                    color: isCurrent ? theme.palette.primary.main : 'text.primary',
-                  }}
-                >
-                  {section.title}
-                </Typography>
-
-                {/* Time range */}
-                {section.start_time_seconds != null && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontFamily: 'monospace',
-                      fontSize: '0.7rem',
-                      color: 'text.disabled',
-                      mt: 0.25,
-                      display: 'block',
-                    }}
-                  >
-                    {formatTime(section.start_time_seconds)}
-                    {section.end_time_seconds != null
-                      ? ` — ${formatTime(section.end_time_seconds)}`
-                      : ''}
-                  </Typography>
-                )}
-
-                {/* Quiz chip + button */}
-                {hasQuiz && (
-                  <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {quizStatus === 'passed' && (
-                      <Chip
-                        size="small"
-                        label="Quiz Passed"
-                        color="success"
-                        sx={{ height: 22, fontSize: '0.65rem', fontWeight: 700 }}
-                      />
-                    )}
-                    {quizStatus === 'failed' && (
-                      <Chip
-                        size="small"
-                        label="Quiz Failed"
-                        color="error"
-                        sx={{ height: 22, fontSize: '0.65rem', fontWeight: 700 }}
-                      />
-                    )}
-                    <Button
-                      size="small"
-                      variant={quizStatus === 'not_attempted' ? 'contained' : 'outlined'}
-                      startIcon={<QuizOutlinedIcon sx={{ fontSize: 14 }} />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onQuizOpen(section);
-                      }}
-                      sx={{
-                        minHeight: 32,
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        borderRadius: 1.5,
-                        textTransform: 'none',
-                        px: 1.5,
-                      }}
-                    >
-                      {quizStatus === 'not_attempted' ? 'Take Quiz' : 'Retry Quiz'}
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          </Paper>
-        );
-      })}
-    </Box>
-  );
-}
-
-interface NotesListProps {
-  sections: Section[];
-  noteTexts: Record<string, string>;
-  noteSaving: Record<string, boolean>;
-  onNoteChange: (sectionId: string, text: string) => void;
-  theme: any;
-}
-
-function NotesList({
-  sections,
-  noteTexts,
-  noteSaving,
-  onNoteChange,
-  theme,
-}: NotesListProps) {
-  if (sections.length === 0) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 4 }}>
-        <Typography variant="body2" color="text.disabled">
-          No sections to add notes for.
-        </Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {sections.map((section) => (
-        <Paper
-          key={section.id}
-          elevation={0}
-          sx={{
-            p: 2,
-            borderRadius: 2.5,
-            border: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-              {section.title}
-            </Typography>
-            {noteSaving[section.id] && (
-              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
-                Saving...
-              </Typography>
-            )}
-          </Box>
-          <TextField
-            multiline
-            minRows={2}
-            maxRows={6}
-            fullWidth
-            placeholder="Add your notes here..."
-            value={noteTexts[section.id] || ''}
-            onChange={(e) => onNoteChange(section.id, e.target.value)}
-            variant="outlined"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
-                fontSize: '0.85rem',
-                '& fieldset': {
-                  borderColor: alpha(theme.palette.divider, 0.8),
-                },
-              },
-              '& .MuiOutlinedInput-input': {
-                minHeight: 48,
-              },
-            }}
-          />
-        </Paper>
-      ))}
-    </Box>
-  );
-}
-
-interface DesktopSidebarProps extends SectionsListProps, Omit<NotesListProps, 'sections' | 'theme'> {}
-
-function DesktopSidebar({
-  sections,
-  currentSectionIndex,
-  onSectionClick,
-  onQuizOpen,
-  getSectionQuizStatus,
-  noteTexts,
-  noteSaving,
-  onNoteChange,
-  theme,
-}: DesktopSidebarProps) {
-  const [sidebarTab, setSidebarTab] = useState(0);
-
-  return (
-    <Box>
-      <Tabs
-        value={sidebarTab}
-        onChange={(_, v) => setSidebarTab(v)}
-        variant="fullWidth"
-        sx={{
-          mb: 2,
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          '& .MuiTab-root': {
-            minHeight: 48,
-            fontWeight: 600,
-            fontSize: '0.85rem',
-          },
-        }}
-      >
-        <Tab
-          label={`Sections (${sections.length})`}
-          icon={<PlayArrowIcon sx={{ fontSize: 18 }} />}
-          iconPosition="start"
-        />
-        <Tab
-          label="Notes"
-          icon={<NoteOutlinedIcon sx={{ fontSize: 18 }} />}
-          iconPosition="start"
-        />
-      </Tabs>
-
-      {sidebarTab === 0 && (
-        <SectionsList
-          sections={sections}
-          currentSectionIndex={currentSectionIndex}
-          onSectionClick={onSectionClick}
-          onQuizOpen={onQuizOpen}
-          getSectionQuizStatus={getSectionQuizStatus}
-          theme={theme}
-        />
-      )}
-
-      {sidebarTab === 1 && (
-        <NotesList
-          sections={sections}
-          noteTexts={noteTexts}
-          noteSaving={noteSaving}
-          onNoteChange={onNoteChange}
-          theme={theme}
         />
       )}
     </Box>

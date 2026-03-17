@@ -4100,6 +4100,7 @@ export type NexusEnrollmentRole = 'teacher' | 'student';
 export type NexusTopicCategory = 'mathematics' | 'aptitude' | 'drawing' | 'architecture_awareness' | 'general';
 export type NexusClassStatus = 'scheduled' | 'live' | 'completed' | 'cancelled' | 'rescheduled';
 export type NexusAttendanceSource = 'teams' | 'manual';
+export type NexusRsvpResponse = 'attending' | 'not_attending';
 export type NexusTopicProgressStatus = 'not_started' | 'attended' | 'completed' | 'skipped';
 export type NexusResourceType = 'pdf' | 'image' | 'youtube' | 'onenote' | 'link';
 
@@ -4155,6 +4156,7 @@ export interface NexusTopic extends Timestamps {
 export interface NexusScheduledClass extends Timestamps {
   id: string;
   classroom_id: string;
+  batch_id: string | null;
   topic_id: string | null;
   teacher_id: string | null;
   title: string;
@@ -4164,8 +4166,11 @@ export interface NexusScheduledClass extends Timestamps {
   end_time: string;
   teams_meeting_url: string | null;
   teams_meeting_id: string | null;
+  teams_meeting_join_url: string | null;
   recording_url: string | null;
   recording_duration_minutes: number | null;
+  transcript_url: string | null;
+  recording_fetched_at: string | null;
   status: NexusClassStatus;
   rescheduled_to: string | null;
   notes: string | null;
@@ -4181,6 +4186,25 @@ export interface NexusAttendance {
   duration_minutes: number | null;
   source: NexusAttendanceSource;
   created_at: string;
+}
+
+export interface NexusClassRsvp {
+  id: string;
+  scheduled_class_id: string;
+  student_id: string;
+  response: NexusRsvpResponse;
+  reason: string | null;
+  responded_at: string;
+}
+
+export interface NexusClassReview {
+  id: string;
+  scheduled_class_id: string;
+  student_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface NexusChecklistItem extends Timestamps {
@@ -4228,6 +4252,15 @@ export interface NexusEnrollmentWithUser extends NexusEnrollment {
 export interface NexusScheduledClassWithTopic extends NexusScheduledClass {
   topic: NexusTopic | null;
   teacher: Pick<User, 'id' | 'name' | 'avatar_url'> | null;
+  batch: Pick<NexusBatch, 'id' | 'name'> | null;
+}
+
+export interface NexusClassReviewWithStudent extends NexusClassReview {
+  student: Pick<User, 'id' | 'name' | 'avatar_url'>;
+}
+
+export interface NexusClassRsvpWithStudent extends NexusClassRsvp {
+  student: Pick<User, 'id' | 'name' | 'avatar_url'>;
 }
 
 export interface NexusChecklistItemWithResources extends NexusChecklistItem {

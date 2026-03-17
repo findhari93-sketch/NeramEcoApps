@@ -1,98 +1,191 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  Chip,
-  Button,
-  Skeleton,
-  Tabs,
-  Tab,
-} from '@neram/ui';
+import { useState, useEffect, useCallback } from 'react';
+import { Box, Typography, Snackbar, Alert } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-
-interface ScheduledClass {
-  id: string;
-  title: string;
-  scheduled_date: string;
-  start_time: string;
-  end_time: string;
-  status: string;
-  teams_meeting_url: string | null;
-  topic: { title: string; category: string } | null;
-  teacher: { name: string } | null;
-}
+import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
+import ClassReviewForm from '@/components/timetable/ClassReviewForm';
+import { type ClassCardData } from '@/components/timetable/ClassCard';
 
 export default function StudentTimetable() {
   const { activeClassroom, getToken } = useNexusAuthContext();
-  const [classes, setClasses] = useState<ScheduledClass[]>([]);
+  const [classes, setClasses] = useState<ClassCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const getWeekDates = (offset: number) => {
-    const now = new Date();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - now.getDay() + 1 + offset * 7);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return {
-      start: monday.toISOString().split('T')[0],
-      end: sunday.toISOString().split('T')[0],
-      label: `${monday.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} - ${sunday.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}`,
-    };
+  // RSVP state
+  const [myRsvps, setMyRsvps] = useState<Record<string, 'attending' | 'not_attending'>>({});
+  // Attendance state
+  const [myAttendance, setMyAttendance] = useState<Record<string, boolean>>({});
+  // Review state
+  const [reviewClass, setReviewClass] = useState<ClassCardData | null>(null);
+  const [existingReview, setExistingReview] = useState<{ rating?: number; comment?: string }>({});
+
+  // Snackbar
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+
+  const fetchClasses = useCallback(async () => {
+    if (!activeClassroom) return;
+    setLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const week = getWeekDates(weekOffset);
+      const res = await fetch(
+        `/api/timetable?classroom=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        setClasses(data.classes || []);
+
+        // Fetch student's RSVPs and attendance for each class
+        const classIds = (data.classes || []).map((c: ClassCardData) => c.id);
+        if (classIds.length > 0) {
+          fetchMyData(classIds, token);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load timetable:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeClassroom, weekOffset, getToken]);
+
+  const fetchMyData = async (classIds: string[], token: string) => {
+    if (!activeClassroom) return;
+
+    // Fetch RSVPs and attendance in parallel
+    const rsvpPromises = classIds.map((id) =>
+      fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${activeClassroom.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null)
+    );
+
+    const attendancePromises = classIds.map((id) =>
+      fetch(`/api/timetable/attendance-report?class_id=${id}&classroom_id=${activeClassroom.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null)
+    );
+
+    const [rsvpResults, attendanceResults] = await Promise.all([
+      Promise.all(rsvpPromises),
+      Promise.all(attendancePromises),
+    ]);
+
+    const rsvpMap: Record<string, 'attending' | 'not_attending'> = {};
+    const attendanceMap: Record<string, boolean> = {};
+
+    classIds.forEach((id, i) => {
+      if (rsvpResults[i]?.rsvp?.response) {
+        rsvpMap[id] = rsvpResults[i].rsvp.response;
+      }
+      if (attendanceResults[i]?.attendance) {
+        attendanceMap[id] = attendanceResults[i].attendance.attended;
+      }
+    });
+
+    setMyRsvps(rsvpMap);
+    setMyAttendance(attendanceMap);
   };
 
   useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  const handleRsvp = async (classId: string, response: 'attending' | 'not_attending') => {
     if (!activeClassroom) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
 
-    async function fetchClasses() {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        if (!token) return;
+      const res = await fetch('/api/timetable/rsvp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          class_id: classId,
+          classroom_id: activeClassroom.id,
+          response,
+        }),
+      });
 
-        const week = getWeekDates(weekOffset);
-        const res = await fetch(
-          `/api/timetable?classroom=${activeClassroom!.id}&start=${week.start}&end=${week.end}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          setClasses(data.classes || []);
-        }
-      } catch (err) {
-        console.error('Failed to load timetable:', err);
-      } finally {
-        setLoading(false);
+      if (res.ok) {
+        setMyRsvps((prev) => ({ ...prev, [classId]: response }));
+        setSnackbar({
+          open: true,
+          message: response === 'attending' ? 'Marked as attending' : 'Marked as not attending',
+          severity: 'success',
+        });
       }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to update RSVP', severity: 'error' });
+    }
+  };
+
+  const handleOpenRate = async (cls: ClassCardData) => {
+    setReviewClass(cls);
+    // Fetch existing review
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(
+        `/api/timetable/reviews?class_id=${cls.id}&classroom_id=${activeClassroom?.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.review) {
+          setExistingReview({ rating: data.review.rating, comment: data.review.comment });
+        } else {
+          setExistingReview({});
+        }
+      }
+    } catch {
+      setExistingReview({});
+    }
+  };
+
+  const handleSubmitReview = async (rating: number, comment: string) => {
+    if (!reviewClass || !activeClassroom) return;
+    const token = await getToken();
+    if (!token) return;
+
+    const res = await fetch('/api/timetable/reviews', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        class_id: reviewClass.id,
+        classroom_id: activeClassroom.id,
+        rating,
+        comment,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to submit review');
     }
 
-    fetchClasses();
-  }, [activeClassroom, weekOffset, getToken]);
-
-  const formatTime = (time: string) => {
-    const [h, m] = time.split(':');
-    const hour = parseInt(h);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    return `${hour % 12 || 12}:${m} ${ampm}`;
+    setSnackbar({ open: true, message: 'Review submitted!', severity: 'success' });
   };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  const week = getWeekDates(weekOffset);
-
-  // Group classes by date
-  const classesByDate = classes.reduce<Record<string, ScheduledClass[]>>((acc, cls) => {
-    if (!acc[cls.scheduled_date]) acc[cls.scheduled_date] = [];
-    acc[cls.scheduled_date].push(cls);
-    return acc;
-  }, {});
 
   return (
     <Box>
@@ -100,104 +193,44 @@ export default function StudentTimetable() {
         Timetable
       </Typography>
 
-      {/* Week Navigation */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Button size="small" onClick={() => setWeekOffset((w) => w - 1)} sx={{ textTransform: 'none' }}>
-          ← Prev
-        </Button>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {week.label}
-        </Typography>
-        <Button size="small" onClick={() => setWeekOffset((w) => w + 1)} sx={{ textTransform: 'none' }}>
-          Next →
-        </Button>
-      </Box>
+      <WeeklyCalendarGrid
+        classes={classes}
+        loading={loading}
+        weekOffset={weekOffset}
+        onWeekChange={setWeekOffset}
+        role="student"
+        myRsvps={myRsvps}
+        myAttendance={myAttendance}
+        onRsvp={handleRsvp}
+        onRate={handleOpenRate}
+      />
 
-      {/* Classes by Day */}
-      {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={80} sx={{ borderRadius: 1 }} />
-          ))}
-        </Box>
-      ) : Object.keys(classesByDate).length === 0 ? (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            No classes scheduled for this week.
-          </Typography>
-        </Paper>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {Object.entries(classesByDate)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([date, dayClasses]) => (
-              <Box key={date}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: 'text.secondary' }}>
-                  {formatDate(date)}
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {dayClasses.map((cls) => (
-                    <Paper
-                      key={cls.id}
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        display: 'flex',
-                        alignItems: { xs: 'flex-start', sm: 'center' },
-                        flexDirection: { xs: 'column', sm: 'row' },
-                        gap: 1,
-                        borderLeft: `4px solid`,
-                        borderLeftColor:
-                          cls.status === 'completed' ? 'success.main' :
-                          cls.status === 'live' ? 'error.main' :
-                          cls.status === 'cancelled' ? 'text.disabled' :
-                          'primary.main',
-                      }}
-                    >
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {cls.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
-                          {cls.teacher && ` · ${cls.teacher.name}`}
-                        </Typography>
-                        {cls.topic && (
-                          <Chip label={cls.topic.title} size="small" sx={{ mt: 0.5 }} />
-                        )}
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Chip
-                          label={cls.status}
-                          size="small"
-                          color={
-                            cls.status === 'completed' ? 'success' :
-                            cls.status === 'live' ? 'error' :
-                            cls.status === 'cancelled' ? 'default' :
-                            'primary'
-                          }
-                          variant="outlined"
-                          sx={{ textTransform: 'capitalize' }}
-                        />
-                        {cls.teams_meeting_url && cls.status !== 'completed' && cls.status !== 'cancelled' && (
-                          <Button
-                            variant="contained"
-                            size="small"
-                            href={cls.teams_meeting_url}
-                            target="_blank"
-                            sx={{ textTransform: 'none', minHeight: 36 }}
-                          >
-                            Join
-                          </Button>
-                        )}
-                      </Box>
-                    </Paper>
-                  ))}
-                </Box>
-              </Box>
-            ))}
-        </Box>
+      {/* Review Dialog */}
+      {reviewClass && (
+        <ClassReviewForm
+          open={!!reviewClass}
+          onClose={() => setReviewClass(null)}
+          classTitle={reviewClass.title}
+          existingRating={existingReview.rating}
+          existingComment={existingReview.comment}
+          onSubmit={handleSubmitReview}
+        />
       )}
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

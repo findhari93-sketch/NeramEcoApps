@@ -62,12 +62,6 @@ export async function GET(
       return rest;
     });
 
-    // Attach questions to their sections
-    const sectionsWithQuestions = (sections || []).map((section: any) => ({
-      ...section,
-      quiz_questions: strippedQuestions.filter((q: any) => q.section_id === section.id),
-    }));
-
     // Fetch student-specific data if user found
     let progress = null;
     let quizAttempts: any[] = [];
@@ -107,6 +101,25 @@ export async function GET(
         notes = notesData || [];
       }
     }
+
+    // Attach questions, best quiz_attempt, and note to each section
+    // (matches NexusFoundationSectionWithQuiz shape for component reuse)
+    const sectionsWithQuestions = (sections || []).map((section: any) => {
+      // Find the best quiz attempt: prefer passed, then most recent
+      const sectionAttempts = quizAttempts.filter((a: any) => a.section_id === section.id);
+      const passedAttempt = sectionAttempts.find((a: any) => a.passed);
+      const quiz_attempt = passedAttempt || sectionAttempts[0] || null;
+
+      // Find note for this section
+      const note = notes.find((n: any) => n.section_id === section.id) || null;
+
+      return {
+        ...section,
+        quiz_questions: strippedQuestions.filter((q: any) => q.section_id === section.id),
+        quiz_attempt,
+        note,
+      };
+    });
 
     // Fetch audio tracks for this module item
     const { data: audioTracks } = await supabase

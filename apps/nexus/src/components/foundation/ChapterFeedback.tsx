@@ -26,11 +26,24 @@ import type { NexusFoundationSection } from '@neram/database/types';
 
 interface ChapterFeedbackProps {
   chapterId: string;
-  sections: NexusFoundationSection[];
+  sections: Pick<NexusFoundationSection, 'id' | 'title'>[];
   getToken: () => Promise<string | null>;
+  /** Override feedback API URL. Defaults to `/api/foundation/chapters/{chapterId}/feedback` */
+  feedbackApiUrl?: string;
+  /** Override issues API URL. Defaults to `/api/foundation/issues` */
+  issuesApiUrl?: string;
+  /** Body key for the item ID in issue submissions. Defaults to `chapter_id` */
+  issueItemKey?: string;
 }
 
-export default function ChapterFeedback({ chapterId, sections, getToken }: ChapterFeedbackProps) {
+export default function ChapterFeedback({
+  chapterId,
+  sections,
+  getToken,
+  feedbackApiUrl,
+  issuesApiUrl,
+  issueItemKey = 'chapter_id',
+}: ChapterFeedbackProps) {
   const theme = useTheme();
   const [reaction, setReaction] = useState<'like' | 'dislike' | null>(null);
   const [likeCount, setLikeCount] = useState(0);
@@ -52,7 +65,8 @@ export default function ChapterFeedback({ chapterId, sections, getToken }: Chapt
       try {
         const token = await getToken();
         if (!token) return;
-        const res = await fetch(`/api/foundation/chapters/${chapterId}/feedback`, {
+        const url = feedbackApiUrl || `/api/foundation/chapters/${chapterId}/feedback`;
+        const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -89,7 +103,8 @@ export default function ChapterFeedback({ chapterId, sections, getToken }: Chapt
     try {
       const token = await getToken();
       if (!token) return;
-      const res = await fetch(`/api/foundation/chapters/${chapterId}/feedback`, {
+      const url = feedbackApiUrl || `/api/foundation/chapters/${chapterId}/feedback`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ reaction: newReaction }),
@@ -116,11 +131,12 @@ export default function ChapterFeedback({ chapterId, sections, getToken }: Chapt
       const token = await getToken();
       if (!token) return;
 
-      const res = await fetch('/api/foundation/issues', {
+      const url = issuesApiUrl || '/api/foundation/issues';
+      const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chapter_id: chapterId,
+          [issueItemKey]: chapterId,
           section_id: issueSectionId || undefined,
           title: issueTitle.trim(),
           description: issueDescription.trim(),

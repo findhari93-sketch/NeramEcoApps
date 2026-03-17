@@ -13,3 +13,5 @@ export * from './classroom-access';
 export * from './settings';
 export * from './modules';
 export * from './checklists-v2';
+export * from './rsvp';
+export * from './reviews';

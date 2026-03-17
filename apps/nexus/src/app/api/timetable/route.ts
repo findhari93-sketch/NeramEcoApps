@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
+const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
+
 /**
  * GET /api/timetable?classroom={id}&start={date}&end={date}
  *
  * Returns scheduled classes for a classroom within a date range.
+ * For students: auto-filters by their batch (shows classroom-wide + their batch classes).
+ * For teachers: shows all classes (optionally filtered by batch_id query param).
  */
 export async function GET(request: NextRequest) {
   try {
-    await verifyMsToken(request.headers.get('Authorization'));
+    const msUser = await verifyMsToken(request.headers.get('Authorization'));
 
     const classroomId = request.nextUrl.searchParams.get('classroom');
     const start = request.nextUrl.searchParams.get('start');
@@ -21,18 +25,59 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    const { data, error } = await supabase
+    // Look up user and enrollment
+    const { data: user } = await supabase
+      .from('users')
+      .select('id')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const { data: enrollment } = await supabase
+      .from('nexus_enrollments')
+      .select('role, batch_id')
+      .eq('user_id', user.id)
+      .eq('classroom_id', classroomId)
+      .eq('is_active', true)
+      .single();
+
+    if (!enrollment) {
+      return NextResponse.json({ error: 'Not enrolled in this classroom' }, { status: 403 });
+    }
+
+    let query = supabase
       .from('nexus_scheduled_classes')
-      .select('*, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url)')
+      .select(CLASS_SELECT)
       .eq('classroom_id', classroomId)
       .gte('scheduled_date', start)
       .lte('scheduled_date', end)
       .order('scheduled_date', { ascending: true })
       .order('start_time', { ascending: true });
 
+    // For students: filter by their batch (show classroom-wide + their batch)
+    if (enrollment.role === 'student') {
+      if (enrollment.batch_id) {
+        // Show classes where batch_id is null (classroom-wide) OR matches student's batch
+        query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
+      } else {
+        // Student has no batch assigned — only show classroom-wide classes
+        query = query.is('batch_id', null);
+      }
+    } else {
+      // Teachers: optionally filter by batch
+      const batchFilter = request.nextUrl.searchParams.get('batch_id');
+      if (batchFilter) {
+        query = query.eq('batch_id', batchFilter);
+      }
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ classes: data || [] });
+    return NextResponse.json({ classes: data || [], role: enrollment.role });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load timetable';
     return NextResponse.json({ error: message }, { status: 401 });
@@ -41,6 +86,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * Helper: verify the caller is a teacher in the given classroom.
+ * Returns { userId, msOid }
  */
 async function verifyTeacherRole(msOid: string, classroomId: string) {
   const supabase = getSupabaseAdminClient();
@@ -74,7 +120,7 @@ export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
-    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, create_teams_meeting } = body;
+    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, create_teams_meeting } = body;
 
     if (!classroom_id || !title || !scheduled_date || !start_time || !end_time) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -83,7 +129,7 @@ export async function POST(request: NextRequest) {
     const teacherId = await verifyTeacherRole(msUser.oid, classroom_id);
     const supabase = getSupabaseAdminClient();
 
-    const insertData: any = {
+    const insertData: Record<string, unknown> = {
       classroom_id,
       title,
       scheduled_date,
@@ -91,24 +137,23 @@ export async function POST(request: NextRequest) {
       end_time,
       teacher_id: teacherId,
       topic_id: topic_id || null,
+      batch_id: batch_id || null,
       status: 'scheduled',
     };
 
-    // If create_teams_meeting is requested, the client should call /api/graph/teams
-    // separately and then update the class with the meeting URL.
-    if (create_teams_meeting) {
-      insertData.teams_meeting_url = null; // placeholder — set after Teams API call
-    }
-
     const { data, error } = await supabase
       .from('nexus_scheduled_classes')
-      .insert(insertData)
-      .select('*')
+      .insert(insertData as any)
+      .select(CLASS_SELECT)
       .single();
 
     if (error) throw error;
 
-    return NextResponse.json({ class: data }, { status: 201 });
+    return NextResponse.json({
+      class: data,
+      // Tell client whether to create a Teams meeting
+      create_teams_meeting: !!create_teams_meeting,
+    }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create class';
     const status = message.includes('Only teachers') ? 403 : 500;
@@ -133,8 +178,12 @@ export async function PATCH(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
 
     // Only allow updating specific fields
-    const allowedFields = ['title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'status', 'teams_meeting_url'];
-    const safeUpdates: any = {};
+    const allowedFields = [
+      'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'status',
+      'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url',
+      'batch_id', 'recording_url', 'transcript_url', 'notes', 'description',
+    ];
+    const safeUpdates: Record<string, unknown> = {};
     for (const key of allowedFields) {
       if (key in updates) safeUpdates[key] = updates[key];
     }
@@ -144,7 +193,7 @@ export async function PATCH(request: NextRequest) {
       .update(safeUpdates)
       .eq('id', id)
       .eq('classroom_id', classroom_id)
-      .select('*')
+      .select(CLASS_SELECT)
       .single();
 
     if (error) throw error;
