@@ -9,7 +9,8 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
 import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
-import GeneralChatbot from '@/components/GeneralChatbot';
+import dynamic from 'next/dynamic';
+const GeneralChatbot = dynamic(() => import('@/components/GeneralChatbot'), { ssr: false });
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import '@/styles/globals.css';
 
