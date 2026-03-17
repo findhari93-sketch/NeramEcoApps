@@ -711,3 +711,4 @@ export default function GeneralChatbot({ userId }: { userId?: string | null } = 
     </>
   );
 }
+
