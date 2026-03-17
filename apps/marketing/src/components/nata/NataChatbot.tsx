@@ -14,7 +14,6 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import Image from 'next/image';
-import ReactMarkdown from 'react-markdown';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
 
@@ -64,49 +63,56 @@ function BotAvatar({ size = 40 }: { size?: number }) {
   );
 }
 
-/** Renders bot message text with markdown formatting */
+/** Lightweight markdown renderer — handles **bold**, *italic*, lists, and paragraphs. */
 function BotMessageContent({ text }: { text: string }) {
+  const paragraphs = text.split(/\n\n+/);
   return (
-    <ReactMarkdown
-      components={{
-        p: ({ children }) => (
-          <Typography
-            component="p"
-            sx={{ fontSize: '0.9375rem', lineHeight: 1.65, mb: 1, '&:last-child': { mb: 0 } }}
-          >
-            {children}
+    <Box>
+      {paragraphs.map((para, pi) => {
+        const trimmed = para.trim();
+        if (!trimmed) return null;
+        const ulMatch = trimmed.split('\n').every((l) => /^[-*]\s/.test(l.trim()));
+        if (ulMatch) {
+          return (
+            <Box key={pi} component="ul" sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}>
+              {trimmed.split('\n').map((li, i) => (
+                <li key={i}><InlineMarkdown text={li.replace(/^[-*]\s/, '')} /></li>
+              ))}
+            </Box>
+          );
+        }
+        const olMatch = trimmed.split('\n').every((l) => /^\d+[.)]\s/.test(l.trim()));
+        if (olMatch) {
+          return (
+            <Box key={pi} component="ol" sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}>
+              {trimmed.split('\n').map((li, i) => (
+                <li key={i}><InlineMarkdown text={li.replace(/^\d+[.)]\s/, '')} /></li>
+              ))}
+            </Box>
+          );
+        }
+        return (
+          <Typography key={pi} component="p" sx={{ fontSize: '0.9375rem', lineHeight: 1.65, mb: 1, '&:last-child': { mb: 0 } }}>
+            <InlineMarkdown text={trimmed} />
           </Typography>
-        ),
-        strong: ({ children }) => (
-          <Typography component="span" sx={{ fontWeight: 700, fontSize: 'inherit' }}>
-            {children}
-          </Typography>
-        ),
-        em: ({ children }) => (
-          <Typography component="span" sx={{ fontStyle: 'italic', fontSize: 'inherit' }}>
-            {children}
-          </Typography>
-        ),
-        ul: ({ children }) => (
-          <Box
-            component="ul"
-            sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}
-          >
-            {children}
-          </Box>
-        ),
-        ol: ({ children }) => (
-          <Box
-            component="ol"
-            sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}
-          >
-            {children}
-          </Box>
-        ),
-      }}
-    >
-      {text}
-    </ReactMarkdown>
+        );
+      })}
+    </Box>
+  );
+}
+
+function InlineMarkdown({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**'))
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        if (part.startsWith('*') && part.endsWith('*'))
+          return <em key={i}>{part.slice(1, -1)}</em>;
+        return <span key={i}>{part}</span>;
+      })}
+    </>
   );
 }
 

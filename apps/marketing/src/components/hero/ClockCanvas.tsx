@@ -249,8 +249,8 @@ export default function ClockCanvas() {
           />
         </g>
 
-        {/* Second hand (at 0/12 o'clock position for static display) */}
-        <g transform={`rotate(-90 ${CX} ${CY})`}>
+        {/* Second hand — animated with CSS rotation (60s per revolution) */}
+        <g style={{ transformOrigin: `${CX}px ${CY}px`, animation: 'neramSecondHand 60s linear infinite' }}>
           <line
             x1={CX}
             y1={CY + R * 0.25}

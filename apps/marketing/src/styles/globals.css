@@ -277,6 +277,12 @@ body::after {
   }
 }
 
+/* Clock second hand — one full rotation every 60 seconds */
+@keyframes neramSecondHand {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Pulse animation for dots/badges */
 @keyframes neramPulse {
 
