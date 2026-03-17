@@ -100,7 +100,7 @@ function buildCenterFAQs(center: OfflineCenter) {
   return [
     {
       question: `What is the fee for NATA coaching in ${city}?`,
-      answer: `Our NATA course fees at ${city} range from ₹15,000 to ₹75,000 depending on the course duration (3, 6, or 12 months) and mode (online/offline). Contact us at ${center.contact_phone || '+91-9176137043'} for detailed fee structure and scholarship options.`,
+      answer: `Our NATA course fees at ${city} range from ₹15,000 to ₹35,000 depending on the course duration (3, 12, or 24 months) and mode (online/offline). Contact us at ${center.contact_phone || '+91-9176137043'} for detailed fee structure and scholarship options.`,
     },
     {
       question: `Is there an offline NATA coaching center in ${city}?`,
@@ -154,16 +154,16 @@ const coursePlans = [
     highlights: ['Intensive revision', 'Mock test series', 'Drawing practice'],
   },
   {
-    name: 'Regular Course',
-    duration: '6 Months',
-    mode: 'Online/Offline',
-    highlights: ['Complete syllabus', 'Concept building', 'Practice sessions'],
-  },
-  {
-    name: 'Premium Course',
+    name: '1-Year Program',
     duration: '12 Months',
     mode: 'Online/Offline',
-    highlights: ['1-on-1 mentoring', 'Foundation + Advanced', 'All resources'],
+    highlights: ['Complete syllabus', 'Daily drawing practice', '100+ mock tests'],
+  },
+  {
+    name: '2-Year Program',
+    duration: '24 Months',
+    mode: 'Online/Offline',
+    highlights: ['Foundation + Advanced', '1-on-1 mentoring', 'All resources'],
   },
 ];
 

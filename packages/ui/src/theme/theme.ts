@@ -769,7 +769,6 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
           '&.Mui-checked': {
             transform: 'translateX(20px)',
             '& + .MuiSwitch-track': {
-              backgroundColor: primaryColors[500],
               opacity: 1,
             },
           },

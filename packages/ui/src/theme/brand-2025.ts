@@ -218,6 +218,28 @@ export const m3NexusAccent = {
 } as const;
 
 /**
+ * Nexus Complete Color Config — transferable to other apps
+ * Import this object and pass to createNexusTheme() or use directly
+ */
+export interface AppColorConfig {
+  primary: { main: string; light: string; dark: string; contrastText: string };
+  secondary: { main: string; light: string; dark: string; contrastText: string };
+  info: { main: string; light: string; dark: string; contrastText: string };
+  success: { main: string; light: string; dark: string; contrastText: string };
+  warning: { main: string; light: string; dark: string; contrastText: string };
+  error: { main: string; light: string; dark: string; contrastText: string };
+}
+
+export const nexusColors: AppColorConfig = {
+  primary:   { main: '#7C3AED', light: '#CFBCFF', dark: '#4F378B', contrastText: '#FFFFFF' },
+  secondary: { main: '#059669', light: '#D1FAE5', dark: '#047857', contrastText: '#FFFFFF' },
+  info:      { main: '#4F46E5', light: '#E0E7FF', dark: '#3730A3', contrastText: '#FFFFFF' },
+  success:   { main: '#16A34A', light: '#DCFCE7', dark: '#15803D', contrastText: '#FFFFFF' },
+  warning:   { main: '#D97706', light: '#FEF3C7', dark: '#B45309', contrastText: '#FFFFFF' },
+  error:     { main: '#DC2626', light: '#FEE2E2', dark: '#B91C1C', contrastText: '#FFFFFF' },
+} as const;
+
+/**
  * Admin Accent: Red (for alerts/actions)
  */
 export const m3AdminAccent = {

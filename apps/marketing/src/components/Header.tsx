@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import {
   AppBar,
@@ -24,11 +24,13 @@ import {
   ListItemIcon,
 } from '@neram/ui';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
+import SearchIcon from '@mui/icons-material/Search';
 import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
 import AuthButton from './AuthButton';
 import UserNotificationBell from './UserNotificationBell';
+import SearchDialog from './SearchDialog';
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
 
@@ -125,11 +127,23 @@ export default function Header() {
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const handleLocaleChange = (newLocale: Locale) => {
     router.replace(pathname, { locale: newLocale });
   };
 
+  // Ctrl+K / Cmd+K keyboard shortcut for search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
@@ -311,6 +325,25 @@ export default function Header() {
                 })}
               </Box>
 
+
+            {/* Desktop Search Button */}
+            <Tooltip title="Search (Ctrl+K)" arrow>
+              <IconButton
+                color="inherit"
+                size="small"
+                onClick={() => setSearchOpen(true)}
+                sx={{
+                  display: { xs: "none", md: "flex" },
+                  width: 32,
+                  height: 32,
+                  borderRadius: "8px",
+                  opacity: 0.75,
+                  "&:hover": { opacity: 1, bgcolor: "action.hover" },
+                }}
+              >
+                <SearchIcon sx={{ fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
             {/* Spacer for mobile */}
             <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
 
@@ -499,6 +532,18 @@ export default function Header() {
           <Divider />
 
           {/* Navigation Links */}
+          <ListItemButton
+            onClick={() => { setMobileMenuOpen(false); setSearchOpen(true); }}
+            sx={{ py: 1.5 }}
+          >
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <SearchIcon sx={{ fontSize: 20 }} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Search"
+              primaryTypographyProps={{ fontWeight: 400 }}
+            />
+          </ListItemButton>
           <List sx={{ flexGrow: 1, py: 1 }}>
             {pathname !== '/' && (
               <ListItemButton
@@ -692,6 +737,7 @@ export default function Header() {
         </SwipeableDrawer>
       </AppBar>
       {/* Spacer to prevent content from sliding under fixed AppBar + broadcast banner */}
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
       <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }} />
     </>
   );

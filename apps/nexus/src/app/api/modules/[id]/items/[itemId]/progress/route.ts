@@ -38,6 +38,15 @@ export async function POST(
     if (body.last_video_position_seconds !== undefined) {
       upsertData.last_video_position_seconds = body.last_video_position_seconds;
     }
+    if (body.last_pdf_page !== undefined) {
+      upsertData.last_pdf_page = body.last_pdf_page;
+    }
+    if (body.last_audio_position_seconds !== undefined) {
+      upsertData.last_audio_position_seconds = body.last_audio_position_seconds;
+    }
+    if (body.last_audio_language !== undefined) {
+      upsertData.last_audio_language = body.last_audio_language;
+    }
 
     // Set timestamps based on status
     if (body.status === 'in_progress') {

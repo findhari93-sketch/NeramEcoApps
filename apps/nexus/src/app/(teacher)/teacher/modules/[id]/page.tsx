@@ -69,12 +69,21 @@ const ITEM_TYPES = [
   { value: 'chapter', label: 'Chapter' },
 ] as const;
 
-const ITEM_TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string }> = {
-  video: { icon: <OndemandVideoOutlinedIcon sx={{ fontSize: '1rem' }} />, color: '#d32f2f' },
-  document: { icon: <DescriptionOutlinedIcon sx={{ fontSize: '1rem' }} />, color: '#1976d2' },
-  quiz_paper: { icon: <QuizOutlinedIcon sx={{ fontSize: '1rem' }} />, color: '#7b1fa2' },
-  link: { icon: <LinkOutlinedIcon sx={{ fontSize: '1rem' }} />, color: '#00796b' },
-  chapter: { icon: <MenuBookOutlinedIcon sx={{ fontSize: '1rem' }} />, color: '#f57c00' },
+// Colors resolved from theme palette at render time via getItemTypeConfig()
+const ITEM_TYPE_ICONS: Record<string, React.ReactNode> = {
+  video: <OndemandVideoOutlinedIcon sx={{ fontSize: '1rem' }} />,
+  document: <DescriptionOutlinedIcon sx={{ fontSize: '1rem' }} />,
+  quiz_paper: <QuizOutlinedIcon sx={{ fontSize: '1rem' }} />,
+  link: <LinkOutlinedIcon sx={{ fontSize: '1rem' }} />,
+  chapter: <MenuBookOutlinedIcon sx={{ fontSize: '1rem' }} />,
+};
+
+const ITEM_TYPE_PALETTE_KEY: Record<string, 'error' | 'info' | 'primary' | 'secondary' | 'warning'> = {
+  video: 'error',
+  document: 'info',
+  quiz_paper: 'primary',
+  link: 'secondary',
+  chapter: 'warning',
 };
 
 function getTypeLabel(type: string): string {
@@ -432,7 +441,7 @@ export default function ModuleDetailPage() {
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                 {moduleData.icon && (
-                  <Typography sx={{ fontSize: '1.5rem', lineHeight: 1 }}>{moduleData.icon}</Typography>
+                  <span className="material-icons" style={{ fontSize: '1.5rem', lineHeight: 1 }}>{moduleData.icon}</span>
                 )}
                 <Typography variant="h6" sx={{ fontWeight: 700, fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
                   {moduleData.title}
@@ -526,7 +535,9 @@ export default function ModuleDetailPage() {
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {moduleData.items.map((item) => {
-                const typeConfig = ITEM_TYPE_CONFIG[item.item_type] || ITEM_TYPE_CONFIG.link;
+                const paletteKey = ITEM_TYPE_PALETTE_KEY[item.item_type] || 'info';
+                const itemColor = theme.palette[paletteKey].main;
+                const itemIcon = ITEM_TYPE_ICONS[item.item_type] || ITEM_TYPE_ICONS.link;
                 return (
                   <Paper
                     key={item.id}
@@ -538,7 +549,7 @@ export default function ModuleDetailPage() {
                       border: `1px solid ${theme.palette.divider}`,
                       cursor: 'pointer',
                       transition: 'border-color 200ms',
-                      '&:hover': { borderColor: alpha(typeConfig.color, 0.5) },
+                      '&:hover': { borderColor: alpha(itemColor, 0.5) },
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
@@ -548,8 +559,8 @@ export default function ModuleDetailPage() {
                           width: 36,
                           height: 36,
                           borderRadius: 1.5,
-                          bgcolor: alpha(typeConfig.color, 0.1),
-                          color: typeConfig.color,
+                          bgcolor: alpha(itemColor, 0.1),
+                          color: itemColor,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -557,7 +568,7 @@ export default function ModuleDetailPage() {
                           mt: 0.25,
                         }}
                       >
-                        {typeConfig.icon}
+                        {itemIcon}
                       </Box>
 
                       {/* Content */}
@@ -573,8 +584,8 @@ export default function ModuleDetailPage() {
                               height: 20,
                               fontSize: '0.6rem',
                               fontWeight: 600,
-                              bgcolor: alpha(typeConfig.color, 0.1),
-                              color: typeConfig.color,
+                              bgcolor: alpha(itemColor, 0.1),
+                              color: itemColor,
                             }}
                           />
                         </Box>

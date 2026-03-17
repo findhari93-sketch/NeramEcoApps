@@ -232,9 +232,9 @@ export default function QuestionDetail({
           }}
         >
           {isCorrect ? (
-            <CheckCircleIcon sx={{ fontSize: 80, color: '#22C55E', opacity: 0.9 }} />
+            <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', opacity: 0.9 }} />
           ) : (
-            <CancelIcon sx={{ fontSize: 80, color: '#EF4444', opacity: 0.9 }} />
+            <CancelIcon sx={{ fontSize: 80, color: 'error.main', opacity: 0.9 }} />
           )}
         </Box>
       </Fade>
@@ -312,9 +312,9 @@ export default function QuestionDetail({
                   </Typography>
                 </Box>
                 {attempt.is_correct ? (
-                  <CheckCircleIcon sx={{ color: '#22C55E', fontSize: 20 }} />
+                  <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
                 ) : (
-                  <CancelIcon sx={{ color: '#EF4444', fontSize: 20 }} />
+                  <CancelIcon sx={{ color: 'error.main', fontSize: 20 }} />
                 )}
               </Box>
             ))}

@@ -9,6 +9,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
 import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
+import GeneralChatbot from '@/components/GeneralChatbot';
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import '@/styles/globals.css';
 
@@ -161,6 +162,7 @@ export default async function RootLayout({
               <main>{children}</main>
               <Footer />
               <StickyAchievementWidget locale={locale} />
+              <GeneralChatbot />
             </AuthProvider>
           </ThemeRegistry>
         </NextIntlClientProvider>

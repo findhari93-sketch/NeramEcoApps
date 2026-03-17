@@ -29,15 +29,15 @@ export default function MCQOptions({
     if (submitted && correctId) {
       if (isCorrect) {
         return {
-          bgcolor: alpha('#22C55E', 0.12),
-          borderColor: '#22C55E',
+          bgcolor: alpha(theme.palette.success.main, 0.12),
+          borderColor: theme.palette.success.main,
           borderWidth: 2,
         };
       }
       if (isSelected && !isCorrect) {
         return {
-          bgcolor: alpha('#EF4444', 0.12),
-          borderColor: '#EF4444',
+          bgcolor: alpha(theme.palette.error.main, 0.12),
+          borderColor: theme.palette.error.main,
           borderWidth: 2,
         };
       }

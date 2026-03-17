@@ -52,7 +52,7 @@ const features = [
 ];
 
 const courseDetails = [
-  { label: 'Duration', value: '6-12 Months' },
+  { label: 'Duration', value: '3-24 Months' },
   { label: 'Mode', value: 'Online & Offline' },
   { label: 'Batch Size', value: '20-25 Students' },
   { label: 'Language', value: 'English & Regional' },
@@ -78,11 +78,11 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
 
   const faqs = [
     { question: 'What is the best online NATA coaching in Tamil Nadu?', answer: 'Neram Classes is the top-rated online NATA coaching institute in Tamil Nadu with a 99.9% success rate. Based in Tamil Nadu, we offer live interactive online classes, daily drawing practice sessions, 100+ mock tests, and personal mentoring from IIT/NIT alumni faculty. Students from Chennai, Coimbatore, Madurai, Trichy, and across Tamil Nadu trust Neram Classes for NATA preparation.' },
-    { question: 'How much does NATA coaching cost at Neram Classes?', answer: 'NATA coaching fees at Neram Classes range from ₹15,000 for a 3-month crash course to ₹75,000 for a premium year-long program with 1-on-1 mentoring. We also offer scholarships for meritorious students and flexible EMI payment options. Our pricing is competitive compared to other NATA coaching institutes in Tamil Nadu.' },
+    { question: 'How much does NATA coaching cost at Neram Classes?', answer: 'NATA coaching fees at Neram Classes range from ₹15,000 for a 3-month crash course to ₹35,000 for a 2-year program. We also offer a 1-year program starting at ₹25,000 (single payment). Scholarships and flexible payment options available. Our pricing is competitive compared to other NATA coaching institutes in Tamil Nadu.' },
     { question: 'Does Neram Classes offer online NATA classes?', answer: 'Yes, Neram Classes offers comprehensive online NATA coaching with live interactive sessions, recorded lectures, daily supervised drawing practice, and personal mentoring. Our online program delivers the same 99.9% success rate as our offline classes. Students can attend from anywhere in Tamil Nadu, India, or even abroad.' },
     { question: 'What is Neram Classes\' success rate for NATA?', answer: 'Neram Classes maintains a 99.9% success rate for NATA exam preparation. Over 10,000 students have successfully cleared NATA through our coaching programs. Our students consistently score 150+ marks, with many achieving top ranks in Tamil Nadu and across India. We have produced multiple state toppers and national rankers.' },
     { question: 'Can I join Neram Classes from outside Tamil Nadu?', answer: 'Absolutely! While Neram Classes is headquartered in Tamil Nadu, our online NATA coaching program is accessible from anywhere in India and internationally. We have students from 90+ cities including Chennai, Bangalore, Hyderabad, Mumbai, Delhi, and Gulf countries. All online students get the same curriculum, faculty access, and study materials as our Tamil Nadu students.' },
-    { question: 'How long should I prepare for NATA 2026?', answer: 'Ideally, 6-12 months of dedicated preparation is recommended for NATA 2026. Neram Classes offers a 12-month premium course, a 6-month regular course, and a 3-month crash course for last-minute preparation. Early starters can join our foundation batch starting from Class 11. The key is consistent daily practice, especially for the drawing section which carries 80 marks.' },
+    { question: 'How long should I prepare for NATA 2026?', answer: 'Ideally, 12-24 months of dedicated preparation is recommended for NATA 2026. Neram Classes offers a 2-year program, a 1-year program, and a 3-month crash course for last-minute preparation. Early starters can join our 2-year foundation batch starting from Class 11. The key is consistent daily practice, especially for the drawing section which carries 80 marks.' },
   ];
 
   return (
@@ -129,25 +129,25 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
             },
             {
               '@type': 'Course',
-              name: 'NATA 2026 Regular Course',
-              description: 'Comprehensive 6-month NATA coaching with complete syllabus coverage, daily drawing practice, and 100+ mock tests.',
-              provider: { '@type': 'EducationalOrganization', name: ORG_NAME, areaServed: 'Tamil Nadu, India' },
-              educationalLevel: '12th Pass',
-              timeRequired: 'P6M',
-              teaches: ['Mathematics', 'General Aptitude', 'Drawing', 'Architecture Awareness'],
-              hasCourseInstance: { '@type': 'CourseInstance', courseMode: ['online', 'onsite'] },
-              offers: { '@type': 'Offer', price: '35000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
-            },
-            {
-              '@type': 'Course',
-              name: 'NATA 2026 Premium Course',
-              description: '12-month premium NATA coaching with 1-on-1 mentoring, personalized study plans, and guaranteed result.',
+              name: 'NATA 1-Year Program',
+              description: 'Comprehensive 12-month NATA coaching with complete syllabus coverage, daily drawing practice, and 100+ mock tests.',
               provider: { '@type': 'EducationalOrganization', name: ORG_NAME, areaServed: 'Tamil Nadu, India' },
               educationalLevel: '12th Pass',
               timeRequired: 'P12M',
               teaches: ['Mathematics', 'General Aptitude', 'Drawing', 'Architecture Awareness'],
               hasCourseInstance: { '@type': 'CourseInstance', courseMode: ['online', 'onsite'] },
-              offers: { '@type': 'Offer', price: '75000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
+              offers: { '@type': 'Offer', price: '25000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
+            },
+            {
+              '@type': 'Course',
+              name: 'NATA 2-Year Program',
+              description: '24-month NATA coaching with foundation + advanced preparation, 1-on-1 mentoring, and complete NATA & JEE Paper 2 coverage.',
+              provider: { '@type': 'EducationalOrganization', name: ORG_NAME, areaServed: 'Tamil Nadu, India' },
+              educationalLevel: '12th Pass',
+              timeRequired: 'P24M',
+              teaches: ['Mathematics', 'General Aptitude', 'Drawing', 'Architecture Awareness'],
+              hasCourseInstance: { '@type': 'CourseInstance', courseMode: ['online', 'onsite'] },
+              offers: { '@type': 'Offer', price: '30000', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
             },
           ],
         },

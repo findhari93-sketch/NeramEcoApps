@@ -119,7 +119,7 @@ const faqs = [
   },
   {
     question: 'How much does NATA coaching cost in Tamil Nadu?',
-    answer: 'NATA coaching fees at Neram Classes in Tamil Nadu range from ₹15,000 for a 3-month crash course to ₹75,000 for a 12-month premium program with 1-on-1 mentoring. Scholarships and EMI options are available. Contact us for the latest fee structure.',
+    answer: 'NATA coaching fees at Neram Classes in Tamil Nadu range from ₹15,000 for a 3-month crash course to ₹35,000 for a 2-year program. 1-year program from ₹25,000. Scholarships and EMI options available. Contact us for the latest fee structure.',
   },
   {
     question: 'Is online NATA coaching effective?',
@@ -139,7 +139,7 @@ const faqs = [
   },
   {
     question: 'Can I join NATA coaching after 12th in Tamil Nadu?',
-    answer: 'Yes, students who have completed or are appearing for 12th standard (with Mathematics as a subject) can join NATA coaching. Neram Classes offers crash courses (3 months), regular courses (6 months), and premium courses (12 months) to suit different preparation timelines.',
+    answer: 'Yes, students who have completed or are appearing for 12th standard (with Mathematics as a subject) can join NATA coaching. Neram Classes offers crash courses (3 months), 1-year programs (12 months), and 2-year programs (24 months) to suit different preparation timelines.',
   },
   {
     question: 'What are the top architecture colleges in Tamil Nadu?',
@@ -175,18 +175,18 @@ const coursePlans = [
     highlights: ['Intensive NATA revision', '50+ mock tests', 'Daily drawing practice', 'Doubt clearing sessions'],
   },
   {
-    name: 'Regular Course',
-    duration: '6 Months',
-    price: '₹35,000',
+    name: '1-Year Program',
+    duration: '12 Months',
+    price: '₹25,000 - ₹30,000',
     mode: 'Online / Offline',
-    highlights: ['Complete NATA syllabus', 'Concept building from scratch', '100+ practice sessions', 'Weekly assessments'],
+    highlights: ['Complete NATA syllabus', 'Daily drawing practice', '100+ mock tests', 'Personal mentor assigned'],
   },
   {
-    name: 'Premium Course',
-    duration: '12 Months',
-    price: '₹75,000',
+    name: '2-Year Program',
+    duration: '24 Months',
+    price: '₹30,000 - ₹35,000',
     mode: 'Online / Offline',
-    highlights: ['1-on-1 personal mentoring', 'Foundation + Advanced', 'All study materials included', 'Guaranteed results'],
+    highlights: ['Foundation + Advanced', 'NATA & JEE Paper 2 coverage', '1-on-1 personal mentoring', 'All study materials included'],
   },
 ];
 

@@ -9,7 +9,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
-import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -22,18 +22,17 @@ const QB_PATH = '/student/question-bank';
 const allStudentNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
-  { label: 'Modules', path: '/student/modules', icon: <ViewModuleOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
+  { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
 ];
 
 const allBottomNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
-  { label: 'Modules', path: '/student/modules', icon: <ViewModuleOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },

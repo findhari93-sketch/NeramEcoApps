@@ -20,12 +20,7 @@ import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
-import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
-import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
-import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import PageHeader from '@/components/PageHeader';
 
 interface GuideSection {
@@ -159,50 +154,6 @@ export default function GuidePage() {
       ],
     },
     {
-      title: 'Tests',
-      icon: <QuizOutlinedIcon />,
-      color: '#9C27B0',
-      summary: 'Create tests from a question bank. View student attempts and scores.',
-      steps: [
-        'Open Tests to see all tests for your classroom.',
-        'Click "+ New Test" to create a test.',
-        'Choose test type: Untimed, Timed, Per-Question Timer, or Model Test.',
-        'Add questions from the verified question bank.',
-        'Set: Total marks, passing marks, duration, shuffle options.',
-        'Publish the test to make it visible to students.',
-        'View student attempts, scores, and time spent after submission.',
-      ],
-      tips: [
-        'Questions can be MCQ, True/False, Short Answer, Drawing, or Numerical.',
-        'Students can submit questions for your review — approve them to add to the bank.',
-        'Tests support negative marking per question.',
-        'Use "Show answers after" to control when students see correct answers.',
-      ],
-    },
-    {
-      title: 'Classrooms & Batches',
-      icon: <SchoolOutlinedIcon />,
-      color: '#607D8B',
-      summary: 'Create classrooms, organize students into batches, and manage enrollments.',
-      steps: [
-        'Navigate to Classrooms from the sidebar to see all your classrooms.',
-        'Tap "+ New Classroom" to create a classroom — set the name, type (NATA, JEE, Revit, Other), and description.',
-        'Tap a classroom card to view its details with 3 tabs: Overview, Batches, Students.',
-        'In the Batches tab, create batches (e.g., "Batch A", "Batch B") to organize students.',
-        'In the Students tab, click "Add Student" to search and enroll students by name or email.',
-        'Filter enrolled students by batch using the chip bar.',
-        'Select multiple students and use "Assign Batch" to move them between batches.',
-        'Switch your active classroom using the chip in the top bar — all app data updates accordingly.',
-      ],
-      tips: [
-        'Batches are for organizing students only — all students see the same content (checklist, timetable, topics) regardless of batch.',
-        'You can move students between batches at any time without affecting their progress.',
-        'Batch names must be unique within a classroom.',
-        'Classroom types: NATA, JEE, Revit, Other.',
-        'Your last selected classroom is remembered when you return.',
-      ],
-    },
-    {
       title: 'Parent Access',
       icon: <GroupsOutlinedIcon />,
       color: '#00897B',
@@ -218,49 +169,6 @@ export default function GuidePage() {
         'Each invite code can only be used once.',
         'Parents have read-only access — they cannot modify anything.',
         'A student can have multiple parents linked.',
-      ],
-    },
-    {
-      title: 'Foundation Content',
-      icon: <MenuBookOutlinedIcon />,
-      color: '#5C6BC0',
-      summary: 'Create self-paced learning chapters with videos, sections, and quizzes for students.',
-      steps: [
-        'Go to Foundation from the sidebar to see student progress across all chapters.',
-        'Click "Manage Content" to open the content management dashboard.',
-        'Click "+ Add Chapter" to create a new chapter — enter a title, YouTube video ID, chapter number, and pass score %.',
-        'Tap a chapter card to open the chapter editor with a video preview.',
-        'Add sections by clicking "+ Add Section" — set a title and start/end timestamps using the video preview\'s "Use current time" buttons.',
-        'For each section, add quiz questions: enter the question text, four answer options (A–D), select the correct answer, and optionally add an explanation.',
-        'Use the Publish toggle on each chapter to make it visible to students. Unpublished chapters show a "Draft" badge.',
-        'Back on the Foundation Progress page, monitor which students have completed chapters, who is in progress, and who hasn\'t started.',
-      ],
-      tips: [
-        'Use the embedded video preview to play the video and capture exact timestamps for sections.',
-        'Students must watch the full section video before the quiz appears — they cannot skip ahead.',
-        'If a student fails the quiz, they must rewatch the section before retrying.',
-        'The pass score % controls how many questions a student must answer correctly to proceed.',
-        'Students are sorted by status: stuck students (red) appear first so you can follow up with them.',
-      ],
-    },
-    {
-      title: 'Student Issues',
-      icon: <BugReportOutlinedIcon />,
-      color: '#E65100',
-      summary: 'Review and resolve issues reported by students during their learning experience.',
-      steps: [
-        'Go to Issues from the sidebar to see all student-reported issues.',
-        'Issues can be about: video problems, incorrect quiz questions, confusing content, or technical bugs.',
-        'Filter issues by status: Open, In Progress, or Resolved.',
-        'Click on an issue to view the full details including the student\'s description and context.',
-        'Mark an issue as "In Progress" when you start working on it.',
-        'Resolve the issue by adding resolution notes explaining what was fixed or clarified.',
-        'Students are notified when their reported issue is resolved.',
-      ],
-      tips: [
-        'Check issues regularly — quick responses build student trust.',
-        'If a quiz question is reported as incorrect, update it in Foundation → Manage Content.',
-        'Resolution notes are visible to the student, so be clear and helpful.',
       ],
     },
   ];
@@ -283,7 +191,7 @@ export default function GuidePage() {
       >
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Welcome to Nexus — the Learning Management Platform for Neram Classes.
-          This guide covers every feature available to teachers and admins.
+          This guide covers daily teaching features. Switch to the Management panel for content and classroom management guides.
           Tap on any section below to expand it.
         </Typography>
         <Divider sx={{ my: 1.5 }} />
@@ -308,7 +216,7 @@ export default function GuidePage() {
         </Box>
       </Paper>
 
-      {sections.map((section, idx) => {
+      {sections.map((section) => {
         const panelId = section.title.toLowerCase().replace(/[^a-z]/g, '');
         return (
           <Accordion

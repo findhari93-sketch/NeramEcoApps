@@ -85,7 +85,7 @@ export default function StudentModuleDetailPage() {
           title={module.title || 'Foundation Module'}
           subtitle={module.description || undefined}
           breadcrumbs={[
-            { label: 'Modules', href: '/student/modules' },
+            { label: 'Checklist', href: '/student/checklist' },
             { label: module.title || 'Foundation Module' },
           ]}
         />
@@ -103,7 +103,7 @@ export default function StudentModuleDetailPage() {
         title={loading ? 'Loading...' : module?.title || 'Module'}
         subtitle={module?.description || undefined}
         breadcrumbs={[
-          { label: 'Modules', href: '/student/modules' },
+          { label: 'Checklist', href: '/student/checklist' },
           { label: module?.title || 'Module' },
         ]}
       />

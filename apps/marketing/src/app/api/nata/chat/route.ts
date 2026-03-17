@@ -103,42 +103,44 @@ async function callGemini(
   model: string,
   contents: Array<{ role: string; parts: Array<{ text: string }> }>
 ): Promise<{ reply: string; model: string } | null> {
-  const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: NATA_SYSTEM_PROMPT }] },
-      contents,
-      generationConfig: {
-        temperature: 0.75,
-        maxOutputTokens: 1024,
-        topP: 0.9,
-      },
-      safetySettings: [
-        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-      ],
-    }),
-  });
+  try {
+    const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: NATA_SYSTEM_PROMPT }] },
+        contents,
+        generationConfig: {
+          temperature: 0.75,
+          maxOutputTokens: 1024,
+          topP: 0.9,
+        },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        ],
+      }),
+    });
 
-  if (!response.ok) {
-    const status = response.status;
-    if (status === 429 || status === 503) {
-      // Rate limited or unavailable — try next model
+    if (!response.ok) {
+      const status = response.status;
+      const errorText = await response.text().catch(() => 'unknown');
+      console.error(`[NataChat] Gemini ${model} error: ${status}`, errorText);
       return null;
     }
-    console.error(`Gemini ${model} error:`, status, await response.text());
+
+    const data = await response.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!reply) return null;
+
+    return { reply, model };
+  } catch (err) {
+    console.error(`[NataChat] Gemini ${model} fetch error:`, err);
     return null;
   }
-
-  const data = await response.json();
-  const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!reply) return null;
-
-  return { reply, model };
 }
 
 async function logConversation(params: {
@@ -206,6 +208,15 @@ export async function POST(request: NextRequest) {
     for (const model of GEMINI_MODELS) {
       result = await callGemini(model, contents);
       if (result) break;
+    }
+
+    // Retry once with a short delay if rate-limited (429 is common on free tier)
+    if (!result) {
+      await new Promise((r) => setTimeout(r, 2000));
+      for (const model of GEMINI_MODELS) {
+        result = await callGemini(model, contents);
+        if (result) break;
+      }
     }
 
     const responseTimeMs = Date.now() - startTime;

@@ -16,7 +16,7 @@ export async function GET(
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const { id: chapterId } = await params;
-    const supabase = getSupabaseAdminClient();
+    const supabase = getSupabaseAdminClient() as any;
 
     const { data: user } = await supabase
       .from('users')
@@ -45,10 +45,18 @@ export async function GET(
       })),
     }));
 
+    // Fetch audio tracks for this chapter
+    const { data: audioTracks } = await supabase
+      .from('nexus_audio_tracks')
+      .select('*')
+      .eq('chapter_id', chapterId)
+      .order('sort_order', { ascending: true });
+
     return NextResponse.json({
       chapter: result.chapter,
       sections,
       progress: result.progress,
+      audio_tracks: audioTracks || [],
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load chapter';

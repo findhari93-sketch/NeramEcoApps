@@ -30,6 +30,7 @@ import {
   useMediaQuery,
   Slide,
   Divider,
+  Switch,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
@@ -37,6 +38,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
@@ -48,6 +50,7 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
 import React from 'react';
@@ -97,6 +100,7 @@ interface ChecklistDetail {
   id: string;
   title: string;
   description: string | null;
+  is_published: boolean;
   entries: ChecklistEntry[];
   classrooms: ClassroomRef[];
   created_at: string;
@@ -113,15 +117,16 @@ interface AvailableModule {
   title: string;
   color: string;
   item_count: number;
+  category: string;
 }
 
 // --- Helpers ---
 
 const classroomColors: Record<string, string> = {
-  nata: '#1976D2',
-  jee: '#7B1FA2',
-  revit: '#00897B',
-  other: '#546E7A',
+  nata: '#4F46E5',   // Indigo (info)
+  jee: '#7C3AED',    // Purple (primary)
+  revit: '#059669',  // Green (secondary)
+  other: '#78716C',  // Stone (neutral)
 };
 
 function detectResourceType(url: string): string {
@@ -151,15 +156,15 @@ function resourceTypeIcon(type: string) {
 function resourceTypeColor(type: string): string {
   switch (type) {
     case 'video':
-      return '#E53935';
+      return '#DC2626';   // error
     case 'pdf':
-      return '#D84315';
+      return '#D97706';   // warning
     case 'image':
-      return '#7B1FA2';
+      return '#7C3AED';   // primary
     case 'document':
-      return '#1565C0';
+      return '#4F46E5';   // info
     default:
-      return '#546E7A';
+      return '#78716C';   // neutral
   }
 }
 
@@ -192,6 +197,10 @@ export default function ChecklistDetailPage() {
   // Expanded modules
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
 
+  // Drag reorder visual state
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
   // Classroom assignment dialog
   const [classroomDialogOpen, setClassroomDialogOpen] = useState(false);
   const [availableClassrooms, setAvailableClassrooms] = useState<AvailableClassroom[]>([]);
@@ -205,6 +214,7 @@ export default function ChecklistDetailPage() {
   const [availableModules, setAvailableModules] = useState<AvailableModule[]>([]);
   const [modulesLoading, setModulesLoading] = useState(false);
   const [addingModule, setAddingModule] = useState<string | null>(null);
+  const [moduleCategoryFilter, setModuleCategoryFilter] = useState<string>('all');
 
   // Simple item form
   const [simpleTitle, setSimpleTitle] = useState('');
@@ -217,9 +227,22 @@ export default function ChecklistDetailPage() {
 
   // Student progress
   const [progressData, setProgressData] = useState<{
-    students: { id: string; name: string; completedEntries: number; totalEntries: number; percentage: number; lastActivity: string | null }[];
-    overall: { averageCompletion: number; totalStudents: number };
+    students: {
+      id: string;
+      name: string;
+      completedEntries: number;
+      totalEntries: number;
+      percentage: number;
+      lastActivity: string | null;
+      currentStepTitle: string | null;
+      currentStepStatus: string | null;
+      currentStepStartedAt: string | null;
+      daysSinceLastActivity: number | null;
+      isStale: boolean;
+    }[];
+    overall: { averageCompletion: number; totalStudents: number; staleStudents: number };
   } | null>(null);
+  const [showStaleOnly, setShowStaleOnly] = useState(false);
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressClassroomId, setProgressClassroomId] = useState<string | null>(null);
 
@@ -303,6 +326,69 @@ export default function ChecklistDetailPage() {
     }
   };
 
+  // --- Publish toggle ---
+  const handlePublishToggle = async () => {
+    if (!checklist) return;
+    const newVal = !checklist.is_published;
+    setChecklist((prev) => (prev ? { ...prev, is_published: newVal } : prev));
+    try {
+      const token = await getToken();
+      if (!token) return;
+      await fetch(`/api/checklists/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ is_published: newVal }),
+      });
+    } catch (err) {
+      console.error('Failed to toggle publish:', err);
+      setChecklist((prev) => (prev ? { ...prev, is_published: !newVal } : prev));
+    }
+  };
+
+  // --- Drag reorder ---
+  const handleDragStart = (e: React.DragEvent, idx: number) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIdx !== idx) setDragOverIdx(idx);
+  };
+
+  const handleDragEnd = () => {
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    const fromIdx = dragIdx;
+    setDragIdx(null);
+    setDragOverIdx(null);
+
+    if (fromIdx === null || !checklist || fromIdx === dropIdx) return;
+
+    const sortedEntries = [...(checklist.entries || [])].sort((a, b) => a.sort_order - b.sort_order);
+    const [moved] = sortedEntries.splice(fromIdx, 1);
+    sortedEntries.splice(dropIdx, 0, moved);
+
+    const reordered = sortedEntries.map((entry, i) => ({ ...entry, sort_order: i }));
+    setChecklist((prev) => (prev ? { ...prev, entries: reordered } : prev));
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+      await fetch(`/api/checklists/${id}/entries/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ entries: reordered.map((entry) => ({ id: entry.id, sort_order: entry.sort_order })) }),
+      });
+    } catch (err) {
+      console.error('Failed to reorder:', err);
+    }
+  };
   // --- Toggle expand ---
   const toggleExpand = (entryId: string) => {
     setExpandedEntries((prev) => {
@@ -402,7 +488,13 @@ export default function ChecklistDetailPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setAvailableModules(data.modules || []);
+        setAvailableModules((data.modules || []).map((m: any) => ({
+          id: m.id,
+          title: m.title,
+          color: m.color || '#4F46E5',
+          item_count: m.itemCount || m.item_count || 0,
+          category: m.category || 'general',
+        })));
       }
     } catch (err) {
       console.error('Failed to load modules:', err);
@@ -644,6 +736,26 @@ export default function ChecklistDetailPage() {
         </Typography>
       )}
 
+      {/* Draft / Published toggle */}
+      <Box sx={{ ml: { xs: 0, sm: 7 }, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Switch
+          checked={checklist.is_published}
+          onChange={handlePublishToggle}
+          color="success"
+          size="small"
+        />
+        <Chip
+          label={checklist.is_published ? 'Published' : 'Draft'}
+          size="small"
+          color={checklist.is_published ? 'success' : 'default'}
+          variant={checklist.is_published ? 'filled' : 'outlined'}
+          sx={{ fontWeight: 600, fontSize: '0.75rem' }}
+        />
+        <Typography variant="caption" color="text.secondary">
+          {checklist.is_published ? 'Visible to students' : 'Hidden from students'}
+        </Typography>
+      </Box>
+
       {/* Assigned Classrooms */}
       <Box sx={{ mb: 3, ml: { xs: 0, sm: 7 } }}>
         <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mb: 0.75, display: 'block' }}>
@@ -712,22 +824,58 @@ export default function ChecklistDetailPage() {
           </Typography>
         </Paper>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {entries.map((entry) => {
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {entries.map((entry, idx) => {
+            const isDragging = dragIdx === idx;
+            const isDropTarget = dragOverIdx === idx && dragIdx !== null && dragIdx !== idx;
+
             if (entry.entry_type === 'module' && entry.module) {
               const mod = entry.module;
               const isExpanded = expandedEntries.has(entry.id);
               return (
-                <Paper
-                  key={entry.id}
-                  elevation={0}
-                  sx={{
-                    borderRadius: 2.5,
-                    border: `1px solid ${theme.palette.divider}`,
-                    borderLeft: `4px solid ${mod.color || theme.palette.primary.main}`,
-                    overflow: 'hidden',
-                  }}
-                >
+                <Box key={entry.id} sx={{ position: 'relative', pt: 0.75, pb: 0.75 }}>
+                  {/* Drop indicator line */}
+                  {isDropTarget && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: -1,
+                        left: 0,
+                        right: 0,
+                        height: 3,
+                        bgcolor: 'primary.main',
+                        borderRadius: 1.5,
+                        zIndex: 2,
+                        '&::before': {
+                          content: '""',
+                          position: 'absolute',
+                          left: -4,
+                          top: -3,
+                          width: 9,
+                          height: 9,
+                          borderRadius: '50%',
+                          bgcolor: 'primary.main',
+                        },
+                      }}
+                    />
+                  )}
+                  <Paper
+                    elevation={isDragging ? 4 : 0}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e as React.DragEvent, idx)}
+                    onDragOver={(e) => handleDragOver(e as React.DragEvent, idx)}
+                    onDrop={(e) => handleDrop(e as React.DragEvent, idx)}
+                    onDragEnd={handleDragEnd}
+                    sx={{
+                      borderRadius: 2.5,
+                      border: `1px solid ${isDropTarget ? theme.palette.primary.main : theme.palette.divider}`,
+                      borderLeft: `4px solid ${mod.color || theme.palette.primary.main}`,
+                      overflow: 'hidden',
+                      opacity: isDragging ? 0.4 : 1,
+                      transition: 'opacity 200ms, box-shadow 200ms, border-color 200ms',
+                      '&[draggable=true]': { cursor: 'grab' },
+                    }}
+                  >
                   <Box
                     sx={{
                       p: 2,
@@ -738,6 +886,7 @@ export default function ChecklistDetailPage() {
                     }}
                     onClick={() => toggleExpand(entry.id)}
                   >
+                    <DragIndicatorIcon sx={{ fontSize: '1.2rem', color: 'text.disabled', cursor: 'grab', flexShrink: 0 }} />
                     <Box
                       sx={{
                         width: 36,
@@ -839,21 +988,56 @@ export default function ChecklistDetailPage() {
                     </Box>
                   </Collapse>
                 </Paper>
+                </Box>
               );
             }
 
             // Simple item entry
             return (
-              <Paper
-                key={entry.id}
-                elevation={0}
-                sx={{
-                  p: 2,
-                  borderRadius: 2.5,
-                  border: `1px solid ${theme.palette.divider}`,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <Box key={entry.id} sx={{ position: 'relative', pt: 0.75, pb: 0.75 }}>
+                {/* Drop indicator line */}
+                {isDropTarget && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: -1,
+                      left: 0,
+                      right: 0,
+                      height: 3,
+                      bgcolor: 'primary.main',
+                      borderRadius: 1.5,
+                      zIndex: 2,
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        left: -4,
+                        top: -3,
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        bgcolor: 'primary.main',
+                      },
+                    }}
+                  />
+                )}
+                <Paper
+                  elevation={isDragging ? 4 : 0}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e as React.DragEvent, idx)}
+                  onDragOver={(e) => handleDragOver(e as React.DragEvent, idx)}
+                  onDrop={(e) => handleDrop(e as React.DragEvent, idx)}
+                  onDragEnd={handleDragEnd}
+                  sx={{
+                    p: 2,
+                    borderRadius: 2.5,
+                    border: `1px solid ${isDropTarget ? theme.palette.primary.main : theme.palette.divider}`,
+                    opacity: isDragging ? 0.4 : 1,
+                    transition: 'opacity 200ms, box-shadow 200ms, border-color 200ms',
+                    '&[draggable=true]': { cursor: 'grab' },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                    <DragIndicatorIcon sx={{ fontSize: '1.2rem', color: 'text.disabled', cursor: 'grab', mt: 0.25, flexShrink: 0 }} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
                       {entry.title}
@@ -897,6 +1081,7 @@ export default function ChecklistDetailPage() {
                   </IconButton>
                 </Box>
               </Paper>
+              </Box>
             );
           })}
         </Box>
@@ -982,9 +1167,27 @@ export default function ChecklistDetailPage() {
                   '& .MuiLinearProgress-bar': { borderRadius: 4 },
                 }}
               />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                {progressData.overall.totalStudents} students enrolled
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {progressData.overall.totalStudents} students enrolled
+                </Typography>
+                {progressData.overall.staleStudents > 0 && (
+                  <Chip
+                    icon={<WarningAmberIcon sx={{ fontSize: '0.85rem !important' }} />}
+                    label={`${progressData.overall.staleStudents} stuck`}
+                    size="small"
+                    onClick={() => setShowStaleOnly((v) => !v)}
+                    variant={showStaleOnly ? 'filled' : 'outlined'}
+                    color="warning"
+                    sx={{
+                      height: 24,
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  />
+                )}
+              </Box>
             </Paper>
           )}
 
@@ -997,7 +1200,9 @@ export default function ChecklistDetailPage() {
             </Box>
           ) : progressData && progressData.students.length > 0 ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {progressData.students.map((student) => (
+              {progressData.students
+                .filter((s) => !showStaleOnly || s.isStale)
+                .map((student) => (
                 <Paper
                   key={student.id}
                   elevation={0}
@@ -1005,59 +1210,117 @@ export default function ChecklistDetailPage() {
                     px: 2,
                     py: 1.5,
                     borderRadius: 2,
-                    border: `1px solid ${theme.palette.divider}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
+                    border: `1px solid ${student.isStale ? alpha(theme.palette.warning.main, 0.4) : theme.palette.divider}`,
+                    bgcolor: student.isStale ? alpha(theme.palette.warning.main, 0.03) : 'background.paper',
                   }}
                 >
-                  <Box
-                    sx={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '50%',
-                      bgcolor: alpha(theme.palette.primary.main, 0.08),
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <PersonOutlineIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {student.name}
-                      </Typography>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: student.percentage === 100 ? 'success.main' : 'text.secondary', flexShrink: 0, ml: 1 }}>
-                        {student.completedEntries}/{student.totalEntries}
-                      </Typography>
-                    </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={student.percentage}
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                    <Box
                       sx={{
-                        height: 6,
-                        borderRadius: 3,
-                        bgcolor: alpha(
-                          student.percentage === 100 ? theme.palette.success.main : theme.palette.primary.main,
-                          0.1
-                        ),
-                        '& .MuiLinearProgress-bar': {
-                          borderRadius: 3,
-                          bgcolor: student.percentage === 100 ? theme.palette.success.main : theme.palette.primary.main,
-                        },
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        bgcolor: student.isStale
+                          ? alpha(theme.palette.warning.main, 0.1)
+                          : alpha(theme.palette.primary.main, 0.08),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        mt: 0.25,
                       }}
-                    />
-                    {student.lastActivity && (
-                      <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem', mt: 0.25, display: 'block' }}>
-                        Last activity: {new Date(student.lastActivity).toLocaleDateString()}
-                      </Typography>
-                    )}
+                    >
+                      {student.isStale ? (
+                        <WarningAmberIcon sx={{ fontSize: '1.1rem', color: 'warning.main' }} />
+                      ) : (
+                        <PersonOutlineIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
+                      )}
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {student.name}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: student.percentage === 100 ? 'success.main' : 'text.secondary', flexShrink: 0, ml: 1 }}>
+                          {student.completedEntries}/{student.totalEntries}
+                        </Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={student.percentage}
+                        sx={{
+                          height: 6,
+                          borderRadius: 3,
+                          bgcolor: alpha(
+                            student.percentage === 100 ? theme.palette.success.main : theme.palette.primary.main,
+                            0.1
+                          ),
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 3,
+                            bgcolor: student.percentage === 100 ? theme.palette.success.main : theme.palette.primary.main,
+                          },
+                        }}
+                      />
+                      {/* Current step info */}
+                      {student.currentStepTitle && student.percentage < 100 && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                            On: <strong>{student.currentStepTitle}</strong>
+                          </Typography>
+                          {student.currentStepStatus && (
+                            <Chip
+                              label={student.currentStepStatus === 'in_progress' ? 'In Progress' : 'Not Started'}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.58rem',
+                                fontWeight: 700,
+                                bgcolor: student.currentStepStatus === 'in_progress'
+                                  ? alpha(theme.palette.info.main, 0.1)
+                                  : alpha(theme.palette.text.disabled, 0.1),
+                                color: student.currentStepStatus === 'in_progress'
+                                  ? 'info.main'
+                                  : 'text.disabled',
+                              }}
+                            />
+                          )}
+                          {student.currentStepStartedAt && (
+                            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>
+                              started {new Date(student.currentStepStartedAt).toLocaleDateString()}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      {/* Activity info */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
+                        {student.lastActivity && (
+                          <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.63rem' }}>
+                            Last active: {new Date(student.lastActivity).toLocaleDateString()}
+                          </Typography>
+                        )}
+                        {student.isStale && student.daysSinceLastActivity !== null && (
+                          <Chip
+                            label={`Idle ${student.daysSinceLastActivity}d`}
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            sx={{
+                              height: 18,
+                              fontSize: '0.58rem',
+                              fontWeight: 700,
+                            }}
+                          />
+                        )}
+                      </Box>
+                    </Box>
                   </Box>
                 </Paper>
               ))}
+              {showStaleOnly && progressData.students.filter((s) => s.isStale).length === 0 && (
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                  No stuck students — everyone is making progress!
+                </Typography>
+              )}
             </Box>
           ) : progressData ? (
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
@@ -1226,9 +1489,35 @@ export default function ChecklistDetailPage() {
               <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
                 No published modules available.
               </Typography>
-            ) : (
+            ) : (() => {
+              const categories = ['all', ...Array.from(new Set(availableModules.map((m) => m.category || 'general')))];
+              const filtered = moduleCategoryFilter === 'all'
+                ? availableModules
+                : availableModules.filter((m) => (m.category || 'general') === moduleCategoryFilter);
+              return (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {availableModules.map((mod) => (
+                {/* Category filter chips */}
+                {categories.length > 2 && (
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.5 }}>
+                    {categories.map((cat) => (
+                      <Chip
+                        key={cat}
+                        label={cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                        size="small"
+                        onClick={() => setModuleCategoryFilter(cat)}
+                        variant={moduleCategoryFilter === cat ? 'filled' : 'outlined'}
+                        color={moduleCategoryFilter === cat ? 'primary' : 'default'}
+                        sx={{
+                          height: 28,
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
+                {filtered.map((mod) => (
                   <Paper
                     key={mod.id}
                     variant="outlined"
@@ -1261,9 +1550,23 @@ export default function ChecklistDetailPage() {
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {mod.title}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {mod.item_count} item{mod.item_count !== 1 ? 's' : ''}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {mod.item_count} item{mod.item_count !== 1 ? 's' : ''}
+                        </Typography>
+                        {mod.category && mod.category !== 'general' && (
+                          <Chip
+                            label={mod.category}
+                            size="small"
+                            sx={{
+                              height: 16,
+                              fontSize: '0.55rem',
+                              fontWeight: 700,
+                              bgcolor: alpha(theme.palette.text.primary, 0.06),
+                            }}
+                          />
+                        )}
+                      </Box>
                     </Box>
                     <Button
                       size="small"
@@ -1284,7 +1587,8 @@ export default function ChecklistDetailPage() {
                   </Paper>
                 ))}
               </Box>
-            )
+              );
+            })()
           ) : (
             /* Simple item tab */
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

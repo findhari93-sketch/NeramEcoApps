@@ -242,17 +242,17 @@ Beyond regular classes, every student receives periodic one-on-one mentoring ses
 
 ## Course Options for Bangalore Students
 
-### Year-Long Comprehensive Course - Starting at Rs. 35,000
+### 1-Year Program - Starting at Rs. 25,000
 
-Our flagship program is designed for students who want thorough preparation over an extended period. This course includes daily classes covering all NATA sections, weekly mock tests, drawing portfolio development, and complete coverage of the NATA syllabus. The year-long course is ideal for Class 11 or early Class 12 students who want to build a strong foundation.
+Our flagship program is designed for students who want thorough preparation over 12 months. This course includes daily classes covering all NATA sections, weekly mock tests, drawing portfolio development, and complete coverage of the NATA syllabus. Pay ₹25,000 as single payment or ₹30,000 in installments. Ideal for Class 11 or early Class 12 students who want to build a strong foundation.
 
 ### Crash Course - Starting at Rs. 15,000
 
 For students who need focused, intensive preparation in a shorter timeframe, our crash course packs the essential NATA syllabus into an accelerated format. This course covers all key topics, includes daily practice tests, and provides rapid skill development in drawing, mathematics, and general aptitude. It is perfect for students who are already familiar with the basics and need to sharpen their skills before the exam.
 
-### Premium 1-on-1 Coaching - Starting at Rs. 75,000
+### 2-Year Program - Starting at Rs. 30,000
 
-Our premium offering provides completely personalized coaching with a dedicated faculty member. Every session is tailored exclusively to your needs, with custom lesson plans, unlimited drawing feedback, and flexible scheduling. This option is ideal for students targeting top-10 ranks or those who require extra attention in specific areas.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation + advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay ₹30,000 as single payment or ₹35,000 in installments.
 
 ## NATA 2026 Exam Information
 
@@ -316,7 +316,7 @@ Yes, Neram Classes offers both online and offline coaching options for Bangalore
 
 ### What is the fee structure for NATA coaching at Neram Classes?
 
-Our courses range from Rs. 15,000 for the crash course to Rs. 75,000 for premium 1-on-1 coaching. The year-long comprehensive course starts at Rs. 35,000. We also offer flexible payment plans to make quality coaching accessible to all students.
+Our courses range from Rs. 15,000 for the 3-month crash course to Rs. 35,000 for the 2-year program. The 1-year program starts at Rs. 25,000 (single payment). We also offer flexible payment options.
 
 ### How many students from Bangalore have successfully cleared NATA through Neram Classes?
 
@@ -404,17 +404,17 @@ Beyond regular classes, each student is assigned a personal mentor who conducts 
 
 ## Course Options for Dubai Students
 
-### Year-Long Comprehensive Course - Starting at Rs. 35,000
+### 1-Year Program - Starting at Rs. 25,000
 
-This flagship program provides complete NATA preparation over 10-12 months. It includes daily live classes, weekly mock tests, comprehensive drawing portfolio development, and full syllabus coverage. The year-long course is recommended for students beginning preparation in Class 11 or early Class 12.
+This flagship program provides complete NATA preparation over 12 months. It includes daily live classes, weekly mock tests, comprehensive drawing portfolio development, and full syllabus coverage. Pay ₹25,000 as single payment or ₹30,000 in installments. Recommended for students beginning preparation in Class 11 or early Class 12.
 
 ### Crash Course - Starting at Rs. 15,000
 
 Designed for students who need intensive, focused preparation in 2-3 months, the crash course covers all essential NATA topics in an accelerated format. It includes daily classes, practice tests, and targeted skill development. This option works well for students who have some prior preparation or a strong foundation in mathematics and drawing.
 
-### Premium 1-on-1 Coaching - Starting at Rs. 75,000
+### 2-Year Program - Starting at Rs. 30,000
 
-The premium tier offers completely personalized instruction with a dedicated faculty member. Every session is customized to the student's needs, with flexible scheduling that works perfectly for Dubai time zones. This is ideal for students targeting top ranks or those who need specialized attention in particular areas.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation + advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay ₹30,000 as single payment or ₹35,000 in installments.
 
 ## NATA 2026 Exam Information for Dubai Students
 
@@ -560,17 +560,17 @@ Each Doha student is paired with a personal mentor who provides regular one-on-o
 
 ## Course Options for Doha Students
 
-### Year-Long Comprehensive Course - Starting at Rs. 35,000
+### 1-Year Program - Starting at Rs. 25,000
 
-The year-long course provides thorough, systematic NATA preparation over 10-12 months. It includes daily live classes timed for the Gulf timezone, weekly mock tests, comprehensive drawing portfolio development, mathematics and aptitude modules, and regular progress assessments. This is our most recommended option for students beginning preparation in Class 11.
+The 1-year program provides thorough, systematic NATA preparation over 12 months. It includes daily live classes timed for the Gulf timezone, weekly mock tests, comprehensive drawing portfolio development, mathematics and aptitude modules, and regular progress assessments. Pay ₹25,000 as single payment or ₹30,000 in installments. Most recommended for students beginning preparation in Class 11.
 
 ### Crash Course - Starting at Rs. 15,000
 
 For students who need focused, intensive preparation in a 2-3 month window, the crash course covers all essential NATA components in an accelerated format. With daily sessions, concentrated practice, and rapid skill building, this option is suitable for students with some existing preparation who need to sharpen their skills before the exam.
 
-### Premium 1-on-1 Coaching - Starting at Rs. 75,000
+### 2-Year Program - Starting at Rs. 30,000
 
-The premium tier provides a fully personalized coaching experience with a dedicated faculty member. Sessions are scheduled entirely at the student's convenience in the Qatar timezone. Every aspect of preparation is customized, from the curriculum sequence to the practice assignments and mock test frequency. This option consistently produces our highest-scoring students.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation + advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay ₹30,000 as single payment or ₹35,000 in installments.
 
 ## NATA 2026 Exam Information for Doha Students
 
@@ -710,17 +710,17 @@ Beyond group instruction, each student receives dedicated one-on-one time with a
 
 ## Course Options for Muscat Students
 
-### Year-Long Comprehensive Course - Starting at Rs. 35,000
+### 1-Year Program - Starting at Rs. 25,000
 
-Our most thorough offering, this 10-12 month program provides systematic preparation across all NATA sections. Daily live classes, weekly mock tests, progressive drawing portfolio development, complete syllabus coverage, and regular mentoring sessions are all included. Recommended for students starting preparation in Class 11 or early Class 12.
+Our most thorough offering, this 12-month program provides systematic preparation across all NATA sections. Daily live classes, weekly mock tests, progressive drawing portfolio development, complete syllabus coverage, and regular mentoring sessions are all included. Pay ₹25,000 as single payment or ₹30,000 in installments. Recommended for students starting preparation in Class 11 or early Class 12.
 
 ### Crash Course - Starting at Rs. 15,000
 
 Intensive 2-3 month preparation covering all essential NATA topics at an accelerated pace. Daily sessions focus on high-impact topics and skills, with frequent practice tests and rapid feedback cycles. Ideal for students with existing foundational knowledge who need focused exam preparation.
 
-### Premium 1-on-1 Coaching - Starting at Rs. 75,000
+### 2-Year Program - Starting at Rs. 30,000
 
-Complete personalization with a dedicated faculty member who designs every session around the individual student's needs and schedule. Flexible timing that works perfectly for Muscat students, custom curriculum pacing, unlimited drawing feedback, and intensive exam preparation. This tier consistently produces top-percentile scores.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation + advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay ₹30,000 as single payment or ₹35,000 in installments.
 
 ## NATA 2026 Exam Information for Muscat Students
 
@@ -861,17 +861,17 @@ Each student receives dedicated one-on-one mentoring sessions with a senior facu
 
 ## Course Options for Riyadh Students
 
-### Year-Long Comprehensive Course - Starting at Rs. 35,000
+### 1-Year Program - Starting at Rs. 25,000
 
-The most thorough preparation option, this 10-12 month course covers every aspect of NATA in depth. Daily live classes at Gulf timezone, weekly mock tests, comprehensive drawing portfolio development, complete mathematics and aptitude preparation, and regular mentoring are all included. Best suited for students beginning in Class 11 or early Class 12.
+The most thorough preparation option, this 12-month course covers every aspect of NATA in depth. Daily live classes at Gulf timezone, weekly mock tests, comprehensive drawing portfolio development, complete mathematics and aptitude preparation, and regular mentoring are all included. Pay ₹25,000 as single payment or ₹30,000 in installments. Best suited for students beginning in Class 11 or early Class 12.
 
 ### Crash Course - Starting at Rs. 15,000
 
 A focused 2-3 month intensive that covers all NATA essentials at an accelerated pace. Daily sessions concentrate on the highest-impact topics and skills, with frequent practice tests and rapid feedback. Designed for students with existing foundational preparation who need targeted exam readiness.
 
-### Premium 1-on-1 Coaching - Starting at Rs. 75,000
+### 2-Year Program - Starting at Rs. 30,000
 
-The ultimate personalized experience: a dedicated faculty member designs every session around the individual student. Completely flexible scheduling for Saudi timezone, custom curriculum progression, unlimited drawing review, and intensive preparation targeting top percentile scores. This option is ideal for students aiming for the highest-ranked architecture programs.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation + advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay ₹30,000 as single payment or ₹35,000 in installments.
 
 ## NATA 2026 Exam Information for Riyadh Students
 
@@ -1013,17 +1013,17 @@ Every student receives periodic one-on-one mentoring with a senior faculty membe
 
 ## Course Options for Kuwait City Students
 
-### Year-Long Comprehensive Course - Starting at Rs. 35,000
+### 1-Year Program - Starting at Rs. 25,000
 
-Complete NATA preparation spanning 10-12 months, including daily live classes at Gulf timezone, weekly mock tests, progressive drawing portfolio development, thorough mathematics and aptitude coverage, and regular mentoring. This is the recommended option for students starting preparation in Class 11 or the beginning of Class 12.
+Complete NATA preparation spanning 12 months, including daily live classes at Gulf timezone, weekly mock tests, progressive drawing portfolio development, thorough mathematics and aptitude coverage, and regular mentoring. Pay ₹25,000 as single payment or ₹30,000 in installments. Recommended for students starting preparation in Class 11 or the beginning of Class 12.
 
 ### Crash Course - Starting at Rs. 15,000
 
 Intensive 2-3 month preparation focused on essential NATA topics and skills. Daily sessions, frequent practice tests, and rapid skill development in drawing, mathematics, and aptitude. Suited for students with existing foundational preparation who need focused, exam-ready training.
 
-### Premium 1-on-1 Coaching - Starting at Rs. 75,000
+### 2-Year Program - Starting at Rs. 30,000
 
-The most personalized option: a dedicated faculty member crafts every session exclusively for the student. Completely flexible Kuwait timezone scheduling, custom curriculum pacing, unlimited drawing feedback, and targeted preparation for top-percentile performance. Ideal for students targeting India's most competitive architecture programs.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation + advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay ₹30,000 as single payment or ₹35,000 in installments.
 
 ## NATA 2026 Exam Information for Kuwait City Students
 

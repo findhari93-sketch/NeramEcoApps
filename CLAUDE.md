@@ -45,15 +45,28 @@ You are the **Project Architect** — the orchestrator of an 8-agent team. When 
 | Nexus | **YES** | Teachers do quick reviews on phone |
 | Admin | No | Staff always on desktop |
 
+### Required Skills (Claude Code Skills)
+
+When building or modifying UI/UX, **always use the `ui-ux-pro-max` skill** (`/ui-ux-pro-max`) for:
+- Designing screens, components, layouts, and interactions
+- Choosing color palettes, typography, and spacing
+- Reviewing and improving existing UI for usability and visual quality
+- Aim for Amazon-level polished, functional, and intuitive interfaces
+
+When writing or running E2E tests, **always use Playwright** via `pnpm test:e2e`:
+- Write tests in `tests/e2e/` using Playwright
+- Run after every feature implementation to verify end-to-end functionality
+- Test mobile viewports (375px, 768px) and desktop (1280px)
+
 ### Feature Implementation Order
 ```
 1. Architect (You)  → Schema, types, shared code in packages/
-2. UX Designer      → Mobile-first design specs
+2. ui-ux-pro-max    → Mobile-first design (use /ui-ux-pro-max skill)
 3. SEO/AEO Expert   → Meta requirements, structured data
 4. App Agents       → Implement features (in parallel)
-5. UX Designer      → Visual review at mobile viewports
+5. ui-ux-pro-max    → Visual review at mobile viewports
 6. SEO/AEO Expert   → Validate SEO implementation
-7. QA Agent         → E2E tests + mobile viewport tests
+7. Playwright E2E   → E2E tests + mobile viewport tests (pnpm test:e2e)
 ```
 
 ### Execution Modes
@@ -275,13 +288,15 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 ## Post-Implementation E2E Verification (REQUIRED)
 
 > **After implementing ANY feature, run relevant Playwright E2E tests to verify the implementation works end-to-end.**
+> **All frontend UI/UX work MUST use the `/ui-ux-pro-max` skill for design quality — aim for Amazon-level polished interfaces.**
 
 ### Rules
 1. After implementing a feature, run `pnpm test:e2e` (or the relevant project) to verify
 2. If tests fail, fix the issues before considering the implementation complete
-3. If no E2E tests exist for the feature, create them in `tests/e2e/`
+3. If no E2E tests exist for the feature, create them in `tests/e2e/` using Playwright
 4. Check the browser console for errors during E2E runs - zero console errors is the target
 5. Cross-app features (SSO, auth) must have integration tests (`tests/e2e/*integration*.spec.ts`)
+6. All UI changes should be reviewed using the `/ui-ux-pro-max` skill for design quality
 
 ### Test File Naming Convention
 | App/Feature | Pattern | Project |

@@ -167,48 +167,62 @@ export async function POST(
     const sharepointUrl = body.sharepoint_video_url || item.sharepoint_video_url;
     const itemTitle = body.title || item.title;
 
-    if (!sharepointUrl) {
-      return NextResponse.json(
-        { error: 'No SharePoint video URL configured for this item' },
-        { status: 400 }
-      );
-    }
+    let transcript: { start: number; end: number; text: string }[] = [];
 
-    // Fetch transcript from SharePoint
-    let vttText: string;
-    try {
-      vttText = await fetchTranscript(sharepointUrl, msToken);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      if (message === 'NO_ACCESS') {
+    // Step 0: If client provided VTT content directly (file upload), use it
+    if (body.vtt_content && typeof body.vtt_content === 'string') {
+      transcript = parseVTT(body.vtt_content);
+      if (transcript.length === 0) {
         return NextResponse.json(
-          { error: 'You do not have access to this video in SharePoint. Please ensure you have view permissions.' },
-          { status: 403 }
-        );
-      }
-      if (message === 'VIDEO_NOT_FOUND') {
-        return NextResponse.json(
-          { error: 'Video not found in SharePoint. The link may have expired or been moved.' },
-          { status: 404 }
-        );
-      }
-      if (message === 'NO_TRANSCRIPT') {
-        return NextResponse.json(
-          { error: 'no_transcript', message: 'No transcript found for this video. Make sure the video has auto-generated or manually added captions in SharePoint.' },
+          { error: 'no_transcript', message: 'Uploaded VTT file was empty or could not be parsed.' },
           { status: 200 }
         );
       }
-      throw err;
     }
 
-    // Parse VTT transcript
-    const transcript = parseVTT(vttText);
-
+    // Step 1: If no VTT upload, try SharePoint
     if (transcript.length === 0) {
-      return NextResponse.json(
-        { error: 'no_transcript', message: 'Transcript file was empty or could not be parsed.' },
-        { status: 200 }
-      );
+      if (!sharepointUrl) {
+        return NextResponse.json(
+          { error: 'no_transcript', message: 'No transcript found. Upload a .vtt file or ensure the video has captions in SharePoint.' },
+          { status: 200 }
+        );
+      }
+
+      let vttText: string;
+      try {
+        vttText = await fetchTranscript(sharepointUrl, msToken);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        if (message === 'NO_ACCESS') {
+          return NextResponse.json(
+            { error: 'You do not have access to this video in SharePoint. Please ensure you have view permissions.' },
+            { status: 403 }
+          );
+        }
+        if (message === 'VIDEO_NOT_FOUND') {
+          return NextResponse.json(
+            { error: 'Video not found in SharePoint. The link may have expired or been moved.' },
+            { status: 404 }
+          );
+        }
+        if (message === 'NO_TRANSCRIPT') {
+          return NextResponse.json(
+            { error: 'no_transcript', message: 'Could not fetch transcript automatically. Download the .vtt file from SharePoint and upload it using the upload button.' },
+            { status: 200 }
+          );
+        }
+        throw err;
+      }
+
+      transcript = parseVTT(vttText);
+
+      if (transcript.length === 0) {
+        return NextResponse.json(
+          { error: 'no_transcript', message: 'Transcript file was empty or could not be parsed.' },
+          { status: 200 }
+        );
+      }
     }
 
     // Generate sections and questions via AI
@@ -226,6 +240,13 @@ export async function POST(
 
     if (message.includes('GEMINI_API_KEY')) {
       return NextResponse.json({ error: 'AI service not configured' }, { status: 503 });
+    }
+
+    if (message.includes('429') || message.includes('Too Many Requests') || message.includes('quota') || message.includes('RESOURCE_EXHAUSTED')) {
+      return NextResponse.json(
+        { error: 'AI rate limit reached. Please wait 30 seconds and try again, or upload a JSON file with sections instead.' },
+        { status: 429 }
+      );
     }
 
     return NextResponse.json({ error: message }, { status: 500 });

@@ -8,12 +8,16 @@ import {
   IconButton,
   Button,
   Skeleton,
+  Tabs,
+  Tab,
   alpha,
   useTheme,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
+import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import VideoPlayer from '@/components/foundation/VideoPlayer';
 import SharePointPlayer from '@/components/foundation/SharePointPlayer';
@@ -25,17 +29,23 @@ import NoteEditor from '@/components/foundation/NoteEditor';
 import ChapterFeedback from '@/components/foundation/ChapterFeedback';
 import FoundationProgressBar from '@/components/foundation/ProgressBar';
 import Transcript from '@/components/foundation/Transcript';
+import PDFReader from '@/components/reader/PDFReader';
+import AudioPlayer from '@/components/reader/AudioPlayer';
 import type {
   NexusFoundationChapter,
   NexusFoundationSectionWithQuiz,
   NexusFoundationStudentProgress,
+  NexusAudioTrack,
 } from '@neram/database/types';
 
 interface ChapterData {
   chapter: NexusFoundationChapter;
   sections: NexusFoundationSectionWithQuiz[];
   progress: NexusFoundationStudentProgress | null;
+  audio_tracks?: NexusAudioTrack[];
 }
+
+type ContentTab = 'watch' | 'read';
 
 interface FoundationLearningContentProps {
   chapterId: string;
@@ -57,6 +67,7 @@ export default function FoundationLearningContent({
   const [quizOpen, setQuizOpen] = useState(false);
   const [quizSectionIndex, setQuizSectionIndex] = useState(0);
   const [allQuizMode, setAllQuizMode] = useState(false);
+  const [contentTab, setContentTab] = useState<ContentTab>('watch');
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
@@ -78,6 +89,16 @@ export default function FoundationLearningContent({
       if (res.ok) {
         const chapterData = await res.json();
         setData(chapterData);
+
+        // Set default content tab based on available content
+        if (!silent) {
+          const hasVideo = chapterData.chapter.video_source && (
+            chapterData.chapter.youtube_video_id || chapterData.chapter.sharepoint_video_url
+          );
+          if (!hasVideo && chapterData.chapter.pdf_url) {
+            setContentTab('read');
+          }
+        }
 
         // Only update section index on initial load, not silent refreshes
         if (!silent) {
@@ -394,9 +415,14 @@ export default function FoundationLearningContent({
     );
   }
 
-  const { chapter, sections, progress } = data;
+  const { chapter, sections, progress, audio_tracks } = data;
   const currentSection = sections[currentSectionIndex];
   const completedSections = sections.filter(s => s.quiz_attempt?.passed).length;
+
+  const hasVideo = chapter.video_source && (chapter.youtube_video_id || chapter.sharepoint_video_url);
+  const hasPdf = !!chapter.pdf_url;
+  const hasAudio = (audio_tracks?.length ?? 0) > 0;
+  const showTabs = hasVideo && hasPdf; // Only show tabs if both available
 
   return (
     <Box sx={{ mx: { xs: -2, sm: 0 } }}>
@@ -427,56 +453,121 @@ export default function FoundationLearningContent({
         </Box>
       </Box>
 
-      {/* Placeholder for Coursera-style video shrink */}
-      <Box
-        ref={videoPlaceholderRef}
-        sx={{
-          position: 'relative',
-          width: '100%',
-          height: 0,
-          paddingTop: '56.25%',
-          borderRadius: { xs: 0, sm: 2 },
-          bgcolor: '#000',
-          overflow: 'visible',
-        }}
-      >
-        <Box
-          ref={videoWrapperRef}
+      {/* Content tabs (Watch / Read) — only show if both video and PDF available */}
+      {showTabs && (
+        <Tabs
+          value={contentTab}
+          onChange={(_, v) => setContentTab(v)}
           sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
+            mb: 1,
+            px: { xs: 2, sm: 0 },
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              minHeight: 40,
+            },
+          }}
+        >
+          <Tab
+            value="watch"
+            label="Watch"
+            icon={<OndemandVideoOutlinedIcon sx={{ fontSize: '1rem' }} />}
+            iconPosition="start"
+          />
+          <Tab
+            value="read"
+            label="Read"
+            icon={<MenuBookOutlinedIcon sx={{ fontSize: '1rem' }} />}
+            iconPosition="start"
+          />
+        </Tabs>
+      )}
+
+      {/* Video Player (Watch tab or only content) */}
+      {((contentTab === 'watch' && hasVideo) || (!hasPdf && hasVideo)) && (
+        <Box
+          ref={videoPlaceholderRef}
+          sx={{
+            position: 'relative',
             width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-            bgcolor: '#000',
+            height: 0,
+            paddingTop: '56.25%',
             borderRadius: { xs: 0, sm: 2 },
-            zIndex: 10,
+            bgcolor: '#000',
+            overflow: 'visible',
           }}
         >
           <Box
-            ref={videoInnerRef}
+            ref={videoWrapperRef}
             sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
               width: '100%',
               height: '100%',
-              transformOrigin: 'top center',
+              overflow: 'hidden',
+              bgcolor: '#000',
+              borderRadius: { xs: 0, sm: 2 },
+              zIndex: 10,
             }}
           >
-            {chapter.video_source === 'sharepoint' && chapter.sharepoint_video_url ? (
-              <SharePointPlayer videoUrl={chapter.sharepoint_video_url} />
-            ) : (
-              <VideoPlayer
-                videoId={chapter.youtube_video_id!}
-                sections={sections}
-                currentSectionIndex={currentSectionIndex}
-                resumePosition={progress?.last_video_position_seconds}
-                onSectionEnd={handleSectionEnd}
-                onTimeUpdate={handleTimeUpdate}
-              />
-            )}
+            <Box
+              ref={videoInnerRef}
+              sx={{
+                width: '100%',
+                height: '100%',
+                transformOrigin: 'top center',
+              }}
+            >
+              {chapter.video_source === 'sharepoint' && chapter.sharepoint_video_url ? (
+                <SharePointPlayer videoUrl={chapter.sharepoint_video_url} />
+              ) : (
+                <VideoPlayer
+                  videoId={chapter.youtube_video_id!}
+                  sections={sections}
+                  currentSectionIndex={currentSectionIndex}
+                  resumePosition={progress?.last_video_position_seconds}
+                  onSectionEnd={handleSectionEnd}
+                  onTimeUpdate={handleTimeUpdate}
+                />
+              )}
+            </Box>
           </Box>
         </Box>
-      </Box>
+      )}
+
+      {/* PDF Reader (Read tab or only content) */}
+      {((contentTab === 'read' && hasPdf) || (!hasVideo && hasPdf)) && (
+        <Box
+          sx={{
+            height: { xs: 'calc(100vh - 200px)', sm: 'calc(100vh - 180px)' },
+            borderRadius: { xs: 0, sm: 2 },
+            overflow: 'hidden',
+            border: `1px solid ${theme.palette.divider}`,
+          }}
+        >
+          <PDFReader
+            pdfUrl={chapter.pdf_url!}
+            initialPage={progress?.last_pdf_page || 1}
+            totalPages={chapter.pdf_page_count || undefined}
+            onPageChange={(page) => {
+              // Save PDF progress
+              getToken().then((token) => {
+                if (!token) return;
+                fetch(`/api/foundation/chapters/${chapterId}/progress`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ last_pdf_page: page }),
+                });
+              });
+            }}
+          />
+        </Box>
+      )}
 
       {/* Content below video */}
       <Box sx={{ px: { xs: 2, sm: 0 }, mt: 2 }}>
@@ -596,6 +687,37 @@ export default function FoundationLearningContent({
           onClose={() => setAllQuizMode(false)}
           onSubmitSection={handleAllQuizSubmitSection}
           onComplete={handleAllQuizComplete}
+        />
+      )}
+
+      {/* Audio Player — persistent bar at bottom when audio tracks exist */}
+      {hasAudio && audio_tracks && (
+        <AudioPlayer
+          tracks={audio_tracks.map((t) => ({
+            id: t.id,
+            language: t.language,
+            language_label: t.language_label,
+            audio_url: t.audio_url,
+            audio_duration_seconds: t.audio_duration_seconds,
+          }))}
+          initialPosition={progress?.last_audio_position_seconds || 0}
+          initialLanguage={progress?.last_audio_language || 'en'}
+          onPositionChange={(seconds, language) => {
+            getToken().then((token) => {
+              if (!token) return;
+              fetch(`/api/foundation/chapters/${chapterId}/progress`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  last_audio_position_seconds: seconds,
+                  last_audio_language: language,
+                }),
+              });
+            });
+          }}
         />
       )}
     </Box>

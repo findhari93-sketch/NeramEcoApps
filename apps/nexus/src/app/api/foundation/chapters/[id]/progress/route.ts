@@ -36,6 +36,15 @@ export async function POST(
     if (body.last_video_position_seconds !== undefined) {
       updateData.last_video_position_seconds = body.last_video_position_seconds;
     }
+    if (body.last_pdf_page !== undefined) {
+      updateData.last_pdf_page = body.last_pdf_page;
+    }
+    if (body.last_audio_position_seconds !== undefined) {
+      updateData.last_audio_position_seconds = body.last_audio_position_seconds;
+    }
+    if (body.last_audio_language !== undefined) {
+      updateData.last_audio_language = body.last_audio_language;
+    }
 
     // If starting a chapter, set started_at
     if (body.status === 'in_progress') {

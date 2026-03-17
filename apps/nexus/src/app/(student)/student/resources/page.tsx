@@ -31,11 +31,11 @@ interface Resource {
 }
 
 const typeIcons: Record<string, React.ReactNode> = {
-  youtube: <PlayCircleOutlinedIcon sx={{ fontSize: 20, color: '#FF0000' }} />,
-  pdf: <PictureAsPdfOutlinedIcon sx={{ fontSize: 20, color: '#E53935' }} />,
-  onenote: <NoteOutlinedIcon sx={{ fontSize: 20, color: '#7719AA' }} />,
-  image: <ImageOutlinedIcon sx={{ fontSize: 20, color: '#1976D2' }} />,
-  link: <LinkOutlinedIcon sx={{ fontSize: 20, color: '#666' }} />,
+  youtube: <PlayCircleOutlinedIcon sx={{ fontSize: 20, color: '#DC2626' }} />,
+  pdf: <PictureAsPdfOutlinedIcon sx={{ fontSize: 20, color: '#D97706' }} />,
+  onenote: <NoteOutlinedIcon sx={{ fontSize: 20, color: '#7C3AED' }} />,
+  image: <ImageOutlinedIcon sx={{ fontSize: 20, color: '#4F46E5' }} />,
+  link: <LinkOutlinedIcon sx={{ fontSize: 20, color: '#78716C' }} />,
 };
 
 export default function StudentResources() {

@@ -68,12 +68,12 @@ const emptyForm: ItemFormData = {
 
 // Category icon + color mapping for visual differentiation
 const categoryConfig: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  mathematics: { icon: <CalculateOutlinedIcon />, color: '#1976D2', label: 'Mathematics' },
-  aptitude: { icon: <PsychologyOutlinedIcon />, color: '#E65100', label: 'Aptitude' },
-  drawing: { icon: <BrushOutlinedIcon />, color: '#7B1FA2', label: 'Drawing' },
-  architecture_awareness: { icon: <AccountBalanceOutlinedIcon />, color: '#00695C', label: 'Architecture' },
-  general: { icon: <FolderOutlinedIcon />, color: '#546E7A', label: 'General' },
-  uncategorized: { icon: <FolderOutlinedIcon />, color: '#78909C', label: 'Other' },
+  mathematics: { icon: <CalculateOutlinedIcon />, color: '#4F46E5', label: 'Mathematics' },
+  aptitude: { icon: <PsychologyOutlinedIcon />, color: '#D97706', label: 'Aptitude' },
+  drawing: { icon: <BrushOutlinedIcon />, color: '#7C3AED', label: 'Drawing' },
+  architecture_awareness: { icon: <AccountBalanceOutlinedIcon />, color: '#059669', label: 'Architecture' },
+  general: { icon: <FolderOutlinedIcon />, color: '#78716C', label: 'General' },
+  uncategorized: { icon: <FolderOutlinedIcon />, color: '#78716C', label: 'Other' },
 };
 
 const getCategoryConfig = (category: string) =>

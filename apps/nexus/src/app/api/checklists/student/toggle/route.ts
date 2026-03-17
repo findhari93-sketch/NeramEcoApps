@@ -4,14 +4,15 @@ import { getSupabaseAdminClient } from '@neram/database';
 import {
   toggleEntryProgress,
   toggleModuleItemProgress,
+  updateEntryStatus,
+  updateModuleItemStatus,
 } from '@neram/database/queries/nexus';
 
 /**
  * POST /api/checklists/student/toggle
  *
- * Toggle completion for a checklist entry (simple_item) or module item.
- * Body: { entry_id, is_completed } for simple items
- *    or { module_item_id, is_completed } for module items
+ * Status-based: { entry_id | module_item_id, action: 'start' | 'complete' }
+ * Legacy compat: { entry_id | module_item_id, is_completed: boolean }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -29,28 +30,42 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { entry_id, module_item_id, is_completed } = body;
+    const { entry_id, module_item_id, action, is_completed } = body;
 
-    if (typeof is_completed !== 'boolean') {
-      return NextResponse.json({ error: 'is_completed (boolean) is required' }, { status: 400 });
+    // New status-based flow
+    if (action === 'start' || action === 'complete') {
+      if (entry_id) {
+        const result = await updateEntryStatus(user.id, entry_id, action);
+        return NextResponse.json({ progress: result });
+      }
+      if (module_item_id) {
+        const result = await updateModuleItemStatus(user.id, module_item_id, action);
+        return NextResponse.json({ progress: result });
+      }
+      return NextResponse.json(
+        { error: 'Either entry_id or module_item_id is required' },
+        { status: 400 }
+      );
     }
 
-    if (entry_id) {
-      const result = await toggleEntryProgress(user.id, entry_id, is_completed);
-      return NextResponse.json({ progress: result });
-    }
-
-    if (module_item_id) {
-      const result = await toggleModuleItemProgress(user.id, module_item_id, is_completed);
-      return NextResponse.json({ progress: result });
+    // Legacy boolean toggle (backward compat)
+    if (typeof is_completed === 'boolean') {
+      if (entry_id) {
+        const result = await toggleEntryProgress(user.id, entry_id, is_completed);
+        return NextResponse.json({ progress: result });
+      }
+      if (module_item_id) {
+        const result = await toggleModuleItemProgress(user.id, module_item_id, is_completed);
+        return NextResponse.json({ progress: result });
+      }
     }
 
     return NextResponse.json(
-      { error: 'Either entry_id or module_item_id is required' },
+      { error: 'action (start|complete) or is_completed (boolean) is required' },
       { status: 400 }
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to toggle progress';
+    const message = err instanceof Error ? err.message : 'Failed to update progress';
     console.error('Toggle progress error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

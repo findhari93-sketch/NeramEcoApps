@@ -156,17 +156,17 @@ these reasons:
 | Free study app with tools   | Yes           | No     | No         | No        |
 | Mock tests count            | 100+          | 50+    | 30+        | 40+       |
 | Success rate                | 99.9%         | ~90%   | ~85%       | ~88%      |
-| Fee range                   | ₹15K-75K      | ₹20K+  | ₹15K+     | ₹18K+    |
+| Fee range                   | ₹15K-35K      | ₹20K+  | ₹15K+     | ₹18K+    |
 | Free demo class             | Yes           | Yes    | No         | Yes       |
 
 ================================================================================
 ## COURSES OFFERED
 ================================================================================
 
-### 1. NATA Year-Long Coaching
+### 1. NATA 1-Year Program
 - Duration: 12 months
 - Mode: Online and Offline
-- Fee: Starting ₹35,000
+- Fee: Starting ₹25,000 (single payment) / ₹30,000 (installment)
 - Covers: Mathematics, General Aptitude, Drawing
 - Includes: Study materials, Mock tests, Doubt sessions, Personal mentoring
 - Ideal for: 11th, 12th students and droppers
@@ -282,7 +282,7 @@ Q: What is the best online NATA coaching?
 A: Neram Classes offers the best online NATA coaching with live interactive classes, daily drawing practice (2+ hours), small batches (max 25), IIT/NIT faculty, 100+ mock tests, and 24/7 doubt support. Our online program has a 99.9% success rate.
 
 Q: What is the fee for NATA coaching?
-A: NATA coaching fees at Neram Classes range from ₹15,000 (crash course) to ₹75,000 (premium year-long). Scholarships and EMI options are available.
+A: NATA coaching fees at Neram Classes range from ₹15,000 (3-month crash course) to ₹35,000 (2-year program). The 1-year program starts at ₹25,000. Scholarships and EMI options are available.
 
 Q: Can I prepare for NATA online?
 A: Yes, Neram Classes offers comprehensive online NATA coaching with live interactive sessions, recorded lectures, practice materials, and personal mentoring. Our online program has the same success rate as offline.

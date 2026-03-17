@@ -41,6 +41,7 @@ interface Checklist {
   title: string;
   description: string | null;
   entry_count: number;
+  is_published: boolean;
   classrooms: ClassroomRef[];
   created_at: string;
 }
@@ -53,10 +54,10 @@ interface CreateForm {
 const emptyForm: CreateForm = { title: '', description: '' };
 
 const classroomColors: Record<string, string> = {
-  nata: '#1976D2',
-  jee: '#7B1FA2',
-  revit: '#00897B',
-  other: '#546E7A',
+  nata: '#4F46E5',   // Indigo (info)
+  jee: '#7C3AED',    // Purple (primary)
+  revit: '#059669',  // Green (secondary)
+  other: '#78716C',  // Stone (neutral)
 };
 
 // Mobile bottom-sheet transition
@@ -237,7 +238,26 @@ export default function ChecklistsPage() {
                   )}
                 </Box>
 
-                {/* Entry count badge */}
+                {/* Draft/Published badge */}
+                <Chip
+                  label={checklist.is_published ? "Published" : "Draft"}
+                  size="small"
+                  sx={{
+                    height: 24,
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    borderRadius: 1.5,
+                    flexShrink: 0,
+                    bgcolor: checklist.is_published
+                      ? alpha(theme.palette.success.main, 0.1)
+                      : alpha(theme.palette.warning.main, 0.1),
+                    color: checklist.is_published
+                      ? "success.main"
+                      : "warning.main",
+                  }}
+                />
+
+              {/* Entry count badge */}
                 <Chip
                   icon={<ViewModuleOutlinedIcon sx={{ fontSize: '0.85rem !important' }} />}
                   label={`${checklist.entry_count} item${checklist.entry_count !== 1 ? 's' : ''}`}

@@ -231,6 +231,7 @@ export async function getChecklistsByClassroomV2(
     `)
     .in('id', checklistIds)
     .eq('is_active', true)
+    .eq('is_published', true)
     .order('sort_order', { referencedTable: 'nexus_checklist_entries', ascending: true });
   if (cErr) throw cErr;
 
@@ -325,6 +326,106 @@ export async function toggleModuleItemProgress(
         module_item_id: moduleItemId,
         is_completed: isCompleted,
         completed_at: isCompleted ? new Date().toISOString() : null,
+      },
+      { onConflict: 'student_id,module_item_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ============================================
+// STATUS-BASED PROGRESS (start / complete)
+// ============================================
+
+export async function updateEntryStatus(
+  studentId: string,
+  entryId: string,
+  action: 'start' | 'complete',
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  if (action === 'start') {
+    const { data, error } = await (supabase as any)
+      .from('nexus_student_entry_progress')
+      .upsert(
+        {
+          student_id: studentId,
+          entry_id: entryId,
+          status: 'in_progress',
+          started_at: now,
+          is_completed: false,
+          completed_at: null,
+        },
+        { onConflict: 'student_id,entry_id' }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  // action === 'complete'
+  const { data, error } = await (supabase as any)
+    .from('nexus_student_entry_progress')
+    .upsert(
+      {
+        student_id: studentId,
+        entry_id: entryId,
+        status: 'completed',
+        is_completed: true,
+        completed_at: now,
+      },
+      { onConflict: 'student_id,entry_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateModuleItemStatus(
+  studentId: string,
+  moduleItemId: string,
+  action: 'start' | 'complete',
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  if (action === 'start') {
+    const { data, error } = await (supabase as any)
+      .from('nexus_student_module_item_progress')
+      .upsert(
+        {
+          student_id: studentId,
+          module_item_id: moduleItemId,
+          status: 'in_progress',
+          started_at: now,
+          is_completed: false,
+          completed_at: null,
+        },
+        { onConflict: 'student_id,module_item_id' }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  // action === 'complete'
+  const { data, error } = await (supabase as any)
+    .from('nexus_student_module_item_progress')
+    .upsert(
+      {
+        student_id: studentId,
+        module_item_id: moduleItemId,
+        status: 'completed',
+        is_completed: true,
+        completed_at: now,
       },
       { onConflict: 'student_id,module_item_id' }
     )

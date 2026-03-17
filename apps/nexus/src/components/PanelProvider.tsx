@@ -79,6 +79,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
+      { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
     bottomNavItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },

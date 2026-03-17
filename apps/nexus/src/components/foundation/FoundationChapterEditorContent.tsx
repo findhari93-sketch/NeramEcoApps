@@ -23,6 +23,9 @@ import {
   useTheme,
   ToggleButton,
   ToggleButtonGroup,
+  Snackbar,
+  Alert,
+  LinearProgress,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
@@ -34,12 +37,22 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
 import CloudOutlinedIcon from '@mui/icons-material/CloudOutlined';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { toEmbedUrl } from '@/components/foundation/SharePointPlayer';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
+import HeadphonesOutlinedIcon from '@mui/icons-material/HeadphonesOutlined';
+import AutoGeneratePreview from '@/components/modules/AutoGeneratePreview';
+import FileUploadZone from '@/components/foundation/FileUploadZone';
+import type { GeneratedSection } from '@/lib/ai-generate';
 import type {
   NexusFoundationChapter,
   NexusFoundationSection,
   NexusFoundationQuizQuestion,
+  NexusAudioTrack,
 } from '@neram/database/types';
 
 interface SectionWithCount extends NexusFoundationSection {
@@ -79,6 +92,9 @@ export default function FoundationChapterEditorContent({
     is_published: false,
   });
 
+  // PDF & Audio state
+  const [audioTracks, setAudioTracks] = useState<NexusAudioTrack[]>([]);
+
   // Section expansion & editing
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [sectionQuestions, setSectionQuestions] = useState<Record<string, NexusFoundationQuizQuestion[]>>({});
@@ -99,6 +115,16 @@ export default function FoundationChapterEditorContent({
     correct_option: 'a' as 'a' | 'b' | 'c' | 'd',
     explanation: '',
   });
+
+  // Auto-generate state
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoGenStatus, setAutoGenStatus] = useState('');
+  const [generatedSections, setGeneratedSections] = useState<GeneratedSection[]>([]);
+  const [autoGenPreviewOpen, setAutoGenPreviewOpen] = useState(false);
+  const [autoGenSnackbar, setAutoGenSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' }>({ open: false, message: '', severity: 'success' });
+  const [showJsonHelp, setShowJsonHelp] = useState(false);
+  const vttFileInputRef = useRef<HTMLInputElement>(null);
+  const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
   // YouTube preview
   const playerRef = useRef<any>(null);
@@ -135,6 +161,15 @@ export default function FoundationChapterEditorContent({
           chapter_number: data.chapter.chapter_number ?? 0,
           is_published: data.chapter.is_published || false,
         });
+
+        // Fetch audio tracks
+        const audioRes = await fetch(`/api/foundation/admin/chapters/${chapterId}/audio-tracks`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (audioRes.ok) {
+          const audioData = await audioRes.json();
+          setAudioTracks(audioData.tracks || []);
+        }
       }
     } catch (err) {
       console.error('Failed to load chapter:', err);
@@ -370,6 +405,134 @@ export default function FoundationChapterEditorContent({
     }
   };
 
+  const handleAutoGenerate = async (vttContent?: string) => {
+    setAutoGenerating(true);
+    setAutoGenStatus(vttContent ? 'Analyzing transcript & generating sections...' : 'Fetching transcript...');
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      setAutoGenStatus('Analyzing transcript & generating sections...');
+      const res = await fetch(`/api/foundation/admin/chapters/${chapterId}/auto-generate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sharepoint_video_url: form.sharepoint_video_url,
+          title: form.title,
+          ...(vttContent ? { vtt_content: vttContent } : {}),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAutoGenSnackbar({ open: true, message: data.error || 'Failed to auto-generate', severity: 'error' });
+        return;
+      }
+
+      if (data.error === 'no_transcript') {
+        setAutoGenSnackbar({ open: true, message: data.message || 'No transcript found. Try uploading a .vtt file instead.', severity: 'warning' });
+        return;
+      }
+
+      if (data.generated?.sections?.length > 0) {
+        setGeneratedSections(data.generated.sections);
+        setAutoGenPreviewOpen(true);
+      } else {
+        setAutoGenSnackbar({ open: true, message: 'AI could not generate sections from this transcript.', severity: 'warning' });
+      }
+    } catch (err) {
+      console.error('Auto-generate error:', err);
+      setAutoGenSnackbar({ open: true, message: 'Failed to auto-generate. Please try again.', severity: 'error' });
+    } finally {
+      setAutoGenerating(false);
+      setAutoGenStatus('');
+    }
+  };
+
+  const handleVttFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        handleAutoGenerate(content);
+      }
+    };
+    reader.readAsText(file);
+
+    // Reset file input so same file can be re-uploaded
+    e.target.value = '';
+  };
+
+  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (!content) return;
+
+      try {
+        const parsed = JSON.parse(content);
+        const sections = parsed.sections || parsed;
+
+        if (!Array.isArray(sections) || sections.length === 0) {
+          setAutoGenSnackbar({ open: true, message: 'Invalid JSON: expected a "sections" array with at least one section.', severity: 'error' });
+          return;
+        }
+
+        // Validate basic structure
+        for (const s of sections) {
+          if (!s.title || s.start_timestamp_seconds == null || s.end_timestamp_seconds == null) {
+            setAutoGenSnackbar({ open: true, message: 'Invalid JSON: each section needs title, start_timestamp_seconds, and end_timestamp_seconds.', severity: 'error' });
+            return;
+          }
+        }
+
+        setGeneratedSections(sections);
+        setAutoGenPreviewOpen(true);
+      } catch {
+        setAutoGenSnackbar({ open: true, message: 'Failed to parse JSON file. Make sure it is valid JSON.', severity: 'error' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleAcceptGenerated = async (accepted: GeneratedSection[]) => {
+    setAutoGenPreviewOpen(false);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/foundation/admin/chapters/${chapterId}/auto-generate/save`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections: accepted }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAutoGenSnackbar({
+          open: true,
+          message: `Added ${data.count} sections with questions successfully!`,
+          severity: 'success',
+        });
+        await fetchChapter();
+      } else {
+        const data = await res.json();
+        setAutoGenSnackbar({ open: true, message: data.error || 'Failed to save sections', severity: 'error' });
+      }
+    } catch (err) {
+      console.error('Failed to save generated sections:', err);
+      setAutoGenSnackbar({ open: true, message: 'Failed to save sections. Please try again.', severity: 'error' });
+    }
+  };
+
   if (loading) {
     return (
       <Box>
@@ -556,6 +719,317 @@ export default function FoundationChapterEditorContent({
           )}
         </Box>
       </Paper>
+
+      {/* PDF Upload Section */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <PictureAsPdfOutlinedIcon sx={{ fontSize: '1.1rem', color: 'error.main' }} />
+          <Typography variant="subtitle2" fontWeight={700}>
+            Reading Material (PDF)
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Optional — students can read alongside or instead of video
+          </Typography>
+        </Box>
+        <FileUploadZone
+          accept="application/pdf"
+          uploadUrl={`/api/foundation/admin/chapters/${chapterId}/upload-pdf`}
+          maxSizeMB={50}
+          getToken={getToken}
+          currentFileUrl={chapter.pdf_url}
+          currentFileLabel={
+            chapter.pdf_url
+              ? `PDF · ${chapter.pdf_page_count || '?'} pages`
+              : undefined
+          }
+          onUpload={(data) => {
+            setChapter((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    pdf_url: data.pdf_url as string,
+                    pdf_storage_path: data.pdf_storage_path as string,
+                    pdf_page_count: data.pdf_page_count as number | null,
+                  }
+                : prev
+            );
+          }}
+          onRemove={() => {
+            setChapter((prev) =>
+              prev
+                ? { ...prev, pdf_url: null, pdf_storage_path: null, pdf_page_count: null }
+                : prev
+            );
+          }}
+          label="Drop PDF file or click to upload"
+        />
+      </Paper>
+
+      {/* Audio Tracks Section */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <HeadphonesOutlinedIcon sx={{ fontSize: '1.1rem', color: 'info.main' }} />
+          <Typography variant="subtitle2" fontWeight={700}>
+            Audio / Audiobook
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Multiple languages supported
+          </Typography>
+        </Box>
+
+        {/* Existing audio tracks */}
+        {audioTracks.map((track) => (
+          <Box
+            key={track.id}
+            sx={{
+              mb: 1,
+              p: 1.5,
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
+              bgcolor: alpha(theme.palette.info.main, 0.02),
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <Chip
+                label={track.language_label}
+                size="small"
+                color="info"
+                variant="outlined"
+                sx={{ fontSize: '0.7rem', height: 22 }}
+              />
+              {track.audio_duration_seconds && (
+                <Typography variant="caption" color="text.secondary">
+                  {Math.floor(track.audio_duration_seconds / 60)}:{String(track.audio_duration_seconds % 60).padStart(2, '0')}
+                </Typography>
+              )}
+              <IconButton
+                size="small"
+                color="error"
+                sx={{ ml: 'auto' }}
+                onClick={async () => {
+                  const token = await getToken();
+                  if (!token) return;
+                  const res = await fetch(
+                    `/api/foundation/admin/chapters/${chapterId}/audio-tracks?trackId=${track.id}`,
+                    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+                  );
+                  if (res.ok) {
+                    setAudioTracks((prev) => prev.filter((t) => t.id !== track.id));
+                  }
+                }}
+              >
+                <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Box>
+            <audio controls src={track.audio_url} style={{ width: '100%', height: 32 }} />
+          </Box>
+        ))}
+
+        {/* Add new audio track */}
+        <FileUploadZone
+          accept="audio/mpeg,audio/mp4,audio/wav,audio/x-m4a,audio/webm,audio/aac,audio/ogg"
+          uploadUrl={`/api/foundation/admin/chapters/${chapterId}/audio-tracks`}
+          maxSizeMB={100}
+          getToken={getToken}
+          onUpload={(data) => {
+            const track = data.track as unknown as NexusAudioTrack;
+            if (track) setAudioTracks((prev) => [...prev, track]);
+          }}
+          onRemove={() => {}}
+          label="Drop audio file or click to upload (MP3, M4A, WAV)"
+          extraFormData={{
+            language: audioTracks.length === 0 ? 'en' : 'ta',
+            language_label: audioTracks.length === 0 ? 'English' : 'Tamil',
+          }}
+        />
+        {audioTracks.length > 0 && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Upload another file to add a different language version.
+          </Typography>
+        )}
+      </Paper>
+
+      {/* Auto-generate & upload buttons */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {form.video_source === 'sharepoint' && form.sharepoint_video_url && (
+            <>
+              <Button
+                variant="outlined"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={() => handleAutoGenerate()}
+                disabled={autoGenerating}
+                sx={{
+                  textTransform: 'none',
+                  borderStyle: 'dashed',
+                  flex: 1,
+                  py: 1.2,
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  minWidth: 200,
+                }}
+              >
+                {autoGenerating ? autoGenStatus : 'Auto-generate from Transcript'}
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<UploadFileOutlinedIcon />}
+                onClick={() => vttFileInputRef.current?.click()}
+                disabled={autoGenerating}
+                sx={{
+                  textTransform: 'none',
+                  borderStyle: 'dashed',
+                  py: 1.2,
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Upload .vtt
+              </Button>
+            </>
+          )}
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<UploadFileOutlinedIcon />}
+            onClick={() => jsonFileInputRef.current?.click()}
+            disabled={autoGenerating}
+            sx={{
+              textTransform: 'none',
+              borderStyle: 'dashed',
+              py: 1.2,
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Upload Sections JSON
+          </Button>
+        </Box>
+
+        {/* JSON help toggle */}
+        <Button
+          size="small"
+          startIcon={<HelpOutlineIcon sx={{ fontSize: '0.9rem' }} />}
+          onClick={() => setShowJsonHelp(prev => !prev)}
+          sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.secondary', mt: 0.5, mb: 0.5 }}
+        >
+          {showJsonHelp ? 'Hide instructions' : 'How to create Sections JSON using AI?'}
+        </Button>
+
+        <Collapse in={showJsonHelp}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
+              bgcolor: alpha(theme.palette.info.main, 0.04),
+              mb: 1,
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Steps to create sections & MCQs using any AI tool
+            </Typography>
+            <Box component="ol" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.8, fontSize: '0.82rem', color: 'text.secondary', lineHeight: 1.5 } }}>
+              <li>Download the <strong>.vtt transcript</strong> file from SharePoint (or your video source)</li>
+              <li>Open any AI tool — <strong>ChatGPT, Claude, Gemini</strong>, etc.</li>
+              <li>
+                Copy the prompt below and paste it along with your full transcript content
+                <Box sx={{ position: 'relative', mt: 1, mb: 0.5 }}>
+                  <Box
+                    component="pre"
+                    sx={{
+                      bgcolor: alpha(theme.palette.common.black, 0.04),
+                      p: 1.5,
+                      borderRadius: 1,
+                      fontSize: '0.72rem',
+                      lineHeight: 1.5,
+                      overflow: 'auto',
+                      maxHeight: 200,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      border: `1px solid ${theme.palette.divider}`,
+                    }}
+                  >
+{`Analyze the following video transcript and create sections with MCQ questions. Return ONLY valid JSON in exactly this format, no other text:
+
+{
+  "sections": [
+    {
+      "title": "Section title",
+      "description": "Brief 1-2 line description of what this section covers",
+      "start_timestamp_seconds": 0,
+      "end_timestamp_seconds": 300,
+      "questions": [
+        {
+          "question_text": "A clear question about the content",
+          "option_a": "First option",
+          "option_b": "Second option",
+          "option_c": "Third option",
+          "option_d": "Fourth option",
+          "correct_option": "a",
+          "explanation": "Brief explanation of why this is correct"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Create 3-6 sections based on natural topic breaks in the transcript
+- Each section should have 2-4 MCQ questions
+- Use the actual timestamps from the transcript for start/end times
+- Questions should test understanding, not just recall
+- correct_option must be "a", "b", "c", or "d"
+- Return ONLY the JSON, no markdown code blocks or extra text
+
+Here is the transcript:
+[PASTE YOUR VTT TRANSCRIPT CONTENT HERE]`}
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      const prompt = `Analyze the following video transcript and create sections with MCQ questions. Return ONLY valid JSON in exactly this format, no other text:\n\n{\n  "sections": [\n    {\n      "title": "Section title",\n      "description": "Brief 1-2 line description of what this section covers",\n      "start_timestamp_seconds": 0,\n      "end_timestamp_seconds": 300,\n      "questions": [\n        {\n          "question_text": "A clear question about the content",\n          "option_a": "First option",\n          "option_b": "Second option",\n          "option_c": "Third option",\n          "option_d": "Fourth option",\n          "correct_option": "a",\n          "explanation": "Brief explanation of why this is correct"\n        }\n      ]\n    }\n  ]\n}\n\nRules:\n- Create 3-6 sections based on natural topic breaks in the transcript\n- Each section should have 2-4 MCQ questions\n- Use the actual timestamps from the transcript for start/end times\n- Questions should test understanding, not just recall\n- correct_option must be "a", "b", "c", or "d"\n- Return ONLY the JSON, no markdown code blocks or extra text\n\nHere is the transcript:\n[PASTE YOUR VTT TRANSCRIPT CONTENT HERE]`;
+                      navigator.clipboard.writeText(prompt);
+                      setAutoGenSnackbar({ open: true, message: 'Prompt copied to clipboard!', severity: 'success' });
+                    }}
+                    sx={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      bgcolor: alpha(theme.palette.background.paper, 0.9),
+                      '&:hover': { bgcolor: theme.palette.background.paper },
+                    }}
+                  >
+                    <ContentCopyIcon sx={{ fontSize: '0.85rem' }} />
+                  </IconButton>
+                </Box>
+              </li>
+              <li>Copy the AI&apos;s JSON response and save it as a <strong>.json</strong> file</li>
+              <li>Click <strong>&quot;Upload Sections JSON&quot;</strong> and select the file</li>
+              <li>Review the sections in the preview dialog, edit if needed, then accept</li>
+            </Box>
+          </Paper>
+        </Collapse>
+
+        <input
+          ref={vttFileInputRef}
+          type="file"
+          accept=".vtt,.srt"
+          onChange={handleVttFileUpload}
+          style={{ display: 'none' }}
+        />
+        <input
+          ref={jsonFileInputRef}
+          type="file"
+          accept=".json"
+          onChange={handleJsonFileUpload}
+          style={{ display: 'none' }}
+        />
+        {autoGenerating && <LinearProgress sx={{ mt: 0.5, borderRadius: 1 }} />}
+      </Box>
 
       {/* Sections */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
@@ -963,6 +1437,30 @@ export default function FoundationChapterEditorContent({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Auto-Generate Preview Dialog */}
+      <AutoGeneratePreview
+        open={autoGenPreviewOpen}
+        sections={generatedSections}
+        onAccept={handleAcceptGenerated}
+        onClose={() => setAutoGenPreviewOpen(false)}
+      />
+
+      {/* Auto-Generate Snackbar */}
+      <Snackbar
+        open={autoGenSnackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setAutoGenSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setAutoGenSnackbar(prev => ({ ...prev, open: false }))}
+          severity={autoGenSnackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {autoGenSnackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

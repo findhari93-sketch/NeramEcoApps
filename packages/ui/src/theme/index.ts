@@ -47,6 +47,10 @@ export { neramTokens, neramFontFamilies, neramShadows } from './neram-2026';
 export type { NeramTokens, NeramFontFamilies, NeramShadows } from './neram-2026';
 export { neramaiArchitekDarkTheme, neramaiArchitekLightTheme } from './variants-2026';
 
+// Transferable Color Configs
+export { nexusColors } from './brand-2025';
+export type { AppColorConfig } from './brand-2025';
+
 // Theme Registry (SSR-compatible for Next.js App Router)
 export { ThemeRegistry } from './ThemeRegistry';
 

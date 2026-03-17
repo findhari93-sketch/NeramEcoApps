@@ -24,12 +24,12 @@ export default function AttemptIndicator({ summary }: AttemptIndicatorProps) {
 
   const icon = summary.last_was_correct ? (
     <CheckCircleOutlinedIcon
-      sx={{ color: '#22C55E', fontSize: 22 }}
+      sx={{ color: 'success.main', fontSize: 22 }}
       aria-label="Last attempt correct"
     />
   ) : (
     <CancelOutlinedIcon
-      sx={{ color: '#EF4444', fontSize: 22 }}
+      sx={{ color: 'error.main', fontSize: 22 }}
       aria-label="Last attempt incorrect"
     />
   );

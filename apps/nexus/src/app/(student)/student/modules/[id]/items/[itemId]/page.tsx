@@ -33,6 +33,10 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import NoteOutlinedIcon from '@mui/icons-material/NoteOutlined';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CloseIcon from '@mui/icons-material/Close';
+import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import PDFReader from '@/components/reader/PDFReader';
+import AudioPlayer from '@/components/reader/AudioPlayer';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -82,6 +86,9 @@ interface ItemProgress {
   status: 'not_started' | 'in_progress' | 'completed';
   last_video_position_seconds: number | null;
   last_section_id: string | null;
+  last_pdf_page: number | null;
+  last_audio_position_seconds: number | null;
+  last_audio_language: string | null;
 }
 
 interface ItemDetail {
@@ -91,8 +98,17 @@ interface ItemDetail {
   item_type: string;
   video_source: string | null;
   youtube_video_id: string | null;
-  sharepoint_url: string | null;
+  sharepoint_video_url: string | null;
   chapter_number: number | null;
+  pdf_url: string | null;
+  pdf_page_count: number | null;
+  audio_tracks: Array<{
+    id: string;
+    language: string;
+    language_label: string;
+    audio_url: string;
+    audio_duration_seconds: number | null;
+  }>;
   sections: Section[];
   progress: ItemProgress | null;
   quiz_attempts: QuizAttempt[];
@@ -126,6 +142,7 @@ export default function StudentItemLearningPage() {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [mobileTab, setMobileTab] = useState(0); // 0=sections 1=notes
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [contentTab, setContentTab] = useState<'watch' | 'read'>('watch');
 
   // Quiz state
   const [quizOpen, setQuizOpen] = useState(false);
@@ -170,6 +187,10 @@ export default function StudentItemLearningPage() {
         notes[n.section_id] = n.note_text;
       });
       setNoteTexts(notes);
+
+      // Set default content tab based on available content
+      const hasVideo = !!(itemData.youtube_video_id || itemData.sharepoint_video_url);
+      if (!hasVideo && itemData.pdf_url) setContentTab('read');
 
       // Resume from last section
       if (itemData.progress?.last_section_id && itemData.sections.length > 0) {
@@ -480,7 +501,11 @@ export default function StudentItemLearningPage() {
 
   const currentSection = item.sections[currentSectionIndex] || null;
   const hasYouTube = !!item.youtube_video_id;
-  const hasSharePoint = !!item.sharepoint_url;
+  const hasSharePoint = !!item.sharepoint_video_url;
+  const hasVideo = hasYouTube || hasSharePoint;
+  const hasPdf = !!item.pdf_url;
+  const hasAudio = (item.audio_tracks?.length ?? 0) > 0;
+  const showContentTabs = hasVideo && hasPdf;
 
   // ─── Render ─────────────────────────────────────────────────────────
 
@@ -538,7 +563,39 @@ export default function StudentItemLearningPage() {
         </Box>
       </Box>
 
+      {/* ─── Content Tabs (Watch / Read) ─────────────────────────── */}
+      {showContentTabs && (
+        <Tabs
+          value={contentTab}
+          onChange={(_, v) => setContentTab(v)}
+          sx={{
+            mb: 1,
+            px: { xs: 2, lg: 3 },
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              minHeight: 40,
+            },
+          }}
+        >
+          <Tab
+            value="watch"
+            label="Watch"
+            icon={<OndemandVideoOutlinedIcon sx={{ fontSize: '1rem' }} />}
+            iconPosition="start"
+          />
+          <Tab
+            value="read"
+            label="Read"
+            icon={<MenuBookOutlinedIcon sx={{ fontSize: '1rem' }} />}
+            iconPosition="start"
+          />
+        </Tabs>
+      )}
+
       {/* ─── Video Player ────────────────────────────────────────── */}
+      {((contentTab === 'watch' && hasVideo) || (!hasPdf && hasVideo)) && (
       <Box
         sx={{
           display: 'flex',
@@ -586,7 +643,7 @@ export default function StudentItemLearningPage() {
               }}
             >
               <iframe
-                src={item.sharepoint_url!}
+                src={item.sharepoint_video_url!}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -600,28 +657,6 @@ export default function StudentItemLearningPage() {
                 title={item.title}
               />
             </Box>
-          )}
-
-          {!hasYouTube && !hasSharePoint && (
-            <Paper
-              elevation={0}
-              sx={{
-                p: 4,
-                mx: { xs: 2, lg: 0 },
-                mt: 1,
-                textAlign: 'center',
-                borderRadius: 3,
-                border: `1px solid ${theme.palette.divider}`,
-                bgcolor: alpha(theme.palette.primary.main, 0.03),
-              }}
-            >
-              <Typography variant="body1" color="text.secondary">
-                No video available for this item.
-              </Typography>
-              <Typography variant="caption" color="text.disabled">
-                This item contains text-based content and quizzes.
-              </Typography>
-            </Paper>
           )}
 
           {/* Current video time indicator (mobile) */}
@@ -674,6 +709,60 @@ export default function StudentItemLearningPage() {
           />
         </Box>
       </Box>
+      )}
+
+      {/* ─── PDF Reader (Read tab or only content) ─────────────────── */}
+      {((contentTab === 'read' && hasPdf) || (!hasVideo && hasPdf)) && (
+        <Box
+          sx={{
+            height: { xs: 'calc(100vh - 200px)', sm: 'calc(100vh - 180px)' },
+            borderRadius: 2,
+            overflow: 'hidden',
+            border: '1px solid',
+            borderColor: 'divider',
+            mx: { xs: 2, lg: 3 },
+          }}
+        >
+          <PDFReader
+            pdfUrl={item.pdf_url!}
+            initialPage={item.progress?.last_pdf_page || 1}
+            totalPages={item.pdf_page_count || undefined}
+            onPageChange={(page) => {
+              getToken().then((token) => {
+                if (!token) return;
+                fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ last_pdf_page: page }),
+                });
+              });
+            }}
+          />
+        </Box>
+      )}
+
+      {/* ─── No content fallback ───────────────────────────────────── */}
+      {!hasVideo && !hasPdf && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 4,
+            mx: { xs: 2, lg: 3 },
+            mt: 1,
+            textAlign: 'center',
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            bgcolor: alpha(theme.palette.primary.main, 0.03),
+          }}
+        >
+          <Typography variant="body1" color="text.secondary">
+            No video or PDF available for this item.
+          </Typography>
+          <Typography variant="caption" color="text.disabled">
+            This item contains text-based content and quizzes.
+          </Typography>
+        </Paper>
+      )}
 
       {/* ─── Mobile: Tabs for Sections / Notes ───────────────────── */}
       <Box sx={{ display: { xs: 'block', lg: 'none' }, mt: 1, px: 2 }}>
@@ -946,6 +1035,25 @@ export default function StudentItemLearningPage() {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* ─── Audio Player ──────────────────────────────────────────── */}
+      {hasAudio && item.audio_tracks && (
+        <AudioPlayer
+          tracks={item.audio_tracks}
+          initialPosition={item.progress?.last_audio_position_seconds || 0}
+          initialLanguage={item.progress?.last_audio_language || 'en'}
+          onPositionChange={(seconds, language) => {
+            getToken().then((token) => {
+              if (!token) return;
+              fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ last_audio_position_seconds: seconds, last_audio_language: language }),
+              });
+            });
+          }}
+        />
+      )}
     </Box>
   );
 }

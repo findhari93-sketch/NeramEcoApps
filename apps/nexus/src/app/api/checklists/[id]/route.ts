@@ -81,12 +81,13 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, description, is_active } = body;
+    const { title, description, is_active, is_published } = body;
 
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (is_active !== undefined) updateData.is_active = is_active;
+    if (is_published !== undefined) updateData.is_published = is_published;
 
     const { data: checklist, error } = await (supabase as any)
       .from('nexus_checklists')

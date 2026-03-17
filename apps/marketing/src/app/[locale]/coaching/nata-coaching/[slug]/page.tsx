@@ -113,16 +113,16 @@ const coursePlans = [
     highlights: ['Intensive revision', 'Mock test series', 'Drawing practice'],
   },
   {
-    name: 'Regular Course',
-    duration: '6 Months',
-    mode: 'Online/Offline',
-    highlights: ['Complete syllabus', 'Concept building', 'Practice sessions'],
-  },
-  {
-    name: 'Premium Course',
+    name: '1-Year Program',
     duration: '12 Months',
     mode: 'Online/Offline',
-    highlights: ['1-on-1 mentoring', 'Foundation + Advanced', 'All resources'],
+    highlights: ['Complete syllabus', 'Daily drawing practice', '100+ mock tests'],
+  },
+  {
+    name: '2-Year Program',
+    duration: '24 Months',
+    mode: 'Online/Offline',
+    highlights: ['Foundation + Advanced', '1-on-1 mentoring', 'All resources'],
   },
 ];
 
@@ -144,7 +144,7 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
   const seoContent = getLocationSeoContent(city);
 
   const faqs = [
-    { question: `What is the fee for NATA coaching in ${location.cityDisplay}?`, answer: 'Our course fees range from ₹15,000 to ₹75,000 depending on the course duration and mode. Contact us for detailed fee structure and scholarship options.' },
+    { question: `What is the fee for NATA coaching in ${location.cityDisplay}?`, answer: 'Our course fees range from ₹15,000 to ₹35,000 depending on the course duration (3, 12, or 24 months) and mode. Contact us for detailed fee structure and scholarship options.' },
     { question: `Is there an offline center in ${location.cityDisplay}?`, answer: isGulf ? `Currently, we offer online classes for students in ${location.cityDisplay}. Our online program is just as effective with live interactive sessions.` : `Yes, we have a fully-equipped center in ${location.cityDisplay} with drawing studios and classroom facilities. We also offer online classes.` },
     { question: 'What is the batch timing?', answer: 'We offer multiple batch timings including morning, evening, and weekend batches to accommodate school/college students.' },
     { question: 'Do you provide study materials?', answer: 'Yes, comprehensive study materials, practice papers, and online resources are included in the course fee.' },

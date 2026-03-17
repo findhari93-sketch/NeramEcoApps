@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, icon, color } = body;
+    const { title, description, icon, color, category } = body;
 
     if (!title) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
         description: description || null,
         icon: icon || null,
         color: color || null,
+        category: category || 'general',
         created_by: user.id,
       })
       .select()

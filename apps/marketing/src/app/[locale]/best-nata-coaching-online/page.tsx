@@ -85,22 +85,6 @@ const featureIcons = [
 
 const courses = [
   {
-    name: 'Year-Long NATA Coaching',
-    duration: '12 Months',
-    price: 35000,
-    priceDisplay: '35,000',
-    highlights: [
-      'Complete NATA syllabus coverage',
-      '600+ hours of live classes',
-      'Daily 2-hour drawing practice',
-      '100+ full-length mock tests',
-      'Personal mentor assigned',
-      'Recorded lectures for revision',
-      '24/7 WhatsApp doubt support',
-      'College admission guidance',
-    ],
-  },
-  {
     name: 'NATA Crash Course',
     duration: '3 Months',
     price: 15000,
@@ -114,6 +98,38 @@ const courses = [
       'Previous year question analysis',
       'WhatsApp doubt support',
       'Last-minute tips and strategies',
+    ],
+  },
+  {
+    name: '1-Year NATA Program',
+    duration: '12 Months',
+    price: 25000,
+    priceDisplay: '25,000',
+    highlights: [
+      'Complete NATA syllabus coverage',
+      '600+ hours of live classes',
+      'Daily 2-hour drawing practice',
+      '100+ full-length mock tests',
+      'Personal mentor assigned',
+      'Recorded lectures for revision',
+      '24/7 WhatsApp doubt support',
+      'College admission guidance',
+    ],
+  },
+  {
+    name: '2-Year NATA Program',
+    duration: '24 Months',
+    price: 30000,
+    priceDisplay: '30,000',
+    highlights: [
+      'Foundation + Advanced preparation',
+      'Complete NATA & JEE Paper 2 coverage',
+      'Daily drawing practice',
+      '200+ full-length mock tests',
+      '1-on-1 personal mentoring',
+      'All study materials included',
+      'Recorded lectures for revision',
+      'College admission guidance',
     ],
   },
 ];
@@ -200,7 +216,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
     {
       question: 'What is the fee for online NATA coaching?',
       answer:
-        'Online NATA coaching fees at Neram Classes start at Rs. 15,000 for the 3-month crash course and Rs. 35,000 for the comprehensive 12-month program. EMI options and scholarships are available for deserving students. The fee includes all study materials, mock tests, and recorded lecture access.',
+        'Online NATA coaching fees at Neram Classes start at Rs. 15,000 for the 3-month crash course, Rs. 25,000 for the 1-year program (single payment), and Rs. 30,000 for the 2-year program (single payment). Installment options and scholarships are available for deserving students. The fee includes all study materials, mock tests, and recorded lecture access.',
     },
     {
       question: 'Do you provide live classes or recorded?',
@@ -311,7 +327,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
                     {[
                       { label: 'Mode', value: '100% Live Online' },
                       { label: 'Batch Size', value: 'Max 25 Students' },
-                      { label: 'Duration', value: '3 - 12 Months' },
+                      { label: 'Duration', value: '3 - 24 Months' },
                       { label: 'Drawing Practice', value: '2+ Hours Daily' },
                       { label: 'Mock Tests', value: '100+ Full-Length' },
                       { label: 'Success Rate', value: '99.9%' },
@@ -419,16 +435,16 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
 
             <Grid container spacing={4} justifyContent="center">
               {courses.map((course, index) => (
-                <Grid item xs={12} md={6} key={index}>
+                <Grid item xs={12} md={4} key={index}>
                   <Card
                     sx={{
                       height: '100%',
-                      border: index === 0 ? '2px solid' : '1px solid',
-                      borderColor: index === 0 ? 'primary.main' : 'grey.300',
+                      border: index === 1 ? '2px solid' : '1px solid',
+                      borderColor: index === 1 ? 'primary.main' : 'grey.300',
                       position: 'relative',
                     }}
                   >
-                    {index === 0 && (
+                    {index === 1 && (
                       <Chip
                         label="Most Popular"
                         size="small"
@@ -473,7 +489,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
                       </List>
 
                       <Button
-                        variant={index === 0 ? 'contained' : 'outlined'}
+                        variant={index === 1 ? 'contained' : 'outlined'}
                         fullWidth
                         size="large"
                         component={Link}

@@ -37,16 +37,16 @@ interface Module {
 }
 
 const PRESET_COLORS = [
-  '#1976d2', // Blue
-  '#388e3c', // Green
-  '#f57c00', // Orange
-  '#d32f2f', // Red
-  '#7b1fa2', // Purple
-  '#00796b', // Teal
-  '#c2185b', // Pink
-  '#455a64', // Blue Grey
-  '#5d4037', // Brown
-  '#fbc02d', // Yellow
+  '#7C3AED', // Purple (primary)
+  '#4F46E5', // Indigo (info)
+  '#059669', // Green (secondary)
+  '#D97706', // Amber (warning)
+  '#DC2626', // Red (error)
+  '#0891B2', // Cyan
+  '#DB2777', // Pink
+  '#65A30D', // Lime
+  '#78716C', // Stone (neutral)
+  '#7E22CE', // Violet
 ];
 
 export default function ModulesPage() {

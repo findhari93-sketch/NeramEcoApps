@@ -31,6 +31,7 @@ import {
   m3MarketingAccent,
   m3AppAccent,
   m3NexusPrimary,
+  m3NexusAccent,
   m3AdminAccent,
   m3StateLayer,
 } from './brand-2025';
@@ -471,15 +472,40 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
   return createTheme(baseTheme, {
     palette: {
       primary: {
-        main: m3NexusPrimary.base,
-        light: m3NexusPrimary.light,
-        dark: m3NexusPrimary.dark,
+        main: m3NexusPrimary.base,       // #7C3AED — vibrant purple
+        light: m3NexusPrimary.light,     // #CFBCFF
+        dark: m3NexusPrimary.dark,       // #4F378B
         contrastText: '#FFFFFF',
       },
       secondary: {
-        main: scheme.tertiary,
-        light: scheme.tertiaryContainer,
-        contrastText: scheme.onTertiary,
+        main: m3NexusAccent[40],         // #059669 — green (growth/progress)
+        light: m3NexusAccent[90],        // #D1FAE5
+        dark: '#047857',
+        contrastText: '#FFFFFF',
+      },
+      info: {
+        main: '#4F46E5',                 // Indigo — harmonizes with purple
+        light: '#E0E7FF',
+        dark: '#3730A3',
+        contrastText: '#FFFFFF',
+      },
+      success: {
+        main: '#16A34A',                 // Green — clear semantic
+        light: '#DCFCE7',
+        dark: '#15803D',
+        contrastText: '#FFFFFF',
+      },
+      warning: {
+        main: '#D97706',                 // Amber — warm complement
+        light: '#FEF3C7',
+        dark: '#B45309',
+        contrastText: '#FFFFFF',
+      },
+      error: {
+        main: '#DC2626',                 // Red — standard danger
+        light: '#FEE2E2',
+        dark: '#B91C1C',
+        contrastText: '#FFFFFF',
       },
       background: {
         default: scheme.background,
@@ -612,13 +638,115 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
           },
         },
       },
-      // M3 Status chips
+      // M3 Status chips (color overrides merged into new MuiChip below)
+      // Mobile-friendly buttons
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 600,
+            borderRadius: 6,
+            minHeight: 48,
+          },
+          containedPrimary: {
+            '&:hover': {
+              backgroundColor: m3NexusPrimary[50],
+              boxShadow: m3Elevation.level2,
+            },
+          },
+          outlinedPrimary: {
+            borderColor: alpha(m3NexusPrimary.base, 0.5),
+            '&:hover': {
+              borderColor: m3NexusPrimary.base,
+              backgroundColor: alpha(m3NexusPrimary.base, 0.04),
+            },
+          },
+        },
+      },
+      // Switch — purple when checked, with good contrast
+      MuiSwitch: {
+        styleOverrides: {
+          switchBase: {
+            '&.Mui-checked': {
+              color: '#FFFFFF',
+              '& + .MuiSwitch-track': {
+                backgroundColor: m3NexusPrimary.base,
+                opacity: 1,
+              },
+            },
+          },
+          track: {
+            backgroundColor: scheme.outlineVariant,
+          },
+        },
+      },
+      // FAB — purple primary
+      MuiFab: {
+        styleOverrides: {
+          primary: {
+            backgroundColor: m3NexusPrimary.base,
+            '&:hover': {
+              backgroundColor: m3NexusPrimary[50],
+            },
+          },
+        },
+      },
+      // TextField — purple focus ring
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: m3NexusPrimary.base,
+            },
+          },
+        },
+      },
+      // Tabs — purple indicator and selected text
+      MuiTabs: {
+        styleOverrides: {
+          indicator: {
+            backgroundColor: m3NexusPrimary.base,
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            fontWeight: 500,
+            '&.Mui-selected': {
+              color: m3NexusPrimary.base,
+              fontWeight: 600,
+            },
+          },
+        },
+      },
+      // Chip colors — harmonized with theme
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 4,
+            borderRadius: 6,
             fontWeight: 500,
-            height: 32,
+          },
+          colorPrimary: {
+            backgroundColor: alpha(m3NexusPrimary.base, 0.12),
+            color: m3NexusPrimary.dark,
+          },
+          colorSuccess: {
+            backgroundColor: alpha('#16A34A', 0.12),
+            color: '#15803D',
+          },
+          colorWarning: {
+            backgroundColor: alpha('#D97706', 0.12),
+            color: '#B45309',
+          },
+          colorError: {
+            backgroundColor: alpha('#DC2626', 0.12),
+            color: '#B91C1C',
+          },
+          colorInfo: {
+            backgroundColor: alpha('#4F46E5', 0.12),
+            color: '#3730A3',
           },
         },
         variants: [
@@ -637,17 +765,6 @@ export const createNexusTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
             },
           },
         ],
-      },
-      // Mobile-friendly buttons
-      MuiButton: {
-        styleOverrides: {
-          root: {
-            textTransform: 'none',
-            fontWeight: 600,
-            borderRadius: 6,
-            minHeight: 48,
-          },
-        },
       },
       // Mobile navigation rail / bottom nav
       MuiBottomNavigation: {

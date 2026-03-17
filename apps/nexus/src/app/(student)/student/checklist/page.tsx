@@ -7,7 +7,7 @@ import {
   Paper,
   Chip,
   Skeleton,
-  Checkbox,
+  Button,
   LinearProgress,
   Tabs,
   Tab,
@@ -15,13 +15,15 @@ import {
   useTheme,
 } from '@neram/ui';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import NoteOutlinedIcon from '@mui/icons-material/NoteOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PageHeader from '@/components/PageHeader';
@@ -58,6 +60,8 @@ interface EntryProgress {
   student_id: string;
   entry_id: string;
   is_completed: boolean;
+  status: 'not_started' | 'in_progress' | 'completed';
+  started_at: string | null;
   completed_at: string | null;
 }
 
@@ -66,6 +70,8 @@ interface ModuleItemProgress {
   student_id: string;
   module_item_id: string;
   is_completed: boolean;
+  status: 'not_started' | 'in_progress' | 'completed';
+  started_at: string | null;
   completed_at: string | null;
 }
 
@@ -116,13 +122,13 @@ const resourceColor = (type: string) => {
   switch (type) {
     case 'video':
     case 'youtube':
-      return '#FF0000';
+      return '#DC2626';
     case 'pdf':
-      return '#D32F2F';
+      return '#D97706';
     case 'onenote':
-      return '#7B1FA2';
+      return '#7C3AED';
     default:
-      return '#1976D2';
+      return '#4F46E5';
   }
 };
 
@@ -152,6 +158,25 @@ function getChecklistProgress(checklist: ChecklistV2): { completed: number; tota
   return { completed, total };
 }
 
+function getEntryStatus(entry: ChecklistEntry, foundation: FoundationData | null): 'not_started' | 'in_progress' | 'completed' {
+  if (entry.entry_type === 'module' && entry.module?.module_type === 'foundation' && foundation) {
+    if (foundation.totalCount > 0 && foundation.completedCount >= foundation.totalCount) return 'completed';
+    if (foundation.completedCount > 0) return 'in_progress';
+    return 'not_started';
+  }
+  const counts = getEntryCompletedCount(entry);
+  if (counts.total > 0 && counts.completed >= counts.total) return 'completed';
+  if (entry.entry_type === 'simple_item') {
+    if (entry.progress?.status === 'in_progress') return 'in_progress';
+    return 'not_started';
+  }
+  if (entry.entry_type === 'module') {
+    if (counts.completed > 0) return 'in_progress';
+    return 'not_started';
+  }
+  return 'not_started';
+}
+
 // --- Component ---
 
 export default function StudentChecklist() {
@@ -163,7 +188,7 @@ export default function StudentChecklist() {
   const [foundation, setFoundation] = useState<FoundationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
-  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
+  const [actioningIds, setActioningIds] = useState<Set<string>>(new Set());
 
   // Fetch V2 checklists for this classroom
   const fetchData = useCallback(async () => {
@@ -197,9 +222,53 @@ export default function StudentChecklist() {
     if (!authLoading) fetchData();
   }, [authLoading, fetchData]);
 
-  // Toggle simple entry completion
-  const handleToggleEntry = async (entryId: string, isCompleted: boolean) => {
-    setTogglingIds((prev) => new Set(prev).add(entryId));
+  // Start an entry (simple item)
+  const handleStartEntry = async (entryId: string) => {
+    setActioningIds((prev) => new Set(prev).add(entryId));
+
+    // Optimistic update
+    setChecklists((prev) =>
+      prev.map((cl) => ({
+        ...cl,
+        entries: cl.entries.map((e) =>
+          e.id === entryId
+            ? {
+                ...e,
+                progress: {
+                  ...(e.progress || { id: '', student_id: '', entry_id: entryId, is_completed: false, completed_at: null }),
+                  status: 'in_progress' as const,
+                  started_at: new Date().toISOString(),
+                  is_completed: false,
+                  completed_at: null,
+                } as EntryProgress,
+              }
+            : e
+        ),
+      }))
+    );
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+      await fetch('/api/checklists/student/toggle', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_id: entryId, action: 'start' }),
+      });
+    } catch (err) {
+      console.error('Failed to start entry:', err);
+    } finally {
+      setActioningIds((prev) => {
+        const next = new Set(prev);
+        next.delete(entryId);
+        return next;
+      });
+    }
+  };
+
+  // Complete an entry (simple item)
+  const handleCompleteEntry = async (entryId: string) => {
+    setActioningIds((prev) => new Set(prev).add(entryId));
 
     // Optimistic update
     setChecklists((prev) =>
@@ -211,8 +280,9 @@ export default function StudentChecklist() {
                 ...e,
                 progress: {
                   ...(e.progress || { id: '', student_id: '', entry_id: entryId }),
-                  is_completed: isCompleted,
-                  completed_at: isCompleted ? new Date().toISOString() : null,
+                  status: 'completed' as const,
+                  is_completed: true,
+                  completed_at: new Date().toISOString(),
                 } as EntryProgress,
               }
             : e
@@ -223,35 +293,15 @@ export default function StudentChecklist() {
     try {
       const token = await getToken();
       if (!token) return;
-
-      const res = await fetch('/api/checklists/student/toggle', {
+      await fetch('/api/checklists/student/toggle', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry_id: entryId, is_completed: isCompleted }),
+        body: JSON.stringify({ entry_id: entryId, action: 'complete' }),
       });
-
-      if (!res.ok) {
-        // Revert on failure
-        setChecklists((prev) =>
-          prev.map((cl) => ({
-            ...cl,
-            entries: cl.entries.map((e) =>
-              e.id === entryId
-                ? {
-                    ...e,
-                    progress: e.progress
-                      ? { ...e.progress, is_completed: !isCompleted, completed_at: null }
-                      : null,
-                  }
-                : e
-            ),
-          }))
-        );
-      }
     } catch (err) {
-      console.error('Failed to toggle entry:', err);
+      console.error('Failed to complete entry:', err);
     } finally {
-      setTogglingIds((prev) => {
+      setActioningIds((prev) => {
         const next = new Set(prev);
         next.delete(entryId);
         return next;
@@ -259,63 +309,22 @@ export default function StudentChecklist() {
     }
   };
 
-  // Toggle module item completion
-  const handleToggleModuleItem = async (
-    entryId: string,
-    moduleItemId: string,
-    isCompleted: boolean
-  ) => {
-    const key = `mi-${moduleItemId}`;
-    setTogglingIds((prev) => new Set(prev).add(key));
-
-    // Optimistic update
-    setChecklists((prev) =>
-      prev.map((cl) => ({
-        ...cl,
-        entries: cl.entries.map((e) => {
-          if (e.id !== entryId) return e;
-          const existing = (e.module_item_progress || []).find(
-            (p) => p.module_item_id === moduleItemId
-          );
-          const updatedProgress = existing
-            ? (e.module_item_progress || []).map((p) =>
-                p.module_item_id === moduleItemId
-                  ? { ...p, is_completed: isCompleted, completed_at: isCompleted ? new Date().toISOString() : null }
-                  : p
-              )
-            : [
-                ...(e.module_item_progress || []),
-                {
-                  id: '',
-                  student_id: '',
-                  module_item_id: moduleItemId,
-                  is_completed: isCompleted,
-                  completed_at: isCompleted ? new Date().toISOString() : null,
-                },
-              ];
-          return { ...e, module_item_progress: updatedProgress };
-        }),
-      }))
-    );
-
+  // Start a module entry (mark as started + navigate)
+  const handleStartModule = async (entryId: string, moduleId: string) => {
+    // If it's the first module item, mark it as started via API
     try {
       const token = await getToken();
-      if (!token) return;
-
-      await fetch('/api/checklists/student/toggle', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ module_item_id: moduleItemId, is_completed: isCompleted }),
-      });
-    } catch (err) {
-      console.error('Failed to toggle module item:', err);
-    } finally {
-      setTogglingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
+      if (token) {
+        await fetch('/api/checklists/student/toggle', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entry_id: entryId, action: 'start' }),
+        });
+      }
+    } catch {
+      // Navigate anyway
     }
+    router.push(`/student/modules/${moduleId}`);
   };
 
   // Overall progress across all checklists
@@ -334,12 +343,6 @@ export default function StudentChecklist() {
 
   const showTabs = checklists.length > 1;
   const activeChecklist = checklists[activeTab] || null;
-
-  // Check if active checklist has a foundation entry
-  const activeHasFoundation =
-    activeChecklist?.entries.some(
-      (e) => e.entry_type === 'module' && e.module?.module_type === 'foundation'
-    ) ?? false;
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -501,226 +504,438 @@ export default function StudentChecklist() {
             </Box>
           )}
 
-          {/* Active Checklist Entries */}
-          {activeChecklist && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              {/* Foundation Module Card (if this checklist has it) */}
-              {activeHasFoundation && foundation && (
-                <Box sx={{ mb: 1 }}>
-                  <FoundationOverviewCard
-                    chapters={foundation.chapters}
-                    loading={false}
-                    onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
-                    onViewAll={() => router.push('/student/foundation')}
-                  />
-                </Box>
-              )}
+          {/* Active Checklist Entries — Vertical Stepper */}
+          {activeChecklist && (() => {
+            const visibleEntries = activeChecklist.entries;
 
-              {activeChecklist.entries.map((entry, idx) => {
-                // Skip foundation module entries in the list (shown as the card above)
-                if (
-                  entry.entry_type === 'module' &&
-                  entry.module?.module_type === 'foundation'
-                ) {
-                  return null;
-                }
+            // Determine status per entry
+            const entryStatuses = visibleEntries.map((entry) => getEntryStatus(entry, foundation));
 
-                if (entry.entry_type === 'simple_item') {
-                  const isCompleted = entry.progress?.is_completed ?? false;
-                  return (
-                    <Paper
-                      key={entry.id}
-                      elevation={0}
-                      sx={{
-                        px: 1.5,
-                        py: 1.5,
-                        borderRadius: 2.5,
-                        border: `1px solid ${isCompleted ? alpha(theme.palette.success.main, 0.3) : theme.palette.divider}`,
-                        bgcolor: isCompleted
-                          ? alpha(theme.palette.success.main, 0.03)
-                          : 'background.paper',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 1,
-                        transition: 'all 250ms ease',
-                        animation: `fadeIn 300ms ease ${idx * 30}ms both`,
-                        '@keyframes fadeIn': {
-                          from: { opacity: 0, transform: 'translateY(4px)' },
-                          to: { opacity: 1, transform: 'translateY(0)' },
-                        },
-                      }}
-                    >
-                      <Checkbox
-                        checked={isCompleted}
-                        onChange={(e) => handleToggleEntry(entry.id, e.target.checked)}
-                        disabled={togglingIds.has(entry.id)}
-                        icon={
-                          <RadioButtonUncheckedIcon
-                            sx={{ fontSize: '1.4rem', color: alpha(theme.palette.primary.main, 0.4) }}
-                          />
-                        }
-                        checkedIcon={
-                          <CheckCircleOutlinedIcon sx={{ fontSize: '1.4rem', color: 'success.main' }} />
-                        }
-                        sx={{ p: 0.5, mt: -0.25 }}
-                      />
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography
-                          variant="body2"
+            // First incomplete entry index = current step
+            const currentStepIdx = entryStatuses.findIndex((s) => s !== 'completed');
+
+            return (
+              <Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  {visibleEntries.map((entry, idx) => {
+                    const status = entryStatuses[idx];
+                    const isCompleted = status === 'completed';
+                    const isCurrent = idx === currentStepIdx;
+                    const isFuture = currentStepIdx >= 0 && idx > currentStepIdx;
+                    const isLast = idx === visibleEntries.length - 1;
+                    const isFoundation = entry.entry_type === 'module' && entry.module?.module_type === 'foundation';
+
+                    return (
+                      <Box key={entry.id} sx={{ display: 'flex', gap: 0 }}>
+                        {/* Stepper rail: circle + connector line with arrow */}
+                        <Box
                           sx={{
-                            fontWeight: isCompleted ? 500 : 600,
-                            textDecoration: isCompleted ? 'line-through' : 'none',
-                            color: isCompleted ? 'text.secondary' : 'text.primary',
-                            lineHeight: 1.4,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            width: 40,
+                            flexShrink: 0,
                           }}
                         >
-                          {entry.title}
-                        </Typography>
-                        {entry.resources && entry.resources.length > 0 && (
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
-                            {entry.resources.map((res) => (
-                              <Chip
-                                key={res.id}
-                                component="a"
-                                href={res.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                clickable
-                                icon={resourceIcon(res.resource_type)}
-                                label={
-                                  res.resource_type === 'youtube'
-                                    ? 'Video'
-                                    : res.resource_type.toUpperCase()
-                                }
-                                size="small"
-                                sx={{
-                                  height: 26,
-                                  fontSize: '0.675rem',
-                                  fontWeight: 600,
-                                  bgcolor: alpha(resourceColor(res.resource_type), 0.08),
-                                  color: resourceColor(res.resource_type),
-                                  border: `1px solid ${alpha(resourceColor(res.resource_type), 0.15)}`,
-                                  '& .MuiChip-icon': { color: resourceColor(res.resource_type) },
-                                  '&:hover': { bgcolor: alpha(resourceColor(res.resource_type), 0.14) },
-                                }}
-                              />
-                            ))}
+                          {/* Step circle */}
+                          <Box
+                            sx={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              mt: 2,
+                              ...(isCompleted && {
+                                bgcolor: theme.palette.success.main,
+                                color: '#fff',
+                              }),
+                              ...(isCurrent && {
+                                bgcolor: theme.palette.primary.main,
+                                color: '#fff',
+                                boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.2)}`,
+                              }),
+                              ...(isFuture && {
+                                bgcolor: alpha(theme.palette.text.disabled, 0.12),
+                                color: 'text.disabled',
+                              }),
+                              ...(!isCompleted && !isCurrent && !isFuture && {
+                                bgcolor: alpha(theme.palette.text.disabled, 0.12),
+                                color: 'text.disabled',
+                              }),
+                            }}
+                          >
+                            {isCompleted ? (
+                              <CheckCircleOutlinedIcon sx={{ fontSize: '1.1rem' }} />
+                            ) : (
+                              <Typography variant="caption" sx={{ fontWeight: 700, fontSize: '0.75rem', lineHeight: 1 }}>
+                                {idx + 1}
+                              </Typography>
+                            )}
                           </Box>
-                        )}
-                      </Box>
-                    </Paper>
-                  );
-                }
-
-                // Module entry — show module items as sub-checkboxes
-                if (entry.entry_type === 'module' && entry.module) {
-                  const moduleItems = entry.module.items || [];
-                  const progressMap = new Map(
-                    (entry.module_item_progress || []).map((p) => [p.module_item_id, p])
-                  );
-                  const completedItems = moduleItems.filter(
-                    (i) => progressMap.get(i.id)?.is_completed
-                  ).length;
-
-                  return (
-                    <Paper
-                      key={entry.id}
-                      elevation={0}
-                      sx={{
-                        p: 2,
-                        borderRadius: 2.5,
-                        border: `1px solid ${theme.palette.divider}`,
-                        borderLeft: `4px solid ${entry.module.color || theme.palette.primary.main}`,
-                        animation: `fadeIn 300ms ease ${idx * 30}ms both`,
-                        '@keyframes fadeIn': {
-                          from: { opacity: 0, transform: 'translateY(4px)' },
-                          to: { opacity: 1, transform: 'translateY(0)' },
-                        },
-                      }}
-                    >
-                      {/* Module Header */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {entry.module.icon && (
-                            <Typography sx={{ fontSize: '1.2rem' }}>{entry.module.icon}</Typography>
-                          )}
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                            {entry.module.title}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          label={`${completedItems}/${moduleItems.length}`}
-                          size="small"
-                          sx={{
-                            height: 22,
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            bgcolor:
-                              completedItems === moduleItems.length && moduleItems.length > 0
-                                ? alpha(theme.palette.success.main, 0.1)
-                                : alpha(theme.palette.primary.main, 0.08),
-                            color:
-                              completedItems === moduleItems.length && moduleItems.length > 0
-                                ? 'success.main'
-                                : 'primary.main',
-                          }}
-                        />
-                      </Box>
-
-                      {/* Module Items */}
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pl: 0.5 }}>
-                        {moduleItems.map((item) => {
-                          const itemCompleted = progressMap.get(item.id)?.is_completed ?? false;
-                          const toggleKey = `mi-${item.id}`;
-                          return (
+                          {/* Connector line with arrow */}
+                          {!isLast && (
                             <Box
-                              key={item.id}
                               sx={{
                                 display: 'flex',
+                                flexDirection: 'column',
                                 alignItems: 'center',
-                                gap: 0.75,
-                                py: 0.5,
+                                flex: 1,
+                                minHeight: 20,
                               }}
                             >
-                              <Checkbox
-                                checked={itemCompleted}
-                                onChange={(e) =>
-                                  handleToggleModuleItem(entry.id, item.id, e.target.checked)
-                                }
-                                disabled={togglingIds.has(toggleKey)}
-                                icon={
-                                  <RadioButtonUncheckedIcon
-                                    sx={{ fontSize: '1.2rem', color: alpha(theme.palette.primary.main, 0.35) }}
-                                  />
-                                }
-                                checkedIcon={
-                                  <CheckCircleOutlinedIcon sx={{ fontSize: '1.2rem', color: 'success.main' }} />
-                                }
-                                sx={{ p: 0.25 }}
+                              <Box
+                                sx={{
+                                  width: 2,
+                                  flex: 1,
+                                  bgcolor: isCompleted
+                                    ? alpha(theme.palette.success.main, 0.3)
+                                    : alpha(theme.palette.divider, 1),
+                                }}
                               />
+                              {/* Small arrow triangle */}
+                              <Box
+                                sx={{
+                                  width: 0,
+                                  height: 0,
+                                  borderLeft: '5px solid transparent',
+                                  borderRight: '5px solid transparent',
+                                  borderTop: `6px solid ${
+                                    isCompleted
+                                      ? alpha(theme.palette.success.main, 0.4)
+                                      : alpha(theme.palette.text.disabled, 0.3)
+                                  }`,
+                                  mb: -0.25,
+                                }}
+                              />
+                            </Box>
+                          )}
+                        </Box>
+
+                        {/* Entry content */}
+                        <Box sx={{ flex: 1, minWidth: 0, pb: isLast ? 0 : 1 }}>
+                          {entry.entry_type === 'simple_item' ? (
+                            <Paper
+                              elevation={0}
+                              sx={{
+                                px: 2,
+                                py: 1.5,
+                                borderRadius: 2.5,
+                                border: `1px solid ${
+                                  isCompleted
+                                    ? alpha(theme.palette.success.main, 0.3)
+                                    : isCurrent
+                                      ? alpha(theme.palette.primary.main, 0.3)
+                                      : theme.palette.divider
+                                }`,
+                                bgcolor: isCompleted
+                                  ? alpha(theme.palette.success.main, 0.03)
+                                  : isCurrent
+                                    ? alpha(theme.palette.primary.main, 0.02)
+                                    : 'background.paper',
+                                opacity: isFuture ? 0.5 : 1,
+                                transition: 'all 250ms ease',
+                              }}
+                            >
                               <Typography
                                 variant="body2"
                                 sx={{
-                                  fontSize: '0.85rem',
-                                  fontWeight: itemCompleted ? 500 : 600,
-                                  textDecoration: itemCompleted ? 'line-through' : 'none',
-                                  color: itemCompleted ? 'text.secondary' : 'text.primary',
+                                  fontWeight: isCompleted ? 500 : 600,
+                                  textDecoration: isCompleted ? 'line-through' : 'none',
+                                  color: isFuture ? 'text.disabled' : isCompleted ? 'text.secondary' : 'text.primary',
+                                  lineHeight: 1.4,
+                                  mb: 1,
                                 }}
                               >
-                                {item.title}
+                                {entry.title}
                               </Typography>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    </Paper>
-                  );
-                }
 
-                return null;
-              })}
-            </Box>
-          )}
+                              {/* Resources (visible when current or in_progress) */}
+                              {entry.resources && entry.resources.length > 0 && !isFuture && !isCompleted && (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+                                  {entry.resources.map((res) => (
+                                    <Chip
+                                      key={res.id}
+                                      component="a"
+                                      href={res.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      clickable
+                                      icon={resourceIcon(res.resource_type)}
+                                      label={
+                                        res.resource_type === 'youtube'
+                                          ? 'Video'
+                                          : res.resource_type.toUpperCase()
+                                      }
+                                      size="small"
+                                      sx={{
+                                        height: 26,
+                                        fontSize: '0.675rem',
+                                        fontWeight: 600,
+                                        bgcolor: alpha(resourceColor(res.resource_type), 0.08),
+                                        color: resourceColor(res.resource_type),
+                                        border: `1px solid ${alpha(resourceColor(res.resource_type), 0.15)}`,
+                                        '& .MuiChip-icon': { color: resourceColor(res.resource_type) },
+                                        '&:hover': { bgcolor: alpha(resourceColor(res.resource_type), 0.14) },
+                                      }}
+                                    />
+                                  ))}
+                                </Box>
+                              )}
+
+                              {/* Action buttons */}
+                              {isCompleted ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <CheckCircleOutlinedIcon sx={{ fontSize: '1rem', color: 'success.main' }} />
+                                  <Typography variant="caption" color="success.main" sx={{ fontWeight: 600 }}>
+                                    Completed
+                                  </Typography>
+                                </Box>
+                              ) : isCurrent && status === 'not_started' ? (
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  startIcon={<PlayArrowIcon />}
+                                  onClick={() => handleStartEntry(entry.id)}
+                                  disabled={actioningIds.has(entry.id)}
+                                  sx={{
+                                    minHeight: 36,
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  Start
+                                </Button>
+                              ) : isCurrent && status === 'in_progress' ? (
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  startIcon={<CheckCircleOutlinedIcon />}
+                                  onClick={() => handleCompleteEntry(entry.id)}
+                                  disabled={actioningIds.has(entry.id)}
+                                  sx={{
+                                    minHeight: 36,
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    fontSize: '0.8rem',
+                                  }}
+                                >
+                                  Mark Complete
+                                </Button>
+                              ) : isFuture ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <LockOutlinedIcon sx={{ fontSize: '0.9rem', color: 'text.disabled' }} />
+                                  <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                                    Complete previous steps first
+                                  </Typography>
+                                </Box>
+                              ) : null}
+                            </Paper>
+                          ) : isFoundation && foundation ? (
+                            /* Foundation module */
+                            isFuture ? (
+                              <Paper
+                                elevation={0}
+                                sx={{
+                                  p: 2,
+                                  borderRadius: 2.5,
+                                  border: `1px solid ${theme.palette.divider}`,
+                                  borderLeft: `4px solid ${entry.module!.color || theme.palette.primary.main}`,
+                                  opacity: 0.5,
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                  {entry.module!.icon && (
+                                    <span className="material-icons" style={{ fontSize: '1.2rem', lineHeight: 1 }}>{entry.module!.icon}</span>
+                                  )}
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.disabled' }}>
+                                    {entry.module!.title}
+                                  </Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <LockOutlinedIcon sx={{ fontSize: '0.9rem', color: 'text.disabled' }} />
+                                  <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                                    Complete previous steps first
+                                  </Typography>
+                                </Box>
+                              </Paper>
+                            ) : (
+                              <Box sx={{ transition: 'all 250ms ease' }}>
+                                <FoundationOverviewCard
+                                  chapters={foundation.chapters}
+                                  loading={false}
+                                  onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
+                                  onViewAll={() => router.push('/student/foundation')}
+                                />
+                              </Box>
+                            )
+                          ) : entry.entry_type === 'module' && entry.module ? (() => {
+                            const moduleItems = entry.module.items || [];
+                            const progressMap = new Map(
+                              (entry.module_item_progress || []).map((p) => [p.module_item_id, p])
+                            );
+                            const completedItems = moduleItems.filter(
+                              (i) => progressMap.get(i.id)?.is_completed
+                            ).length;
+                            const moduleStatus = status;
+
+                            return (
+                              <Paper
+                                elevation={0}
+                                sx={{
+                                  p: 2,
+                                  borderRadius: 2.5,
+                                  border: `1px solid ${
+                                    isCompleted
+                                      ? alpha(theme.palette.success.main, 0.3)
+                                      : isCurrent
+                                        ? alpha(theme.palette.primary.main, 0.3)
+                                        : theme.palette.divider
+                                  }`,
+                                  borderLeft: `4px solid ${entry.module!.color || theme.palette.primary.main}`,
+                                  opacity: isFuture ? 0.5 : 1,
+                                  bgcolor: isCurrent ? alpha(theme.palette.primary.main, 0.02) : 'background.paper',
+                                  transition: 'all 250ms ease',
+                                  ...(isCurrent && !isFuture && {
+                                    cursor: 'pointer',
+                                    '&:hover': {
+                                      borderColor: alpha(theme.palette.primary.main, 0.5),
+                                      boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.1)}`,
+                                    },
+                                  }),
+                                }}
+                                onClick={
+                                  isCurrent && !isFuture && entry.module
+                                    ? () => handleStartModule(entry.id, entry.module!.id)
+                                    : undefined
+                                }
+                              >
+                                {/* Module Header */}
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    {entry.module!.icon && (
+                                      <span className="material-icons" style={{ fontSize: '1.2rem', lineHeight: 1 }}>{entry.module!.icon}</span>
+                                    )}
+                                    <Typography
+                                      variant="subtitle2"
+                                      sx={{
+                                        fontWeight: 700,
+                                        color: isFuture ? 'text.disabled' : isCompleted ? 'text.secondary' : 'text.primary',
+                                        textDecoration: isCompleted ? 'line-through' : 'none',
+                                      }}
+                                    >
+                                      {entry.module!.title}
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label={`${completedItems}/${moduleItems.length}`}
+                                    size="small"
+                                    sx={{
+                                      height: 22,
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      bgcolor:
+                                        completedItems === moduleItems.length && moduleItems.length > 0
+                                          ? alpha(theme.palette.success.main, 0.1)
+                                          : alpha(theme.palette.primary.main, 0.08),
+                                      color:
+                                        completedItems === moduleItems.length && moduleItems.length > 0
+                                          ? 'success.main'
+                                          : 'primary.main',
+                                    }}
+                                  />
+                                </Box>
+
+                                {/* Module progress bar */}
+                                {moduleItems.length > 0 && !isFuture && (
+                                  <LinearProgress
+                                    variant="determinate"
+                                    value={moduleItems.length > 0 ? (completedItems / moduleItems.length) * 100 : 0}
+                                    sx={{
+                                      height: 4,
+                                      borderRadius: 2,
+                                      mb: 1,
+                                      bgcolor: alpha(theme.palette.primary.main, 0.08),
+                                      '& .MuiLinearProgress-bar': {
+                                        borderRadius: 2,
+                                        bgcolor: completedItems === moduleItems.length
+                                          ? theme.palette.success.main
+                                          : theme.palette.primary.main,
+                                      },
+                                    }}
+                                  />
+                                )}
+
+                                {/* Action area */}
+                                {isCompleted ? (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <CheckCircleOutlinedIcon sx={{ fontSize: '1rem', color: 'success.main' }} />
+                                    <Typography variant="caption" color="success.main" sx={{ fontWeight: 600 }}>
+                                      All items completed
+                                    </Typography>
+                                  </Box>
+                                ) : isCurrent && moduleStatus === 'not_started' ? (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<PlayArrowIcon />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartModule(entry.id, entry.module!.id);
+                                    }}
+                                    sx={{
+                                      minHeight: 36,
+                                      borderRadius: 2,
+                                      textTransform: 'none',
+                                      fontWeight: 600,
+                                      fontSize: '0.8rem',
+                                    }}
+                                  >
+                                    Start Module
+                                  </Button>
+                                ) : isCurrent && moduleStatus === 'in_progress' ? (
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    endIcon={<ArrowForwardIcon />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(`/student/modules/${entry.module!.id}`);
+                                    }}
+                                    sx={{
+                                      minHeight: 36,
+                                      borderRadius: 2,
+                                      textTransform: 'none',
+                                      fontWeight: 600,
+                                      fontSize: '0.8rem',
+                                    }}
+                                  >
+                                    Continue ({completedItems}/{moduleItems.length})
+                                  </Button>
+                                ) : isFuture ? (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <LockOutlinedIcon sx={{ fontSize: '0.9rem', color: 'text.disabled' }} />
+                                    <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                                      Complete previous steps first
+                                    </Typography>
+                                  </Box>
+                                ) : null}
+                              </Paper>
+                            );
+                          })() : null}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+            );
+          })()}
         </>
       )}
     </Box>

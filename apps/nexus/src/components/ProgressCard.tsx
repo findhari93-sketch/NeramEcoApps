@@ -15,7 +15,7 @@ export default function ProgressCard({
   completed,
   total,
   percentage,
-  color = '#1976d2',
+  color = '#7C3AED',
 }: ProgressCardProps) {
   return (
     <Card

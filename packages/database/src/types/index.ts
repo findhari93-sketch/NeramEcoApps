@@ -4255,6 +4255,7 @@ export interface NexusModule {
   color: string | null;
   module_type: NexusModuleType;
   is_published: boolean;
+  category: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -4267,13 +4268,17 @@ export interface NexusModuleItem {
   item_type: NexusModuleItemType;
   content_url: string | null;
   youtube_video_id: string | null;
-  video_source: 'youtube' | 'sharepoint';
+  video_source: 'youtube' | 'sharepoint' | null;
   sharepoint_video_url: string | null;
   video_duration_seconds: number | null;
   chapter_number: number | null;
   is_published: boolean;
   sort_order: number;
   metadata: Record<string, unknown> | null;
+  pdf_url: string | null;
+  pdf_storage_path: string | null;
+  pdf_page_count: number | null;
+  pdf_onedrive_item_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -4313,6 +4318,9 @@ export interface NexusModuleStudentProgress {
   completed_at: string | null;
   last_section_id: string | null;
   last_video_position_seconds: number;
+  last_pdf_page: number;
+  last_audio_position_seconds: number;
+  last_audio_language: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -4357,6 +4365,7 @@ export interface NexusChecklist {
   description: string | null;
   created_by: string | null;
   is_active: boolean;
+  is_published: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -4387,11 +4396,15 @@ export interface NexusChecklistClassroom {
   created_at: string;
 }
 
+export type NexusProgressStatus = 'not_started' | 'in_progress' | 'completed';
+
 export interface NexusStudentEntryProgress {
   id: string;
   student_id: string;
   entry_id: string;
   is_completed: boolean;
+  status: NexusProgressStatus;
+  started_at: string | null;
   completed_at: string | null;
   created_at: string;
 }
@@ -4401,6 +4414,8 @@ export interface NexusStudentModuleItemProgress {
   student_id: string;
   module_item_id: string;
   is_completed: boolean;
+  status: NexusProgressStatus;
+  started_at: string | null;
   completed_at: string | null;
   created_at: string;
 }
@@ -4537,13 +4552,33 @@ export interface NexusFoundationChapter {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
-  video_source: 'youtube' | 'sharepoint';
+  video_source: 'youtube' | 'sharepoint' | null;
   youtube_video_id: string | null;
   sharepoint_video_url: string | null;
   video_duration_seconds: number | null;
   chapter_number: number;
   min_quiz_score_pct: number;
   is_published: boolean;
+  pdf_url: string | null;
+  pdf_storage_path: string | null;
+  pdf_page_count: number | null;
+  pdf_onedrive_item_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusAudioTrack {
+  id: string;
+  chapter_id: string | null;
+  module_item_id: string | null;
+  language: string;
+  language_label: string;
+  audio_url: string;
+  audio_storage_path: string;
+  onedrive_item_id: string | null;
+  audio_duration_seconds: number | null;
+  sort_order: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -4584,6 +4619,9 @@ export interface NexusFoundationStudentProgress {
   completed_at: string | null;
   last_section_id: string | null;
   last_video_position_seconds: number;
+  last_pdf_page: number;
+  last_audio_position_seconds: number;
+  last_audio_language: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -4722,26 +4760,34 @@ export interface NexusFoundationTranscript {
 export interface NexusFoundationChapterInsert {
   title: string;
   description?: string | null;
-  video_source?: 'youtube' | 'sharepoint';
+  video_source?: 'youtube' | 'sharepoint' | null;
   youtube_video_id?: string | null;
   sharepoint_video_url?: string | null;
   video_duration_seconds?: number | null;
   chapter_number: number;
   min_quiz_score_pct?: number;
   is_published?: boolean;
+  pdf_url?: string | null;
+  pdf_storage_path?: string | null;
+  pdf_page_count?: number | null;
+  pdf_onedrive_item_id?: string | null;
   created_by?: string | null;
 }
 
 export interface NexusFoundationChapterUpdate {
   title?: string;
   description?: string | null;
-  video_source?: 'youtube' | 'sharepoint';
+  video_source?: 'youtube' | 'sharepoint' | null;
   youtube_video_id?: string | null;
   sharepoint_video_url?: string | null;
   video_duration_seconds?: number | null;
   chapter_number?: number;
   min_quiz_score_pct?: number;
   is_published?: boolean;
+  pdf_url?: string | null;
+  pdf_storage_path?: string | null;
+  pdf_page_count?: number | null;
+  pdf_onedrive_item_id?: string | null;
 }
 
 export interface NexusFoundationSectionInsert {

@@ -228,17 +228,17 @@ Our coaching methodology has been refined over years of experience and is specif
 
 ## Course Options Available in Chennai
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-Our most comprehensive offering, the Year-Long Course is ideal for students in Class 11 who want to begin their NATA preparation early. This course covers the entire NATA syllabus systematically, with ample time for revision and practice. Students attend classes three times a week, participate in monthly assessments, and receive individual attention throughout the year. The early start gives students a significant advantage, allowing them to build strong foundations in drawing and mathematics before the exam season.
+Our most comprehensive offering, the 1-Year Program is ideal for students in Class 11 who want to begin their NATA preparation early. This course covers the entire NATA syllabus systematically, with ample time for revision and practice. Students attend classes three times a week, participate in monthly assessments, and receive individual attention throughout the year. Pay Rs.25,000 as single payment or Rs.30,000 in installments. The early start gives students a significant advantage, allowing them to build strong foundations in drawing and mathematics before the exam season.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
 Designed for students who are in the final months before NATA, the Crash Course provides intensive preparation with daily classes. This program focuses on high-yield topics, rapid skill development in drawing, and extensive mock test practice. While the timeline is shorter, the intensity ensures that students cover all essential concepts and develop the speed and accuracy needed for the exam. Ideal for Class 12 students who have decided to pursue architecture later in their academic year.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-Our Premium Course offers everything in the Year-Long Course plus exclusive benefits including one-on-one faculty sessions twice a week, unlimited personal drawing portfolio reviews, exclusive masterclasses with practicing architects, guided visits to architecture firms and construction sites in Chennai, and guaranteed score improvement or additional coaching at no extra cost. This program is designed for students who want the absolute best preparation experience and are targeting top-100 NATA ranks.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Chennai Students Need to Know
 
@@ -346,17 +346,17 @@ Our Coimbatore-specific teaching methodology has been designed keeping in mind t
 
 ## Course Options Available in Coimbatore
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-The Year-Long Course is our flagship program designed for students who want to build a rock-solid foundation for NATA. Classes are held three times a week with additional weekend drawing workshops. The course systematically covers the entire NATA syllabus with built-in revision cycles and progressive difficulty levels. Students in Class 11 who enroll in this program gain a tremendous head start, entering their Class 12 year with strong NATA fundamentals already in place. This program also includes specialized sessions on portfolio development and architecture college interview preparation.
+The 1-Year Program is our flagship program designed for students who want to build a rock-solid foundation for NATA. Classes are held three times a week with additional weekend drawing workshops. The course systematically covers the entire NATA syllabus with built-in revision cycles and progressive difficulty levels. Pay Rs.25,000 as single payment or Rs.30,000 in installments. Students in Class 11 who enroll in this program gain a tremendous head start, entering their Class 12 year with strong NATA fundamentals already in place. This program also includes specialized sessions on portfolio development and architecture college interview preparation.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
-The Crash Course is an intensive, fast-paced program designed for students who need to prepare for NATA in a short time frame. With daily two-hour sessions covering high-yield topics, extensive drawing drills, and frequent mock tests, this program compresses the essential elements of NATA preparation into 90 days. While the Year-Long Course is ideal for thorough preparation, our Crash Course has produced remarkable results, with several students scoring above 130 in just three months of focused effort. This program is particularly popular among Class 12 students in Coimbatore who discover their interest in architecture during their board exam year.
+The Crash Course is an intensive, fast-paced program designed for students who need to prepare for NATA in a short time frame. With daily two-hour sessions covering high-yield topics, extensive drawing drills, and frequent mock tests, this program compresses the essential elements of NATA preparation into 90 days. While the 1-Year Program is ideal for thorough preparation, our Crash Course has produced remarkable results, with several students scoring above 130 in just three months of focused effort. This program is particularly popular among Class 12 students in Coimbatore who discover their interest in architecture during their board exam year.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-The Premium Course represents the ultimate NATA preparation experience available in Coimbatore. In addition to everything in the Year-Long Course, Premium students receive biweekly one-on-one sessions with senior faculty, unlimited portfolio reviews, exclusive masterclasses with practicing architects from Coimbatore's growing design community, organized visits to architectural landmarks in the Western Ghats region, advanced composition and design thinking workshops, and a score improvement guarantee. This program is tailored for students targeting admission to India's top 10 architecture schools and is limited to just 10 students per batch.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Coimbatore Students Need to Know
 
@@ -464,17 +464,17 @@ Our teaching methodology for Madurai students leverages the city's extraordinary
 
 ## Course Options Available in Madurai
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-The Year-Long Course provides the most thorough NATA preparation available in the Madurai region. With three classes per week plus weekend drawing workshops, students systematically cover the complete NATA syllabus over 12 months. The program includes progressive skill-building in drawing, chapter-wise mathematics mastery, extensive aptitude development, monthly assessments with detailed feedback, and a dedicated architectural heritage study module that leverages Madurai's unique environment. This course is ideal for students beginning preparation in Class 11 and provides the strongest foundation for top NATA scores.
+The 1-Year Program provides the most thorough NATA preparation available in the Madurai region. With three classes per week plus weekend drawing workshops, students systematically cover the complete NATA syllabus over 12 months. Pay Rs.25,000 as single payment or Rs.30,000 in installments. The program includes progressive skill-building in drawing, chapter-wise mathematics mastery, extensive aptitude development, monthly assessments with detailed feedback, and a dedicated architectural heritage study module that leverages Madurai's unique environment. This course is ideal for students beginning preparation in Class 11 and provides the strongest foundation for top NATA scores.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
 For students who need intensive preparation in a short time, our Crash Course delivers focused NATA readiness in 90 days. Daily two-hour sessions cover high-priority topics, rapid drawing skill development, and frequent mock tests. The curriculum is carefully sequenced to maximize score improvement within the limited timeframe, focusing on topics that carry the highest marks and are most amenable to quick improvement. Several Madurai students who joined our Crash Course have scored above 125 in NATA, demonstrating that quality coaching and dedicated effort can overcome time constraints.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-The Premium Course is our elite program designed for Madurai students targeting top-100 national ranks in NATA. Beyond the comprehensive Year-Long Course content, Premium students enjoy biweekly one-on-one sessions with senior faculty, unlimited individual drawing portfolio reviews, exclusive masterclasses with renowned architects, organized architectural heritage walks in Madurai exploring temple architecture and traditional building techniques, access to advanced design thinking workshops, and a score improvement guarantee. Limited to just 10 students per batch, this program offers truly personalized preparation that maximizes every student's potential.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Madurai Students Need to Know
 
@@ -522,7 +522,7 @@ A: Yes, our online coaching program is specifically designed to serve students a
 A: The critical difference is specialization. JEE/NEET coaching centers that offer NATA as an add-on typically lack faculty with genuine architecture backgrounds, have no drawing expertise, and follow a generic approach that does not address NATA's unique requirements. At Neram Classes, NATA is our core focus. Our faculty are architecture graduates from premier institutions, our drawing training is led by professional artists and architects, and our methodology is specifically designed for the NATA exam format. This focused expertise is why our success rate consistently is 99.9%.
 
 **Q: How much time should a Madurai student dedicate to NATA preparation daily?**
-A: We recommend a minimum of 3 hours of daily dedicated NATA preparation: 1.5 hours for drawing practice, 45 minutes for mathematics, and 45 minutes for general aptitude. Students enrolled in our Year-Long Course attend classes three times a week (about 6 hours total) and are expected to practice independently on other days. For Crash Course students, the commitment is higher at approximately 4-5 hours daily. Living in Madurai gives you a natural advantage as you can practice observational drawing simply by visiting the magnificent temples and heritage buildings in your spare time.
+A: We recommend a minimum of 3 hours of daily dedicated NATA preparation: 1.5 hours for drawing practice, 45 minutes for mathematics, and 45 minutes for general aptitude. Students enrolled in our 1-Year Program attend classes three times a week (about 6 hours total) and are expected to practice independently on other days. For Crash Course students, the commitment is higher at approximately 4-5 hours daily. Living in Madurai gives you a natural advantage as you can practice observational drawing simply by visiting the magnificent temples and heritage buildings in your spare time.
 
 **Q: Do you provide hostel or accommodation facilities for students coming from other districts to Madurai?**
 A: While Neram Classes does not directly provide hostel facilities, we maintain a list of verified and affordable accommodation options near our center in Madurai. We can connect students and their families with trusted landlords who offer safe, clean, and affordable rooms for student tenants. Alternatively, our robust online coaching program means students from other districts can prepare from home without the expense and disruption of relocating to Madurai. Many families prefer this option for both financial and personal reasons.
@@ -580,17 +580,17 @@ Our Trichy program benefits from a methodology specifically enhanced for the cit
 
 ## Course Options Available in Trichy
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-Our comprehensive Year-Long Course is the most thorough NATA preparation program available in the Trichy region. With classes three times per week, weekend drawing intensives, and monthly progress assessments, this course builds skills systematically over 12 months. The curriculum covers the complete NATA syllabus with multiple revision cycles, progressive difficulty levels, and integrated practice tests. Students beginning in Class 11 who enroll in this program develop a formidable combination of mathematical precision, artistic skill, and spatial reasoning that consistently translates to top NATA scores. The course also includes architecture college guidance and portfolio development sessions.
+Our comprehensive 1-Year Program is the most thorough NATA preparation program available in the Trichy region. With classes three times per week, weekend drawing intensives, and monthly progress assessments, this course builds skills systematically over 12 months. Pay Rs.25,000 as single payment or Rs.30,000 in installments. The curriculum covers the complete NATA syllabus with multiple revision cycles, progressive difficulty levels, and integrated practice tests. Students beginning in Class 11 who enroll in this program develop a formidable combination of mathematical precision, artistic skill, and spatial reasoning that consistently translates to top NATA scores. The course also includes architecture college guidance and portfolio development sessions.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
 The Crash Course is engineered for maximum impact in minimum time. Daily two-hour sessions focus exclusively on high-yield topics and exam-critical skills. Drawing practice is intensified with daily exercises targeting the most common NATA drawing themes. Mathematics coaching zeroes in on the most frequently tested concepts, while aptitude preparation covers the patterns most likely to appear in the exam. Despite the compressed timeline, our Trichy Crash Course students regularly achieve impressive results. This program is ideal for Class 12 students who decide to pursue architecture after their board exam preparation or for students who want to improve their scores between NATA attempts.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-The Premium Course is our most exclusive offering, designed for Trichy students with ambitions of securing top-100 national ranks and admission to premier institutions like NIT Trichy, IIT Roorkee, or SPA Delhi. In addition to all Year-Long Course content, Premium students receive biweekly individual sessions with senior faculty (including NIT Trichy alumni), unlimited personalized drawing portfolio reviews, exclusive masterclasses with practicing architects and NIT faculty, organized architectural study tours including campus visits to NIT Trichy and heritage walks in Srirangam, advanced design thinking and problem-solving workshops, and a guaranteed score improvement commitment. Strictly limited to 10 students per batch.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Trichy Students Need to Know
 
@@ -640,7 +640,7 @@ A: Our Trichy program offers identical faculty quality and teaching methodology 
 A: Absolutely. Our online coaching program delivers the complete Neram Classes experience to students across the central Tamil Nadu region. Live interactive sessions, real-time drawing feedback through screen sharing and photo submissions, comprehensive digital study materials, weekly mock tests, and 24/7 doubt resolution are all available online. Several of our highest-scoring students from the Trichy region have prepared entirely through the online mode. The quality of instruction and personal attention is identical to our offline program.
 
 **Q: What is the ideal starting point for NATA preparation for a Trichy student in Class 11?**
-A: The ideal time to begin is at the start of Class 11 (June-July), giving you a full 18-24 months of preparation. During Class 11, focus on building strong drawing fundamentals and mathematical concepts through our Year-Long Course. By the time Class 12 begins, you should be well-versed in all NATA topics and can focus on intensive practice and mock tests. However, even students starting in Class 12 can achieve excellent results with dedicated effort. Our Crash Course has helped many late-starting Trichy students score above 120 in NATA.
+A: The ideal time to begin is at the start of Class 11 (June-July), giving you a full 18-24 months of preparation. During Class 11, focus on building strong drawing fundamentals and mathematical concepts through our 1-Year Program. By the time Class 12 begins, you should be well-versed in all NATA topics and can focus on intensive practice and mock tests. However, even students starting in Class 12 can achieve excellent results with dedicated effort. Our Crash Course has helped many late-starting Trichy students score above 120 in NATA.
 
 **Q: Does Neram Classes help with JEE Paper 2 (B.Arch) preparation in addition to NATA?**
 A: Yes, our coaching covers both NATA and JEE Paper 2 (B.Arch) preparation. Since NIT Trichy admits through JEE Paper 2, this is especially important for Trichy students targeting their hometown NIT. The drawing and aptitude components of both exams have significant overlap, and we ensure students are prepared for the specific format and requirements of each exam. Mathematics preparation for JEE Paper 2 is more extensive than NATA, and our course includes the additional topics needed. This dual preparation gives our students the widest possible range of admission options.
@@ -698,17 +698,17 @@ As our flagship center, the Pudukkottai program showcases our methodology in its
 
 ## Course Options Available in Pudukkottai
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-The Year-Long Course at our Pudukkottai headquarters is our signature program and has produced more NATA success stories than any other course we offer. Classes are held three times per week with additional weekend drawing workshops and monthly assessment sessions. The 12-month timeline allows for systematic coverage of the entire NATA syllabus, multiple revision cycles, progressive skill building in drawing, and extensive mock test practice. Pudukkottai students in Class 11 who enroll in this program enter their Class 12 year with a commanding preparation advantage. The course also includes architecture college guidance sessions, portfolio development workshops, and exposure to architectural thinking through curated film screenings and heritage discussions.
+The 1-Year Program at our Pudukkottai headquarters is our signature program and has produced more NATA success stories than any other course we offer. Classes are held three times per week with additional weekend drawing workshops and monthly assessment sessions. Pay Rs.25,000 as single payment or Rs.30,000 in installments. The 12-month timeline allows for systematic coverage of the entire NATA syllabus, multiple revision cycles, progressive skill building in drawing, and extensive mock test practice. Pudukkottai students in Class 11 who enroll in this program enter their Class 12 year with a commanding preparation advantage.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
 Our Crash Course delivers intensive NATA preparation for students who need to prepare quickly. With daily two-hour sessions at our Pudukkottai center, the course covers high-priority topics across all three NATA sections with focused efficiency. Drawing practice is intensified with daily exercises targeting the most commonly tested themes and formats. Mathematics coaching concentrates on the highest-yield topics, while aptitude preparation builds pattern recognition and speed. Despite the compressed timeline, many of our Pudukkottai Crash Course students have achieved impressive scores, including several who scored above 120 in just three months. This program is especially popular among students who discover their interest in architecture during Class 12 or who want to improve their scores between NATA attempts.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-The Premium Course at our Pudukkottai headquarters represents the finest NATA preparation experience available anywhere. In addition to everything in the Year-Long Course, Premium students receive biweekly one-on-one sessions with our founding faculty members, unlimited individual drawing portfolio reviews with senior mentors, exclusive masterclasses with practicing architects and architecture professors, organized heritage study tours to Chettinad mansions, Thanjavur temples, Sittannavasal caves, and other architectural landmarks in the region, advanced design thinking and creative problem-solving workshops, direct interaction with our alumni network studying at top architecture schools, and a score improvement guarantee backed by additional coaching sessions. Limited to just 8 students per batch at our Pudukkottai center, this program provides the most personalized and intensive NATA preparation experience in India.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Pudukkottai Students Need to Know
 
@@ -816,17 +816,17 @@ Our methodology for Salem students has been crafted to address the specific need
 
 ## Course Options Available in Salem
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-Our Year-Long Course provides Salem students with the most comprehensive and unhurried NATA preparation experience. Three classes per week plus weekend drawing workshops build skills systematically over 12 months. The course covers the complete NATA syllabus with ample time for concept mastery, skill development, revision, and extensive mock test practice. For Salem students starting in Class 11, this program provides an early-mover advantage that is difficult to overcome. The course also includes sessions on architecture as a career, college selection guidance, and portfolio development, ensuring students are prepared not just for the exam but for the journey that follows.
+Our 1-Year Program provides Salem students with the most comprehensive and unhurried NATA preparation experience. Three classes per week plus weekend drawing workshops build skills systematically over 12 months. Pay Rs.25,000 as single payment or Rs.30,000 in installments. The course covers the complete NATA syllabus with ample time for concept mastery, skill development, revision, and extensive mock test practice. For Salem students starting in Class 11, this program provides an early-mover advantage that is difficult to overcome.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
 The Crash Course is a high-intensity program designed for Salem students who need to prepare for NATA in a compressed timeframe. Daily two-hour sessions focus on the highest-yield topics in each section, rapid drawing skill development through intensive daily exercises, and frequent mock tests that build exam readiness quickly. The curriculum is strategically sequenced to maximize score improvement within 90 days, focusing first on areas where improvement is fastest and most impactful. Despite the short duration, our Salem Crash Course has produced impressive results, with multiple students scoring above 115 after just three months of dedicated preparation. This program is ideal for students who decide to pursue architecture late in their Class 12 year or who want targeted improvement between NATA attempts.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-The Premium Course is our elite program for Salem students targeting top NATA ranks and admission to India's most prestigious architecture schools. Beyond the comprehensive Year-Long Course content, Premium students receive biweekly one-on-one sessions with our most experienced faculty, unlimited individual drawing portfolio reviews and improvement sessions, exclusive masterclasses with practicing architects including professionals working in Salem's growing construction sector, organized architectural study tours to Yercaud colonial architecture sites and heritage buildings in the region, advanced design thinking workshops that develop creative problem-solving skills, priority access to our alumni network for college guidance, and a score improvement guarantee. Limited to 10 students per batch to maintain the highest level of personalization.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Salem Students Need to Know
 
@@ -876,7 +876,7 @@ A: Yes, our online coaching program is specifically designed for students across
 A: Absolutely, and this is one of the most common starting points for our Salem students. NATA does not require formal art training. It tests aptitude, spatial reasoning, and trainable drawing skills. Our structured drawing program begins with absolute basics like line quality, proportion estimation, and simple shapes before progressing to perspective drawing, shading, and creative composition. Students without art backgrounds often bring strong analytical skills that help them learn drawing techniques systematically. Many of our most successful Salem students started with zero drawing experience and achieved drawing scores above 55 out of 80 through consistent practice and our guided methodology.
 
 **Q: What is the total cost of NATA preparation at Neram Classes Salem including materials and exam fees?**
-A: The total cost depends on the course you choose. Our Year-Long Course starts at Rs.35,000, Crash Course at Rs.15,000, and Premium Course at Rs.75,000. These fees include all study materials, mock tests, and support services with no hidden charges. Additionally, the NATA exam registration fee is approximately Rs.2,500 per attempt (set by the Council of Architecture). Basic drawing supplies like pencils, erasers, and drawing sheets cost approximately Rs.1,500-2,000 for the entire preparation period. So the all-inclusive cost of preparation ranges from approximately Rs.19,000 (Crash Course) to Rs.79,500 (Premium Course). EMI and scholarship options are available to make this investment manageable.
+A: The total cost depends on the course you choose. Our 1-Year Program starts at Rs.25,000 (single payment) or Rs.30,000 in installments, Crash Course at Rs.15,000, and 2-Year Program at Rs.30,000 (single payment) or Rs.35,000 in installments. These fees include all study materials, mock tests, and support services with no hidden charges. Additionally, the NATA exam registration fee is approximately Rs.2,500 per attempt (set by the Council of Architecture). Basic drawing supplies like pencils, erasers, and drawing sheets cost approximately Rs.1,500-2,000 for the entire preparation period. EMI and scholarship options are available to make this investment manageable.
 
 **Q: How do Neram Classes Salem students perform compared to students from larger cities?**
 A: Our Salem students consistently perform at par with students from Chennai, Bangalore, and other metropolitan coaching centers. In fact, several Salem-region students have outperformed their metro counterparts to secure admission at NIT Trichy and Anna University SAP. The disciplined work ethic and practical mindset that Salem students bring to their preparation, combined with our expert coaching and personalized attention, create a winning combination. The NATA exam does not discriminate based on geography, and neither does our coaching. Every student who puts in the effort gets the results they deserve.
@@ -936,17 +936,17 @@ Our methodology for Tiruppur students addresses the specific context of preparin
 
 ## Course Options Available in Tiruppur
 
-### Year-Long Course (12 Months) - Starting at Rs.35,000
+### 1-Year Program (12 Months) - Starting at Rs.25,000
 
-The Year-Long Course gives Tiruppur students the comprehensive, unhurried preparation that leads to the strongest NATA results. With three sessions per week plus weekend drawing workshops, the course systematically builds mathematical proficiency, drawing skills, and aptitude over a full academic year. Students in Class 11 who enroll gain an enormous advantage, entering their crucial Class 12 year with NATA preparation already well advanced. The program includes progressive skill development with regular checkpoints, monthly assessments with detailed feedback, architecture awareness sessions that introduce students to the world of design, and guided college selection and career planning workshops.
+The 1-Year Program gives Tiruppur students the comprehensive, unhurried preparation that leads to the strongest NATA results. With three sessions per week plus weekend drawing workshops, the course systematically builds mathematical proficiency, drawing skills, and aptitude over a full academic year. Pay Rs.25,000 as single payment or Rs.30,000 in installments. Students in Class 11 who enroll gain an enormous advantage, entering their crucial Class 12 year with NATA preparation already well advanced.
 
 ### Crash Course (3 Months) - Starting at Rs.15,000
 
 For Tiruppur students who need to prepare quickly, the Crash Course delivers focused, intensive NATA preparation in 90 days. Daily two-hour sessions prioritize the highest-impact topics and skills, with particular emphasis on rapid drawing skill development and exam technique. The curriculum is strategically ordered to deliver the maximum score improvement in the shortest time, starting with areas where Tiruppur students typically have natural strengths (mathematics, logical reasoning) and quickly building up the areas that need more work (drawing, creative visualization). Several Tiruppur students who joined our Crash Course have achieved NATA scores above 110, securing admission at good architecture colleges and launching their careers in design.
 
-### Premium Course (12 Months) - Starting at Rs.75,000
+### 2-Year Program (24 Months) - Starting at Rs.30,000
 
-The Premium Course is our most exclusive and intensive offering, designed for Tiruppur students with the ambition and dedication to target top NATA ranks. In addition to all Year-Long Course content, Premium students receive biweekly one-on-one sessions with senior faculty, unlimited personal drawing portfolio reviews with detailed improvement plans, exclusive masterclasses with practicing architects including professionals working on Tiruppur's smart city projects, organized architectural study tours to significant buildings in Coimbatore and the Western Ghats region, advanced design thinking workshops that develop the creative problem-solving skills valued by top architecture schools, direct networking opportunities with our alumni at premier institutions, and a guaranteed score improvement commitment. Limited to 10 students per batch, this program transforms promising students into competitive NATA candidates ready for India's best architecture programs.
+Our comprehensive 2-year program covers both NATA and JEE Paper 2 with foundation and advanced preparation, daily drawing practice, 200+ mock tests, 1-on-1 personal mentoring, and all study materials included. Pay Rs.30,000 as single payment or Rs.35,000 in installments.
 
 ## NATA Exam 2026 - What Tiruppur Students Need to Know
 

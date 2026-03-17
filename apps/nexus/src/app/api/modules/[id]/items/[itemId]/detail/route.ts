@@ -108,6 +108,13 @@ export async function GET(
       }
     }
 
+    // Fetch audio tracks for this module item
+    const { data: audioTracks } = await supabase
+      .from('nexus_audio_tracks')
+      .select('*')
+      .eq('module_item_id', itemId)
+      .order('sort_order', { ascending: true });
+
     return NextResponse.json({
       item: {
         ...item,
@@ -115,6 +122,7 @@ export async function GET(
         progress,
         quiz_attempts: quizAttempts,
         notes,
+        audio_tracks: audioTracks || [],
       },
     });
   } catch (err) {

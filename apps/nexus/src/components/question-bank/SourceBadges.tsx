@@ -14,7 +14,7 @@ function formatSource(source: NexusQBQuestionSource): string {
 }
 
 function getSourceColor(examType: string): string {
-  return examType === 'JEE_PAPER_2' ? '#2563EB' : '#7C3AED';
+  return examType === 'JEE_PAPER_2' ? '#4F46E5' : '#7C3AED';
 }
 
 export default function SourceBadges({ sources }: SourceBadgesProps) {
