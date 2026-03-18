@@ -171,6 +171,27 @@ export default function GuidePage() {
         'A student can have multiple parents linked.',
       ],
     },
+    {
+      title: 'Microsoft Teams Integration',
+      icon: <GroupsOutlinedIcon />,
+      color: '#6264A7',
+      summary: 'Link classrooms to Teams for auto-sync, channel meetings, and calendar invites.',
+      steps: [
+        'Open a classroom from the Classrooms page.',
+        'In the Overview tab, find the "Microsoft Teams" section.',
+        'Click "Link Existing Team" to connect your Teams team, or "Create New Team" to create a fresh one.',
+        'Turn on "Auto-sync" so students are automatically added to Teams when enrolled in Nexus.',
+        'When scheduling a class, toggle "Create Teams Meeting" ON — this posts to the channel and sends calendar invites.',
+        'Use "Sync Now" to reconcile existing members at any time.',
+      ],
+      tips: [
+        'If you already have Teams with students, link them first, then click "Sync Now".',
+        'Auto-sync works in the background — no manual Teams member management needed.',
+        'Students without Microsoft accounts will be skipped (shown in sync report).',
+        'Meeting links appear in both Nexus and the Teams channel.',
+        'You can unlink a team at any time without losing Nexus data.',
+      ],
+    },
   ];
 
   return (

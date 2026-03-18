@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, createUserNotification } from '@neram/database';
+import { addMemberToTeam } from '@/lib/teams-sync';
 
 /**
  * GET /api/classrooms/[id]/enrollments?batch={batchId}&role={teacher|student}
@@ -135,6 +136,22 @@ export async function POST(
       .single();
 
     if (error) throw error;
+
+    // Non-blocking: auto-add to Teams team if sync is enabled
+    const userMsOid = body.ms_oid || null;
+    if (userMsOid) {
+      const { data: classroomConfig } = await supabase
+        .from('nexus_classrooms')
+        .select('ms_team_id, ms_team_sync_enabled, name')
+        .eq('id', id)
+        .single();
+
+      if (classroomConfig?.ms_team_id && classroomConfig?.ms_team_sync_enabled) {
+        addMemberToTeam(classroomConfig.ms_team_id, userMsOid).catch((err: unknown) =>
+          console.error('[Teams auto-sync] Failed to add member:', err)
+        );
+      }
+    }
 
     // Send notification to the enrolled user
     try {

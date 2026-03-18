@@ -20,6 +20,8 @@ import {
   InputLabel,
   InputAdornment,
   Tooltip,
+  CircularProgress,
+  Divider,
 } from '@neram/ui';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
@@ -27,6 +29,7 @@ import EditNoteIcon from '@mui/icons-material/EditNote';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import ForumIcon from '@mui/icons-material/Forum';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import DataTable from '@/components/DataTable';
 
 interface Conversation {
@@ -54,7 +57,9 @@ export default function ChatHistoryPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [correctionText, setCorrectionText] = useState('');
+  const [refinedText, setRefinedText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [refining, setRefining] = useState(false);
   const [promotingKb, setPromotingKb] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success',
@@ -144,8 +149,33 @@ export default function ChatHistoryPage() {
     }
   };
 
+  const handleRefineWithAI = async () => {
+    if (!selected || !correctionText.trim()) return;
+    setRefining(true);
+    try {
+      const res = await fetch('/api/aintra/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: selected.user_message,
+          rawAnswer: correctionText.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error('Refine failed');
+      const json = await res.json();
+      setRefinedText(json.refined || '');
+      showSnackbar('Answer refined by AI', 'success');
+    } catch {
+      showSnackbar('Failed to refine - you can still add manually', 'error');
+    } finally {
+      setRefining(false);
+    }
+  };
+
   const handleAddToKb = async () => {
-    if (!selected || !selected.admin_correction) return;
+    if (!selected) return;
+    const answerToAdd = refinedText.trim() || selected.admin_correction;
+    if (!answerToAdd) return;
     setPromotingKb(true);
     try {
       // Create KB item
@@ -154,7 +184,7 @@ export default function ChatHistoryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: selected.user_message,
-          answer: selected.admin_correction,
+          answer: answerToAdd,
           category: 'General',
           is_active: true,
           display_order: 0,
@@ -373,9 +403,9 @@ export default function ChatHistoryPage() {
                 fullWidth
                 placeholder="Write the accurate answer here. This can be promoted to Aintra's knowledge base."
               />
-              {selected.admin_correction && !selected.promoted_to_kb && (
+              {selected.admin_correction && !selected.promoted_to_kb && !refinedText && (
                 <Alert severity="info">
-                  Correction saved. Click <strong>Add to Aintra KB</strong> to teach Aintra this answer permanently.
+                  Correction saved. Click <strong>Refine with AI</strong> to polish it, then <strong>Add to Aintra KB</strong>.
                 </Alert>
               )}
               {selected.promoted_to_kb && (
@@ -385,18 +415,19 @@ export default function ChatHistoryPage() {
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-          <Button onClick={() => setDialogOpen(false)} disabled={saving || promotingKb}>Close</Button>
-          <Button variant="outlined" onClick={handleSaveCorrection} disabled={saving || promotingKb}>
+          <Button onClick={() => setDialogOpen(false)} disabled={saving || promotingKb || refining}>Close</Button>
+          <Button variant="outlined" onClick={handleSaveCorrection} disabled={saving || promotingKb || refining || !correctionText.trim()}>
             {saving ? 'Saving…' : 'Save Correction'}
           </Button>
-          {selected?.admin_correction && !selected.promoted_to_kb && (
+          {(selected?.admin_correction || correctionText.trim()) && !selected?.promoted_to_kb && (
             <Button
               variant="contained"
               color="success"
               onClick={handleAddToKb}
-              disabled={promotingKb || saving}
+              disabled={promotingKb || saving || refining}
+              startIcon={promotingKb ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
-              {promotingKb ? 'Adding…' : 'Add to Aintra KB'}
+              {promotingKb ? 'Adding...' : refinedText ? 'Add Refined Answer to KB' : 'Add to Aintra KB'}
             </Button>
           )}
         </DialogActions>

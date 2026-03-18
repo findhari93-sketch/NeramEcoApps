@@ -1,11 +1,12 @@
 'use client';
 
-import { Box, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Typography, IconButton, Tooltip, alpha, useTheme } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import ReplayIcon from '@mui/icons-material/Replay';
 import type { NexusFoundationSectionWithQuiz } from '@neram/database/types';
 
 interface SectionListProps {
@@ -13,6 +14,15 @@ interface SectionListProps {
   currentSectionIndex: number;
   chapterNumber?: number;
   onSectionClick: (index: number) => void;
+  onRedoQuiz?: (index: number) => void;
+}
+
+function formatTimestamp(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function formatDuration(startSec: number, endSec: number): string {
@@ -28,6 +38,7 @@ export default function SectionList({
   currentSectionIndex,
   chapterNumber,
   onSectionClick,
+  onRedoQuiz,
 }: SectionListProps) {
   const theme = useTheme();
 
@@ -118,6 +129,8 @@ export default function SectionList({
                 variant="caption"
                 sx={{ color: 'text.secondary', fontSize: '0.7rem' }}
               >
+                {formatTimestamp(section.start_timestamp_seconds)} – {formatTimestamp(section.end_timestamp_seconds)}
+                {' · '}
                 {formatDuration(section.start_timestamp_seconds, section.end_timestamp_seconds)}
               </Typography>
             </Box>
@@ -153,6 +166,25 @@ export default function SectionList({
                       : `${section.quiz_questions.length}Q`
                   }
                 </Typography>
+                {isPassed && onRedoQuiz && (
+                  <Tooltip title="Redo quiz">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRedoQuiz(index);
+                      }}
+                      sx={{
+                        ml: 0.25,
+                        p: 0.5,
+                        color: 'text.secondary',
+                        '&:hover': { color: 'primary.main' },
+                      }}
+                    >
+                      <ReplayIcon sx={{ fontSize: '0.85rem' }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
               </Box>
             )}
           </Box>

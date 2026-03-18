@@ -92,13 +92,15 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, type, description, ms_team_id, is_active } = body;
+    const { name, type, description, ms_team_id, ms_team_name, ms_team_sync_enabled, is_active } = body;
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
     if (type !== undefined) updateData.type = type;
     if (description !== undefined) updateData.description = description;
     if (ms_team_id !== undefined) updateData.ms_team_id = ms_team_id;
+    if (ms_team_name !== undefined) updateData.ms_team_name = ms_team_name;
+    if (ms_team_sync_enabled !== undefined) updateData.ms_team_sync_enabled = ms_team_sync_enabled;
     if (is_active !== undefined) updateData.is_active = is_active;
 
     const { data: classroom, error } = await supabase

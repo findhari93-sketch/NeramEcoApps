@@ -13,6 +13,16 @@ body {
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection in inputs, textareas, and content areas */
+input, textarea, [contenteditable="true"], pre, code {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 a {

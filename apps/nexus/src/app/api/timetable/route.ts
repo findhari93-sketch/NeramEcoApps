@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
-    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, create_teams_meeting } = body;
+    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, teams_meeting_scope } = body;
 
     if (!classroom_id || !title || !scheduled_date || !start_time || !end_time) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
       teacher_id: teacherId,
       topic_id: topic_id || null,
       batch_id: batch_id || null,
+      teams_meeting_scope: teams_meeting_scope || null,
       status: 'scheduled',
     };
 
@@ -161,8 +162,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       class: data,
-      // Tell client whether to create a Teams meeting
-      create_teams_meeting: !!create_teams_meeting,
     }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create class';
@@ -190,7 +189,7 @@ export async function PATCH(request: NextRequest) {
     // Only allow updating specific fields
     const allowedFields = [
       'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'status',
-      'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url',
+      'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url', 'teams_meeting_scope',
       'batch_id', 'recording_url', 'transcript_url', 'notes', 'description',
     ];
     const safeUpdates: Record<string, unknown> = {};

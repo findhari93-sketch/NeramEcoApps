@@ -177,7 +177,11 @@ export default function ClassDetailPanel({
           {cls.teams_meeting_id && (
             <Chip
               icon={<VideocamIcon sx={{ fontSize: '16px !important' }} />}
-              label="Teams Meeting"
+              label={
+                cls.teams_meeting_scope === 'channel_meeting' ? 'Channel Meeting'
+                : cls.teams_meeting_scope === 'calendar_event' ? 'Calendar Event'
+                : 'Teams Link'
+              }
               size="small"
               color="primary"
               variant="outlined"

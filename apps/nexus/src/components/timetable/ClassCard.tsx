@@ -19,6 +19,7 @@ export interface ClassCardData {
   teams_meeting_url: string | null;
   teams_meeting_join_url: string | null;
   teams_meeting_id: string | null;
+  teams_meeting_scope: string | null;
   recording_url: string | null;
   batch_id: string | null;
   topic: { id: string; title: string; category: string } | null;

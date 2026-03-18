@@ -52,6 +52,7 @@ export const loginScopes = {
   teams: ['openid', 'profile', 'email', 'User.Read', 'Team.ReadBasic.All', 'Channel.ReadBasic.All'],
   graph: ['openid', 'profile', 'email', 'User.Read', 'Mail.Read', 'Calendars.Read'],
   admin: ['openid', 'profile', 'email', 'User.Read', 'User.ReadWrite.All', 'Directory.Read.All'],
+  // Base nexus scopes — used by both teachers and students for getToken()
   nexus: [
     'openid', 'profile', 'email', 'User.Read',
     'User.ReadBasic.All',
@@ -60,6 +61,22 @@ export const loginScopes = {
     'OnlineMeetingArtifact.Read.All',
     'Files.ReadWrite',
     'Sites.ReadWrite.All',
+  ],
+  // Extended scopes for teacher-only operations (meetings, channels, calendar invites)
+  // Requested on-demand when teacher creates meetings, not on login
+  nexusTeacher: [
+    'openid', 'profile', 'email', 'User.Read',
+    'User.ReadBasic.All',
+    'Presence.Read.All',
+    'OnlineMeetings.ReadWrite',
+    'OnlineMeetingArtifact.Read.All',
+    'Files.ReadWrite',
+    'Sites.ReadWrite.All',
+    'Calendars.ReadWrite',
+    'ChannelMessage.Send',
+    'Team.ReadBasic.All',
+    'Channel.ReadBasic.All',
+    'TeamMember.ReadWrite.All',
   ],
 };
 

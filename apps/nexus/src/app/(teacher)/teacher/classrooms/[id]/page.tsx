@@ -23,6 +23,13 @@ import {
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import GroupsIcon from '@mui/icons-material/Groups';
+import SyncIcon from '@mui/icons-material/Sync';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import LinkIcon from '@mui/icons-material/Link';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import { Snackbar, Alert } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ClassroomFormDialog from '@/components/ClassroomFormDialog';
 import BatchFormDialog from '@/components/BatchFormDialog';
@@ -37,6 +44,9 @@ interface ClassroomDetail {
   type: string;
   description: string | null;
   is_active: boolean;
+  ms_team_id: string | null;
+  ms_team_name: string | null;
+  ms_team_sync_enabled: boolean;
   created_at: string;
 }
 
@@ -87,6 +97,15 @@ export default function ClassroomDetailPage() {
   const [teacherEnrollments, setTeacherEnrollments] = useState<Enrollment[]>([]);
   const [qbEnabled, setQbEnabled] = useState<boolean | null>(null);
   const [qbToggling, setQbToggling] = useState(false);
+
+  // Teams integration state
+  const [teamsSyncing, setTeamsSyncing] = useState(false);
+  const [teamsCreating, setTeamsCreating] = useState(false);
+  const [teamsLinking, setTeamsLinking] = useState(false);
+  const [availableTeams, setAvailableTeams] = useState<{ id: string; displayName: string }[]>([]);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
+    open: false, message: '', severity: 'success',
+  });
 
   const fetchClassroom = useCallback(async () => {
     try {
@@ -186,6 +205,122 @@ export default function ClassroomDetailPage() {
     }
   };
 
+  // Teams: Sync members
+  const handleTeamsSync = async () => {
+    setTeamsSyncing(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/classrooms/${id}/teams-sync`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const r = data.result;
+        setSnackbar({
+          open: true,
+          severity: 'success',
+          message: `Sync complete: ${r.added} added, ${r.alreadyInTeam} already in team${r.skipped ? `, ${r.skipped} skipped (no Microsoft account)` : ''}`,
+        });
+      } else {
+        setSnackbar({ open: true, severity: 'error', message: data.error || 'Sync failed' });
+      }
+    } catch {
+      setSnackbar({ open: true, severity: 'error', message: 'Teams sync failed' });
+    } finally {
+      setTeamsSyncing(false);
+    }
+  };
+
+  // Teams: Create new team
+  const handleTeamsCreate = async () => {
+    setTeamsCreating(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/classrooms/${id}/teams-create`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSnackbar({ open: true, severity: 'success', message: `Team "${data.teamName}" created and linked!` });
+        await fetchClassroom();
+      } else {
+        setSnackbar({ open: true, severity: 'error', message: data.error || 'Failed to create team' });
+      }
+    } catch {
+      setSnackbar({ open: true, severity: 'error', message: 'Failed to create team' });
+    } finally {
+      setTeamsCreating(false);
+    }
+  };
+
+  // Teams: Link existing team
+  const handleTeamsLink = async (teamId: string, teamName: string) => {
+    const token = await getToken();
+    if (!token) return;
+    const res = await fetch(`/api/classrooms/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ms_team_id: teamId, ms_team_name: teamName }),
+    });
+    if (res.ok) {
+      setSnackbar({ open: true, severity: 'success', message: `Linked to "${teamName}"` });
+      setTeamsLinking(false);
+      await fetchClassroom();
+    }
+  };
+
+  // Teams: Unlink team
+  const handleTeamsUnlink = async () => {
+    const token = await getToken();
+    if (!token) return;
+    const res = await fetch(`/api/classrooms/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ms_team_id: null, ms_team_name: null, ms_team_sync_enabled: false }),
+    });
+    if (res.ok) {
+      setSnackbar({ open: true, severity: 'info', message: 'Team unlinked' });
+      await fetchClassroom();
+    }
+  };
+
+  // Teams: Toggle auto-sync
+  const handleTeamsAutoSyncToggle = async () => {
+    const token = await getToken();
+    if (!token || !classroom) return;
+    const newValue = !classroom.ms_team_sync_enabled;
+    const res = await fetch(`/api/classrooms/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ms_team_sync_enabled: newValue }),
+    });
+    if (res.ok) {
+      await fetchClassroom();
+    }
+  };
+
+  // Teams: Fetch available teams for linking
+  const handleFetchTeams = async () => {
+    setTeamsLinking(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/classrooms/teams-teams', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableTeams(data.teams || []);
+      }
+    } catch {
+      setSnackbar({ open: true, severity: 'error', message: 'Failed to load Teams teams' });
+    }
+  };
+
   useEffect(() => {
     fetchClassroom();
     fetchQBStatus();
@@ -196,7 +331,7 @@ export default function ClassroomDetailPage() {
     if (tab === 3) fetchEnrollments();
   }, [tab, fetchEnrollments, fetchTeacherEnrollments]);
 
-  const handleEditClassroom = async (formData: { name: string; type: string; description: string }) => {
+  const handleEditClassroom = async (formData: { name: string; type: string; description: string; ms_team_id: string | null }) => {
     const token = await getToken();
     if (!token) return;
 
@@ -402,6 +537,146 @@ export default function ClassroomDetailPage() {
                 )}
               </Box>
             </Box>
+          </Paper>
+
+          {/* Teams Integration Panel */}
+          <Paper variant="outlined" sx={{ p: 2.5, mt: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <GroupsIcon color="primary" />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Microsoft Teams
+              </Typography>
+            </Box>
+
+            {classroom.ms_team_id ? (
+              /* Team is linked */
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Chip
+                    label={classroom.ms_team_name || 'Linked Team'}
+                    color="primary"
+                    variant="outlined"
+                    size="small"
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Linked
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>Auto-sync</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      New students auto-added to Teams
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={classroom.ms_team_sync_enabled}
+                    onChange={handleTeamsAutoSyncToggle}
+                    size="small"
+                  />
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={teamsSyncing ? <CircularProgress size={16} /> : <SyncIcon />}
+                    onClick={handleTeamsSync}
+                    disabled={teamsSyncing}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {teamsSyncing ? 'Syncing...' : 'Sync Now'}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<LinkOffIcon />}
+                    onClick={handleTeamsUnlink}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Unlink
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<OpenInNewIcon />}
+                    href={`https://teams.microsoft.com/l/team/${classroom.ms_team_id}`}
+                    target="_blank"
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Open in Teams
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              /* No team linked */
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Typography variant="body2" color="text.secondary">
+                  No team linked. Link a team to enable auto-sync and channel meetings.
+                </Typography>
+
+                {teamsLinking ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {availableTeams.length === 0 ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={20} />
+                        <Typography variant="body2">Loading your teams...</Typography>
+                      </Box>
+                    ) : (
+                      <>
+                        <Typography variant="caption" color="text.secondary">
+                          Select a team to link:
+                        </Typography>
+                        {availableTeams.map((team) => (
+                          <Paper
+                            key={team.id}
+                            variant="outlined"
+                            onClick={() => handleTeamsLink(team.id, team.displayName)}
+                            sx={{
+                              p: 1.5,
+                              cursor: 'pointer',
+                              '&:hover': { bgcolor: 'action.hover', borderColor: 'primary.main' },
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {team.displayName}
+                            </Typography>
+                          </Paper>
+                        ))}
+                        <Button size="small" onClick={() => setTeamsLinking(false)} sx={{ textTransform: 'none' }}>
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<LinkIcon />}
+                      onClick={handleFetchTeams}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Link Existing Team
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={teamsCreating ? <CircularProgress size={16} /> : <AddCircleOutlineIcon />}
+                      onClick={handleTeamsCreate}
+                      disabled={teamsCreating}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      {teamsCreating ? 'Creating...' : 'Create New Team'}
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+            )}
           </Paper>
         </Box>
       )}
@@ -652,6 +927,7 @@ export default function ClassroomDetailPage() {
         onSubmit={handleEditClassroom}
         initialData={classroom}
         mode="edit"
+        getToken={getToken}
       />
 
       <BatchFormDialog
@@ -700,6 +976,17 @@ export default function ClassroomDetailPage() {
           if (tab === 2) fetchTeacherEnrollments();
         }}
       />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

@@ -19,6 +19,9 @@ interface NexusClassroom {
   type: string;
   description: string | null;
   is_active: boolean;
+  ms_team_id: string | null;
+  ms_team_name: string | null;
+  ms_team_sync_enabled: boolean;
   enrollmentRole: 'teacher' | 'student';
 }
 
@@ -47,6 +50,8 @@ interface NexusAuthState {
   isStudent: boolean;
   isAdmin: boolean;
   getToken: () => Promise<string | null>;
+  /** Get token with extended teacher scopes (meetings, channels, calendar) */
+  getTeacherToken: () => Promise<string | null>;
 }
 
 const ACTIVE_CLASSROOM_KEY = 'nexus_active_classroom_id';
@@ -68,6 +73,10 @@ export function useNexusAuth(): NexusAuthState {
 
   const getToken = useCallback(async () => {
     return getAccessToken(loginScopes.nexus);
+  }, []);
+
+  const getTeacherToken = useCallback(async () => {
+    return getAccessToken(loginScopes.nexusTeacher);
   }, []);
 
   // Fetch DB user after MS auth succeeds
@@ -165,6 +174,7 @@ export function useNexusAuth(): NexusAuthState {
     isStudent: nexusRole === 'student',
     isAdmin: nexusRole === 'admin',
     getToken,
+    getTeacherToken,
   };
 }
 

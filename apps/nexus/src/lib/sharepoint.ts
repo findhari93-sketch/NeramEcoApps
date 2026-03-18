@@ -10,56 +10,12 @@
  * Falls back to discovering the site from SHAREPOINT_SITE_URL if SHAREPOINT_SITE_ID is not set.
  */
 
+import { getAppOnlyToken } from './graph-app-token';
+
+// Re-export for backwards compatibility
+export { getAppOnlyToken };
+
 const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB — threshold for upload sessions
-
-/** Cache for app-only tokens (client credentials flow) */
-let appTokenCache: { token: string; expiresAt: number } | null = null;
-
-/**
- * Get an app-only (client credentials) Graph API token.
- * Requires AZ_CLIENT_ID, AZ_CLIENT_SECRET, AZ_TENANT_ID env vars.
- */
-export async function getAppOnlyToken(): Promise<string> {
-  // Return cached token if still valid (with 60s buffer)
-  if (appTokenCache && Date.now() < appTokenCache.expiresAt - 60_000) {
-    return appTokenCache.token;
-  }
-
-  const clientId = process.env.AZ_CLIENT_ID;
-  const clientSecret = process.env.AZ_CLIENT_SECRET;
-  const tenantId = process.env.AZ_TENANT_ID;
-
-  if (!clientId || !clientSecret || !tenantId) {
-    throw new Error('AZ_CLIENT_ID, AZ_CLIENT_SECRET, and AZ_TENANT_ID are required for app-only auth');
-  }
-
-  const res = await fetch(
-    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-        scope: 'https://graph.microsoft.com/.default',
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`Failed to get app-only token: ${res.status} ${err}`);
-  }
-
-  const data = await res.json();
-  appTokenCache = {
-    token: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
-  };
-
-  return data.access_token;
-}
 
 /**
  * Encode a sharing URL for the Graph API /shares endpoint.
@@ -377,6 +333,40 @@ export async function uploadToSharePoint(
     sharingUrl: downloadUrl,
     webUrl: item.webUrl,
   };
+}
+
+/**
+ * Get a fresh pre-authenticated download URL for a SharePoint file by item ID.
+ */
+export async function getSharePointDownloadUrl(itemId: string): Promise<string> {
+  const token = await getAppOnlyToken();
+  const siteId = await getSiteId(token);
+
+  // Note: $select=@microsoft.graph.downloadUrl strips the annotation from the response.
+  // We must request without $select or use /content redirect to get the download URL.
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (res.ok) {
+    const data = await res.json();
+    if (data['@microsoft.graph.downloadUrl']) {
+      return data['@microsoft.graph.downloadUrl'];
+    }
+  }
+
+  // Fallback: use /content endpoint which returns a 302 redirect to the download URL
+  const contentRes = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}/content`,
+    { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
+  );
+  if (contentRes.status === 302) {
+    const location = contentRes.headers.get('Location');
+    if (location) return location;
+  }
+
+  throw new Error('Could not resolve download URL for SharePoint item');
 }
 
 /**

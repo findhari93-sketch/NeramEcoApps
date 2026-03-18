@@ -90,21 +90,22 @@ export default function VideoPlayer({
       if (dur > 0) setDuration(dur);
       onTimeUpdateRef.current?.(Math.floor(time));
 
-      // Check if we've reached a section end — MUST run before anti-gaming
-      // so the quiz can trigger when the section naturally finishes
-      const idx = currentSectionIndexRef.current;
-      const currentSection = sectionsRef.current[idx];
-      if (
-        currentSection &&
-        time >= currentSection.end_timestamp_seconds &&
-        !hasTriggeredQuizRef.current.has(idx)
-      ) {
-        hasTriggeredQuizRef.current.add(idx);
-        isRewatchingRef.current = false;
-        rewatchMaxTimeRef.current = 0;
-        playerRef.current?.pauseVideo?.();
-        onSectionEndRef.current(idx);
-        return;
+      // Check ALL sections for quiz triggers (earliest untriggered first)
+      // This ensures quizzes trigger even if currentSectionIndex is stale
+      const allSections = sectionsRef.current;
+      for (let i = 0; i < allSections.length; i++) {
+        const section = allSections[i];
+        if (
+          time >= section.end_timestamp_seconds &&
+          !hasTriggeredQuizRef.current.has(i)
+        ) {
+          hasTriggeredQuizRef.current.add(i);
+          isRewatchingRef.current = false;
+          rewatchMaxTimeRef.current = 0;
+          playerRef.current?.pauseVideo?.();
+          onSectionEndRef.current(i);
+          return;
+        }
       }
 
       // Anti-gaming: prevent seeking past section end during rewatch

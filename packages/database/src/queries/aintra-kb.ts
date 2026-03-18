@@ -4,7 +4,7 @@
  * Dynamic Q&A pairs for Aintra AI assistant system prompt injection
  */
 
-import { createAdminClient } from '../client';
+import { getSupabaseAdminClient } from '../client';
 import type { AintraKnowledgeBaseItem } from '../types';
 
 // ============================================
@@ -16,7 +16,7 @@ import type { AintraKnowledgeBaseItem } from '../types';
  * Used by /api/chat and /api/nata/chat to inject into Gemini system prompt.
  */
 export async function getActiveAintraKnowledgeBase(): Promise<AintraKnowledgeBaseItem[]> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   const { data, error } = await supabase
     .from('aintra_knowledge_base')
@@ -40,7 +40,7 @@ export async function getActiveAintraKnowledgeBase(): Promise<AintraKnowledgeBas
 export async function listAintraKnowledgeBase(
   options: { category?: string } = {}
 ): Promise<AintraKnowledgeBaseItem[]> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   let query = supabase
     .from('aintra_knowledge_base')
@@ -60,7 +60,7 @@ export async function listAintraKnowledgeBase(
 export async function createAintraKnowledgeBaseItem(
   input: Omit<AintraKnowledgeBaseItem, 'id' | 'created_at' | 'updated_at'>
 ): Promise<AintraKnowledgeBaseItem> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   const { data, error } = await supabase
     .from('aintra_knowledge_base')
@@ -76,7 +76,7 @@ export async function updateAintraKnowledgeBaseItem(
   id: string,
   updates: Partial<Omit<AintraKnowledgeBaseItem, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<AintraKnowledgeBaseItem> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   const { data, error } = await supabase
     .from('aintra_knowledge_base')
@@ -90,7 +90,7 @@ export async function updateAintraKnowledgeBaseItem(
 }
 
 export async function deleteAintraKnowledgeBaseItem(id: string): Promise<void> {
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   const { error } = await supabase
     .from('aintra_knowledge_base')

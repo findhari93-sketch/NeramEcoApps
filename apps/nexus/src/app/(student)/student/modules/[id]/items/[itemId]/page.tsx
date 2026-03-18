@@ -10,6 +10,7 @@ import {
   Skeleton,
   Tabs,
   Tab,
+  CircularProgress,
   alpha,
   useTheme,
 } from '@neram/ui';
@@ -84,9 +85,16 @@ export default function StudentItemLearningPage() {
   // SharePoint streaming
   const [spStreamUrl, setSpStreamUrl] = useState<string | null>(null);
   const [spStreamLoading, setSpStreamLoading] = useState(false);
+
+  // PDF streaming (fresh download URL)
+  const [pdfStreamUrl, setPdfStreamUrl] = useState<string | null>(null);
+  const [pdfStreamLoading, setPdfStreamLoading] = useState(false);
+  const [pdfStreamError, setPdfStreamError] = useState<string | null>(null);
+  const [pdfRetryCount, setPdfRetryCount] = useState(0);
   const spVideoRef = useRef<HTMLVideoElement>(null);
   const spQuizTriggeredRef = useRef<Set<number>>(new Set());
 
+  const currentSectionRef = useRef(0);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
   const videoPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -177,27 +185,78 @@ export default function StudentItemLearningPage() {
     return () => { cancelled = true; };
   }, [data?.sharepoint_video_url, data?.youtube_video_id, getToken]);
 
+  // ─── PDF Stream URL ──────────────────────────────────────────────────
+  // The pdf-stream endpoint proxies the PDF binary from SharePoint (avoids CORS).
+  // We pass the auth token as a query param since pdf.js can't set headers.
+
+  useEffect(() => {
+    if (!data?.pdf_url) return;
+    let cancelled = false;
+    setPdfStreamLoading(true);
+    setPdfStreamError(null);
+
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        // Build the proxied URL — pdf.js will fetch this directly (same origin, no CORS)
+        const streamUrl = `/api/modules/${moduleId}/items/${itemId}/pdf-stream?token=${encodeURIComponent(token)}`;
+        if (!cancelled) {
+          setPdfStreamUrl(streamUrl);
+          setPdfStreamError(null);
+        }
+      } catch (err) {
+        console.error('Failed to build PDF stream URL:', err);
+        if (!cancelled) {
+          setPdfStreamUrl(null);
+          setPdfStreamError('Failed to load PDF');
+        }
+      } finally {
+        if (!cancelled) setPdfStreamLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [data?.pdf_url, getToken, moduleId, itemId, pdfRetryCount]);
+
+  // Keep ref in sync with state for use in timeupdate handler
+  useEffect(() => {
+    currentSectionRef.current = currentSectionIndex;
+  }, [currentSectionIndex]);
+
   // ─── SharePoint video time tracking ────────────────────────────────
 
   useEffect(() => {
     const video = spVideoRef.current;
     if (!video || !data?.sections.length) return;
 
+    const sections = data.sections;
+
+    // Clear triggered flags for sections that are now passed (data refreshed after quiz)
+    sections.forEach((s, i) => {
+      if (s.quiz_attempt?.passed) {
+        spQuizTriggeredRef.current.add(i); // mark as done so we don't re-trigger
+      }
+    });
+
     const onTimeUpdate = () => {
       const time = video.currentTime;
       setCurrentVideoTime(time);
 
       // Auto-detect current section
-      for (let i = data.sections.length - 1; i >= 0; i--) {
-        if (time >= data.sections[i].start_timestamp_seconds) {
-          if (i !== currentSectionIndex) setCurrentSectionIndex(i);
+      for (let i = sections.length - 1; i >= 0; i--) {
+        if (time >= sections[i].start_timestamp_seconds) {
+          if (i !== currentSectionRef.current) {
+            currentSectionRef.current = i;
+            setCurrentSectionIndex(i);
+          }
           break;
         }
       }
 
-      // Auto-trigger quiz when section ends
-      for (let i = 0; i < data.sections.length; i++) {
-        const section = data.sections[i];
+      // Auto-trigger quiz when section ends (only for unpassed sections)
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
         if (
           time >= section.end_timestamp_seconds &&
           section.quiz_questions.length > 0 &&
@@ -215,7 +274,7 @@ export default function StudentItemLearningPage() {
 
     video.addEventListener('timeupdate', onTimeUpdate);
     return () => video.removeEventListener('timeupdate', onTimeUpdate);
-  }, [data?.sections, currentSectionIndex]);
+  }, [data?.sections, spStreamUrl]);
 
   // ─── Auto-save video position every 30 seconds ─────────────────────
 
@@ -245,9 +304,23 @@ export default function StudentItemLearningPage() {
 
   const handleTimeUpdate = useCallback((seconds: number) => {
     setCurrentVideoTime(seconds);
+
+    // Auto-detect current section based on video time (YouTube)
+    if (data?.sections.length) {
+      for (let i = data.sections.length - 1; i >= 0; i--) {
+        if (seconds >= data.sections[i].start_timestamp_seconds) {
+          if (i !== currentSectionRef.current) {
+            currentSectionRef.current = i;
+            setCurrentSectionIndex(i);
+          }
+          break;
+        }
+      }
+    }
+
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => saveProgress(seconds), 30000);
-  }, [saveProgress]);
+  }, [saveProgress, data?.sections]);
 
   // Coursera-style video shrink
   useEffect(() => {
@@ -368,10 +441,41 @@ export default function StudentItemLearningPage() {
 
   // ─── Quiz handlers ─────────────────────────────────────────────────
 
+  // Helper to pause whichever video player is active
+  const pauseVideo = useCallback(() => {
+    if (spVideoRef.current) {
+      spVideoRef.current.pause();
+    } else {
+      const player = (window as any).__foundationPlayer;
+      if (player?.pause) player.pause();
+    }
+  }, []);
+
+  // Helper to resume whichever video player is active
+  const resumeVideo = useCallback(() => {
+    if (spVideoRef.current) {
+      spVideoRef.current.play().catch(() => {});
+    } else {
+      const player = (window as any).__foundationPlayer;
+      if (player?.play) player.play();
+    }
+  }, []);
+
   const handleSectionEnd = useCallback((sectionIndex: number) => {
+    const section = data?.sections[sectionIndex];
+    if (!section) return;
+
+    // If section is already passed, skip quiz and continue playing
+    if (section.quiz_attempt?.passed) return;
+
+    // No quiz questions for this section — just continue playing
+    if (!section.quiz_questions?.length) return;
+
+    // Pause video and show quiz
+    pauseVideo();
     setQuizSectionIndex(sectionIndex);
     setQuizOpen(true);
-  }, []);
+  }, [data, pauseVideo]);
 
   const handleSectionClick = useCallback((index: number) => {
     setCurrentSectionIndex(index);
@@ -456,8 +560,24 @@ export default function StudentItemLearningPage() {
         const player = (window as any).__foundationPlayer;
         if (player?.play) player.play();
       }
+    } else {
+      // Last section — just resume video
+      resumeVideo();
     }
-  }, [quizSectionIndex, data]);
+  }, [quizSectionIndex, data, resumeVideo]);
+
+  // Close quiz drawer (for redo / dismiss) — resume video
+  const handleQuizClose = useCallback(() => {
+    setQuizOpen(false);
+    resumeVideo();
+  }, [resumeVideo]);
+
+  // Student wants to redo quiz on a passed section (from section list)
+  const handleRedoQuiz = useCallback((sectionIndex: number) => {
+    pauseVideo();
+    setQuizSectionIndex(sectionIndex);
+    setQuizOpen(true);
+  }, [pauseVideo]);
 
   const handleAllQuizSubmitSection = useCallback(async (sectionId: string, answers: Record<string, string>) => {
     const token = await getToken();
@@ -581,7 +701,13 @@ export default function StudentItemLearningPage() {
       {showTabs && (
         <Tabs
           value={contentTab}
-          onChange={(_, v) => setContentTab(v)}
+          onChange={(_, v) => {
+            // Pause SharePoint video when switching away from Watch tab
+            if (v !== 'watch' && spVideoRef.current) {
+              spVideoRef.current.pause();
+            }
+            setContentTab(v);
+          }}
           sx={{
             mb: 1,
             px: { xs: 2, sm: 0 },
@@ -616,7 +742,7 @@ export default function StudentItemLearningPage() {
             position: 'relative',
             width: '100%',
             height: 0,
-            paddingTop: hasSharePoint && spStreamUrl ? 0 : '56.25%',
+            paddingTop: '56.25%',
             borderRadius: { xs: 0, sm: 2 },
             bgcolor: '#000',
             overflow: 'visible',
@@ -680,7 +806,8 @@ export default function StudentItemLearningPage() {
                     playsInline
                     style={{
                       width: '100%',
-                      maxHeight: '70vh',
+                      height: '100%',
+                      objectFit: 'contain',
                       backgroundColor: '#000',
                     }}
                     title={data.title}
@@ -719,24 +846,51 @@ export default function StudentItemLearningPage() {
             border: `1px solid ${theme.palette.divider}`,
           }}
         >
-          <PDFReader
-            pdfUrl={data.pdf_url!}
-            initialPage={progress?.last_pdf_page || 1}
-            totalPages={data.pdf_page_count || undefined}
-            onPageChange={(page) => {
-              getToken().then((token) => {
-                if (!token) return;
-                fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ last_pdf_page: page }),
+          {pdfStreamLoading ? (
+            <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : pdfStreamUrl ? (
+            <PDFReader
+              pdfUrl={pdfStreamUrl}
+              initialPage={progress?.last_pdf_page || 1}
+              totalPages={data.pdf_page_count || undefined}
+              onRetry={() => {
+                setPdfStreamUrl(null);
+                setPdfRetryCount((c) => c + 1);
+              }}
+              onPageChange={(page) => {
+                getToken().then((token) => {
+                  if (!token) return;
+                  fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ last_pdf_page: page }),
+                  });
                 });
-              });
-            }}
-          />
+              }}
+            />
+          ) : (
+            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, p: 3 }}>
+              <Typography color={pdfStreamError ? 'error' : 'text.secondary'} textAlign="center">
+                {pdfStreamError || 'PDF unavailable'}
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setPdfStreamUrl(null);
+                  setPdfStreamError(null);
+                  setPdfRetryCount((c) => c + 1);
+                }}
+              >
+                Retry
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -824,6 +978,7 @@ export default function StudentItemLearningPage() {
               currentSectionIndex={currentSectionIndex}
               chapterNumber={data.chapter_number || undefined}
               onSectionClick={handleSectionClick}
+              onRedoQuiz={handleRedoQuiz}
             />
           </Box>
         )}
@@ -855,10 +1010,11 @@ export default function StudentItemLearningPage() {
           open={quizOpen}
           sectionTitle={sections[quizSectionIndex].title}
           questions={sections[quizSectionIndex].quiz_questions}
-          onClose={() => setQuizOpen(false)}
+          onClose={handleQuizClose}
           onSubmit={handleQuizSubmit}
           onRetry={handleQuizRetry}
           onContinue={handleQuizContinue}
+          dismissable={!!sections[quizSectionIndex].quiz_attempt?.passed}
         />
       )}
 

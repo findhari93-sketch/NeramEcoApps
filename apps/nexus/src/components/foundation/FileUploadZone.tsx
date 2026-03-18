@@ -41,6 +41,8 @@ interface FileUploadZoneProps {
   deleteUrl?: string;
   /** Extra form data fields to send */
   extraFormData?: Record<string, string>;
+  /** Override the subtitle shown below the label (defaults to filename from URL) */
+  currentFileSubtitle?: string;
 }
 
 export default function FileUploadZone({
@@ -55,6 +57,7 @@ export default function FileUploadZone({
   label = 'Drop file or click to upload',
   deleteUrl,
   extraFormData,
+  currentFileSubtitle,
 }: FileUploadZoneProps) {
   const theme = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -220,13 +223,15 @@ export default function FileUploadZone({
               color: isPdf ? 'error.main' : isAudio ? 'info.main' : 'text.secondary',
             }}
           />
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
             <Typography variant="body2" fontWeight={600} noWrap>
               {currentFileLabel || 'File uploaded'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" noWrap>
-              {currentFileUrl.split('/').pop()}
-            </Typography>
+            {(currentFileSubtitle || currentFileUrl) && (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {currentFileSubtitle || currentFileUrl.split('?')[0].split('/').pop() || 'Uploaded file'}
+              </Typography>
+            )}
           </Box>
           <IconButton
             size="small"

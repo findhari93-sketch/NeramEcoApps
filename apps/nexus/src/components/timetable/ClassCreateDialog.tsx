@@ -6,7 +6,6 @@ import {
   Typography,
   Button,
   TextField,
-  Checkbox,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,7 +16,9 @@ import {
   InputLabel,
   FormControl,
   FormHelperText,
+  Switch,
 } from '@neram/ui';
+import VideocamIcon from '@mui/icons-material/Videocam';
 import { type ClassCardData } from './ClassCard';
 import { type HolidayInfo } from './WeeklyCalendarGrid';
 
@@ -39,7 +40,7 @@ interface ClassFormData {
   end_time: string;
   topic_id: string;
   batch_id: string;
-  create_teams_meeting: boolean;
+  create_meeting: boolean;
 }
 
 const emptyForm: ClassFormData = {
@@ -49,7 +50,7 @@ const emptyForm: ClassFormData = {
   end_time: '',
   topic_id: '',
   batch_id: '',
-  create_teams_meeting: false,
+  create_meeting: false,
 };
 
 interface ClassCreateDialogProps {
@@ -69,6 +70,8 @@ interface ClassCreateDialogProps {
   holidays?: Record<string, HolidayInfo>;
   /** Remove a holiday by date */
   onRemoveHoliday?: (date: string) => Promise<void>;
+  /** Whether the classroom has a linked Teams team (enables channel meeting) */
+  hasLinkedTeam?: boolean;
 }
 
 export default function ClassCreateDialog({
@@ -84,6 +87,7 @@ export default function ClassCreateDialog({
   prefillTime,
   holidays,
   onRemoveHoliday,
+  hasLinkedTeam,
 }: ClassCreateDialogProps) {
   const [formData, setFormData] = useState<ClassFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -100,7 +104,7 @@ export default function ClassCreateDialog({
         end_time: editingClass.end_time,
         topic_id: editingClass.topic?.id || '',
         batch_id: editingClass.batch_id || '',
-        create_teams_meeting: false,
+        create_meeting: false,
       });
     } else if (prefillDate || prefillTime) {
       setFormData({
@@ -159,7 +163,10 @@ export default function ClassCreateDialog({
       if (!token) return;
 
       const body: Record<string, unknown> = {
-        ...formData,
+        title: formData.title,
+        scheduled_date: formData.scheduled_date,
+        start_time: formData.start_time,
+        end_time: formData.end_time,
         classroom_id: classroomId,
         topic_id: formData.topic_id || null,
         batch_id: formData.batch_id || null,
@@ -186,8 +193,8 @@ export default function ClassCreateDialog({
 
       const data = await res.json();
 
-      // If create_teams_meeting was requested and this is a new class, create the meeting
-      if (!editingClass && formData.create_teams_meeting && data.class?.id) {
+      // If meeting toggle is on and this is a new class, create the Teams meeting
+      if (!editingClass && formData.create_meeting && data.class?.id) {
         try {
           const meetingRes = await fetch('/api/timetable/teams-meeting', {
             method: 'POST',
@@ -198,13 +205,13 @@ export default function ClassCreateDialog({
             body: JSON.stringify({
               class_id: data.class.id,
               classroom_id: classroomId,
+              auto: true,
             }),
           });
 
           if (!meetingRes.ok) {
             const meetingErr = await meetingRes.json().catch(() => ({}));
             console.error('Teams meeting creation failed:', meetingErr.error);
-            // Don't fail the whole operation — class was created, just meeting failed
           }
         } catch (meetingErr) {
           console.error('Teams meeting creation error:', meetingErr);
@@ -308,16 +315,39 @@ export default function ClassCreateDialog({
             <FormHelperText>Leave as &apos;All Batches&apos; for classroom-wide classes</FormHelperText>
           </FormControl>
 
+          {/* Create Teams Meeting toggle */}
           {!editingClass && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Checkbox
-                checked={formData.create_teams_meeting}
-                onChange={(e) =>
-                  setFormData((f) => ({ ...f, create_teams_meeting: e.target.checked }))
-                }
-                sx={{ '& .MuiSvgIcon-root': { fontSize: 28 } }}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                p: 1.5,
+                border: '1px solid',
+                borderColor: formData.create_meeting ? 'primary.main' : 'divider',
+                borderRadius: 1,
+                bgcolor: formData.create_meeting ? 'primary.50' : 'transparent',
+                transition: 'all 0.15s',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <VideocamIcon color={formData.create_meeting ? 'primary' : 'disabled'} />
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Create Teams Meeting
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {hasLinkedTeam
+                      ? 'Meeting link + channel post + calendar invites'
+                      : 'Meeting link + calendar invites to students'}
+                  </Typography>
+                </Box>
+              </Box>
+              <Switch
+                checked={formData.create_meeting}
+                onChange={(e) => setFormData((f) => ({ ...f, create_meeting: e.target.checked }))}
+                color="primary"
               />
-              <Typography variant="body2">Create Teams Meeting</Typography>
             </Box>
           )}
         </Box>

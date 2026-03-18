@@ -5,6 +5,7 @@ import {
   Box,
   Typography,
   Button,
+  IconButton,
   Drawer,
   SwipeableDrawer,
   alpha,
@@ -16,6 +17,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import CloseIcon from '@mui/icons-material/Close';
 import QuizQuestion from './QuizQuestion';
 
 interface QuizQuestionData {
@@ -44,6 +46,8 @@ interface QuizModalProps {
   onSubmit: (answers: Record<string, string>) => Promise<QuizResult>;
   onRetry: () => void;
   onContinue: () => void;
+  /** If true, the student can dismiss the quiz (e.g., redo on a passed section) */
+  dismissable?: boolean;
 }
 
 export default function QuizModal({
@@ -54,6 +58,7 @@ export default function QuizModal({
   onSubmit,
   onRetry,
   onContinue,
+  dismissable = false,
 }: QuizModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -90,6 +95,12 @@ export default function QuizModal({
     onContinue();
   };
 
+  const handleDismiss = () => {
+    setAnswers({});
+    setResult(null);
+    onClose();
+  };
+
   const allAnswered = Object.keys(answers).length >= questions.length;
 
   const content = (
@@ -98,12 +109,17 @@ export default function QuizModal({
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2.5 }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '1.1rem' }}>
-            Section Quiz
+            {dismissable ? 'Redo Quiz' : 'Section Quiz'}
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
             {sectionTitle}
           </Typography>
         </Box>
+        {dismissable && (
+          <IconButton size="small" onClick={handleDismiss} sx={{ mt: -0.5, mr: -0.5 }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        )}
       </Box>
 
       {/* Result banner */}
@@ -247,11 +263,11 @@ export default function QuizModal({
       <SwipeableDrawer
         anchor="bottom"
         open={open}
-        onClose={() => {}}
+        onClose={dismissable ? handleDismiss : () => {}}
         onOpen={() => {}}
-        disableSwipeToOpen
-        disableDiscovery
-        ModalProps={{ disableEscapeKeyDown: true }}
+        disableSwipeToOpen={!dismissable}
+        disableDiscovery={!dismissable}
+        ModalProps={{ disableEscapeKeyDown: !dismissable }}
         PaperProps={{
           sx: {
             borderTopLeftRadius: 20,
@@ -280,8 +296,8 @@ export default function QuizModal({
     <Drawer
       anchor="right"
       open={open}
-      onClose={() => {}}
-      ModalProps={{ disableEscapeKeyDown: true }}
+      onClose={dismissable ? handleDismiss : () => {}}
+      ModalProps={{ disableEscapeKeyDown: !dismissable }}
       PaperProps={{
         sx: {
           width: { md: 420, lg: 460 },

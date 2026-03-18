@@ -73,7 +73,7 @@ export default function ClassroomsPage() {
     fetchClassrooms();
   }, [fetchClassrooms]);
 
-  const handleCreate = async (formData: { name: string; type: string; description: string }) => {
+  const handleCreate = async (formData: { name: string; type: string; description: string; ms_team_id: string | null }) => {
     const token = await getToken();
     if (!token) return;
 
@@ -209,6 +209,7 @@ export default function ClassroomsPage() {
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
         mode="create"
+        getToken={getToken}
       />
     </Box>
   );

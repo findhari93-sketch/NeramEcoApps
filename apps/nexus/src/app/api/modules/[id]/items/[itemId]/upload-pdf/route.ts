@@ -54,6 +54,14 @@ export async function POST(
 
     const result = await uploadToSharePoint(token, filePath, buffer, 'application/pdf');
 
+    // Merge pdf_filename into existing metadata
+    const { data: currentItem } = await supabase
+      .from('nexus_module_items')
+      .select('metadata')
+      .eq('id', itemId)
+      .single();
+    const mergedMetadata = { ...(currentItem?.metadata || {}), pdf_filename: file.name };
+
     const { error: updateError } = await supabase
       .from('nexus_module_items')
       .update({
@@ -61,6 +69,7 @@ export async function POST(
         pdf_storage_path: filePath,
         pdf_page_count: pageCount ? parseInt(String(pageCount), 10) : null,
         pdf_onedrive_item_id: result.itemId,
+        metadata: mergedMetadata,
       })
       .eq('id', itemId);
 
@@ -70,6 +79,7 @@ export async function POST(
       pdf_url: result.sharingUrl,
       pdf_storage_path: filePath,
       pdf_page_count: pageCount ? parseInt(String(pageCount), 10) : null,
+      pdf_filename: file.name,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload failed';

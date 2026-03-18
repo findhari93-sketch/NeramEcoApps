@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Box, Typography, IconButton } from '@neram/ui';
+import { useMemo, useRef, useEffect, useState } from 'react';
+import { Box, Typography, IconButton, useMediaQuery, useTheme } from '@neram/ui';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TodayIcon from '@mui/icons-material/Today';
@@ -11,6 +11,8 @@ import { type HolidayInfo } from './WeeklyCalendarGrid';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
+const ROW_HEIGHT = 68; // px per day row
+const DATE_COL_WIDTH = 56; // px for the left date column
 
 function getWeekDates(offset: number) {
   const now = new Date();
@@ -45,19 +47,9 @@ function isToday(d: Date) {
   return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
 }
 
-function timeToRow(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return (h - 8) * 2 + (m >= 30 ? 1 : 0);
-}
-
-function timeToRowEnd(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return (h - 8) * 2 + (m > 0 ? (m >= 30 ? 2 : 1) : 0);
-}
-
 function formatTime(hour: number) {
   const ampm = hour >= 12 ? 'PM' : 'AM';
-  return `${hour % 12 || 12} ${ampm}`;
+  return `${hour % 12 || 12}${ampm}`;
 }
 
 function formatTimeShort(time: string) {
@@ -93,6 +85,39 @@ export default function TimeSlotGrid({
   onClassClick,
 }: TimeSlotGridProps) {
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Measure available width and compute cell width dynamically
+  const [cellWidth, setCellWidth] = useState(80);
+
+  useEffect(() => {
+    const measure = () => {
+      if (containerRef.current) {
+        const available = containerRef.current.clientWidth - DATE_COL_WIDTH - 2; // border
+        const calculated = Math.floor(available / HOURS.length);
+        // Minimum 50px per cell on desktop, 40px on mobile scroll
+        setCellWidth(Math.max(calculated, isMobile ? 48 : 50));
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isMobile]);
+
+  // Auto-scroll to current time on mount
+  useEffect(() => {
+    if (scrollRef.current && weekOffset === 0) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      if (currentHour >= 8 && currentHour <= 20) {
+        const scrollTo = (currentHour - 8) * cellWidth - cellWidth; // show 1 hour before current
+        scrollRef.current.scrollLeft = Math.max(0, scrollTo);
+      }
+    }
+  }, [weekOffset, cellWidth]);
 
   // Group classes by date
   const classesByDate = useMemo(() => {
@@ -104,16 +129,28 @@ export default function TimeSlotGrid({
     return map;
   }, [classes]);
 
+  /** Convert a time string to a pixel offset from the left edge of the time grid */
+  const timeToX = (time: string): number => {
+    const [h, m] = time.split(':').map(Number);
+    return ((h - 8) + m / 60) * cellWidth;
+  };
+
   const handleSlotClick = (dayIdx: number, hourIdx: number, event: React.MouseEvent) => {
     const dateStr = formatDateISO(week.days[dayIdx]);
-    if (holidays?.[dateStr]) return; // Don't create on holidays
+    if (holidays?.[dateStr]) return;
     const hour = HOURS[hourIdx];
     const startTime = `${hour.toString().padStart(2, '0')}:00`;
     onSlotClick?.(dateStr, startTime, event);
   };
 
+  const totalTimeWidth = HOURS.length * cellWidth;
+  // On desktop, if the grid fits, don't scroll
+  const fitsInView = containerRef.current
+    ? (totalTimeWidth + DATE_COL_WIDTH) <= containerRef.current.clientWidth
+    : false;
+
   return (
-    <Box>
+    <Box ref={containerRef}>
       {/* Week Navigation */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
         <IconButton onClick={() => onWeekChange(weekOffset - 1)} sx={{ minWidth: 40, minHeight: 40 }}>
@@ -134,123 +171,166 @@ export default function TimeSlotGrid({
         </IconButton>
       </Box>
 
-      {/* Calendar Grid */}
+      {/* Calendar Grid — dates as rows, times as columns */}
       <Box
         sx={{
-          display: 'grid',
-          gridTemplateColumns: '60px repeat(7, 1fr)',
           border: '1px solid',
           borderColor: 'divider',
           borderRadius: 1,
           overflow: 'hidden',
           bgcolor: 'background.paper',
+          display: 'flex',
+          width: '100%',
         }}
       >
-        {/* Top-left corner (empty) */}
-        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50' }} />
+        {/* Sticky date column */}
+        <Box
+          sx={{
+            flexShrink: 0,
+            width: DATE_COL_WIDTH,
+            zIndex: 3,
+            bgcolor: 'background.paper',
+            borderRight: '2px solid',
+            borderRightColor: 'divider',
+          }}
+        >
+          {/* Corner cell */}
+          <Box
+            sx={{
+              height: 36,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'grey.50',
+            }}
+          />
+          {/* Date labels */}
+          {week.days.map((day, idx) => {
+            const dateStr = formatDateISO(day);
+            const today = isToday(day);
+            const isHoliday = !!holidays?.[dateStr];
 
-        {/* Day headers */}
-        {week.days.map((day, idx) => {
-          const dateStr = formatDateISO(day);
-          const today = isToday(day);
-          const isHoliday = !!holidays?.[dateStr];
-
-          return (
-            <Box
-              key={dateStr}
-              sx={{
-                textAlign: 'center',
-                py: 1,
-                borderBottom: '1px solid',
-                borderLeft: '1px solid',
-                borderColor: 'divider',
-                bgcolor: isHoliday ? 'error.main' : today ? 'primary.main' : 'grey.50',
-                color: isHoliday || today ? '#fff' : 'text.primary',
-              }}
-            >
-              <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
-                {DAY_NAMES[idx]}
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                {day.getDate()}
-              </Typography>
-              {isHoliday && (
-                <Typography variant="caption" sx={{ fontSize: '0.6rem', display: 'block' }}>
-                  {holidays![dateStr].title}
+            return (
+              <Box
+                key={dateStr}
+                sx={{
+                  height: ROW_HEIGHT,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderBottom: idx < 6 ? '1px solid' : 'none',
+                  borderColor: 'divider',
+                  bgcolor: isHoliday ? 'error.main' : today ? 'primary.main' : 'grey.50',
+                  color: isHoliday || today ? '#fff' : 'text.primary',
+                  px: 0.25,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.65rem', lineHeight: 1.2 }}>
+                  {DAY_NAMES[idx]}
                 </Typography>
-              )}
-            </Box>
-          );
-        })}
+                <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  {day.getDate()}
+                </Typography>
+                {isHoliday && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontSize: '0.5rem',
+                      lineHeight: 1.1,
+                      textAlign: 'center',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '100%',
+                    }}
+                  >
+                    {holidays![dateStr].title}
+                  </Typography>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
 
-        {/* Hour rows */}
-        {HOURS.map((hour, hourIdx) => (
-          <Box key={hour} sx={{ display: 'contents' }}>
-            {/* Time label */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'center',
-                py: 0.5,
-                px: 0.5,
-                borderTop: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'grey.50',
-                height: 48,
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                {formatTime(hour)}
-              </Typography>
-            </Box>
-
-            {/* Day cells */}
-            {week.days.map((day, dayIdx) => {
-              const dateStr = formatDateISO(day);
-              const isHoliday = !!holidays?.[dateStr];
-
-              return (
-                <Box
-                  key={`${dateStr}-${hour}`}
-                  onClick={(e) => !isHoliday && handleSlotClick(dayIdx, hourIdx, e)}
-                  sx={{
-                    borderTop: '1px solid',
-                    borderLeft: '1px solid',
-                    borderColor: 'divider',
-                    height: 48,
-                    position: 'relative',
-                    cursor: isHoliday ? 'not-allowed' : 'pointer',
-                    bgcolor: isHoliday
-                      ? 'error.50'
-                      : 'transparent',
-                    '&:hover': isHoliday
-                      ? {}
-                      : { bgcolor: 'primary.50' },
-                    transition: 'background-color 0.15s',
-                  }}
-                />
-              );
-            })}
+        {/* Scrollable time area */}
+        <Box
+          ref={scrollRef}
+          sx={{
+            flex: 1,
+            overflowX: fitsInView ? 'hidden' : 'auto',
+            overflowY: 'hidden',
+            // Smooth scrolling & scroll snap on mobile for better touch UX
+            ...(isMobile && {
+              WebkitOverflowScrolling: 'touch',
+              scrollSnapType: 'x proximity',
+            }),
+          }}
+        >
+          {/* Time header row */}
+          <Box sx={{ display: 'flex', height: 36, minWidth: totalTimeWidth }}>
+            {HOURS.map((hour) => (
+              <Box
+                key={hour}
+                sx={{
+                  width: cellWidth,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderBottom: '1px solid',
+                  borderLeft: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'grey.50',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.62rem', fontWeight: 500 }}>
+                  {formatTime(hour)}
+                </Typography>
+              </Box>
+            ))}
           </Box>
-        ))}
-      </Box>
 
-      {/* Class blocks overlaid on the grid */}
-      {/* Render class blocks as absolute positioned elements using CSS */}
-      <Box sx={{ position: 'relative', mt: -((HOURS.length * 48) + 60) }}>
-        <Box sx={{ ml: '60px', display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', height: HOURS.length * 48, position: 'relative', top: 60 }}>
+          {/* Day rows */}
           {week.days.map((day, dayIdx) => {
             const dateStr = formatDateISO(day);
+            const isHoliday = !!holidays?.[dateStr];
             const dayClasses = classesByDate[dateStr] || [];
 
             return (
-              <Box key={dateStr} sx={{ position: 'relative' }}>
+              <Box
+                key={dateStr}
+                sx={{
+                  display: 'flex',
+                  height: ROW_HEIGHT,
+                  minWidth: totalTimeWidth,
+                  position: 'relative',
+                  borderBottom: dayIdx < 6 ? '1px solid' : 'none',
+                  borderColor: 'divider',
+                }}
+              >
+                {/* Hour cells (clickable background) */}
+                {HOURS.map((hour, hourIdx) => (
+                  <Box
+                    key={`${dateStr}-${hour}`}
+                    onClick={(e) => !isHoliday && handleSlotClick(dayIdx, hourIdx, e)}
+                    sx={{
+                      width: cellWidth,
+                      flexShrink: 0,
+                      borderLeft: '1px solid',
+                      borderColor: 'divider',
+                      cursor: isHoliday ? 'not-allowed' : 'pointer',
+                      bgcolor: isHoliday ? 'rgba(211,47,47,0.04)' : 'transparent',
+                      '&:hover': isHoliday ? {} : { bgcolor: 'rgba(25,118,210,0.04)' },
+                      transition: 'background-color 0.15s',
+                    }}
+                  />
+                ))}
+
+                {/* Class blocks overlaid horizontally */}
                 {dayClasses.map((cls) => {
-                  const startRow = timeToRow(cls.start_time);
-                  const endRow = timeToRowEnd(cls.end_time);
-                  const top = startRow * 24; // Each half-hour = 24px (48px per hour / 2)
-                  const height = Math.max((endRow - startRow) * 24, 24);
+                  const left = timeToX(cls.start_time);
+                  const right = timeToX(cls.end_time);
+                  const width = Math.max(right - left, cellWidth * 0.5);
 
                   return (
                     <Box
@@ -261,49 +341,49 @@ export default function TimeSlotGrid({
                       }}
                       sx={{
                         position: 'absolute',
-                        top,
-                        left: 2,
-                        right: 2,
-                        height,
+                        left,
+                        top: 3,
+                        bottom: 3,
+                        width,
                         bgcolor: statusColors[cls.status] || statusColors.scheduled,
                         color: '#fff',
-                        borderRadius: 0.5,
-                        px: 0.5,
+                        borderRadius: 1,
+                        px: 0.75,
                         py: 0.25,
                         overflow: 'hidden',
                         cursor: 'pointer',
-                        fontSize: '0.65rem',
-                        lineHeight: 1.3,
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                        '&:hover': { opacity: 0.9, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' },
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                        '&:hover': { opacity: 0.9, boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
                         transition: 'opacity 0.15s',
                         zIndex: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
                       }}
                     >
                       <Typography
                         variant="caption"
                         sx={{
-                          fontWeight: 600,
-                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          fontSize: '0.68rem',
                           color: 'inherit',
                           display: 'block',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
+                          lineHeight: 1.3,
                         }}
                       >
                         {cls.title}
                       </Typography>
-                      {height >= 36 && (
-                        <Typography
-                          variant="caption"
-                          sx={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.85)', display: 'block' }}
-                        >
-                          {formatTimeShort(cls.start_time)} - {formatTimeShort(cls.end_time)}
-                        </Typography>
-                      )}
-                      {height >= 48 && cls.teams_meeting_id && (
-                        <VideocamIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', mt: 0.25 }} />
+                      <Typography
+                        variant="caption"
+                        sx={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.3 }}
+                      >
+                        {formatTimeShort(cls.start_time)} – {formatTimeShort(cls.end_time)}
+                      </Typography>
+                      {cls.teams_meeting_id && (
+                        <VideocamIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', mt: 0.15 }} />
                       )}
                     </Box>
                   );
@@ -313,8 +393,6 @@ export default function TimeSlotGrid({
           })}
         </Box>
       </Box>
-      {/* Spacer to account for the absolute positioning overlay */}
-      <Box sx={{ height: 0 }} />
     </Box>
   );
 }

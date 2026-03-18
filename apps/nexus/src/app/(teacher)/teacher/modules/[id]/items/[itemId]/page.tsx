@@ -816,9 +816,10 @@ export default function ModuleItemEditorPage() {
           maxSizeMB={50}
           getToken={getToken}
           currentFileUrl={item?.pdf_url}
-          currentFileLabel={item?.pdf_url ? `PDF · ${item?.pdf_page_count || '?'} pages` : undefined}
+          currentFileLabel={item?.pdf_url ? ((item?.metadata as any)?.pdf_filename || 'Reading Material') + (item?.pdf_page_count ? ` · ${item.pdf_page_count} pages` : '') : undefined}
+          currentFileSubtitle={item?.pdf_url ? (item?.pdf_page_count ? `PDF · ${item.pdf_page_count} pages` : 'PDF document') : undefined}
           onUpload={(data) => {
-            setItem((prev: any) => prev ? { ...prev, pdf_url: data.pdf_url, pdf_storage_path: data.pdf_storage_path, pdf_page_count: data.pdf_page_count } : prev);
+            setItem((prev: any) => prev ? { ...prev, pdf_url: data.pdf_url, pdf_storage_path: data.pdf_storage_path, pdf_page_count: data.pdf_page_count, metadata: { ...(prev.metadata || {}), pdf_filename: data.pdf_filename } } : prev);
           }}
           onRemove={() => {
             setItem((prev: any) => prev ? { ...prev, pdf_url: null, pdf_storage_path: null, pdf_page_count: null } : prev);

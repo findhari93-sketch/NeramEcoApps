@@ -37,6 +37,7 @@ interface PDFReaderProps {
   initialPage?: number;
   totalPages?: number;
   onPageChange?: (page: number) => void;
+  onRetry?: () => void;
 }
 
 type ReadingMode = 'light' | 'dark' | 'sepia';
@@ -56,7 +57,7 @@ const MAX_ZOOM = 3;
 const DEBOUNCE_MS = 3000;
 
 const loadPdfJs = async () => {
-  const pdfjs = await import('pdfjs-dist');
+  const pdfjs = await import('pdfjs-dist/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
   return pdfjs;
 };
@@ -86,6 +87,7 @@ export default function PDFReader({
   initialPage = 1,
   totalPages: totalPagesOverride,
   onPageChange,
+  onRetry,
 }: PDFReaderProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -100,6 +102,7 @@ export default function PDFReader({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // ---- Refs ----
   const containerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +151,7 @@ export default function PDFReader({
     return () => {
       cancelled = true;
     };
-  }, [pdfUrl]);
+  }, [pdfUrl, retryCount]);
 
   // ---------- Render Page ----------
   const renderPage = useCallback(
@@ -490,7 +493,13 @@ export default function PDFReader({
         </Typography>
         <Button
           variant="outlined"
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            if (onRetry) {
+              onRetry();
+            } else {
+              setRetryCount((c) => c + 1);
+            }
+          }}
         >
           Retry
         </Button>

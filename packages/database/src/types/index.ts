@@ -1154,7 +1154,8 @@ export interface Batch extends Timestamps {
   // Microsoft Teams
   ms_team_id: string | null;
   ms_team_name: string | null;
-  
+  ms_team_sync_enabled: boolean;
+
   // Capacity
   capacity: number;
   enrolled_count: number;
@@ -4128,6 +4129,8 @@ export interface NexusClassroom extends Timestamps {
   type: NexusClassroomType;
   description: string | null;
   ms_team_id: string | null;
+  ms_team_name: string | null;
+  ms_team_sync_enabled: boolean;
   is_active: boolean;
   created_by: string | null;
 }
@@ -4192,6 +4195,7 @@ export interface NexusScheduledClass extends Timestamps {
   status: NexusClassStatus;
   rescheduled_to: string | null;
   notes: string | null;
+  teams_meeting_scope: 'link_only' | 'channel_meeting' | 'calendar_event' | null;
 }
 
 export interface NexusAttendance {

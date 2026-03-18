@@ -21,7 +21,7 @@ export default function StudentTimetable() {
   const [classes, setClasses] = useState<ClassCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
 
   // Detail panel
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
