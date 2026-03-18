@@ -19,6 +19,7 @@ import {
   FormHelperText,
 } from '@neram/ui';
 import { type ClassCardData } from './ClassCard';
+import { type HolidayInfo } from './WeeklyCalendarGrid';
 
 interface TopicOption {
   id: string;
@@ -64,6 +65,10 @@ interface ClassCreateDialogProps {
   prefillDate?: string;
   /** Pre-fill start time from calendar slot click */
   prefillTime?: string;
+  /** Holidays map for conflict checking */
+  holidays?: Record<string, HolidayInfo>;
+  /** Remove a holiday by date */
+  onRemoveHoliday?: (date: string) => Promise<void>;
 }
 
 export default function ClassCreateDialog({
@@ -77,10 +82,13 @@ export default function ClassCreateDialog({
   onSaved,
   prefillDate,
   prefillTime,
+  holidays,
+  onRemoveHoliday,
 }: ClassCreateDialogProps) {
   const [formData, setFormData] = useState<ClassFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [holidayConflict, setHolidayConflict] = useState<{ date: string; title: string } | null>(null);
 
   // Populate form when editing
   useEffect(() => {
@@ -116,6 +124,33 @@ export default function ClassCreateDialog({
       return;
     }
 
+    // Check for holiday conflict (only when creating, not editing)
+    if (!editingClass && holidays && holidays[formData.scheduled_date]) {
+      setHolidayConflict({
+        date: formData.scheduled_date,
+        title: holidays[formData.scheduled_date].title,
+      });
+      return;
+    }
+
+    await doSubmit();
+  };
+
+  const handleConfirmHolidayOverride = async () => {
+    if (holidayConflict && onRemoveHoliday) {
+      try {
+        await onRemoveHoliday(holidayConflict.date);
+      } catch {
+        setError('Failed to remove holiday');
+        setHolidayConflict(null);
+        return;
+      }
+    }
+    setHolidayConflict(null);
+    await doSubmit();
+  };
+
+  const doSubmit = async () => {
     setSubmitting(true);
     setError(null);
 
@@ -300,6 +335,32 @@ export default function ClassCreateDialog({
           {submitting ? 'Saving...' : editingClass ? 'Update' : 'Create'}
         </Button>
       </DialogActions>
+
+      {/* Holiday conflict confirmation */}
+      <Dialog open={!!holidayConflict} onClose={() => setHolidayConflict(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Holiday on this date</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            <strong>{holidayConflict?.date}</strong> is marked as a holiday: <strong>{holidayConflict?.title}</strong>
+          </Typography>
+          <Typography variant="body2" color="warning.main" sx={{ mt: 1.5 }}>
+            Do you want to remove the holiday and schedule this class?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHolidayConflict(null)} sx={{ minHeight: 48 }}>
+            No, keep holiday
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleConfirmHolidayOverride}
+            sx={{ minHeight: 48 }}
+          >
+            Remove holiday &amp; create class
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

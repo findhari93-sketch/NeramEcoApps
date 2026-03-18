@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Snackbar, Alert } from '@neram/ui';
+import { Box, Typography, Snackbar, Alert, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme } from '@neram/ui';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
+import TimeSlotGrid from '@/components/timetable/TimeSlotGrid';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
 import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
 import RsvpReasonDialog from '@/components/timetable/RsvpReasonDialog';
@@ -13,9 +16,12 @@ import { type HolidayInfo } from '@/components/timetable/WeeklyCalendarGrid';
 
 export default function StudentTimetable() {
   const { activeClassroom, getToken } = useNexusAuthContext();
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
   // Detail panel
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
@@ -247,29 +253,57 @@ export default function StudentTimetable() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
           Timetable
         </Typography>
-        {activeClassroom && (
-          <TimetableNotificationBell
-            classroomId={activeClassroom.id}
-            getToken={getToken}
-          />
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {isDesktop && (
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(_, v) => v && setViewMode(v)}
+              size="small"
+              sx={{ mr: 0.5 }}
+            >
+              <ToggleButton value="list" sx={{ minWidth: 36, minHeight: 36 }}>
+                <ViewListIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="calendar" sx={{ minWidth: 36, minHeight: 36 }}>
+                <CalendarMonthIcon fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+          )}
+          {activeClassroom && (
+            <TimetableNotificationBell
+              classroomId={activeClassroom.id}
+              getToken={getToken}
+            />
+          )}
+        </Box>
       </Box>
 
-      <WeeklyCalendarGrid
-        classes={classes}
-        loading={loading}
-        weekOffset={weekOffset}
-        onWeekChange={setWeekOffset}
-        role="student"
-        holidays={holidays}
-        myRsvps={myRsvps}
-        myAttendance={myAttendance}
-        onClassClick={setSelectedClass}
-      />
+      {viewMode === 'calendar' && isDesktop ? (
+        <TimeSlotGrid
+          classes={classes}
+          weekOffset={weekOffset}
+          onWeekChange={setWeekOffset}
+          holidays={holidays}
+          onClassClick={setSelectedClass}
+        />
+      ) : (
+        <WeeklyCalendarGrid
+          classes={classes}
+          loading={loading}
+          weekOffset={weekOffset}
+          onWeekChange={setWeekOffset}
+          role="student"
+          holidays={holidays}
+          myRsvps={myRsvps}
+          myAttendance={myAttendance}
+          onClassClick={setSelectedClass}
+        />
+      )}
 
       {/* Class Detail Panel */}
       <ClassDetailPanel

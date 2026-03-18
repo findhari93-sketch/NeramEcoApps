@@ -22,7 +22,7 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import Image from 'next/image';
 
-const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
+const ASSISTANT_IMG = '/images/nata-ai-assistant2.jpg';
 
 function BotAvatar({ size = 40 }: { size?: number }) {
   const [imgError, setImgError] = useState(false);

@@ -146,8 +146,19 @@ export default async function RootLayout({
       className={`${poppins.variable} ${inter.variable}${locale === 'ta' ? ` ${notoSansTamil.variable}` : ''}`}
       suppressHydrationWarning
     >
-      <head />
+      <head>
+          {/* Preload chatbot avatar — prevents it from being flagged as a slow LCP element */}
+          <link rel="preload" as="image" href="/images/nata-ai-assistant2.jpg" />
+        </head>
       <body className={inter.className} suppressHydrationWarning>
+        {/* Global chunk-load error handler — fires before React mounts.
+            Catches /_next/static/ 404s and forces a one-time reload so users
+            don't get a blank page after a new deployment purges old chunk hashes. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var K='chunk-err-reload';function r(){if(!sessionStorage.getItem(K)){sessionStorage.setItem(K,'1');window.location.reload();}}window.addEventListener('error',function(e){if(e.filename&&e.filename.indexOf('/_next/static/')!==-1)r();},true);window.addEventListener('unhandledrejection',function(e){var m=e.reason&&(e.reason.message||String(e.reason))||'';if(/ChunkLoadError|Loading chunk|dynamically imported module/i.test(m))r();});})();`,
+          }}
+        />
         <GoogleAdsTag />
         <NextIntlClientProvider messages={messages}>
           <ThemeRegistry

@@ -29,12 +29,23 @@ export interface HolidayData {
   created_at: string;
 }
 
+interface ConflictingClass {
+  id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+}
+
 interface HolidayManagerProps {
   open: boolean;
   onClose: () => void;
   classroomId: string;
   getToken: () => Promise<string | null>;
   onHolidaysChanged: () => void;
+  /** Check if classes exist on a given date — returns conflicting classes */
+  getClassesOnDate?: (date: string) => ConflictingClass[];
+  /** Cancel a class by id */
+  onCancelClass?: (classId: string) => Promise<void>;
 }
 
 export default function HolidayManager({
@@ -43,6 +54,8 @@ export default function HolidayManager({
   classroomId,
   getToken,
   onHolidaysChanged,
+  getClassesOnDate,
+  onCancelClass,
 }: HolidayManagerProps) {
   const [holidays, setHolidays] = useState<HolidayData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,6 +64,8 @@ export default function HolidayManager({
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflictClasses, setConflictClasses] = useState<ConflictingClass[]>([]);
+  const [showConflictConfirm, setShowConflictConfirm] = useState(false);
 
   const fetchHolidays = async () => {
     setLoading(true);
@@ -87,6 +102,42 @@ export default function HolidayManager({
       return;
     }
 
+    // Check for conflicting classes on this date
+    if (getClassesOnDate) {
+      const conflicts = getClassesOnDate(date);
+      if (conflicts.length > 0) {
+        setConflictClasses(conflicts);
+        setShowConflictConfirm(true);
+        return;
+      }
+    }
+
+    await doAddHoliday();
+  };
+
+  const handleConfirmConflict = async () => {
+    setShowConflictConfirm(false);
+    setSubmitting(true);
+    setError(null);
+
+    // Cancel all conflicting classes first
+    if (onCancelClass) {
+      try {
+        for (const cls of conflictClasses) {
+          await onCancelClass(cls.id);
+        }
+      } catch {
+        setError('Failed to cancel existing classes');
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    setConflictClasses([]);
+    await doAddHoliday();
+  };
+
+  const doAddHoliday = async () => {
     setSubmitting(true);
     setError(null);
 
@@ -238,6 +289,37 @@ export default function HolidayManager({
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} sx={{ minHeight: 48 }}>Close</Button>
       </DialogActions>
+
+      {/* Conflict confirmation dialog */}
+      <Dialog open={showConflictConfirm} onClose={() => setShowConflictConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Classes exist on this date</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            There {conflictClasses.length === 1 ? 'is' : 'are'} {conflictClasses.length} class{conflictClasses.length === 1 ? '' : 'es'} scheduled on this date. They will be cancelled if you mark this as a holiday:
+          </Typography>
+          {conflictClasses.map((c) => (
+            <Typography key={c.id} variant="body2" sx={{ fontWeight: 600, ml: 1, mb: 0.5 }}>
+              &bull; {c.title} ({c.start_time} - {c.end_time})
+            </Typography>
+          ))}
+          <Typography variant="body2" color="error" sx={{ mt: 1.5 }}>
+            Do you want to cancel these classes and mark this day as a holiday?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowConflictConfirm(false)} sx={{ minHeight: 48 }}>
+            No, keep classes
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmConflict}
+            sx={{ minHeight: 48 }}
+          >
+            Cancel classes &amp; add holiday
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

@@ -255,6 +255,36 @@ deploy_env() {
 
   echo -e "${GREEN}Pushed to origin/${target_branch} — Vercel will auto-deploy${NC}"
 
+  # --- Cloudflare Cache Purge ---
+  # Purge stale HTML from Cloudflare's edge so browsers always get fresh chunk references.
+  # Set CLOUDFLARE_API_TOKEN in .env.staging / .env.production (not committed).
+  CF_ZONE_ID="c8d99edfbd0d36b58a247ea7c4f49a63"
+  CF_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+  # Load from env file if not already set
+  if [[ -z "$CF_API_TOKEN" && "$env_name" == "staging" && -f ".env.staging" ]]; then
+    CF_API_TOKEN=$(grep -E '^CLOUDFLARE_API_TOKEN=' .env.staging 2>/dev/null | cut -d'=' -f2-)
+  fi
+  if [[ -z "$CF_API_TOKEN" && "$env_name" == "production" && -f ".env.production" ]]; then
+    CF_API_TOKEN=$(grep -E '^CLOUDFLARE_API_TOKEN=' .env.production 2>/dev/null | cut -d'=' -f2-)
+  fi
+
+  if [[ -n "$CF_API_TOKEN" ]]; then
+    echo -e "${YELLOW}--- Purging Cloudflare cache ---${NC}"
+    CF_RESPONSE=$(curl -s -X POST \
+      "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+      -H "Authorization: Bearer ${CF_API_TOKEN}" \
+      -H "Content-Type: application/json" \
+      --data '{"purge_everything":true}')
+    if echo "$CF_RESPONSE" | grep -q '"success":true'; then
+      echo -e "${GREEN}Cloudflare cache purged${NC}"
+    else
+      echo -e "${YELLOW}Warning: Cloudflare purge failed (non-fatal): ${CF_RESPONSE}${NC}"
+    fi
+  else
+    echo -e "${YELLOW}CLOUDFLARE_API_TOKEN not set — skipping Cloudflare cache purge${NC}"
+    echo -e "${YELLOW}  Add it to .env.staging / .env.production to enable auto-purge${NC}"
+  fi
+
   # --- Summary ---
   echo -e "\n${GREEN}=== ${env_name^^} Deploy Triggered ===${NC}"
   echo -e "Vercel will build and deploy from the ${YELLOW}${target_branch}${NC} branch."

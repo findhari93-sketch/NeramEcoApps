@@ -283,6 +283,61 @@ export default function TeacherTimetable() {
     setCreateDialogOpen(true);
   };
 
+  const getClassesOnDate = (date: string) => {
+    return classes
+      .filter((c) => c.scheduled_date === date && c.status !== 'cancelled')
+      .map((c) => ({ id: c.id, title: c.title, start_time: c.start_time, end_time: c.end_time }));
+  };
+
+  const handleCancelClassForHoliday = async (classId: string) => {
+    if (!activeClassroom) return;
+    const token = await getToken();
+    if (!token) return;
+
+    const res = await fetch('/api/timetable', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ id: classId, classroom_id: activeClassroom.id }),
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to cancel class');
+    }
+  };
+
+  const handleRemoveHolidayForClass = async (date: string) => {
+    if (!activeClassroom) return;
+    const token = await getToken();
+    if (!token) return;
+
+    // Find the holiday id for this date
+    const res = await fetch(
+      `/api/timetable/holidays?classroom_id=${activeClassroom.id}&start=${date}&end=${date}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      const holiday = (data.holidays || []).find((h: { holiday_date: string }) => h.holiday_date === date);
+      if (holiday) {
+        const delRes = await fetch('/api/timetable/holidays', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ id: holiday.id, classroom_id: activeClassroom.id }),
+        });
+
+        if (!delRes.ok) throw new Error('Failed to remove holiday');
+        fetchHolidays();
+      }
+    }
+  };
+
   return (
     <Box sx={{ position: 'relative', minHeight: '60vh' }}>
       {/* Header with toolbar */}
@@ -413,11 +468,14 @@ export default function TeacherTimetable() {
         onSaved={() => {
           setSnackbar({ open: true, message: editingClass ? 'Class updated' : 'Class created', severity: 'success' });
           fetchClasses();
+          fetchHolidays();
           setPrefillDate('');
           setPrefillTime('');
         }}
         prefillDate={prefillDate}
         prefillTime={prefillTime}
+        holidays={holidays}
+        onRemoveHoliday={handleRemoveHolidayForClass}
       />
 
       {/* Holiday Manager */}
@@ -426,7 +484,9 @@ export default function TeacherTimetable() {
         onClose={() => setHolidayManagerOpen(false)}
         classroomId={activeClassroom?.id || ''}
         getToken={getToken}
-        onHolidaysChanged={fetchHolidays}
+        onHolidaysChanged={() => { fetchHolidays(); fetchClasses(); }}
+        getClassesOnDate={getClassesOnDate}
+        onCancelClass={handleCancelClassForHoliday}
       />
 
       {/* RSVP Dashboard */}
