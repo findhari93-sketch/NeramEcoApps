@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Typography, Snackbar, Alert } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
+import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
+import RsvpReasonDialog from '@/components/timetable/RsvpReasonDialog';
+import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
+import { type HolidayInfo } from '@/components/timetable/WeeklyCalendarGrid';
 
 export default function StudentTimetable() {
   const { activeClassroom, getToken } = useNexusAuthContext();
@@ -13,13 +17,22 @@ export default function StudentTimetable() {
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
 
+  // Detail panel
+  const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
+
   // RSVP state
   const [myRsvps, setMyRsvps] = useState<Record<string, 'attending' | 'not_attending'>>({});
   // Attendance state
   const [myAttendance, setMyAttendance] = useState<Record<string, boolean>>({});
+  // Holidays
+  const [holidays, setHolidays] = useState<Record<string, HolidayInfo>>({});
   // Review state
   const [reviewClass, setReviewClass] = useState<ClassCardData | null>(null);
   const [existingReview, setExistingReview] = useState<{ rating?: number; comment?: string }>({});
+
+  // RSVP reason dialog
+  const [rsvpReasonTarget, setRsvpReasonTarget] = useState<{ classId: string; classTitle: string } | null>(null);
+  const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -28,6 +41,8 @@ export default function StudentTimetable() {
     severity: 'success',
   });
 
+  const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
+
   const fetchClasses = useCallback(async () => {
     if (!activeClassroom) return;
     setLoading(true);
@@ -35,7 +50,6 @@ export default function StudentTimetable() {
       const token = await getToken();
       if (!token) return;
 
-      const week = getWeekDates(weekOffset);
       const res = await fetch(
         `/api/timetable?classroom=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -45,7 +59,6 @@ export default function StudentTimetable() {
         const data = await res.json();
         setClasses(data.classes || []);
 
-        // Fetch student's RSVPs and attendance for each class
         const classIds = (data.classes || []).map((c: ClassCardData) => c.id);
         if (classIds.length > 0) {
           fetchMyData(classIds, token);
@@ -56,12 +69,35 @@ export default function StudentTimetable() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, weekOffset, getToken]);
+  }, [activeClassroom, week.start, week.end, getToken]);
+
+  const fetchHolidays = useCallback(async () => {
+    if (!activeClassroom) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(
+        `/api/timetable/holidays?classroom_id=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<string, HolidayInfo> = {};
+        for (const h of data.holidays || []) {
+          map[h.holiday_date] = { title: h.title, description: h.description };
+        }
+        setHolidays(map);
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeClassroom, week.start, week.end, getToken]);
 
   const fetchMyData = async (classIds: string[], token: string) => {
     if (!activeClassroom) return;
 
-    // Fetch RSVPs and attendance in parallel
     const rsvpPromises = classIds.map((id) =>
       fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${activeClassroom.id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -101,9 +137,19 @@ export default function StudentTimetable() {
 
   useEffect(() => {
     fetchClasses();
-  }, [fetchClasses]);
+    fetchHolidays();
+  }, [fetchClasses, fetchHolidays]);
 
   const handleRsvp = async (classId: string, response: 'attending' | 'not_attending') => {
+    if (response === 'not_attending') {
+      const cls = classes.find((c) => c.id === classId);
+      setRsvpReasonTarget({ classId, classTitle: cls?.title || 'this class' });
+      return;
+    }
+    await submitRsvp(classId, 'attending');
+  };
+
+  const submitRsvp = async (classId: string, response: 'attending' | 'not_attending', reason?: string) => {
     if (!activeClassroom) return;
     try {
       const token = await getToken();
@@ -119,6 +165,7 @@ export default function StudentTimetable() {
           class_id: classId,
           classroom_id: activeClassroom.id,
           response,
+          reason: reason || undefined,
         }),
       });
 
@@ -129,15 +176,25 @@ export default function StudentTimetable() {
           message: response === 'attending' ? 'Marked as attending' : 'Marked as not attending',
           severity: 'success',
         });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSnackbar({ open: true, message: data.error || 'Failed to update RSVP', severity: 'error' });
       }
     } catch {
       setSnackbar({ open: true, message: 'Failed to update RSVP', severity: 'error' });
     }
   };
 
+  const handleRsvpReasonSubmit = async (reason: string) => {
+    if (!rsvpReasonTarget) return;
+    setRsvpSubmitting(true);
+    await submitRsvp(rsvpReasonTarget.classId, 'not_attending', reason);
+    setRsvpSubmitting(false);
+    setRsvpReasonTarget(null);
+  };
+
   const handleOpenRate = async (cls: ClassCardData) => {
     setReviewClass(cls);
-    // Fetch existing review
     try {
       const token = await getToken();
       if (!token) return;
@@ -189,9 +246,18 @@ export default function StudentTimetable() {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 2 }}>
-        Timetable
-      </Typography>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
+          Timetable
+        </Typography>
+        {activeClassroom && (
+          <TimetableNotificationBell
+            classroomId={activeClassroom.id}
+            getToken={getToken}
+          />
+        )}
+      </Box>
 
       <WeeklyCalendarGrid
         classes={classes}
@@ -199,10 +265,33 @@ export default function StudentTimetable() {
         weekOffset={weekOffset}
         onWeekChange={setWeekOffset}
         role="student"
+        holidays={holidays}
         myRsvps={myRsvps}
         myAttendance={myAttendance}
+        onClassClick={setSelectedClass}
+      />
+
+      {/* Class Detail Panel */}
+      <ClassDetailPanel
+        cls={selectedClass}
+        open={!!selectedClass}
+        onClose={() => setSelectedClass(null)}
+        role="student"
+        classroomId={activeClassroom?.id || ''}
+        getToken={getToken}
+        myRsvp={selectedClass ? myRsvps[selectedClass.id] : null}
+        myAttended={selectedClass ? myAttendance[selectedClass.id] ?? null : null}
         onRsvp={handleRsvp}
         onRate={handleOpenRate}
+      />
+
+      {/* RSVP Reason Dialog */}
+      <RsvpReasonDialog
+        open={!!rsvpReasonTarget}
+        onClose={() => setRsvpReasonTarget(null)}
+        classTitle={rsvpReasonTarget?.classTitle || ''}
+        onSubmit={handleRsvpReasonSubmit}
+        submitting={rsvpSubmitting}
       />
 
       {/* Review Dialog */}

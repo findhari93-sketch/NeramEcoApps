@@ -35,7 +35,9 @@ interface ClassCardProps {
   // Review data
   averageRating?: number | null;
   myAttended?: boolean | null;
-  // Actions
+  // Click handler — opens detail panel
+  onClick?: (cls: ClassCardData) => void;
+  // Actions (legacy — used when no detail panel)
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
   onRsvp?: (classId: string, response: 'attending' | 'not_attending') => void;
@@ -74,6 +76,7 @@ export default function ClassCard({
   myRsvp,
   averageRating,
   myAttended,
+  onClick,
   onEdit,
   onDelete,
   onRsvp,
@@ -89,6 +92,7 @@ export default function ClassCard({
 
   return (
     <Box
+      onClick={() => onClick?.(cls)}
       sx={{
         p: 1.5,
         borderLeft: '4px solid',
@@ -100,6 +104,7 @@ export default function ClassCard({
         flexDirection: 'column',
         gap: 0.75,
         opacity: isCancelled ? 0.6 : 1,
+        cursor: onClick ? 'pointer' : 'default',
         '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.12)' },
         transition: 'box-shadow 0.2s',
       }}

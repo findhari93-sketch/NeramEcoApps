@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { notifyRsvpToTeacher } from '@/lib/timetable-notifications';
 
 /**
  * GET /api/timetable/rsvp?class_id={id}&classroom_id={id}
@@ -94,6 +95,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid response value' }, { status: 400 });
     }
 
+    // Mandatory reason when not attending
+    if (response === 'not_attending' && (!reason || !reason.trim())) {
+      return NextResponse.json({ error: 'Reason is required when not attending' }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdminClient() as any;
 
     const { data: user } = await supabase
@@ -136,6 +142,34 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // Send timetable notification to teacher(s)
+    try {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', user.id)
+        .single();
+
+      const { data: classData } = await supabase
+        .from('nexus_scheduled_classes')
+        .select('title')
+        .eq('id', class_id)
+        .single();
+
+      if (userData && classData) {
+        await notifyRsvpToTeacher(
+          classroom_id,
+          userData.name || 'A student',
+          response,
+          reason || null,
+          classData.title,
+          class_id
+        );
+      }
+    } catch {
+      // Don't fail the RSVP if notification fails
+    }
 
     return NextResponse.json({ rsvp: data });
   } catch (err) {

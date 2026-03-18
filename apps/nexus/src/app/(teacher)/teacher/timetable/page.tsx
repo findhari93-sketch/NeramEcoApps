@@ -1,13 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, Fab, Snackbar, Alert } from '@neram/ui';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Box, Typography, Fab, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
+import TimeSlotGrid from '@/components/timetable/TimeSlotGrid';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
 import AttendanceSheet from '@/components/timetable/AttendanceSheet';
+import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
+import HolidayManager from '@/components/timetable/HolidayManager';
+import RsvpDashboard from '@/components/timetable/RsvpDashboard';
+import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
+import { type HolidayInfo } from '@/components/timetable/WeeklyCalendarGrid';
 
 interface TopicOption {
   id: string;
@@ -22,16 +32,29 @@ interface BatchOption {
 
 export default function TeacherTimetable() {
   const { activeClassroom, getToken } = useNexusAuthContext();
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [topics, setTopics] = useState<TopicOption[]>([]);
   const [batches, setBatches] = useState<BatchOption[]>([]);
+  // Pre-fill data for calendar slot click
+  const [prefillDate, setPrefillDate] = useState<string>('');
+  const [prefillTime, setPrefillTime] = useState<string>('');
 
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassCardData | null>(null);
   const [attendanceClass, setAttendanceClass] = useState<ClassCardData | null>(null);
+  const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
+  const [holidayManagerOpen, setHolidayManagerOpen] = useState(false);
+  const [rsvpDashboardOpen, setRsvpDashboardOpen] = useState(false);
+  const [rsvpDashboardClassId, setRsvpDashboardClassId] = useState<string | undefined>();
+
+  // Holidays
+  const [holidays, setHolidays] = useState<Record<string, HolidayInfo>>({});
 
   // RSVP data
   const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
@@ -45,6 +68,8 @@ export default function TeacherTimetable() {
     severity: 'success',
   });
 
+  const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
+
   const fetchClasses = useCallback(async () => {
     if (!activeClassroom) return;
     setLoading(true);
@@ -52,7 +77,6 @@ export default function TeacherTimetable() {
       const token = await getToken();
       if (!token) return;
 
-      const week = getWeekDates(weekOffset);
       const res = await fetch(
         `/api/timetable?classroom=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -73,12 +97,35 @@ export default function TeacherTimetable() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, weekOffset, getToken]);
+  }, [activeClassroom, week.start, week.end, getToken]);
+
+  const fetchHolidays = useCallback(async () => {
+    if (!activeClassroom) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(
+        `/api/timetable/holidays?classroom_id=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<string, HolidayInfo> = {};
+        for (const h of data.holidays || []) {
+          map[h.holiday_date] = { title: h.title, description: h.description };
+        }
+        setHolidays(map);
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeClassroom, week.start, week.end, getToken]);
 
   const fetchRsvpAndRatings = async (classIds: string[], token: string) => {
     if (!activeClassroom) return;
 
-    // Fetch in parallel for all classes
     const rsvpPromises = classIds.map((id) =>
       fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${activeClassroom.id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -118,7 +165,8 @@ export default function TeacherTimetable() {
 
   useEffect(() => {
     fetchClasses();
-  }, [fetchClasses]);
+    fetchHolidays();
+  }, [fetchClasses, fetchHolidays]);
 
   // Fetch topics and batches for create dialog
   useEffect(() => {
@@ -154,13 +202,19 @@ export default function TeacherTimetable() {
     fetchMeta();
   }, [activeClassroom, getToken]);
 
+  const handleClassClick = (cls: ClassCardData) => {
+    setSelectedClass(cls);
+  };
+
   const handleEdit = (cls: ClassCardData) => {
+    setSelectedClass(null);
     setEditingClass(cls);
     setCreateDialogOpen(true);
   };
 
   const handleDelete = async (classId: string) => {
     if (!activeClassroom) return;
+    setSelectedClass(null);
     try {
       const token = await getToken();
       if (!token) return;
@@ -206,7 +260,7 @@ export default function TeacherTimetable() {
         setSnackbar({
           open: true,
           message: data.found ? 'Recording synced!' : 'No recording found yet',
-          severity: data.found ? 'success' : 'success',
+          severity: 'success',
         });
         fetchClasses();
       } else {
@@ -217,25 +271,94 @@ export default function TeacherTimetable() {
     }
   };
 
+  const handleViewRsvpDashboard = (classId: string) => {
+    setRsvpDashboardClassId(classId);
+    setRsvpDashboardOpen(true);
+  };
+
+  const handleSlotClick = (date: string, startTime: string) => {
+    setPrefillDate(date);
+    setPrefillTime(startTime);
+    setEditingClass(null);
+    setCreateDialogOpen(true);
+  };
+
   return (
     <Box sx={{ position: 'relative', minHeight: '60vh' }}>
-      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 2 }}>
-        Timetable
-      </Typography>
+      {/* Header with toolbar */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
+          Timetable
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {isDesktop && (
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(_, v) => v && setViewMode(v)}
+              size="small"
+              sx={{ mr: 0.5 }}
+            >
+              <ToggleButton value="list" sx={{ minWidth: 36, minHeight: 36 }}>
+                <ViewListIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="calendar" sx={{ minWidth: 36, minHeight: 36 }}>
+                <CalendarMonthIcon fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+          )}
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<EventBusyIcon />}
+            onClick={() => setHolidayManagerOpen(true)}
+            sx={{ textTransform: 'none', minHeight: 40 }}
+          >
+            Holidays
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AssessmentIcon />}
+            onClick={() => {
+              setRsvpDashboardClassId(undefined);
+              setRsvpDashboardOpen(true);
+            }}
+            sx={{ textTransform: 'none', minHeight: 40 }}
+          >
+            RSVP
+          </Button>
+          {activeClassroom && (
+            <TimetableNotificationBell
+              classroomId={activeClassroom.id}
+              getToken={getToken}
+            />
+          )}
+        </Box>
+      </Box>
 
-      <WeeklyCalendarGrid
-        classes={classes}
-        loading={loading}
-        weekOffset={weekOffset}
-        onWeekChange={setWeekOffset}
-        role="teacher"
-        rsvpData={rsvpData}
-        averageRatings={averageRatings}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onViewAttendance={setAttendanceClass}
-        onSyncRecording={handleSyncRecording}
-      />
+      {viewMode === 'calendar' && isDesktop ? (
+        <TimeSlotGrid
+          classes={classes}
+          weekOffset={weekOffset}
+          onWeekChange={setWeekOffset}
+          holidays={holidays}
+          onSlotClick={handleSlotClick}
+          onClassClick={handleClassClick}
+        />
+      ) : (
+        <WeeklyCalendarGrid
+          classes={classes}
+          loading={loading}
+          weekOffset={weekOffset}
+          onWeekChange={setWeekOffset}
+          role="teacher"
+          holidays={holidays}
+          rsvpData={rsvpData}
+          averageRatings={averageRatings}
+          onClassClick={handleClassClick}
+        />
+      )}
 
       {/* Add Class FAB */}
       <Fab
@@ -256,12 +379,31 @@ export default function TeacherTimetable() {
         <AddIcon />
       </Fab>
 
+      {/* Class Detail Panel */}
+      <ClassDetailPanel
+        cls={selectedClass}
+        open={!!selectedClass}
+        onClose={() => setSelectedClass(null)}
+        role="teacher"
+        classroomId={activeClassroom?.id || ''}
+        getToken={getToken}
+        rsvpSummary={selectedClass ? rsvpData[selectedClass.id] : null}
+        averageRating={selectedClass ? averageRatings[selectedClass.id] : null}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onViewAttendance={setAttendanceClass}
+        onSyncRecording={handleSyncRecording}
+        onViewRsvpDashboard={handleViewRsvpDashboard}
+      />
+
       {/* Create/Edit Dialog */}
       <ClassCreateDialog
         open={createDialogOpen}
         onClose={() => {
           setCreateDialogOpen(false);
           setEditingClass(null);
+          setPrefillDate('');
+          setPrefillTime('');
         }}
         editingClass={editingClass}
         topics={topics}
@@ -271,7 +413,34 @@ export default function TeacherTimetable() {
         onSaved={() => {
           setSnackbar({ open: true, message: editingClass ? 'Class updated' : 'Class created', severity: 'success' });
           fetchClasses();
+          setPrefillDate('');
+          setPrefillTime('');
         }}
+        prefillDate={prefillDate}
+        prefillTime={prefillTime}
+      />
+
+      {/* Holiday Manager */}
+      <HolidayManager
+        open={holidayManagerOpen}
+        onClose={() => setHolidayManagerOpen(false)}
+        classroomId={activeClassroom?.id || ''}
+        getToken={getToken}
+        onHolidaysChanged={fetchHolidays}
+      />
+
+      {/* RSVP Dashboard */}
+      <RsvpDashboard
+        open={rsvpDashboardOpen}
+        onClose={() => {
+          setRsvpDashboardOpen(false);
+          setRsvpDashboardClassId(undefined);
+        }}
+        classroomId={activeClassroom?.id || ''}
+        getToken={getToken}
+        classId={rsvpDashboardClassId}
+        startDate={week.start}
+        endDate={week.end}
       />
 
       {/* Attendance Sheet */}

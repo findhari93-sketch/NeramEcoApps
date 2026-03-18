@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { notifyRecordingAvailable } from '@/lib/timetable-notifications';
 
 /**
  * GET /api/timetable/recording?class_id={id}
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     // Get class details
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
-      .select('teams_meeting_id')
+      .select('teams_meeting_id, title')
       .eq('id', class_id)
       .single();
 
@@ -128,6 +129,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // Notify students if recording was found
+    if (recordingUrl) {
+      try {
+        await notifyRecordingAvailable(classroom_id, cls.title || 'Class', class_id);
+      } catch {
+        // Don't fail sync if notification fails
+      }
+    }
 
     return NextResponse.json({
       recording: updated,

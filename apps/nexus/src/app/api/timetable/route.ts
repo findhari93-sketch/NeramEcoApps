@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { notifyClassCreated, notifyClassCancelled } from '@/lib/timetable-notifications';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
@@ -149,6 +150,15 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
+    // Notify students
+    try {
+      if (data) {
+        await notifyClassCreated(classroom_id, title, scheduled_date, data.id);
+      }
+    } catch {
+      // Don't fail creation if notification fails
+    }
+
     return NextResponse.json({
       class: data,
       // Tell client whether to create a Teams meeting
@@ -231,6 +241,15 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // Notify students
+    try {
+      if (data) {
+        await notifyClassCancelled(classroom_id, data.title, data.scheduled_date, id);
+      }
+    } catch {
+      // Don't fail cancellation if notification fails
+    }
 
     return NextResponse.json({ class: data });
   } catch (err) {

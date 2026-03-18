@@ -7,17 +7,25 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TodayIcon from '@mui/icons-material/Today';
 import ClassCard, { type ClassCardData } from './ClassCard';
 
+export interface HolidayInfo {
+  title: string;
+  description?: string | null;
+}
+
 interface WeeklyCalendarGridProps {
   classes: ClassCardData[];
   loading: boolean;
   weekOffset: number;
   onWeekChange: (offset: number) => void;
   role: 'teacher' | 'student' | 'parent';
+  /** Holidays keyed by date string (YYYY-MM-DD) */
+  holidays?: Record<string, HolidayInfo>;
   // Pass-through to ClassCard
   rsvpData?: Record<string, { attending: number; total: number }>;
   myRsvps?: Record<string, 'attending' | 'not_attending'>;
   averageRatings?: Record<string, number>;
   myAttendance?: Record<string, boolean>;
+  onClassClick?: (cls: ClassCardData) => void;
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
   onRsvp?: (classId: string, response: 'attending' | 'not_attending') => void;
@@ -68,10 +76,12 @@ export default function WeeklyCalendarGrid({
   weekOffset,
   onWeekChange,
   role,
+  holidays,
   rsvpData,
   myRsvps,
   averageRatings,
   myAttendance,
+  onClassClick,
   onEdit,
   onDelete,
   onRsvp,
@@ -103,31 +113,53 @@ export default function WeeklyCalendarGrid({
   }, [classes]);
 
   const renderClassCards = (dateStr: string) => {
+    const holiday = holidays?.[dateStr];
     const dayClasses = classesByDate[dateStr] || [];
-    if (dayClasses.length === 0) {
-      return (
-        <Typography variant="caption" color="text.disabled" sx={{ py: 2, textAlign: 'center', display: 'block' }}>
-          No classes
-        </Typography>
-      );
-    }
-    return dayClasses.map((cls) => (
-      <ClassCard
-        key={cls.id}
-        cls={cls}
-        role={role}
-        rsvpSummary={rsvpData?.[cls.id]}
-        myRsvp={myRsvps?.[cls.id]}
-        averageRating={averageRatings?.[cls.id]}
-        myAttended={myAttendance?.[cls.id]}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onRsvp={onRsvp}
-        onRate={onRate}
-        onViewAttendance={onViewAttendance}
-        onSyncRecording={onSyncRecording}
-      />
-    ));
+
+    return (
+      <>
+        {/* Holiday indicator */}
+        {holiday && (
+          <Box
+            sx={{
+              p: 1,
+              borderRadius: 1,
+              bgcolor: 'error.50',
+              border: '1px dashed',
+              borderColor: 'error.200',
+              textAlign: 'center',
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.main' }}>
+              🏖️ {holiday.title}
+            </Typography>
+          </Box>
+        )}
+        {dayClasses.length === 0 && !holiday && (
+          <Typography variant="caption" color="text.disabled" sx={{ py: 2, textAlign: 'center', display: 'block' }}>
+            No classes
+          </Typography>
+        )}
+        {dayClasses.map((cls) => (
+          <ClassCard
+            key={cls.id}
+            cls={cls}
+            role={role}
+            rsvpSummary={rsvpData?.[cls.id]}
+            myRsvp={myRsvps?.[cls.id]}
+            averageRating={averageRatings?.[cls.id]}
+            myAttended={myAttendance?.[cls.id]}
+            onClick={onClassClick}
+            onEdit={onClassClick ? undefined : onEdit}
+            onDelete={onClassClick ? undefined : onDelete}
+            onRsvp={onClassClick ? undefined : onRsvp}
+            onRate={onClassClick ? undefined : onRate}
+            onViewAttendance={onClassClick ? undefined : onViewAttendance}
+            onSyncRecording={onClassClick ? undefined : onSyncRecording}
+          />
+        ))}
+      </>
+    );
   };
 
   return (
@@ -186,6 +218,7 @@ export default function WeeklyCalendarGrid({
               const isSelected = idx === selectedDayIndex;
               const today = isToday(day);
               const hasClasses = (classesByDate[dateStr]?.length || 0) > 0;
+              const isHoliday = !!holidays?.[dateStr];
 
               return (
                 <Box
@@ -200,8 +233,14 @@ export default function WeeklyCalendarGrid({
                     px: 1,
                     borderRadius: 2,
                     cursor: 'pointer',
-                    bgcolor: isSelected ? 'primary.main' : today ? 'primary.50' : 'transparent',
-                    color: isSelected ? 'primary.contrastText' : 'text.primary',
+                    bgcolor: isSelected
+                      ? 'primary.main'
+                      : isHoliday
+                        ? 'error.50'
+                        : today
+                          ? 'primary.50'
+                          : 'transparent',
+                    color: isSelected ? 'primary.contrastText' : isHoliday ? 'error.main' : 'text.primary',
                     transition: 'all 0.2s',
                     position: 'relative',
                     '&:hover': { bgcolor: isSelected ? 'primary.dark' : 'action.hover' },
@@ -212,7 +251,7 @@ export default function WeeklyCalendarGrid({
                     sx={{
                       fontWeight: 500,
                       fontSize: '0.65rem',
-                      color: isSelected ? 'inherit' : 'text.secondary',
+                      color: isSelected ? 'inherit' : isHoliday ? 'error.main' : 'text.secondary',
                     }}
                   >
                     {DAY_NAMES[idx]}
@@ -220,14 +259,18 @@ export default function WeeklyCalendarGrid({
                   <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '1rem' }}>
                     {day.getDate()}
                   </Typography>
-                  {/* Dot indicator for days with classes */}
-                  {hasClasses && (
+                  {/* Dot indicator for days with classes or holidays */}
+                  {(hasClasses || isHoliday) && (
                     <Box
                       sx={{
                         width: 5,
                         height: 5,
                         borderRadius: '50%',
-                        bgcolor: isSelected ? 'primary.contrastText' : 'primary.main',
+                        bgcolor: isSelected
+                          ? 'primary.contrastText'
+                          : isHoliday
+                            ? 'error.main'
+                            : 'primary.main',
                         mt: 0.25,
                       }}
                     />
@@ -260,6 +303,7 @@ export default function WeeklyCalendarGrid({
           {week.days.map((day, idx) => {
             const dateStr = formatDateISO(day);
             const today = isToday(day);
+            const isHoliday = !!holidays?.[dateStr];
 
             return (
               <Box
@@ -269,9 +313,9 @@ export default function WeeklyCalendarGrid({
                   flexDirection: 'column',
                   borderRadius: 1,
                   border: '1px solid',
-                  borderColor: today ? 'primary.main' : 'divider',
+                  borderColor: isHoliday ? 'error.main' : today ? 'primary.main' : 'divider',
                   overflow: 'hidden',
-                  bgcolor: today ? 'primary.50' : 'background.default',
+                  bgcolor: isHoliday ? 'error.50' : today ? 'primary.50' : 'background.default',
                 }}
               >
                 {/* Day header */}
@@ -279,8 +323,8 @@ export default function WeeklyCalendarGrid({
                   sx={{
                     textAlign: 'center',
                     py: 0.75,
-                    bgcolor: today ? 'primary.main' : 'grey.100',
-                    color: today ? 'primary.contrastText' : 'text.primary',
+                    bgcolor: isHoliday ? 'error.main' : today ? 'primary.main' : 'grey.100',
+                    color: isHoliday || today ? '#fff' : 'text.primary',
                   }}
                 >
                   <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>

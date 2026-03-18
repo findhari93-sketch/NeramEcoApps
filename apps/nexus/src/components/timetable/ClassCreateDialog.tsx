@@ -12,6 +12,11 @@ import {
   DialogContent,
   DialogActions,
   Alert,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+  FormHelperText,
 } from '@neram/ui';
 import { type ClassCardData } from './ClassCard';
 
@@ -55,6 +60,10 @@ interface ClassCreateDialogProps {
   classroomId: string;
   getToken: () => Promise<string | null>;
   onSaved: () => void;
+  /** Pre-fill date from calendar slot click */
+  prefillDate?: string;
+  /** Pre-fill start time from calendar slot click */
+  prefillTime?: string;
 }
 
 export default function ClassCreateDialog({
@@ -66,6 +75,8 @@ export default function ClassCreateDialog({
   classroomId,
   getToken,
   onSaved,
+  prefillDate,
+  prefillTime,
 }: ClassCreateDialogProps) {
   const [formData, setFormData] = useState<ClassFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +93,16 @@ export default function ClassCreateDialog({
         topic_id: editingClass.topic?.id || '',
         batch_id: editingClass.batch_id || '',
         create_teams_meeting: false,
+      });
+    } else if (prefillDate || prefillTime) {
+      setFormData({
+        ...emptyForm,
+        scheduled_date: prefillDate || '',
+        start_time: prefillTime || '',
+        end_time: prefillTime ? (() => {
+          const [h] = prefillTime.split(':').map(Number);
+          return `${(h + 1).toString().padStart(2, '0')}:00`;
+        })() : '',
       });
     } else {
       setFormData(emptyForm);
@@ -207,40 +228,50 @@ export default function ClassCreateDialog({
             />
           </Box>
 
-          <TextField
-            label="Topic"
-            select
-            fullWidth
-            value={formData.topic_id}
-            onChange={(e) => setFormData((f) => ({ ...f, topic_id: e.target.value }))}
-            SelectProps={{ native: true }}
-            InputLabelProps={{ shrink: true }}
-          >
-            <option value="">-- Select Topic --</option>
-            {topics.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </TextField>
+          <FormControl fullWidth>
+            <InputLabel id="topic-select-label" shrink>Topic</InputLabel>
+            <Select
+              labelId="topic-select-label"
+              label="Topic"
+              displayEmpty
+              value={formData.topic_id}
+              onChange={(e) => setFormData((f) => ({ ...f, topic_id: e.target.value as string }))}
+              notched
+              MenuProps={{ PaperProps: { sx: { maxHeight: 300 } } }}
+              sx={{ minHeight: 48 }}
+            >
+              <MenuItem value="">
+                <em>-- Select Topic --</em>
+              </MenuItem>
+              {topics.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.title}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-          <TextField
-            label="Batch"
-            select
-            fullWidth
-            value={formData.batch_id}
-            onChange={(e) => setFormData((f) => ({ ...f, batch_id: e.target.value }))}
-            SelectProps={{ native: true }}
-            InputLabelProps={{ shrink: true }}
-            helperText="Leave as 'All Batches' for classroom-wide classes"
-          >
-            <option value="">All Batches (Classroom-wide)</option>
-            {batches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </TextField>
+          <FormControl fullWidth>
+            <InputLabel id="batch-select-label" shrink>Batch</InputLabel>
+            <Select
+              labelId="batch-select-label"
+              label="Batch"
+              displayEmpty
+              value={formData.batch_id}
+              onChange={(e) => setFormData((f) => ({ ...f, batch_id: e.target.value as string }))}
+              notched
+              MenuProps={{ PaperProps: { sx: { maxHeight: 300 } } }}
+              sx={{ minHeight: 48 }}
+            >
+              <MenuItem value="">All Batches (Classroom-wide)</MenuItem>
+              {batches.map((b) => (
+                <MenuItem key={b.id} value={b.id}>
+                  {b.name}
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>Leave as &apos;All Batches&apos; for classroom-wide classes</FormHelperText>
+          </FormControl>
 
           {!editingClass && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
