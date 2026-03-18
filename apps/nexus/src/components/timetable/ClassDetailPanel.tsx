@@ -18,6 +18,7 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -39,6 +40,7 @@ interface ClassDetailPanelProps {
   // Actions
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
+  onDeletePermanent?: (classId: string) => void;
   onRsvp?: (classId: string, response: 'attending' | 'not_attending') => void;
   onRate?: (cls: ClassCardData) => void;
   onViewAttendance?: (cls: ClassCardData) => void;
@@ -86,6 +88,7 @@ export default function ClassDetailPanel({
   myAttended,
   onEdit,
   onDelete,
+  onDeletePermanent,
   onRsvp,
   onRate,
   onViewAttendance,
@@ -338,6 +341,20 @@ export default function ClassDetailPanel({
                 </Button>
               )}
             </Box>
+          )}
+
+          {/* Delete permanently for cancelled classes */}
+          {role === 'teacher' && isCancelled && onDeletePermanent && (
+            <Button
+              variant="outlined"
+              fullWidth
+              color="error"
+              startIcon={<DeleteForeverIcon />}
+              onClick={() => onDeletePermanent(cls.id)}
+              sx={{ minHeight: 48, textTransform: 'none' }}
+            >
+              Delete Permanently
+            </Button>
           )}
         </Box>
 

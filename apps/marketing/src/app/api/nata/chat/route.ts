@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Try models in order: 2.5-flash (best quota), 2.0-flash, 2.0-flash-lite
@@ -99,9 +99,52 @@ INSTRUCTIONS:
 - For session-wise exam schedules, direct students to www.nata.in
 - End responses with a brief follow-up question or encouragement when appropriate (e.g., "Would you like to know more about the exam pattern?" or "You've got this!")`;
 
+// ============================================
+// AINTRA KNOWLEDGE BASE CACHE
+// ============================================
+
+let kbCache: { text: string; fetchedAt: number } | null = null;
+const KB_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getKBSection(): Promise<string> {
+  const now = Date.now();
+  if (kbCache && now - kbCache.fetchedAt < KB_CACHE_TTL_MS) return kbCache.text;
+
+  try {
+    const items = await getActiveAintraKnowledgeBase();
+    if (!items.length) {
+      kbCache = { text: '', fetchedAt: now };
+      return '';
+    }
+
+    const grouped: Record<string, { question: string; answer: string }[]> = {};
+    for (const item of items) {
+      if (!grouped[item.category]) grouped[item.category] = [];
+      grouped[item.category].push({ question: item.question, answer: item.answer });
+    }
+
+    const lines: string[] = ['\n\n## ADDITIONAL KNOWLEDGE BASE (Admin-Managed)'];
+    for (const [cat, catItems] of Object.entries(grouped)) {
+      lines.push(`\n### ${cat}`);
+      for (const { question, answer } of catItems) {
+        lines.push(`Q: ${question}\nA: ${answer}`);
+      }
+    }
+
+    const text = lines.join('\n');
+    kbCache = { text, fetchedAt: now };
+    return text;
+  } catch (err) {
+    console.error('[NataChat] Failed to load KB:', err);
+    kbCache = { text: '', fetchedAt: now };
+    return '';
+  }
+}
+
 async function callGemini(
   model: string,
-  contents: Array<{ role: string; parts: Array<{ text: string }> }>
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+  systemPrompt: string
 ): Promise<{ reply: string; model: string } | null> {
   try {
     const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
@@ -109,7 +152,7 @@ async function callGemini(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: NATA_SYSTEM_PROMPT }] },
+        system_instruction: { parts: [{ text: systemPrompt }] },
         contents,
         generationConfig: {
           temperature: 0.75,
@@ -203,10 +246,14 @@ export async function POST(request: NextRequest) {
 
     const startTime = Date.now();
 
+    // Build effective system prompt with admin-managed KB
+    const kbSection = await getKBSection();
+    const effectivePrompt = NATA_SYSTEM_PROMPT + kbSection;
+
     // Try models with fallback
     let result: { reply: string; model: string } | null = null;
     for (const model of GEMINI_MODELS) {
-      result = await callGemini(model, contents);
+      result = await callGemini(model, contents, effectivePrompt);
       if (result) break;
     }
 
@@ -214,7 +261,7 @@ export async function POST(request: NextRequest) {
     if (!result) {
       await new Promise((r) => setTimeout(r, 2000));
       for (const model of GEMINI_MODELS) {
-        result = await callGemini(model, contents);
+        result = await callGemini(model, contents, effectivePrompt);
         if (result) break;
       }
     }

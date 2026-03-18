@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const userId = searchParams.get('userId');
   const sessionId = searchParams.get('sessionId');
   const search = searchParams.get('search');
+  const source = searchParams.get('source');
   const offset = (page - 1) * limit;
 
   let query = supabase
@@ -28,6 +29,10 @@ export async function GET(request: NextRequest) {
 
   if (search) {
     query = query.ilike('user_message', `%${search}%`);
+  }
+
+  if (source) {
+    query = query.eq('source', source);
   }
 
   const { data, error, count } = await query;

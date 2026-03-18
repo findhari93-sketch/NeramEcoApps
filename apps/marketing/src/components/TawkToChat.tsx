@@ -13,7 +13,7 @@ declare global {
   }
 }
 
-export default function TawkToChat() {
+export default function TawkToChat({ hideByDefault = false }: { hideByDefault?: boolean }) {
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -28,9 +28,13 @@ export default function TawkToChat() {
     }
 
     // If Tawk was already loaded (e.g. client-side nav back to this page),
-    // just show the widget instead of re-injecting the script
+    // show or hide bubble based on hideByDefault prop
     if (window.Tawk_API && typeof window.Tawk_API.showWidget === 'function') {
-      window.Tawk_API.showWidget();
+      if (hideByDefault && typeof window.Tawk_API.hideWidget === "function") {
+        window.Tawk_API.hideWidget();
+      } else {
+        window.Tawk_API.showWidget();
+      }
       loaded.current = true;
       return () => {
         // Hide widget when leaving the page (don't destroy it)
@@ -44,10 +48,16 @@ export default function TawkToChat() {
     window.Tawk_API = window.Tawk_API || {};
     window.Tawk_LoadStart = new Date();
 
-    // Hide by default — show once loaded (prevents flash on wrong pages)
+    // On load: show or hide bubble based on hideByDefault prop
     window.Tawk_API.onLoad = function () {
-      if (window.Tawk_API && typeof window.Tawk_API.showWidget === 'function') {
-        window.Tawk_API.showWidget();
+      if (hideByDefault) {
+        if (window.Tawk_API && typeof window.Tawk_API.hideWidget === "function") {
+          window.Tawk_API.hideWidget();
+        }
+      } else {
+        if (window.Tawk_API && typeof window.Tawk_API.showWidget === "function") {
+          window.Tawk_API.showWidget();
+        }
       }
     };
 
@@ -77,7 +87,7 @@ export default function TawkToChat() {
         window.Tawk_API.hideWidget();
       }
     };
-  }, []);
+  }, [hideByDefault]);
 
   return null;
 }

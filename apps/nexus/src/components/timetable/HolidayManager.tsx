@@ -46,6 +46,8 @@ interface HolidayManagerProps {
   getClassesOnDate?: (date: string) => ConflictingClass[];
   /** Cancel a class by id */
   onCancelClass?: (classId: string) => Promise<void>;
+  /** Pre-fill date (e.g. from calendar context) */
+  prefillDate?: string;
 }
 
 export default function HolidayManager({
@@ -56,6 +58,7 @@ export default function HolidayManager({
   onHolidaysChanged,
   getClassesOnDate,
   onCancelClass,
+  prefillDate,
 }: HolidayManagerProps) {
   const [holidays, setHolidays] = useState<HolidayData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,6 +96,10 @@ export default function HolidayManager({
     if (open) {
       fetchHolidays();
       setError(null);
+      // Default date to prefillDate or today
+      const today = new Date();
+      const defaultDate = prefillDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      setDate(defaultDate);
     }
   }, [open]);
 

@@ -35,6 +35,9 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import ForumIcon from '@mui/icons-material/Forum';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import EventNoteIcon from '@mui/icons-material/EventNote';
@@ -107,6 +110,9 @@ const menuGroups: MenuGroup[] = [
       { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
       { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback' },
       { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
+      { text: 'Chat History', icon: ForumIcon, path: '/chat-history' },
+      { text: 'Aintra Training', icon: SmartToyIcon, path: '/aintra-kb' },
+      { text: 'Training Guide', icon: MenuBookIcon, path: '/aintra-guide' },
     ],
   },
   {

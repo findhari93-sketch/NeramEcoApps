@@ -3521,7 +3521,25 @@ export interface ChatbotConversation {
   model_used: string | null;
   response_time_ms: number | null;
   error: string | null;
+  thumbs_up: boolean | null;
+  admin_correction: string | null;
+  promoted_to_kb: boolean;
   created_at: string;
+}
+
+// ============================================
+// AINTRA KNOWLEDGE BASE
+// ============================================
+
+export interface AintraKnowledgeBaseItem {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============================================

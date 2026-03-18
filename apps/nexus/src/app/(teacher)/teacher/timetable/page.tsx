@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Fab, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme } from '@neram/ui';
+import { Box, Typography, Fab, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
+import EventIcon from '@mui/icons-material/Event';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ViewListIcon from '@mui/icons-material/ViewList';
@@ -60,6 +61,11 @@ export default function TeacherTimetable() {
   const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
   // Rating data
   const [averageRatings, setAverageRatings] = useState<Record<string, number>>({});
+
+  // Slot action menu
+  const [slotMenuAnchor, setSlotMenuAnchor] = useState<HTMLElement | null>(null);
+  const [slotMenuDate, setSlotMenuDate] = useState('');
+  const [slotMenuTime, setSlotMenuTime] = useState('');
 
   // Snackbar
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -237,6 +243,32 @@ export default function TeacherTimetable() {
     }
   };
 
+  const handleDeletePermanent = async (classId: string) => {
+    if (!activeClassroom) return;
+    setSelectedClass(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/timetable', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: classId, classroom_id: activeClassroom.id, permanent: true }),
+      });
+
+      if (res.ok) {
+        setSnackbar({ open: true, message: 'Class permanently deleted', severity: 'success' });
+        fetchClasses();
+      }
+    } catch (err) {
+      console.error('Failed to delete class:', err);
+      setSnackbar({ open: true, message: 'Failed to delete class', severity: 'error' });
+    }
+  };
+
   const handleSyncRecording = async (cls: ClassCardData) => {
     if (!activeClassroom) return;
     try {
@@ -276,11 +308,30 @@ export default function TeacherTimetable() {
     setRsvpDashboardOpen(true);
   };
 
-  const handleSlotClick = (date: string, startTime: string) => {
+  const handleSlotClick = (date: string, startTime: string, event?: React.MouseEvent) => {
+    setSlotMenuDate(date);
+    setSlotMenuTime(startTime);
     setPrefillDate(date);
     setPrefillTime(startTime);
+    // Show context menu at click position
+    if (event) {
+      setSlotMenuAnchor(event.currentTarget as HTMLElement);
+    } else {
+      // Fallback: open create dialog directly
+      setEditingClass(null);
+      setCreateDialogOpen(true);
+    }
+  };
+
+  const handleSlotMenuCreateClass = () => {
+    setSlotMenuAnchor(null);
     setEditingClass(null);
     setCreateDialogOpen(true);
+  };
+
+  const handleSlotMenuMarkHoliday = () => {
+    setSlotMenuAnchor(null);
+    setHolidayManagerOpen(true);
   };
 
   const getClassesOnDate = (date: string) => {
@@ -446,6 +497,7 @@ export default function TeacherTimetable() {
         averageRating={selectedClass ? averageRatings[selectedClass.id] : null}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onDeletePermanent={handleDeletePermanent}
         onViewAttendance={setAttendanceClass}
         onSyncRecording={handleSyncRecording}
         onViewRsvpDashboard={handleViewRsvpDashboard}
@@ -487,6 +539,7 @@ export default function TeacherTimetable() {
         onHolidaysChanged={() => { fetchHolidays(); fetchClasses(); }}
         getClassesOnDate={getClassesOnDate}
         onCancelClass={handleCancelClassForHoliday}
+        prefillDate={prefillDate}
       />
 
       {/* RSVP Dashboard */}
@@ -515,6 +568,24 @@ export default function TeacherTimetable() {
           getToken={getToken}
         />
       )}
+
+      {/* Slot action menu (create class or mark holiday) */}
+      <Menu
+        anchorEl={slotMenuAnchor}
+        open={!!slotMenuAnchor}
+        onClose={() => setSlotMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <MenuItem onClick={handleSlotMenuCreateClass}>
+          <ListItemIcon><EventIcon fontSize="small" color="primary" /></ListItemIcon>
+          <ListItemText>Schedule a Class</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleSlotMenuMarkHoliday}>
+          <ListItemIcon><EventBusyIcon fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Mark as Holiday</ListItemText>
+        </MenuItem>
+      </Menu>
 
       {/* Snackbar */}
       <Snackbar

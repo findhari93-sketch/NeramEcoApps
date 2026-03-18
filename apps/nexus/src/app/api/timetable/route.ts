@@ -217,12 +217,13 @@ export async function PATCH(request: NextRequest) {
 }
 
 /**
- * DELETE /api/timetable — Cancel a scheduled class (teacher only)
+ * DELETE /api/timetable — Cancel or permanently delete a scheduled class (teacher only)
+ * Pass { permanent: true } to hard-delete instead of soft-cancel.
  */
 export async function DELETE(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const { id, classroom_id } = await request.json();
+    const { id, classroom_id, permanent } = await request.json();
 
     if (!id || !classroom_id) {
       return NextResponse.json({ error: 'Missing id and classroom_id' }, { status: 400 });
@@ -230,6 +231,19 @@ export async function DELETE(request: NextRequest) {
 
     await verifyTeacherRole(msUser.oid, classroom_id);
     const supabase = getSupabaseAdminClient();
+
+    if (permanent) {
+      // Hard delete — permanently remove from database
+      const { error } = await supabase
+        .from('nexus_scheduled_classes')
+        .delete()
+        .eq('id', id)
+        .eq('classroom_id', classroom_id);
+
+      if (error) throw error;
+
+      return NextResponse.json({ deleted: true });
+    }
 
     // Soft-delete: set status to cancelled
     const { data, error } = await supabase

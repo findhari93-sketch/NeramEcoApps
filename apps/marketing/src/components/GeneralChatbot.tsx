@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
+import TawkToChat from './TawkToChat';
 import {
   Box,
   Typography,
@@ -153,6 +155,8 @@ function generateSessionId() {
 const FAB_BOTTOM = 24;
 
 export default function GeneralChatbot({ userId }: { userId?: string | null } = {}) {
+  const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -292,7 +296,7 @@ export default function GeneralChatbot({ userId }: { userId?: string | null } = 
   const handleTawkTo = () => {
     handleCloseHumanMenu();
     if (typeof window !== 'undefined' && (window as any).Tawk_API) {
-      (window as any).Tawk_API.toggle();
+      (window as any).Tawk_API.maximize();
       setOpen(false);
     } else {
       // Fallback: go to contact page
@@ -307,8 +311,13 @@ export default function GeneralChatbot({ userId }: { userId?: string | null } = 
     }
   };
 
+  // On /contact page, show nothing — TawkToChat is loaded by ContactPageContent there
+  if (pathname?.includes('/contact')) return null;
+
   return (
     <>
+      {/* Initialize Tawk.to hidden — bubble only shows when user clicks Live Chat */}
+      <TawkToChat hideByDefault />
       {/* FAB button */}
       {!open && (
         <Box

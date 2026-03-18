@@ -80,7 +80,7 @@ interface TimeSlotGridProps {
   weekOffset: number;
   onWeekChange: (offset: number) => void;
   holidays?: Record<string, HolidayInfo>;
-  onSlotClick?: (date: string, startTime: string) => void;
+  onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   onClassClick?: (cls: ClassCardData) => void;
 }
 
@@ -104,12 +104,12 @@ export default function TimeSlotGrid({
     return map;
   }, [classes]);
 
-  const handleSlotClick = (dayIdx: number, hourIdx: number) => {
+  const handleSlotClick = (dayIdx: number, hourIdx: number, event: React.MouseEvent) => {
     const dateStr = formatDateISO(week.days[dayIdx]);
     if (holidays?.[dateStr]) return; // Don't create on holidays
     const hour = HOURS[hourIdx];
     const startTime = `${hour.toString().padStart(2, '0')}:00`;
-    onSlotClick?.(dateStr, startTime);
+    onSlotClick?.(dateStr, startTime, event);
   };
 
   return (
@@ -213,7 +213,7 @@ export default function TimeSlotGrid({
               return (
                 <Box
                   key={`${dateStr}-${hour}`}
-                  onClick={() => !isHoliday && handleSlotClick(dayIdx, hourIdx)}
+                  onClick={(e) => !isHoliday && handleSlotClick(dayIdx, hourIdx, e)}
                   sx={{
                     borderTop: '1px solid',
                     borderLeft: '1px solid',
