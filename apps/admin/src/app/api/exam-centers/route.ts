@@ -72,9 +72,18 @@ export async function POST(request: NextRequest) {
     const created = await createNataExamCenter(body, client);
 
     return NextResponse.json({ data: created }, { status: 201 });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error creating exam center:', error);
-    const msg = error instanceof Error ? error.message : 'Failed to create exam center';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Surface Supabase/Postgres error details
+    const pgError = error as { message?: string; code?: string; details?: string };
+    let msg = 'Failed to create exam center';
+    if (pgError?.code === '23505') {
+      msg = 'A center with this city, state, and year already exists';
+    } else if (pgError?.code === '23514') {
+      msg = `Constraint violation: ${pgError.details || pgError.message || 'invalid value for a field'}`;
+    } else if (pgError?.message) {
+      msg = pgError.message;
+    }
+    return NextResponse.json({ error: msg }, { status: pgError?.code === '23505' ? 409 : 500 });
   }
 }

@@ -118,13 +118,16 @@ export default function ExamCentersPage() {
   };
 
   const handleAddSave = async (data: Record<string, unknown>) => {
-    const res = await fetch('/api/exam-centers', {
-      method: 'POST',
+    const isEdit = editData && editData.id;
+    const url = isEdit ? `/api/exam-centers/${editData.id}` : '/api/exam-centers';
+    const method = isEdit ? 'PATCH' : 'POST';
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to create');
+    if (!res.ok) throw new Error(json.error || (isEdit ? 'Failed to update' : 'Failed to create'));
     await fetchData(); // Refresh all data
   };
 

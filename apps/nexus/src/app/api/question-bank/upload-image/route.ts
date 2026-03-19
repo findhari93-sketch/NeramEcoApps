@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, rewriteStorageUrl } from '@neram/database';
 
 /**
  * POST /api/question-bank/upload-image
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       .getPublicUrl(filePath);
 
     return NextResponse.json({
-      url: urlData.publicUrl,
+      url: rewriteStorageUrl(urlData.publicUrl) || urlData.publicUrl,
       path: filePath,
     });
   } catch (err) {

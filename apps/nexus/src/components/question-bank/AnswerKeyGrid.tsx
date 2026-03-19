@@ -12,8 +12,10 @@ import {
   MenuItem,
   CircularProgress,
 } from '@neram/ui';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
+import AnswerKeyUpload from './AnswerKeyUpload';
 
 interface AnswerKeyGridProps {
   questions: NexusQBQuestion[];
@@ -34,6 +36,7 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
   });
 
   const [dirty, setDirty] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const handleChange = (questionNumber: number, value: string) => {
     setAnswers((prev) => ({ ...prev, [questionNumber]: value }));
@@ -83,15 +86,25 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
         <Typography variant="subtitle1" fontWeight={600}>
           Answer Key
         </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          startIcon={saving ? <CircularProgress size={16} /> : undefined}
-        >
-          {saving ? 'Saving...' : 'Save All'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setUploadOpen(true)}
+          >
+            Upload Answer Key
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            startIcon={saving ? <CircularProgress size={16} /> : undefined}
+          >
+            {saving ? 'Saving...' : 'Save All'}
+          </Button>
+        </Box>
       </Box>
 
       {sections.map((section) => (
@@ -199,6 +212,13 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
           </Paper>
         </Box>
       ))}
+
+      <AnswerKeyUpload
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        questions={questions}
+        onApply={onSave}
+      />
     </Box>
   );
 }

@@ -512,28 +512,30 @@ export default function PDFReader({
       ref={containerRef}
       sx={{
         height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
         bgcolor: readingMode === 'dark' ? '#1a1a1a' : '#f5f5f5',
         position: 'relative',
         overflow: 'hidden',
         userSelect: 'none',
       }}
     >
-      {/* ---- Toolbar ---- */}
+      {/* ---- Toolbar (overlays on canvas) ---- */}
       <Box
         sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
           display: 'flex',
           alignItems: 'center',
           gap: isMobile ? 0.5 : 1,
           px: isMobile ? 1 : 2,
-          py: 0.5,
+          py: isMobile ? 0.25 : 0.5,
           bgcolor: alpha(theme.palette.background.paper, 0.92),
           backdropFilter: 'blur(8px)',
           borderBottom: `1px solid ${theme.palette.divider}`,
           zIndex: 2,
-          flexWrap: 'wrap',
-          minHeight: 48,
+          flexWrap: 'nowrap',
+          minHeight: isMobile ? 40 : 48,
         }}
       >
         {/* Page input */}
@@ -558,16 +560,20 @@ export default function PDFReader({
           / {effectivePages || '...'}
         </Typography>
 
-        {/* Zoom */}
-        <IconButton size="small" onClick={zoomOut} aria-label="Zoom out">
-          <ZoomOutIcon fontSize="small" />
-        </IconButton>
-        <Typography variant="caption" sx={{ minWidth: 36, textAlign: 'center' }}>
-          {Math.round(zoom * 100)}%
-        </Typography>
-        <IconButton size="small" onClick={zoomIn} aria-label="Zoom in">
-          <ZoomInIcon fontSize="small" />
-        </IconButton>
+        {/* Zoom — hidden on mobile (pinch-to-zoom available) */}
+        {!isMobile && (
+          <>
+            <IconButton size="small" onClick={zoomOut} aria-label="Zoom out">
+              <ZoomOutIcon fontSize="small" />
+            </IconButton>
+            <Typography variant="caption" sx={{ minWidth: 36, textAlign: 'center' }}>
+              {Math.round(zoom * 100)}%
+            </Typography>
+            <IconButton size="small" onClick={zoomIn} aria-label="Zoom in">
+              <ZoomInIcon fontSize="small" />
+            </IconButton>
+          </>
+        )}
 
         {/* Spacer */}
         <Box sx={{ flex: 1 }} />
@@ -620,10 +626,11 @@ export default function PDFReader({
         </IconButton>
       </Box>
 
-      {/* ---- Canvas area ---- */}
+      {/* ---- Canvas area (fills entire container, toolbar/nav overlay on top) ---- */}
       <Box
         sx={{
-          flex: 1,
+          width: '100%',
+          height: '100%',
           overflow: 'auto',
           display: 'flex',
           justifyContent: 'center',
@@ -695,14 +702,18 @@ export default function PDFReader({
         />
       </Box>
 
-      {/* ---- Bottom page indicator ---- */}
+      {/* ---- Bottom page indicator (overlays on canvas) ---- */}
       <Box
         sx={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: 1,
-          py: 0.75,
+          py: { xs: 0.5, sm: 0.75 },
           px: 2,
           bgcolor: alpha(theme.palette.background.paper, 0.92),
           backdropFilter: 'blur(8px)',

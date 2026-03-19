@@ -9,7 +9,9 @@ function base64ToFile(dataUrl: string, filename: string): File {
   const mime = mimeMatch ? mimeMatch[1] : 'image/png';
   const ext = mime.split('/')[1] || 'png';
 
-  const binary = atob(data);
+  // Clean whitespace/newlines that AI tools sometimes include in base64
+  const cleaned = data.replace(/\s/g, '');
+  const binary = atob(cleaned);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);

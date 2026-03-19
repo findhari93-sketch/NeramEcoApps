@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Box, Typography, IconButton, CircularProgress, alpha, useTheme } from '@neram/ui';
 import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -23,6 +23,30 @@ interface ImageUploadZoneProps {
   enableGlobalPaste?: boolean;
 }
 
+/**
+ * Convert a base64 data URL to a blob URL for safe rendering.
+ * Browsers fail on large data URLs in <img src> (ERR_INVALID_URL).
+ */
+function base64ToBlobUrl(dataUrl: string): string | null {
+  try {
+    const [header, data] = dataUrl.split(',');
+    if (!data) return null;
+    const mimeMatch = header.match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    // Clean whitespace/newlines that AI tools sometimes include in base64
+    const cleaned = data.replace(/\s/g, '');
+    const binary = atob(cleaned);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: mime });
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
 export default function ImageUploadZone({
   image,
   onChange,
@@ -36,6 +60,25 @@ export default function ImageUploadZone({
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
+  const blobUrlRef = useRef<string | null>(null);
+
+  // Convert base64 data URLs to blob URLs for safe rendering
+  const displayUrl = useMemo(() => {
+    if (!image?.url) return null;
+    if (!image.url.startsWith('data:')) return image.url;
+    // Convert base64 to blob URL (revoke old one first)
+    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    const blobUrl = base64ToBlobUrl(image.url);
+    blobUrlRef.current = blobUrl;
+    return blobUrl;
+  }, [image?.url]);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
   const uploadFile = useCallback(async (file: File) => {
     setError('');
@@ -138,7 +181,7 @@ export default function ImageUploadZone({
       >
         <Box
           component="img"
-          src={image.url}
+          src={displayUrl || image.url}
           alt="Question image"
           sx={{
             width: '100%',

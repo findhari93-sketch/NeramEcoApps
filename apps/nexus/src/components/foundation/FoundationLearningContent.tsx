@@ -465,8 +465,8 @@ export default function FoundationLearningContent({
         </Box>
       </Box>
 
-      {/* Content tabs (Watch / Read) — only show if both video and PDF available */}
-      {showTabs && (
+      {/* Content tabs (Watch / Read) or PDF-only header */}
+      {showTabs ? (
         <Tabs
           value={contentTab}
           onChange={(_, v) => setContentTab(v)}
@@ -494,7 +494,12 @@ export default function FoundationLearningContent({
             iconPosition="start"
           />
         </Tabs>
-      )}
+      ) : (!hasVideo && hasPdf) ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, px: { xs: 2, sm: 0 } }}>
+          <MenuBookOutlinedIcon sx={{ fontSize: '1.1rem', color: 'primary.main' }} />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Reading Material</Typography>
+        </Box>
+      ) : null}
 
       {/* Video Player (Watch tab or only content) */}
       {((contentTab === 'watch' && hasVideo) || (!hasPdf && hasVideo)) && (
@@ -533,7 +538,7 @@ export default function FoundationLearningContent({
               }}
             >
               {chapter.video_source === 'sharepoint' && chapter.sharepoint_video_url ? (
-                <SharePointPlayer videoUrl={chapter.sharepoint_video_url} />
+                <SharePointPlayer videoUrl={chapter.sharepoint_video_url} chapterId={chapterId} token={msToken} />
               ) : (
                 <VideoPlayer
                   videoId={chapter.youtube_video_id!}
@@ -553,7 +558,12 @@ export default function FoundationLearningContent({
       {((contentTab === 'read' && hasPdf) || (!hasVideo && hasPdf)) && (
         <Box
           sx={{
-            height: { xs: 'calc(100vh - 200px)', sm: 'calc(100vh - 180px)' },
+            height: {
+              xs: 'calc(100dvh - 244px)',
+              md: 'calc(100vh - 180px)',
+            },
+            maxWidth: { md: '850px' },
+            mx: { md: 'auto' },
             borderRadius: { xs: 0, sm: 2 },
             overflow: 'hidden',
             border: `1px solid ${theme.palette.divider}`,
