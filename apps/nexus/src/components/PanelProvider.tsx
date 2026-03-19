@@ -6,7 +6,6 @@ import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
-import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
@@ -52,7 +51,6 @@ const PANELS: PanelConfig[] = [
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
       { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
-      { label: 'Checklist', path: '/teacher/checklist', icon: <ChecklistOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
     bottomNavItems: [
@@ -60,7 +58,6 @@ const PANELS: PanelConfig[] = [
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
       { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
-      { label: 'Checklist', path: '/teacher/checklist', icon: <ChecklistOutlinedIcon /> },
     ],
   },
   {
