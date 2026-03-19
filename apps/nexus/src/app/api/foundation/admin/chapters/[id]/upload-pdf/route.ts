@@ -69,6 +69,7 @@ export async function POST(
         pdf_storage_path: filePath,
         pdf_page_count: pageCount ? parseInt(String(pageCount), 10) : null,
         pdf_onedrive_item_id: result.itemId,
+        pdf_source: 'upload',
       })
       .eq('id', chapterId);
 

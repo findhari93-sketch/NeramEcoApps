@@ -44,6 +44,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { toEmbedUrl } from '@/components/foundation/SharePointPlayer';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import HeadphonesOutlinedIcon from '@mui/icons-material/HeadphonesOutlined';
 import AutoGeneratePreview from '@/components/modules/AutoGeneratePreview';
 import FileUploadZone from '@/components/foundation/FileUploadZone';
@@ -93,6 +94,9 @@ export default function FoundationChapterEditorContent({
   });
 
   // PDF & Audio state
+  const [pdfSource, setPdfSource] = useState<'upload' | 'link'>('upload');
+  const [pdfLinkUrl, setPdfLinkUrl] = useState('');
+  const [pdfLinking, setPdfLinking] = useState(false);
   const [audioTracks, setAudioTracks] = useState<NexusAudioTrack[]>([]);
 
   // Section expansion & editing
@@ -161,6 +165,7 @@ export default function FoundationChapterEditorContent({
           chapter_number: data.chapter.chapter_number ?? 0,
           is_published: data.chapter.is_published || false,
         });
+        setPdfSource(data.chapter.pdf_source || 'upload');
 
         // Fetch audio tracks
         const audioRes = await fetch(`/api/foundation/admin/chapters/${chapterId}/audio-tracks`, {
@@ -720,7 +725,7 @@ export default function FoundationChapterEditorContent({
         </Box>
       </Paper>
 
-      {/* PDF Upload Section */}
+      {/* PDF Section */}
       <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
           <PictureAsPdfOutlinedIcon sx={{ fontSize: '1.1rem', color: 'error.main' }} />
@@ -731,38 +736,168 @@ export default function FoundationChapterEditorContent({
             Optional — students can read alongside or instead of video
           </Typography>
         </Box>
-        <FileUploadZone
-          accept="application/pdf"
-          uploadUrl={`/api/foundation/admin/chapters/${chapterId}/upload-pdf`}
-          maxSizeMB={50}
-          getToken={getToken}
-          currentFileUrl={chapter.pdf_url}
-          currentFileLabel={
-            chapter.pdf_url
-              ? `PDF · ${chapter.pdf_page_count || '?'} pages`
-              : undefined
-          }
-          onUpload={(data) => {
-            setChapter((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    pdf_url: data.pdf_url as string,
-                    pdf_storage_path: data.pdf_storage_path as string,
-                    pdf_page_count: data.pdf_page_count as number | null,
+
+        {/* PDF Source Toggle */}
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            PDF Source
+          </Typography>
+          <ToggleButtonGroup
+            value={pdfSource}
+            exclusive
+            onChange={(_, val) => { if (val) setPdfSource(val); }}
+            size="small"
+            sx={{ mb: 1 }}
+          >
+            <ToggleButton value="upload" sx={{ textTransform: 'none', px: 2 }}>
+              <UploadFileOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
+              Upload
+            </ToggleButton>
+            <ToggleButton value="link" sx={{ textTransform: 'none', px: 2 }}>
+              <LinkOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
+              SharePoint Link
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+
+        {pdfSource === 'upload' ? (
+          <FileUploadZone
+            accept="application/pdf"
+            uploadUrl={`/api/foundation/admin/chapters/${chapterId}/upload-pdf`}
+            maxSizeMB={50}
+            getToken={getToken}
+            currentFileUrl={chapter.pdf_source !== 'link' ? chapter.pdf_url : null}
+            currentFileLabel={
+              chapter.pdf_url && chapter.pdf_source !== 'link'
+                ? `PDF · ${chapter.pdf_page_count || '?'} pages`
+                : undefined
+            }
+            onUpload={(data) => {
+              setChapter((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      pdf_url: data.pdf_url as string,
+                      pdf_storage_path: data.pdf_storage_path as string,
+                      pdf_page_count: data.pdf_page_count as number | null,
+                      pdf_source: 'upload',
+                    }
+                  : prev
+              );
+            }}
+            onRemove={() => {
+              setChapter((prev) =>
+                prev
+                  ? { ...prev, pdf_url: null, pdf_storage_path: null, pdf_page_count: null, pdf_source: null }
+                  : prev
+              );
+            }}
+            label="Drop PDF file or click to upload"
+          />
+        ) : (
+          <Box>
+            {chapter.pdf_url && chapter.pdf_source === 'link' ? (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  border: `1px solid ${theme.palette.divider}`,
+                  bgcolor: alpha(theme.palette.success.main, 0.04),
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  mb: 1,
+                }}
+              >
+                <PictureAsPdfOutlinedIcon sx={{ color: 'error.main', fontSize: '1.2rem' }} />
+                <Typography variant="body2" sx={{ flex: 1, wordBreak: 'break-all' }}>
+                  PDF linked from SharePoint
+                </Typography>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={async () => {
+                    const token = await getToken();
+                    if (!token) return;
+                    const res = await fetch(
+                      `/api/foundation/admin/chapters/${chapterId}/link-pdf`,
+                      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    if (res.ok) {
+                      setChapter((prev) =>
+                        prev
+                          ? { ...prev, pdf_url: null, pdf_storage_path: null, pdf_page_count: null, pdf_onedrive_item_id: null, pdf_source: null }
+                          : prev
+                      );
+                      setPdfLinkUrl('');
+                    }
+                  }}
+                >
+                  <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
+                </IconButton>
+              </Box>
+            ) : null}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="SharePoint / OneDrive PDF URL"
+                placeholder="https://nerasmclasses.sharepoint.com/..."
+                value={pdfLinkUrl}
+                onChange={(e) => setPdfLinkUrl(e.target.value)}
+                helperText="Paste the sharing link or direct URL to the PDF on SharePoint"
+              />
+              <Button
+                variant="contained"
+                size="small"
+                disabled={!pdfLinkUrl.trim() || pdfLinking}
+                sx={{ textTransform: 'none', minWidth: 80, height: 40 }}
+                onClick={async () => {
+                  setPdfLinking(true);
+                  try {
+                    const token = await getToken();
+                    if (!token) return;
+                    const res = await fetch(
+                      `/api/foundation/admin/chapters/${chapterId}/link-pdf`,
+                      {
+                        method: 'POST',
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ url: pdfLinkUrl.trim() }),
+                      }
+                    );
+                    const data = await res.json();
+                    if (!res.ok) {
+                      alert(data.error || 'Failed to link PDF');
+                      return;
+                    }
+                    setChapter((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            pdf_url: data.pdf_url,
+                            pdf_onedrive_item_id: data.pdf_onedrive_item_id,
+                            pdf_source: 'link',
+                            pdf_storage_path: null,
+                            pdf_page_count: null,
+                          }
+                        : prev
+                    );
+                    setPdfLinkUrl('');
+                  } catch {
+                    alert('Failed to link PDF');
+                  } finally {
+                    setPdfLinking(false);
                   }
-                : prev
-            );
-          }}
-          onRemove={() => {
-            setChapter((prev) =>
-              prev
-                ? { ...prev, pdf_url: null, pdf_storage_path: null, pdf_page_count: null }
-                : prev
-            );
-          }}
-          label="Drop PDF file or click to upload"
-        />
+                }}
+              >
+                {pdfLinking ? 'Linking…' : 'Link'}
+              </Button>
+            </Box>
+          </Box>
+        )}
       </Paper>
 
       {/* Audio Tracks Section */}

@@ -4334,6 +4334,7 @@ export interface NexusModuleItem {
   pdf_storage_path: string | null;
   pdf_page_count: number | null;
   pdf_onedrive_item_id: string | null;
+  pdf_source: 'upload' | 'link' | null;
   created_at: string;
   updated_at: string;
 }
@@ -4618,6 +4619,7 @@ export interface NexusFoundationChapter {
   pdf_storage_path: string | null;
   pdf_page_count: number | null;
   pdf_onedrive_item_id: string | null;
+  pdf_source: 'upload' | 'link' | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -4826,6 +4828,7 @@ export interface NexusFoundationChapterInsert {
   pdf_storage_path?: string | null;
   pdf_page_count?: number | null;
   pdf_onedrive_item_id?: string | null;
+  pdf_source?: 'upload' | 'link' | null;
   created_by?: string | null;
 }
 
@@ -4843,6 +4846,7 @@ export interface NexusFoundationChapterUpdate {
   pdf_storage_path?: string | null;
   pdf_page_count?: number | null;
   pdf_onedrive_item_id?: string | null;
+  pdf_source?: 'upload' | 'link' | null;
 }
 
 export interface NexusFoundationSectionInsert {
