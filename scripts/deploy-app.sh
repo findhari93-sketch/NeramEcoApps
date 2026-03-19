@@ -135,11 +135,19 @@ else
   URL="${STAGING_URLS[$APP]}"
 fi
 
-# Deploy from the app directory
-cd "$APP_DIR"
-echo -e "${YELLOW}Running: vercel deploy ${VERCEL_FLAGS} (from ${APP_DIR})${NC}"
+# Swap .vercel/project.json to point to the target app's Vercel project
+# (Vercel projects have Root Directory set on the dashboard, so deploy from repo root)
+ORIG_PROJECT=""
+if [[ -f .vercel/project.json ]]; then
+  ORIG_PROJECT=$(cat .vercel/project.json)
+fi
+cp -f "$APP_DIR/.vercel/project.json" .vercel/project.json
+echo -e "${YELLOW}Running: vercel deploy ${VERCEL_FLAGS} (project: ${APP})${NC}"
 DEPLOY_URL=$(vercel deploy $VERCEL_FLAGS 2>&1)
-cd - > /dev/null
+# Restore original .vercel/project.json
+if [[ -n "$ORIG_PROJECT" ]]; then
+  echo "$ORIG_PROJECT" > .vercel/project.json
+fi
 
 echo -e "\n${GREEN}=== ${APP^^} deployed to ${TARGET^^} ===${NC}"
 echo -e "App URL:    ${YELLOW}${URL}${NC}"
