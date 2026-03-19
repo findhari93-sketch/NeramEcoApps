@@ -402,8 +402,12 @@ Rules:
    - "drawing" for Drawing Test (Q76+)
 5. For each question:
    - Extract question_text (the full question statement).
+   - Use LaTeX notation for all mathematical formulas and symbols:
+     * Inline math: wrap with single dollar signs, e.g. $\\sqrt{x^2 + y^2}$
+     * Block/display math: wrap with double dollar signs, e.g. $$\\int_0^{\\pi} \\sin(x) \\, dx$$
+     * Use LaTeX for: fractions ($\\frac{a}{b}$), superscripts ($x^2$), subscripts ($a_n$), roots ($\\sqrt{x}$), Greek letters ($\\alpha$, $\\theta$), summations ($\\sum$), integrals ($\\int$), matrices, etc.
    - If the question has a diagram/figure, include it as a base64 data URL in question_image.
-   - For MCQ: include all 4 options with label (A/B/C/D), text, and nta_id if visible.
+   - For MCQ: include all 4 options with label (A/B/C/D), text (with LaTeX for math), and nta_id if visible.
    - For NUMERICAL: set question_format to "NUMERICAL", no options needed.
    - For DRAWING_PROMPT: set question_format to "DRAWING_PROMPT".
    - Include nta_question_id if visible in the PDF.

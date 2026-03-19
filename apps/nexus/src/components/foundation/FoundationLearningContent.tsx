@@ -68,6 +68,7 @@ export default function FoundationLearningContent({
   const [quizSectionIndex, setQuizSectionIndex] = useState(0);
   const [allQuizMode, setAllQuizMode] = useState(false);
   const [contentTab, setContentTab] = useState<ContentTab>('watch');
+  const [msToken, setMsToken] = useState<string | null>(null);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
@@ -81,6 +82,7 @@ export default function FoundationLearningContent({
     try {
       const token = await getToken();
       if (!token) return;
+      setMsToken(token);
 
       const res = await fetch(`/api/foundation/chapters/${chapterId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -92,10 +94,12 @@ export default function FoundationLearningContent({
 
         // Set default content tab based on available content
         if (!silent) {
-          const hasVideo = chapterData.chapter.video_source && (
-            chapterData.chapter.youtube_video_id || chapterData.chapter.sharepoint_video_url
-          );
-          if (!hasVideo && chapterData.chapter.pdf_url) {
+          const chYtId = chapterData.chapter.youtube_video_id;
+          const hasValidYt = !!(chYtId && chYtId.length === 11 && !chYtId.startsWith('PLACEHOLDER'));
+          const chHasVideo = chapterData.chapter.video_source === 'sharepoint'
+            ? !!chapterData.chapter.sharepoint_video_url
+            : hasValidYt;
+          if (!chHasVideo && chapterData.chapter.pdf_url) {
             setContentTab('read');
           }
         }
@@ -419,7 +423,15 @@ export default function FoundationLearningContent({
   const currentSection = sections[currentSectionIndex];
   const completedSections = sections.filter(s => s.quiz_attempt?.passed).length;
 
-  const hasVideo = chapter.video_source && (chapter.youtube_video_id || chapter.sharepoint_video_url);
+  // Validate YouTube video IDs: must be 11 chars, not a placeholder
+  const hasValidYoutubeId = !!(
+    chapter.youtube_video_id &&
+    chapter.youtube_video_id.length === 11 &&
+    !chapter.youtube_video_id.startsWith('PLACEHOLDER')
+  );
+  const hasVideo = chapter.video_source === 'sharepoint'
+    ? !!chapter.sharepoint_video_url
+    : hasValidYoutubeId;
   const hasPdf = !!chapter.pdf_url;
   const hasAudio = (audio_tracks?.length ?? 0) > 0;
   const showTabs = hasVideo && hasPdf; // Only show tabs if both available
@@ -548,7 +560,7 @@ export default function FoundationLearningContent({
           }}
         >
           <PDFReader
-            pdfUrl={chapter.pdf_url!}
+            pdfUrl={`/api/foundation/chapters/${chapterId}/pdf-stream${msToken ? `?token=${encodeURIComponent(msToken)}` : ''}`}
             initialPage={progress?.last_pdf_page || 1}
             totalPages={chapter.pdf_page_count || undefined}
             onPageChange={(page) => {

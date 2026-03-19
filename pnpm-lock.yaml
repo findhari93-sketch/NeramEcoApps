@@ -297,6 +297,9 @@ importers:
       '@neram/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      katex:
+        specifier: ^0.16.38
+        version: 0.16.38
       next:
         specifier: 14.2.21
         version: 14.2.21(@babel/core@7.28.5)(@playwright/test@1.58.1)(react-dom@18.3.1)(react@18.3.1)
@@ -310,6 +313,9 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
     devDependencies:
+      '@types/katex':
+        specifier: ^0.16.8
+        version: 0.16.8
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.27
@@ -5002,6 +5008,10 @@ packages:
       '@types/node': 20.19.27
     dev: false
 
+  /@types/katex@0.16.8:
+    resolution: {integrity: sha512-trgaNyfU+Xh2Tc+ABIb44a5AYUpicB3uwirOioeOkNPPbmgRNtcWyDeeFRzjPZENO9Vq8gvVqfhaaXWLlevVwg==}
+    dev: true
+
   /@types/long@4.0.2:
     resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
     dev: false
@@ -6945,6 +6955,11 @@ packages:
   /commander@5.1.0:
     resolution: {integrity: sha512-P0CysNDQ7rtVw4QIQtm+MRxV66vKFSvlsQvGYXZWR3qFU0jlMKHZZZgw8e+8DSah4UDKMqnknRDQz+xuQXQ/Zg==}
     engines: {node: '>= 6'}
+    dev: false
+
+  /commander@8.3.0:
+    resolution: {integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==}
+    engines: {node: '>= 12'}
     dev: false
 
   /common-tags@1.8.2:
@@ -10626,6 +10641,13 @@ packages:
     dependencies:
       jwa: 2.0.1
       safe-buffer: 5.2.1
+    dev: false
+
+  /katex@0.16.38:
+    resolution: {integrity: sha512-cjHooZUmIAUmDsHBN+1n8LaZdpmbj03LtYeYPyuYB7OuloiaeaV6N4LcfjcnHVzGWjVQmKrxxTrpDcmSzEZQwQ==}
+    hasBin: true
+    dependencies:
+      commander: 8.3.0
     dev: false
 
   /keyv@4.5.4:

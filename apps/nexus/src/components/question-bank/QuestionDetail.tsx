@@ -32,6 +32,7 @@ import DifficultyChip from './DifficultyChip';
 import CategoryChips from './CategoryChips';
 import MCQOptions from './MCQOptions';
 import SolutionSection from './SolutionSection';
+import MathText from '@/components/common/MathText';
 
 interface QuestionDetailProps {
   question: NexusQBQuestionDetail;
@@ -193,17 +194,15 @@ export default function QuestionDetail({
 
       {/* Question text */}
       {question.question_text && (
-        <Typography
+        <MathText
+          text={question.question_text}
           variant="body1"
           sx={{
             mb: 2.5,
             lineHeight: 1.7,
             fontSize: { xs: '0.95rem', md: '1rem' },
-            whiteSpace: 'pre-wrap',
           }}
-        >
-          {question.question_text}
-        </Typography>
+        />
       )}
 
       {/* MCQ Options */}

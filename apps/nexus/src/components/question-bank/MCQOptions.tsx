@@ -2,6 +2,7 @@
 
 import { Box, Paper, Typography, alpha, useTheme } from '@neram/ui';
 import type { NexusQBQuestionOption } from '@neram/database';
+import MathText from '@/components/common/MathText';
 
 interface MCQOptionsProps {
   options: NexusQBQuestionOption[];
@@ -131,9 +132,9 @@ export default function MCQOptions({
 
             {/* Option content */}
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
-                {option.text}
-              </Typography>
+              {option.text ? (
+                <MathText text={option.text} variant="body2" sx={{ lineHeight: 1.5 }} />
+              ) : null}
               {option.image_url && (
                 <Box
                   component="img"

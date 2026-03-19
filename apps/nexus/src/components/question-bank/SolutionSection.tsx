@@ -13,6 +13,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CloseIcon from '@mui/icons-material/Close';
 import type { NexusQBQuestionDetail } from '@neram/database';
+import MathText from '@/components/common/MathText';
 
 interface SolutionSectionProps {
   question: NexusQBQuestionDetail;
@@ -49,9 +50,7 @@ export default function SolutionSection({
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5, color: 'text.secondary' }}>
             Quick Explanation
           </Typography>
-          <Typography variant="body2" sx={{ lineHeight: 1.7, color: 'text.primary' }}>
-            {question.explanation_brief}
-          </Typography>
+          <MathText text={question.explanation_brief} variant="body2" sx={{ lineHeight: 1.7, color: 'text.primary' }} />
         </Box>
       )}
 
@@ -79,12 +78,11 @@ export default function SolutionSection({
           <AccordionDetails sx={{ pt: 0 }}>
             {/* Detailed text */}
             {question.explanation_detailed && (
-              <Typography
+              <MathText
+                text={question.explanation_detailed}
                 variant="body2"
-                sx={{ lineHeight: 1.7, mb: 2, whiteSpace: 'pre-wrap' }}
-              >
-                {question.explanation_detailed}
-              </Typography>
+                sx={{ lineHeight: 1.7, mb: 2 }}
+              />
             )}
 
             {/* YouTube embed */}

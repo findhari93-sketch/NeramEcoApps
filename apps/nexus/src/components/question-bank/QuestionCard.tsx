@@ -6,6 +6,7 @@ import SourceBadges from './SourceBadges';
 import DifficultyChip from './DifficultyChip';
 import CategoryChips from './CategoryChips';
 import AttemptIndicator from './AttemptIndicator';
+import MathText from '@/components/common/MathText';
 
 interface QuestionCardProps {
   question: NexusQBQuestionListItem;
@@ -57,8 +58,7 @@ export default function QuestionCard({ question, mode, onClick }: QuestionCardPr
           </Box>
 
           {/* Question text */}
-          <Typography
-            variant="body2"
+          <Box
             sx={{
               mb: 1,
               display: '-webkit-box',
@@ -67,11 +67,16 @@ export default function QuestionCard({ question, mode, onClick }: QuestionCardPr
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               lineHeight: 1.5,
-              color: 'text.primary',
             }}
           >
-            {question.question_text || 'Image-based question'}
-          </Typography>
+            {question.question_text ? (
+              <MathText text={question.question_text} variant="body2" sx={{ color: 'text.primary' }} />
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                Image-based question
+              </Typography>
+            )}
+          </Box>
 
           {/* Bottom row */}
           <Box

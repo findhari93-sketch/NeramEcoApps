@@ -97,7 +97,8 @@ INSTRUCTIONS:
 - When relevant, naturally mention Neram Classes tools or coaching (don't force it)
 - All dates and facts above are from the official NATA 2026 Brochure V1.0. Be confident in these facts.
 - For session-wise exam schedules, direct students to www.nata.in
-- End responses with a brief follow-up question or encouragement when appropriate (e.g., "Would you like to know more about the exam pattern?" or "You've got this!")`;
+- End responses with a brief follow-up question or encouragement when appropriate (e.g., "Would you like to know more about the exam pattern?" or "You've got this!")
+- IMPORTANT: Always complete your answer. If a topic needs a long explanation, summarize the key points concisely rather than giving an incomplete detailed answer. Never end mid-sentence.`;
 
 // ============================================
 // AINTRA KNOWLEDGE BASE CACHE
@@ -145,7 +146,7 @@ async function callGemini(
   model: string,
   contents: Array<{ role: string; parts: Array<{ text: string }> }>,
   systemPrompt: string
-): Promise<{ reply: string; model: string } | null> {
+): Promise<{ reply: string; model: string; finishReason: string } | null> {
   try {
     const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
     const response = await fetch(url, {
@@ -156,7 +157,7 @@ async function callGemini(
         contents,
         generationConfig: {
           temperature: 0.75,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 4096,
           topP: 0.9,
         },
         safetySettings: [
@@ -176,10 +177,20 @@ async function callGemini(
     }
 
     const data = await response.json();
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const candidate = data?.candidates?.[0];
+    const reply = candidate?.content?.parts?.[0]?.text;
     if (!reply) return null;
 
-    return { reply, model };
+    const finishReason: string = candidate?.finishReason || 'UNKNOWN';
+    let finalReply = reply;
+
+    if (finishReason === 'MAX_TOKENS') {
+      console.warn(`[NataChat] Gemini ${model}: response truncated (MAX_TOKENS)`);
+      finalReply = reply.trimEnd() +
+        '\n\n*For more details, please contact us at **+91 91761 37043** or visit **neramclasses.com**.*';
+    }
+
+    return { reply: finalReply, model, finishReason };
   } catch (err) {
     console.error(`[NataChat] Gemini ${model} fetch error:`, err);
     return null;
@@ -251,7 +262,7 @@ export async function POST(request: NextRequest) {
     const effectivePrompt = NATA_SYSTEM_PROMPT + kbSection;
 
     // Try models with fallback
-    let result: { reply: string; model: string } | null = null;
+    let result: { reply: string; model: string; finishReason: string } | null = null;
     for (const model of GEMINI_MODELS) {
       result = await callGemini(model, contents, effectivePrompt);
       if (result) break;
@@ -294,9 +305,10 @@ export async function POST(request: NextRequest) {
       pageUrl,
       modelUsed: result.model,
       responseTimeMs,
+      error: result.finishReason === 'MAX_TOKENS' ? 'TRUNCATED_MAX_TOKENS' : undefined,
     });
 
-    return NextResponse.json({ reply: result.reply, model: result.model });
+    return NextResponse.json({ reply: result.reply, model: result.model, finishReason: result.finishReason });
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

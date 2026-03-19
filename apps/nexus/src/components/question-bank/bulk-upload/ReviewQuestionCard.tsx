@@ -17,6 +17,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import ImageUploadZone from '@/components/question-bank/ImageUploadZone';
 import type { ReviewQuestion, ReviewQuestionOption, ImageState } from '@/lib/bulk-upload-schema';
+import MathText from '@/components/common/MathText';
 
 interface ReviewQuestionCardProps {
   question: ReviewQuestion;
@@ -176,22 +177,30 @@ export default function ReviewQuestionCard({
 
           {/* Question text */}
           {editing ? (
-            <TextField
-              size="small"
-              fullWidth
-              multiline
-              minRows={2}
-              maxRows={6}
-              value={question.question_text}
-              onChange={(e) => updateField('question_text', e.target.value)}
-              placeholder="Enter question text..."
-              sx={{ mb: 1.5 }}
-            />
+            <>
+              <TextField
+                size="small"
+                fullWidth
+                multiline
+                minRows={2}
+                maxRows={6}
+                value={question.question_text}
+                onChange={(e) => updateField('question_text', e.target.value)}
+                placeholder="Enter question text (use $...$ for inline math, $$...$$ for block math)..."
+                sx={{ mb: 0.5 }}
+              />
+              {question.question_text && question.question_text.includes('$') && (
+                <Box sx={{ mb: 1.5, p: 1, bgcolor: alpha(theme.palette.info.main, 0.04), borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    Math Preview
+                  </Typography>
+                  <MathText text={question.question_text} variant="body2" />
+                </Box>
+              )}
+            </>
           ) : (
             question.question_text && (
-              <Typography variant="body2" sx={{ mb: 1.5, whiteSpace: 'pre-wrap' }}>
-                {question.question_text}
-              </Typography>
+              <MathText text={question.question_text} variant="body2" sx={{ mb: 1.5 }} />
             )
           )}
 
@@ -246,9 +255,7 @@ export default function ReviewQuestionCard({
                         />
                       ) : (
                         opt.text && (
-                          <Typography variant="body2" sx={{ mb: opt.image ? 1 : 0 }}>
-                            {opt.text}
-                          </Typography>
+                          <MathText text={opt.text} variant="body2" sx={{ mb: opt.image ? 1 : 0 }} />
                         )
                       )}
 

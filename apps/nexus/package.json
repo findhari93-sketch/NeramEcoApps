@@ -17,12 +17,14 @@
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
     "@neram/ui": "workspace:*",
+    "katex": "^0.16.38",
     "next": "14.2.21",
     "pdfjs-dist": "^5.5.207",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
