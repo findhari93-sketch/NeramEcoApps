@@ -22,15 +22,18 @@ import {
   Tabs,
   alpha,
   useTheme,
+  LinearProgress,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import DataObjectIcon from '@mui/icons-material/DataObject';
+import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { QBExamType } from '@neram/database';
 import type { ReviewQuestion, UploadMethod } from '@/lib/bulk-upload-schema';
+import { uploadBase64Images } from '@/lib/upload-base64-images';
 import PasteTextTab from '@/components/question-bank/bulk-upload/PasteTextTab';
 import UploadPDFTab from '@/components/question-bank/bulk-upload/UploadPDFTab';
 import UploadJSONTab from '@/components/question-bank/bulk-upload/UploadJSONTab';
@@ -64,6 +67,14 @@ export default function BulkUploadPage() {
   const [reviewQuestions, setReviewQuestions] = useState<ReviewQuestion[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
 
+  // Image auto-upload state
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = useState<{
+    total: number;
+    completed: number;
+    failed: number;
+  } | null>(null);
+
   // Import state
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
@@ -74,11 +85,47 @@ export default function BulkUploadPage() {
   } | null>(null);
   const [error, setError] = useState('');
 
-  const handleQuestionsReady = useCallback((questions: ReviewQuestion[], warns: string[]) => {
-    setReviewQuestions(questions);
-    setWarnings(warns);
-    setActiveStep(2);
-  }, []);
+  const handleQuestionsReady = useCallback(async (questions: ReviewQuestion[], warns: string[]) => {
+    // Check if there are any base64 images that need uploading
+    const hasBase64 = questions.some((q) => {
+      if (q.question_image && !q.question_image.uploaded && q.question_image.url.startsWith('data:')) return true;
+      return q.options.some((opt) => opt.image && !opt.image.uploaded && opt.image.url.startsWith('data:'));
+    });
+
+    if (hasBase64) {
+      // Auto-upload base64 images before showing review
+      setUploadingImages(true);
+      setImageUploadProgress(null);
+      setWarnings(warns);
+      setActiveStep(2);
+
+      try {
+        let failedCount = 0;
+        const updated = await uploadBase64Images(questions, getToken, (progress) => {
+          setImageUploadProgress(progress);
+          failedCount = progress.failed;
+        });
+        setReviewQuestions(updated);
+
+        if (failedCount > 0) {
+          setWarnings((prev) => [
+            ...prev,
+            `${failedCount} image(s) failed to upload. You can manually re-upload them in the review panel.`,
+          ]);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Image upload failed');
+        setReviewQuestions(questions);
+      } finally {
+        setUploadingImages(false);
+        setImageUploadProgress(null);
+      }
+    } else {
+      setReviewQuestions(questions);
+      setWarnings(warns);
+      setActiveStep(2);
+    }
+  }, [getToken]);
 
   const handleImport = async () => {
     if (reviewQuestions.length === 0) return;
@@ -297,8 +344,44 @@ export default function BulkUploadPage() {
         </Paper>
       )}
 
+      {/* Image upload progress */}
+      {activeStep === 2 && uploadingImages && (
+        <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderRadius: 2.5 }}>
+          <CloudUploadOutlinedIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1.5 }} />
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+            Uploading Images...
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Uploading extracted images to storage. This may take a moment.
+          </Typography>
+          {imageUploadProgress && (
+            <Box sx={{ maxWidth: 400, mx: 'auto' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {imageUploadProgress.completed} / {imageUploadProgress.total} images
+                </Typography>
+                {imageUploadProgress.failed > 0 && (
+                  <Typography variant="caption" color="error">
+                    {imageUploadProgress.failed} failed
+                  </Typography>
+                )}
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={
+                  imageUploadProgress.total > 0
+                    ? ((imageUploadProgress.completed + imageUploadProgress.failed) / imageUploadProgress.total) * 100
+                    : 0
+                }
+                sx={{ height: 8, borderRadius: 4 }}
+              />
+            </Box>
+          )}
+        </Paper>
+      )}
+
       {/* Step 3: Review & Import */}
-      {activeStep === 2 && (
+      {activeStep === 2 && !uploadingImages && (
         <Box>
           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
             <Button variant="outlined" size="small" onClick={() => setActiveStep(1)}>

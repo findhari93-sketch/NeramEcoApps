@@ -21,8 +21,9 @@ async function resolveLinkedPdfUrl(sharingUrl: string): Promise<string | null> {
   const token = await getAppOnlyToken();
   const encoded = encodeSharingUrl(sharingUrl);
 
+  // Don't use $select — it strips @microsoft.graph.downloadUrl from the response
   const res = await fetch(
-    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,@microsoft.graph.downloadUrl`,
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
 
@@ -33,6 +34,30 @@ async function resolveLinkedPdfUrl(sharingUrl: string): Promise<string | null> {
     }
   }
 
+  return null;
+}
+
+/**
+ * Fetch PDF content directly via the /shares/{encoded}/driveItem/content endpoint.
+ * Returns the binary PDF data as ArrayBuffer if successful.
+ */
+async function fetchLinkedPdfContent(sharingUrl: string): Promise<ArrayBuffer | null> {
+  const token = await getAppOnlyToken();
+  const encoded = encodeSharingUrl(sharingUrl);
+
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: 'follow',
+    }
+  );
+
+  if (res.ok) {
+    return res.arrayBuffer();
+  }
+
+  console.error('Direct content fetch failed:', res.status, await res.text().catch(() => ''));
   return null;
 }
 
@@ -68,6 +93,7 @@ export async function GET(
       return NextResponse.json({ error: 'No PDF found' }, { status: 404 });
     }
 
+    // --- Strategy 1: Resolve download URL then fetch ---
     let downloadUrl: string | null = null;
 
     if (chapter.pdf_source === 'link' && chapter.pdf_url) {
@@ -86,38 +112,42 @@ export async function GET(
       }
     }
 
-    // Fallback: try /shares on stored URL regardless of source
-    if (!downloadUrl && chapter.pdf_url) {
+    if (downloadUrl) {
+      const pdfRes = await fetch(downloadUrl, { redirect: 'follow' });
+      if (pdfRes.ok) {
+        const pdfBuffer = await pdfRes.arrayBuffer();
+        return new NextResponse(pdfBuffer, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Length': String(pdfBuffer.byteLength),
+            'Cache-Control': 'private, max-age=3600',
+          },
+        });
+      }
+      console.error('Download URL fetch failed:', pdfRes.status);
+    }
+
+    // --- Strategy 2: Fetch content directly via /shares/.../content ---
+    if (chapter.pdf_url) {
       try {
-        downloadUrl = await resolveLinkedPdfUrl(chapter.pdf_url);
-      } catch {
-        // Last resort — use raw URL (may not work for sharing links)
-        downloadUrl = chapter.pdf_url;
+        const pdfBuffer = await fetchLinkedPdfContent(chapter.pdf_url);
+        if (pdfBuffer) {
+          return new NextResponse(pdfBuffer, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/pdf',
+              'Content-Length': String(pdfBuffer.byteLength),
+              'Cache-Control': 'private, max-age=3600',
+            },
+          });
+        }
+      } catch (err) {
+        console.error('Direct content fetch error:', err);
       }
     }
 
-    if (!downloadUrl) {
-      return NextResponse.json({ error: 'Could not resolve PDF URL' }, { status: 500 });
-    }
-
-    // Fetch the PDF binary server-side and stream it to the client
-    const pdfRes = await fetch(downloadUrl, { redirect: 'follow' });
-
-    if (!pdfRes.ok) {
-      console.error('SharePoint PDF fetch failed:', pdfRes.status, await pdfRes.text().catch(() => ''));
-      return NextResponse.json({ error: 'Failed to fetch PDF from storage' }, { status: 502 });
-    }
-
-    const pdfBuffer = await pdfRes.arrayBuffer();
-
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Length': String(pdfBuffer.byteLength),
-        'Cache-Control': 'private, max-age=3600',
-      },
-    });
+    return NextResponse.json({ error: 'Could not resolve PDF URL' }, { status: 500 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to resolve PDF URL';
     console.error('Foundation PDF stream error:', message);

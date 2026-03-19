@@ -5196,9 +5196,18 @@ export interface NTAParsedQuestion {
   question_number: number;
   nta_question_id: string;
   question_format: QBQuestionFormat;
-  options: { nta_id: string }[];
+  question_text?: string | null;
+  question_image_url?: string | null;
+  options: {
+    nta_id: string;
+    text?: string;
+    label?: string;
+    image_url?: string | null;
+  }[];
   section: 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing';
   categories: string[];
+  marks_correct?: number;
+  marks_negative?: number;
 }
 
 export interface NTAParsedPaper {

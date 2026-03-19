@@ -861,10 +861,13 @@ export async function bulkCreateDraftQuestions(
   // Build question inserts
   const questionInserts = questions.map((q) => ({
     question_format: q.question_format,
+    question_text: q.question_text || null,
+    question_image_url: q.question_image_url || null,
     options: q.question_format === 'MCQ'
       ? q.options.map((opt, i) => ({
           id: String.fromCharCode(97 + i), // a, b, c, d
-          text: '',
+          text: opt.text || '',
+          image_url: opt.image_url || null,
           nta_id: opt.nta_id,
         }))
       : null,
