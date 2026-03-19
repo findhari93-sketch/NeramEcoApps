@@ -19,7 +19,7 @@
     "@neram/ui": "workspace:*",
     "katex": "^0.16.38",
     "next": "14.2.21",
-    "pdfjs-dist": "^5.5.207",
+    "pdfjs-dist": "^4.10.38",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

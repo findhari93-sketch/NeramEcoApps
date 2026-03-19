@@ -6,11 +6,13 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const page = parseInt(searchParams.get('page') || '1', 10);
-  const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
   const userId = searchParams.get('userId');
   const sessionId = searchParams.get('sessionId');
   const search = searchParams.get('search');
   const source = searchParams.get('source');
+  const dateFrom = searchParams.get('dateFrom');
+  const dateTo = searchParams.get('dateTo');
   const offset = (page - 1) * limit;
 
   let query = supabase
@@ -33,6 +35,17 @@ export async function GET(request: NextRequest) {
 
   if (source) {
     query = query.eq('source', source);
+  }
+
+  if (dateFrom) {
+    query = query.gte('created_at', dateFrom);
+  }
+
+  if (dateTo) {
+    // Add 1 day to include the full end date
+    const endDate = new Date(dateTo);
+    endDate.setDate(endDate.getDate() + 1);
+    query = query.lt('created_at', endDate.toISOString());
   }
 
   const { data, error, count } = await query;

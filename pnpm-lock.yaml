@@ -304,8 +304,8 @@ importers:
         specifier: 14.2.21
         version: 14.2.21(@babel/core@7.28.5)(@playwright/test@1.58.1)(react-dom@18.3.1)(react@18.3.1)
       pdfjs-dist:
-        specifier: ^5.5.207
-        version: 5.5.207
+        specifier: ^4.10.38
+        version: 4.10.38
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -11734,12 +11734,6 @@ packages:
     dev: false
     optional: true
 
-  /node-readable-to-web-readable-stream@0.4.2:
-    resolution: {integrity: sha512-/cMZNI34v//jUTrI+UIo4ieHAB5EZRY/+7OmXZgBxaWBMcW2tGdceIw06RFxWxrKZ5Jp3sI2i5TsRo+CBhtVLQ==}
-    requiresBuild: true
-    dev: false
-    optional: true
-
   /node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
 
@@ -12241,12 +12235,11 @@ packages:
     resolution: {integrity: sha512-Dp6zGqpTdETdR63lehJYPeIOqpiNBNtc7BpWSLrOje7UaIsE5aY92r/AunQA7rsXvet3lrJ3JnZX29UPTKXyKQ==}
     dev: true
 
-  /pdfjs-dist@5.5.207:
-    resolution: {integrity: sha512-WMqqw06w1vUt9ZfT0gOFhMf3wHsWhaCrxGrckGs5Cci6ybDW87IvPaOd2pnBwT6BJuP/CzXDZxjFgmSULLdsdw==}
-    engines: {node: '>=20.19.0 || >=22.13.0 || >=24'}
+  /pdfjs-dist@4.10.38:
+    resolution: {integrity: sha512-/Y3fcFrXEAsMjJXeL9J8+ZG9U01LbuWaYypvDW2ycW1jL269L3js3DVBjDJ0Up9Np1uqDXsDrRihHANhZOlwdQ==}
+    engines: {node: '>=20'}
     optionalDependencies:
       '@napi-rs/canvas': 0.1.97
-      node-readable-to-web-readable-stream: 0.4.2
     dev: false
 
   /peberminta@0.9.0:

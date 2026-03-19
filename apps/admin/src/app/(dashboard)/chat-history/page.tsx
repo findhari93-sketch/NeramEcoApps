@@ -30,6 +30,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import ForumIcon from '@mui/icons-material/Forum';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import PersonIcon from '@mui/icons-material/Person';
+import ClearIcon from '@mui/icons-material/Clear';
 import DataTable from '@/components/DataTable';
 
 interface Conversation {
@@ -54,6 +56,8 @@ export default function ChatHistoryPage() {
   const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [correctionText, setCorrectionText] = useState('');
@@ -71,7 +75,7 @@ export default function ChatHistoryPage() {
     setSnackbar({ open: true, message, severity });
   };
 
-  const fetchData = useCallback(async (p: number, ps: number, q: string, src: string) => {
+  const fetchData = useCallback(async (p: number, ps: number, q: string, src: string, df: string, dt: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -79,6 +83,8 @@ export default function ChatHistoryPage() {
         limit: String(ps),
         ...(q ? { search: q } : {}),
         ...(src ? { source: src } : {}),
+        ...(df ? { dateFrom: df } : {}),
+        ...(dt ? { dateTo: dt } : {}),
       });
       const res = await fetch(`/api/chatbot-logs?${params}`);
       const json = await res.json();
@@ -92,15 +98,15 @@ export default function ChatHistoryPage() {
   }, []);
 
   useEffect(() => {
-    fetchData(page, pageSize, search, sourceFilter);
-  }, [page, pageSize, sourceFilter, fetchData]);
+    fetchData(page, pageSize, search, sourceFilter, dateFrom, dateTo);
+  }, [page, pageSize, sourceFilter, dateFrom, dateTo, fetchData]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => {
       setPage(0);
-      fetchData(0, pageSize, value, sourceFilter);
+      fetchData(0, pageSize, value, sourceFilter, dateFrom, dateTo);
     }, 500);
   };
 
@@ -228,12 +234,29 @@ export default function ChatHistoryPage() {
     {
       field: 'lead_name',
       headerName: 'User',
-      width: 150,
-      renderCell: (params: any) => (
-        <Typography variant="body2" color={params.value ? 'text.primary' : 'text.disabled'}>
-          {params.value || 'Unknown'}
-        </Typography>
-      ),
+      width: 160,
+      renderCell: (params: any) => {
+        const name = params.value;
+        const hasName = !!name;
+        const initials = hasName
+          ? name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+          : '?';
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+              bgcolor: hasName ? 'primary.main' : 'grey.300',
+              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.7rem', fontWeight: 600,
+            }}>
+              {hasName ? initials : <PersonIcon sx={{ fontSize: 16 }} />}
+            </Box>
+            <Typography variant="body2" color={hasName ? 'text.primary' : 'text.disabled'} noWrap>
+              {name || 'Guest'}
+            </Typography>
+          </Box>
+        );
+      },
     },
     {
       field: 'source',
@@ -334,13 +357,13 @@ export default function ChatHistoryPage() {
       </Box>
 
       {/* Filters */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           size="small"
           placeholder="Search questions…"
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
-          sx={{ flex: 1, maxWidth: 400 }}
+          sx={{ flex: 1, minWidth: 200, maxWidth: 400 }}
           InputProps={{
             startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
           }}
@@ -357,6 +380,31 @@ export default function ChatHistoryPage() {
             <MenuItem value="nata_chatbot">NATA</MenuItem>
           </Select>
         </FormControl>
+        <TextField
+          size="small"
+          type="date"
+          label="From"
+          value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: 160 }}
+        />
+        <TextField
+          size="small"
+          type="date"
+          label="To"
+          value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: 160 }}
+        />
+        {(dateFrom || dateTo) && (
+          <Tooltip title="Clear date filters" arrow>
+            <IconButton size="small" onClick={() => { setDateFrom(''); setDateTo(''); setPage(0); }}>
+              <ClearIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {/* Table */}

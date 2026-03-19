@@ -202,6 +202,7 @@ async function logConversation(params: {
   userMessage: string;
   aiResponse: string | null;
   userId?: string | null;
+  userName?: string | null;
   pageUrl?: string;
   modelUsed?: string;
   responseTimeMs?: number;
@@ -214,6 +215,7 @@ async function logConversation(params: {
       user_message: params.userMessage,
       ai_response: params.aiResponse,
       user_id: params.userId || null,
+      lead_name: params.userName || null,
       page_url: params.pageUrl || null,
       model_used: params.modelUsed || null,
       response_time_ms: params.responseTimeMs || null,
@@ -235,7 +237,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { message, history, sessionId, userId, pageUrl } = body;
+    const { message, history, sessionId, userId, userName, pageUrl } = body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -286,6 +288,7 @@ export async function POST(request: NextRequest) {
         userMessage: message.trim(),
         aiResponse: null,
         userId,
+        userName,
         pageUrl,
         error: 'All models exhausted or rate limited',
         responseTimeMs,
@@ -302,6 +305,7 @@ export async function POST(request: NextRequest) {
       userMessage: message.trim(),
       aiResponse: result.reply,
       userId,
+      userName,
       pageUrl,
       modelUsed: result.model,
       responseTimeMs,

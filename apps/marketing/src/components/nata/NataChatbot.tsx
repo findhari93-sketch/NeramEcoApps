@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useFirebaseAuth } from '@neram/auth';
 import {
   Box,
   Typography,
@@ -101,16 +102,48 @@ function BotMessageContent({ text }: { text: string }) {
   );
 }
 
+/** Detects URLs in text and renders them as clickable links (opens in new tab) */
+function Linkify({ text }: { text: string }) {
+  const urlRegex = /(https?:\/\/[^\s,)]+|www\.[^\s,)]+|\b[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:com|in|org|net|edu)(?:\/[^\s,)]*)?)/g;
+  const nodes: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let m;
+  while ((m = urlRegex.exec(text)) !== null) {
+    if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
+    const url = m[0];
+    const href = url.startsWith('http') ? url : `https://${url}`;
+    nodes.push(
+      <a key={m.index} href={href} target="_blank" rel="noopener noreferrer"
+         style={{ color: '#1976d2', textDecoration: 'underline', wordBreak: 'break-all' }}>
+        {url}
+      </a>
+    );
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
+  return <>{nodes}</>;
+}
+
+/** Renders **bold**, *italic*, [markdown links](url), and auto-linked URLs */
 function InlineMarkdown({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
   return (
     <>
       {parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**'))
-          return <strong key={i}>{part.slice(2, -2)}</strong>;
+          return <strong key={i}><Linkify text={part.slice(2, -2)} /></strong>;
         if (part.startsWith('*') && part.endsWith('*'))
-          return <em key={i}>{part.slice(1, -1)}</em>;
-        return <span key={i}>{part}</span>;
+          return <em key={i}><Linkify text={part.slice(1, -1)} /></em>;
+        const mdLink = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (mdLink) {
+          return (
+            <a key={i} href={mdLink[2]} target="_blank" rel="noopener noreferrer"
+               style={{ color: '#1976d2', textDecoration: 'underline' }}>
+              {mdLink[1]}
+            </a>
+          );
+        }
+        return <Linkify key={i} text={part} />;
       })}
     </>
   );
@@ -121,9 +154,6 @@ interface ChatMessage {
   text: string;
 }
 
-interface NataChatbotProps {
-  userId?: string | null;
-}
 
 const MAX_QUESTIONS_PER_SESSION = 20;
 const LEAD_CAPTURE_AFTER = 3;
@@ -142,7 +172,8 @@ function generateSessionId() {
 /** Default bottom offset for the FAB */
 const FAB_BOTTOM = 24;
 
-export default function NataChatbot({ userId }: NataChatbotProps = {}) {
+export default function NataChatbot() {
+  const { user: firebaseUser } = useFirebaseAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -212,7 +243,8 @@ export default function NataChatbot({ userId }: NataChatbotProps = {}) {
           message: text.trim(),
           history: messages.slice(-10),
           sessionId,
-          userId: userId || null,
+          userId: firebaseUser?.uid || null,
+          userName: firebaseUser?.displayName || firebaseUser?.phoneNumber || null,
           pageUrl: typeof window !== 'undefined' ? window.location.pathname : null,
         }),
       });
