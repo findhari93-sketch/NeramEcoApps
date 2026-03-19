@@ -291,6 +291,9 @@ export default function FoundationLearningContent({
   }, [saveProgress]);
 
   const handleSectionEnd = useCallback((sectionIndex: number) => {
+    // Pause video when quiz opens
+    const player = (window as any).__foundationPlayer;
+    if (player?.pause) player.pause();
     setQuizSectionIndex(sectionIndex);
     setQuizOpen(true);
   }, []);
@@ -693,7 +696,12 @@ export default function FoundationLearningContent({
           open={quizOpen}
           sectionTitle={sections[quizSectionIndex].title}
           questions={sections[quizSectionIndex].quiz_questions}
-          onClose={() => setQuizOpen(false)}
+          onClose={() => {
+            setQuizOpen(false);
+            // Resume video when quiz is dismissed
+            const player = (window as any).__foundationPlayer;
+            if (player?.play) player.play();
+          }}
           onSubmit={handleQuizSubmit}
           onRetry={handleQuizRetry}
           onContinue={handleQuizContinue}

@@ -13,14 +13,23 @@ import {
   IconButton,
   Tabs,
   Tab,
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   QB_EXAM_TYPE_LABELS,
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
+  QB_CATEGORY_LABELS,
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestion } from '@neram/database';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
@@ -38,6 +47,9 @@ export default function PaperDetailPage() {
   const [tab, setTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [message, setMessage] = useState('');
 
   const fetchData = useCallback(async () => {
@@ -86,7 +98,7 @@ export default function PaperDetailPage() {
       const json = await res.json();
       if (res.ok) {
         setMessage(json.message || 'Answers saved');
-        await fetchData(); // Refresh
+        await fetchData();
       } else {
         setMessage(`Error: ${json.error}`);
       }
@@ -123,6 +135,58 @@ export default function PaperDetailPage() {
     }
   };
 
+  const handleDeactivate = async () => {
+    setDeactivating(true);
+    setMessage('');
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/question-bank/papers/${paperId}/deactivate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const json = await res.json();
+      if (res.ok) {
+        setMessage(json.message || 'Questions deactivated');
+        await fetchData();
+      } else {
+        setMessage(`Error: ${json.error}`);
+      }
+    } catch (err) {
+      setMessage('Failed to deactivate');
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleteConfirmOpen(false);
+    setDeleting(true);
+    setMessage('');
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/question-bank/papers/${paperId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const json = await res.json();
+      if (res.ok) {
+        router.push('/teacher/question-bank/papers');
+      } else {
+        setMessage(`Error: ${json.error}`);
+      }
+    } catch (err) {
+      setMessage('Failed to delete paper');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -131,6 +195,9 @@ export default function PaperDetailPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+
+  const getCategoryLabel = (cat: string) =>
+    QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat;
 
   if (loading) {
     return (
@@ -155,6 +222,22 @@ export default function PaperDetailPage() {
   const draft = total - keyed;
   const answerKeyedOnly = keyed - complete;
   const completeCount = questions.filter((q) => q.status === 'complete').length;
+  const activeCount = questions.filter((q) => q.status === 'active' && q.is_active).length;
+  const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
+
+  // Section breakdown
+  const sectionBreakdown: Record<string, number> = {};
+  for (const q of questions) {
+    const cats = q.categories as string[] | null;
+    if (cats && cats.length > 0) {
+      for (const cat of cats) {
+        sectionBreakdown[cat] = (sectionBreakdown[cat] || 0) + 1;
+      }
+    } else {
+      const fmt = q.question_format || 'OTHER';
+      sectionBreakdown[fmt] = (sectionBreakdown[fmt] || 0) + 1;
+    }
+  }
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -189,14 +272,31 @@ export default function PaperDetailPage() {
           total={total}
           draft={draft > 0 ? draft : 0}
           answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
-          complete={complete}
-          active={0}
+          complete={complete - activeCount > 0 ? complete - activeCount : 0}
+          active={activeCount}
           showLabels
         />
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5 }}>
-          <Typography variant="body2">
-            {total} total &middot; {keyed} with answers &middot; {complete} complete
-          </Typography>
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {total} total &middot; {keyed} with answers &middot; {complete} complete{activeCount > 0 ? ` \u00b7 ${activeCount} active` : ''}
+        </Typography>
+
+        {/* Section breakdown */}
+        {Object.keys(sectionBreakdown).length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
+            {Object.entries(sectionBreakdown).map(([cat, count]) => (
+              <Chip
+                key={cat}
+                label={`${getCategoryLabel(cat)}: ${count}`}
+                size="small"
+                variant="outlined"
+                sx={{ height: 22, fontSize: '0.65rem' }}
+              />
+            ))}
+          </Box>
+        )}
+
+        {/* Action buttons */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
           {completeCount > 0 && (
             <Button
               variant="contained"
@@ -209,6 +309,28 @@ export default function PaperDetailPage() {
               {activating ? 'Activating...' : `Activate ${completeCount}`}
             </Button>
           )}
+          {activeCount > 0 && (
+            <Button
+              variant="outlined"
+              size="small"
+              color="warning"
+              startIcon={<VisibilityOffOutlinedIcon />}
+              onClick={handleDeactivate}
+              disabled={deactivating}
+            >
+              {deactivating ? 'Deactivating...' : `Deactivate ${activeCount}`}
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            color="error"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting...' : 'Delete Paper'}
+          </Button>
         </Box>
       </Paper>
 
@@ -289,6 +411,26 @@ export default function PaperDetailPage() {
           ))}
         </Box>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+      >
+        <DialogTitle>Delete Paper?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete <strong>{paperLabel}</strong> and all {total} questions.
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={handleDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

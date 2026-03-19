@@ -154,6 +154,7 @@ export default function EditQuestionPage() {
           topics={topics}
           onSubmit={handleSubmit}
           loading={submitting}
+          getToken={getToken}
         />
       )}
 

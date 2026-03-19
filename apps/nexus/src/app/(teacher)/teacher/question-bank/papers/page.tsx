@@ -10,48 +10,180 @@ import {
   Skeleton,
   Chip,
   IconButton,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { QB_EXAM_TYPE_LABELS } from '@neram/database';
+import { QB_EXAM_TYPE_LABELS, QB_CATEGORY_LABELS } from '@neram/database';
 import type { NexusQBOriginalPaper } from '@neram/database';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
+
+interface PaperWithBreakdown extends NexusQBOriginalPaper {
+  section_breakdown?: Record<string, number>;
+  active_count?: number;
+}
 
 export default function PapersListPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
 
-  const [papers, setPapers] = useState<NexusQBOriginalPaper[]>([]);
+  const [papers, setPapers] = useState<PaperWithBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; paperId: string; paperLabel: string }>({
+    open: false,
+    paperId: '',
+    paperLabel: '',
+  });
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'success' });
+
+  async function fetchPapers() {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/question-bank/papers', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const papersData = json.data || [];
+
+        // Fetch section breakdowns for each paper in parallel
+        const enriched = await Promise.all(
+          papersData.map(async (paper: NexusQBOriginalPaper) => {
+            try {
+              const detailRes = await fetch(`/api/question-bank/papers/${paper.id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (detailRes.ok) {
+                const detailJson = await detailRes.json();
+                const questions = detailJson.data?.questions || [];
+                const breakdown: Record<string, number> = {};
+                let activeCount = 0;
+                for (const q of questions) {
+                  const cats = q.categories as string[] | null;
+                  if (cats && cats.length > 0) {
+                    for (const cat of cats) {
+                      breakdown[cat] = (breakdown[cat] || 0) + 1;
+                    }
+                  } else {
+                    const fmt = q.question_format || 'OTHER';
+                    breakdown[fmt] = (breakdown[fmt] || 0) + 1;
+                  }
+                  if (q.is_active && q.status === 'active') activeCount++;
+                }
+                return { ...paper, section_breakdown: breakdown, active_count: activeCount };
+              }
+            } catch {
+              // Ignore errors for individual papers
+            }
+            return paper;
+          })
+        );
+
+        setPapers(enriched);
+      }
+    } catch (err) {
+      console.error('Failed to fetch papers:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function fetchPapers() {
-      setLoading(true);
-      try {
-        const token = await getToken();
-        if (!token || cancelled) return;
-
-        const res = await fetch('/api/question-bank/papers', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (!cancelled) setPapers(json.data || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch papers:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     fetchPapers();
-    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getToken]);
+
+  async function handleActivate(paperId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setActionLoading(paperId + '-activate');
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/papers/${paperId}/activate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setSnackbar({ open: true, message: json.message || 'Questions activated', severity: 'success' });
+        fetchPapers();
+      } else {
+        throw new Error('Failed to activate');
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to activate questions', severity: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDeactivate(paperId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setActionLoading(paperId + '-deactivate');
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/papers/${paperId}/deactivate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setSnackbar({ open: true, message: json.message || 'Questions deactivated', severity: 'success' });
+        fetchPapers();
+      } else {
+        throw new Error('Failed to deactivate');
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to deactivate questions', severity: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDelete() {
+    const paperId = deleteConfirm.paperId;
+    setDeleteConfirm({ open: false, paperId: '', paperLabel: '' });
+    setActionLoading(paperId + '-delete');
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/papers/${paperId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setSnackbar({ open: true, message: json.message || 'Paper deleted', severity: 'success' });
+        setPapers((prev) => prev.filter((p) => p.id !== paperId));
+      } else {
+        throw new Error('Failed to delete');
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to delete paper', severity: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('en-IN', {
@@ -59,6 +191,9 @@ export default function PapersListPage() {
       month: 'short',
       year: 'numeric',
     });
+
+  const getCategoryLabel = (cat: string) =>
+    QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS] || cat;
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -82,7 +217,7 @@ export default function PapersListPage() {
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={100} sx={{ borderRadius: 1 }} />
+            <Skeleton key={i} variant="rectangular" height={140} sx={{ borderRadius: 1 }} />
           ))}
         </Box>
       ) : papers.length === 0 ? (
@@ -107,6 +242,10 @@ export default function PapersListPage() {
             const complete = paper.questions_complete || 0;
             const draft = total - keyed;
             const answerKeyedOnly = keyed - complete;
+            const activeCount = paper.active_count || 0;
+            const completeNotActive = complete - activeCount;
+            const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
+            const isDeleting = actionLoading === paper.id + '-delete';
 
             return (
               <Paper
@@ -116,9 +255,11 @@ export default function PapersListPage() {
                   p: 2,
                   cursor: 'pointer',
                   '&:hover': { bgcolor: 'action.hover' },
+                  opacity: isDeleting ? 0.5 : 1,
                 }}
                 onClick={() => router.push(`/teacher/question-bank/papers/${paper.id}`)}
               >
+                {/* Header row */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Chip
                     label={QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type}
@@ -137,24 +278,127 @@ export default function PapersListPage() {
                   </Typography>
                 </Box>
 
+                {/* Progress bar */}
                 <Box sx={{ mb: 1 }}>
                   <PaperProgressBar
                     total={total}
                     draft={draft > 0 ? draft : 0}
                     answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
-                    complete={complete}
-                    active={0}
+                    complete={completeNotActive > 0 ? completeNotActive : 0}
+                    active={activeCount}
                   />
                 </Box>
 
-                <Typography variant="caption" color="text.secondary">
-                  {total} questions &middot; {keyed} with answers &middot; {complete} complete
+                {/* Stats summary */}
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
+                  {total} total &middot; {keyed} with answers &middot; {complete} complete{activeCount > 0 ? ` \u00b7 ${activeCount} active` : ''}
                 </Typography>
+
+                {/* Section breakdown */}
+                {paper.section_breakdown && Object.keys(paper.section_breakdown).length > 0 && (
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
+                    {Object.entries(paper.section_breakdown).map(([cat, count]) => (
+                      <Chip
+                        key={cat}
+                        label={`${getCategoryLabel(cat)}: ${count}`}
+                        size="small"
+                        variant="outlined"
+                        sx={{ height: 22, fontSize: '0.65rem' }}
+                      />
+                    ))}
+                  </Box>
+                )}
+
+                {/* Bulk action buttons */}
+                <Box
+                  sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {completeNotActive > 0 && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="success"
+                      startIcon={<CheckCircleOutlineIcon />}
+                      onClick={(e) => handleActivate(paper.id, e)}
+                      disabled={actionLoading === paper.id + '-activate'}
+                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
+                    >
+                      {actionLoading === paper.id + '-activate' ? 'Activating...' : `Activate ${completeNotActive}`}
+                    </Button>
+                  )}
+                  {activeCount > 0 && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      startIcon={<VisibilityOffOutlinedIcon />}
+                      onClick={(e) => handleDeactivate(paper.id, e)}
+                      disabled={actionLoading === paper.id + '-deactivate'}
+                      sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
+                    >
+                      {actionLoading === paper.id + '-deactivate' ? 'Deactivating...' : `Deactivate ${activeCount}`}
+                    </Button>
+                  )}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteOutlineIcon />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirm({ open: true, paperId: paper.id, paperLabel });
+                    }}
+                    disabled={isDeleting}
+                    sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
+                  >
+                    Delete
+                  </Button>
+                </Box>
               </Paper>
             );
           })}
         </Box>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, paperId: '', paperLabel: '' })}
+      >
+        <DialogTitle>Delete Paper?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete <strong>{deleteConfirm.paperLabel}</strong> and all its questions.
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm({ open: false, paperId: '', paperLabel: '' })}>
+            Cancel
+          </Button>
+          <Button onClick={handleDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

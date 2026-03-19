@@ -160,9 +160,9 @@ export default function QuizModal({
 
       {/* Questions */}
       {questions.map((q, i) => {
-        const matchedResult = result?.questions.find(rq => rq.id === q.id);
+        const matchedResult = result?.questions?.find(rq => rq.id === q.id);
         // Fallback to index-based matching if ID lookup fails
-        const correctOption = matchedResult?.correct_option ?? result?.questions[i]?.correct_option;
+        const correctOption = matchedResult?.correct_option ?? result?.questions?.[i]?.correct_option;
         return (
           <QuizQuestion
             key={q.id}
@@ -177,13 +177,13 @@ export default function QuizModal({
       })}
 
       {/* Explanation after result */}
-      {result && result.questions.some(q => q.explanation) && (
+      {result && result.questions?.some(q => q.explanation) && (
         <Box sx={{ mt: 2, mb: 2 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
             Explanations
           </Typography>
           {result.questions
-            .filter(q => q.explanation)
+            ?.filter(q => q.explanation)
             .map((q, i) => (
               <Box
                 key={q.id}

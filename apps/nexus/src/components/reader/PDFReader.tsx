@@ -512,125 +512,18 @@ export default function PDFReader({
       ref={containerRef}
       sx={{
         height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         bgcolor: readingMode === 'dark' ? '#1a1a1a' : '#f5f5f5',
         position: 'relative',
         overflow: 'hidden',
         userSelect: 'none',
       }}
     >
-      {/* ---- Toolbar (overlays on canvas) ---- */}
+      {/* ---- Canvas area (fills all space above bottom bar) ---- */}
       <Box
         sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: isMobile ? 0.5 : 1,
-          px: isMobile ? 1 : 2,
-          py: isMobile ? 0.25 : 0.5,
-          bgcolor: alpha(theme.palette.background.paper, 0.92),
-          backdropFilter: 'blur(8px)',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          zIndex: 2,
-          flexWrap: 'nowrap',
-          minHeight: isMobile ? 40 : 48,
-        }}
-      >
-        {/* Page input */}
-        <TextField
-          size="small"
-          value={pageInput}
-          onChange={(e) => setPageInput(e.target.value)}
-          onBlur={handlePageInputBlur}
-          onKeyDown={handlePageInputKey}
-          inputProps={{
-            'aria-label': 'Page number',
-            style: {
-              width: 40,
-              textAlign: 'center',
-              padding: '4px 6px',
-              fontSize: 14,
-            },
-          }}
-          sx={{ '& .MuiOutlinedInput-root': { height: 32 } }}
-        />
-        <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
-          / {effectivePages || '...'}
-        </Typography>
-
-        {/* Zoom — hidden on mobile (pinch-to-zoom available) */}
-        {!isMobile && (
-          <>
-            <IconButton size="small" onClick={zoomOut} aria-label="Zoom out">
-              <ZoomOutIcon fontSize="small" />
-            </IconButton>
-            <Typography variant="caption" sx={{ minWidth: 36, textAlign: 'center' }}>
-              {Math.round(zoom * 100)}%
-            </Typography>
-            <IconButton size="small" onClick={zoomIn} aria-label="Zoom in">
-              <ZoomInIcon fontSize="small" />
-            </IconButton>
-          </>
-        )}
-
-        {/* Spacer */}
-        <Box sx={{ flex: 1 }} />
-
-        {/* Reading mode chips */}
-        {!isMobile &&
-          modeChips.map(({ label, mode, icon }) => (
-            <Chip
-              key={mode}
-              label={label}
-              icon={icon as React.ReactElement | undefined}
-              size="small"
-              variant={readingMode === mode ? 'filled' : 'outlined'}
-              color={readingMode === mode ? 'primary' : 'default'}
-              onClick={() => changeMode(mode)}
-              sx={{ cursor: 'pointer' }}
-            />
-          ))}
-
-        {/* Mobile: compact mode toggle */}
-        {isMobile && (
-          <IconButton
-            size="small"
-            onClick={() => {
-              const modes: ReadingMode[] = ['light', 'dark', 'sepia'];
-              const idx = modes.indexOf(readingMode);
-              changeMode(modes[(idx + 1) % modes.length]);
-            }}
-            aria-label="Toggle reading mode"
-          >
-            {readingMode === 'dark' ? (
-              <DarkModeIcon fontSize="small" />
-            ) : (
-              <LightModeIcon fontSize="small" />
-            )}
-          </IconButton>
-        )}
-
-        {/* Fullscreen */}
-        <IconButton
-          size="small"
-          onClick={toggleFullscreen}
-          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {isFullscreen ? (
-            <FullscreenExitIcon fontSize="small" />
-          ) : (
-            <FullscreenIcon fontSize="small" />
-          )}
-        </IconButton>
-      </Box>
-
-      {/* ---- Canvas area (fills entire container, toolbar/nav overlay on top) ---- */}
-      <Box
-        sx={{
-          width: '100%',
-          height: '100%',
+          flex: 1,
           overflow: 'auto',
           display: 'flex',
           justifyContent: 'center',
@@ -702,45 +595,127 @@ export default function PDFReader({
         />
       </Box>
 
-      {/* ---- Bottom page indicator (overlays on canvas) ---- */}
+      {/* ---- Bottom bar: page nav + controls (all in one row) ---- */}
       <Box
         sx={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: 1,
-          py: { xs: 0.5, sm: 0.75 },
-          px: 2,
-          bgcolor: alpha(theme.palette.background.paper, 0.92),
+          gap: isMobile ? 0.5 : 1,
+          px: isMobile ? 0.5 : 2,
+          py: isMobile ? 0.25 : 0.5,
+          bgcolor: alpha(theme.palette.background.paper, 0.95),
           backdropFilter: 'blur(8px)',
           borderTop: `1px solid ${theme.palette.divider}`,
           zIndex: 2,
+          flexWrap: 'nowrap',
+          minHeight: isMobile ? 40 : 44,
         }}
       >
+        {/* Prev page */}
         <IconButton
           size="small"
           onClick={prevPage}
           disabled={currentPage <= 1}
           aria-label="Previous page"
         >
-          <NavigateBeforeIcon />
+          <NavigateBeforeIcon fontSize="small" />
         </IconButton>
 
-        <Typography variant="body2" color="text.secondary">
-          Page {currentPage} of {effectivePages || '...'}
+        {/* Page input */}
+        <TextField
+          size="small"
+          value={pageInput}
+          onChange={(e) => setPageInput(e.target.value)}
+          onBlur={handlePageInputBlur}
+          onKeyDown={handlePageInputKey}
+          inputProps={{
+            'aria-label': 'Page number',
+            style: {
+              width: 32,
+              textAlign: 'center',
+              padding: '2px 4px',
+              fontSize: 13,
+            },
+          }}
+          sx={{ '& .MuiOutlinedInput-root': { height: 28 } }}
+        />
+        <Typography variant="caption" color="text.secondary">
+          /{effectivePages || '…'}
         </Typography>
 
+        {/* Next page */}
         <IconButton
           size="small"
           onClick={nextPage}
           disabled={currentPage >= effectivePages}
           aria-label="Next page"
         >
-          <NavigateNextIcon />
+          <NavigateNextIcon fontSize="small" />
+        </IconButton>
+
+        {/* Spacer */}
+        <Box sx={{ flex: 1 }} />
+
+        {/* Zoom — hidden on mobile (pinch-to-zoom available) */}
+        {!isMobile && (
+          <>
+            <IconButton size="small" onClick={zoomOut} aria-label="Zoom out">
+              <ZoomOutIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+            <Typography variant="caption" sx={{ minWidth: 32, textAlign: 'center', fontSize: 12 }}>
+              {Math.round(zoom * 100)}%
+            </Typography>
+            <IconButton size="small" onClick={zoomIn} aria-label="Zoom in">
+              <ZoomInIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </>
+        )}
+
+        {/* Reading mode chips (desktop) */}
+        {!isMobile &&
+          modeChips.map(({ label, mode, icon }) => (
+            <Chip
+              key={mode}
+              label={label}
+              icon={icon as React.ReactElement | undefined}
+              size="small"
+              variant={readingMode === mode ? 'filled' : 'outlined'}
+              color={readingMode === mode ? 'primary' : 'default'}
+              onClick={() => changeMode(mode)}
+              sx={{ cursor: 'pointer', height: 26, fontSize: 12 }}
+            />
+          ))}
+
+        {/* Mobile: compact mode toggle */}
+        {isMobile && (
+          <IconButton
+            size="small"
+            onClick={() => {
+              const modes: ReadingMode[] = ['light', 'dark', 'sepia'];
+              const idx = modes.indexOf(readingMode);
+              changeMode(modes[(idx + 1) % modes.length]);
+            }}
+            aria-label="Toggle reading mode"
+          >
+            {readingMode === 'dark' ? (
+              <DarkModeIcon sx={{ fontSize: 18 }} />
+            ) : (
+              <LightModeIcon sx={{ fontSize: 18 }} />
+            )}
+          </IconButton>
+        )}
+
+        {/* Fullscreen */}
+        <IconButton
+          size="small"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        >
+          {isFullscreen ? (
+            <FullscreenExitIcon sx={{ fontSize: 18 }} />
+          ) : (
+            <FullscreenIcon sx={{ fontSize: 18 }} />
+          )}
         </IconButton>
       </Box>
     </Box>

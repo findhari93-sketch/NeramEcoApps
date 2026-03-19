@@ -32,6 +32,7 @@ import {
 import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
+import MathText from '@/components/common/MathText';
 
 const DIFFICULTY_OPTIONS = [
   { value: '', label: 'All Difficulties' },
@@ -313,25 +314,28 @@ export default function QuestionsListPage() {
               variant="outlined"
               sx={{
                 p: { xs: 1.5, md: 2 },
-                opacity: q.is_active ? 1 : 0.6,
-                transition: 'opacity 0.2s',
+                cursor: 'pointer',
+                '&:hover': { bgcolor: 'action.hover' },
               }}
             >
               {/* Question text */}
-              <Typography
-                variant="body2"
+              <Box
                 sx={{
                   mb: 1,
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  lineHeight: 1.5,
                 }}
               >
-                {q.question_text || (q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question')}
-              </Typography>
+                {q.question_text ? (
+                  <MathText text={q.question_text} variant="body2" />
+                ) : (
+                  <Typography variant="body2">
+                    {q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question'}
+                  </Typography>
+                )}
+              </Box>
 
               {/* Source badges */}
               <Box sx={{ mb: 0.75 }}>

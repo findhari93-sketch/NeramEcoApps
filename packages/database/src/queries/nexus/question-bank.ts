@@ -1196,3 +1196,109 @@ export async function getTeacherQBQuestions(
 
   return { questions: result, total: count || 0 };
 }
+
+/**
+ * Bulk deactivate active questions in a paper.
+ * Sets status back to 'complete' and is_active to false.
+ */
+export async function bulkDeactivateQuestions(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<{ deactivated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .update({
+      status: 'complete',
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('original_paper_id', paperId)
+    .eq('status' as any, 'active')
+    .select('id');
+  if (error) throw error;
+
+  const deactivated = data?.length || 0;
+
+  await refreshPaperStats(paperId, supabase);
+
+  return { deactivated };
+}
+
+/**
+ * Delete a paper and all its questions and sources.
+ */
+export async function deletePaperWithQuestions(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<{ deletedQuestions: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get question IDs for this paper
+  const { data: questions, error: fetchError } = await supabase
+    .from('nexus_qb_questions')
+    .select('id')
+    .eq('original_paper_id', paperId);
+  if (fetchError) throw fetchError;
+
+  const questionIds = (questions || []).map((q: any) => q.id);
+
+  if (questionIds.length > 0) {
+
+    // Delete sources
+    const { error: srcError } = await supabase
+      .from('nexus_qb_question_sources')
+      .delete()
+      .in('question_id', questionIds);
+    if (srcError) throw srcError;
+
+    // Delete questions
+    const { error: qError } = await supabase
+      .from('nexus_qb_questions')
+      .delete()
+      .eq('original_paper_id', paperId);
+    if (qError) throw qError;
+  }
+
+  // Delete the paper itself
+  const { error: paperError } = await supabase
+    .from('nexus_qb_original_papers')
+    .delete()
+    .eq('id', paperId);
+  if (paperError) throw paperError;
+
+  return { deletedQuestions: questionIds.length };
+}
+
+/**
+ * Get section breakdown for a paper (counts by category).
+ */
+export async function getPaperSectionBreakdown(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<Record<string, number>> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('categories, question_format')
+    .eq('original_paper_id', paperId);
+  if (error) throw error;
+
+  const breakdown: Record<string, number> = {};
+  for (const q of (data || []) as any[]) {
+    const cats = q.categories as string[] | null;
+    if (cats && cats.length > 0) {
+      for (const cat of cats) {
+        breakdown[cat] = (breakdown[cat] || 0) + 1;
+      }
+    } else {
+      // Use question_format as fallback
+      const fmt = q.question_format || 'OTHER';
+      breakdown[fmt] = (breakdown[fmt] || 0) + 1;
+    }
+  }
+
+  return breakdown;
+}

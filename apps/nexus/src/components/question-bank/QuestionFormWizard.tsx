@@ -38,7 +38,9 @@ import type {
 } from '@neram/database';
 import { QB_CATEGORIES, QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS } from '@neram/database';
 import type { QBCategory } from '@neram/database';
+import type { ImageState } from '@/lib/bulk-upload-schema';
 import QuestionCard from './QuestionCard';
+import ImageUploadZone from './ImageUploadZone';
 
 interface QuestionFormWizardProps {
   initialData?: NexusQBQuestion;
@@ -46,6 +48,7 @@ interface QuestionFormWizardProps {
   topics: NexusQBTopic[];
   onSubmit: (data: Partial<NexusQBQuestion>, sources: Partial<NexusQBQuestionSource>[]) => Promise<void>;
   loading?: boolean;
+  getToken: () => Promise<string | null>;
 }
 
 interface FormData {
@@ -57,6 +60,7 @@ interface FormData {
   question_format: QBQuestionFormat;
   // Step 2: Content
   question_text: string;
+  question_image?: ImageState;
   options: NexusQBQuestionOption[];
   correct_option_id: string;
   correct_answer: string;
@@ -71,6 +75,7 @@ interface FormData {
   explanation_brief: string;
   explanation_detailed: string;
   solution_video_url: string;
+  solution_image?: ImageState;
 }
 
 const STEPS = [
@@ -98,6 +103,9 @@ function getInitialFormData(
     question_number: source?.question_number ? String(source.question_number) : '',
     question_format: initialData?.question_format ?? 'MCQ',
     question_text: initialData?.question_text ?? '',
+    question_image: initialData?.question_image_url
+      ? { url: initialData.question_image_url, uploaded: true }
+      : undefined,
     options: initialData?.options?.length
       ? initialData.options
       : [createDefaultOption(0), createDefaultOption(1), createDefaultOption(2), createDefaultOption(3)],
@@ -112,6 +120,9 @@ function getInitialFormData(
     explanation_brief: initialData?.explanation_brief ?? '',
     explanation_detailed: initialData?.explanation_detailed ?? '',
     solution_video_url: initialData?.solution_video_url ?? '',
+    solution_image: initialData?.solution_image_url
+      ? { url: initialData.solution_image_url, uploaded: true }
+      : undefined,
   };
 }
 
@@ -121,6 +132,7 @@ export default function QuestionFormWizard({
   topics,
   onSubmit,
   loading,
+  getToken,
 }: QuestionFormWizardProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -175,6 +187,7 @@ export default function QuestionFormWizard({
   const handleSubmit = async () => {
     const questionData: Partial<NexusQBQuestion> = {
       question_text: form.question_text || null,
+      question_image_url: form.question_image?.uploaded ? form.question_image.url : null,
       question_format: form.question_format,
       options: form.question_format === 'MCQ' ? form.options : null,
       correct_answer:
@@ -186,6 +199,7 @@ export default function QuestionFormWizard({
       explanation_brief: form.explanation_brief,
       explanation_detailed: form.explanation_detailed || null,
       solution_video_url: form.solution_video_url || null,
+      solution_image_url: form.solution_image?.uploaded ? form.solution_image.url : null,
       difficulty: form.difficulty,
       exam_relevance: form.exam_relevance,
       categories: form.categories,
@@ -209,7 +223,7 @@ export default function QuestionFormWizard({
   const previewQuestion = {
     id: initialData?.id ?? 'preview',
     question_text: form.question_text || null,
-    question_image_url: null,
+    question_image_url: form.question_image?.url || null,
     question_format: form.question_format,
     options: form.question_format === 'MCQ' ? form.options : null,
     correct_answer:
@@ -217,7 +231,7 @@ export default function QuestionFormWizard({
     answer_tolerance: form.answer_tolerance ? Number(form.answer_tolerance) : null,
     explanation_brief: form.explanation_brief,
     explanation_detailed: form.explanation_detailed || null,
-    solution_image_url: null,
+    solution_image_url: form.solution_image?.url || null,
     solution_video_url: form.solution_video_url || null,
     difficulty: form.difficulty,
     exam_relevance: form.exam_relevance,
@@ -325,14 +339,18 @@ export default function QuestionFormWizard({
               onChange={(e) => updateField('question_text', e.target.value)}
               fullWidth
             />
-            <Paper
-              variant="outlined"
-              sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1.5 }}
-            >
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Image upload will be available in Phase 2
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                Question Image (optional)
               </Typography>
-            </Paper>
+              <ImageUploadZone
+                image={form.question_image}
+                onChange={(img) => updateField('question_image', img)}
+                label="Drop question image, paste, or click to upload"
+                height={140}
+                getToken={getToken}
+              />
+            </Box>
 
             {form.question_format === 'MCQ' && (
               <Box>
@@ -524,14 +542,18 @@ export default function QuestionFormWizard({
               placeholder="https://youtube.com/watch?v=..."
               fullWidth
             />
-            <Paper
-              variant="outlined"
-              sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1.5 }}
-            >
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Solution image upload will be available in Phase 2
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                Solution Image (optional)
               </Typography>
-            </Paper>
+              <ImageUploadZone
+                image={form.solution_image}
+                onChange={(img) => updateField('solution_image', img)}
+                label="Drop solution image, paste, or click to upload"
+                height={140}
+                getToken={getToken}
+              />
+            </Box>
           </Box>
         );
 

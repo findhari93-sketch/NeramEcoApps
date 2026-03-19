@@ -127,6 +127,7 @@ export default function AddQuestionPage() {
           topics={topics}
           onSubmit={handleSubmit}
           loading={submitting}
+          getToken={getToken}
         />
       )}
 

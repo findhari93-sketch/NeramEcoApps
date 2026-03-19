@@ -22,6 +22,7 @@ import type { NexusQBQuestionListItem, QBProgressStats } from '@neram/database';
 import { QB_DIFFICULTY_COLORS } from '@neram/database';
 import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
+import MathText from '@/components/common/MathText';
 
 export default function QuestionBankDashboard() {
   const router = useRouter();
@@ -355,8 +356,7 @@ export default function QuestionBankDashboard() {
               }}
               onClick={() => router.push(`/teacher/question-bank/questions/${q.id}/edit`)}
             >
-              <Typography
-                variant="body2"
+              <Box
                 sx={{
                   mb: 0.5,
                   display: '-webkit-box',
@@ -365,8 +365,12 @@ export default function QuestionBankDashboard() {
                   overflow: 'hidden',
                 }}
               >
-                {q.question_text || 'Image-based question'}
-              </Typography>
+                {q.question_text ? (
+                  <MathText text={q.question_text} variant="body2" />
+                ) : (
+                  <Typography variant="body2">Image-based question</Typography>
+                )}
+              </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                 <SourceBadges sources={q.sources} />
                 <DifficultyChip difficulty={q.difficulty} size="small" />
