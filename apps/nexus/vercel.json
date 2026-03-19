@@ -3,6 +3,7 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@neram/nexus",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/",
   "headers": [
     {
       "source": "/(.*)",

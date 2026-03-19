@@ -29,7 +29,7 @@ export default function UploadPDFTab({ onQuestionsReady }: UploadPDFTabProps) {
   const extractTextFromPDF = useCallback(async (file: File): Promise<string> => {
     // Dynamically import pdfjs-dist for client-side PDF parsing
     const pdfjsLib = await import('pdfjs-dist');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;

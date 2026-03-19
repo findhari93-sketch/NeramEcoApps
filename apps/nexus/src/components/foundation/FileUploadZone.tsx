@@ -104,7 +104,7 @@ export default function FileUploadZone({
         if (isPdf) {
           try {
             const pdfjs = await import('pdfjs-dist');
-            pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+            pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
             const arrayBuffer = await file.arrayBuffer();
             const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
             formData.append('page_count', String(doc.numPages));
