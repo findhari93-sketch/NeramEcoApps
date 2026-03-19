@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, createUserNotification } from '@neram/database';
+import { getSupabaseAdminClient, createUserNotification, removeEnrollments } from '@neram/database';
 import { addMemberToTeam } from '@/lib/teams-sync';
+import type { RemovalReasonCategory } from '@neram/database';
 
 /**
  * GET /api/classrooms/[id]/enrollments?batch={batchId}&role={teacher|student}
@@ -279,6 +280,100 @@ export async function PATCH(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update enrollments';
     console.error('Enrollments PATCH error:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/classrooms/[id]/enrollments
+ * Remove students from classroom (soft-delete with audit trail).
+ * Body: { enrollment_ids: string[], reason_category: RemovalReasonCategory, notes?: string }
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const supabase = getSupabaseAdminClient() as any;
+
+    const { data: caller } = await supabase
+      .from('users')
+      .select('id, user_type')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!caller || !['teacher', 'admin'].includes(caller.user_type)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { enrollment_ids, reason_category, notes } = body;
+
+    if (!enrollment_ids || !Array.isArray(enrollment_ids) || enrollment_ids.length === 0) {
+      return NextResponse.json({ error: 'enrollment_ids array is required' }, { status: 400 });
+    }
+
+    const validReasons: RemovalReasonCategory[] = [
+      'fee_nonpayment', 'course_completed', 'college_admitted',
+      'self_withdrawal', 'disciplinary', 'other',
+    ];
+    if (!reason_category || !validReasons.includes(reason_category)) {
+      return NextResponse.json({ error: 'Valid reason_category is required' }, { status: 400 });
+    }
+
+    if (reason_category === 'other' && !notes) {
+      return NextResponse.json({ error: 'Notes are required when reason is "other"' }, { status: 400 });
+    }
+
+    const removed = await removeEnrollments(
+      enrollment_ids,
+      id,
+      caller.id,
+      reason_category as RemovalReasonCategory,
+      notes || null,
+      supabase
+    );
+
+    // Send notifications to removed students
+    try {
+      const { data: classroom } = await supabase
+        .from('nexus_classrooms')
+        .select('name')
+        .eq('id', id)
+        .single();
+      const classroomName = classroom?.name || 'a classroom';
+
+      // Get user_ids for removed enrollments
+      const { data: removedEnrollments } = await supabase
+        .from('nexus_enrollments')
+        .select('user_id')
+        .in('id', enrollment_ids);
+
+      if (removedEnrollments) {
+        const notifications = removedEnrollments.map((e: any) =>
+          createUserNotification(
+            {
+              user_id: e.user_id,
+              event_type: 'classroom_removed',
+              title: 'Removed from Classroom',
+              message: `You have been removed from "${classroomName}".`,
+              metadata: { classroom_id: id, classroom_name: classroomName, reason_category },
+            },
+            supabase
+          )
+        );
+        await Promise.allSettled(notifications);
+      }
+    } catch (notifErr) {
+      console.warn('Failed to send removal notifications:', notifErr);
+    }
+
+    return NextResponse.json({ removed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to remove students';
+    console.error('Enrollments DELETE error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

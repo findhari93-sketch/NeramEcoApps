@@ -29,12 +29,18 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import { Snackbar, Alert } from '@neram/ui';
+import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
+import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
+import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import HistoryIcon from '@mui/icons-material/History';
+import { Snackbar, Alert, Checkbox } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ClassroomFormDialog from '@/components/ClassroomFormDialog';
 import BatchFormDialog from '@/components/BatchFormDialog';
 import BatchAssignDialog from '@/components/BatchAssignDialog';
 import AddStudentDialog from '@/components/AddStudentDialog';
+import RemoveStudentDialog from '@/components/RemoveStudentDialog';
+import HistoricalStudentsTab from '@/components/HistoricalStudentsTab';
 import GraphAvatar from '@/components/GraphAvatar';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 
@@ -97,6 +103,11 @@ export default function ClassroomDetailPage() {
   const [teacherEnrollments, setTeacherEnrollments] = useState<Enrollment[]>([]);
   const [qbEnabled, setQbEnabled] = useState<boolean | null>(null);
   const [qbToggling, setQbToggling] = useState(false);
+
+  // Student selection & removal state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
   // Teams integration state
   const [teamsSyncing, setTeamsSyncing] = useState(false);
@@ -491,6 +502,7 @@ export default function ClassroomDetailPage() {
         <Tab label="Batches" sx={{ minHeight: 48 }} />
         <Tab label="Teachers" sx={{ minHeight: 48 }} />
         <Tab label="Students" sx={{ minHeight: 48 }} />
+        <Tab label="History" sx={{ minHeight: 48 }} icon={<HistoryIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
       </Tabs>
 
       {/* Tab: Overview */}
@@ -836,24 +848,70 @@ export default function ClassroomDetailPage() {
           </Box>
 
           {/* Action buttons */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2 }}>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<PersonAddAltOutlinedIcon />}
-              onClick={() => setAddStudentOpen(true)}
-            >
-              Add Student
-            </Button>
-            {enrollments.length > 0 && batches.length > 0 && (
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<SwapHorizIcon />}
-                onClick={() => setAssignOpen(true)}
-              >
-                Assign to Batch
-              </Button>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+            {selectionMode ? (
+              <>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    if (selectedIds.size === enrollments.length) {
+                      setSelectedIds(new Set());
+                    } else {
+                      setSelectedIds(new Set(enrollments.map((e) => e.id)));
+                    }
+                  }}
+                >
+                  {selectedIds.size === enrollments.length ? 'Deselect All' : 'Select All'}
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="error"
+                  startIcon={<PersonRemoveOutlinedIcon />}
+                  onClick={() => setRemoveDialogOpen(true)}
+                  disabled={selectedIds.size === 0}
+                >
+                  Remove ({selectedIds.size})
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<PersonAddAltOutlinedIcon />}
+                  onClick={() => setAddStudentOpen(true)}
+                >
+                  Add Student
+                </Button>
+                {enrollments.length > 0 && batches.length > 0 && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<SwapHorizIcon />}
+                    onClick={() => setAssignOpen(true)}
+                  >
+                    Assign to Batch
+                  </Button>
+                )}
+                {enrollments.length > 0 && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="error"
+                    startIcon={<PersonRemoveOutlinedIcon />}
+                    onClick={() => setSelectionMode(true)}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </>
             )}
           </Box>
 
@@ -870,14 +928,35 @@ export default function ClassroomDetailPage() {
                 <Paper
                   key={enrollment.id}
                   variant="outlined"
+                  onClick={selectionMode ? () => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(enrollment.id)) next.delete(enrollment.id);
+                      else next.add(enrollment.id);
+                      return next;
+                    });
+                  } : undefined}
                   sx={{
                     p: 2,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 2,
                     minHeight: 48,
+                    cursor: selectionMode ? 'pointer' : 'default',
+                    ...(selectionMode && selectedIds.has(enrollment.id) && {
+                      borderColor: 'error.main',
+                      bgcolor: 'error.50',
+                    }),
                   }}
                 >
+                  {selectionMode && (
+                    <Checkbox
+                      checked={selectedIds.has(enrollment.id)}
+                      size="small"
+                      color="error"
+                      sx={{ p: 0.5 }}
+                    />
+                  )}
                   <GraphAvatar
                     msOid={enrollment.user.ms_oid}
                     name={enrollment.user.name}
@@ -902,7 +981,7 @@ export default function ClassroomDetailPage() {
           )}
 
           {/* Mobile FAB for batch assignment */}
-          {enrollments.length > 0 && batches.length > 0 && (
+          {!selectionMode && enrollments.length > 0 && batches.length > 0 && (
             <Fab
               color="primary"
               onClick={() => setAssignOpen(true)}
@@ -917,7 +996,49 @@ export default function ClassroomDetailPage() {
               <SwapHorizIcon />
             </Fab>
           )}
+
+          {/* Mobile fixed bottom bar for selection mode */}
+          {selectionMode && selectedIds.size > 0 && (
+            <Box
+              sx={{
+                display: { xs: 'flex', sm: 'none' },
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                p: 2,
+                bgcolor: 'background.paper',
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                zIndex: 1000,
+                gap: 1,
+                justifyContent: 'center',
+              }}
+            >
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<PersonRemoveOutlinedIcon />}
+                onClick={() => setRemoveDialogOpen(true)}
+                fullWidth
+              >
+                Remove {selectedIds.size} Student{selectedIds.size !== 1 ? 's' : ''}
+              </Button>
+            </Box>
+          )}
         </Box>
+      )}
+
+      {/* Tab: History */}
+      {tab === 4 && (
+        <HistoricalStudentsTab
+          classroomId={id}
+          getToken={getToken}
+          onRestored={() => {
+            fetchClassroom();
+            fetchEnrollments();
+          }}
+        />
       )}
 
       {/* Dialogs */}
@@ -951,6 +1072,27 @@ export default function ClassroomDetailPage() {
         }))}
         batches={batches.map((b) => ({ id: b.id, name: b.name }))}
         onAssign={handleAssign}
+      />
+
+      <RemoveStudentDialog
+        open={removeDialogOpen}
+        onClose={() => setRemoveDialogOpen(false)}
+        students={enrollments
+          .filter((e) => selectedIds.has(e.id))
+          .map((e) => ({
+            enrollmentId: e.id,
+            name: e.user.name,
+            email: e.user.email,
+            avatar_url: e.user.avatar_url,
+          }))}
+        classroomId={id}
+        onRemoved={() => {
+          setSelectionMode(false);
+          setSelectedIds(new Set());
+          fetchClassroom();
+          fetchEnrollments();
+        }}
+        getToken={getToken}
       />
 
       <AddStudentDialog

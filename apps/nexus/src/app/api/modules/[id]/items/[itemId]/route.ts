@@ -30,6 +30,7 @@ export async function PUT(
       title, item_type, content_url, youtube_video_id, sort_order, metadata,
       description, video_source, sharepoint_video_url, video_duration_seconds,
       chapter_number, is_published, is_active,
+      solution_video_source, solution_youtube_video_id, solution_sharepoint_video_url,
     } = body;
 
     const updateData: Record<string, unknown> = {};
@@ -46,6 +47,9 @@ export async function PUT(
     if (chapter_number !== undefined) updateData.chapter_number = chapter_number;
     if (is_published !== undefined) updateData.is_published = is_published;
     if (is_active !== undefined) updateData.is_active = is_active;
+    if (solution_video_source !== undefined) updateData.solution_video_source = solution_video_source;
+    if (solution_youtube_video_id !== undefined) updateData.solution_youtube_video_id = solution_youtube_video_id;
+    if (solution_sharepoint_video_url !== undefined) updateData.solution_sharepoint_video_url = solution_sharepoint_video_url;
 
     const { data: item, error } = await supabase
       .from('nexus_module_items')

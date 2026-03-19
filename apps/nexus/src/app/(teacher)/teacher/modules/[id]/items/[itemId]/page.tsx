@@ -128,6 +128,9 @@ export default function ModuleItemEditorPage() {
     video_duration_seconds: 0,
     chapter_number: 0,
     is_published: false,
+    solution_video_source: null as 'youtube' | 'sharepoint' | null,
+    solution_youtube_video_id: '',
+    solution_sharepoint_video_url: '',
   });
 
   // Section expansion & editing
@@ -206,6 +209,9 @@ export default function ModuleItemEditorPage() {
           video_duration_seconds: fetchedItem.video_duration_seconds || 0,
           chapter_number: fetchedItem.chapter_number ?? 0,
           is_published: fetchedItem.is_published || false,
+          solution_video_source: (fetchedItem.solution_video_source as 'youtube' | 'sharepoint' | null) || null,
+          solution_youtube_video_id: String(fetchedItem.solution_youtube_video_id || ''),
+          solution_sharepoint_video_url: String(fetchedItem.solution_sharepoint_video_url || ''),
         });
 
         // Fetch audio tracks
@@ -794,6 +800,82 @@ export default function ModuleItemEditorPage() {
                   </Box>
                 </Box>
               )}
+            </Box>
+          )}
+        </Box>
+      </Paper>
+
+      {/* Solution Video Section */}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+          <OndemandVideoOutlinedIcon sx={{ fontSize: '1.1rem', color: 'success.main' }} />
+          <Typography variant="subtitle2" fontWeight={700}>
+            Solution Video
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Optional — YouTube (unlisted) or SharePoint
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <ToggleButtonGroup
+            value={form.solution_video_source}
+            exclusive
+            onChange={(_, val) => setForm(prev => ({ ...prev, solution_video_source: val }))}
+            size="small"
+          >
+            <ToggleButton value="youtube" sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
+              <OndemandVideoOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} /> YouTube
+            </ToggleButton>
+            <ToggleButton value="sharepoint" sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
+              <CloudOutlinedIcon sx={{ fontSize: '1rem', mr: 0.5 }} /> SharePoint
+            </ToggleButton>
+          </ToggleButtonGroup>
+          {form.solution_video_source === 'youtube' && (
+            <TextField
+              label="YouTube Video ID"
+              placeholder="e.g. dQw4w9WgXcQ (supports unlisted)"
+              value={form.solution_youtube_video_id}
+              onChange={(e) => setForm(prev => ({ ...prev, solution_youtube_video_id: e.target.value }))}
+              size="small"
+              helperText="Paste the video ID from the YouTube URL (works with unlisted videos)"
+            />
+          )}
+          {form.solution_video_source === 'sharepoint' && (
+            <TextField
+              label="SharePoint Video URL"
+              placeholder="Paste the video sharing link from SharePoint"
+              value={form.solution_sharepoint_video_url}
+              onChange={(e) => setForm(prev => ({ ...prev, solution_sharepoint_video_url: e.target.value }))}
+              size="small"
+              helperText="Copy the video sharing link from SharePoint/Stream"
+            />
+          )}
+          {form.solution_video_source === 'youtube' && form.solution_youtube_video_id && (
+            <Box sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}`, maxWidth: 400 }}>
+              <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
+                <iframe
+                  src={`https://www.youtube-nocookie.com/embed/${form.solution_youtube_video_id}`}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title="Solution Video Preview"
+                />
+              </Box>
+            </Box>
+          )}
+          {form.solution_video_source === 'sharepoint' && form.solution_sharepoint_video_url && (
+            <Box sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}`, maxWidth: 400 }}>
+              <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
+                <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+                  <iframe
+                    src={toEmbedUrl(form.solution_sharepoint_video_url)}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    allow="autoplay; encrypted-media; fullscreen"
+                    allowFullScreen
+                    title="Solution Video Preview"
+                  />
+                </Box>
+              </Box>
             </Box>
           )}
         </Box>

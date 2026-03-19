@@ -13,12 +13,16 @@ import {
   CircularProgress,
   alpha,
   useTheme,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import VideoPlayer from '@/components/foundation/VideoPlayer';
 import SectionTimer from '@/components/foundation/SectionTimer';
@@ -59,6 +63,9 @@ interface ModuleItemData {
     last_audio_language: string | null;
   } | null;
   audio_tracks: NexusAudioTrack[];
+  solution_video_source: 'youtube' | 'sharepoint' | null;
+  solution_youtube_video_id: string | null;
+  solution_sharepoint_video_url: string | null;
 }
 
 type ContentTab = 'watch' | 'read';
@@ -93,6 +100,9 @@ export default function StudentItemLearningPage() {
   const [pdfRetryCount, setPdfRetryCount] = useState(0);
   const spVideoRef = useRef<HTMLVideoElement>(null);
   const spQuizTriggeredRef = useRef<Set<number>>(new Set());
+
+  // Solution video streaming
+  const [solutionStreamUrl, setSolutionStreamUrl] = useState<string | null>(null);
 
   const currentSectionRef = useRef(0);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -184,6 +194,31 @@ export default function StudentItemLearningPage() {
 
     return () => { cancelled = true; };
   }, [data?.sharepoint_video_url, data?.youtube_video_id, getToken]);
+
+  // ─── Solution SharePoint Stream URL ──────────────────────────────────
+  useEffect(() => {
+    if (data?.solution_video_source !== 'sharepoint' || !data?.solution_sharepoint_video_url) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const res = await fetch(
+          `/api/sharepoint/stream?url=${encodeURIComponent(data.solution_sharepoint_video_url!)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (res.ok && !cancelled) {
+          const json = await res.json();
+          setSolutionStreamUrl(json.streamUrl);
+        }
+      } catch (err) {
+        console.error('Failed to get solution SharePoint stream URL:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [data?.solution_video_source, data?.solution_sharepoint_video_url, getToken]);
 
   // ─── PDF Stream URL ──────────────────────────────────────────────────
   // The pdf-stream endpoint proxies the PDF binary from SharePoint (avoids CORS).
@@ -854,23 +889,9 @@ export default function StudentItemLearningPage() {
             <PDFReader
               pdfUrl={pdfStreamUrl}
               initialPage={progress?.last_pdf_page || 1}
-              totalPages={data.pdf_page_count || undefined}
               onRetry={() => {
                 setPdfStreamUrl(null);
                 setPdfRetryCount((c) => c + 1);
-              }}
-              onPageChange={(page) => {
-                getToken().then((token) => {
-                  if (!token) return;
-                  fetch(`/api/modules/${moduleId}/items/${itemId}/progress`, {
-                    method: 'POST',
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ last_pdf_page: page }),
-                  });
-                });
               }}
             />
           ) : (
@@ -991,6 +1012,96 @@ export default function StudentItemLearningPage() {
             initialNote={currentSection.note?.note_text}
             onSave={handleNoteSave}
           />
+        )}
+
+        {/* Solution Video */}
+        {data.solution_video_source && (data.solution_youtube_video_id || data.solution_sharepoint_video_url) && (
+          <Accordion
+            sx={{
+              mt: 2,
+              '&:before': { display: 'none' },
+              boxShadow: 'none',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: '12px !important',
+              overflow: 'hidden',
+            }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon />}
+              sx={{ minHeight: 48, '& .MuiAccordionSummary-content': { my: 1, gap: 1, alignItems: 'center' } }}
+            >
+              <OndemandVideoOutlinedIcon sx={{ fontSize: '1.1rem', color: 'success.main' }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Solution Video
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0, px: { xs: 1, sm: 2 } }}>
+              {data.solution_video_source === 'youtube' && data.solution_youtube_video_id && (
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: '100%',
+                    paddingTop: '56.25%',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    bgcolor: '#000',
+                  }}
+                >
+                  <Box
+                    component="iframe"
+                    src={`https://www.youtube-nocookie.com/embed/${data.solution_youtube_video_id}`}
+                    title="Solution video"
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      border: 0,
+                    }}
+                  />
+                </Box>
+              )}
+              {data.solution_video_source === 'sharepoint' && data.solution_sharepoint_video_url && (
+                solutionStreamUrl ? (
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      width: '100%',
+                      paddingTop: '56.25%',
+                      borderRadius: 1,
+                      overflow: 'hidden',
+                      bgcolor: '#000',
+                    }}
+                  >
+                    <video
+                      src={solutionStreamUrl}
+                      controls
+                      controlsList="nodownload"
+                      playsInline
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                      }}
+                      title="Solution video"
+                    />
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                )
+              )}
+            </AccordionDetails>
+          </Accordion>
         )}
 
         {/* Feedback: like/dislike + report issue */}

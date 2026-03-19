@@ -8,7 +8,6 @@ import {
   Paper,
   Button,
   TextField,
-  MenuItem,
   IconButton,
   Skeleton,
   Chip,
@@ -24,8 +23,6 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import {
-  QB_CATEGORY_LABELS,
-  QB_CATEGORIES,
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
 } from '@neram/database';
@@ -33,20 +30,7 @@ import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
 import MathText from '@/components/common/MathText';
-
-const DIFFICULTY_OPTIONS = [
-  { value: '', label: 'All Difficulties' },
-  { value: 'EASY', label: 'Easy' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HARD', label: 'Hard' },
-];
-
-const RELEVANCE_OPTIONS = [
-  { value: '', label: 'All Exams' },
-  { value: 'NATA', label: 'NATA' },
-  { value: 'JEE', label: 'JEE' },
-  { value: 'BOTH', label: 'Both' },
-];
+import TeacherFilterBar from '@/components/question-bank/TeacherFilterBar';
 
 export default function QuestionsListPage() {
   const router = useRouter();
@@ -207,82 +191,22 @@ export default function QuestionsListPage() {
             <SearchOutlinedIcon sx={{ color: 'text.secondary', mr: 1 }} fontSize="small" />
           ),
         }}
-        sx={{ mb: 1.5 }}
+        sx={{ mb: 1 }}
       />
 
-      {/* Filter Row */}
-      <Box
-        sx={{
-          display: 'flex',
-          gap: 1,
-          mb: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <TextField
-          value={difficulty}
-          onChange={(e) => setDifficulty(e.target.value)}
-          select
-          size="small"
-          sx={{ minWidth: 140 }}
-        >
-          {DIFFICULTY_OPTIONS.map((d) => (
-            <MenuItem key={d.value} value={d.value}>
-              {d.label}
-            </MenuItem>
-          ))}
-        </TextField>
-
-        <TextField
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          select
-          size="small"
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">All Categories</MenuItem>
-          {QB_CATEGORIES.map((cat: string) => (
-            <MenuItem key={cat} value={cat}>
-              {QB_CATEGORY_LABELS[cat as keyof typeof QB_CATEGORY_LABELS]}
-            </MenuItem>
-          ))}
-        </TextField>
-
-        <TextField
-          value={examRelevance}
-          onChange={(e) => setExamRelevance(e.target.value)}
-          select
-          size="small"
-          sx={{ minWidth: 120 }}
-        >
-          {RELEVANCE_OPTIONS.map((r) => (
-            <MenuItem key={r.value} value={r.value}>
-              {r.label}
-            </MenuItem>
-          ))}
-        </TextField>
-
-        <TextField
-          value={questionStatus}
-          onChange={(e) => setQuestionStatus(e.target.value)}
-          select
-          size="small"
-          sx={{ minWidth: 130 }}
-        >
-          <MenuItem value="">All Statuses</MenuItem>
-          <MenuItem value="active">Active</MenuItem>
-          <MenuItem value="complete">Complete</MenuItem>
-          <MenuItem value="answer_keyed">Answer Keyed</MenuItem>
-          <MenuItem value="draft">Draft</MenuItem>
-        </TextField>
-      </Box>
-
-      {/* Results count */}
-      {!loading && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {total} question{total !== 1 ? 's' : ''} found
-        </Typography>
-      )}
+      {/* Filter Chips */}
+      <TeacherFilterBar
+        difficulty={difficulty}
+        category={category}
+        examRelevance={examRelevance}
+        questionStatus={questionStatus}
+        total={total}
+        loading={loading}
+        onDifficultyChange={setDifficulty}
+        onCategoryChange={setCategory}
+        onExamRelevanceChange={setExamRelevance}
+        onQuestionStatusChange={setQuestionStatus}
+      />
 
       {/* Question List */}
       {loading ? (

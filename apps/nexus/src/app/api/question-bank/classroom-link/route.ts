@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     const enabled = await isQBEnabledForClassroom(classroomId);
 
-    return NextResponse.json({ data: { enabled } }, { status: 200 });
+    return NextResponse.json({ data: { enabled, is_active: enabled } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', message);

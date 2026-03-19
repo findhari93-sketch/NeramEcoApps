@@ -683,6 +683,8 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     foundation_issue_in_progress: null, // In-app only (Nexus)
     foundation_issue_delegated: null, // In-app only (Nexus)
     classroom_access_requested: null, // Telegram + admin in-app only
+    classroom_removed: null, // In-app only (Nexus)
+    classroom_restored: null, // In-app only (Nexus)
   };
 
   return map[eventType];

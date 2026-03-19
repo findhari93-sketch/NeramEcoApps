@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress } from '@neram/ui';
 
 interface SharePointPlayerProps {
   videoUrl: string;
   chapterId: string;
   token?: string | null;
+  onTimeUpdate?: (seconds: number) => void;
 }
 
 /**
- * Converts a SharePoint/Stream video URL to an embeddable format (client-side fallback).
+ * Converts a SharePoint/Stream video URL to an embeddable format.
+ * Kept exported for teacher editor preview pages that still use iframe embedding.
  */
 export function toEmbedUrl(url: string): string {
   try {
@@ -19,7 +21,6 @@ export function toEmbedUrl(url: string): string {
     if (u.pathname.includes('stream.aspx')) {
       return url.replace('stream.aspx', 'embed.aspx');
     }
-    // For sharing links, use stream.aspx with share= param
     if (u.pathname.match(/\/:v:\//)) {
       const pathParts = u.pathname.split('/');
       const vIdx = pathParts.indexOf(':v:');
@@ -34,62 +35,79 @@ export function toEmbedUrl(url: string): string {
   }
 }
 
-export default function SharePointPlayer({ videoUrl, chapterId, token }: SharePointPlayerProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+const MAX_RETRIES = 2;
+
+export default function SharePointPlayer({ videoUrl, chapterId, token, onTimeUpdate }: SharePointPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const retryCountRef = useRef(0);
 
-  // Register a minimal player interface on window
+  // Fetch stream URL from API
+  const fetchStreamUrl = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/foundation/chapters/${chapterId}/video-embed${token ? `?token=${encodeURIComponent(token)}` : ''}`,
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        setStreamUrl(data.streamUrl);
+        retryCountRef.current = 0;
+      } else {
+        const errData = await res.json().catch(() => ({ error: 'Failed to load video' }));
+        setError(errData.error || 'Failed to load video');
+      }
+    } catch {
+      setError('Network error — could not load video');
+    } finally {
+      setLoading(false);
+    }
+  }, [chapterId, token]);
+
   useEffect(() => {
+    fetchStreamUrl();
+  }, [fetchStreamUrl]);
+
+  // Register player interface on window for section seeking, quiz pause/resume
+  useEffect(() => {
+    const video = videoRef.current;
     (window as any).__foundationPlayer = {
       type: 'sharepoint',
-      seekTo: () => {},
-      play: () => {},
-      pause: () => {},
-      getCurrentTime: () => 0,
+      seekTo: (seconds: number) => { if (video) video.currentTime = seconds; },
+      play: () => { video?.play().catch(() => {}); },
+      pause: () => { video?.pause(); },
+      getCurrentTime: () => video?.currentTime ?? 0,
     };
     return () => {
       delete (window as any).__foundationPlayer;
     };
-  }, []);
+  }, [streamUrl]); // Re-register when stream URL changes (video element may remount)
 
-  // Resolve embed URL via server API
+  // Wire timeupdate event
   useEffect(() => {
-    let cancelled = false;
+    const video = videoRef.current;
+    if (!video || !onTimeUpdate) return;
 
-    async function resolveEmbed() {
-      setLoading(true);
-      setError(null);
-      try {
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+    const handler = () => onTimeUpdate(video.currentTime);
+    video.addEventListener('timeupdate', handler);
+    return () => video.removeEventListener('timeupdate', handler);
+  }, [streamUrl, onTimeUpdate]);
 
-        const url = `/api/foundation/chapters/${chapterId}/video-embed${!token ? '' : `?token=${encodeURIComponent(token)}`}`;
-        const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-
-        if (!cancelled) {
-          if (res.ok) {
-            const data = await res.json();
-            setEmbedUrl(data.embedUrl);
-          } else {
-            // Fallback to client-side conversion
-            console.warn('Video embed API failed, using client-side fallback');
-            setEmbedUrl(toEmbedUrl(videoUrl));
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setEmbedUrl(toEmbedUrl(videoUrl));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  // Handle video error — retry with fresh URL (may have expired)
+  const handleVideoError = useCallback(() => {
+    if (retryCountRef.current < MAX_RETRIES) {
+      retryCountRef.current++;
+      console.warn(`Video stream error, retrying (${retryCountRef.current}/${MAX_RETRIES})...`);
+      fetchStreamUrl();
+    } else {
+      setError('Video failed to load. The stream URL may have expired.');
     }
-
-    resolveEmbed();
-    return () => { cancelled = true; };
-  }, [chapterId, videoUrl, token]);
+  }, [fetchStreamUrl]);
 
   if (loading) {
     return (
@@ -99,9 +117,9 @@ export default function SharePointPlayer({ videoUrl, chapterId, token }: SharePo
     );
   }
 
-  if (error || !embedUrl) {
+  if (error || !streamUrl) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', bgcolor: '#000', color: 'white', gap: 1 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', bgcolor: '#000', color: 'white', gap: 1, p: 2, textAlign: 'center' }}>
         <Typography variant="body2">{error || 'Could not load video'}</Typography>
         <Typography
           variant="caption"
@@ -111,7 +129,7 @@ export default function SharePointPlayer({ videoUrl, chapterId, token }: SharePo
           rel="noopener noreferrer"
           sx={{ color: 'primary.light', textDecoration: 'underline' }}
         >
-          Open in SharePoint
+          Watch in SharePoint
         </Typography>
       </Box>
     );
@@ -126,20 +144,20 @@ export default function SharePointPlayer({ videoUrl, chapterId, token }: SharePo
         bgcolor: '#000',
       }}
     >
-      <iframe
-        ref={iframeRef}
-        src={embedUrl}
+      <video
+        ref={videoRef}
+        src={streamUrl}
+        controls
+        playsInline
+        onError={handleVideoError}
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
           width: '100%',
           height: '100%',
-          border: 'none',
+          objectFit: 'contain',
         }}
-        allow="autoplay; encrypted-media; fullscreen"
-        allowFullScreen
-        title="SharePoint Video"
       />
     </Box>
   );

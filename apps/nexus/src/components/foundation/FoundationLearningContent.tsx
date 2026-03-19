@@ -300,14 +300,12 @@ export default function FoundationLearningContent({
 
   const handleSectionClick = useCallback((index: number) => {
     setCurrentSectionIndex(index);
-    if (data?.chapter.video_source !== 'sharepoint') {
-      const section = data?.sections[index];
-      if (section) {
-        const player = (window as any).__foundationPlayer;
-        if (player?.seekTo) {
-          player.seekTo(section.start_timestamp_seconds);
-          player.play();
-        }
+    const section = data?.sections[index];
+    if (section) {
+      const player = (window as any).__foundationPlayer;
+      if (player?.seekTo) {
+        player.seekTo(section.start_timestamp_seconds);
+        player.play();
       }
     }
   }, [data]);
@@ -541,7 +539,7 @@ export default function FoundationLearningContent({
               }}
             >
               {chapter.video_source === 'sharepoint' && chapter.sharepoint_video_url ? (
-                <SharePointPlayer videoUrl={chapter.sharepoint_video_url} chapterId={chapterId} token={msToken} />
+                <SharePointPlayer videoUrl={chapter.sharepoint_video_url} chapterId={chapterId} token={msToken} onTimeUpdate={handleTimeUpdate} />
               ) : (
                 <VideoPlayer
                   videoId={chapter.youtube_video_id!}
@@ -565,8 +563,6 @@ export default function FoundationLearningContent({
               xs: 'calc(100dvh - 244px)',
               md: 'calc(100vh - 180px)',
             },
-            maxWidth: { md: '850px' },
-            mx: { md: 'auto' },
             borderRadius: { xs: 0, sm: 2 },
             overflow: 'hidden',
             border: `1px solid ${theme.palette.divider}`,
@@ -575,21 +571,6 @@ export default function FoundationLearningContent({
           <PDFReader
             pdfUrl={`/api/foundation/chapters/${chapterId}/pdf-stream${msToken ? `?token=${encodeURIComponent(msToken)}` : ''}`}
             initialPage={progress?.last_pdf_page || 1}
-            totalPages={chapter.pdf_page_count || undefined}
-            onPageChange={(page) => {
-              // Save PDF progress
-              getToken().then((token) => {
-                if (!token) return;
-                fetch(`/api/foundation/chapters/${chapterId}/progress`, {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ last_pdf_page: page }),
-                });
-              });
-            }}
           />
         </Box>
       )}

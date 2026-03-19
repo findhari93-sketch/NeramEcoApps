@@ -2414,7 +2414,9 @@ export type NotificationEventType =
   | 'foundation_issue_assigned'
   | 'foundation_issue_in_progress'
   | 'foundation_issue_delegated'
-  | 'classroom_access_requested';
+  | 'classroom_access_requested'
+  | 'classroom_removed'
+  | 'classroom_restored';
 
 // Classroom access request types
 export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -4122,6 +4124,8 @@ export type NexusAttendanceSource = 'teams' | 'manual';
 export type NexusRsvpResponse = 'attending' | 'not_attending';
 export type NexusTopicProgressStatus = 'not_started' | 'attended' | 'completed' | 'skipped';
 export type NexusResourceType = 'pdf' | 'image' | 'youtube' | 'onenote' | 'link';
+export type RemovalReasonCategory = 'fee_nonpayment' | 'course_completed' | 'college_admitted' | 'self_withdrawal' | 'disciplinary' | 'other';
+export type EnrollmentHistoryAction = 'enrolled' | 'removed' | 'restored';
 
 export interface NexusClassroom extends Timestamps {
   id: string;
@@ -4151,6 +4155,44 @@ export interface NexusEnrollment {
   role: NexusEnrollmentRole;
   enrolled_at: string;
   is_active: boolean;
+  removed_at: string | null;
+  removed_by: string | null;
+  removal_reason_category: RemovalReasonCategory | null;
+  removal_notes: string | null;
+}
+
+export interface ProgressSnapshot {
+  attendance: { total: number; attended: number; percentage: number };
+  checklist: { completed: number; total: number };
+  topics: { completed: number; total: number };
+  batch_name: string | null;
+  enrolled_at: string;
+  removed_at: string;
+}
+
+export interface NexusEnrollmentHistory {
+  id: string;
+  enrollment_id: string;
+  classroom_id: string;
+  user_id: string;
+  action: EnrollmentHistoryAction;
+  reason_category: RemovalReasonCategory | null;
+  notes: string | null;
+  performed_by: string;
+  progress_snapshot: ProgressSnapshot | null;
+  created_at: string;
+}
+
+export interface HistoricalStudent {
+  enrollment_id: string;
+  user: { id: string; name: string; email: string; avatar_url: string | null };
+  batch_name: string | null;
+  enrolled_at: string;
+  removed_at: string;
+  removed_by: { id: string; name: string };
+  reason_category: RemovalReasonCategory;
+  notes: string | null;
+  progress_snapshot: ProgressSnapshot | null;
 }
 
 export interface NexusParentLink {
@@ -4335,6 +4377,9 @@ export interface NexusModuleItem {
   pdf_page_count: number | null;
   pdf_onedrive_item_id: string | null;
   pdf_source: 'upload' | 'link' | null;
+  solution_video_source: 'youtube' | 'sharepoint' | null;
+  solution_youtube_video_id: string | null;
+  solution_sharepoint_video_url: string | null;
   created_at: string;
   updated_at: string;
 }
