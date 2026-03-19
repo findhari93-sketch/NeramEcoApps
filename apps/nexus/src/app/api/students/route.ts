@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Get student enrollments with user info and batch
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('user_id, enrolled_at, batch_id, user:users!inner(id, name, email, avatar_url, ms_oid), batch:nexus_batches(id, name)')
+      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, ms_oid), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student');
 

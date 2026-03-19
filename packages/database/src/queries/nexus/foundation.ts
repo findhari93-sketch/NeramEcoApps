@@ -474,7 +474,7 @@ export async function getFoundationDashboard(
   // Get all students (optionally filtered by classroom/batch)
   let studentQuery = supabase
     .from('nexus_enrollments')
-    .select('user_id, users:users!inner(id, name, email, avatar_url)')
+    .select('user_id, users:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url)')
     .eq('role', 'student')
     .eq('is_active', true);
 

@@ -128,7 +128,7 @@ export async function getHistoricalStudents(
   let query = supabase
     .from('nexus_enrollments')
     .select(
-      'id, user_id, enrolled_at, removed_at, removed_by, removal_reason_category, removal_notes, batch:nexus_batches(name), user:users(id, name, email, avatar_url), remover:users!nexus_enrollments_removed_by_fkey(id, name)',
+      'id, user_id, enrolled_at, removed_at, removed_by, removal_reason_category, removal_notes, batch:nexus_batches(name), user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url), remover:users!nexus_enrollments_removed_by_fkey(id, name)',
       { count: 'exact' }
     )
     .eq('classroom_id', classroomId)

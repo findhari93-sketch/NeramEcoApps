@@ -39,7 +39,7 @@ export async function getEnrollmentsByClassroom(
   const supabase = client || getSupabaseAdminClient();
   let query = supabase
     .from('nexus_enrollments')
-    .select('*, user:users(id, name, email, phone, avatar_url, user_type), batch:nexus_batches(id, name)')
+    .select('*, user:users!nexus_enrollments_user_id_fkey(id, name, email, phone, avatar_url, user_type), batch:nexus_batches(id, name)')
     .eq('classroom_id', classroomId)
     .eq('is_active', true);
   if (role) query = query.eq('role', role);

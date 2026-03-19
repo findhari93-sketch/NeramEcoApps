@@ -242,7 +242,7 @@ async function createCalendarEvent(
   // Fetch enrolled student emails
   let query = supabase
     .from('nexus_enrollments')
-    .select('user_id, users!inner(email)')
+    .select('user_id, users!nexus_enrollments_user_id_fkey!inner(email)')
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
     .eq('is_active', true);

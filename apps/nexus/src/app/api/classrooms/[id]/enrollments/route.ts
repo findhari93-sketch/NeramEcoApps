@@ -22,7 +22,7 @@ export async function GET(
 
     let query = supabase
       .from('nexus_enrollments')
-      .select('*, user:users(id, name, email, avatar_url, user_type, ms_oid), batch:nexus_batches(id, name)')
+      .select('*, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, user_type, ms_oid), batch:nexus_batches(id, name)')
       .eq('classroom_id', id)
       .eq('is_active', true);
 
@@ -133,7 +133,7 @@ export async function POST(
         { user_id: resolvedUserId, classroom_id: id, role, batch_id: batch_id || null },
         { onConflict: 'user_id,classroom_id' }
       )
-      .select('*, user:users(id, name, email, avatar_url), batch:nexus_batches(id, name)')
+      .select('*, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url), batch:nexus_batches(id, name)')
       .single();
 
     if (error) throw error;

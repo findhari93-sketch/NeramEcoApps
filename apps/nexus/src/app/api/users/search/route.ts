@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
             const dirOids = newDirectoryUsers.map((u: any) => u.ms_oid);
             const { data: enrolledByOid } = await supabase
               .from('nexus_enrollments')
-              .select('user_id, user:users!inner(ms_oid)')
+              .select('user_id, user:users!nexus_enrollments_user_id_fkey!inner(ms_oid)')
               .eq('classroom_id', excludeClassroom)
               .eq('is_active', true);
 
