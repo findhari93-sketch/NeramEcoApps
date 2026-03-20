@@ -599,6 +599,60 @@ export async function getStudentQBStats(
 }
 
 // ============================================
+// TEACHER STATS
+// ============================================
+
+/**
+ * Aggregate stats for teacher view — counts ALL questions regardless of status/is_active.
+ */
+export async function getTeacherQBStats(
+  examRelevance?: QBExamRelevance,
+  client?: TypedSupabaseClient
+): Promise<QBProgressStats> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let totalQuery = supabase
+    .from('nexus_qb_questions')
+    .select('*', { count: 'exact' });
+  if (examRelevance) {
+    totalQuery = totalQuery.eq('exam_relevance', examRelevance);
+  }
+  const { data: allQuestions, count: totalCount, error: totalError } = await totalQuery;
+  if (totalError) throw totalError;
+
+  const totalQuestions = totalCount || 0;
+  const questionsData = (allQuestions || []) as NexusQBQuestion[];
+
+  // Count questions with solutions (answer_keyed, complete, or active)
+  const withSolutions = questionsData.filter(
+    (q) => q.status === 'answer_keyed' || q.status === 'complete' || q.status === 'active'
+  ).length;
+
+  const byCategory: Record<string, { attempted: number; correct: number; total: number }> = {};
+  const byDifficulty: Record<string, { attempted: number; correct: number; total: number }> = {};
+
+  for (const q of questionsData) {
+    for (const cat of q.categories || []) {
+      if (!byCategory[cat]) byCategory[cat] = { attempted: 0, correct: 0, total: 0 };
+      byCategory[cat].total++;
+    }
+    const diff = q.difficulty;
+    if (!byDifficulty[diff]) byDifficulty[diff] = { attempted: 0, correct: 0, total: 0 };
+    byDifficulty[diff].total++;
+  }
+
+  return {
+    total_questions: totalQuestions,
+    attempted_count: withSolutions,
+    correct_count: 0,
+    incorrect_count: 0,
+    accuracy_percentage: 0,
+    by_category: byCategory,
+    by_difficulty: byDifficulty,
+  };
+}
+
+// ============================================
 // SAVED PRESETS
 // ============================================
 

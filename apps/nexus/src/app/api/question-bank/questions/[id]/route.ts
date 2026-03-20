@@ -61,6 +61,20 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // When activating (is_active=true), also promote status to 'active'
+    // if the question has an answer key (answer_keyed or complete)
+    if (body.is_active === true) {
+      const { data: existing } = await supabase
+        .from('nexus_qb_questions')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (existing && ['answer_keyed', 'complete'].includes((existing as any).status)) {
+        body.status = 'active';
+      }
+    }
+
     const data = await updateQBQuestion(id, body);
 
     return NextResponse.json({ data }, { status: 200 });

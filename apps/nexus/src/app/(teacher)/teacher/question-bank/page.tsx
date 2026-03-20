@@ -219,7 +219,7 @@ export default function QuestionBankDashboard() {
             </Typography>
           )}
           <Typography variant="caption" color="text.secondary">
-            With Solutions
+            With Answer Key
           </Typography>
         </Paper>
 

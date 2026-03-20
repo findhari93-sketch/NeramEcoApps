@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBAccess } from '@/lib/qb-auth';
-import { getStudentQBStats, type QBExamRelevance } from '@neram/database';
+import { getStudentQBStats, getTeacherQBStats, type QBExamRelevance } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +14,11 @@ export async function GET(request: NextRequest) {
 
     const examRelevance = params.get('exam_relevance') || undefined;
 
-    const data = await getStudentQBStats(caller.id, examRelevance as QBExamRelevance | undefined);
+    // Teachers see stats for ALL questions; students see only active questions
+    const isTeacher = ['teacher', 'admin'].includes(caller.user_type ?? '');
+    const data = isTeacher
+      ? await getTeacherQBStats(examRelevance as QBExamRelevance | undefined)
+      : await getStudentQBStats(caller.id, examRelevance as QBExamRelevance | undefined);
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {

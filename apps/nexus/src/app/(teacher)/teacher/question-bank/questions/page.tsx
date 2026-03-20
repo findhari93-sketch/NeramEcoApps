@@ -13,12 +13,13 @@ import {
   Chip,
   Snackbar,
   Alert,
+  Checkbox,
+  Switch,
+  Tooltip,
 } from '@neram/ui';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionListItem } from '@neram/database';
@@ -49,6 +50,10 @@ export default function QuestionsListPage() {
   const [category, setCategory] = useState('');
   const [examRelevance, setExamRelevance] = useState('');
   const [questionStatus, setQuestionStatus] = useState('');
+
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   // Debounce search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,6 +105,7 @@ export default function QuestionsListPage() {
             setQuestions((prev) => [...prev, ...fetched]);
           } else {
             setQuestions(fetched);
+            setSelectedIds(new Set()); // Clear selection on filter change
           }
           setTotal(fetchedTotal);
         }
@@ -140,14 +146,18 @@ export default function QuestionsListPage() {
       });
 
       if (res.ok) {
+        const json = await res.json();
+        const updated = json.data;
         setQuestions((prev) =>
           prev.map((q) =>
-            q.id === questionId ? { ...q, is_active: !currentActive } : q
+            q.id === questionId
+              ? { ...q, is_active: updated.is_active, status: updated.status }
+              : q
           )
         );
         setSnackbar({
           open: true,
-          message: !currentActive ? 'Question activated' : 'Question deactivated',
+          message: !currentActive ? 'Question activated — now visible to students' : 'Question deactivated',
           severity: 'success',
         });
       } else {
@@ -159,7 +169,87 @@ export default function QuestionsListPage() {
     }
   }
 
+  // Selection helpers
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === questions.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(questions.map((q) => q.id)));
+    }
+  }
+
+  async function handleBulkAction(action: 'activate' | 'deactivate') {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch('/api/question-bank/questions/bulk-update', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question_ids: Array.from(selectedIds),
+          action,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const updatedCount = json.data?.updated || 0;
+
+        // Update local state
+        setQuestions((prev) =>
+          prev.map((q) => {
+            if (!selectedIds.has(q.id)) return q;
+            if (action === 'activate') {
+              return { ...q, is_active: true, status: 'active' as any };
+            } else {
+              return { ...q, is_active: false };
+            }
+          })
+        );
+
+        setSelectedIds(new Set());
+        setSnackbar({
+          open: true,
+          message: `${updatedCount} question${updatedCount !== 1 ? 's' : ''} ${action === 'activate' ? 'activated' : 'deactivated'}`,
+          severity: 'success',
+        });
+      } else {
+        throw new Error('Failed to bulk update');
+      }
+    } catch (err) {
+      console.error('Bulk update failed:', err);
+      setSnackbar({ open: true, message: 'Bulk update failed', severity: 'error' });
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
   const hasMore = questions.length < total;
+  const allSelected = questions.length > 0 && selectedIds.size === questions.length;
+  const someSelected = selectedIds.size > 0;
+
+  // Check if selected questions can be activated (have answer keys)
+  const selectedQuestions = questions.filter((q) => selectedIds.has(q.id));
+  const canActivate = selectedQuestions.some(
+    (q) => !q.is_active || ['answer_keyed', 'complete'].includes(q.status)
+  );
+  const canDeactivate = selectedQuestions.some((q) => q.is_active);
 
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
@@ -208,6 +298,59 @@ export default function QuestionsListPage() {
         onQuestionStatusChange={setQuestionStatus}
       />
 
+      {/* Bulk Action Bar */}
+      {someSelected && (
+        <Paper
+          sx={{
+            p: 1.5,
+            mb: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            bgcolor: 'primary.50',
+            border: '1px solid',
+            borderColor: 'primary.200',
+            flexWrap: 'wrap',
+          }}
+        >
+          <Typography variant="body2" fontWeight={600} sx={{ mr: 1 }}>
+            {selectedIds.size} selected
+          </Typography>
+          {canActivate && (
+            <Button
+              size="small"
+              variant="contained"
+              color="success"
+              disabled={bulkLoading}
+              onClick={() => handleBulkAction('activate')}
+              sx={{ textTransform: 'none', minHeight: 36 }}
+            >
+              {bulkLoading ? 'Updating...' : 'Activate for Students'}
+            </Button>
+          )}
+          {canDeactivate && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              disabled={bulkLoading}
+              onClick={() => handleBulkAction('deactivate')}
+              sx={{ textTransform: 'none', minHeight: 36 }}
+            >
+              Deactivate
+            </Button>
+          )}
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => setSelectedIds(new Set())}
+            sx={{ textTransform: 'none', ml: 'auto' }}
+          >
+            Clear
+          </Button>
+        </Paper>
+      )}
+
       {/* Question List */}
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -232,88 +375,156 @@ export default function QuestionsListPage() {
         </Paper>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {questions.map((q) => (
-            <Paper
-              key={q.id}
-              variant="outlined"
-              sx={{
-                p: { xs: 1.5, md: 2 },
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              {/* Question text */}
-              <Box
+          {/* Select All Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
+            <Checkbox
+              size="small"
+              checked={allSelected}
+              indeterminate={someSelected && !allSelected}
+              onChange={toggleSelectAll}
+              sx={{ p: 0.5 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {allSelected ? 'Deselect all' : 'Select all'} ({questions.length})
+            </Typography>
+          </Box>
+
+          {questions.map((q) => {
+            const isSelected = selectedIds.has(q.id);
+            const isActive = q.is_active && q.status === 'active';
+            const hasAnswer = ['answer_keyed', 'complete', 'active'].includes(q.status);
+
+            return (
+              <Paper
+                key={q.id}
+                variant="outlined"
                 sx={{
-                  mb: 1,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
+                  p: { xs: 1.5, md: 2 },
+                  cursor: 'pointer',
+                  borderColor: isSelected ? 'primary.main' : undefined,
+                  bgcolor: isSelected ? 'primary.50' : undefined,
+                  '&:hover': { bgcolor: isSelected ? 'primary.50' : 'action.hover' },
                 }}
               >
-                {q.question_text ? (
-                  <MathText text={q.question_text} variant="body2" />
-                ) : (
-                  <Typography variant="body2">
-                    {q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question'}
-                  </Typography>
-                )}
-              </Box>
-
-              {/* Source badges */}
-              <Box sx={{ mb: 0.75 }}>
-                <SourceBadges sources={q.sources} />
-              </Box>
-
-              {/* Bottom row */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                <DifficultyChip difficulty={q.difficulty} size="small" />
-                <CategoryChips categories={q.categories.slice(0, 2)} size="small" />
-
-                {q.status && q.status !== 'active' && (
-                  <Chip
-                    label={QB_QUESTION_STATUS_LABELS[q.status as keyof typeof QB_QUESTION_STATUS_LABELS] || q.status}
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {/* Checkbox */}
+                  <Checkbox
                     size="small"
-                    sx={{
-                      height: 22,
-                      fontSize: '0.65rem',
-                      bgcolor: (QB_QUESTION_STATUS_COLORS[q.status as keyof typeof QB_QUESTION_STATUS_COLORS] || '#999') + '20',
-                      color: QB_QUESTION_STATUS_COLORS[q.status as keyof typeof QB_QUESTION_STATUS_COLORS] || '#999',
-                      fontWeight: 600,
-                    }}
+                    checked={isSelected}
+                    onChange={() => toggleSelect(q.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    sx={{ p: 0.5, alignSelf: 'flex-start', mt: 0.25 }}
                   />
-                )}
-                {!q.is_active && q.status === 'active' && (
-                  <Chip label="Inactive" size="small" color="default" sx={{ height: 22, fontSize: '0.65rem' }} />
-                )}
 
-                <Box sx={{ flexGrow: 1 }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* Question text */}
+                    <Box
+                      sx={{
+                        mb: 1,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {q.question_text ? (
+                        <MathText text={q.question_text} variant="body2" />
+                      ) : (
+                        <Typography variant="body2">
+                          {q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question'}
+                        </Typography>
+                      )}
+                    </Box>
 
-                {/* Actions */}
-                <IconButton
-                  size="small"
-                  onClick={() => router.push(`/teacher/question-bank/questions/${q.id}/edit`)}
-                  sx={{ minWidth: 40, minHeight: 40 }}
-                  title="Edit"
-                >
-                  <EditOutlinedIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => handleToggleActive(q.id, q.is_active)}
-                  sx={{ minWidth: 40, minHeight: 40 }}
-                  title={q.is_active ? 'Deactivate' : 'Activate'}
-                >
-                  {q.is_active ? (
-                    <VisibilityOffOutlinedIcon fontSize="small" />
-                  ) : (
-                    <VisibilityOutlinedIcon fontSize="small" />
-                  )}
-                </IconButton>
-              </Box>
-            </Paper>
-          ))}
+                    {/* Source badges */}
+                    <Box sx={{ mb: 0.75 }}>
+                      <SourceBadges sources={q.sources} />
+                    </Box>
+
+                    {/* Bottom row */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                      <DifficultyChip difficulty={q.difficulty} size="small" />
+                      <CategoryChips categories={q.categories.slice(0, 2)} size="small" />
+
+                      {q.status && q.status !== 'active' && (
+                        <Chip
+                          label={QB_QUESTION_STATUS_LABELS[q.status as keyof typeof QB_QUESTION_STATUS_LABELS] || q.status}
+                          size="small"
+                          sx={{
+                            height: 22,
+                            fontSize: '0.65rem',
+                            bgcolor: (QB_QUESTION_STATUS_COLORS[q.status as keyof typeof QB_QUESTION_STATUS_COLORS] || '#999') + '20',
+                            color: QB_QUESTION_STATUS_COLORS[q.status as keyof typeof QB_QUESTION_STATUS_COLORS] || '#999',
+                            fontWeight: 600,
+                          }}
+                        />
+                      )}
+
+                      <Box sx={{ flexGrow: 1 }} />
+
+                      {/* Actions */}
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/teacher/question-bank/questions/${q.id}/edit`);
+                        }}
+                        sx={{ minWidth: 40, minHeight: 40 }}
+                        title="Edit"
+                      >
+                        <EditOutlinedIcon fontSize="small" />
+                      </IconButton>
+
+                      {/* Visibility Toggle - Switch with label */}
+                      <Tooltip
+                        title={
+                          !hasAnswer
+                            ? 'Add answer key before activating'
+                            : isActive
+                              ? 'Visible to students — click to hide'
+                              : 'Hidden from students — click to show'
+                        }
+                        arrow
+                      >
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.25,
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Switch
+                            size="small"
+                            checked={isActive}
+                            disabled={!hasAnswer}
+                            onChange={() => handleToggleActive(q.id, q.is_active)}
+                            color="success"
+                            sx={{
+                              '& .MuiSwitch-thumb': { width: 14, height: 14 },
+                              '& .MuiSwitch-switchBase': { padding: '7px' },
+                              '& .MuiSwitch-track': { borderRadius: 8 },
+                            }}
+                          />
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontSize: '0.6rem',
+                              color: isActive ? 'success.main' : 'text.disabled',
+                              fontWeight: 600,
+                              minWidth: 28,
+                            }}
+                          >
+                            {isActive ? 'Live' : 'Off'}
+                          </Typography>
+                        </Box>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                </Box>
+              </Paper>
+            );
+          })}
 
           {/* Load More */}
           {hasMore && (
