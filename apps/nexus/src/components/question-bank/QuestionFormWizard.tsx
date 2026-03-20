@@ -26,6 +26,7 @@ import {
 } from '@neram/ui';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type {
   NexusQBQuestion,
   NexusQBQuestionSource,
@@ -126,6 +127,47 @@ function getInitialFormData(
   };
 }
 
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function isSharePointUrl(url: string): boolean {
+  return /\.sharepoint\.com\//i.test(url) || /onedrive\.live\.com\//i.test(url);
+}
+
+function getSharePointEmbedUrl(url: string): string {
+  // OneDrive personal links
+  if (/onedrive\.live\.com\//i.test(url)) {
+    return url.replace(/\/redir\?/i, '/embed?').replace(/\/view\?/i, '/embed?');
+  }
+  // SharePoint: try _layouts/15/embed.aspx pattern
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname; // e.g. myorg.sharepoint.com
+    // If it's already an embed URL, return as-is
+    if (parsed.pathname.includes('_layouts/15/embed.aspx')) return url;
+    // For download.aspx or direct file URLs, convert to embed
+    if (parsed.pathname.includes('download.aspx') || parsed.pathname.includes('_api')) {
+      const srcParam = parsed.searchParams.get('UniqueId') || parsed.searchParams.get('sourcedoc');
+      if (srcParam) {
+        return `https://${host}/_layouts/15/embed.aspx?UniqueId=${encodeURIComponent(srcParam)}`;
+      }
+    }
+    // Generic SharePoint file link — wrap in embed.aspx
+    return `https://${host}/_layouts/15/embed.aspx?url=${encodeURIComponent(url)}`;
+  } catch {
+    return url;
+  }
+}
+
 export default function QuestionFormWizard({
   initialData,
   sources,
@@ -196,7 +238,7 @@ export default function QuestionFormWizard({
         form.question_format === 'NUMERICAL' && form.answer_tolerance
           ? Number(form.answer_tolerance)
           : null,
-      explanation_brief: form.explanation_brief,
+      explanation_brief: form.explanation_brief || null,
       explanation_detailed: form.explanation_detailed || null,
       solution_video_url: form.solution_video_url || null,
       solution_image_url: form.solution_image?.uploaded ? form.solution_image.url : null,
@@ -516,13 +558,12 @@ export default function QuestionFormWizard({
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <TextField
-              label="Brief Explanation (required)"
+              label="Brief Explanation"
               multiline
               minRows={2}
               maxRows={5}
               value={form.explanation_brief}
               onChange={(e) => updateField('explanation_brief', e.target.value)}
-              required
               fullWidth
             />
             <TextField
@@ -535,13 +576,63 @@ export default function QuestionFormWizard({
               fullWidth
             />
             <TextField
-              label="Solution Video URL (YouTube)"
+              label="Solution Video URL"
               size="small"
               value={form.solution_video_url}
               onChange={(e) => updateField('solution_video_url', e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
+              placeholder="YouTube, SharePoint, or OneDrive link"
               fullWidth
             />
+            {/* Video URL preview */}
+            {form.solution_video_url && (() => {
+              const ytId = extractYouTubeId(form.solution_video_url);
+              if (ytId) {
+                return (
+                  <Box sx={{ maxWidth: 400, width: '100%' }}>
+                    <Box sx={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 1, overflow: 'hidden', bgcolor: 'grey.900' }}>
+                      <Box
+                        component="iframe"
+                        src={`https://www.youtube-nocookie.com/embed/${ytId}`}
+                        title="Solution video preview"
+                        loading="lazy"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              }
+              if (isSharePointUrl(form.solution_video_url)) {
+                const embedUrl = getSharePointEmbedUrl(form.solution_video_url);
+                return (
+                  <Box sx={{ maxWidth: 400, width: '100%' }}>
+                    <Box sx={{ position: 'relative', width: '100%', paddingTop: '56.25%', borderRadius: 1, overflow: 'hidden', bgcolor: 'grey.900' }}>
+                      <Box
+                        component="iframe"
+                        src={embedUrl}
+                        title="Solution video preview"
+                        loading="lazy"
+                        allowFullScreen
+                        sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              }
+              return (
+                <Box
+                  component="a"
+                  href={form.solution_video_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                >
+                  <OpenInNewIcon fontSize="small" />
+                  <Typography variant="body2">Open link</Typography>
+                </Box>
+              );
+            })()}
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                 Solution Image (optional)
@@ -598,7 +689,7 @@ export default function QuestionFormWizard({
               variant="contained"
               fullWidth
               onClick={handleSubmit}
-              disabled={loading || !form.explanation_brief}
+              disabled={loading}
               sx={{
                 minHeight: 48,
                 fontWeight: 600,

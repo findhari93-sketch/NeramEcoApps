@@ -45,6 +45,7 @@ interface QuestionDetailProps {
   hasPrev: boolean;
   currentIndex: number;
   totalCount: number;
+  inline?: boolean;
 }
 
 export default function QuestionDetail({
@@ -58,6 +59,7 @@ export default function QuestionDetail({
   hasPrev,
   currentIndex,
   totalCount,
+  inline = false,
 }: QuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -68,8 +70,19 @@ export default function QuestionDetail({
   const [submitting, setSubmitting] = useState(false);
   const [imageZoomed, setImageZoomed] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   const isStudyMode = mode === 'study';
+
+  // Study mode: check answer locally without API call
+  const handleCheckAnswer = useCallback(() => {
+    if (!selectedAnswer) return;
+    const correct = selectedAnswer === question.correct_answer;
+    setIsCorrect(correct);
+    setChecked(true);
+    setShowFeedback(true);
+    setTimeout(() => setShowFeedback(false), 2000);
+  }, [selectedAnswer, question.correct_answer]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedAnswer || submitting) return;
@@ -89,6 +102,7 @@ export default function QuestionDetail({
   const handleNext = useCallback(() => {
     setSelectedAnswer(null);
     setSubmitted(false);
+    setChecked(false);
     setIsCorrect(null);
     setShowFeedback(false);
     onNext();
@@ -97,44 +111,47 @@ export default function QuestionDetail({
   const handlePrev = useCallback(() => {
     setSelectedAnswer(null);
     setSubmitted(false);
+    setChecked(false);
     setIsCorrect(null);
     setShowFeedback(false);
     onPrev();
   }, [onPrev]);
 
   return (
-    <Box sx={{ position: 'relative', pb: isMobile ? 10 : 0 }}>
-      {/* Navigation header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 2,
-        }}
-      >
-        <IconButton
-          onClick={handlePrev}
-          disabled={!hasPrev}
-          size="small"
-          aria-label="Previous question"
-          sx={{ minWidth: 48, minHeight: 48 }}
+    <Box sx={{ position: 'relative', pb: inline ? 0 : (isMobile ? 10 : 0) }}>
+      {/* Navigation header (hidden in inline mode) */}
+      {!inline && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            mb: 2,
+          }}
         >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
-          {currentIndex + 1} / {totalCount}
-        </Typography>
-        <IconButton
-          onClick={handleNext}
-          disabled={!hasNext}
-          size="small"
-          aria-label="Next question"
-          sx={{ minWidth: 48, minHeight: 48 }}
-        >
-          <ArrowForwardIcon />
-        </IconButton>
-      </Box>
+          <IconButton
+            onClick={handlePrev}
+            disabled={!hasPrev}
+            size="small"
+            aria-label="Previous question"
+            sx={{ minWidth: 48, minHeight: 48 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+            {currentIndex + 1} / {totalCount}
+          </Typography>
+          <IconButton
+            onClick={handleNext}
+            disabled={!hasNext}
+            size="small"
+            aria-label="Next question"
+            sx={{ minWidth: 48, minHeight: 48 }}
+          >
+            <ArrowForwardIcon />
+          </IconButton>
+        </Box>
+      )}
 
       {/* Source badges */}
       <Box sx={{ mb: 1.5 }}>
@@ -211,8 +228,8 @@ export default function QuestionDetail({
           <MCQOptions
             options={question.options}
             selectedId={selectedAnswer}
-            correctId={isStudyMode || submitted ? question.correct_answer : undefined}
-            submitted={isStudyMode || submitted}
+            correctId={(isStudyMode ? checked : submitted) ? question.correct_answer : undefined}
+            submitted={isStudyMode ? checked : submitted}
             onSelect={setSelectedAnswer}
           />
         </Box>
@@ -238,8 +255,8 @@ export default function QuestionDetail({
         </Box>
       </Fade>
 
-      {/* Study mode toggle */}
-      {isStudyMode && (
+      {/* Study mode toggle (only after checking answer) */}
+      {isStudyMode && checked && (
         <Box sx={{ mb: 2 }}>
           <FormControlLabel
             control={
@@ -255,11 +272,11 @@ export default function QuestionDetail({
         </Box>
       )}
 
-      {/* Solution section (shown after submit or in study mode) */}
-      {(submitted || isStudyMode) && (
+      {/* Solution section (shown after submit in practice, or after check in study) */}
+      {(submitted || (isStudyMode && checked)) && (
         <Box sx={{ mb: 3 }}>
           <Divider sx={{ mb: 2 }} />
-          <SolutionSection question={question} defaultExpanded={isStudyMode} />
+          <SolutionSection question={question} defaultExpanded={isStudyMode && checked} />
         </Box>
       )}
 
@@ -324,21 +341,54 @@ export default function QuestionDetail({
       {/* Category + Difficulty footer */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
         <DifficultyChip difficulty={question.difficulty} />
-        <CategoryChips categories={question.categories} />
+        <CategoryChips categories={question.categories || []} />
       </Box>
+
+      {/* Study mode: Check Answer button (before checked) */}
+      {isStudyMode && !checked && (
+        <Box
+          sx={{
+            position: inline ? 'relative' : (isMobile ? 'fixed' : 'relative'),
+            bottom: inline ? 'auto' : (isMobile ? 0 : 'auto'),
+            left: 0,
+            right: 0,
+            p: inline ? 0 : (isMobile ? 2 : 0),
+            pt: inline ? 2 : (isMobile ? 1.5 : 2),
+            bgcolor: inline ? 'transparent' : (isMobile ? 'background.paper' : 'transparent'),
+            borderTop: inline ? 'none' : (isMobile ? '1px solid' : 'none'),
+            borderColor: 'divider',
+            zIndex: 10,
+          }}
+        >
+          <Button
+            variant="contained"
+            fullWidth
+            disabled={!selectedAnswer}
+            onClick={handleCheckAnswer}
+            sx={{
+              minHeight: 48,
+              fontWeight: 600,
+              textTransform: 'none',
+              fontSize: '1rem',
+            }}
+          >
+            Check Answer
+          </Button>
+        </Box>
+      )}
 
       {/* Bottom sticky submit bar (practice mode, mobile) */}
       {!isStudyMode && !submitted && (
         <Box
           sx={{
-            position: isMobile ? 'fixed' : 'relative',
-            bottom: isMobile ? 0 : 'auto',
+            position: inline ? 'relative' : (isMobile ? 'fixed' : 'relative'),
+            bottom: inline ? 'auto' : (isMobile ? 0 : 'auto'),
             left: 0,
             right: 0,
-            p: isMobile ? 2 : 0,
-            pt: isMobile ? 1.5 : 2,
-            bgcolor: isMobile ? 'background.paper' : 'transparent',
-            borderTop: isMobile ? '1px solid' : 'none',
+            p: inline ? 0 : (isMobile ? 2 : 0),
+            pt: inline ? 2 : (isMobile ? 1.5 : 2),
+            bgcolor: inline ? 'transparent' : (isMobile ? 'background.paper' : 'transparent'),
+            borderTop: inline ? 'none' : (isMobile ? '1px solid' : 'none'),
             borderColor: 'divider',
             zIndex: 10,
           }}

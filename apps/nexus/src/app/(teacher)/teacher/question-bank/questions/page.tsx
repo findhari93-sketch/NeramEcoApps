@@ -21,6 +21,10 @@ import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import {
@@ -50,6 +54,7 @@ export default function QuestionsListPage() {
   const [category, setCategory] = useState('');
   const [examRelevance, setExamRelevance] = useState('');
   const [questionStatus, setQuestionStatus] = useState('');
+  const [solutionFilter, setSolutionFilter] = useState('');
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -92,6 +97,7 @@ export default function QuestionsListPage() {
         if (category) params.set('categories', category);
         if (examRelevance) params.set('exam_relevance', examRelevance);
         if (questionStatus) params.set('question_status', questionStatus);
+        if (solutionFilter) params.set('solution_filter', solutionFilter);
 
         const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -116,14 +122,14 @@ export default function QuestionsListPage() {
         setLoadingMore(false);
       }
     },
-    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus]
+    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter]
   );
 
   // Reset page and fetch when filters change
   useEffect(() => {
     setPage(1);
     fetchQuestions(1, false);
-  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, fetchQuestions]);
+  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, fetchQuestions]);
 
   function handleLoadMore() {
     const nextPage = page + 1;
@@ -290,12 +296,14 @@ export default function QuestionsListPage() {
         category={category}
         examRelevance={examRelevance}
         questionStatus={questionStatus}
+        solutionFilter={solutionFilter}
         total={total}
         loading={loading}
         onDifficultyChange={setDifficulty}
         onCategoryChange={setCategory}
         onExamRelevanceChange={setExamRelevance}
         onQuestionStatusChange={setQuestionStatus}
+        onSolutionFilterChange={setSolutionFilter}
       />
 
       {/* Bulk Action Bar */}
@@ -398,12 +406,18 @@ export default function QuestionsListPage() {
               <Paper
                 key={q.id}
                 variant="outlined"
+                onClick={() => router.push(`/teacher/question-bank/questions/${q.id}/edit`)}
                 sx={{
                   p: { xs: 1.5, md: 2 },
                   cursor: 'pointer',
                   borderColor: isSelected ? 'primary.main' : undefined,
                   bgcolor: isSelected ? 'primary.50' : undefined,
-                  '&:hover': { bgcolor: isSelected ? 'primary.50' : 'action.hover' },
+                  transition: 'all 0.15s ease',
+                  '&:hover': {
+                    bgcolor: isSelected ? 'primary.50' : 'grey.50',
+                    borderColor: 'primary.200',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  },
                 }}
               >
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -459,6 +473,28 @@ export default function QuestionsListPage() {
                           }}
                         />
                       )}
+
+                      {/* Solution indicators */}
+                      {q.solution_video_url ? (
+                        <Tooltip title="Has video solution" arrow>
+                          <VideoLibraryOutlinedIcon sx={{ fontSize: 18, color: 'success.main' }} />
+                        </Tooltip>
+                      ) : null}
+                      {q.solution_image_url ? (
+                        <Tooltip title="Has image solution" arrow>
+                          <ImageOutlinedIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                        </Tooltip>
+                      ) : null}
+                      {q.explanation_brief ? (
+                        <Tooltip title="Has explanation" arrow>
+                          <DescriptionOutlinedIcon sx={{ fontSize: 18, color: 'warning.main' }} />
+                        </Tooltip>
+                      ) : null}
+                      {!q.solution_video_url && !q.solution_image_url && !q.explanation_brief ? (
+                        <Tooltip title="No solution" arrow>
+                          <WarningAmberOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+                        </Tooltip>
+                      ) : null}
 
                       <Box sx={{ flexGrow: 1 }} />
 

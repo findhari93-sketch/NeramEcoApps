@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     const page = params.get('page') ? parseInt(params.get('page')!, 10) : 1;
     const pageSize = params.get('page_size') ? parseInt(params.get('page_size')!, 10) : 20;
 
+    const solutionFilter = params.get('solution_filter') || undefined;
+
     const filters: import('@neram/database').QBFilterState = {
       exam_relevance: (params.get('exam_relevance') as any) || undefined,
       exam_years: params.get('years') ? params.get('years')!.split(',').map(Number) : undefined,
@@ -32,6 +34,12 @@ export async function GET(request: NextRequest) {
       attempt_status: (params.get('status') as any) || undefined,
       search_text: params.get('search') || undefined,
       topic_ids: params.get('topic_ids') ? params.get('topic_ids')!.split(',') : undefined,
+      // Source-based filters from exam sidebar
+      exam_type: (params.get('exam_type') as any) || undefined,
+      source_year: params.get('year') ? parseInt(params.get('year')!, 10) : undefined,
+      source_session: params.get('session') || undefined,
+      // Solution filter
+      solution_filter: solutionFilter as any,
     };
 
     // Teachers see all statuses; students only see active questions

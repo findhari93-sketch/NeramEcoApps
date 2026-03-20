@@ -16,15 +16,17 @@ import {
 import FilterListIcon from '@mui/icons-material/FilterList';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import QuestionCard from '@/components/question-bank/QuestionCard';
+import QuestionBankLayout from '@/components/question-bank/QuestionBankLayout';
+import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
 import FilterDrawer from '@/components/question-bank/FilterDrawer';
 import FilterChips, { countActiveFilters } from '@/components/question-bank/FilterChips';
 import type {
-  NexusQBQuestionListItem,
-  NexusQBTopic,
+  QBExamTree,
   QBFilterState,
+  NexusQBQuestionListItem,
+  NexusQBQuestionDetail,
+  NexusQBTopic,
   QBDifficulty,
-  QBExamRelevance,
   QBQuestionFormat,
 } from '@neram/database';
 
@@ -32,8 +34,6 @@ const PAGE_SIZE = 20;
 
 function serializeFilters(filters: QBFilterState): URLSearchParams {
   const params = new URLSearchParams();
-  if (filters.exam_relevance) params.set('exam', filters.exam_relevance);
-  if (filters.exam_years?.length) params.set('years', filters.exam_years.join(','));
   if (filters.categories?.length) params.set('cat', filters.categories.join(','));
   if (filters.difficulty?.length) params.set('diff', filters.difficulty.join(','));
   if (filters.question_format?.length) params.set('fmt', filters.question_format.join(','));
@@ -45,10 +45,6 @@ function serializeFilters(filters: QBFilterState): URLSearchParams {
 
 function deserializeFilters(params: URLSearchParams): QBFilterState {
   const filters: QBFilterState = {};
-  const exam = params.get('exam');
-  if (exam) filters.exam_relevance = exam as QBExamRelevance;
-  const years = params.get('years');
-  if (years) filters.exam_years = years.split(',').map(Number);
   const cat = params.get('cat');
   if (cat) filters.categories = cat.split(',');
   const diff = params.get('diff');
@@ -69,12 +65,30 @@ export default function QuestionListPage() {
   const searchParams = useSearchParams();
   const { activeClassroom, getToken } = useNexusAuthContext();
 
+  // Exam sidebar state
+  const [examTree, setExamTree] = useState<QBExamTree | null>(null);
+  const [examTreeLoading, setExamTreeLoading] = useState(true);
+  const [selectedExam, setSelectedExam] = useState<string | null>(
+    searchParams.get('exam') || null,
+  );
+  const [selectedYear, setSelectedYear] = useState<number | null>(
+    searchParams.get('year') ? Number(searchParams.get('year')) : null,
+  );
+  const [selectedSession, setSelectedSession] = useState<string | null>(
+    searchParams.get('session') || null,
+  );
+
+  // Mode
   const [mode, setMode] = useState<'practice' | 'study'>(
     (searchParams.get('mode') as 'practice' | 'study') || 'practice',
   );
+
+  // Filters (categories, difficulty, format, status, search, topics)
   const [filters, setFilters] = useState<QBFilterState>(() =>
     deserializeFilters(searchParams),
   );
+
+  // Question list state
   const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -83,12 +97,18 @@ export default function QuestionListPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [topics, setTopics] = useState<NexusQBTopic[]>([]);
 
+  // Inline expansion state
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<NexusQBQuestionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
   const sentinelRef = useRef<HTMLDivElement>(null);
   const hasMore = questions.length < totalCount;
 
-  // Fetch topics on mount
+  // Fetch exam tree on mount
   useEffect(() => {
     if (!activeClassroom) return;
+    fetchExamTree();
     fetchTopics();
   }, [activeClassroom]);
 
@@ -100,15 +120,18 @@ export default function QuestionListPage() {
     }
   }, [searchParams, activeClassroom]);
 
-  // Fetch questions when filters or classroom change
+  // Fetch questions when filters, sidebar selection, or mode change
   useEffect(() => {
     if (!activeClassroom) return;
     fetchQuestions(1, false);
-  }, [activeClassroom, filters, mode]);
+  }, [activeClassroom, filters, mode, selectedExam, selectedYear, selectedSession]);
 
-  // Sync filters to URL
+  // Sync filters + sidebar to URL
   useEffect(() => {
     const params = serializeFilters(filters);
+    if (selectedExam) params.set('exam', selectedExam);
+    if (selectedYear) params.set('year', String(selectedYear));
+    if (selectedSession) params.set('session', selectedSession);
     if (mode !== 'practice') params.set('mode', mode);
     const qs = params.toString();
     const current = searchParams.toString();
@@ -117,7 +140,7 @@ export default function QuestionListPage() {
         scroll: false,
       });
     }
-  }, [filters, mode]);
+  }, [filters, mode, selectedExam, selectedYear, selectedSession]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -136,6 +159,25 @@ export default function QuestionListPage() {
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, page]);
+
+  async function fetchExamTree() {
+    setExamTreeLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(
+        `/api/question-bank/exam-tree?classroom_id=${activeClassroom!.id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setExamTree(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch exam tree:', err);
+    } finally {
+      setExamTreeLoading(false);
+    }
+  }
 
   async function fetchTopics() {
     try {
@@ -188,8 +230,12 @@ export default function QuestionListPage() {
       params.set('page_size', String(PAGE_SIZE));
       params.set('mode', mode);
 
-      if (filters.exam_relevance) params.set('exam_relevance', filters.exam_relevance);
-      if (filters.exam_years?.length) params.set('exam_years', filters.exam_years.join(','));
+      // Sidebar source filters
+      if (selectedExam) params.set('exam_type', selectedExam);
+      if (selectedYear) params.set('year', String(selectedYear));
+      if (selectedSession) params.set('session', selectedSession);
+
+      // Filter drawer filters
       if (filters.categories?.length) params.set('categories', filters.categories.join(','));
       if (filters.difficulty?.length) params.set('difficulty', filters.difficulty.join(','));
       if (filters.question_format?.length) params.set('question_format', filters.question_format.join(','));
@@ -227,6 +273,96 @@ export default function QuestionListPage() {
     fetchQuestions(page + 1, true);
   }
 
+  function handleExamSelect(exam: string | null, year: number | null, session: string | null) {
+    setSelectedExam(exam);
+    setSelectedYear(year);
+    setSelectedSession(session);
+    setExpandedQuestionId(null);
+    setExpandedDetail(null);
+  }
+
+  async function handleExpandQuestion(questionId: string) {
+    if (expandedQuestionId === questionId) {
+      setExpandedQuestionId(null);
+      setExpandedDetail(null);
+      return;
+    }
+
+    setExpandedQuestionId(questionId);
+    setExpandedDetail(null);
+    setDetailLoading(true);
+
+    try {
+      const token = await getToken();
+      const res = await fetch(
+        `/api/question-bank/questions/${questionId}?classroom_id=${activeClassroom!.id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setExpandedDetail(json.data || json);
+      }
+    } catch (err) {
+      console.error('Failed to fetch question detail:', err);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function handleInlineSubmit(answer: string) {
+    if (!expandedQuestionId || !activeClassroom) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(
+        `/api/question-bank/questions/${expandedQuestionId}/attempt`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            selected_answer: answer,
+            mode: 'practice',
+            classroom_id: activeClassroom.id,
+          }),
+        },
+      );
+      if (res.ok) {
+        const json = await res.json();
+        // Refresh the detail to show result
+        setExpandedDetail((prev) => prev ? { ...prev, ...json.data } : prev);
+      }
+    } catch (err) {
+      console.error('Failed to submit answer:', err);
+    }
+  }
+
+  async function handleStudyToggle() {
+    if (!expandedQuestionId || !activeClassroom) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(
+        `/api/question-bank/questions/${expandedQuestionId}/study-mark`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ classroom_id: activeClassroom.id }),
+        },
+      );
+      if (res.ok) {
+        setExpandedDetail((prev) =>
+          prev ? { ...prev, is_studied: !prev.is_studied } : prev,
+        );
+      }
+    } catch (err) {
+      console.error('Failed to toggle study mark:', err);
+    }
+  }
+
   function handleFilterApply(newFilters: QBFilterState) {
     setFilters(newFilters);
   }
@@ -259,15 +395,30 @@ export default function QuestionListPage() {
 
   const activeFilterCount = countActiveFilters(filters);
 
+  // Build context label for filter drawer
+  const contextLabelParts: string[] = [];
+  if (selectedExam) contextLabelParts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
+  if (selectedYear) contextLabelParts.push(String(selectedYear));
+  if (selectedSession) contextLabelParts.push(selectedSession);
+  const contextLabel = contextLabelParts.length > 0 ? contextLabelParts.join(' ') : undefined;
+
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 600, mx: 'auto' }}>
-      {/* Top bar: mode toggle + filter button */}
+    <QuestionBankLayout
+      examTree={examTree}
+      examTreeLoading={examTreeLoading}
+      selectedExam={selectedExam}
+      selectedYear={selectedYear}
+      selectedSession={selectedSession}
+      onSelect={handleExamSelect}
+    >
+      {/* Top bar: mode toggle + question count + filter button */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 1,
+          gap: 1,
+          mb: 2,
+          flexWrap: 'wrap',
         }}
       >
         <ToggleButtonGroup
@@ -289,6 +440,14 @@ export default function QuestionListPage() {
           <ToggleButton value="practice">Practice</ToggleButton>
           <ToggleButton value="study">Study</ToggleButton>
         </ToggleButtonGroup>
+
+        <Box sx={{ flexGrow: 1 }} />
+
+        {!loading && (
+          <Typography variant="body2" color="text.secondary">
+            {totalCount} question{totalCount !== 1 ? 's' : ''}
+          </Typography>
+        )}
 
         <IconButton
           onClick={() => setFilterOpen(true)}
@@ -321,13 +480,6 @@ export default function QuestionListPage() {
         />
       </Box>
 
-      {/* Result count */}
-      {!loading && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {totalCount} question{totalCount !== 1 ? 's' : ''}
-        </Typography>
-      )}
-
       {/* Question list */}
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -354,16 +506,18 @@ export default function QuestionListPage() {
         </Paper>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {questions.map((q) => (
-            <QuestionCard
+          {questions.map((q, idx) => (
+            <InlineQuestionCard
               key={q.id}
               question={q}
+              questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
               mode={mode}
-              onClick={() =>
-                router.push(
-                  `/student/question-bank/questions/${q.id}?mode=${mode}`,
-                )
-              }
+              expanded={expandedQuestionId === q.id}
+              loading={expandedQuestionId === q.id && detailLoading}
+              questionIndex={idx}
+              onToggleExpand={() => handleExpandQuestion(q.id)}
+              onSubmit={handleInlineSubmit}
+              onStudyToggle={handleStudyToggle}
             />
           ))}
 
@@ -388,7 +542,8 @@ export default function QuestionListPage() {
         filters={filters}
         onApply={handleFilterApply}
         topics={topics}
+        contextLabel={contextLabel}
       />
-    </Box>
+    </QuestionBankLayout>
   );
 }

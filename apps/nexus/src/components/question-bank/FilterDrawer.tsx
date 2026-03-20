@@ -17,7 +17,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
-import type { QBFilterState, NexusQBTopic, QBDifficulty, QBExamRelevance, QBQuestionFormat } from '@neram/database';
+import type { QBFilterState, NexusQBTopic, QBDifficulty, QBQuestionFormat } from '@neram/database';
 import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
 
 interface FilterDrawerProps {
@@ -26,13 +26,8 @@ interface FilterDrawerProps {
   filters: QBFilterState;
   onApply: (filters: QBFilterState) => void;
   topics: NexusQBTopic[];
+  contextLabel?: string;
 }
-
-const EXAM_OPTIONS: { value: QBExamRelevance; label: string }[] = [
-  { value: 'NATA', label: 'NATA' },
-  { value: 'JEE', label: 'JEE Paper 2' },
-  { value: 'BOTH', label: 'Both' },
-];
 
 const DIFFICULTY_OPTIONS: { value: QBDifficulty; label: string }[] = [
   { value: 'EASY', label: 'Easy' },
@@ -54,11 +49,9 @@ const STATUS_OPTIONS: { value: NonNullable<QBFilterState['attempt_status']>; lab
   { value: 'incorrect', label: 'Incorrect' },
 ];
 
-const YEAR_RANGE = Array.from({ length: 15 }, (_, i) => 2026 - i);
-
 const ALL_CATEGORIES = Object.keys(QB_CATEGORY_LABELS) as QBCategory[];
 
-export default function FilterDrawer({ open, onClose, filters, onApply, topics }: FilterDrawerProps) {
+export default function FilterDrawer({ open, onClose, filters, onApply, topics, contextLabel }: FilterDrawerProps) {
   const [draft, setDraft] = useState<QBFilterState>(filters);
 
   const handleOpen = () => setDraft(filters);
@@ -136,50 +129,13 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics }
 
         <Divider />
 
-        <Accordion defaultExpanded disableGutters elevation={0}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="subtitle2">Exam Type</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {EXAM_OPTIONS.map((opt) => (
-                <Chip
-                  key={opt.value}
-                  label={opt.label}
-                  onClick={() =>
-                    setDraft((p) => ({
-                      ...p,
-                      exam_relevance: p.exam_relevance === opt.value ? undefined : opt.value,
-                    }))
-                  }
-                  variant={draft.exam_relevance === opt.value ? 'filled' : 'outlined'}
-                  color={draft.exam_relevance === opt.value ? 'primary' : 'default'}
-                  size="small"
-                />
-              ))}
-            </Box>
-          </AccordionDetails>
-        </Accordion>
-
-        <Accordion disableGutters elevation={0}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="subtitle2">Year</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {YEAR_RANGE.map((y) => (
-                <Chip
-                  key={y}
-                  label={y}
-                  onClick={() => toggleArrayValue('exam_years', y)}
-                  variant={(draft.exam_years || []).includes(y) ? 'filled' : 'outlined'}
-                  color={(draft.exam_years || []).includes(y) ? 'primary' : 'default'}
-                  size="small"
-                />
-              ))}
-            </Box>
-          </AccordionDetails>
-        </Accordion>
+        {contextLabel && (
+          <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover' }}>
+            <Typography variant="caption" color="text.secondary">
+              Filtering: {contextLabel}
+            </Typography>
+          </Box>
+        )}
 
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>

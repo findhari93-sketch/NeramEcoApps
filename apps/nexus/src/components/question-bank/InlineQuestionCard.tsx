@@ -1,0 +1,216 @@
+'use client';
+
+import { Box, Paper, Typography, Collapse, Skeleton, IconButton, alpha, useTheme } from '@neram/ui';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import type { NexusQBQuestionListItem, NexusQBQuestionDetail } from '@neram/database';
+import SourceBadges from './SourceBadges';
+import DifficultyChip from './DifficultyChip';
+import CategoryChips from './CategoryChips';
+import AttemptIndicator from './AttemptIndicator';
+import QuestionDetail from './QuestionDetail';
+import MathText from '@/components/common/MathText';
+
+interface InlineQuestionCardProps {
+  question: NexusQBQuestionListItem;
+  questionDetail: NexusQBQuestionDetail | null;
+  mode: 'practice' | 'study';
+  expanded: boolean;
+  loading: boolean;
+  questionIndex: number;
+  onToggleExpand: () => void;
+  onSubmit: (answer: string) => Promise<void>;
+  onStudyToggle: () => void;
+}
+
+export default function InlineQuestionCard({
+  question,
+  questionDetail,
+  mode,
+  expanded,
+  loading,
+  questionIndex,
+  onToggleExpand,
+  onSubmit,
+  onStudyToggle,
+}: InlineQuestionCardProps) {
+  const theme = useTheme();
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        borderRadius: 2,
+        transition: 'all 0.2s ease-in-out',
+        borderColor: expanded
+          ? alpha(theme.palette.primary.main, 0.5)
+          : 'divider',
+        boxShadow: expanded ? theme.shadows[2] : 'none',
+        '&:hover': expanded
+          ? {}
+          : {
+              boxShadow: theme.shadows[4],
+              borderColor: alpha(theme.palette.primary.main, 0.4),
+            },
+      }}
+    >
+      {/* Collapsed header - always visible, clickable to expand */}
+      <Box
+        onClick={expanded ? undefined : onToggleExpand}
+        role={expanded ? undefined : 'button'}
+        tabIndex={expanded ? undefined : 0}
+        onKeyDown={
+          expanded
+            ? undefined
+            : (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onToggleExpand();
+                }
+              }
+        }
+        sx={{
+          p: { xs: 1.5, md: 2 },
+          cursor: expanded ? 'default' : 'pointer',
+          display: 'flex',
+          gap: 1.5,
+        }}
+      >
+        {/* Question number */}
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 700,
+            color: expanded ? 'primary.main' : 'text.secondary',
+            minWidth: 32,
+            pt: 0.25,
+          }}
+        >
+          Q{questionIndex + 1}
+        </Typography>
+
+        {/* Main content */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* Source badges */}
+          <Box sx={{ mb: 1 }}>
+            <SourceBadges sources={question.sources} />
+          </Box>
+
+          {/* Question text preview (2 lines) */}
+          {!expanded && (
+            <Box
+              sx={{
+                mb: 1,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                lineHeight: 1.5,
+              }}
+            >
+              {question.question_text ? (
+                <MathText
+                  text={question.question_text}
+                  variant="body2"
+                  sx={{ color: 'text.primary' }}
+                />
+              ) : (
+                <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                  Image-based question
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          {/* Bottom row: difficulty, categories, attempt indicator */}
+          {!expanded && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                flexWrap: 'wrap',
+              }}
+            >
+              <DifficultyChip difficulty={question.difficulty} size="small" />
+              <CategoryChips
+                categories={(question.categories || []).slice(0, 2)}
+                size="small"
+              />
+              <Box sx={{ flexGrow: 1 }} />
+              <AttemptIndicator summary={question.attempt_summary} />
+            </Box>
+          )}
+        </Box>
+
+        {/* Image thumbnail (collapsed only) */}
+        {!expanded && question.question_image_url && (
+          <Box
+            sx={{
+              width: { xs: 56, md: 72 },
+              height: { xs: 56, md: 72 },
+              flexShrink: 0,
+              borderRadius: 1,
+              overflow: 'hidden',
+              bgcolor: 'grey.100',
+            }}
+          >
+            <Box
+              component="img"
+              src={question.question_image_url}
+              alt="Question"
+              sx={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          </Box>
+        )}
+
+        {/* Collapse button when expanded */}
+        {expanded && (
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand();
+            }}
+            size="small"
+            aria-label="Collapse question"
+            sx={{ alignSelf: 'flex-start', minWidth: 36, minHeight: 36 }}
+          >
+            <ExpandLessIcon />
+          </IconButton>
+        )}
+      </Box>
+
+      {/* Expanded content */}
+      <Collapse in={expanded} timeout={300} unmountOnExit>
+        <Box sx={{ px: { xs: 1.5, md: 2 }, pb: { xs: 1.5, md: 2 } }}>
+          {loading && !questionDetail ? (
+            <Box>
+              <Skeleton variant="text" width="100%" height={24} sx={{ mb: 1 }} />
+              <Skeleton variant="text" width="90%" height={24} sx={{ mb: 1 }} />
+              <Skeleton variant="rectangular" width="100%" height={160} sx={{ borderRadius: 1, mb: 1 }} />
+              <Skeleton variant="rectangular" width="100%" height={48} sx={{ borderRadius: 1 }} />
+            </Box>
+          ) : questionDetail ? (
+            <QuestionDetail
+              question={questionDetail}
+              mode={mode}
+              onSubmit={onSubmit}
+              onStudyToggle={onStudyToggle}
+              onNext={() => {}}
+              onPrev={() => {}}
+              hasNext={false}
+              hasPrev={false}
+              currentIndex={questionIndex}
+              totalCount={0}
+              inline
+            />
+          ) : null}
+        </Box>
+      </Collapse>
+    </Paper>
+  );
+}

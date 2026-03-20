@@ -39,6 +39,23 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+function getDisplayName(user: { name: string; first_name: string | null; last_name: string | null; phone: string | null }): string {
+  // If name is set and not the default 'User', use it
+  if (user.name && user.name !== 'User') return user.name;
+  // Fall back to first_name + last_name
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+  if (fullName) return fullName;
+  // Fall back to phone
+  if (user.phone) return user.phone;
+  return 'Unnamed User';
+}
+
+function getInitial(user: { name: string; first_name: string | null; last_name: string | null; phone: string | null }): string {
+  const displayName = getDisplayName(user);
+  if (displayName.startsWith('+')) return '#';
+  return displayName.charAt(0).toUpperCase() || '?';
+}
+
 function formatCurrency(amount: number): string {
   if (!amount) return '-';
   return new Intl.NumberFormat('en-IN', {
@@ -77,7 +94,7 @@ function handleExportCsv(rows: UserJourney[]) {
   ];
 
   const csvRows = rows.map((user) => [
-    user.name || '',
+    getDisplayName(user),
     user.email || '',
     user.phone || '',
     (user.pipeline_stage || '').replace(/_/g, ' '),
@@ -162,7 +179,7 @@ export default function UsersTable({
                       color: 'primary.contrastText',
                     }}
                   >
-                    {row.original.name?.charAt(0)?.toUpperCase() || '?'}
+                    {getInitial(row.original)}
                   </Avatar>
                 </Box>
               </Box>
@@ -178,7 +195,7 @@ export default function UsersTable({
                   color: 'primary.contrastText',
                 }}
               >
-                {row.original.name?.charAt(0)?.toUpperCase() || '?'}
+                {getInitial(row.original)}
               </Avatar>
             )}
             <Box sx={{ minWidth: 0 }}>
@@ -187,7 +204,7 @@ export default function UsersTable({
                 sx={{ fontWeight: 600, lineHeight: 1.3 }}
                 noWrap
               >
-                {row.original.name || 'Unnamed User'}
+                {getDisplayName(row.original)}
               </Typography>
               <Typography
                 variant="caption"

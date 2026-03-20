@@ -175,12 +175,29 @@ export async function injectAuthForPage(
 
 /**
  * Navigate to a page and wait for it to be ready.
+ * Waits for the loading spinner to disappear and actual content to render.
  * Returns false if redirected to login (auth failure).
  */
 export async function navigateAndWait(page: Page, pagePath: string): Promise<boolean> {
   await page.goto(pagePath, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  // Give MUI time to render
-  await page.waitForTimeout(1500);
+
+  // Wait for the RoleGuard loading spinner to disappear (up to 15s for auth + API)
+  try {
+    await page.waitForFunction(
+      () => {
+        const body = document.body.textContent || '';
+        // Page is ready when it doesn't show loading indicators
+        const isLoading = body.trim() === 'Loading...' || body.trim() === 'Authenticating...';
+        return !isLoading;
+      },
+      { timeout: 15000 },
+    );
+  } catch {
+    // Timeout waiting for loading to finish — continue anyway
+  }
+
+  // Give MUI time to render after auth completes
+  await page.waitForTimeout(1000);
 
   const url = page.url();
   if (url.includes('/login')) {

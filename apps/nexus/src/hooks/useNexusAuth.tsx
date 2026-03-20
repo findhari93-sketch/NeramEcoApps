@@ -79,8 +79,46 @@ export function useNexusAuth(): NexusAuthState {
     return getAccessToken(loginScopes.nexusTeacher);
   }, []);
 
-  // Fetch DB user after MS auth succeeds
+  // E2E test auth bypass: if nexus_test_token exists in localStorage,
+  // read cached auth data directly from localStorage (no API call needed).
+  // The auth setup stores nexus_auth_user, nexus_auth_role, nexus_auth_classrooms.
+  const [testMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return !!localStorage.getItem('nexus_test_token');
+  });
+
   useEffect(() => {
+    if (!testMode) return;
+
+    try {
+      const userJson = localStorage.getItem('nexus_auth_user');
+      const roleStr = localStorage.getItem('nexus_auth_role');
+      const classroomsJson = localStorage.getItem('nexus_auth_classrooms');
+
+      if (userJson && roleStr) {
+        const parsedUser = JSON.parse(userJson) as NexusUser;
+        const parsedClassrooms = classroomsJson ? JSON.parse(classroomsJson) as NexusClassroom[] : [];
+
+        setUser(parsedUser);
+        setNexusRole(roleStr as NexusRole);
+        setClassrooms(parsedClassrooms);
+
+        const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
+        const savedClassroom = parsedClassrooms.find(c => c.id === savedClassroomId);
+        setActiveClassroomState(savedClassroom || parsedClassrooms[0] || null);
+      }
+    } catch (err) {
+      console.error('Nexus test auth: failed to parse localStorage:', err);
+    } finally {
+      setDbLoading(false);
+    }
+  }, [testMode]);
+
+  // Fetch DB user after MS auth succeeds (skip if test token is present)
+  useEffect(() => {
+    // Skip MSAL auth fetch if test token bypass is active
+    if (testMode) return;
+
     if (!msUser || msLoading) {
       setUser(null);
       setNexusRole(null);
@@ -168,7 +206,7 @@ export function useNexusAuth(): NexusAuthState {
     classrooms,
     activeClassroom,
     setActiveClassroom,
-    loading: msLoading || dbLoading,
+    loading: testMode ? dbLoading : msLoading || dbLoading,
     error,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',
     isStudent: nexusRole === 'student',

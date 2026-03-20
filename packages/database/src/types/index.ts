@@ -5120,6 +5120,35 @@ export interface QBFilterState {
   question_format?: QBQuestionFormat[];
   attempt_status?: 'all' | 'unattempted' | 'correct' | 'incorrect';
   search_text?: string;
+  // Source-based filters (from exam sidebar)
+  exam_type?: QBExamType;
+  source_year?: number;
+  source_session?: string;
+  // Solution filter
+  solution_filter?: 'has_video' | 'has_image' | 'has_explanation' | 'no_solution';
+}
+
+// Exam tree types for sidebar navigation
+export interface QBExamTreeSession {
+  session: string;
+  count: number;
+}
+
+export interface QBExamTreeYear {
+  year: number;
+  count: number;
+  sessions: QBExamTreeSession[];
+}
+
+export interface QBExamTreeExam {
+  exam_type: QBExamType;
+  label: string;
+  total_count: number;
+  years: QBExamTreeYear[];
+}
+
+export interface QBExamTree {
+  exams: QBExamTreeExam[];
 }
 
 export interface QBProgressStats {

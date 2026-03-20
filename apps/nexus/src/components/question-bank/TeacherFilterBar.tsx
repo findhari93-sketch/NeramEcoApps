@@ -26,12 +26,14 @@ interface TeacherFilterBarProps {
   category: string;
   examRelevance: string;
   questionStatus: string;
+  solutionFilter: string;
   total: number;
   loading: boolean;
   onDifficultyChange: (v: string) => void;
   onCategoryChange: (v: string) => void;
   onExamRelevanceChange: (v: string) => void;
   onQuestionStatusChange: (v: string) => void;
+  onSolutionFilterChange: (v: string) => void;
 }
 
 interface FilterConfig {
@@ -48,12 +50,14 @@ export default function TeacherFilterBar({
   category,
   examRelevance,
   questionStatus,
+  solutionFilter,
   total,
   loading,
   onDifficultyChange,
   onCategoryChange,
   onExamRelevanceChange,
   onQuestionStatusChange,
+  onSolutionFilterChange,
 }: TeacherFilterBarProps) {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [openFilter, setOpenFilter] = useState<string | null>(null);
@@ -105,6 +109,18 @@ export default function TeacherFilterBar({
         { value: 'draft', label: QB_QUESTION_STATUS_LABELS.draft || 'Draft' },
       ],
       onChange: onQuestionStatusChange,
+    },
+    {
+      key: 'solution',
+      label: 'Solution',
+      value: solutionFilter,
+      options: [
+        { value: 'has_video', label: 'Has Video' },
+        { value: 'has_image', label: 'Has Image Solution' },
+        { value: 'has_explanation', label: 'Has Explanation' },
+        { value: 'no_solution', label: 'No Solution' },
+      ],
+      onChange: onSolutionFilterChange,
     },
   ];
 

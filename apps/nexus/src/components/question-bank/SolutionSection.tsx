@@ -12,6 +12,7 @@ import {
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CloseIcon from '@mui/icons-material/Close';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { NexusQBQuestionDetail } from '@neram/database';
 import MathText from '@/components/common/MathText';
 
@@ -30,6 +31,30 @@ function extractYouTubeId(url: string): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+function isSharePointUrl(url: string): boolean {
+  return /\.sharepoint\.com\//i.test(url) || /onedrive\.live\.com\//i.test(url);
+}
+
+function getSharePointEmbedUrl(url: string): string {
+  if (/onedrive\.live\.com\//i.test(url)) {
+    return url.replace(/\/redir\?/i, '/embed?').replace(/\/view\?/i, '/embed?');
+  }
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname;
+    if (parsed.pathname.includes('_layouts/15/embed.aspx')) return url;
+    if (parsed.pathname.includes('download.aspx') || parsed.pathname.includes('_api')) {
+      const srcParam = parsed.searchParams.get('UniqueId') || parsed.searchParams.get('sourcedoc');
+      if (srcParam) {
+        return `https://${host}/_layouts/15/embed.aspx?UniqueId=${encodeURIComponent(srcParam)}`;
+      }
+    }
+    return `https://${host}/_layouts/15/embed.aspx?url=${encodeURIComponent(url)}`;
+  } catch {
+    return url;
+  }
 }
 
 export default function SolutionSection({
@@ -55,7 +80,7 @@ export default function SolutionSection({
       )}
 
       {/* Detailed solution - accordion */}
-      {(question.explanation_detailed || videoId || question.solution_image_url) && (
+      {(question.explanation_detailed || videoId || question.solution_video_url || question.solution_image_url) && (
         <Accordion
           defaultExpanded={defaultExpanded}
           sx={{
@@ -85,8 +110,8 @@ export default function SolutionSection({
               />
             )}
 
-            {/* YouTube embed */}
-            {videoId && (
+            {/* Video embed: YouTube, SharePoint/OneDrive, or fallback link */}
+            {videoId ? (
               <Box
                 sx={{
                   position: 'relative',
@@ -115,7 +140,55 @@ export default function SolutionSection({
                   }}
                 />
               </Box>
-            )}
+            ) : question.solution_video_url && isSharePointUrl(question.solution_video_url) ? (
+              <Box
+                sx={{
+                  position: 'relative',
+                  width: '100%',
+                  paddingTop: '56.25%',
+                  mb: 2,
+                  borderRadius: 1,
+                  overflow: 'hidden',
+                  bgcolor: 'grey.900',
+                }}
+              >
+                <Box
+                  component="iframe"
+                  src={getSharePointEmbedUrl(question.solution_video_url)}
+                  title="Solution video"
+                  loading="lazy"
+                  allowFullScreen
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    border: 0,
+                  }}
+                />
+              </Box>
+            ) : question.solution_video_url ? (
+              <Box sx={{ mb: 2 }}>
+                <Box
+                  component="a"
+                  href={question.solution_video_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    color: 'primary.main',
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  <OpenInNewIcon fontSize="small" />
+                  <Typography variant="body2">Open solution video</Typography>
+                </Box>
+              </Box>
+            ) : null}
 
             {/* Solution image (zoomable) */}
             {question.solution_image_url && (

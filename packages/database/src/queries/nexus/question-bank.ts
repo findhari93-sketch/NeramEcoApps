@@ -9,6 +9,10 @@ import type {
   QBFilterState,
   QBProgressStats,
   QBAttemptSummary,
+  QBExamTree,
+  QBExamTreeExam,
+  QBExamTreeYear,
+  QBExamTreeSession,
   NexusQBTopic,
   NexusQBQuestion,
   NexusQBQuestionSource,
@@ -25,6 +29,110 @@ import type {
   NTAParsedQuestion,
   NexusQBAnswerKeyEntry,
 } from '../../types';
+
+// ============================================
+// EXAM TREE QUERIES
+// ============================================
+
+const QB_EXAM_LABELS: Record<string, string> = {
+  NATA: 'NATA',
+  JEE_PAPER_2: 'JEE Paper 2',
+};
+
+/**
+ * Get the exam tree for sidebar navigation: exam_type → year → session with counts.
+ */
+export async function getQBExamTree(
+  client?: TypedSupabaseClient
+): Promise<QBExamTree> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get all sources for active questions, grouped by exam_type/year/session
+  const { data, error } = await supabase
+    .from('nexus_qb_question_sources')
+    .select('exam_type, year, session, question_id');
+
+  if (error) throw error;
+
+  // Filter to only active questions
+  const activeQuestionIds = new Set<string>();
+  const { data: activeQ, error: activeErr } = await supabase
+    .from('nexus_qb_questions')
+    .select('id')
+    .eq('is_active', true)
+    .eq('status' as any, 'active');
+  if (activeErr) throw activeErr;
+  for (const q of activeQ || []) {
+    activeQuestionIds.add((q as any).id);
+  }
+
+  // Build grouped counts
+  const examMap = new Map<string, Map<number, Map<string, Set<string>>>>();
+
+  for (const row of (data || []) as any[]) {
+    if (!activeQuestionIds.has(row.question_id)) continue;
+
+    const examType = row.exam_type as string;
+    const year = row.year as number;
+    const session = (row.session as string) || '';
+
+    if (!examMap.has(examType)) examMap.set(examType, new Map());
+    const yearMap = examMap.get(examType)!;
+    if (!yearMap.has(year)) yearMap.set(year, new Map());
+    const sessionMap = yearMap.get(year)!;
+    if (!sessionMap.has(session)) sessionMap.set(session, new Set());
+    sessionMap.get(session)!.add(row.question_id);
+  }
+
+  // Convert to tree structure
+  const exams: QBExamTreeExam[] = [];
+  // Sort exam types: NATA first, then JEE
+  const sortedExamTypes = [...examMap.keys()].sort((a, b) => {
+    if (a === 'NATA') return -1;
+    if (b === 'NATA') return 1;
+    return a.localeCompare(b);
+  });
+
+  for (const examType of sortedExamTypes) {
+    const yearMap = examMap.get(examType)!;
+    const years: QBExamTreeYear[] = [];
+    let examTotal = 0;
+
+    // Sort years descending
+    const sortedYears = [...yearMap.keys()].sort((a, b) => b - a);
+    for (const year of sortedYears) {
+      const sessionMap = yearMap.get(year)!;
+      const sessions: QBExamTreeSession[] = [];
+      const yearQuestionIds = new Set<string>();
+
+      // Sort sessions
+      const sortedSessions = [...sessionMap.keys()].sort();
+      for (const session of sortedSessions) {
+        const qIds = sessionMap.get(session)!;
+        for (const id of qIds) yearQuestionIds.add(id);
+        if (session !== '') {
+          sessions.push({ session, count: qIds.size });
+        }
+      }
+
+      years.push({
+        year,
+        count: yearQuestionIds.size,
+        sessions,
+      });
+      examTotal += yearQuestionIds.size;
+    }
+
+    exams.push({
+      exam_type: examType as QBExamType,
+      label: QB_EXAM_LABELS[examType] || examType,
+      total_count: examTotal,
+      years,
+    });
+  }
+
+  return { exams };
+}
 
 // ============================================
 // TOPIC QUERIES
@@ -112,9 +220,35 @@ export async function getQBQuestions(
     query = query.ilike('question_text', `%${filters.search_text}%`);
   }
 
-  // For exam_years filter, we need to get question IDs from sources first
+  // Source-based filters from sidebar (exam_type + source_year + source_session)
+  let sourceFilteredIds: string[] | null = null;
+  if (filters.exam_type) {
+    let sourceQuery = supabase
+      .from('nexus_qb_question_sources')
+      .select('question_id')
+      .eq('exam_type', filters.exam_type);
+
+    if (filters.source_year) {
+      sourceQuery = sourceQuery.eq('year', filters.source_year);
+    }
+    if (filters.source_session) {
+      sourceQuery = sourceQuery.eq('session', filters.source_session);
+    }
+
+    const { data: sourceData, error: sourceError } = await sourceQuery;
+    if (sourceError) throw sourceError;
+
+    sourceFilteredIds = [...new Set((sourceData || []).map((s: any) => s.question_id))];
+
+    if (sourceFilteredIds.length === 0) {
+      return { questions: [], total: 0 };
+    }
+    query = query.in('id', sourceFilteredIds);
+  }
+
+  // For exam_years filter (legacy/preset-based), get question IDs from sources
   let yearFilteredIds: string[] | null = null;
-  if (filters.exam_years && filters.exam_years.length > 0) {
+  if (!filters.exam_type && filters.exam_years && filters.exam_years.length > 0) {
     let sourceQuery = supabase
       .from('nexus_qb_question_sources')
       .select('question_id')
@@ -1198,6 +1332,24 @@ export async function getTeacherQBQuestions(
   }
   if (filters.search_text) {
     query = query.ilike('question_text', `%${filters.search_text}%`);
+  }
+
+  // Solution filter
+  if (filters.solution_filter) {
+    switch (filters.solution_filter) {
+      case 'has_video':
+        query = query.not('solution_video_url', 'is', null);
+        break;
+      case 'has_image':
+        query = query.not('solution_image_url', 'is', null);
+        break;
+      case 'has_explanation':
+        query = query.not('explanation_brief', 'is', null);
+        break;
+      case 'no_solution':
+        query = query.is('solution_video_url', null).is('solution_image_url', null).is('explanation_brief', null);
+        break;
+    }
   }
 
   query = query

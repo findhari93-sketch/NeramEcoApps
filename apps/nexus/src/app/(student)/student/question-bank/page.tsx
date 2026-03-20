@@ -10,9 +10,8 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
-import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
-import TopicOutlinedIcon from '@mui/icons-material/TopicOutlined';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import ArchitectureOutlinedIcon from '@mui/icons-material/ArchitectureOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -176,21 +175,16 @@ export default function QuestionBankHome() {
     );
   }
 
-  const exploreCards = [
+  const examCards = [
     {
-      icon: <CalendarTodayOutlinedIcon />,
-      title: 'Browse by Year',
-      href: '/student/question-bank/questions',
+      icon: <SchoolOutlinedIcon />,
+      title: 'NATA Questions',
+      href: '/student/question-bank/questions?exam=NATA',
     },
     {
-      icon: <TopicOutlinedIcon />,
-      title: 'Browse by Topic',
-      href: '/student/question-bank/questions',
-    },
-    {
-      icon: <CategoryOutlinedIcon />,
-      title: 'Browse by Category',
-      href: '/student/question-bank/questions',
+      icon: <ArchitectureOutlinedIcon />,
+      title: 'JEE Paper 2 Questions',
+      href: '/student/question-bank/questions?exam=JEE_PAPER_2',
     },
   ];
 
@@ -214,13 +208,13 @@ export default function QuestionBankHome() {
         />
       </Box>
 
-      {/* Explore */}
+      {/* Exam Links */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-          Explore
+          Browse Questions
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {exploreCards.map((card) => (
+          {examCards.map((card) => (
             <Paper
               key={card.title}
               variant="outlined"
