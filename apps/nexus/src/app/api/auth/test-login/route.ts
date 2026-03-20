@@ -118,14 +118,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine nexus role
-    const nexusRole = user.user_type === 'admin'
-      ? 'admin'
-      : user.user_type === 'teacher'
-        ? 'teacher'
-        : enrollments?.some((e: any) => e.role === 'teacher')
+    // Determine nexus role — for test-login, honour the requested role
+    // so parent E2E tests get nexusRole='parent' (matches RoleGuard).
+    const nexusRole = role === 'parent'
+      ? 'parent'
+      : user.user_type === 'admin'
+        ? 'admin'
+        : user.user_type === 'teacher'
           ? 'teacher'
-          : 'student';
+          : enrollments?.some((e: any) => e.role === 'teacher')
+            ? 'teacher'
+            : 'student';
 
     // Generate test token: test_<base64(email)>
     const testToken = `test_${Buffer.from(email).toString('base64')}`;

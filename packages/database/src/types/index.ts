@@ -5295,3 +5295,58 @@ export interface NexusQBAnswerKeyEntry {
   question_number: number;
   correct_answer: string;
 }
+
+// QB Report Types
+
+export type QBReportType = 'wrong_answer' | 'no_correct_option' | 'question_error' | 'missing_solution' | 'unclear_question' | 'other';
+export type QBReportStatus = 'open' | 'in_review' | 'resolved' | 'dismissed';
+
+export const QB_REPORT_TYPE_LABELS: Record<QBReportType, string> = {
+  wrong_answer: 'Wrong Answer Key',
+  no_correct_option: 'No Correct Option',
+  question_error: 'Question Has Error',
+  missing_solution: 'Missing Solution',
+  unclear_question: 'Unclear Question',
+  other: 'Other',
+};
+
+export const QB_REPORT_STATUS_LABELS: Record<QBReportStatus, string> = {
+  open: 'Open',
+  in_review: 'In Review',
+  resolved: 'Resolved',
+  dismissed: 'Dismissed',
+};
+
+export interface NexusQBQuestionReport {
+  id: string;
+  question_id: string;
+  student_id: string;
+  report_type: QBReportType;
+  description: string | null;
+  status: QBReportStatus;
+  resolution_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusQBReportWithContext extends NexusQBQuestionReport {
+  question_text: string | null;
+  question_image_url: string | null;
+  student_name: string | null;
+  student_email: string | null;
+  sources: NexusQBQuestionSource[];
+}
+
+// ============================================
+// Custom Tests (student-created from QB)
+// ============================================
+
+export interface NexusCustomTestCreate {
+  title: string;
+  question_ids: string[];
+  timer_type: 'none' | 'full' | 'per_question';
+  duration_minutes?: number;
+  per_question_seconds?: number;
+}

@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress } from '@neram/ui';
+import type { NexusFoundationSection } from '@neram/database/types';
 
 interface SharePointPlayerProps {
   videoUrl: string;
   chapterId: string;
   token?: string | null;
+  sections?: NexusFoundationSection[];
+  onSectionEnd?: (sectionIndex: number) => void;
   onTimeUpdate?: (seconds: number) => void;
 }
 
@@ -37,12 +40,21 @@ export function toEmbedUrl(url: string): string {
 
 const MAX_RETRIES = 2;
 
-export default function SharePointPlayer({ videoUrl, chapterId, token, onTimeUpdate }: SharePointPlayerProps) {
+export default function SharePointPlayer({ videoUrl, chapterId, token, sections, onSectionEnd, onTimeUpdate }: SharePointPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const retryCountRef = useRef(0);
+
+  // Section-based quiz triggering (mirrors VideoPlayer.tsx pattern)
+  const hasTriggeredQuizRef = useRef<Set<number>>(new Set());
+  const isRewatchingRef = useRef(false);
+  const rewatchMaxTimeRef = useRef(0);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+  const onSectionEndRef = useRef(onSectionEnd);
+  onSectionEndRef.current = onSectionEnd;
 
   // Fetch stream URL from API
   const fetchStreamUrl = useCallback(async () => {
@@ -82,18 +94,50 @@ export default function SharePointPlayer({ videoUrl, chapterId, token, onTimeUpd
       play: () => { video?.play().catch(() => {}); },
       pause: () => { video?.pause(); },
       getCurrentTime: () => video?.currentTime ?? 0,
+      resetSectionTrigger: (index: number) => hasTriggeredQuizRef.current.delete(index),
+      setRewatchMode: (enabled: boolean, maxTime: number) => {
+        isRewatchingRef.current = enabled;
+        rewatchMaxTimeRef.current = maxTime;
+      },
     };
     return () => {
       delete (window as any).__foundationPlayer;
     };
   }, [streamUrl]); // Re-register when stream URL changes (video element may remount)
 
-  // Wire timeupdate event
+  // Wire timeupdate event + section-end quiz triggering
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !onTimeUpdate) return;
+    if (!video) return;
 
-    const handler = () => onTimeUpdate(video.currentTime);
+    const handler = () => {
+      const time = video.currentTime;
+      onTimeUpdate?.(time);
+
+      // Check ALL sections for quiz triggers (same logic as VideoPlayer.tsx)
+      const allSections = sectionsRef.current;
+      if (allSections && onSectionEndRef.current) {
+        for (let i = 0; i < allSections.length; i++) {
+          const section = allSections[i];
+          if (
+            time >= section.end_timestamp_seconds &&
+            !hasTriggeredQuizRef.current.has(i)
+          ) {
+            hasTriggeredQuizRef.current.add(i);
+            isRewatchingRef.current = false;
+            rewatchMaxTimeRef.current = 0;
+            video.pause();
+            onSectionEndRef.current(i);
+            return;
+          }
+        }
+      }
+
+      // Anti-gaming: prevent seeking past section end during rewatch
+      if (isRewatchingRef.current && time > rewatchMaxTimeRef.current) {
+        video.currentTime = rewatchMaxTimeRef.current - 2;
+      }
+    };
     video.addEventListener('timeupdate', handler);
     return () => video.removeEventListener('timeupdate', handler);
   }, [streamUrl, onTimeUpdate]);

@@ -24,6 +24,8 @@ interface TestAttempt {
   score: number | null;
   total_marks: number | null;
   percentage: number | null;
+  started_at?: string | null;
+  submitted_at?: string | null;
 }
 
 interface Test {
@@ -34,6 +36,7 @@ interface Test {
   question_count: number;
   total_marks: number;
   published_at: string | null;
+  is_custom?: boolean;
   myAttempt: TestAttempt | null;
 }
 
@@ -74,7 +77,20 @@ export default function StudentTestsPage() {
     return test.myAttempt.status;
   }
 
+  function isAbandoned(test: Test): boolean {
+    if (!test.myAttempt) return false;
+    if (test.myAttempt.status !== 'in_progress') return false;
+    if (!test.myAttempt.started_at) return false;
+    const started = new Date(test.myAttempt.started_at).getTime();
+    const now = Date.now();
+    const hoursDiff = (now - started) / (1000 * 60 * 60);
+    return hoursDiff > 48;
+  }
+
   function getStatusChip(test: Test) {
+    if (isAbandoned(test)) {
+      return <Chip label="Abandoned" size="small" color="error" />;
+    }
     const status = getStatus(test);
     switch (status) {
       case 'not_started':
@@ -155,6 +171,84 @@ export default function StudentTestsPage() {
     return `${minutes} min`;
   }
 
+  function renderTestCard(test: Test) {
+    return (
+      <Paper
+        key={test.id}
+        variant="outlined"
+        sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}
+      >
+        {/* Header row: title + status chip */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+              {test.title}
+            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 1,
+                mt: 0.5,
+              }}
+            >
+              <Chip
+                label={formatTestType(test.test_type)}
+                size="small"
+                variant="outlined"
+                sx={{ textTransform: 'capitalize', fontSize: '0.7rem' }}
+              />
+              {test.is_custom && (
+                <Chip label="Custom" size="small" color="secondary" variant="outlined" sx={{ fontSize: '0.7rem' }} />
+              )}
+              {getStatusChip(test)}
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Info row: duration, questions, marks */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: { xs: 1.5, sm: 3 },
+            color: 'text.secondary',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TimerOutlinedIcon sx={{ fontSize: 16 }} />
+            <Typography variant="caption">{formatDuration(test.duration_minutes)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <AssignmentOutlinedIcon sx={{ fontSize: 16 }} />
+            <Typography variant="caption">{test.question_count} questions</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              {test.total_marks} marks
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Score progress bar for graded tests */}
+        {getStatus(test) === 'graded' && test.myAttempt?.percentage != null && (
+          <LinearProgress
+            variant="determinate"
+            value={test.myAttempt.percentage}
+            color={test.myAttempt.percentage >= 60 ? 'success' : test.myAttempt.percentage >= 40 ? 'warning' : 'error'}
+            sx={{ height: 6, borderRadius: 3 }}
+          />
+        )}
+
+        {/* Action row */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {getActionButton(test)}
+        </Box>
+      </Paper>
+    );
+  }
+
   return (
     <Box>
       <Box sx={{ mb: 2 }}>
@@ -180,80 +274,31 @@ export default function StudentTestsPage() {
           </Typography>
         </Paper>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {tests.map((test) => (
-            <Paper
-              key={test.id}
-              variant="outlined"
-              sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}
-            >
-              {/* Header row: title + status chip */}
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                    {test.title}
-                  </Typography>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      gap: 1,
-                      mt: 0.5,
-                    }}
-                  >
-                    <Chip
-                      label={formatTestType(test.test_type)}
-                      size="small"
-                      variant="outlined"
-                      sx={{ textTransform: 'capitalize', fontSize: '0.7rem' }}
-                    />
-                    {getStatusChip(test)}
-                  </Box>
-                </Box>
+        <>
+          {/* My Custom Tests section */}
+          {tests.filter((t) => t.is_custom).length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
+                My Custom Tests
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {tests.filter((t) => t.is_custom).map((test) => renderTestCard(test))}
               </Box>
+            </Box>
+          )}
 
-              {/* Info row: duration, questions, marks */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: { xs: 1.5, sm: 3 },
-                  color: 'text.secondary',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <TimerOutlinedIcon sx={{ fontSize: 16 }} />
-                  <Typography variant="caption">{formatDuration(test.duration_minutes)}</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <AssignmentOutlinedIcon sx={{ fontSize: 16 }} />
-                  <Typography variant="caption">{test.question_count} questions</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                    {test.total_marks} marks
-                  </Typography>
-                </Box>
+          {/* Published Tests section */}
+          {tests.filter((t) => !t.is_custom).length > 0 && (
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
+                Published Tests
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {tests.filter((t) => !t.is_custom).map((test) => renderTestCard(test))}
               </Box>
-
-              {/* Score progress bar for graded tests */}
-              {getStatus(test) === 'graded' && test.myAttempt?.percentage != null && (
-                <LinearProgress
-                  variant="determinate"
-                  value={test.myAttempt.percentage}
-                  color={test.myAttempt.percentage >= 60 ? 'success' : test.myAttempt.percentage >= 40 ? 'warning' : 'error'}
-                  sx={{ height: 6, borderRadius: 3 }}
-                />
-              )}
-
-              {/* Action row */}
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                {getActionButton(test)}
-              </Box>
-            </Paper>
-          ))}
-        </Box>
+            </Box>
+          )}
+        </>
       )}
     </Box>
   );

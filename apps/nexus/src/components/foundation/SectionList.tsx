@@ -135,7 +135,7 @@ export default function SectionList({
               </Typography>
             </Box>
 
-            {/* Quiz indicator */}
+            {/* Quiz indicator with score */}
             {section.quiz_questions.length > 0 && (
               <Box
                 sx={{
@@ -160,14 +160,14 @@ export default function SectionList({
                   }}
                 >
                   {isPassed
-                    ? 'Passed'
+                    ? `${Math.round(section.quiz_attempt?.score_pct ?? 100)}%`
                     : section.min_questions_to_pass
                       ? `${section.min_questions_to_pass}/${section.quiz_questions.length}`
                       : `${section.quiz_questions.length}Q`
                   }
                 </Typography>
                 {isPassed && onRedoQuiz && (
-                  <Tooltip title="Redo quiz">
+                  <Tooltip title="Redo section to improve score">
                     <IconButton
                       size="small"
                       onClick={(e) => {

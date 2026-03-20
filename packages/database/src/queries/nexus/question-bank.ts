@@ -28,6 +28,8 @@ import type {
   NexusQBQuestionSourceInsert,
   NTAParsedQuestion,
   NexusQBAnswerKeyEntry,
+  NexusQBQuestionReport,
+  NexusQBReportWithContext,
 } from '../../types';
 
 // ============================================
@@ -1507,4 +1509,116 @@ export async function getPaperSectionBreakdown(
   }
 
   return breakdown;
+}
+
+// ============================================
+// QUESTION REPORT QUERIES
+// ============================================
+
+/**
+ * Create a question report from a student.
+ */
+export async function createQBReport(
+  data: { question_id: string; student_id: string; report_type: string; description?: string },
+  client?: TypedSupabaseClient
+): Promise<NexusQBQuestionReport> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: report, error } = await (supabase as any)
+    .from('nexus_qb_question_reports')
+    .insert(data)
+    .select()
+    .single();
+  if (error) throw error;
+  return report as NexusQBQuestionReport;
+}
+
+/**
+ * Get reports created by a specific student.
+ */
+export async function getStudentQBReports(
+  studentId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusQBQuestionReport[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any)
+    .from('nexus_qb_question_reports')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []) as NexusQBQuestionReport[];
+}
+
+/**
+ * Get all reports for teacher/admin view with question context.
+ */
+export async function getTeacherQBReports(
+  filters?: { status?: string },
+  client?: TypedSupabaseClient
+): Promise<NexusQBReportWithContext[]> {
+  const supabase = client || getSupabaseAdminClient();
+  let query = (supabase as any)
+    .from('nexus_qb_question_reports')
+    .select('*, nexus_qb_questions!inner(question_text, question_image_url), users!nexus_qb_question_reports_student_id_fkey(display_name, email)')
+    .order('created_at', { ascending: false });
+
+  if (filters?.status) {
+    query = query.eq('status', filters.status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  // Transform the joined data
+  return (data || []).map((r: any) => ({
+    ...r,
+    question_text: r.nexus_qb_questions?.question_text || null,
+    question_image_url: r.nexus_qb_questions?.question_image_url || null,
+    student_name: r.users?.display_name || null,
+    student_email: r.users?.email || null,
+    sources: [],
+  })) as NexusQBReportWithContext[];
+}
+
+/**
+ * Resolve or update a report's status.
+ */
+export async function resolveQBReport(
+  reportId: string,
+  data: { status: string; resolution_note?: string; resolved_by: string },
+  client?: TypedSupabaseClient
+): Promise<NexusQBQuestionReport> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: report, error } = await (supabase as any)
+    .from('nexus_qb_question_reports')
+    .update({
+      status: data.status,
+      resolution_note: data.resolution_note || null,
+      resolved_by: data.resolved_by,
+      resolved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reportId)
+    .select()
+    .single();
+  if (error) throw error;
+  return report as NexusQBQuestionReport;
+}
+
+/**
+ * Get report counts grouped by status.
+ */
+export async function getQBReportCounts(
+  client?: TypedSupabaseClient
+): Promise<{ open: number; in_review: number; resolved: number; dismissed: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any)
+    .from('nexus_qb_question_reports')
+    .select('status');
+  if (error) throw error;
+  const counts = { open: 0, in_review: 0, resolved: 0, dismissed: 0 };
+  (data || []).forEach((r: any) => {
+    if (r.status in counts) counts[r.status as keyof typeof counts]++;
+  });
+  return counts;
 }

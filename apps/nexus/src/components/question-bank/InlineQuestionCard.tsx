@@ -13,25 +13,25 @@ import MathText from '@/components/common/MathText';
 interface InlineQuestionCardProps {
   question: NexusQBQuestionListItem;
   questionDetail: NexusQBQuestionDetail | null;
-  mode: 'practice' | 'study';
   expanded: boolean;
   loading: boolean;
   questionIndex: number;
   onToggleExpand: () => void;
   onSubmit: (answer: string) => Promise<void>;
   onStudyToggle: () => void;
+  onReport?: (questionId: string, reportType: string, description: string) => Promise<void>;
 }
 
 export default function InlineQuestionCard({
   question,
   questionDetail,
-  mode,
   expanded,
   loading,
   questionIndex,
   onToggleExpand,
   onSubmit,
   onStudyToggle,
+  onReport,
 }: InlineQuestionCardProps) {
   const theme = useTheme();
 
@@ -91,7 +91,7 @@ export default function InlineQuestionCard({
         {/* Main content */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {/* Source badges */}
-          <Box sx={{ mb: 1 }}>
+          <Box sx={{ mb: 0.5 }}>
             <SourceBadges sources={question.sources} />
           </Box>
 
@@ -99,7 +99,7 @@ export default function InlineQuestionCard({
           {!expanded && (
             <Box
               sx={{
-                mb: 1,
+                mb: 0.5,
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: 'vertical',
@@ -186,7 +186,7 @@ export default function InlineQuestionCard({
 
       {/* Expanded content */}
       <Collapse in={expanded} timeout={300} unmountOnExit>
-        <Box sx={{ px: { xs: 1.5, md: 2 }, pb: { xs: 1.5, md: 2 } }}>
+        <Box sx={{ px: { xs: 1.5, md: 2 }, pb: { xs: 1, md: 1.5 }, pt: 0 }}>
           {loading && !questionDetail ? (
             <Box>
               <Skeleton variant="text" width="100%" height={24} sx={{ mb: 1 }} />
@@ -197,9 +197,14 @@ export default function InlineQuestionCard({
           ) : questionDetail ? (
             <QuestionDetail
               question={questionDetail}
-              mode={mode}
               onSubmit={onSubmit}
               onStudyToggle={onStudyToggle}
+              onReport={
+                onReport
+                  ? (reportType: string, description: string) =>
+                      onReport(question.id, reportType, description)
+                  : undefined
+              }
               onNext={() => {}}
               onPrev={() => {}}
               hasNext={false}
@@ -207,6 +212,7 @@ export default function InlineQuestionCard({
               currentIndex={questionIndex}
               totalCount={0}
               inline
+              showSourceBadges={false}
             />
           ) : null}
         </Box>

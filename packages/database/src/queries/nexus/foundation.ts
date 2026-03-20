@@ -1067,3 +1067,113 @@ export async function upsertChapterTranscript(
   if (error) throw error;
   return data as unknown as NexusFoundationTranscript;
 }
+
+// ============================================
+// STUDENT SCORES (TEACHER VIEW)
+// ============================================
+
+export interface ChapterStudentScore {
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  sections: Array<{
+    section_id: string;
+    section_title: string;
+    sort_order: number;
+    score_pct: number | null;
+    passed: boolean;
+    attempt_count: number;
+  }>;
+  overall_score_pct: number;
+  completed_sections: number;
+  total_sections: number;
+}
+
+/**
+ * Get all students' section-wise quiz scores for a chapter.
+ * Used by teacher/admin to view student performance.
+ */
+export async function getChapterStudentScores(
+  chapterId: string,
+  client?: TypedSupabaseClient
+): Promise<ChapterStudentScore[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get sections for this chapter
+  const { data: sections, error: secError } = await supabase
+    .from('nexus_foundation_sections')
+    .select('id, title, sort_order')
+    .eq('chapter_id', chapterId)
+    .order('sort_order', { ascending: true });
+  if (secError) throw secError;
+  if (!sections?.length) return [];
+
+  const sectionIds = sections.map((s: any) => s.id);
+
+  // Get all quiz attempts for these sections
+  const { data: attempts, error: attError } = await supabase
+    .from('nexus_foundation_quiz_attempts')
+    .select('student_id, section_id, score_pct, passed, attempt_number')
+    .in('section_id', sectionIds)
+    .order('attempt_number', { ascending: false });
+  if (attError) throw attError;
+
+  // Get all students who have progress on this chapter
+  const { data: progressRows, error: progError } = await supabase
+    .from('nexus_foundation_student_progress')
+    .select('student_id')
+    .eq('chapter_id', chapterId);
+  if (progError) throw progError;
+
+  const studentIds = [...new Set((progressRows || []).map((p: any) => p.student_id))];
+  if (!studentIds.length) return [];
+
+  // Fetch student details
+  const { data: users, error: usersError } = await supabase
+    .from('users')
+    .select('id, full_name, email')
+    .in('id', studentIds);
+  if (usersError) throw usersError;
+
+  const userMap = new Map((users || []).map((u: any) => [u.id, u]));
+
+  // Build best attempt per student per section
+  const bestAttempts = new Map<string, { score_pct: number; passed: boolean; attempt_count: number }>();
+  for (const att of (attempts || [])) {
+    const key = `${att.student_id}:${att.section_id}`;
+    const existing = bestAttempts.get(key);
+    if (!existing) {
+      bestAttempts.set(key, { score_pct: att.score_pct, passed: att.passed, attempt_count: att.attempt_number });
+    } else if (att.score_pct > existing.score_pct) {
+      bestAttempts.set(key, { score_pct: att.score_pct, passed: att.passed, attempt_count: Math.max(existing.attempt_count, att.attempt_number) });
+    }
+  }
+
+  return studentIds.map((studentId: string) => {
+    const user = userMap.get(studentId);
+    const sectionScores = sections.map((sec: any) => {
+      const best = bestAttempts.get(`${studentId}:${sec.id}`);
+      return {
+        section_id: sec.id,
+        section_title: sec.title,
+        sort_order: sec.sort_order,
+        score_pct: best?.score_pct ?? null,
+        passed: best?.passed ?? false,
+        attempt_count: best?.attempt_count ?? 0,
+      };
+    });
+    const attempted = sectionScores.filter((s: any) => s.score_pct !== null);
+    const overallScore = attempted.length > 0
+      ? Math.round(attempted.reduce((sum: number, s: any) => sum + (s.score_pct ?? 0), 0) / attempted.length)
+      : 0;
+    return {
+      student_id: studentId,
+      student_name: user?.full_name || 'Unknown',
+      student_email: user?.email || '',
+      sections: sectionScores,
+      overall_score_pct: overallScore,
+      completed_sections: sectionScores.filter((s: any) => s.passed).length,
+      total_sections: sections.length,
+    };
+  }).sort((a: any, b: any) => b.overall_score_pct - a.overall_score_pct);
+}

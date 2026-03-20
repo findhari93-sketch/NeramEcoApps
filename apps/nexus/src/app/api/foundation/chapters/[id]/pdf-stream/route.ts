@@ -122,6 +122,7 @@ export async function GET(
             'Content-Type': 'application/pdf',
             'Content-Length': String(pdfBuffer.byteLength),
             'Cache-Control': 'private, max-age=3600',
+            'Content-Disposition': 'inline',
           },
         });
       }

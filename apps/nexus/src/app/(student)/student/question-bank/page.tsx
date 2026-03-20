@@ -6,6 +6,7 @@ import {
   Box,
   Typography,
   Paper,
+  Button,
   Skeleton,
   alpha,
   useTheme,
@@ -13,6 +14,7 @@ import {
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import ArchitectureOutlinedIcon from '@mui/icons-material/ArchitectureOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatsRow from '@/components/question-bank/StatsRow';
@@ -190,9 +192,19 @@ export default function QuestionBankHome() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 600, mx: 'auto' }}>
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 3 }}>
-        Question Bank
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h5" fontWeight={700}>
+          Question Bank
+        </Typography>
+        <Button
+          size="small"
+          startIcon={<BugReportOutlinedIcon />}
+          onClick={() => router.push('/student/question-bank/reports')}
+          sx={{ textTransform: 'none', color: 'text.secondary' }}
+        >
+          My Reports
+        </Button>
+      </Box>
 
       {/* Stats */}
       <Box sx={{ mb: 3 }}>

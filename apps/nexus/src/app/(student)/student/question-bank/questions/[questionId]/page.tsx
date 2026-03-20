@@ -21,7 +21,6 @@ export default function QuestionDetailPage() {
   const { activeClassroom, getToken } = useNexusAuthContext();
 
   const questionId = params.questionId as string;
-  const mode = (searchParams.get('mode') as 'practice' | 'study') || 'practice';
 
   const [question, setQuestion] = useState<NexusQBQuestionDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +70,7 @@ export default function QuestionDetailPage() {
             body: JSON.stringify({
               classroom_id: activeClassroom.id,
               selected_answer: answer,
-              mode,
+              mode: 'practice',
             }),
           },
         );
@@ -84,7 +83,34 @@ export default function QuestionDetailPage() {
         setSubmitting(false);
       }
     },
-    [activeClassroom, questionId, submitting, mode],
+    [activeClassroom, questionId, submitting],
+  );
+
+  const handleReport = useCallback(
+    async (reportType: string, description: string) => {
+      if (!activeClassroom) return;
+      const token = await getToken();
+      const res = await fetch(
+        `/api/question-bank/questions/${questionId}/report`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            report_type: reportType,
+            description: description || undefined,
+            classroom_id: activeClassroom.id,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to submit report');
+      }
+    },
+    [activeClassroom, questionId],
   );
 
   const handleStudyToggle = useCallback(async () => {
@@ -195,9 +221,9 @@ export default function QuestionDetailPage() {
       {/* Question Detail */}
       <QuestionDetail
         question={question}
-        mode={mode}
         onSubmit={handleSubmit}
         onStudyToggle={handleStudyToggle}
+        onReport={handleReport}
         onNext={() => {}}
         onPrev={() => {}}
         hasNext={false}

@@ -48,6 +48,7 @@ import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import HeadphonesOutlinedIcon from '@mui/icons-material/HeadphonesOutlined';
 import AutoGeneratePreview from '@/components/modules/AutoGeneratePreview';
 import FileUploadZone from '@/components/foundation/FileUploadZone';
+import StudentScoresTable from '@/components/foundation/StudentScoresTable';
 import type { GeneratedSection } from '@/lib/ai-generate';
 import type {
   NexusFoundationChapter,
@@ -1398,6 +1399,15 @@ Here is the transcript:
             </Paper>
           );
         })}
+      </Box>
+
+      {/* Student Scores */}
+      <Box sx={{ mt: 4 }}>
+        <StudentScoresTable
+          chapterId={chapterId}
+          chapterNumber={chapter?.chapter_number}
+          getToken={getToken}
+        />
       </Box>
 
       {/* Add Section Dialog */}

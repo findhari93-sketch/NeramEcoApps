@@ -51,23 +51,38 @@ export async function GET(request: NextRequest) {
       if (error) throw error;
       return NextResponse.json({ tests: tests || [], role: 'teacher' });
     } else {
-      // Students see published tests with their attempt
-      const { data: tests, error } = await supabase
+      // Students see published non-custom tests + their own custom tests
+      const { data: publishedTests, error: pubErr } = await supabase
         .from('nexus_tests')
         .select('*, questions:nexus_test_questions(count)')
         .eq('classroom_id', classroomId)
         .eq('is_published', true)
         .eq('is_active', true)
+        .or('is_custom.is.null,is_custom.eq.false')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (pubErr) throw pubErr;
+
+      // Also fetch this student's custom tests
+      const { data: customTests, error: custErr } = await supabase
+        .from('nexus_tests')
+        .select('*, questions:nexus_test_questions(count)')
+        .eq('classroom_id', classroomId)
+        .eq('is_custom', true)
+        .eq('created_by_student', user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (custErr) throw custErr;
+
+      const tests = [...(customTests || []), ...(publishedTests || [])];
 
       // Get student's attempts for these tests
       const testIds = (tests || []).map((t: any) => t.id);
       const { data: attempts } = testIds.length > 0
         ? await supabase
             .from('nexus_test_attempts')
-            .select('id, test_id, status, score, total_marks, percentage, submitted_at')
+            .select('id, test_id, status, score, total_marks, percentage, started_at, submitted_at')
             .eq('student_id', user.id)
             .in('test_id', testIds)
         : { data: [] };

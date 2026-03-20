@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Paper, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Paper, Typography, alpha, useTheme, useMediaQuery } from '@neram/ui';
 import type { NexusQBQuestionOption } from '@neram/database';
 import MathText from '@/components/common/MathText';
 
@@ -22,6 +22,12 @@ export default function MCQOptions({
   onSelect,
 }: MCQOptionsProps) {
   const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
+
+  // Determine if options are short enough for 2-column layout
+  const allShort =
+    options.every((o) => (!o.text || o.text.length < 80) && !o.image_url);
+  const useGrid = allShort && isDesktop;
 
   const getOptionStyles = (optionId: string) => {
     const isSelected = optionId === selectedId;
@@ -66,7 +72,13 @@ export default function MCQOptions({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: useGrid ? 'repeat(2, 1fr)' : '1fr',
+        gap: 1,
+      }}
+    >
       {options.map((option, idx) => {
         const styles = getOptionStyles(option.id);
         return (
@@ -88,7 +100,7 @@ export default function MCQOptions({
               display: 'flex',
               alignItems: 'center',
               gap: 1.5,
-              p: { xs: 1.5, md: 2 },
+              p: { xs: 1, md: 1.25 },
               minHeight: 56,
               cursor: submitted ? 'default' : 'pointer',
               transition: 'all 0.15s ease',
@@ -109,8 +121,8 @@ export default function MCQOptions({
             {/* Option letter */}
             <Box
               sx={{
-                width: 32,
-                height: 32,
+                width: { xs: 32, sm: 28 },
+                height: { xs: 32, sm: 28 },
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
@@ -122,7 +134,7 @@ export default function MCQOptions({
                 color:
                   option.id === selectedId ? '#fff' : 'text.secondary',
                 fontWeight: 700,
-                fontSize: '0.85rem',
+                fontSize: { xs: '0.8rem', sm: '0.75rem' },
                 flexShrink: 0,
                 transition: 'all 0.15s ease',
               }}

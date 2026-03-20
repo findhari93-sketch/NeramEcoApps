@@ -9,12 +9,26 @@ import {
   Paper,
   IconButton,
   Badge,
-  ToggleButtonGroup,
-  ToggleButton,
   Button,
+  Checkbox,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Snackbar,
+  Alert,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
+import SelectAllIcon from '@mui/icons-material/SelectAll';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import QuestionBankLayout from '@/components/question-bank/QuestionBankLayout';
 import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
@@ -63,6 +77,8 @@ function deserializeFilters(params: URLSearchParams): QBFilterState {
 export default function QuestionListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { activeClassroom, getToken } = useNexusAuthContext();
 
   // Exam sidebar state
@@ -76,11 +92,6 @@ export default function QuestionListPage() {
   );
   const [selectedSession, setSelectedSession] = useState<string | null>(
     searchParams.get('session') || null,
-  );
-
-  // Mode
-  const [mode, setMode] = useState<'practice' | 'study'>(
-    (searchParams.get('mode') as 'practice' | 'study') || 'practice',
   );
 
   // Filters (categories, difficulty, format, status, search, topics)
@@ -101,6 +112,25 @@ export default function QuestionListPage() {
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<NexusQBQuestionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
+  const [createTestOpen, setCreateTestOpen] = useState(false);
+
+  // Create test dialog state
+  const [testTitle, setTestTitle] = useState('');
+  const [timerType, setTimerType] = useState<'none' | 'full' | 'per_question'>('none');
+  const [durationMinutes, setDurationMinutes] = useState<number>(60);
+  const [perQuestionSeconds, setPerQuestionSeconds] = useState<number>(120);
+  const [creatingTest, setCreatingTest] = useState(false);
+
+  // Snackbar
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const hasMore = questions.length < totalCount;
@@ -124,7 +154,7 @@ export default function QuestionListPage() {
   useEffect(() => {
     if (!activeClassroom) return;
     fetchQuestions(1, false);
-  }, [activeClassroom, filters, mode, selectedExam, selectedYear, selectedSession]);
+  }, [activeClassroom, filters, selectedExam, selectedYear, selectedSession]);
 
   // Sync filters + sidebar to URL
   useEffect(() => {
@@ -132,7 +162,6 @@ export default function QuestionListPage() {
     if (selectedExam) params.set('exam', selectedExam);
     if (selectedYear) params.set('year', String(selectedYear));
     if (selectedSession) params.set('session', selectedSession);
-    if (mode !== 'practice') params.set('mode', mode);
     const qs = params.toString();
     const current = searchParams.toString();
     if (qs !== current) {
@@ -140,7 +169,7 @@ export default function QuestionListPage() {
         scroll: false,
       });
     }
-  }, [filters, mode, selectedExam, selectedYear, selectedSession]);
+  }, [filters, selectedExam, selectedYear, selectedSession]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -228,7 +257,7 @@ export default function QuestionListPage() {
       params.set('classroom_id', activeClassroom!.id);
       params.set('page', String(pageNum));
       params.set('page_size', String(PAGE_SIZE));
-      params.set('mode', mode);
+      params.set('mode', 'practice');
 
       // Sidebar source filters
       if (selectedExam) params.set('exam_type', selectedExam);
@@ -281,7 +310,91 @@ export default function QuestionListPage() {
     setExpandedDetail(null);
   }
 
+  // Auto-suggest test title when create dialog opens
+  useEffect(() => {
+    if (createTestOpen && !testTitle) {
+      const parts: string[] = [];
+      if (selectedExam) parts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
+      if (selectedYear) parts.push(String(selectedYear));
+      parts.push('Practice');
+      parts.push(`- ${selectedQuestionIds.size} questions`);
+      setTestTitle(parts.join(' '));
+    }
+  }, [createTestOpen]);
+
+  // Selection mode helpers
+  function toggleQuestionSelection(questionId: string) {
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  }
+
+  function selectAllFiltered() {
+    setSelectedQuestionIds(new Set(questions.map((q) => q.id)));
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedQuestionIds(new Set());
+  }
+
+  // Create test handler
+  async function handleCreateTest() {
+    if (!activeClassroom || selectedQuestionIds.size === 0) return;
+
+    setCreatingTest(true);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/question-bank/custom-tests', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: testTitle.trim(),
+          question_ids: Array.from(selectedQuestionIds),
+          timer_type: timerType,
+          duration_minutes: timerType === 'full' ? durationMinutes : undefined,
+          per_question_seconds: timerType === 'per_question' ? perQuestionSeconds : undefined,
+          classroom_id: activeClassroom.id,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to create test');
+      }
+
+      setSnackbar({ open: true, message: 'Custom test created successfully!', severity: 'success' });
+      setCreateTestOpen(false);
+      exitSelectionMode();
+      setTestTitle('');
+      setTimerType('none');
+      setDurationMinutes(60);
+      setPerQuestionSeconds(120);
+      router.push('/student/tests');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create test';
+      setSnackbar({ open: true, message, severity: 'error' });
+    } finally {
+      setCreatingTest(false);
+    }
+  }
+
   async function handleExpandQuestion(questionId: string) {
+    // In selection mode, toggle selection instead of expanding
+    if (selectionMode) {
+      toggleQuestionSelection(questionId);
+      return;
+    }
+
     if (expandedQuestionId === questionId) {
       setExpandedQuestionId(null);
       setExpandedDetail(null);
@@ -335,6 +448,32 @@ export default function QuestionListPage() {
       }
     } catch (err) {
       console.error('Failed to submit answer:', err);
+    }
+  }
+
+  async function handleReport(questionId: string, reportType: string, description: string) {
+    if (!activeClassroom) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/question-bank/questions/${questionId}/report`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          report_type: reportType,
+          description: description || undefined,
+          classroom_id: activeClassroom.id,
+        }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to submit report');
+      }
+    } catch (err) {
+      console.error('Failed to submit report:', err);
+      throw err;
     }
   }
 
@@ -411,7 +550,7 @@ export default function QuestionListPage() {
       selectedSession={selectedSession}
       onSelect={handleExamSelect}
     >
-      {/* Top bar: mode toggle + question count + filter button */}
+      {/* Top bar: question count + filter button */}
       <Box
         sx={{
           display: 'flex',
@@ -421,32 +560,46 @@ export default function QuestionListPage() {
           flexWrap: 'wrap',
         }}
       >
-        <ToggleButtonGroup
-          value={mode}
-          exclusive
-          onChange={(_, val) => val && setMode(val)}
-          size="small"
-          sx={{
-            '& .MuiToggleButton-root': {
-              textTransform: 'none',
-              fontWeight: 600,
-              px: 2,
-              py: 0.5,
-              borderRadius: '20px !important',
-              fontSize: '0.85rem',
-            },
-          }}
-        >
-          <ToggleButton value="practice">Practice</ToggleButton>
-          <ToggleButton value="study">Study</ToggleButton>
-        </ToggleButtonGroup>
-
         <Box sx={{ flexGrow: 1 }} />
 
         {!loading && (
           <Typography variant="body2" color="text.secondary">
             {totalCount} question{totalCount !== 1 ? 's' : ''}
           </Typography>
+        )}
+
+        {/* Create Test / Cancel button */}
+        {!selectionMode ? (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => setSelectionMode(true)}
+            sx={{ textTransform: 'none', minHeight: 40 }}
+          >
+            Create Test
+          </Button>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<SelectAllIcon />}
+              onClick={selectAllFiltered}
+              sx={{ textTransform: 'none', minHeight: 40 }}
+            >
+              Select All ({questions.length})
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              color="inherit"
+              onClick={exitSelectionMode}
+              sx={{ textTransform: 'none', minHeight: 40 }}
+            >
+              Cancel
+            </Button>
+          </Box>
         )}
 
         <IconButton
@@ -505,20 +658,37 @@ export default function QuestionListPage() {
           </Button>
         </Paper>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pb: selectionMode && selectedQuestionIds.size > 0 ? 10 : 0 }}>
           {questions.map((q, idx) => (
-            <InlineQuestionCard
-              key={q.id}
-              question={q}
-              questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
-              mode={mode}
-              expanded={expandedQuestionId === q.id}
-              loading={expandedQuestionId === q.id && detailLoading}
-              questionIndex={idx}
-              onToggleExpand={() => handleExpandQuestion(q.id)}
-              onSubmit={handleInlineSubmit}
-              onStudyToggle={handleStudyToggle}
-            />
+            <Box key={q.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+              {/* Checkbox in selection mode */}
+              {selectionMode && (
+                <Checkbox
+                  checked={selectedQuestionIds.has(q.id)}
+                  onChange={() => toggleQuestionSelection(q.id)}
+                  sx={{
+                    mt: 1,
+                    mr: -0.5,
+                    minWidth: 42,
+                    minHeight: 42,
+                  }}
+                  inputProps={{ 'aria-label': `Select question ${idx + 1}` }}
+                />
+              )}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <InlineQuestionCard
+                  question={q}
+                  questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
+                  expanded={expandedQuestionId === q.id}
+                  loading={expandedQuestionId === q.id && detailLoading}
+                  questionIndex={idx}
+                  onToggleExpand={() => handleExpandQuestion(q.id)}
+                  onSubmit={handleInlineSubmit}
+                  onStudyToggle={handleStudyToggle}
+                  onReport={handleReport}
+                />
+              </Box>
+            </Box>
           ))}
 
           {/* Loading more indicator */}
@@ -535,6 +705,147 @@ export default function QuestionListPage() {
         </Box>
       )}
 
+      {/* Sticky bottom bar when questions are selected */}
+      {selectionMode && selectedQuestionIds.size > 0 && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'fixed',
+            bottom: { xs: 56, sm: 0 },
+            left: 0,
+            right: 0,
+            p: 2,
+            zIndex: 100,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              maxWidth: 800,
+              mx: 'auto',
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {selectedQuestionIds.size} selected
+            </Typography>
+            <Box sx={{ flex: 1 }} />
+            <Button
+              variant="contained"
+              onClick={() => setCreateTestOpen(true)}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Create Test
+            </Button>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Create Test Dialog */}
+      <Dialog
+        open={createTestOpen}
+        onClose={() => setCreateTestOpen(false)}
+        fullScreen={isMobile}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
+          Create Custom Test
+          <IconButton
+            onClick={() => setCreateTestOpen(false)}
+            sx={{ ml: 'auto' }}
+            aria-label="Close"
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
+            <TextField
+              label="Test Name"
+              value={testTitle}
+              onChange={(e) => setTestTitle(e.target.value)}
+              fullWidth
+              required
+              inputProps={{ maxLength: 200 }}
+            />
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                Timer Type
+              </Typography>
+              <RadioGroup
+                value={timerType}
+                onChange={(e) => setTimerType(e.target.value as 'none' | 'full' | 'per_question')}
+              >
+                <FormControlLabel
+                  value="none"
+                  control={<Radio />}
+                  label="No Timer"
+                />
+                <FormControlLabel
+                  value="full"
+                  control={<Radio />}
+                  label="Full Test Timer"
+                />
+                <FormControlLabel
+                  value="per_question"
+                  control={<Radio />}
+                  label="Per Question Timer"
+                />
+              </RadioGroup>
+            </Box>
+
+            {timerType === 'full' && (
+              <TextField
+                label="Duration (minutes)"
+                type="number"
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value)))}
+                inputProps={{ min: 1, max: 600 }}
+                fullWidth
+              />
+            )}
+
+            {timerType === 'per_question' && (
+              <TextField
+                label="Time per question (seconds)"
+                type="number"
+                value={perQuestionSeconds}
+                onChange={(e) => setPerQuestionSeconds(Math.max(10, Number(e.target.value)))}
+                inputProps={{ min: 10, max: 3600 }}
+                fullWidth
+              />
+            )}
+
+            <Typography variant="body2" color="text.secondary">
+              {selectedQuestionIds.size} question{selectedQuestionIds.size !== 1 ? 's' : ''} selected
+              {' '}({selectedQuestionIds.size} marks total)
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setCreateTestOpen(false)}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateTest}
+            disabled={creatingTest || !testTitle.trim() || selectedQuestionIds.size === 0}
+            sx={{ textTransform: 'none', minWidth: 120 }}
+          >
+            {creatingTest ? 'Creating...' : 'Create Test'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Filter Drawer */}
       <FilterDrawer
         open={filterOpen}
@@ -544,6 +855,23 @@ export default function QuestionListPage() {
         topics={topics}
         contextLabel={contextLabel}
       />
+
+      {/* Snackbar for feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </QuestionBankLayout>
   );
 }

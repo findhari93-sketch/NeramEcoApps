@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Box, Typography, CircularProgress, Button } from '@neram/ui';
+import { useState, useRef, useEffect } from 'react';
+import { Box, Typography, CircularProgress, IconButton, Tooltip } from '@neram/ui';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 interface PDFReaderProps {
@@ -13,18 +15,44 @@ interface PDFReaderProps {
 }
 
 /**
- * Native browser PDF viewer using <iframe>.
- * Provides pinch-to-zoom, swipe, search, and all standard PDF features
- * via the browser's built-in PDF renderer (Chrome PDF Viewer, etc.).
+ * Secure PDF viewer with fullscreen support and download blocking.
+ * Uses iframe with toolbar=0 to hide browser PDF controls (download/print).
  */
 export default function PDFReader({ pdfUrl, initialPage, onRetry }: PDFReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Append #page=N for browsers that support it (Chrome, Edge, Firefox)
-  const src = initialPage && initialPage > 1
-    ? `${pdfUrl}#page=${initialPage}`
-    : pdfUrl;
+  // Build URL: append #toolbar=0 to hide Chrome PDF viewer toolbar (download/print buttons)
+  const buildSrc = () => {
+    const pageParam = initialPage && initialPage > 1 ? `&page=${initialPage}` : '';
+    // toolbar=0 hides the native PDF viewer controls (download, print, etc.)
+    const hasQuery = pdfUrl.includes('?');
+    const base = pdfUrl;
+    return `${base}#toolbar=0&navpanes=0${pageParam ? `&page=${initialPage}` : ''}`;
+  };
+
+  const src = buildSrc();
+
+  // Fullscreen toggle
+  const handleFullscreen = async () => {
+    if (!containerRef.current) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await containerRef.current.requestFullscreen();
+    }
+  };
+
+  // Track fullscreen changes
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
   if (error) {
     return (
@@ -45,9 +73,8 @@ export default function PDFReader({ pdfUrl, initialPage, onRetry }: PDFReaderPro
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {onRetry && (
-            <Button
+            <IconButton
               size="small"
-              variant="outlined"
               onClick={() => {
                 setError(false);
                 setLoading(true);
@@ -55,30 +82,61 @@ export default function PDFReader({ pdfUrl, initialPage, onRetry }: PDFReaderPro
               }}
             >
               Retry
-            </Button>
+            </IconButton>
           )}
-          <Button
-            size="small"
-            variant="text"
-            href={pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            startIcon={<OpenInNewIcon />}
-          >
-            Open PDF
-          </Button>
         </Box>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
+    <Box
+      ref={containerRef}
+      onContextMenu={(e) => e.preventDefault()}
+      sx={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        bgcolor: isFullscreen ? '#525659' : 'background.default',
+      }}
+    >
+      {/* Toolbar */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 0.5,
+          px: 1.5,
+          py: 0.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          minHeight: 40,
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ flex: 1, fontWeight: 600, color: 'text.secondary', fontSize: '0.75rem' }}
+        >
+          PDF Viewer
+        </Typography>
+        <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+          <IconButton size="small" onClick={handleFullscreen}>
+            {isFullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {/* Loading overlay */}
       {loading && (
         <Box
           sx={{
             position: 'absolute',
-            inset: 0,
+            top: 40,
+            left: 0,
+            right: 0,
+            bottom: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -89,6 +147,8 @@ export default function PDFReader({ pdfUrl, initialPage, onRetry }: PDFReaderPro
           <CircularProgress size={36} />
         </Box>
       )}
+
+      {/* PDF iframe — sandbox prevents downloads, toolbar=0 hides Chrome PDF controls */}
       <iframe
         src={src}
         onLoad={() => setLoading(false)}
@@ -96,9 +156,10 @@ export default function PDFReader({ pdfUrl, initialPage, onRetry }: PDFReaderPro
           setLoading(false);
           setError(true);
         }}
+        sandbox="allow-same-origin allow-scripts"
         style={{
           width: '100%',
-          height: '100%',
+          height: 'calc(100% - 40px)',
           border: 'none',
         }}
         title="PDF Reader"

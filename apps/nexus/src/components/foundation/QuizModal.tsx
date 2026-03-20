@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -65,6 +65,19 @@ export default function QuizModal({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const autoContinueRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-continue after pass (1.5s delay to show success animation)
+  useEffect(() => {
+    if (result?.passed && open) {
+      autoContinueRef.current = setTimeout(() => {
+        handleContinue();
+      }, 1500);
+    }
+    return () => {
+      if (autoContinueRef.current) clearTimeout(autoContinueRef.current);
+    };
+  }, [result, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAnswerChange = useCallback((questionId: string, answer: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));

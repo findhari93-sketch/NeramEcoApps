@@ -9,6 +9,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
@@ -24,6 +25,7 @@ const allStudentNavItems = [
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
+  { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
