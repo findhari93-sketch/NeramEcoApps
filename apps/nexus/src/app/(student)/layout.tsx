@@ -6,6 +6,7 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
@@ -27,6 +28,7 @@ const allStudentNavItems = [
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
   { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
+  { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
@@ -42,6 +44,7 @@ const allBottomNavItems = [
 const allOverflowItems = [
   { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
+  { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
