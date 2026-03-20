@@ -232,25 +232,35 @@ export default function ChatHistoryPage() {
       ),
     },
     {
-      field: 'lead_name',
+      field: 'resolved_name',
       headerName: 'User',
       width: 160,
       renderCell: (params: any) => {
-        const name = params.value;
+        const name = params.value || params.row.lead_name;
+        const avatarUrl = params.row.resolved_avatar;
         const hasName = !!name;
         const initials = hasName
           ? name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
           : '?';
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{
-              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-              bgcolor: hasName ? 'primary.main' : 'grey.300',
-              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.7rem', fontWeight: 600,
-            }}>
-              {hasName ? initials : <PersonIcon sx={{ fontSize: 16 }} />}
-            </Box>
+            {avatarUrl ? (
+              <Box
+                component="img"
+                src={avatarUrl}
+                alt={name}
+                sx={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }}
+              />
+            ) : (
+              <Box sx={{
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                bgcolor: hasName ? 'primary.main' : 'grey.300',
+                color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.7rem', fontWeight: 600,
+              }}>
+                {hasName ? initials : <PersonIcon sx={{ fontSize: 16 }} />}
+              </Box>
+            )}
             <Typography variant="body2" color={hasName ? 'text.primary' : 'text.disabled'} noWrap>
               {name || 'Guest'}
             </Typography>
@@ -435,10 +445,10 @@ export default function ChatHistoryPage() {
                 <Typography variant="body2" sx={{ mt: 0.5 }}>{selected.user_message}</Typography>
               </Box>
               {selected.ai_response && (
-                <Box sx={{ p: 2, bgcolor: 'primary.50', borderRadius: 1 }}>
+                <Box sx={{ p: 2, bgcolor: 'primary.50', borderRadius: 1, maxHeight: 300, overflowY: 'auto' }}>
                   <Typography variant="caption" color="primary.main" fontWeight={600}>AINTRA'S ANSWER</Typography>
                   <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
-                    {selected.ai_response.slice(0, 600)}{selected.ai_response.length > 600 ? '…' : ''}
+                    {selected.ai_response}
                   </Typography>
                 </Box>
               )}

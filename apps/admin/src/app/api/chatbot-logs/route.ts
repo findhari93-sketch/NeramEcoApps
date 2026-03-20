@@ -54,8 +54,44 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Resolve user names for conversations that have user_id but no lead_name
+  const conversations = data || [];
+  const userIdsToResolve = [
+    ...new Set(
+      conversations
+        .filter((c: any) => c.user_id && !c.lead_name)
+        .map((c: any) => c.user_id)
+    ),
+  ];
+
+  let userNameMap: Record<string, { name: string; avatar_url: string | null }> = {};
+  if (userIdsToResolve.length > 0) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, name, first_name, last_name, avatar_url, phone')
+      .in('id', userIdsToResolve);
+
+    if (users) {
+      for (const u of users) {
+        const displayName = u.first_name
+          ? `${u.first_name}${u.last_name ? ' ' + u.last_name : ''}`
+          : u.name || u.phone || null;
+        if (displayName) {
+          userNameMap[u.id] = { name: displayName, avatar_url: u.avatar_url };
+        }
+      }
+    }
+  }
+
+  // Enrich conversations with resolved names
+  const enriched = conversations.map((c: any) => ({
+    ...c,
+    resolved_name: c.lead_name || userNameMap[c.user_id]?.name || null,
+    resolved_avatar: userNameMap[c.user_id]?.avatar_url || null,
+  }));
+
   return NextResponse.json({
-    conversations: data || [],
+    conversations: enriched,
     total: count || 0,
     page,
     limit,

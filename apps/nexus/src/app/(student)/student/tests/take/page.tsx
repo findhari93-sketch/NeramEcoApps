@@ -106,7 +106,8 @@ export default function TakeTestPage() {
 
       const data = await res.json();
       setTest(data.test);
-      setQuestions(data.questions || []);
+      // Filter out any questions with null question data (safety)
+      setQuestions((data.questions || []).filter((q: any) => q.question != null));
       setAttempt(data.attempt);
       setAnswers(data.attempt?.answers || {});
 

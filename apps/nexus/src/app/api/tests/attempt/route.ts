@@ -49,11 +49,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Get questions with details (don't expose correct_answer during test)
-    const { data: testQuestions } = await supabase
-      .from('nexus_test_questions')
-      .select('id, sort_order, marks, negative_marks, question:nexus_verified_questions(id, question_text, question_image_url, question_type, options)')
-      .eq('test_id', testId)
-      .order('sort_order', { ascending: true });
+    // Custom tests use qb_question_id → nexus_qb_questions, regular tests use question_id → nexus_verified_questions
+    const isCustomTest = !!(test as any).is_custom;
+
+    let testQuestions: any[] = [];
+
+    if (isCustomTest) {
+      const { data } = await (supabase as any)
+        .from('nexus_test_questions')
+        .select('id, sort_order, marks, negative_marks, qb_question_id, question:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, question_text, question_image_url, question_type, options)')
+        .eq('test_id', testId)
+        .order('sort_order', { ascending: true });
+      testQuestions = data || [];
+    } else {
+      const { data } = await supabase
+        .from('nexus_test_questions')
+        .select('id, sort_order, marks, negative_marks, question_id, question:nexus_verified_questions(id, question_text, question_image_url, question_type, options)')
+        .eq('test_id', testId)
+        .order('sort_order', { ascending: true });
+      testQuestions = data || [];
+    }
 
     // Check for existing in-progress attempt
     const { data: existingAttempt } = await supabase
@@ -100,7 +115,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Shuffle questions if needed
-    let questions = testQuestions || [];
+    let questions = testQuestions;
     if (test.shuffle_questions) {
       questions = [...questions].sort(() => Math.random() - 0.5);
     }
@@ -170,10 +185,23 @@ export async function POST(request: NextRequest) {
     if (action === 'submit') {
       // Calculate score
       const test = attempt.test as any;
-      const { data: testQuestions } = await supabase
-        .from('nexus_test_questions')
-        .select('question_id, marks, negative_marks, question:nexus_verified_questions(correct_answer)')
-        .eq('test_id', attempt.test_id);
+      const isCustom = !!test?.is_custom;
+
+      let testQuestions: any[] = [];
+
+      if (isCustom) {
+        const { data } = await (supabase as any)
+          .from('nexus_test_questions')
+          .select('qb_question_id, marks, negative_marks, question:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, correct_answer)')
+          .eq('test_id', attempt.test_id);
+        testQuestions = data || [];
+      } else {
+        const { data } = await supabase
+          .from('nexus_test_questions')
+          .select('question_id, marks, negative_marks, question:nexus_verified_questions(correct_answer)')
+          .eq('test_id', attempt.test_id);
+        testQuestions = data || [];
+      }
 
       let score = 0;
       let totalMarks = 0;
@@ -184,7 +212,9 @@ export async function POST(request: NextRequest) {
         const negMarks = Number(tq.negative_marks) || 0;
         totalMarks += qMarks;
         const correctAnswer = (tq.question as any)?.correct_answer;
-        const studentAnswer = answersObj[tq.question_id];
+        // Use the question ID from the joined question object for answer lookup
+        const questionId = (tq.question as any)?.id || tq.question_id || tq.qb_question_id;
+        const studentAnswer = answersObj[questionId];
 
         if (studentAnswer && correctAnswer) {
           if (studentAnswer === correctAnswer) {
