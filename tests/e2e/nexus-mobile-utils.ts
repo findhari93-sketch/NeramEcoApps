@@ -321,11 +321,16 @@ export async function checkSidebarHidden(page: Page): Promise<boolean> {
 
 /**
  * Check that the bottom navigation is visible on mobile.
+ * Waits up to 5s for MUI's useMediaQuery hydration.
  */
 export async function checkBottomNavVisible(page: Page): Promise<boolean> {
-  const bottomNav = page.locator('.MuiBottomNavigation-root');
-  if (await bottomNav.count() === 0) return false;
-  return await bottomNav.isVisible().catch(() => false);
+  try {
+    // Wait for MUI's useMediaQuery to hydrate and render the bottom nav
+    await page.locator('.MuiBottomNavigation-root').waitFor({ state: 'visible', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

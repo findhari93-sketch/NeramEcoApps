@@ -204,8 +204,9 @@ export default function QuestionListPage() {
       if (!res.ok) throw new Error('Failed to fetch questions');
 
       const json = await res.json();
-      const items: NexusQBQuestionListItem[] = json.data || json.questions || [];
-      const total: number = json.total_count ?? json.total ?? items.length;
+      const payload = json.data || json;
+      const items: NexusQBQuestionListItem[] = payload?.questions || (Array.isArray(payload) ? payload : []);
+      const total: number = payload?.total ?? json.total_count ?? items.length;
 
       if (append) {
         setQuestions((prev) => [...prev, ...items]);

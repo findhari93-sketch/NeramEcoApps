@@ -89,7 +89,7 @@ export default function QuestionCard({ question, mode, onClick }: QuestionCardPr
           >
             <DifficultyChip difficulty={question.difficulty} size="small" />
             <CategoryChips
-              categories={question.categories.slice(0, 2)}
+              categories={(question.categories || []).slice(0, 2)}
               size="small"
             />
             <Box sx={{ flexGrow: 1 }} />

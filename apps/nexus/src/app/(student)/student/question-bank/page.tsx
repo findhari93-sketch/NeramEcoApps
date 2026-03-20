@@ -122,7 +122,7 @@ export default function QuestionBankHome() {
       );
       if (res.ok) {
         const json = await res.json();
-        setRecentQuestions(json.data || json.questions || []);
+        setRecentQuestions(json.data?.questions || json.data || []);
       }
     } catch (err) {
       console.error('Failed to fetch recent:', err);
