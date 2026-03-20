@@ -1131,7 +1131,7 @@ export async function getChapterStudentScores(
   // Fetch student details
   const { data: users, error: usersError } = await supabase
     .from('users')
-    .select('id, full_name, email')
+    .select('id, name, email')
     .in('id', studentIds);
   if (usersError) throw usersError;
 
@@ -1168,7 +1168,7 @@ export async function getChapterStudentScores(
       : 0;
     return {
       student_id: studentId,
-      student_name: user?.full_name || 'Unknown',
+      student_name: user?.name || 'Unknown',
       student_email: user?.email || '',
       sections: sectionScores,
       overall_score_pct: overallScore,

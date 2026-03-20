@@ -703,15 +703,27 @@ export default function FoundationChapterEditorContent({
               )}
               {form.video_source === 'sharepoint' && form.sharepoint_video_url && (
                 <Box sx={{ borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
-                  <Box sx={{ position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#000' }}>
-                    <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
-                      <iframe
-                        src={toEmbedUrl(form.sharepoint_video_url)}
-                        style={{ width: '100%', height: '100%', border: 'none' }}
-                        allow="autoplay; encrypted-media; fullscreen"
-                        allowFullScreen
-                        title="SharePoint Preview"
-                      />
+                  <Box sx={{
+                    position: 'relative', width: '100%', pt: '56.25%', bgcolor: '#1a1a2e',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Box sx={{
+                      position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5,
+                    }}>
+                      <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                        SharePoint Video
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        href={form.sharepoint_video_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: '0.8rem' }}
+                      >
+                        Open in SharePoint
+                      </Button>
                     </Box>
                   </Box>
                   <Box sx={{ px: 1.5, py: 1, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
