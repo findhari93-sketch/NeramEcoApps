@@ -10,7 +10,7 @@ import PanelProvider, { usePanelContext } from '@/components/PanelProvider';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
-  const { currentSidebarItems, currentBottomNavItems } = usePanelContext();
+  const { currentSidebarItems, currentBottomNavItems, currentOverflowItems } = usePanelContext();
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -41,7 +41,7 @@ function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
             {children}
           </Container>
         </Box>
-        <BottomNav items={currentBottomNavItems} />
+        <BottomNav items={currentBottomNavItems} overflowItems={currentOverflowItems} />
       </Box>
     </Box>
   );

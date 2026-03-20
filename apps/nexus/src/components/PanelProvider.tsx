@@ -35,6 +35,7 @@ interface PanelConfig {
   requiredRoles: string[];
   sidebarItems: NavItem[];
   bottomNavItems: NavItem[];
+  overflowItems: NavItem[];
   defaultPath: string;
 }
 
@@ -58,6 +59,9 @@ const PANELS: PanelConfig[] = [
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
       { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
+    ],
+    overflowItems: [
+      { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
   },
   {
@@ -83,7 +87,13 @@ const PANELS: PanelConfig[] = [
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
+    ],
+    overflowItems: [
+      { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
+      { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
+      { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
   },
   {
@@ -101,6 +111,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
+    overflowItems: [],
   },
 ];
 
@@ -137,6 +148,7 @@ interface PanelContextValue {
   currentPanelTitle: string;
   currentSidebarItems: NavItem[];
   currentBottomNavItems: NavItem[];
+  currentOverflowItems: NavItem[];
 }
 
 const PanelContext = createContext<PanelContextValue>({
@@ -146,6 +158,7 @@ const PanelContext = createContext<PanelContextValue>({
   currentPanelTitle: 'Classroom Teaching',
   currentSidebarItems: [],
   currentBottomNavItems: [],
+  currentOverflowItems: [],
 });
 
 export function usePanelContext() {
@@ -212,6 +225,7 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
     currentPanelTitle: currentPanel.title,
     currentSidebarItems: currentPanel.sidebarItems,
     currentBottomNavItems: currentPanel.bottomNavItems,
+    currentOverflowItems: currentPanel.overflowItems,
   }), [activePanel, setActivePanel, availablePanels, currentPanel]);
 
   return (

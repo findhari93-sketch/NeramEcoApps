@@ -57,10 +57,20 @@ export async function GET(request: NextRequest) {
     if (isCustomTest) {
       const { data } = await (supabase as any)
         .from('nexus_test_questions')
-        .select('id, sort_order, marks, negative_marks, qb_question_id, question:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, question_text, question_image_url, question_type, options)')
+        .select('id, sort_order, marks, negative_marks, qb_question_id, qb:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, question_text, question_image_url, question_format, options)')
         .eq('test_id', testId)
         .order('sort_order', { ascending: true });
-      testQuestions = data || [];
+      // Normalize qb questions to match the expected `question` shape
+      testQuestions = (data || []).map((tq: any) => ({
+        ...tq,
+        question: tq.qb ? {
+          id: tq.qb.id,
+          question_text: tq.qb.question_text,
+          question_image_url: tq.qb.question_image_url,
+          question_type: tq.qb.question_format || 'mcq',
+          options: tq.qb.options,
+        } : null,
+      }));
     } else {
       const { data } = await supabase
         .from('nexus_test_questions')
@@ -192,9 +202,13 @@ export async function POST(request: NextRequest) {
       if (isCustom) {
         const { data } = await (supabase as any)
           .from('nexus_test_questions')
-          .select('qb_question_id, marks, negative_marks, question:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, correct_answer)')
+          .select('qb_question_id, marks, negative_marks, qb:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, correct_answer)')
           .eq('test_id', attempt.test_id);
-        testQuestions = data || [];
+        // Normalize to match expected shape
+        testQuestions = (data || []).map((tq: any) => ({
+          ...tq,
+          question: tq.qb ? { id: tq.qb.id, correct_answer: tq.qb.correct_answer } : null,
+        }));
       } else {
         const { data } = await supabase
           .from('nexus_test_questions')

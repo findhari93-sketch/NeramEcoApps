@@ -37,6 +37,13 @@ const allBottomNavItems = [
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
+];
+
+const allOverflowItems = [
+  { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
+  { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
+  { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
+  { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
 ];
 
@@ -51,6 +58,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   const bottomNavItems = useMemo(
     () => isQBEnabled ? allBottomNavItems : allBottomNavItems.filter((i) => i.path !== QB_PATH),
+    [isQBEnabled],
+  );
+
+  const overflowItems = useMemo(
+    () => isQBEnabled ? allOverflowItems : allOverflowItems.filter((i) => i.path !== QB_PATH),
     [isQBEnabled],
   );
 
@@ -84,7 +96,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               {children}
             </Container>
           </Box>
-          <BottomNav items={bottomNavItems} />
+          <BottomNav items={bottomNavItems} overflowItems={overflowItems} />
         </Box>
       </Box>
     </RoleGuard>
