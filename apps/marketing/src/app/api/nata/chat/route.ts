@@ -446,11 +446,23 @@ async function logConversation(params: {
 }) {
   try {
     const supabase = createAdminClient();
+
+    // Resolve Firebase UID to Supabase user UUID (FK requires users.id, not firebase_uid)
+    let resolvedUserId: string | null = null;
+    if (params.userId) {
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('firebase_uid', params.userId)
+        .single();
+      resolvedUserId = dbUser?.id || null;
+    }
+
     await (supabase.from('chatbot_conversations') as any).insert({
       session_id: params.sessionId,
       user_message: params.userMessage,
       ai_response: params.aiResponse,
-      user_id: params.userId || null,
+      user_id: resolvedUserId,
       lead_name: params.userName || null,
       page_url: params.pageUrl || null,
       model_used: params.modelUsed || null,

@@ -117,20 +117,21 @@ function BotMessageContent({ text }: { text: string }) {
   );
 }
 
-/** Detects URLs in text and renders them as clickable links (opens in new tab) */
+/** Detects URLs and email addresses in text and renders them as clickable links */
 function Linkify({ text }: { text: string }) {
-  const urlRegex = /(https?:\/\/[^\s,)]+|www\.[^\s,)]+|\b[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:com|in|org|net|edu)(?:\/[^\s,)]*)?)/g;
+  const linkRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|https?:\/\/[^\s,)]+|www\.[^\s,)]+|\b[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:com|in|org|net|edu)(?:\/[^\s,)]*)?)/g;
   const nodes: React.ReactNode[] = [];
   let lastIdx = 0;
   let m;
-  while ((m = urlRegex.exec(text)) !== null) {
+  while ((m = linkRegex.exec(text)) !== null) {
     if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
-    const url = m[0];
-    const href = url.startsWith('http') ? url : `https://${url}`;
+    const match = m[0];
+    const isEmail = match.includes('@') && !match.startsWith('http');
+    const href = isEmail ? `mailto:${match}` : match.startsWith('http') ? match : `https://${match}`;
     nodes.push(
-      <a key={m.index} href={href} target="_blank" rel="noopener noreferrer"
+      <a key={m.index} href={href} target={isEmail ? undefined : '_blank'} rel={isEmail ? undefined : 'noopener noreferrer'}
          style={{ color: '#1976d2', textDecoration: 'underline', wordBreak: 'break-all' }}>
-        {url}
+        {match}
       </a>
     );
     lastIdx = m.index + m[0].length;
@@ -749,6 +750,8 @@ export default function GeneralChatbot() {
             inputRef={inputRef}
             size="small"
             fullWidth
+            multiline
+            maxRows={4}
             placeholder="Ask about courses, fees, timing..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
