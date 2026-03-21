@@ -4388,6 +4388,72 @@ export interface NexusDocumentAuditLog {
   created_at: string;
 }
 
+// ============================================
+// EXAM TRACKING ENHANCEMENT TYPES
+// ============================================
+
+export type ExamPhase = 'phase_1' | 'phase_2' | 'session_1' | 'session_2';
+export type ExamAttemptState = 'planning' | 'applied' | 'completed' | 'scorecard_uploaded';
+export type ExamBroadcastType = 'scorecard_released' | 'registration_reminder' | 'general';
+
+export interface NexusExamDate {
+  id: string;
+  exam_type: ExamPlanType;
+  year: number;
+  phase: ExamPhase;
+  attempt_number: number;
+  exam_date: string;
+  label: string | null;
+  registration_deadline: string | null;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusStudentExamRegistration {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  exam_type: ExamPlanType;
+  is_writing: boolean;
+  application_number: string | null;
+  application_summary_doc_id: string | null;
+  notes: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface NexusStudentExamAttempt {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  exam_type: ExamPlanType;
+  phase: ExamPhase;
+  attempt_number: number;
+  exam_date_id: string | null;
+  state: ExamAttemptState;
+  application_date: string | null;
+  exam_completed_at: string | null;
+  scorecard_reminder_sent: boolean;
+  aptitude_score: number | null;
+  drawing_score: number | null;
+  total_score: number | null;
+  notes: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface NexusExamBroadcast {
+  id: string;
+  classroom_id: string;
+  exam_type: ExamPlanType;
+  broadcast_type: ExamBroadcastType;
+  message: string | null;
+  sent_by: string;
+  created_at: string;
+}
+
 // Nexus joined types for queries
 export interface NexusEnrollmentWithUser extends NexusEnrollment {
   user: User;
