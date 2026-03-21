@@ -23,6 +23,9 @@ import {
   alpha,
   useTheme,
   LinearProgress,
+  Autocomplete,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -40,7 +43,21 @@ import UploadJSONTab from '@/components/question-bank/bulk-upload/UploadJSONTab'
 import ReviewPanel from '@/components/question-bank/bulk-upload/ReviewPanel';
 
 const steps = ['Paper Info', 'Upload Data', 'Review & Import', 'Done'];
-const YEARS = Array.from({ length: 15 }, (_, i) => 2027 - i);
+const currentYear = new Date().getFullYear();
+const YEARS = Array.from({ length: currentYear - 2005 + 1 }, (_, i) => currentYear - i);
+
+// JEE Paper 2 has 2 sessions per year
+const JEE_SESSIONS = [
+  { value: 'Session 1', label: 'Session 1', hint: 'January' },
+  { value: 'Session 2', label: 'Session 2', hint: 'April' },
+];
+
+// NATA has up to 3 tests per year
+const NATA_SESSIONS = [
+  { value: 'Test 1', label: 'Test 1', hint: 'April' },
+  { value: 'Test 2', label: 'Test 2', hint: 'July' },
+  { value: 'Test 3', label: 'Test 3', hint: 'October' },
+];
 
 const TAB_ICONS: Record<UploadMethod, React.ReactElement> = {
   paste: <ContentPasteIcon sx={{ fontSize: '1rem' }} />,
@@ -156,6 +173,9 @@ export default function BulkUploadPage() {
         categories: q.categories,
         marks_correct: q.marks_correct,
         marks_negative: q.marks_negative,
+        solution_video_url: q.solution_video_url || null,
+        explanation_brief: q.explanation_brief || null,
+        explanation_detailed: q.explanation_detailed || null,
       }));
 
       const res = await fetch('/api/question-bank/papers', {
@@ -230,12 +250,16 @@ export default function BulkUploadPage() {
             Paper Information
           </Typography>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Exam Type */}
             <FormControl fullWidth size="small">
               <InputLabel>Exam Type</InputLabel>
               <Select
                 value={examType}
-                onChange={(e) => setExamType(e.target.value as QBExamType)}
+                onChange={(e) => {
+                  setExamType(e.target.value as QBExamType);
+                  setSession('');
+                }}
                 label="Exam Type"
               >
                 <MenuItem value="JEE_PAPER_2">JEE Paper 2 (B.Arch)</MenuItem>
@@ -243,27 +267,82 @@ export default function BulkUploadPage() {
               </Select>
             </FormControl>
 
-            <FormControl fullWidth size="small">
-              <InputLabel>Year</InputLabel>
-              <Select
+            {/* Year (Autocomplete) + Session (Toggle Buttons) — same row on tablet+ */}
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                gap: 2,
+                alignItems: { sm: 'flex-start' },
+              }}
+            >
+              <Autocomplete
+                size="small"
+                options={YEARS}
                 value={year}
-                onChange={(e) => setYear(e.target.value as number)}
-                label="Year"
-              >
-                {YEARS.map((y) => (
-                  <MenuItem key={y} value={y}>{y}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                onChange={(_, v) => v && setYear(v)}
+                getOptionLabel={(opt) => String(opt)}
+                renderInput={(params) => (
+                  <TextField {...params} label="Year" />
+                )}
+                disableClearable
+                sx={{ minWidth: { xs: '100%', sm: 160 }, flex: { sm: '0 0 160px' } }}
+              />
 
-            <TextField
-              size="small"
-              label="Session (optional)"
-              value={session}
-              onChange={(e) => setSession(e.target.value)}
-              placeholder="e.g., Session 1, January, Shift 2"
-              helperText="Leave blank if only one session"
-            />
+              {/* Session selector */}
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
+                  Session
+                </Typography>
+                <ToggleButtonGroup
+                  value={session}
+                  exclusive
+                  onChange={(_, v) => setSession(v || '')}
+                  size="small"
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 0.75,
+                    '& .MuiToggleButton-root': {
+                      flex: '1 1 auto',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: '8px !important',
+                      textTransform: 'none',
+                      px: 2,
+                      py: 0.75,
+                      '&.Mui-selected': {
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                        borderColor: 'primary.main',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                      },
+                    },
+                  }}
+                >
+                  {(examType === 'JEE_PAPER_2' ? JEE_SESSIONS : NATA_SESSIONS).map((s) => (
+                    <ToggleButton key={s.value} value={s.value}>
+                      <Box sx={{ textAlign: 'center' }}>
+                        <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.2 }}>
+                          {s.label}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            lineHeight: 1,
+                            opacity: 0.75,
+                            display: 'block',
+                            fontSize: '0.65rem',
+                          }}
+                        >
+                          {s.hint}
+                        </Typography>
+                      </Box>
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+              </Box>
+            </Box>
 
             <Button variant="contained" onClick={() => setActiveStep(1)}>
               Next

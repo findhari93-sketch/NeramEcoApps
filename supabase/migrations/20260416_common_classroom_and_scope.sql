@@ -17,17 +17,25 @@ ALTER TABLE nexus_scheduled_classes
   ADD COLUMN IF NOT EXISTS target_scope TEXT DEFAULT 'classroom'
   CHECK (target_scope IN ('all', 'classroom', 'batch'));
 
--- Step 3: Create the Common classroom
-INSERT INTO nexus_classrooms (name, type, description, is_active)
+-- Step 3: Add short_code column for easy-to-remember classroom IDs
+ALTER TABLE nexus_classrooms
+  ADD COLUMN IF NOT EXISTS short_code TEXT UNIQUE;
+
+-- Step 4: Create the Common classroom (unique partial index prevents duplicates)
+CREATE UNIQUE INDEX IF NOT EXISTS nexus_classrooms_unique_common
+  ON nexus_classrooms (type) WHERE type = 'common';
+
+INSERT INTO nexus_classrooms (name, type, description, is_active, short_code)
 VALUES (
   'Common Classes',
   'common',
   'Cross-classroom classes visible to all enrolled students',
-  true
+  true,
+  'COM'
 )
 ON CONFLICT DO NOTHING;
 
--- Step 4: Bulk-enroll all existing active students in the Common classroom
+-- Step 5: Bulk-enroll all existing active students in the Common classroom
 INSERT INTO nexus_enrollments (user_id, classroom_id, role, is_active)
 SELECT DISTINCT e.user_id,
   (SELECT id FROM nexus_classrooms WHERE type = 'common' LIMIT 1),
@@ -39,7 +47,7 @@ WHERE e.role = 'student'
   AND (SELECT id FROM nexus_classrooms WHERE type = 'common' LIMIT 1) IS NOT NULL
 ON CONFLICT (user_id, classroom_id) DO NOTHING;
 
--- Step 5: Auto-enroll trigger — whenever a student is enrolled in any classroom,
+-- Step 6: Auto-enroll trigger — whenever a student is enrolled in any classroom,
 -- also enroll them in the Common classroom automatically.
 CREATE OR REPLACE FUNCTION auto_enroll_common_classroom()
 RETURNS TRIGGER AS $$

@@ -15,6 +15,9 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import CheckIcon from '@mui/icons-material/Check';
+import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import ImageUploadZone from '@/components/question-bank/ImageUploadZone';
 import type { ReviewQuestion, ReviewQuestionOption, ImageState } from '@/lib/bulk-upload-schema';
 import MathText from '@/components/common/MathText';
@@ -142,6 +145,14 @@ export default function ReviewQuestionCard({
           <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.65rem', flexShrink: 0 }}>
             {question.nta_question_id}
           </Typography>
+        )}
+
+        {(question.explanation_brief || question.explanation_detailed) && (
+          <LightbulbOutlinedIcon sx={{ fontSize: '0.85rem', color: 'success.main', flexShrink: 0 }} />
+        )}
+
+        {question.solution_video_url && (
+          <OndemandVideoOutlinedIcon sx={{ fontSize: '0.85rem', color: 'info.main', flexShrink: 0 }} />
         )}
 
         {question._modified && (
@@ -313,6 +324,107 @@ export default function ReviewQuestionCard({
               </>
             )}
           </Box>
+
+          {/* Solution & Explanation section */}
+          {(editing || question.solution_video_url || question.explanation_brief || question.explanation_detailed) && (
+            <Box
+              sx={{
+                mt: 1.5,
+                p: 1.5,
+                bgcolor: alpha(theme.palette.success.main, 0.04),
+                borderRadius: 1.5,
+                border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
+                <LightbulbOutlinedIcon sx={{ fontSize: '1rem', color: 'success.main' }} />
+                <Typography variant="caption" fontWeight={700} color="success.main">
+                  Solution & Explanation
+                </Typography>
+              </Box>
+
+              {/* Solution Video URL */}
+              {editing ? (
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Solution Video URL"
+                  value={question.solution_video_url || ''}
+                  onChange={(e) => updateField('solution_video_url', e.target.value || undefined)}
+                  placeholder="https://youtube.com/watch?v=... or SharePoint link"
+                  sx={{ mb: 1 }}
+                  InputProps={{
+                    startAdornment: (
+                      <OndemandVideoOutlinedIcon sx={{ fontSize: '1rem', color: 'text.secondary', mr: 0.5 }} />
+                    ),
+                  }}
+                />
+              ) : question.solution_video_url ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                  <OndemandVideoOutlinedIcon sx={{ fontSize: '0.9rem', color: 'text.secondary' }} />
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}
+                  >
+                    {question.solution_video_url}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={() => window.open(question.solution_video_url, '_blank', 'noopener,noreferrer')}
+                    sx={{ p: 0.25 }}
+                  >
+                    <OpenInNewIcon sx={{ fontSize: '0.85rem' }} />
+                  </IconButton>
+                </Box>
+              ) : null}
+
+              {/* Explanation Brief */}
+              {editing ? (
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  maxRows={4}
+                  label="Explanation (Brief)"
+                  value={question.explanation_brief || ''}
+                  onChange={(e) => updateField('explanation_brief', e.target.value || undefined)}
+                  placeholder="Concise 1-2 sentence summary of the solution approach..."
+                  sx={{ mb: 1 }}
+                />
+              ) : question.explanation_brief ? (
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Brief:
+                  </Typography>
+                  <MathText text={question.explanation_brief} variant="caption" sx={{ display: 'block', color: 'text.secondary' }} />
+                </Box>
+              ) : null}
+
+              {/* Explanation Detailed */}
+              {editing ? (
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  maxRows={8}
+                  label="Explanation (Detailed)"
+                  value={question.explanation_detailed || ''}
+                  onChange={(e) => updateField('explanation_detailed', e.target.value || undefined)}
+                  placeholder="Step-by-step solution with reasoning (use $...$ for math)..."
+                />
+              ) : question.explanation_detailed ? (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Detailed:
+                  </Typography>
+                  <MathText text={question.explanation_detailed} variant="caption" sx={{ display: 'block', color: 'text.secondary' }} />
+                </Box>
+              ) : null}
+            </Box>
+          )}
         </Box>
       </Collapse>
     </Paper>

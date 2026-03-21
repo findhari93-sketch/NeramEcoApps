@@ -23,6 +23,7 @@ interface ClassroomSummary {
   id: string;
   name: string;
   type: string;
+  short_code: string | null;
   description: string | null;
   is_active: boolean;
   studentCount: number;
@@ -34,13 +35,15 @@ const typeLabels: Record<string, string> = {
   nata: 'NATA',
   jee: 'JEE',
   revit: 'Revit',
+  common: 'Common',
   other: 'Other',
 };
 
-const typeColors: Record<string, 'primary' | 'secondary' | 'info' | 'default'> = {
+const typeColors: Record<string, 'primary' | 'secondary' | 'info' | 'warning' | 'default'> = {
   nata: 'primary',
   jee: 'secondary',
   revit: 'info',
+  common: 'warning',
   other: 'default',
 };
 
@@ -202,18 +205,29 @@ export default function ClassroomsPage() {
                   mb: 0.5,
                 }}
               >
-                <Typography
-                  variant="subtitle1"
-                  sx={{
-                    fontWeight: 600,
-                    fontSize: { xs: '0.95rem', sm: '1rem' },
-                    lineHeight: 1.3,
-                    minWidth: 0,
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {classroom.name}
-                </Typography>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: { xs: '0.95rem', sm: '1rem' },
+                      lineHeight: 1.3,
+                      minWidth: 0,
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {classroom.name}
+                  </Typography>
+                  {classroom.short_code && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontFamily: 'monospace', fontSize: '0.7rem', fontWeight: 600 }}
+                    >
+                      {classroom.short_code}
+                    </Typography>
+                  )}
+                </Box>
                 <Chip
                   label={typeLabels[classroom.type] || classroom.type}
                   size="small"

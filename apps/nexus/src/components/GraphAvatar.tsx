@@ -5,6 +5,7 @@ import { Avatar, Badge, type SxProps, type Theme } from '@neram/ui';
 import { useNexusAuth } from '@/hooks/useNexusAuth';
 
 // Module-level cache for blob URLs to avoid refetching across re-renders
+const NO_PHOTO = '__NO_PHOTO__';
 const photoCache = new Map<string, { url: string; timestamp: number }>();
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
@@ -90,9 +91,13 @@ export default function GraphAvatar({
 
     const cacheKey = getCacheKey(msOid ?? undefined, self, size);
 
-    // Check cache first
+    // Check cache first (includes cached 404s)
     const cached = photoCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      if (cached.url === NO_PHOTO) {
+        setPhotoError(true);
+        return;
+      }
       setPhotoUrl(cached.url);
       return;
     }
@@ -117,7 +122,13 @@ export default function GraphAvatar({
         });
 
         if (!response.ok || cancelled) {
-          if (!cancelled) setPhotoError(true);
+          if (!cancelled) {
+            // Cache 404s to avoid repeated requests for users without photos
+            if (response.status === 404) {
+              photoCache.set(cacheKey, { url: NO_PHOTO, timestamp: Date.now() });
+            }
+            setPhotoError(true);
+          }
           return;
         }
 

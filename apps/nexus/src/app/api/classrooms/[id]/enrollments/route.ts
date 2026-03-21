@@ -130,7 +130,7 @@ export async function POST(
     const { data: enrollment, error } = await supabase
       .from('nexus_enrollments')
       .upsert(
-        { user_id: resolvedUserId, classroom_id: id, role, batch_id: batch_id || null },
+        { user_id: resolvedUserId, classroom_id: id, role, batch_id: batch_id || null, is_active: true },
         { onConflict: 'user_id,classroom_id' }
       )
       .select('*, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url), batch:nexus_batches(id, name)')

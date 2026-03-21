@@ -19,6 +19,7 @@ import {
   ArrowBackIcon,
   Switch,
   CircularProgress,
+  Dialog,
 } from '@neram/ui';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
@@ -43,6 +44,8 @@ import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import HistoricalStudentsTab from '@/components/HistoricalStudentsTab';
 import GraphAvatar from '@/components/GraphAvatar';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
+import SortIcon from '@mui/icons-material/Sort';
+import ChecklistIcon from '@mui/icons-material/Checklist';
 
 interface ClassroomDetail {
   id: string;
@@ -104,10 +107,15 @@ export default function ClassroomDetailPage() {
   const [qbEnabled, setQbEnabled] = useState<boolean | null>(null);
   const [qbToggling, setQbToggling] = useState(false);
 
+  // Student sorting
+  const [sortBy, setSortBy] = useState<'name-asc' | 'name-desc' | 'enrolled-desc' | 'enrolled-asc'>('name-asc');
+
   // Student selection & removal state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [quickBatchAssignOpen, setQuickBatchAssignOpen] = useState(false);
+  const [quickBatchTarget, setQuickBatchTarget] = useState<string>('');
 
   // Teams integration state
   const [teamsSyncing, setTeamsSyncing] = useState(false);
@@ -414,6 +422,35 @@ export default function ClassroomDetailPage() {
     });
 
     await Promise.all([fetchClassroom(), fetchEnrollments()]);
+  };
+
+  // Sort enrollments client-side
+  const sortedEnrollments = [...enrollments].sort((a, b) => {
+    switch (sortBy) {
+      case 'name-asc':
+        return (a.user.name || '').localeCompare(b.user.name || '');
+      case 'name-desc':
+        return (b.user.name || '').localeCompare(a.user.name || '');
+      case 'enrolled-asc':
+        return 0; // API returns desc, reverse it
+      case 'enrolled-desc':
+      default:
+        return 0; // Already sorted by API
+    }
+  });
+  // For enrolled-asc, reverse the API's default desc order
+  if (sortBy === 'enrolled-asc') sortedEnrollments.reverse();
+
+  const handleQuickBatchAssign = async () => {
+    if (selectedIds.size === 0 || !quickBatchTarget) return;
+    await handleAssign(
+      Array.from(selectedIds),
+      quickBatchTarget === 'unassigned' ? null : quickBatchTarget
+    );
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+    setQuickBatchAssignOpen(false);
+    setQuickBatchTarget('');
   };
 
   if (loading) {
@@ -816,35 +853,58 @@ export default function ClassroomDetailPage() {
       {/* Tab: Students */}
       {tab === 3 && (
         <Box>
-          {/* Batch filter chips */}
-          <Box sx={{ display: 'flex', gap: 1, mb: 2, overflowX: 'auto', pb: 1 }}>
-            <Chip
-              label="All"
-              size="small"
-              variant={batchFilter === null ? 'filled' : 'outlined'}
-              color={batchFilter === null ? 'primary' : 'default'}
-              onClick={() => setBatchFilter(null)}
-              sx={{ minHeight: 32 }}
-            />
-            <Chip
-              label="Unassigned"
-              size="small"
-              variant={batchFilter === 'unassigned' ? 'filled' : 'outlined'}
-              color={batchFilter === 'unassigned' ? 'warning' : 'default'}
-              onClick={() => setBatchFilter('unassigned')}
-              sx={{ minHeight: 32 }}
-            />
-            {batches.map((b) => (
+          {/* Batch filter chips + Sort control */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', flex: 1, pb: 0.5 }}>
               <Chip
-                key={b.id}
-                label={b.name}
+                label="All"
                 size="small"
-                variant={batchFilter === b.id ? 'filled' : 'outlined'}
-                color={batchFilter === b.id ? 'primary' : 'default'}
-                onClick={() => setBatchFilter(b.id)}
+                variant={batchFilter === null ? 'filled' : 'outlined'}
+                color={batchFilter === null ? 'primary' : 'default'}
+                onClick={() => setBatchFilter(null)}
                 sx={{ minHeight: 32 }}
               />
-            ))}
+              <Chip
+                label="Unassigned"
+                size="small"
+                variant={batchFilter === 'unassigned' ? 'filled' : 'outlined'}
+                color={batchFilter === 'unassigned' ? 'warning' : 'default'}
+                onClick={() => setBatchFilter('unassigned')}
+                sx={{ minHeight: 32 }}
+              />
+              {batches.map((b) => (
+                <Chip
+                  key={b.id}
+                  label={b.name}
+                  size="small"
+                  variant={batchFilter === b.id ? 'filled' : 'outlined'}
+                  color={batchFilter === b.id ? 'primary' : 'default'}
+                  onClick={() => setBatchFilter(b.id)}
+                  sx={{ minHeight: 32 }}
+                />
+              ))}
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <SortIcon fontSize="small" color="action" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                style={{
+                  border: '1px solid #ccc',
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  fontSize: 13,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  minHeight: 32,
+                }}
+              >
+                <option value="name-asc">Name A-Z</option>
+                <option value="name-desc">Name Z-A</option>
+                <option value="enrolled-desc">Newest First</option>
+                <option value="enrolled-asc">Oldest First</option>
+              </select>
+            </Box>
           </Box>
 
           {/* Action buttons */}
@@ -854,15 +914,26 @@ export default function ClassroomDetailPage() {
                 <Button
                   size="small"
                   onClick={() => {
-                    if (selectedIds.size === enrollments.length) {
+                    if (selectedIds.size === sortedEnrollments.length) {
                       setSelectedIds(new Set());
                     } else {
-                      setSelectedIds(new Set(enrollments.map((e) => e.id)));
+                      setSelectedIds(new Set(sortedEnrollments.map((e) => e.id)));
                     }
                   }}
                 >
-                  {selectedIds.size === enrollments.length ? 'Deselect All' : 'Select All'}
+                  {selectedIds.size === sortedEnrollments.length ? 'Deselect All' : 'Select All'}
                 </Button>
+                {batches.length > 0 && (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<SwapHorizIcon />}
+                    onClick={() => setQuickBatchAssignOpen(true)}
+                    disabled={selectedIds.size === 0}
+                  >
+                    Assign to Batch ({selectedIds.size})
+                  </Button>
+                )}
                 <Button
                   size="small"
                   variant="contained"
@@ -904,11 +975,10 @@ export default function ClassroomDetailPage() {
                   <Button
                     variant="outlined"
                     size="small"
-                    color="error"
-                    startIcon={<PersonRemoveOutlinedIcon />}
+                    startIcon={<ChecklistIcon />}
                     onClick={() => setSelectionMode(true)}
                   >
-                    Remove
+                    Select
                   </Button>
                 )}
               </>
@@ -916,7 +986,7 @@ export default function ClassroomDetailPage() {
           </Box>
 
           {/* Student list */}
-          {enrollments.length === 0 ? (
+          {sortedEnrollments.length === 0 ? (
             <Paper sx={{ p: 3, textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">
                 {batchFilter ? 'No students in this batch.' : 'No students enrolled.'}
@@ -924,7 +994,7 @@ export default function ClassroomDetailPage() {
             </Paper>
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {enrollments.map((enrollment) => (
+              {sortedEnrollments.map((enrollment) => (
                 <Paper
                   key={enrollment.id}
                   variant="outlined"
@@ -981,7 +1051,7 @@ export default function ClassroomDetailPage() {
           )}
 
           {/* Mobile FAB for batch assignment */}
-          {!selectionMode && enrollments.length > 0 && batches.length > 0 && (
+          {!selectionMode && sortedEnrollments.length > 0 && batches.length > 0 && (
             <Fab
               color="primary"
               onClick={() => setAssignOpen(true)}
@@ -1026,6 +1096,51 @@ export default function ClassroomDetailPage() {
               </Button>
             </Box>
           )}
+
+          {/* Quick batch assign dialog (from selection mode) */}
+          <Dialog
+            open={quickBatchAssignOpen}
+            onClose={() => { setQuickBatchAssignOpen(false); setQuickBatchTarget(''); }}
+            maxWidth="xs"
+            fullWidth
+          >
+            <Box sx={{ p: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Assign {selectedIds.size} Student{selectedIds.size !== 1 ? 's' : ''} to Batch
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 3 }}>
+                <Chip
+                  label="Unassigned"
+                  variant={quickBatchTarget === 'unassigned' ? 'filled' : 'outlined'}
+                  color={quickBatchTarget === 'unassigned' ? 'warning' : 'default'}
+                  onClick={() => setQuickBatchTarget('unassigned')}
+                  sx={{ minHeight: 40 }}
+                />
+                {batches.map((b) => (
+                  <Chip
+                    key={b.id}
+                    label={b.name}
+                    variant={quickBatchTarget === b.id ? 'filled' : 'outlined'}
+                    color={quickBatchTarget === b.id ? 'primary' : 'default'}
+                    onClick={() => setQuickBatchTarget(b.id)}
+                    sx={{ minHeight: 40 }}
+                  />
+                ))}
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                <Button onClick={() => { setQuickBatchAssignOpen(false); setQuickBatchTarget(''); }}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleQuickBatchAssign}
+                  disabled={!quickBatchTarget}
+                >
+                  Assign
+                </Button>
+              </Box>
+            </Box>
+          </Dialog>
         </Box>
       )}
 

@@ -1062,7 +1062,9 @@ export async function bulkCreateDraftQuestions(
         }))
       : null,
     correct_answer: null,
-    explanation_brief: null,
+    explanation_brief: q.explanation_brief || null,
+    explanation_detailed: q.explanation_detailed || null,
+    solution_video_url: q.solution_video_url || null,
     difficulty: 'MEDIUM' as QBDifficulty,
     exam_relevance: (examType === 'JEE_PAPER_2' ? 'JEE' : 'NATA') as QBExamRelevance,
     categories: q.categories,

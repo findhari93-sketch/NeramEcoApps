@@ -70,6 +70,12 @@ export interface ReviewQuestion {
   marks_correct?: number;
   /** Negative marks for wrong answer */
   marks_negative?: number;
+  /** Solution video URL (YouTube unlisted or SharePoint) */
+  solution_video_url?: string;
+  /** Brief explanation of the solution */
+  explanation_brief?: string;
+  /** Detailed step-by-step explanation */
+  explanation_detailed?: string;
   /** Has been modified by user in review panel */
   _modified?: boolean;
   /** Validation errors for this question */
@@ -118,6 +124,12 @@ export interface BulkUploadQuestion {
   marks_correct?: number;
   marks_negative?: number;
   categories?: string[];
+  /** Solution video URL (YouTube unlisted or SharePoint) */
+  solution_video_url?: string;
+  /** Brief explanation of the solution */
+  explanation_brief?: string;
+  /** Detailed step-by-step explanation */
+  explanation_detailed?: string;
 }
 
 // ============================================
@@ -211,6 +223,9 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
         categories: q.categories || inferCategories(sectionKey),
         marks_correct: q.marks_correct,
         marks_negative: q.marks_negative,
+        solution_video_url: q.solution_video_url || undefined,
+        explanation_brief: q.explanation_brief || undefined,
+        explanation_detailed: q.explanation_detailed || undefined,
       });
     }
   }
@@ -320,6 +335,9 @@ export const JSON_SCHEMA_EXAMPLE: BulkUploadJSON = {
           marks_correct: 4,
           marks_negative: -1,
           categories: ['mathematics'],
+          solution_video_url: 'https://youtube.com/watch?v=example',
+          explanation_brief: 'Use integration to find the area between y = x² and y = √x.',
+          explanation_detailed: 'Step 1: Find intersection points by solving x² = √x → x⁴ = x → x(x³-1) = 0 → x = 0, 1.\nStep 2: Area = ∫₀¹ (√x - x²) dx = [⅔x^(3/2) - x³/3]₀¹ = ⅔ - ⅓ = ⅓.',
         },
       ],
     },
@@ -416,5 +434,9 @@ Rules:
    - Numerical: +4 / 0
    - Drawing: +100 / 0
 7. Do NOT include correct answers (they come from a separate answer key).
+8. For each question, include solution details:
+   - "explanation_brief": A concise 1-2 sentence summary of the solution approach.
+   - "explanation_detailed": A detailed step-by-step solution with reasoning. Use LaTeX notation ($...$) for math.
+   - "solution_video_url": Leave empty or omit if no video is available.
 
 Here is the PDF:`;
