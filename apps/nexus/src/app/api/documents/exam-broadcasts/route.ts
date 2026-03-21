@@ -91,6 +91,39 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
+    // If broadcast type is scorecard_released, notify all registered students
+    if (broadcast_type === 'scorecard_released') {
+      // Get all students registered for this exam in this classroom
+      const { data: registrations } = await (supabase as any)
+        .from('nexus_student_exam_registrations')
+        .select('student_id')
+        .eq('classroom_id', classroom_id)
+        .eq('exam_type', exam_type)
+        .eq('is_writing', true);
+
+      if (registrations && registrations.length > 0) {
+        // Try to create notifications for each student
+        const notifications = registrations.map((reg: any) => ({
+          user_id: reg.student_id,
+          type: 'scorecard_released',
+          title: `${exam_type.toUpperCase()} Scorecard Released`,
+          message: message || `${exam_type.toUpperCase()} exam scorecards are now available. Please upload your scorecard.`,
+          metadata: {
+            exam_type,
+            broadcast_id: data.id,
+            classroom_id,
+          },
+          is_read: false,
+        }));
+
+        try {
+          await (supabase as any).from('user_notifications').insert(notifications);
+        } catch {
+          console.warn('Could not create notifications, user_notifications table may not exist');
+        }
+      }
+    }
+
     return NextResponse.json({ broadcast: data }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create broadcast';

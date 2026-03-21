@@ -4,6 +4,12 @@
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@neram/nexus",
   "ignoreCommand": "git diff HEAD^ HEAD --quiet -- . ../../packages/",
+  "crons": [
+    {
+      "path": "/api/cron/scorecard-reminders",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
