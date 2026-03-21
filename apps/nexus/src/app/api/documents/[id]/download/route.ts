@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { data: doc } = await supabase
       .from('nexus_student_documents')
-      .select('sharepoint_item_id, file_url')
+      .select('file_url')
       .eq('id', id)
       .single();
 
@@ -27,8 +27,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    if (doc.sharepoint_item_id) {
-      const url = await getSharePointDownloadUrl(doc.sharepoint_item_id);
+    // Check for sharepoint_item_id (may exist at DB level but not in generated types)
+    const { data: rawDoc } = await supabase
+      .from('nexus_student_documents')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    const spItemId = (rawDoc as Record<string, unknown>)?.sharepoint_item_id as string | undefined;
+    if (spItemId) {
+      const url = await getSharePointDownloadUrl(spItemId);
       return NextResponse.json({ url });
     }
 
