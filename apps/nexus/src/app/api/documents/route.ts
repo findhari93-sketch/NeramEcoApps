@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     const templateId = formData.get('template_id') as string | null;
     const title = formData.get('title') as string;
     const category = formData.get('category') as string;
+    const examAttemptId = formData.get('exam_attempt_id') as string | null;
 
     if (!file || !classroomId || !title || !category) {
       return NextResponse.json({ error: 'Missing required fields: file, classroom_id, title, category' }, { status: 400 });
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
         is_current: true,
         previous_version_id: previousVersionId,
         uploaded_by: user.id,
+        exam_attempt_id: examAttemptId || null,
         status: 'pending',
       })
       .select()
@@ -184,6 +186,7 @@ export async function POST(request: NextRequest) {
         file_type: file.type,
         file_size: file.size,
         version,
+        exam_attempt_id: examAttemptId,
       },
     });
 
