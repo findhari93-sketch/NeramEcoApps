@@ -17,6 +17,7 @@ import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
 import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -76,6 +77,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
+      { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
@@ -89,6 +91,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
     ],
     overflowItems: [
+      { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },

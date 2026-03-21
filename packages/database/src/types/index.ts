@@ -4308,6 +4308,86 @@ export interface NexusStudentTopicProgress {
   completed_at: string | null;
 }
 
+// ============================================
+// NEXUS DOCUMENT VAULT TYPES
+// ============================================
+
+export type DocumentStandard = '10th' | '11th' | '12th' | 'gap_year';
+export type DocumentCategory = 'identity' | 'academic' | 'exam' | 'photo' | 'other' | 'aadhaar' | 'marksheet' | 'hall_ticket';
+export type DocumentStatus = 'pending' | 'verified' | 'rejected';
+export type ExamPlanState = 'still_thinking' | 'planning_to_write' | 'applied' | 'completed';
+export type ExamPlanType = 'nata' | 'jee';
+export type DocumentAuditAction = 'uploaded' | 'verified' | 'rejected' | 're_uploaded' | 'soft_deleted' | 'hard_deleted' | 'restored';
+
+export interface NexusDocumentTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  category: DocumentCategory;
+  applicable_standards: DocumentStandard[];
+  is_required: boolean;
+  unlock_date: string | null;
+  linked_exam: 'nata' | 'jee' | 'both' | null;
+  exam_state_threshold: ExamPlanState | null;
+  max_file_size_mb: number;
+  allowed_file_types: string[];
+  sort_order: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusStudentExamPlan {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  exam_type: ExamPlanType;
+  state: ExamPlanState;
+  application_number: string | null;
+  notes: string | null;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface NexusStudentDocument {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  category: DocumentCategory;
+  title: string;
+  file_url: string;
+  file_type: string | null;
+  uploaded_at: string;
+  verified_by: string | null;
+  verified_at: string | null;
+  status: DocumentStatus;
+  notes: string | null;
+  template_id: string | null;
+  sharepoint_item_id: string | null;
+  sharepoint_web_url: string | null;
+  file_size_bytes: number | null;
+  version: number;
+  is_current: boolean;
+  previous_version_id: string | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  rejection_reason: string | null;
+  uploaded_by: string | null;
+}
+
+export interface NexusDocumentAuditLog {
+  id: string;
+  document_id: string | null;
+  student_id: string;
+  classroom_id: string;
+  action: DocumentAuditAction;
+  performed_by: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 // Nexus joined types for queries
 export interface NexusEnrollmentWithUser extends NexusEnrollment {
   user: User;
