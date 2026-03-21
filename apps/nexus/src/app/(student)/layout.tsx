@@ -76,6 +76,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             display: 'flex',
             flexDirection: 'column',
             flex: 1,
+            minWidth: 0,
             minHeight: '100vh',
             ml: { md: `${sidebarWidth}px` },
             transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1)',
@@ -86,6 +87,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             component="main"
             sx={{
               flexGrow: 1,
+              overflow: 'hidden',
               bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
               pt: { xs: 2, md: 3 },
               pb: { xs: 10, md: 3 },

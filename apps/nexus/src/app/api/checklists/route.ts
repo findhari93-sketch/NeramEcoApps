@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
     // Flatten nested classroom data for frontend consumption
     const flatChecklists = (checklists || []).map((cl: any) => ({
       ...cl,
+      entry_count: cl.entries?.[0]?.count ?? 0,
+      entries: undefined,
       classrooms: (cl.classrooms || []).map((cc: any) => ({
         id: cc.classroom?.id || cc.classroom_id,
         name: cc.classroom?.name || 'Unknown',

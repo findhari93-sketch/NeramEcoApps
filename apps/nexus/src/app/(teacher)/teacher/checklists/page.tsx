@@ -260,7 +260,7 @@ export default function ChecklistsPage() {
               {/* Entry count badge */}
                 <Chip
                   icon={<ViewModuleOutlinedIcon sx={{ fontSize: '0.85rem !important' }} />}
-                  label={`${checklist.entry_count} item${checklist.entry_count !== 1 ? 's' : ''}`}
+                  label={`${checklist.entry_count ?? 0} item${(checklist.entry_count ?? 0) !== 1 ? 's' : ''}`}
                   size="small"
                   variant="outlined"
                   sx={{

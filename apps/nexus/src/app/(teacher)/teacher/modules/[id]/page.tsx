@@ -373,7 +373,7 @@ export default function ModuleDetailPage() {
   const borderColor = moduleData.color || theme.palette.primary.main;
 
   return (
-    <Box>
+    <Box sx={{ overflow: 'hidden' }}>
       {/* Header */}
       <PageHeader
         breadcrumbs={[
@@ -437,19 +437,19 @@ export default function ModuleDetailPage() {
             </Box>
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, overflow: 'hidden' }}>
+            <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, minWidth: 0 }}>
                 {moduleData.icon && (
-                  <span className="material-icons" style={{ fontSize: '1.5rem', lineHeight: 1 }}>{moduleData.icon}</span>
+                  <span className="material-icons" style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{moduleData.icon}</span>
                 )}
-                <Typography variant="h6" sx={{ fontWeight: 700, fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+                <Typography variant="h6" noWrap sx={{ fontWeight: 700, fontSize: { xs: '1.1rem', sm: '1.25rem' }, minWidth: 0 }}>
                   {moduleData.title}
                 </Typography>
                 <IconButton
                   size="small"
                   onClick={() => setEditingTitle(true)}
-                  sx={{ color: 'text.secondary', ml: 0.5 }}
+                  sx={{ color: 'text.secondary', ml: 0.5, flexShrink: 0 }}
                 >
                   <EditOutlinedIcon sx={{ fontSize: '1rem' }} />
                 </IconButton>
@@ -497,7 +497,7 @@ export default function ModuleDetailPage() {
       ) : (
         <>
           {/* Items list */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
               Items
             </Typography>
@@ -552,12 +552,13 @@ export default function ModuleDetailPage() {
                       '&:hover': { borderColor: alpha(itemColor, 0.5) },
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                    {/* Top row: icon + title + type chip + actions */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, overflow: 'hidden' }}>
                       {/* Type icon */}
                       <Box
                         sx={{
-                          width: 36,
-                          height: 36,
+                          width: 34,
+                          height: 34,
                           borderRadius: 1.5,
                           bgcolor: alpha(itemColor, 0.1),
                           color: itemColor,
@@ -565,30 +566,53 @@ export default function ModuleDetailPage() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
-                          mt: 0.25,
                         }}
                       >
                         {itemIcon}
                       </Box>
 
-                      {/* Content */}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.9rem' }} noWrap>
-                            {item.title}
-                          </Typography>
-                          <Chip
-                            label={getTypeLabel(item.item_type)}
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.6rem',
-                              fontWeight: 600,
-                              bgcolor: alpha(itemColor, 0.1),
-                              color: itemColor,
-                            }}
-                          />
-                        </Box>
+                      {/* Title + type chip */}
+                      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, overflow: 'hidden' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: { xs: '0.85rem', sm: '0.9rem' }, minWidth: 0 }} noWrap>
+                          {item.title}
+                        </Typography>
+                        <Chip
+                          label={getTypeLabel(item.item_type)}
+                          size="small"
+                          sx={{
+                            height: 20,
+                            fontSize: '0.6rem',
+                            fontWeight: 600,
+                            bgcolor: alpha(itemColor, 0.1),
+                            color: itemColor,
+                            flexShrink: 0,
+                            display: { xs: 'none', sm: 'flex' },
+                          }}
+                        />
+                      </Box>
+
+                      {/* Actions */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                        <IconButton
+                          size="small"
+                          onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleOpenEditItem(item); }}
+                          sx={{ color: 'text.secondary' }}
+                        >
+                          <EditOutlinedIcon sx={{ fontSize: '1rem' }} />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={(e: React.MouseEvent) => { e.stopPropagation(); setDeleteItemId(item.id); }}
+                          sx={{ color: 'text.secondary', '&:hover': { color: theme.palette.error.main } }}
+                        >
+                          <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
+                        </IconButton>
+                      </Box>
+                    </Box>
+
+                    {/* Bottom row: URL or video ID (only if present) */}
+                    {(item.content_url || (item.item_type === 'video' && item.youtube_video_id)) && (
+                      <Box sx={{ mt: 0.75, ml: { xs: 0, sm: 5.75 }, overflow: 'hidden' }}>
                         {item.content_url && (
                           <Typography
                             variant="caption"
@@ -597,6 +621,7 @@ export default function ModuleDetailPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            noWrap
                             sx={{
                               color: 'text.secondary',
                               textDecoration: 'none',
@@ -607,40 +632,23 @@ export default function ModuleDetailPage() {
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
+                              fontSize: '0.7rem',
                               '&:hover': { color: 'primary.main', textDecoration: 'underline' },
                             }}
                           >
-                            {item.content_url.length > 60
-                              ? item.content_url.substring(0, 60) + '...'
+                            {item.content_url.length > 45
+                              ? item.content_url.substring(0, 45) + '...'
                               : item.content_url}
-                            <OpenInNewIcon sx={{ fontSize: '0.7rem', ml: 0.25 }} />
+                            <OpenInNewIcon sx={{ fontSize: '0.65rem', ml: 0.25, flexShrink: 0 }} />
                           </Typography>
                         )}
                         {item.item_type === 'video' && item.youtube_video_id && (
-                          <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+                          <Typography variant="caption" noWrap sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.7rem', display: 'block' }}>
                             YT: {item.youtube_video_id}
                           </Typography>
                         )}
                       </Box>
-
-                      {/* Actions */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-                        <IconButton
-                          size="small"
-                          onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleOpenEditItem(item); }}
-                          sx={{ color: 'text.secondary' }}
-                        >
-                          <EditOutlinedIcon sx={{ fontSize: '1.1rem' }} />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={(e: React.MouseEvent) => { e.stopPropagation(); setDeleteItemId(item.id); }}
-                          sx={{ color: 'text.secondary', '&:hover': { color: theme.palette.error.main } }}
-                        >
-                          <DeleteOutlineIcon sx={{ fontSize: '1.1rem' }} />
-                        </IconButton>
-                      </Box>
-                    </Box>
+                    )}
                   </Paper>
                 );
               })}

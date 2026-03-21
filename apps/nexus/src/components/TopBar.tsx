@@ -96,10 +96,12 @@ export default function TopBar() {
           </IconButton>
         )}
 
-        {/* Brand - Mobile only (desktop has sidebar) */}
+        {/* Brand - Mobile only (desktop has sidebar). Taps → home dashboard */}
         <Typography
           variant="h6"
-          component="div"
+          component="button"
+          onClick={() => router.push(nexusRole === 'student' ? '/student/dashboard' : '/teacher/dashboard')}
+          aria-label="Go to dashboard"
           sx={{
             display: { xs: 'block', md: 'none' },
             fontWeight: 800,
@@ -109,6 +111,12 @@ export default function TopBar() {
             WebkitTextFillColor: 'transparent',
             mr: 1.5,
             letterSpacing: '-0.3px',
+            // Make it a clean tappable button
+            border: 'none',
+            p: 0,
+            cursor: 'pointer',
+            WebkitTapHighlightColor: 'transparent',
+            '&:active': { opacity: 0.7 },
           }}
         >
           Nexus

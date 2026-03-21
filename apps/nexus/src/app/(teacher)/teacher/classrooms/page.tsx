@@ -10,6 +10,8 @@ import {
   Skeleton,
   Fab,
   AddIcon,
+  alpha,
+  useTheme,
 } from '@neram/ui';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
@@ -44,6 +46,7 @@ const typeColors: Record<string, 'primary' | 'secondary' | 'info' | 'default'> =
 
 export default function ClassroomsPage() {
   const router = useRouter();
+  const theme = useTheme();
   const { getToken } = useNexusAuthContext();
   const [classrooms, setClassrooms] = useState<ClassroomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,18 +98,37 @@ export default function ClassroomsPage() {
   };
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
+    <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
+      {/* Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: { xs: 2, sm: 3 },
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
+            variant="h5"
+            component="h1"
+            sx={{
+              fontWeight: 700,
+              fontSize: { xs: '1.25rem', sm: '1.5rem' },
+            }}
+          >
             Classrooms
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+          >
             Manage your classrooms and batches
           </Typography>
         </Box>
         {/* Desktop create button */}
-        <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+        <Box sx={{ display: { xs: 'none', sm: 'block' }, flexShrink: 0 }}>
           <Fab
             color="primary"
             variant="extended"
@@ -121,14 +143,25 @@ export default function ClassroomsPage() {
 
       {/* Classroom Cards */}
       {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 } }}>
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+            <Skeleton
+              key={i}
+              variant="rectangular"
+              height={100}
+              sx={{ borderRadius: 2 }}
+            />
           ))}
         </Box>
       ) : classrooms.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <SchoolOutlinedIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+        <Paper
+          sx={{
+            p: { xs: 3, sm: 4 },
+            textAlign: 'center',
+            borderRadius: 3,
+          }}
+        >
+          <SchoolOutlinedIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No classrooms yet
           </Typography>
@@ -137,49 +170,124 @@ export default function ClassroomsPage() {
           </Typography>
         </Paper>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2 } }}>
           {classrooms.map((classroom) => (
             <Paper
               key={classroom.id}
               variant="outlined"
               onClick={() => router.push(`/teacher/classrooms/${classroom.id}`)}
               sx={{
-                p: 2.5,
+                p: { xs: 2, sm: 2.5 },
                 cursor: 'pointer',
-                transition: 'all 0.15s',
-                '&:hover': { backgroundColor: 'action.hover', borderColor: 'primary.main' },
-                '&:active': { backgroundColor: 'action.selected' },
+                borderRadius: 2.5,
+                transition: 'all 0.15s ease',
+                WebkitTapHighlightColor: 'transparent',
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                  borderColor: 'primary.main',
+                },
+                '&:active': {
+                  backgroundColor: 'action.selected',
+                  transform: 'scale(0.99)',
+                },
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }} noWrap>
-                    {classroom.name}
-                  </Typography>
-                  {classroom.description && (
-                    <Typography variant="body2" color="text.secondary" noWrap>
-                      {classroom.description}
-                    </Typography>
-                  )}
-                </Box>
+              {/* Top row: Name + Type chip */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  mb: 0.5,
+                }}
+              >
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: { xs: '0.95rem', sm: '1rem' },
+                    lineHeight: 1.3,
+                    minWidth: 0,
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {classroom.name}
+                </Typography>
                 <Chip
                   label={typeLabels[classroom.type] || classroom.type}
                   size="small"
                   color={typeColors[classroom.type] || 'default'}
                   variant="outlined"
-                  sx={{ ml: 1, flexShrink: 0 }}
+                  sx={{ flexShrink: 0, height: 24, fontSize: '0.7rem' }}
                 />
               </Box>
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <PeopleOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
+
+              {/* Description */}
+              {classroom.description && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    mb: 1.5,
+                    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+                    lineHeight: 1.4,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {classroom.description}
+                </Typography>
+              )}
+
+              {/* Stats row */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: { xs: 1.5, sm: 2 },
+                  flexWrap: 'wrap',
+                  mt: classroom.description ? 0 : 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    bgcolor: alpha(theme.palette.primary.main, 0.06),
+                    borderRadius: 1.5,
+                    px: 1,
+                    py: 0.25,
+                  }}
+                >
+                  <PeopleOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500, fontSize: '0.75rem' }}
+                  >
                     {classroom.studentCount} student{classroom.studentCount !== 1 ? 's' : ''}
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <LayersOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    bgcolor: alpha(theme.palette.secondary.main, 0.06),
+                    borderRadius: 1.5,
+                    px: 1,
+                    py: 0.25,
+                  }}
+                >
+                  <LayersOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500, fontSize: '0.75rem' }}
+                  >
                     {classroom.batchCount} batch{classroom.batchCount !== 1 ? 'es' : ''}
                   </Typography>
                 </Box>
@@ -199,6 +307,8 @@ export default function ClassroomsPage() {
           bottom: 80,
           right: 16,
           zIndex: 1000,
+          width: 56,
+          height: 56,
         }}
       >
         <AddIcon />
