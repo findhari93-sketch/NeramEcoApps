@@ -149,7 +149,7 @@ export default function FoundationManageContent({
   };
 
   return (
-    <Box>
+    <Box sx={{ overflow: 'hidden' }}>
       {!hideHeader && (
         <PageHeader
           title="Manage Foundation"
@@ -171,7 +171,7 @@ export default function FoundationManageContent({
       )}
 
       {hideHeader && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
             Chapters ({loading ? '...' : chapters.length})
           </Typography>
@@ -225,12 +225,13 @@ export default function FoundationManageContent({
                 }}
                 onClick={() => router.push(`${chapterLinkPrefix}/${chapter.id}`)}
               >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                {/* Top row: badge + title + publish toggle */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, overflow: 'hidden' }}>
                   {/* Chapter number badge */}
                   <Box
                     sx={{
-                      width: 40,
-                      height: 40,
+                      width: 36,
+                      height: 36,
                       borderRadius: 2,
                       bgcolor: alpha(theme.palette.primary.main, 0.1),
                       color: theme.palette.primary.main,
@@ -238,90 +239,82 @@ export default function FoundationManageContent({
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontWeight: 700,
-                      fontSize: '1rem',
+                      fontSize: '0.95rem',
                       flexShrink: 0,
                     }}
                   >
                     {chapter.chapter_number}
                   </Box>
 
-                  {/* Info */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '0.95rem' }} noWrap>
+                  {/* Title */}
+                  <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: { xs: '0.88rem', sm: '0.95rem' }, minWidth: 0 }} noWrap>
                         {chapter.title}
                       </Typography>
                       {!chapter.is_published && (
-                        <Chip label="Draft" size="small" sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }} />
-                      )}
-                    </Box>
-
-                    {/* Stats */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <LayersOutlinedIcon sx={{ fontSize: '0.85rem', color: 'text.secondary' }} />
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          {chapter.section_count} sections
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <QuizOutlinedIcon sx={{ fontSize: '0.85rem', color: 'text.secondary' }} />
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          {chapter.question_count} questions
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        {chapter.video_source === 'sharepoint' ? (
-                          <CloudOutlinedIcon sx={{ fontSize: '0.85rem', color: 'text.secondary' }} />
-                        ) : (
-                          <OndemandVideoOutlinedIcon sx={{ fontSize: '0.85rem', color: 'text.secondary' }} />
-                        )}
-                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
-                          {chapter.video_source === 'sharepoint' ? 'SharePoint' : chapter.youtube_video_id}
-                        </Typography>
-                      </Box>
-                      {((chapter as any).like_count > 0 || (chapter as any).dislike_count > 0) && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                            <ThumbUpOutlinedIcon sx={{ fontSize: '0.8rem', color: 'success.main' }} />
-                            <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
-                              {(chapter as any).like_count}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                            <ThumbDownOutlinedIcon sx={{ fontSize: '0.8rem', color: 'error.main' }} />
-                            <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600 }}>
-                              {(chapter as any).dislike_count}
-                            </Typography>
-                          </Box>
-                        </Box>
+                        <Chip label="Draft" size="small" sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600, flexShrink: 0 }} />
                       )}
                     </Box>
                   </Box>
 
-                  {/* Actions */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                  {/* Actions: compact on mobile */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                     <Switch
                       size="small"
                       checked={chapter.is_published}
                       onChange={() => handleTogglePublish(chapter)}
-                      sx={{ mr: 0.5 }}
                     />
-                    <IconButton
-                      size="small"
-                      onClick={() => router.push(`${chapterLinkPrefix}/${chapter.id}`)}
-                      sx={{ color: 'text.secondary' }}
-                    >
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
                     <IconButton
                       size="small"
                       onClick={() => setDeleteId(chapter.id)}
                       sx={{ color: 'text.secondary', '&:hover': { color: theme.palette.error.main } }}
                     >
-                      <DeleteOutlineIcon fontSize="small" />
+                      <DeleteOutlineIcon sx={{ fontSize: '1.1rem' }} />
                     </IconButton>
                   </Box>
+                </Box>
+
+                {/* Bottom row: Stats */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flexWrap: 'wrap', mt: 1, ml: { xs: 0, sm: 6 }, overflow: 'hidden' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <LayersOutlinedIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                      {chapter.section_count} sec
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <QuizOutlinedIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                      {chapter.question_count} qs
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    {chapter.video_source === 'sharepoint' ? (
+                      <CloudOutlinedIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
+                    ) : (
+                      <OndemandVideoOutlinedIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
+                    )}
+                    <Typography variant="caption" noWrap sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.65rem', maxWidth: { xs: 80, sm: 'none' } }}>
+                      {chapter.video_source === 'sharepoint' ? 'SharePoint' : chapter.youtube_video_id}
+                    </Typography>
+                  </Box>
+                  {((chapter as any).like_count > 0 || (chapter as any).dislike_count > 0) && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                        <ThumbUpOutlinedIcon sx={{ fontSize: '0.75rem', color: 'success.main' }} />
+                        <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600, fontSize: '0.7rem' }}>
+                          {(chapter as any).like_count}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                        <ThumbDownOutlinedIcon sx={{ fontSize: '0.75rem', color: 'error.main' }} />
+                        <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 600, fontSize: '0.7rem' }}>
+                          {(chapter as any).dislike_count}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
                 </Box>
               </Paper>
             ))

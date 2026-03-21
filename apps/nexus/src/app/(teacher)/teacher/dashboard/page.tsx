@@ -331,7 +331,7 @@ export default function TeacherDashboard() {
             { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon />, color: theme.palette.primary.main },
             { label: 'Attendance', path: '/teacher/attendance', icon: <FactCheckOutlinedIcon />, color: theme.palette.success.main },
             { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon />, color: theme.palette.info.main },
-            { label: 'Checklist', path: '/teacher/checklist', icon: <ChecklistOutlinedIcon />, color: theme.palette.warning.main },
+            { label: 'Checklist', path: '/teacher/checklists', icon: <ChecklistOutlinedIcon />, color: theme.palette.warning.main },
           ].map((action) => (
             <Grid item xs={6} sm={3} key={action.path}>
               <Paper

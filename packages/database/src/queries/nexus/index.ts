@@ -16,3 +16,4 @@ export * from './checklists-v2';
 export * from './rsvp';
 export * from './reviews';
 export * from './enrollment-history';
+export * from './documents';
