@@ -28,9 +28,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    // Get version history
-    const versions: typeof doc[] = [];
-    let prevId = doc.previous_version_id;
+    // Get version history (previous_version_id may exist at DB level but not in generated types)
+    const rawDoc = doc as Record<string, unknown>;
+    const versions: Record<string, unknown>[] = [];
+    let prevId = rawDoc.previous_version_id as string | undefined;
     while (prevId) {
       const { data: prev } = await supabase
         .from('nexus_student_documents')
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         .single();
       if (!prev) break;
       versions.push(prev);
-      prevId = prev.previous_version_id;
+      prevId = (prev as Record<string, unknown>).previous_version_id as string | undefined;
     }
 
     return NextResponse.json({ document: doc, versions });
@@ -161,18 +162,26 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     const { data: doc } = await supabase
       .from('nexus_student_documents')
-      .select('id, student_id, classroom_id, sharepoint_item_id')
+      .select('id, student_id, classroom_id')
       .eq('id', id)
       .single();
 
     if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
+    // Get sharepoint_item_id via wildcard (may exist at DB level but not in generated types)
+    const { data: rawDoc } = await supabase
+      .from('nexus_student_documents')
+      .select('*')
+      .eq('id', id)
+      .single();
+    const spItemId = (rawDoc as Record<string, unknown>)?.sharepoint_item_id as string | undefined;
+
     if (hard) {
       // Delete from SharePoint if item ID exists
-      if (doc.sharepoint_item_id) {
+      if (spItemId) {
         try {
           const token = await getAppOnlyToken();
-          await deleteFromSharePoint(token, doc.sharepoint_item_id);
+          await deleteFromSharePoint(token, spItemId);
         } catch (spErr) {
           console.error('SharePoint delete error:', spErr);
         }
