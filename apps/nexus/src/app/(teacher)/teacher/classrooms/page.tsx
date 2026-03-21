@@ -95,7 +95,7 @@ export default function ClassroomsPage() {
   };
 
   return (
-    <Box>
+    <Box sx={{ overflow: 'hidden' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
           <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
