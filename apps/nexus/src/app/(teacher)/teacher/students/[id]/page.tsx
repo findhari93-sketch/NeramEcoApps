@@ -61,7 +61,31 @@ export default function StudentDetailPage() {
 
         if (res.ok) {
           const data = await res.json();
-          setStudent(data.student || data);
+          const s = data.student || data;
+          const att = data.attendanceSummary || {};
+          const cl = data.checklistProgress || {};
+          const tp = data.topicProgress || {};
+          setStudent({
+            id: s.id,
+            name: s.name,
+            email: s.email,
+            avatar_url: s.avatar_url,
+            enrollment_date: s.enrolled_at || s.enrollment_date || null,
+            attendance: {
+              attended: att.attended || 0,
+              total: att.total || 0,
+              percentage: att.percentage || 0,
+            },
+            checklist: {
+              completed: cl.completed || 0,
+              total: cl.total || 0,
+              percentage: cl.total > 0 ? Math.round((cl.completed / cl.total) * 100) : 0,
+            },
+            topics: {
+              completed: tp.completed || 0,
+              total: tp.total || 0,
+            },
+          });
         }
       } catch (err) {
         console.error('Failed to load student:', err);
