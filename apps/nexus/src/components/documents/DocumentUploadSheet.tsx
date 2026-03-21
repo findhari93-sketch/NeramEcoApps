@@ -33,6 +33,7 @@ interface DocumentUploadSheetProps {
   open: boolean;
   template: Template | null;
   classroomId: string;
+  examAttemptId?: string | null;
   onClose: () => void;
   onUploaded: () => void;
 }
@@ -41,6 +42,7 @@ export default function DocumentUploadSheet({
   open,
   template,
   classroomId,
+  examAttemptId,
   onClose,
   onUploaded,
 }: DocumentUploadSheetProps) {
@@ -79,6 +81,9 @@ export default function DocumentUploadSheet({
       formData.append('classroom_id', classroomId);
       formData.append('title', template.name);
       formData.append('category', template.category);
+      if (examAttemptId) {
+        formData.append('exam_attempt_id', examAttemptId);
+      }
 
       const progressInterval = setInterval(() => {
         setProgress((prev) => Math.min(prev + 10, 90));
@@ -108,7 +113,7 @@ export default function DocumentUploadSheet({
       setUploading(false);
       setProgress(0);
     }
-  }, [file, template, classroomId, maxSizeMb, getToken, onUploaded, onClose]);
+  }, [file, template, classroomId, examAttemptId, maxSizeMb, getToken, onUploaded, onClose]);
 
   const content = (
     <Box sx={{ p: isMobile ? 2 : 0 }}>
@@ -118,9 +123,14 @@ export default function DocumentUploadSheet({
             {template.name}
           </Typography>
           {template.description && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-              {template.description}
-            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2, '& a': { color: 'primary.main', textDecoration: 'underline' } }}
+              dangerouslySetInnerHTML={{
+                __html: template.description.replace(
+                  /(https?:\/\/[^\s]+)/g,
+                  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+                ),
+              }}
+            />
           )}
         </>
       )}
