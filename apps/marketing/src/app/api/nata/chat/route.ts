@@ -381,7 +381,8 @@ async function getKBSection(): Promise<string> {
 async function callGemini(
   model: string,
   contents: Array<{ role: string; parts: Array<{ text: string }> }>,
-  systemPrompt: string
+  systemPrompt: string,
+  errors: string[]
 ): Promise<{ reply: string; model: string; finishReason: string } | null> {
   try {
     const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
@@ -408,6 +409,9 @@ async function callGemini(
     if (!response.ok) {
       const status = response.status;
       const errorText = await response.text().catch(() => 'unknown');
+      const shortError = errorText.slice(0, 150);
+      const detail = `${model}:HTTP${status}(${shortError})`;
+      errors.push(detail);
       console.error(`[NataChat] Gemini ${model} error: ${status}`, errorText);
       return null;
     }
@@ -415,7 +419,13 @@ async function callGemini(
     const data = await response.json();
     const candidate = data?.candidates?.[0];
     const reply = candidate?.content?.parts?.[0]?.text;
-    if (!reply) return null;
+    if (!reply) {
+      const blockReason = data?.promptFeedback?.blockReason || candidate?.finishReason || 'NO_CONTENT';
+      const detail = `${model}:${blockReason}`;
+      errors.push(detail);
+      console.error(`[NataChat] Gemini ${model}: no reply (${blockReason})`, JSON.stringify(data).slice(0, 200));
+      return null;
+    }
 
     const finishReason: string = candidate?.finishReason || 'UNKNOWN';
     let finalReply = reply;
@@ -428,6 +438,8 @@ async function callGemini(
 
     return { reply: finalReply, model, finishReason };
   } catch (err) {
+    const detail = `${model}:FETCH_ERROR(${err instanceof Error ? err.message : 'unknown'})`;
+    errors.push(detail);
     console.error(`[NataChat] Gemini ${model} fetch error:`, err);
     return null;
   }
@@ -513,24 +525,35 @@ export async function POST(request: NextRequest) {
 
     // Try models with fallback
     let result: { reply: string; model: string; finishReason: string } | null = null;
+    const errors: string[] = [];
+
     for (const model of GEMINI_MODELS) {
-      result = await callGemini(model, contents, effectivePrompt);
+      result = await callGemini(model, contents, effectivePrompt, errors);
       if (result) break;
     }
 
-    // Retry once with a short delay if rate-limited (429 is common on free tier)
+    // Retry with increasing delays if rate-limited
     if (!result) {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 3000));
+      errors.push('RETRY_1');
       for (const model of GEMINI_MODELS) {
-        result = await callGemini(model, contents, effectivePrompt);
+        result = await callGemini(model, contents, effectivePrompt, errors);
         if (result) break;
       }
+    }
+
+    // Second retry with longer delay
+    if (!result) {
+      await new Promise((r) => setTimeout(r, 5000));
+      errors.push('RETRY_2');
+      // Only try the lite model on last retry (most available)
+      result = await callGemini(GEMINI_MODELS[GEMINI_MODELS.length - 1], contents, effectivePrompt, errors);
     }
 
     const responseTimeMs = Date.now() - startTime;
 
     if (!result) {
-      // Log the failure
+      const detailedError = errors.join(' | ');
       await logConversation({
         sessionId: sessionId || 'unknown',
         userMessage: message.trim(),
@@ -538,7 +561,7 @@ export async function POST(request: NextRequest) {
         userId,
         userName,
         pageUrl,
-        error: 'All models exhausted or rate limited',
+        error: detailedError,
         responseTimeMs,
       });
       return NextResponse.json(
