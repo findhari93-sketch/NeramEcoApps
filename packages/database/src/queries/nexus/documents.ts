@@ -13,6 +13,7 @@ import type {
   ExamPlanType,
   ExamPlanState,
   ExamAttemptState,
+  ExamBroadcastType,
   DocumentAuditAction,
 } from '../../types';
 
@@ -517,7 +518,7 @@ export async function getClassroomExamAttemptOverview(
 export async function createExamBroadcast(data: {
   classroom_id: string;
   exam_type: ExamPlanType;
-  broadcast_type: string;
+  broadcast_type: ExamBroadcastType;
   message?: string | null;
   sent_by: string;
 }): Promise<NexusExamBroadcast> {

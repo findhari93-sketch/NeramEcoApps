@@ -3316,7 +3316,7 @@ export interface ExamDetailAuditLog {
 }
 
 // Exam Planner types (migration 20260314)
-export type ExamPhase = 'phase_1' | 'phase_2';
+// ExamPhase is defined in the Exam Tracking Enhancement section below (includes session_1/session_2)
 export type ExamTimeSlot = 'morning' | 'afternoon';
 
 export interface UserExamSessionPreference {
@@ -5428,6 +5428,12 @@ export interface NTAParsedQuestion {
   categories: string[];
   marks_correct?: number;
   marks_negative?: number;
+  /** Solution video URL (YouTube unlisted or SharePoint) */
+  solution_video_url?: string | null;
+  /** Brief explanation of the solution */
+  explanation_brief?: string | null;
+  /** Detailed step-by-step explanation */
+  explanation_detailed?: string | null;
 }
 
 export interface NTAParsedPaper {

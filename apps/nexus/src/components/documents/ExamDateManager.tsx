@@ -256,7 +256,7 @@ export default function ExamDateManager() {
         fullWidth
         value={formDate}
         onChange={(e) => setFormDate(e.target.value)}
-        slotProps={{ inputLabel: { shrink: true } }}
+        InputLabelProps={{ shrink: true }}
         required
       />
 
@@ -276,7 +276,7 @@ export default function ExamDateManager() {
         fullWidth
         value={formDeadline}
         onChange={(e) => setFormDeadline(e.target.value)}
-        slotProps={{ inputLabel: { shrink: true } }}
+        InputLabelProps={{ shrink: true }}
       />
 
       <Button
