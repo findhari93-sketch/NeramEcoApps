@@ -373,7 +373,7 @@ export default function ModuleDetailPage() {
   const borderColor = moduleData.color || theme.palette.primary.main;
 
   return (
-    <Box>
+    <Box sx={{ overflow: 'hidden' }}>
       {/* Header */}
       <PageHeader
         breadcrumbs={[
@@ -437,19 +437,19 @@ export default function ModuleDetailPage() {
             </Box>
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, overflow: 'hidden' }}>
+            <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, minWidth: 0 }}>
                 {moduleData.icon && (
-                  <span className="material-icons" style={{ fontSize: '1.5rem', lineHeight: 1 }}>{moduleData.icon}</span>
+                  <span className="material-icons" style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{moduleData.icon}</span>
                 )}
-                <Typography variant="h6" sx={{ fontWeight: 700, fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+                <Typography variant="h6" noWrap sx={{ fontWeight: 700, fontSize: { xs: '1.1rem', sm: '1.25rem' }, minWidth: 0 }}>
                   {moduleData.title}
                 </Typography>
                 <IconButton
                   size="small"
                   onClick={() => setEditingTitle(true)}
-                  sx={{ color: 'text.secondary', ml: 0.5 }}
+                  sx={{ color: 'text.secondary', ml: 0.5, flexShrink: 0 }}
                 >
                   <EditOutlinedIcon sx={{ fontSize: '1rem' }} />
                 </IconButton>
@@ -497,7 +497,7 @@ export default function ModuleDetailPage() {
       ) : (
         <>
           {/* Items list */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
               Items
             </Typography>
@@ -553,7 +553,7 @@ export default function ModuleDetailPage() {
                     }}
                   >
                     {/* Top row: icon + title + type chip + actions */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, overflow: 'hidden' }}>
                       {/* Type icon */}
                       <Box
                         sx={{
@@ -572,8 +572,8 @@ export default function ModuleDetailPage() {
                       </Box>
 
                       {/* Title + type chip */}
-                      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: { xs: '0.85rem', sm: '0.9rem' } }} noWrap>
+                      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, overflow: 'hidden' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: { xs: '0.85rem', sm: '0.9rem' }, minWidth: 0 }} noWrap>
                           {item.title}
                         </Typography>
                         <Chip
@@ -586,6 +586,7 @@ export default function ModuleDetailPage() {
                             bgcolor: alpha(itemColor, 0.1),
                             color: itemColor,
                             flexShrink: 0,
+                            display: { xs: 'none', sm: 'flex' },
                           }}
                         />
                       </Box>
@@ -611,7 +612,7 @@ export default function ModuleDetailPage() {
 
                     {/* Bottom row: URL or video ID (only if present) */}
                     {(item.content_url || (item.item_type === 'video' && item.youtube_video_id)) && (
-                      <Box sx={{ mt: 0.75, ml: { xs: 0, sm: 5.75 } }}>
+                      <Box sx={{ mt: 0.75, ml: { xs: 0, sm: 5.75 }, overflow: 'hidden' }}>
                         {item.content_url && (
                           <Typography
                             variant="caption"

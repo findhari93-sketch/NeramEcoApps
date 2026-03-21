@@ -149,7 +149,7 @@ export default function FoundationManageContent({
   };
 
   return (
-    <Box>
+    <Box sx={{ overflow: 'hidden' }}>
       {!hideHeader && (
         <PageHeader
           title="Manage Foundation"
@@ -171,7 +171,7 @@ export default function FoundationManageContent({
       )}
 
       {hideHeader && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
             Chapters ({loading ? '...' : chapters.length})
           </Typography>
@@ -226,7 +226,7 @@ export default function FoundationManageContent({
                 onClick={() => router.push(`${chapterLinkPrefix}/${chapter.id}`)}
               >
                 {/* Top row: badge + title + publish toggle */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, overflow: 'hidden' }}>
                   {/* Chapter number badge */}
                   <Box
                     sx={{
@@ -247,9 +247,9 @@ export default function FoundationManageContent({
                   </Box>
 
                   {/* Title */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: { xs: '0.88rem', sm: '0.95rem' } }} noWrap>
+                  <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: { xs: '0.88rem', sm: '0.95rem' }, minWidth: 0 }} noWrap>
                         {chapter.title}
                       </Typography>
                       {!chapter.is_published && (
@@ -276,7 +276,7 @@ export default function FoundationManageContent({
                 </Box>
 
                 {/* Bottom row: Stats */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.25, sm: 2 }, flexWrap: 'wrap', mt: 1, ml: { xs: 0, sm: 6 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flexWrap: 'wrap', mt: 1, ml: { xs: 0, sm: 6 }, overflow: 'hidden' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <LayersOutlinedIcon sx={{ fontSize: '0.8rem', color: 'text.secondary' }} />
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
