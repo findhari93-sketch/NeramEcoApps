@@ -11,7 +11,8 @@ import type {
   DocumentAuditAction,
 } from '../../types';
 
-const supabase = () => getSupabaseAdminClient();
+// Cast to 'any' — document vault tables are not in generated Supabase types yet
+const supabase = (): any => getSupabaseAdminClient();
 
 // ============================================
 // TEMPLATES

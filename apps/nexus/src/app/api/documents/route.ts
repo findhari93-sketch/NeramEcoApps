@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    let query = supabase
+    // Use 'any' cast because nexus_student_documents has columns not in generated types
+    let query = (supabase as any)
       .from('nexus_student_documents')
       .select('*, template:template_id(id, name, category, is_required)')
       .eq('student_id', user.id)
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     // Validate file size against template if provided
     if (templateId) {
-      const { data: template } = await supabase
+      const { data: template } = await (supabase as any)
         .from('nexus_document_templates')
         .select('max_file_size_mb, allowed_file_types')
         .eq('id', templateId)
@@ -119,10 +120,12 @@ export async function POST(request: NextRequest) {
     const spResult = await uploadToSharePoint(token, spPath, buffer, file.type);
 
     // Handle versioning: mark previous document as not current
+    // Use 'any' cast for columns not in generated types
+    const db = supabase as any;
     let previousVersionId: string | null = null;
     let version = 1;
     if (templateId) {
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from('nexus_student_documents')
         .select('id, version')
         .eq('student_id', user.id)
@@ -135,7 +138,7 @@ export async function POST(request: NextRequest) {
       if (existing) {
         previousVersionId = existing.id;
         version = (existing.version || 1) + 1;
-        await supabase
+        await db
           .from('nexus_student_documents')
           .update({ is_current: false })
           .eq('id', existing.id);
@@ -143,7 +146,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create document record
-    const { data: doc, error } = await supabase
+    const { data: doc, error } = await db
       .from('nexus_student_documents')
       .insert({
         student_id: user.id,
@@ -168,7 +171,7 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     // Audit log
-    await supabase.from('nexus_document_audit_log').insert({
+    await db.from('nexus_document_audit_log').insert({
       document_id: doc.id,
       student_id: user.id,
       classroom_id: classroomId,

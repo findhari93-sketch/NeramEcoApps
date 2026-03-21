@@ -39,8 +39,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authorized for this classroom' }, { status: 403 });
     }
 
+    // Use 'any' cast for columns not in generated types (current_standard, is_current, is_deleted, etc.)
+    const db = supabase as any;
+
     // Get enrolled students with current_standard
-    const { data: enrollments, error: enrollErr } = await supabase
+    const { data: enrollments, error: enrollErr } = await db
       .from('nexus_enrollments')
       .select('user_id, current_standard, users:user_id(id, name, email, avatar_url)')
       .eq('classroom_id', classroomId)
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
     if (enrollErr) throw enrollErr;
 
     // Get active templates
-    const { data: templates, error: tmplErr } = await supabase
+    const { data: templates, error: tmplErr } = await db
       .from('nexus_document_templates')
       .select('*')
       .eq('is_active', true)
@@ -60,7 +63,8 @@ export async function GET(request: NextRequest) {
     if (tmplErr) throw tmplErr;
 
     // Get all current, non-deleted documents for this classroom
-    const { data: docs, error: docsErr } = await supabase
+    // is_current and is_deleted are not in generated types
+    const { data: docs, error: docsErr } = await db
       .from('nexus_student_documents')
       .select('id, student_id, template_id, status')
       .eq('classroom_id', classroomId)

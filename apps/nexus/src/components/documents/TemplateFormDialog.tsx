@@ -213,7 +213,7 @@ export default function TemplateFormDialog({ open, template, onClose, onSaved }:
           size="small"
           fullWidth
           placeholder=""
-          slotProps={{ inputLabel: { shrink: !!unlockDate || undefined } }}
+          InputLabelProps={{ shrink: !!unlockDate || undefined }}
         />
 
         <TextField

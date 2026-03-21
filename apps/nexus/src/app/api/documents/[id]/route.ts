@@ -17,8 +17,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await context.params;
     const supabase = getSupabaseAdminClient();
+    // Use 'any' cast for columns not in generated types
+    const db = supabase as any;
 
-    const { data: doc, error } = await supabase
+    const { data: doc, error } = await db
       .from('nexus_student_documents')
       .select('*, template:template_id(id, name, category, is_required)')
       .eq('id', id)
@@ -28,19 +30,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    // Get version history (previous_version_id may exist at DB level but not in generated types)
-    const rawDoc = doc as Record<string, unknown>;
-    const versions: Record<string, unknown>[] = [];
-    let prevId = rawDoc.previous_version_id as string | undefined;
+    // Get version history
+    const versions: any[] = [];
+    let prevId = doc.previous_version_id;
     while (prevId) {
-      const { data: prev } = await supabase
+      const { data: prev } = await db
         .from('nexus_student_documents')
         .select('*')
         .eq('id', prevId)
         .single();
       if (!prev) break;
       versions.push(prev);
-      prevId = (prev as Record<string, unknown>).previous_version_id as string | undefined;
+      prevId = prev.previous_version_id;
     }
 
     return NextResponse.json({ document: doc, versions });
@@ -60,6 +61,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await context.params;
     const supabase = getSupabaseAdminClient();
+    const db = supabase as any;
 
     const { data: user } = await supabase
       .from('users')
@@ -112,7 +114,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updates.verified_at = null;
     }
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await db
       .from('nexus_student_documents')
       .update(updates)
       .eq('id', id)
@@ -122,7 +124,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (error) throw error;
 
     // Audit log
-    await supabase.from('nexus_document_audit_log').insert({
+    await db.from('nexus_document_audit_log').insert({
       document_id: id,
       student_id: doc.student_id,
       classroom_id: doc.classroom_id,
@@ -151,6 +153,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const hard = request.nextUrl.searchParams.get('hard') === 'true';
     const supabase = getSupabaseAdminClient();
+    const db = supabase as any;
 
     const { data: user } = await supabase
       .from('users')
@@ -160,36 +163,28 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const { data: doc } = await supabase
+    const { data: doc } = await db
       .from('nexus_student_documents')
-      .select('id, student_id, classroom_id')
+      .select('id, student_id, classroom_id, sharepoint_item_id')
       .eq('id', id)
       .single();
 
     if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 });
 
-    // Get sharepoint_item_id via wildcard (may exist at DB level but not in generated types)
-    const { data: rawDoc } = await supabase
-      .from('nexus_student_documents')
-      .select('*')
-      .eq('id', id)
-      .single();
-    const spItemId = (rawDoc as Record<string, unknown>)?.sharepoint_item_id as string | undefined;
-
     if (hard) {
       // Delete from SharePoint if item ID exists
-      if (spItemId) {
+      if (doc.sharepoint_item_id) {
         try {
           const token = await getAppOnlyToken();
-          await deleteFromSharePoint(token, spItemId);
+          await deleteFromSharePoint(token, doc.sharepoint_item_id);
         } catch (spErr) {
           console.error('SharePoint delete error:', spErr);
         }
       }
 
-      await supabase.from('nexus_student_documents').delete().eq('id', id);
+      await db.from('nexus_student_documents').delete().eq('id', id);
 
-      await supabase.from('nexus_document_audit_log').insert({
+      await db.from('nexus_document_audit_log').insert({
         document_id: id,
         student_id: doc.student_id,
         classroom_id: doc.classroom_id,
@@ -198,7 +193,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         metadata: {},
       });
     } else {
-      await supabase
+      await db
         .from('nexus_student_documents')
         .update({
           is_deleted: true,
@@ -207,7 +202,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         })
         .eq('id', id);
 
-      await supabase.from('nexus_document_audit_log').insert({
+      await db.from('nexus_document_audit_log').insert({
         document_id: id,
         student_id: doc.student_id,
         classroom_id: doc.classroom_id,

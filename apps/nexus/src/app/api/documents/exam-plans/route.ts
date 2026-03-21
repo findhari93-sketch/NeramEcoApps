@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const { data, error } = await supabase
+    // nexus_student_exam_plans may not be in generated types
+    const { data, error } = await (supabase as any)
       .from('nexus_student_exam_plans')
       .select('*')
       .eq('student_id', user.id)
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('nexus_student_exam_plans')
       .upsert(
         {

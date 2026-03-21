@@ -16,10 +16,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await context.params;
     const supabase = getSupabaseAdminClient();
+    // Use 'any' cast for columns not in generated types
+    const db = supabase as any;
 
-    const { data: doc } = await supabase
+    const { data: doc } = await db
       .from('nexus_student_documents')
-      .select('file_url')
+      .select('file_url, sharepoint_item_id')
       .eq('id', id)
       .single();
 
@@ -27,16 +29,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    // Check for sharepoint_item_id (may exist at DB level but not in generated types)
-    const { data: rawDoc } = await supabase
-      .from('nexus_student_documents')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    const spItemId = (rawDoc as Record<string, unknown>)?.sharepoint_item_id as string | undefined;
-    if (spItemId) {
-      const url = await getSharePointDownloadUrl(spItemId);
+    if (doc.sharepoint_item_id) {
+      const url = await getSharePointDownloadUrl(doc.sharepoint_item_id);
       return NextResponse.json({ url });
     }
 

@@ -10,8 +10,9 @@ export async function GET(request: NextRequest) {
   try {
     await verifyMsToken(request.headers.get('Authorization'));
 
-    const supabase = getSupabaseAdminClient();
-    let query = supabase
+    // nexus_document_templates not in generated types — use 'any'
+    const db = getSupabaseAdminClient() as any;
+    let query = db
       .from('nexus_document_templates')
       .select('*')
       .eq('is_active', true);
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient();
+    const db = supabase as any;
 
     // Verify teacher/admin role
     const { data: user } = await supabase
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    const { data: template, error } = await supabase
+    const { data: template, error } = await db
       .from('nexus_document_templates')
       .insert({
         name: body.name,

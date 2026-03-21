@@ -13,9 +13,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   try {
     await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await context.params;
-    const supabase = getSupabaseAdminClient();
+    // nexus_document_templates not in generated types
+    const db = getSupabaseAdminClient() as any;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('nexus_document_templates')
       .select('*')
       .eq('id', id)
@@ -41,6 +42,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await context.params;
     const supabase = getSupabaseAdminClient();
+    const db = supabase as any;
 
     const { data: user } = await supabase
       .from('users')
@@ -64,7 +66,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json();
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('nexus_document_templates')
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', id)
@@ -89,6 +91,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const { id } = await context.params;
     const supabase = getSupabaseAdminClient();
+    const db = supabase as any;
 
     const { data: user } = await supabase
       .from('users')
@@ -98,7 +101,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const { error } = await supabase
+    const { error } = await db
       .from('nexus_document_templates')
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', id);

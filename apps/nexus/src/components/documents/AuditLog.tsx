@@ -117,7 +117,7 @@ export default function AuditLog({ studentId }: { studentId?: string }) {
                 color={ACTION_COLORS[entry.action] || 'default'}
                 sx={{ height: 20, fontSize: '0.65rem', mx: 0.5, textTransform: 'capitalize' }}
               />
-              {(entry.metadata as Record<string, unknown>)?.title && (
+              {!!(entry.metadata as Record<string, unknown>)?.title && (
                 <Typography component="span" variant="body2" color="text.secondary">
                   &quot;{String((entry.metadata as Record<string, unknown>).title)}&quot;
                 </Typography>

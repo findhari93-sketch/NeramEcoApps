@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    let query = supabase
+    // nexus_document_audit_log is not in generated types
+    let query = (supabase as any)
       .from('nexus_document_audit_log')
       .select('*, performer:performed_by(id, name)')
       .order('created_at', { ascending: false })
