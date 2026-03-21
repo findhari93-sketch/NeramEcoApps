@@ -107,6 +107,9 @@ export default function TakeTestPage() {
   const answersRef = useRef(answers);
   answersRef.current = answers;
 
+  // Auth token ref for abandon-on-leave
+  const tokenRef = useRef<string | null>(null);
+
   // Swipe tracking
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -124,6 +127,7 @@ export default function TakeTestPage() {
     try {
       const token = await getToken();
       if (!token) return;
+      tokenRef.current = token;
 
       const res = await fetch(`/api/tests/attempt?test_id=${testId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -224,16 +228,36 @@ export default function TakeTestPage() {
   }, [attempt, submitted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -------------------------------------------------------------------------
-  // Prevent back navigation during test
+  // Prevent back navigation + abandon on leave
   // -------------------------------------------------------------------------
+
+  const attemptRef = useRef(attempt);
+  attemptRef.current = attempt;
 
   useEffect(() => {
     if (submitted || loading) return;
 
+    // Warn before leaving
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
+
+      // Fire-and-forget abandon call (keepalive allows it to survive page unload)
+      const aid = attemptRef.current?.id;
+      const tok = tokenRef.current;
+      if (aid && tok) {
+        fetch('/api/tests/attempt/abandon', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attempt_id: aid }),
+          keepalive: true,
+        }).catch(() => {});
+      }
     };
+
+    // Note: we intentionally do NOT abandon on visibilitychange (tab switch).
+    // Students may briefly switch to a calculator app. Abandoning only happens
+    // on actual page unload (close tab, navigate away, refresh).
 
     const handlePopState = () => {
       window.history.pushState(null, '', window.location.href);

@@ -201,12 +201,19 @@ export default function TemplateFormDialog({ open, template, onClose, onSaved }:
 
         <TextField
           label="Unlock Date (optional)"
-          type="datetime-local"
+          type={unlockDate ? 'datetime-local' : 'text'}
           value={unlockDate}
+          onFocus={(e) => {
+            if (!unlockDate) (e.target as HTMLInputElement).type = 'datetime-local';
+          }}
+          onBlur={(e) => {
+            if (!unlockDate) (e.target as HTMLInputElement).type = 'text';
+          }}
           onChange={(e) => setUnlockDate(e.target.value)}
           size="small"
           fullWidth
-          slotProps={{ inputLabel: { shrink: true } }}
+          placeholder=""
+          slotProps={{ inputLabel: { shrink: !!unlockDate || undefined } }}
         />
 
         <TextField

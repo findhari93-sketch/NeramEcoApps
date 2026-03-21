@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  Badge,
   BottomNavigation,
   BottomNavigationAction,
   Paper,
@@ -18,6 +19,7 @@ import {
   Typography,
 } from '@neram/ui';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import { useNavBadges } from './NavBadgeProvider';
 
 interface NavItem {
   label: string;
@@ -41,6 +43,12 @@ export default function BottomNav({ items, overflowItems = [] }: BottomNavProps)
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { getBadgeCount } = useNavBadges();
+
+  // Total badge count across overflow items (to show on "More" button)
+  const overflowBadgeTotal = overflowItems.reduce(
+    (sum, item) => sum + getBadgeCount(item.path), 0,
+  );
 
   if (!isMobile) return null;
 
@@ -125,32 +133,37 @@ export default function BottomNav({ items, overflowItems = [] }: BottomNavProps)
             },
           }}
         >
-          {items.map((item, index) => (
-            <BottomNavigationAction
-              key={item.path}
-              label={item.label}
-              icon={
-                <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {activeIndex === index && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        width: 56,
-                        height: 28,
-                        borderRadius: 14,
-                        bgcolor: alpha(theme.palette.primary.main, 0.12),
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        transition: 'all 250ms cubic-bezier(0.2, 0, 0, 1)',
-                      }}
-                    />
-                  )}
-                  {item.icon}
-                </Box>
-              }
-            />
-          ))}
+          {items.map((item, index) => {
+            const badgeCount = getBadgeCount(item.path);
+            return (
+              <BottomNavigationAction
+                key={item.path}
+                label={item.label}
+                icon={
+                  <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {activeIndex === index && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          width: 56,
+                          height: 28,
+                          borderRadius: 14,
+                          bgcolor: alpha(theme.palette.primary.main, 0.12),
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          transition: 'all 250ms cubic-bezier(0.2, 0, 0, 1)',
+                        }}
+                      />
+                    )}
+                    <Badge badgeContent={badgeCount} color="error" max={99} sx={{ '& .MuiBadge-badge': { fontSize: '0.575rem', height: 16, minWidth: 16, padding: '0 3px' } }}>
+                      {item.icon}
+                    </Badge>
+                  </Box>
+                }
+              />
+            );
+          })}
           {hasOverflow && (
             <BottomNavigationAction
               key="__more__"
@@ -172,7 +185,9 @@ export default function BottomNav({ items, overflowItems = [] }: BottomNavProps)
                       }}
                     />
                   )}
-                  <MoreHorizIcon />
+                  <Badge badgeContent={overflowBadgeTotal} color="error" max={99} sx={{ '& .MuiBadge-badge': { fontSize: '0.575rem', height: 16, minWidth: 16, padding: '0 3px' } }}>
+                    <MoreHorizIcon />
+                  </Badge>
                 </Box>
               }
             />
@@ -235,6 +250,7 @@ export default function BottomNav({ items, overflowItems = [] }: BottomNavProps)
           <List sx={{ px: 1, pb: 2 }}>
             {overflowItems.map((item) => {
               const isActive = pathname === item.path || pathname.startsWith(item.path + '/');
+              const badgeCount = getBadgeCount(item.path);
               return (
                 <ListItemButton
                   key={item.path}
@@ -262,7 +278,9 @@ export default function BottomNav({ items, overflowItems = [] }: BottomNavProps)
                       '& .MuiSvgIcon-root': { fontSize: '1.25rem' },
                     }}
                   >
-                    {item.icon}
+                    <Badge badgeContent={badgeCount} color="error" max={99} sx={{ '& .MuiBadge-badge': { fontSize: '0.575rem', height: 16, minWidth: 16, padding: '0 3px' } }}>
+                      {item.icon}
+                    </Badge>
                   </ListItemIcon>
                   <ListItemText
                     primary={item.label}

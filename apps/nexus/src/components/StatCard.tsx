@@ -5,6 +5,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 
 type StatVariant = 'gradient' | 'outlined' | 'surface';
+type StatSize = 'compact' | 'default' | 'wide';
 
 interface StatCardProps {
   title: string;
@@ -15,13 +16,14 @@ interface StatCardProps {
   trend?: { value: number; label?: string };
   subtitle?: string;
   delay?: number;
+  size?: StatSize;
+  onClick?: () => void;
 }
 
 /**
- * Enterprise-grade stat card with 3 variants:
- * - gradient: primary stat with colored gradient background
- * - outlined: secondary stat with border
- * - surface: tertiary stat with subtle background
+ * Enterprise-grade stat card with 3 variants and 3 sizes:
+ * Variants: gradient | outlined | surface
+ * Sizes: compact (tight grids) | default | wide (full-width hero)
  */
 export default function StatCard({
   title,
@@ -32,6 +34,8 @@ export default function StatCard({
   trend,
   subtitle,
   delay = 0,
+  size = 'default',
+  onClick,
 }: StatCardProps) {
   const theme = useTheme();
   const cardColor = color || theme.palette.primary.main;
@@ -74,16 +78,55 @@ export default function StatCard({
 
   const s = variantStyles[variant];
 
+  /* ── Size-specific tokens ── */
+  const sizeTokens = {
+    compact: {
+      padding: { xs: 1.5 },
+      iconSize: 30,
+      iconRadius: 1.5,
+      iconFont: '1rem',
+      titleFont: '0.6rem',
+      titleTransform: 'uppercase' as const,
+      valueFont: { xs: '1.15rem', sm: '1.3rem' },
+      direction: 'column' as const,
+    },
+    default: {
+      padding: { xs: 1.75, sm: 2 },
+      iconSize: 36,
+      iconRadius: 2,
+      iconFont: '1.15rem',
+      titleFont: '0.65rem',
+      titleTransform: 'uppercase' as const,
+      valueFont: { xs: '1.4rem', sm: '1.6rem' },
+      direction: 'column' as const,
+    },
+    wide: {
+      padding: { xs: 2, sm: 2.5 },
+      iconSize: 44,
+      iconRadius: 2.5,
+      iconFont: '1.4rem',
+      titleFont: '0.7rem',
+      titleTransform: 'uppercase' as const,
+      valueFont: { xs: '1.75rem', sm: '2rem' },
+      direction: 'row' as const,
+    },
+  };
+
+  const t = sizeTokens[size];
+  const isWide = size === 'wide';
+
   return (
     <Paper
       elevation={0}
+      onClick={onClick}
       sx={{
-        p: { xs: 2, sm: 2.5 },
-        borderRadius: 3,
+        p: t.padding,
+        borderRadius: 2,
         background: s.background,
         border: s.border,
         position: 'relative',
         overflow: 'hidden',
+        cursor: onClick ? 'pointer' : 'default',
         transition: 'transform 200ms ease, box-shadow 200ms ease',
         animation: `fadeInUp 400ms cubic-bezier(0.05, 0.7, 0.1, 1) ${delay}ms both`,
         '@keyframes fadeInUp': {
@@ -91,23 +134,56 @@ export default function StatCard({
           to: { opacity: 1, transform: 'translateY(0)' },
         },
         '&:hover': {
-          transform: 'translateY(-2px)',
-          boxShadow: variant === 'gradient'
-            ? `0 8px 24px ${alpha(cardColor, 0.3)}`
-            : '0 4px 16px rgba(0,0,0,0.06)',
+          transform: onClick ? 'translateY(-2px)' : 'none',
+          boxShadow: onClick
+            ? variant === 'gradient'
+              ? `0 8px 24px ${alpha(cardColor, 0.3)}`
+              : '0 4px 16px rgba(0,0,0,0.06)'
+            : 'none',
         },
+        '&:active': onClick ? { transform: 'scale(0.98)' } : {},
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: isWide ? 2 : 1,
+        }}
+      >
+        {/* Icon — on left for wide, on right for default/compact */}
+        {isWide && (
+          <Box
+            sx={{
+              width: t.iconSize,
+              height: t.iconSize,
+              borderRadius: t.iconRadius,
+              bgcolor: s.iconBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              '& .MuiSvgIcon-root': {
+                fontSize: t.iconFont,
+                color: s.iconColor,
+              },
+            }}
+          >
+            {icon}
+          </Box>
+        )}
+
+        {/* Text content */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="caption"
             sx={{
               color: s.titleColor,
               fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              fontSize: '0.65rem',
+              textTransform: t.titleTransform,
+              letterSpacing: t.titleTransform === 'uppercase' ? '0.5px' : '0.2px',
+              fontSize: t.titleFont,
               lineHeight: 1.2,
             }}
           >
@@ -120,7 +196,7 @@ export default function StatCard({
               fontWeight: 800,
               mt: 0.5,
               lineHeight: 1.1,
-              fontSize: { xs: '1.5rem', sm: '1.75rem' },
+              fontSize: t.valueFont,
               letterSpacing: '-0.5px',
             }}
           >
@@ -156,25 +232,27 @@ export default function StatCard({
           )}
         </Box>
 
-        {/* Icon */}
-        <Box
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: 2.5,
-            bgcolor: s.iconBg,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            '& .MuiSvgIcon-root': {
-              fontSize: '1.25rem',
-              color: s.iconColor,
-            },
-          }}
-        >
-          {icon}
-        </Box>
+        {/* Icon — on right for default/compact */}
+        {!isWide && (
+          <Box
+            sx={{
+              width: t.iconSize,
+              height: t.iconSize,
+              borderRadius: t.iconRadius,
+              bgcolor: s.iconBg,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              '& .MuiSvgIcon-root': {
+                fontSize: t.iconFont,
+                color: s.iconColor,
+              },
+            }}
+          >
+            {icon}
+          </Box>
+        )}
       </Box>
     </Paper>
   );

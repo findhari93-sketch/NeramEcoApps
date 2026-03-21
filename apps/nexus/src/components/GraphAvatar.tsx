@@ -28,6 +28,27 @@ function getInitials(name: string | undefined | null): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
+// Professional color palette for avatar backgrounds (deterministic by name)
+const AVATAR_COLORS = [
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#f97316', // orange
+  '#0ea5e9', // sky
+  '#10b981', // emerald
+  '#e11d48', // rose
+];
+
+function getAvatarColor(name: string | undefined | null): string {
+  if (!name) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 // Presence color mapping
 const presenceColors: Record<string, string> = {
   Available: '#107c10',
@@ -136,19 +157,24 @@ export default function GraphAvatar({
     };
   }, []);
 
+  const initials = getInitials(name);
+  const initialsCount = initials.length;
+
   const avatar = (
     <Avatar
       src={!photoError && photoUrl ? photoUrl : undefined}
       sx={{
         width: size,
         height: size,
-        fontSize: size * 0.4,
+        fontSize: initialsCount > 1 ? size * 0.36 : size * 0.44,
         fontWeight: 700,
-        bgcolor: 'primary.main',
+        bgcolor: getAvatarColor(name),
+        color: '#fff',
+        letterSpacing: initialsCount > 1 ? '-0.5px' : 0,
         ...((sx as object) || {}),
       }}
     >
-      {getInitials(name)}
+      {initials}
     </Avatar>
   );
 

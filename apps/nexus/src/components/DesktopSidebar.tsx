@@ -3,6 +3,7 @@
 import { useRef, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  Badge,
   Box,
   Typography,
   Avatar,
@@ -21,6 +22,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useSidebarContext, SIDEBAR_EXPANDED, SIDEBAR_ICONS } from './SidebarProvider';
 import { usePanelContext } from './PanelProvider';
+import { useNavBadges } from './NavBadgeProvider';
 
 // Re-export for backward compat (layouts import this)
 export const SIDEBAR_WIDTH = SIDEBAR_EXPANDED;
@@ -44,6 +46,7 @@ export default function DesktopSidebar({ items }: DesktopSidebarProps) {
   const { user, nexusRole } = useNexusAuthContext();
   const { sidebarState, cycle, toggle, expand } = useSidebarContext();
   const { currentPanelTitle } = usePanelContext();
+  const { getBadgeCount } = useNavBadges();
 
   // Click delay pattern: single click waits 250ms, double-click cancels and fires toggle
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,6 +127,7 @@ export default function DesktopSidebar({ items }: DesktopSidebarProps) {
         <List sx={{ px: isExpanded ? 1.5 : 0.75, flex: 1 }}>
           {items.map((item) => {
             const active = isActive(item.path);
+            const badgeCount = getBadgeCount(item.path);
             const button = (
               <ListItemButton
                 key={item.path}
@@ -151,7 +155,21 @@ export default function DesktopSidebar({ items }: DesktopSidebarProps) {
                     '& .MuiSvgIcon-root': { fontSize: '1.25rem' },
                   }}
                 >
-                  {item.icon}
+                  <Badge
+                    badgeContent={badgeCount}
+                    color="error"
+                    max={99}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        fontSize: '0.625rem',
+                        height: 18,
+                        minWidth: 18,
+                        padding: '0 4px',
+                      },
+                    }}
+                  >
+                    {item.icon}
+                  </Badge>
                 </ListItemIcon>
                 {isExpanded && (
                   <ListItemText

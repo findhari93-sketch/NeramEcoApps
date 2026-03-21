@@ -10,18 +10,22 @@ import {
   SwipeableDrawer,
   Drawer,
   Divider,
+  Snackbar,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import { type ClassCardData } from './ClassCard';
 import MeetingRecap from './MeetingRecap';
 
@@ -98,14 +102,38 @@ export default function ClassDetailPanel({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   if (!cls) return null;
 
   const isUpcoming = cls.status === 'scheduled' || cls.status === 'live';
+  const isLive = cls.status === 'live';
   const isCompleted = cls.status === 'completed';
   const isCancelled = cls.status === 'cancelled';
   const meetingUrl = cls.teams_meeting_join_url || cls.teams_meeting_url;
   const hasRecording = !!cls.recording_url;
+
+  // Compute time-until-class indicator
+  const getTimeIndicator = () => {
+    if (isLive) return { label: 'Live Now', color: 'error' as const };
+    if (cls.status !== 'scheduled') return null;
+    const now = new Date();
+    const classStart = new Date(`${cls.scheduled_date}T${cls.start_time}:00+05:30`);
+    const diffMs = classStart.getTime() - now.getTime();
+    if (diffMs < 0) return { label: 'Starting soon', color: 'warning' as const };
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 60) return { label: `Starts in ${diffMin} min`, color: 'warning' as const };
+    const diffHrs = Math.floor(diffMin / 60);
+    if (diffHrs < 24) return { label: `Starts in ${diffHrs}h`, color: 'primary' as const };
+    return null;
+  };
+  const timeIndicator = getTimeIndicator();
+
+  const handleCopyLink = () => {
+    if (meetingUrl) {
+      navigator.clipboard.writeText(meetingUrl).then(() => setCopied(true));
+    }
+  };
 
   const drawerContent = (
     <Box
@@ -131,13 +159,36 @@ export default function ClassDetailPanel({
             <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
               {cls.title}
             </Typography>
-            <Chip
-              label={cls.status}
-              size="small"
-              color={statusChipColor[cls.status] || 'default'}
-              variant="outlined"
-              sx={{ textTransform: 'capitalize', mt: 0.5 }}
-            />
+            <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
+              <Chip
+                label={cls.status}
+                size="small"
+                color={statusChipColor[cls.status] || 'default'}
+                variant="outlined"
+                sx={{ textTransform: 'capitalize' }}
+              />
+              {timeIndicator && (
+                <Chip
+                  icon={isLive ? <FiberManualRecordIcon sx={{ fontSize: '10px !important', animation: 'pulse 1.5s infinite' }} /> : undefined}
+                  label={timeIndicator.label}
+                  size="small"
+                  color={timeIndicator.color}
+                  variant="filled"
+                  sx={{
+                    fontWeight: 600,
+                    '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
+                  }}
+                />
+              )}
+              {cls.classroom && (
+                <Chip
+                  label={cls.classroom.type === 'common' ? 'All Students' : cls.classroom.name}
+                  size="small"
+                  color={cls.classroom.type === 'common' ? 'warning' : 'default'}
+                  variant="outlined"
+                />
+              )}
+            </Box>
           </Box>
           <IconButton onClick={onClose} sx={{ minWidth: 40, minHeight: 40 }}>
             <CloseIcon />
@@ -252,18 +303,33 @@ export default function ClassDetailPanel({
             </Box>
           )}
 
-          {/* Join meeting */}
+          {/* Join meeting + Copy Link */}
           {isUpcoming && !isCancelled && meetingUrl && (
-            <Button
-              variant="contained"
-              fullWidth
-              href={meetingUrl}
-              target="_blank"
-              startIcon={<VideocamIcon />}
-              sx={{ minHeight: 48, textTransform: 'none' }}
-            >
-              Join Meeting
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="contained"
+                fullWidth
+                href={meetingUrl}
+                target="_blank"
+                startIcon={<VideocamIcon />}
+                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+              >
+                Join in Teams
+              </Button>
+              <IconButton
+                onClick={handleCopyLink}
+                sx={{
+                  minWidth: 48,
+                  minHeight: 48,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                }}
+                title="Copy meeting link"
+              >
+                <ContentCopyIcon />
+              </IconButton>
+            </Box>
           )}
 
           {/* Watch recording */}
@@ -385,45 +451,109 @@ export default function ClassDetailPanel({
             )}
           </>
         )}
+
+        {/* Teacher Audit Info */}
+        {role === 'teacher' && (
+          <>
+            <Divider />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  Class Info
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75 }}>
+                {cls.teacher && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Created by</Typography>
+                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{cls.teacher.name}</Typography>
+                  </Box>
+                )}
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Scope</Typography>
+                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                    {cls.target_scope === 'all' ? 'All Students' :
+                     cls.target_scope === 'batch' ? `Batch: ${cls.batch?.name || 'N/A'}` :
+                     cls.classroom?.name || 'Classroom'}
+                  </Typography>
+                </Box>
+                {cls.teams_meeting_scope && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Teams type</Typography>
+                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                      {cls.teams_meeting_scope === 'channel_meeting' ? 'Channel meeting'
+                       : cls.teams_meeting_scope === 'calendar_event' ? 'Calendar invites'
+                       : 'Link only'}
+                    </Typography>
+                  </Box>
+                )}
+                {cls.classroom && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Classroom</Typography>
+                    <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{cls.classroom.name}</Typography>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          </>
+        )}
       </Box>
     </Box>
   );
 
+  // Snackbar for "Copied!" feedback
+  const snackbarElement = (
+    <Snackbar
+      open={copied}
+      autoHideDuration={2000}
+      onClose={() => setCopied(false)}
+      message="Meeting link copied!"
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    />
+  );
+
   if (isMobile) {
     return (
-      <SwipeableDrawer
-        anchor="bottom"
-        open={open}
-        onClose={onClose}
-        onOpen={() => {}}
-        disableSwipeToOpen
-        PaperProps={{
-          sx: {
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
-            maxHeight: '85vh',
-          },
-        }}
-      >
-        {/* Drag handle */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-          <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
-        </Box>
-        {drawerContent}
-      </SwipeableDrawer>
+      <>
+        <SwipeableDrawer
+          anchor="bottom"
+          open={open}
+          onClose={onClose}
+          onOpen={() => {}}
+          disableSwipeToOpen
+          PaperProps={{
+            sx: {
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              maxHeight: '85vh',
+            },
+          }}
+        >
+          {/* Drag handle */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+            <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
+          </Box>
+          {drawerContent}
+        </SwipeableDrawer>
+        {snackbarElement}
+      </>
     );
   }
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      PaperProps={{
-        sx: { width: 380 },
-      }}
-    >
-      {drawerContent}
-    </Drawer>
+    <>
+      <Drawer
+        anchor="right"
+        open={open}
+        onClose={onClose}
+        PaperProps={{
+          sx: { width: 380 },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+      {snackbarElement}
+    </>
   );
 }

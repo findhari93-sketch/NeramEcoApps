@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
-    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, teams_meeting_scope } = body;
+    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, teams_meeting_scope, target_scope } = body;
 
     if (!classroom_id || !title || !scheduled_date || !start_time || !end_time) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
       topic_id: topic_id || null,
       batch_id: batch_id || null,
       teams_meeting_scope: teams_meeting_scope || null,
+      target_scope: target_scope || (batch_id ? 'batch' : 'classroom'),
       status: 'scheduled',
     };
 
@@ -190,7 +191,7 @@ export async function PATCH(request: NextRequest) {
     const allowedFields = [
       'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'status',
       'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url', 'teams_meeting_scope',
-      'batch_id', 'recording_url', 'transcript_url', 'notes', 'description',
+      'batch_id', 'recording_url', 'transcript_url', 'notes', 'description', 'target_scope',
     ];
     const safeUpdates: Record<string, unknown> = {};
     for (const key of allowedFields) {

@@ -17,10 +17,17 @@ import {
   FormControl,
   FormHelperText,
   Switch,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import SchoolIcon from '@mui/icons-material/School';
+import GroupsIcon from '@mui/icons-material/Groups';
 import { type ClassCardData } from './ClassCard';
 import { type HolidayInfo } from './WeeklyCalendarGrid';
+
+type TargetScope = 'all' | 'classroom' | 'batch';
 
 interface TopicOption {
   id: string;
@@ -41,6 +48,7 @@ interface ClassFormData {
   topic_id: string;
   batch_id: string;
   create_meeting: boolean;
+  target_scope: TargetScope;
 }
 
 const emptyForm: ClassFormData = {
@@ -51,6 +59,7 @@ const emptyForm: ClassFormData = {
   topic_id: '',
   batch_id: '',
   create_meeting: false,
+  target_scope: 'classroom',
 };
 
 interface ClassCreateDialogProps {
@@ -72,6 +81,10 @@ interface ClassCreateDialogProps {
   onRemoveHoliday?: (date: string) => Promise<void>;
   /** Whether the classroom has a linked Teams team (enables channel meeting) */
   hasLinkedTeam?: boolean;
+  /** ID of the Common classroom (type='common') for cross-classroom meetings */
+  commonClassroomId?: string | null;
+  /** Name of the current classroom (e.g. "NATA 2026") for display */
+  classroomName?: string;
 }
 
 export default function ClassCreateDialog({
@@ -88,6 +101,8 @@ export default function ClassCreateDialog({
   holidays,
   onRemoveHoliday,
   hasLinkedTeam,
+  commonClassroomId,
+  classroomName,
 }: ClassCreateDialogProps) {
   const [formData, setFormData] = useState<ClassFormData>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -105,6 +120,7 @@ export default function ClassCreateDialog({
         topic_id: editingClass.topic?.id || '',
         batch_id: editingClass.batch_id || '',
         create_meeting: false,
+        target_scope: (editingClass.target_scope as 'all' | 'classroom' | 'batch') || 'classroom',
       });
     } else if (prefillDate || prefillTime) {
       setFormData({
@@ -162,14 +178,20 @@ export default function ClassCreateDialog({
       const token = await getToken();
       if (!token) return;
 
+      // Determine the effective classroom ID based on scope
+      const effectiveClassroomId = formData.target_scope === 'all' && commonClassroomId
+        ? commonClassroomId
+        : classroomId;
+
       const body: Record<string, unknown> = {
         title: formData.title,
         scheduled_date: formData.scheduled_date,
         start_time: formData.start_time,
         end_time: formData.end_time,
-        classroom_id: classroomId,
+        classroom_id: effectiveClassroomId,
         topic_id: formData.topic_id || null,
-        batch_id: formData.batch_id || null,
+        batch_id: formData.target_scope === 'batch' ? (formData.batch_id || null) : null,
+        target_scope: formData.target_scope,
       };
 
       const method = editingClass ? 'PATCH' : 'POST';
@@ -204,7 +226,7 @@ export default function ClassCreateDialog({
             },
             body: JSON.stringify({
               class_id: data.class.id,
-              classroom_id: classroomId,
+              classroom_id: effectiveClassroomId,
               auto: true,
             }),
           });
@@ -233,6 +255,43 @@ export default function ClassCreateDialog({
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
+
+          {/* Scope selector — only show when creating (not editing) and common classroom exists */}
+          {!editingClass && commonClassroomId && (
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>
+                Who is this class for?
+              </Typography>
+              <ToggleButtonGroup
+                value={formData.target_scope}
+                exclusive
+                onChange={(_, v) => {
+                  if (v) setFormData((f) => ({ ...f, target_scope: v as TargetScope, batch_id: v === 'all' ? '' : f.batch_id }));
+                }}
+                fullWidth
+                size="small"
+                sx={{ '& .MuiToggleButton-root': { minHeight: 44, textTransform: 'none', fontSize: '0.8rem', gap: 0.5 } }}
+              >
+                <ToggleButton value="all">
+                  <PeopleAltIcon sx={{ fontSize: 18 }} />
+                  All Students
+                </ToggleButton>
+                <ToggleButton value="classroom">
+                  <SchoolIcon sx={{ fontSize: 18 }} />
+                  {classroomName || 'Classroom'}
+                </ToggleButton>
+                <ToggleButton value="batch">
+                  <GroupsIcon sx={{ fontSize: 18 }} />
+                  Batch
+                </ToggleButton>
+              </ToggleButtonGroup>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                {formData.target_scope === 'all' && 'Visible to all students across all classrooms'}
+                {formData.target_scope === 'classroom' && `Visible to all students in ${classroomName || 'this classroom'}`}
+                {formData.target_scope === 'batch' && 'Visible only to students in the selected batch'}
+              </Typography>
+            </Box>
+          )}
 
           <TextField
             label="Title *"
@@ -293,27 +352,38 @@ export default function ClassCreateDialog({
             </Select>
           </FormControl>
 
-          <FormControl fullWidth>
-            <InputLabel id="batch-select-label" shrink>Batch</InputLabel>
-            <Select
-              labelId="batch-select-label"
-              label="Batch"
-              displayEmpty
-              value={formData.batch_id}
-              onChange={(e) => setFormData((f) => ({ ...f, batch_id: e.target.value as string }))}
-              notched
-              MenuProps={{ PaperProps: { sx: { maxHeight: 300 } } }}
-              sx={{ minHeight: 48 }}
-            >
-              <MenuItem value="">All Batches (Classroom-wide)</MenuItem>
-              {batches.map((b) => (
-                <MenuItem key={b.id} value={b.id}>
-                  {b.name}
-                </MenuItem>
-              ))}
-            </Select>
-            <FormHelperText>Leave as &apos;All Batches&apos; for classroom-wide classes</FormHelperText>
-          </FormControl>
+          {/* Batch selector — hidden when scope is 'all', required when scope is 'batch' */}
+          {formData.target_scope !== 'all' && (
+            <FormControl fullWidth>
+              <InputLabel id="batch-select-label" shrink>
+                {formData.target_scope === 'batch' ? 'Batch *' : 'Batch'}
+              </InputLabel>
+              <Select
+                labelId="batch-select-label"
+                label={formData.target_scope === 'batch' ? 'Batch *' : 'Batch'}
+                displayEmpty
+                value={formData.batch_id}
+                onChange={(e) => setFormData((f) => ({ ...f, batch_id: e.target.value as string }))}
+                notched
+                MenuProps={{ PaperProps: { sx: { maxHeight: 300 } } }}
+                sx={{ minHeight: 48 }}
+              >
+                {formData.target_scope !== 'batch' && (
+                  <MenuItem value="">All Batches (Classroom-wide)</MenuItem>
+                )}
+                {batches.map((b) => (
+                  <MenuItem key={b.id} value={b.id}>
+                    {b.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              {formData.target_scope === 'batch' ? (
+                <FormHelperText>Select the batch for this class</FormHelperText>
+              ) : (
+                <FormHelperText>Leave as &apos;All Batches&apos; for classroom-wide classes</FormHelperText>
+              )}
+            </FormControl>
+          )}
 
           {/* Create Teams Meeting toggle */}
           {!editingClass && (
@@ -359,7 +429,7 @@ export default function ClassCreateDialog({
         <Button
           variant="contained"
           onClick={handleSubmit}
-          disabled={submitting || !formData.title || !formData.scheduled_date}
+          disabled={submitting || !formData.title || !formData.scheduled_date || (formData.target_scope === 'batch' && !formData.batch_id)}
           sx={{ minHeight: 48 }}
         >
           {submitting ? 'Saving...' : editingClass ? 'Update' : 'Create'}

@@ -2,7 +2,6 @@
 
 import { Box, Typography, Paper, Button, alpha, useTheme, Skeleton } from '@neram/ui';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import FoundationProgressBar from './ProgressBar';
 import type { NexusFoundationChapterWithProgress, FoundationChapterStatus } from '@neram/database/types';
@@ -58,17 +57,16 @@ export default function FoundationOverviewCard({
     <Paper
       elevation={0}
       sx={{
-        p: { xs: 2, sm: 3 },
-        borderRadius: 3,
-        border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+        p: { xs: 1.5, sm: 2 },
+        borderRadius: 2,
+        border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
         background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${alpha(theme.palette.primary.main, 0.01)} 100%)`,
         mb: 0,
-        position: 'relative',
-        overflow: 'hidden',
       }}
     >
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+      {/* Row 1: Icon + Title + Progress + Continue */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        {/* Icon */}
         <Box
           sx={{
             width: 36,
@@ -78,97 +76,115 @@ export default function FoundationOverviewCard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexShrink: 0,
           }}
         >
-          <MenuBookOutlinedIcon sx={{ fontSize: '1.2rem', color: theme.palette.primary.main }} />
+          {allCompleted ? (
+            <CheckCircleIcon sx={{ fontSize: '1.2rem', color: theme.palette.success.main }} />
+          ) : (
+            <MenuBookOutlinedIcon sx={{ fontSize: '1.1rem', color: theme.palette.primary.main }} />
+          )}
         </Box>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-            Foundation Module
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-            {allCompleted ? 'All chapters completed!' : `Chapter ${currentChapter?.chapter_number || 1} of ${totalCount}`}
-          </Typography>
+
+        {/* Content */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.2 }}>
+              Foundation Module
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.65rem', flexShrink: 0 }}>
+              {completedCount}/{totalCount}
+            </Typography>
+          </Box>
+
+          {/* Progress bar */}
+          <FoundationProgressBar
+            completed={completedCount}
+            total={totalCount}
+            size="small"
+            showPercentage={false}
+          />
         </Box>
-        {allCompleted && (
-          <CheckCircleIcon sx={{ fontSize: '1.5rem', color: theme.palette.success.main }} />
+
+        {/* Continue button */}
+        {currentChapter && !allCompleted && (
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => onContinue(currentChapter.id)}
+            sx={{
+              borderRadius: 1.5,
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              px: 1.5,
+              py: 0.5,
+              minHeight: 30,
+              minWidth: 'auto',
+              flexShrink: 0,
+              boxShadow: 'none',
+              '&:hover': { boxShadow: 'none' },
+            }}
+          >
+            Continue
+          </Button>
         )}
       </Box>
 
-      {/* Progress */}
-      <FoundationProgressBar
-        completed={completedCount}
-        total={totalCount}
-        label="Chapters completed"
-        size="medium"
-      />
+      {/* Row 2: Current chapter + chapter dots + View All */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1, pl: '52px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+          {currentChapter && !allCompleted ? (
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', lineHeight: 1.2 }} noWrap>
+              Ch {currentChapter.chapter_number}: <strong>{currentChapter.title}</strong>
+            </Typography>
+          ) : allCompleted ? (
+            <Typography variant="caption" sx={{ color: theme.palette.success.main, fontSize: '0.7rem', fontWeight: 600 }}>
+              All chapters completed!
+            </Typography>
+          ) : null}
 
-      {/* Current chapter info */}
-      {currentChapter && !allCompleted && (
-        <Box sx={{ mt: 2 }}>
-          <Typography
-            variant="body2"
-            sx={{ color: 'text.secondary', fontSize: '0.8rem', mb: 1 }}
-          >
-            Currently on: <strong>{currentChapter.title}</strong>
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() => onContinue(currentChapter.id)}
-              endIcon={<ArrowForwardIcon />}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.8rem',
-                px: 2,
-                py: 0.75,
-                minHeight: 36,
-              }}
-            >
-              Continue Learning
-            </Button>
-            <Button
-              variant="text"
-              size="small"
-              onClick={onViewAll}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 500,
-                fontSize: '0.8rem',
-                color: 'text.secondary',
-              }}
-            >
-              View All
-            </Button>
+          {/* Chapter dots */}
+          <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+            {chapters.map((ch, i) => {
+              const status = getEffectiveStatus(chapters, i);
+              return (
+                <Box
+                  key={ch.id}
+                  sx={{
+                    width: 14,
+                    height: 4,
+                    borderRadius: 2,
+                    bgcolor: status === 'completed'
+                      ? theme.palette.success.main
+                      : status === 'in_progress'
+                        ? theme.palette.primary.main
+                        : alpha(theme.palette.action.disabled, 0.2),
+                  }}
+                />
+              );
+            })}
           </Box>
         </Box>
-      )}
 
-      {/* Chapter dots/pills */}
-      <Box sx={{ display: 'flex', gap: 0.5, mt: 2, flexWrap: 'wrap' }}>
-        {chapters.map((ch, i) => {
-          const status = getEffectiveStatus(chapters, i);
-          return (
-            <Box
-              key={ch.id}
-              sx={{
-                width: 24,
-                height: 6,
-                borderRadius: 3,
-                bgcolor: status === 'completed'
-                  ? theme.palette.success.main
-                  : status === 'in_progress'
-                    ? theme.palette.primary.main
-                    : alpha(theme.palette.action.disabled, 0.2),
-                transition: 'background-color 300ms ease',
-              }}
-            />
-          );
-        })}
+        <Button
+          variant="text"
+          size="small"
+          onClick={onViewAll}
+          sx={{
+            textTransform: 'none',
+            fontWeight: 500,
+            fontSize: '0.7rem',
+            color: 'text.secondary',
+            minWidth: 'auto',
+            px: 0.5,
+            py: 0,
+            minHeight: 'auto',
+            '&:hover': { color: 'primary.main', bgcolor: 'transparent' },
+          }}
+        >
+          View All
+        </Button>
       </Box>
     </Paper>
   );

@@ -10,7 +10,6 @@ import {
   Skeleton,
   Chip,
   Button,
-  LinearProgress,
   alpha,
   useTheme,
 } from '@neram/ui';
@@ -21,8 +20,8 @@ import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import PageHeader from '@/components/PageHeader';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
 import type { NexusFoundationChapterWithProgress } from '@neram/database/types';
@@ -57,7 +56,6 @@ export default function StudentDashboard() {
 
   const noClassrooms = !authLoading && classrooms.length === 0;
 
-  // Fetch foundation progress
   const fetchFoundation = useCallback(async () => {
     setFoundationLoading(true);
     try {
@@ -111,7 +109,7 @@ export default function StudentDashboard() {
     }
 
     fetchDashboard();
-  }, [activeClassroom, getToken]);
+  }, [activeClassroom, getToken, authLoading]);
 
   const formatTime = (time: string) => {
     const [h, m] = time.split(':');
@@ -122,17 +120,18 @@ export default function StudentDashboard() {
   };
 
   const attendancePct = data?.attendanceSummary.percentage ?? 0;
-  const checklistPct = data?.checklistProgress.total
-    ? Math.round((data.checklistProgress.completed / data.checklistProgress.total) * 100)
-    : 0;
 
   if (noClassrooms) {
     return (
       <Box>
-        <PageHeader
-          title={`Welcome, ${user?.name?.split(' ')[0] || 'Student'}`}
-          subtitle="Getting Started"
-        />
+        <Box sx={{ mb: 2.5 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            Welcome, {user?.name?.split(' ')[0] || 'Student'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Getting Started
+          </Typography>
+        </Box>
         <Paper
           elevation={0}
           sx={{
@@ -154,117 +153,309 @@ export default function StudentDashboard() {
     );
   }
 
+  // Determine "Next Up" hero content
+  const nextClass = data?.upcomingClasses?.[0];
+  const hasUpcomingClassSoon = !!nextClass;
+
   return (
     <Box>
-      <PageHeader
-        title={`Welcome, ${user?.name?.split(' ')[0] || 'Student'}`}
-        subtitle={activeClassroom?.name || 'No classroom selected'}
-      />
+      {/* ── Compact Greeting ── */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+          Welcome, {user?.name?.split(' ')[0] || 'Student'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {activeClassroom?.name || 'No classroom selected'}
+        </Typography>
+      </Box>
 
-      {/* Foundation Progress */}
-      <FoundationOverviewCard
-        chapters={foundationChapters}
-        loading={foundationLoading}
-        onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
-        onViewAll={() => router.push('/student/foundation')}
-      />
+      {/* ── Foundation Progress ── */}
+      <Box sx={{ mb: 2 }}>
+        <FoundationOverviewCard
+          chapters={foundationChapters}
+          loading={foundationLoading}
+          onContinue={(chapterId) => router.push(`/student/foundation/${chapterId}`)}
+          onViewAll={() => router.push('/student/foundation')}
+        />
+      </Box>
 
-      {/* Progress Stats */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}>
-          {loading ? (
-            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
+      {/* ── "Next Up" Hero Card ── */}
+      {!loading && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            borderRadius: 2,
+            mb: 2,
+            background: hasUpcomingClassSoon
+              ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${alpha(theme.palette.primary.main, 0.8)} 100%)`
+              : `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${alpha(theme.palette.success.main, 0.8)} 100%)`,
+            color: '#fff',
+            animation: 'fadeInUp 400ms cubic-bezier(0.05, 0.7, 0.1, 1) both',
+            '@keyframes fadeInUp': {
+              from: { opacity: 0, transform: 'translateY(12px)' },
+              to: { opacity: 1, transform: 'translateY(0)' },
+            },
+          }}
+        >
+          {hasUpcomingClassSoon ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="caption" sx={{ color: alpha('#fff', 0.85), fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Next Class
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700, mt: 0.25, lineHeight: 1.3 }} noWrap>
+                  {nextClass.title}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                  <AccessTimeIcon sx={{ fontSize: '0.8rem', color: alpha('#fff', 0.7) }} />
+                  <Typography variant="caption" sx={{ color: alpha('#fff', 0.85) }}>
+                    {nextClass.scheduled_date} &middot; {formatTime(nextClass.start_time)}
+                  </Typography>
+                </Box>
+              </Box>
+              {nextClass.teams_meeting_url && nextClass.status !== 'completed' && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  href={nextClass.teams_meeting_url}
+                  target="_blank"
+                  startIcon={<VideocamOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
+                  sx={{
+                    textTransform: 'none',
+                    minHeight: 40,
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    px: 2,
+                    bgcolor: alpha('#fff', 0.2),
+                    color: '#fff',
+                    boxShadow: 'none',
+                    '&:hover': { bgcolor: alpha('#fff', 0.3), boxShadow: 'none' },
+                  }}
+                >
+                  Join
+                </Button>
+              )}
+            </Box>
           ) : (
-            <StatCard
-              title="Attendance"
-              value={`${attendancePct}%`}
-              icon={<SchoolOutlinedIcon />}
-              variant="gradient"
-              subtitle={`${data?.attendanceSummary.attended ?? 0} of ${data?.attendanceSummary.total ?? 0} classes`}
-              delay={0}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{
+                width: 48, height: 48, borderRadius: 3,
+                bgcolor: alpha('#fff', 0.2),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <CalendarTodayOutlinedIcon sx={{ fontSize: '1.3rem', color: '#fff' }} />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="caption" sx={{ color: alpha('#fff', 0.85), fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  All caught up!
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                  No upcoming classes
+                </Typography>
+                <Typography variant="caption" sx={{ color: alpha('#fff', 0.8) }}>
+                  Check your timetable for the full schedule
+                </Typography>
+              </Box>
+            </Box>
           )}
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          {loading ? (
-            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
-          ) : (
-            <StatCard
-              title="Checklist"
-              value={`${data?.checklistProgress.completed ?? 0}/${data?.checklistProgress.total ?? 0}`}
-              icon={<ChecklistOutlinedIcon />}
-              variant="surface"
-              color={theme.palette.success.main}
-              delay={80}
-            />
-          )}
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          {loading ? (
-            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
-          ) : (
-            <StatCard
-              title="Topics Done"
-              value={`${data?.topicProgress.completed ?? 0}/${data?.topicProgress.total ?? 0}`}
-              icon={<MenuBookOutlinedIcon />}
-              variant="surface"
-              color={theme.palette.warning.main}
-              delay={160}
-            />
-          )}
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          {loading ? (
-            <Skeleton variant="rounded" height={110} sx={{ borderRadius: 3 }} />
-          ) : (
-            <StatCard
-              title="Classes Attended"
-              value={data?.attendanceSummary.attended ?? 0}
-              icon={<EventAvailableOutlinedIcon />}
-              variant="outlined"
-              color={theme.palette.info.main}
-              delay={240}
-            />
-          )}
-        </Grid>
-      </Grid>
+        </Paper>
+      )}
+      {loading && (
+        <Skeleton variant="rounded" height={80} sx={{ borderRadius: 2, mb: 2 }} />
+      )}
 
-      {/* Upcoming Classes */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          borderRadius: 3,
-          border: `1px solid ${theme.palette.divider}`,
-          mb: 2.5,
-        }}
-      >
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
-          Upcoming Classes
+      {/* ── Progress Stats: Horizontal scroll on mobile, Grid on desktop ── */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+          Your Progress
         </Typography>
 
+        {/* Mobile: horizontal scroll strip */}
+        <Box
+          sx={{
+            display: { xs: 'flex', sm: 'none' },
+            gap: 1.5,
+            overflowX: 'auto',
+            mx: -2,
+            px: 2,
+            pb: 1,
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            '&::-webkit-scrollbar': { display: 'none' },
+            msOverflowStyle: 'none',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {loading ? (
+            [1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} variant="rounded" width={140} height={80} sx={{ borderRadius: 2, flexShrink: 0 }} />
+            ))
+          ) : (
+            <>
+              <Box sx={{ minWidth: 140, flexShrink: 0, scrollSnapAlign: 'start' }}>
+                <StatCard
+                  title="Attendance"
+                  value={`${attendancePct}%`}
+                  icon={<SchoolOutlinedIcon />}
+                  variant="surface"
+                  size="compact"
+                  delay={0}
+                />
+              </Box>
+              <Box sx={{ minWidth: 140, flexShrink: 0, scrollSnapAlign: 'start' }}>
+                <StatCard
+                  title="Checklist"
+                  value={`${data?.checklistProgress.completed ?? 0}/${data?.checklistProgress.total ?? 0}`}
+                  icon={<ChecklistOutlinedIcon />}
+                  variant="surface"
+                  color={theme.palette.success.main}
+                  size="compact"
+                  delay={50}
+                />
+              </Box>
+              <Box sx={{ minWidth: 140, flexShrink: 0, scrollSnapAlign: 'start' }}>
+                <StatCard
+                  title="Topics Done"
+                  value={`${data?.topicProgress.completed ?? 0}/${data?.topicProgress.total ?? 0}`}
+                  icon={<MenuBookOutlinedIcon />}
+                  variant="surface"
+                  color={theme.palette.warning.main}
+                  size="compact"
+                  delay={100}
+                />
+              </Box>
+              <Box sx={{ minWidth: 140, flexShrink: 0, scrollSnapAlign: 'start' }}>
+                <StatCard
+                  title="Classes"
+                  value={data?.attendanceSummary.attended ?? 0}
+                  icon={<EventAvailableOutlinedIcon />}
+                  variant="outlined"
+                  color={theme.palette.info.main}
+                  size="compact"
+                  delay={150}
+                />
+              </Box>
+            </>
+          )}
+        </Box>
+
+        {/* Desktop: 4-column grid */}
+        <Grid container spacing={2} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+          <Grid item sm={3}>
+            {loading ? (
+              <Skeleton variant="rounded" height={100} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatCard
+                title="Attendance"
+                value={`${attendancePct}%`}
+                icon={<SchoolOutlinedIcon />}
+                variant="surface"
+                subtitle={`${data?.attendanceSummary.attended ?? 0} of ${data?.attendanceSummary.total ?? 0} classes`}
+                delay={0}
+              />
+            )}
+          </Grid>
+          <Grid item sm={3}>
+            {loading ? (
+              <Skeleton variant="rounded" height={100} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatCard
+                title="Checklist"
+                value={`${data?.checklistProgress.completed ?? 0}/${data?.checklistProgress.total ?? 0}`}
+                icon={<ChecklistOutlinedIcon />}
+                variant="surface"
+                color={theme.palette.success.main}
+                delay={50}
+              />
+            )}
+          </Grid>
+          <Grid item sm={3}>
+            {loading ? (
+              <Skeleton variant="rounded" height={100} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatCard
+                title="Topics Done"
+                value={`${data?.topicProgress.completed ?? 0}/${data?.topicProgress.total ?? 0}`}
+                icon={<MenuBookOutlinedIcon />}
+                variant="surface"
+                color={theme.palette.warning.main}
+                delay={100}
+              />
+            )}
+          </Grid>
+          <Grid item sm={3}>
+            {loading ? (
+              <Skeleton variant="rounded" height={100} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatCard
+                title="Classes Attended"
+                value={data?.attendanceSummary.attended ?? 0}
+                icon={<EventAvailableOutlinedIcon />}
+                variant="outlined"
+                color={theme.palette.info.main}
+                delay={150}
+              />
+            )}
+          </Grid>
+        </Grid>
+      </Box>
+
+      {/* ── Upcoming Classes ── */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            Upcoming Classes
+          </Typography>
+          <Button
+            size="small"
+            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.85rem !important' }} />}
+            onClick={() => router.push('/student/timetable')}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+          >
+            View All
+          </Button>
+        </Box>
+
         {loading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} variant="rounded" height={72} sx={{ borderRadius: 2.5 }} />
+              <Skeleton key={i} variant="rounded" height={68} sx={{ borderRadius: 2.5 }} />
             ))}
           </Box>
         ) : !data?.upcomingClasses.length ? (
-          <Box sx={{ py: 3, textAlign: 'center' }}>
-            <CalendarTodayOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">
+          <Paper
+            elevation={0}
+            sx={{
+              py: 2.5,
+              textAlign: 'center',
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <CalendarTodayOutlinedIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 0.75 }} />
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               No upcoming classes scheduled
             </Typography>
-          </Box>
+            <Button
+              size="small"
+              onClick={() => router.push('/student/timetable')}
+              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+            >
+              View Timetable
+            </Button>
+          </Paper>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {data.upcomingClasses.map((cls, i) => (
               <Paper
                 key={cls.id}
                 elevation={0}
                 sx={{
                   p: 2,
-                  borderRadius: 2.5,
+                  borderRadius: 2,
                   bgcolor: alpha(theme.palette.background.default, 0.5),
                   border: `1px solid ${theme.palette.divider}`,
                   borderLeft: `4px solid ${cls.status === 'completed' ? theme.palette.success.main : theme.palette.primary.main}`,
@@ -272,7 +463,7 @@ export default function StudentDashboard() {
                   alignItems: { xs: 'flex-start', sm: 'center' },
                   flexDirection: { xs: 'column', sm: 'row' },
                   gap: 1.5,
-                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 60}ms both`,
+                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 50}ms both`,
                   '@keyframes fadeInUp': {
                     from: { opacity: 0, transform: 'translateY(8px)' },
                     to: { opacity: 1, transform: 'translateY(0)' },
@@ -329,41 +520,7 @@ export default function StudentDashboard() {
             ))}
           </Box>
         )}
-      </Paper>
-
-      {/* Checklist Progress Bar */}
-      {data && data.checklistProgress.total > 0 && (
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2, sm: 2.5 },
-            borderRadius: 3,
-            border: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              Theory Checklist
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-              {data.checklistProgress.completed}/{data.checklistProgress.total}
-            </Typography>
-          </Box>
-          <LinearProgress
-            variant="determinate"
-            value={checklistPct}
-            sx={{
-              height: 10,
-              borderRadius: 5,
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              '& .MuiLinearProgress-bar': { borderRadius: 5 },
-            }}
-          />
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
-            {checklistPct}% completed
-          </Typography>
-        </Paper>
-      )}
+      </Box>
     </Box>
   );
 }

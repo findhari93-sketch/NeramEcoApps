@@ -80,6 +80,22 @@ export async function GET(request: NextRequest) {
       testQuestions = data || [];
     }
 
+    // Check if already submitted
+    const { data: submittedAttempt } = await supabase
+      .from('nexus_test_attempts')
+      .select('*')
+      .eq('test_id', testId)
+      .eq('student_id', user.id)
+      .eq('status', 'submitted')
+      .single();
+
+    if (submittedAttempt) {
+      return NextResponse.json({
+        error: 'You have already submitted this test',
+        attempt: submittedAttempt,
+      }, { status: 409 });
+    }
+
     // Check for existing in-progress attempt
     const { data: existingAttempt } = await supabase
       .from('nexus_test_attempts')
@@ -91,24 +107,44 @@ export async function GET(request: NextRequest) {
 
     let attempt = existingAttempt;
 
-    if (!attempt) {
-      // Check if already submitted
-      const { data: submittedAttempt } = await supabase
-        .from('nexus_test_attempts')
-        .select('*')
-        .eq('test_id', testId)
-        .eq('student_id', user.id)
-        .eq('status', 'submitted')
-        .single();
+    // If there's an in_progress attempt, check if it's stale (expired)
+    if (attempt) {
+      let isStale = false;
 
-      if (submittedAttempt) {
-        return NextResponse.json({
-          error: 'You have already submitted this test',
-          attempt: submittedAttempt,
-        }, { status: 409 });
+      if (test.test_type === 'timed' && test.duration_minutes && attempt.started_at) {
+        const startedAt = new Date(attempt.started_at).getTime();
+        const durationMs = test.duration_minutes * 60 * 1000;
+        const graceMs = 30 * 1000; // 30s grace for network delays
+        if (Date.now() > startedAt + durationMs + graceMs) {
+          isStale = true;
+        }
       }
 
-      // Create new attempt
+      if (test.test_type === 'per_question_timer' && test.per_question_seconds && attempt.started_at) {
+        // For per-question timer: total allowed time = per_question_seconds * question_count
+        const totalAllowed = test.per_question_seconds * testQuestions.length * 1000;
+        const graceMs = 60 * 1000; // 1 min grace
+        const startedAt = new Date(attempt.started_at).getTime();
+        if (Date.now() > startedAt + totalAllowed + graceMs) {
+          isStale = true;
+        }
+      }
+
+      if (isStale) {
+        // Auto-mark as abandoned (timer expired while user was away)
+        await supabase
+          .from('nexus_test_attempts')
+          .update({
+            status: 'abandoned',
+            submitted_at: new Date().toISOString(),
+          })
+          .eq('id', attempt.id);
+        attempt = null; // Will create a new attempt below
+      }
+    }
+
+    if (!attempt) {
+      // Create new attempt (first time or after abandoned previous)
       const { data: newAttempt, error } = await supabase
         .from('nexus_test_attempts')
         .insert({

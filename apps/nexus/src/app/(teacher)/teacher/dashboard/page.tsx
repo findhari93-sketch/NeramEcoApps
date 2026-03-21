@@ -23,7 +23,6 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import PageHeader from '@/components/PageHeader';
 import StatCard from '@/components/StatCard';
 
 interface TodayClass {
@@ -50,7 +49,6 @@ export default function TeacherDashboard() {
   const [data, setData] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // If auth is done loading and there are no classrooms, stop showing skeletons
   const noClassrooms = !authLoading && classrooms.length === 0;
 
   useEffect(() => {
@@ -81,7 +79,7 @@ export default function TeacherDashboard() {
     }
 
     fetchDashboard();
-  }, [activeClassroom, getToken]);
+  }, [activeClassroom, getToken, authLoading]);
 
   const formatTime = (time: string) => {
     const [h, m] = time.split(':');
@@ -104,10 +102,14 @@ export default function TeacherDashboard() {
   if (noClassrooms) {
     return (
       <Box>
-        <PageHeader
-          title={`Good ${getGreeting()}, ${firstName}`}
-          subtitle="Welcome to Nexus"
-        />
+        <Box sx={{ mb: 2.5 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            Good {getGreeting()}, {firstName}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Welcome to Nexus
+          </Typography>
+        </Box>
         <Paper
           elevation={0}
           sx={{
@@ -135,32 +137,46 @@ export default function TeacherDashboard() {
     );
   }
 
+  const quickActions = [
+    { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon />, color: theme.palette.primary.main },
+    { label: 'Attendance', path: '/teacher/attendance', icon: <FactCheckOutlinedIcon />, color: theme.palette.success.main },
+    { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon />, color: theme.palette.info.main },
+    { label: 'Checklist', path: '/teacher/checklists', icon: <ChecklistOutlinedIcon />, color: theme.palette.warning.main },
+  ];
+
   return (
     <Box>
-      {/* Welcome Header */}
-      <PageHeader
-        title={`Good ${getGreeting()}, ${firstName}`}
-        subtitle={activeClassroom?.name || 'Select a classroom'}
-      />
+      {/* ── Compact Greeting ── */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+          Good {getGreeting()}, {firstName}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {activeClassroom?.name || 'Select a classroom'}
+        </Typography>
+      </Box>
 
-      {/* Stat Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={4}>
+      {/* ── Stat Cards: Hero + 2 ── */}
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {/* Hero stat — full width on mobile, 1/3 on tablet+ */}
+        <Grid item xs={12} sm={4}>
           {loading ? (
-            <Skeleton variant="rounded" height={100} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
           ) : (
             <StatCard
               title="Classes Today"
               value={data?.todayClasses.length ?? 0}
               icon={<SchoolOutlinedIcon />}
               variant="gradient"
+              size="wide"
               delay={0}
+              onClick={() => router.push('/teacher/timetable')}
             />
           )}
         </Grid>
-        <Grid item xs={4}>
+        <Grid item xs={6} sm={4}>
           {loading ? (
-            <Skeleton variant="rounded" height={100} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
           ) : (
             <StatCard
               title="Students"
@@ -168,13 +184,14 @@ export default function TeacherDashboard() {
               icon={<PeopleOutlinedIcon />}
               variant="surface"
               color={theme.palette.success.main}
-              delay={80}
+              delay={50}
+              onClick={() => router.push('/teacher/students')}
             />
           )}
         </Grid>
-        <Grid item xs={4}>
+        <Grid item xs={6} sm={4}>
           {loading ? (
-            <Skeleton variant="rounded" height={100} sx={{ borderRadius: 3 }} />
+            <Skeleton variant="rounded" height={80} sx={{ borderRadius: 3 }} />
           ) : (
             <StatCard
               title="Open Tickets"
@@ -182,29 +199,21 @@ export default function TeacherDashboard() {
               icon={<SupportAgentOutlinedIcon />}
               variant="surface"
               color={theme.palette.warning.main}
-              delay={160}
+              delay={100}
             />
           )}
         </Grid>
       </Grid>
 
-      {/* Today's Classes */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          borderRadius: 3,
-          border: `1px solid ${theme.palette.divider}`,
-          mb: 2.5,
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+      {/* ── Today's Classes ── */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
             Today&apos;s Classes
           </Typography>
           <Button
             size="small"
-            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.9rem !important' }} />}
+            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.85rem !important' }} />}
             onClick={() => router.push('/teacher/timetable')}
             sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
           >
@@ -213,20 +222,35 @@ export default function TeacherDashboard() {
         </Box>
 
         {loading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {[1, 2].map((i) => (
-              <Skeleton key={i} variant="rounded" height={72} sx={{ borderRadius: 2.5 }} />
+              <Skeleton key={i} variant="rounded" height={68} sx={{ borderRadius: 2.5 }} />
             ))}
           </Box>
         ) : !data?.todayClasses.length ? (
-          <Box sx={{ py: 3, textAlign: 'center' }}>
-            <CalendarTodayOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">
+          <Paper
+            elevation={0}
+            sx={{
+              py: 2.5,
+              textAlign: 'center',
+              borderRadius: 2.5,
+              border: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <CalendarTodayOutlinedIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 0.75 }} />
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               No classes scheduled for today
             </Typography>
-          </Box>
+            <Button
+              size="small"
+              onClick={() => router.push('/teacher/timetable')}
+              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+            >
+              View Timetable
+            </Button>
+          </Paper>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {data.todayClasses.map((cls, i) => (
               <Paper
                 key={cls.id}
@@ -241,7 +265,7 @@ export default function TeacherDashboard() {
                   alignItems: { xs: 'flex-start', sm: 'center' },
                   flexDirection: { xs: 'column', sm: 'row' },
                   gap: 1.5,
-                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 60}ms both`,
+                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 50}ms both`,
                   '@keyframes fadeInUp': {
                     from: { opacity: 0, transform: 'translateY(8px)' },
                     to: { opacity: 1, transform: 'translateY(0)' },
@@ -312,27 +336,75 @@ export default function TeacherDashboard() {
             ))}
           </Box>
         )}
-      </Paper>
+      </Box>
 
-      {/* Quick Actions */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 2, sm: 2.5 },
-          borderRadius: 3,
-          border: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+      {/* ── Quick Actions: Horizontal scroll on mobile ── */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
           Quick Actions
         </Typography>
-        <Grid container spacing={1.5}>
-          {[
-            { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon />, color: theme.palette.primary.main },
-            { label: 'Attendance', path: '/teacher/attendance', icon: <FactCheckOutlinedIcon />, color: theme.palette.success.main },
-            { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon />, color: theme.palette.info.main },
-            { label: 'Checklist', path: '/teacher/checklists', icon: <ChecklistOutlinedIcon />, color: theme.palette.warning.main },
-          ].map((action) => (
+
+        {/* Mobile: horizontal scroll */}
+        <Box
+          sx={{
+            display: { xs: 'flex', sm: 'none' },
+            gap: 1.5,
+            overflowX: 'auto',
+            mx: -2,
+            px: 2,
+            pb: 1,
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch',
+            '&::-webkit-scrollbar': { display: 'none' },
+            msOverflowStyle: 'none',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {quickActions.map((action) => (
+            <Paper
+              key={action.path}
+              elevation={0}
+              onClick={() => router.push(action.path)}
+              sx={{
+                py: 2,
+                px: 2,
+                minWidth: 100,
+                textAlign: 'center',
+                cursor: 'pointer',
+                borderRadius: 2.5,
+                border: `1px solid ${theme.palette.divider}`,
+                flexShrink: 0,
+                scrollSnapAlign: 'start',
+                transition: 'all 200ms ease',
+                '&:active': { transform: 'scale(0.96)', bgcolor: alpha(action.color, 0.04) },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 2.5,
+                  bgcolor: alpha(action.color, 0.1),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mx: 'auto',
+                  mb: 1,
+                  '& .MuiSvgIcon-root': { fontSize: '1.3rem', color: action.color },
+                }}
+              >
+                {action.icon}
+              </Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                {action.label}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
+
+        {/* Desktop: 4-column grid */}
+        <Grid container spacing={1.5} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+          {quickActions.map((action) => (
             <Grid item xs={6} sm={3} key={action.path}>
               <Paper
                 elevation={0}
@@ -355,16 +427,16 @@ export default function TeacherDashboard() {
               >
                 <Box
                   sx={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 2,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 2.5,
                     bgcolor: alpha(action.color, 0.1),
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     mx: 'auto',
                     mb: 1,
-                    '& .MuiSvgIcon-root': { fontSize: '1.25rem', color: action.color },
+                    '& .MuiSvgIcon-root': { fontSize: '1.3rem', color: action.color },
                   }}
                 >
                   {action.icon}
@@ -376,7 +448,7 @@ export default function TeacherDashboard() {
             </Grid>
           ))}
         </Grid>
-      </Paper>
+      </Box>
     </Box>
   );
 }

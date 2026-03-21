@@ -304,6 +304,20 @@ export default function ChatHistoryPage() {
       ),
     },
     {
+      field: 'error',
+      headerName: 'Error',
+      width: 150,
+      renderCell: (params: any) => (
+        params.value
+          ? <Tooltip title={params.value} arrow>
+              <Typography variant="caption" color="error.main" sx={{ py: 1, lineHeight: 1.3, cursor: 'help' }} noWrap>
+                {params.value.length > 30 ? `${params.value.slice(0, 30)}…` : params.value}
+              </Typography>
+            </Tooltip>
+          : <Typography variant="body2" color="text.disabled">—</Typography>
+      ),
+    },
+    {
       field: 'thumbs_up',
       headerName: 'Rating',
       width: 80,

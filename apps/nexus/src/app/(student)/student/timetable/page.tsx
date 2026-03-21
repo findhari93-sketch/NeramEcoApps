@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Snackbar, Alert, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme } from '@neram/ui';
+import { Box, Typography, Snackbar, Alert, ToggleButton, ToggleButtonGroup, Chip, useMediaQuery, useTheme } from '@neram/ui';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -14,14 +14,27 @@ import TimetableNotificationBell from '@/components/timetable/TimetableNotificat
 import { type ClassCardData } from '@/components/timetable/ClassCard';
 import { type HolidayInfo } from '@/components/timetable/WeeklyCalendarGrid';
 
+interface ClassroomInfo {
+  id: string;
+  name: string;
+  type: string;
+}
+
 export default function StudentTimetable() {
   const { activeClassroom, getToken } = useNexusAuthContext();
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
-  const [classes, setClasses] = useState<ClassCardData[]>([]);
+  const [allClasses, setAllClasses] = useState<ClassCardData[]>([]);
+  const [enrolledClassrooms, setEnrolledClassrooms] = useState<ClassroomInfo[]>([]);
+  const [classroomFilter, setClassroomFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
+
+  // Filtered classes based on classroom filter
+  const classes = classroomFilter === 'all'
+    ? allClasses
+    : allClasses.filter((c) => c.classroom?.id === classroomFilter);
 
   // Detail panel
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
@@ -50,20 +63,21 @@ export default function StudentTimetable() {
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
   const fetchClasses = useCallback(async () => {
-    if (!activeClassroom) return;
     setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
 
+      // Use unified my-schedule API to get classes from ALL enrolled classrooms
       const res = await fetch(
-        `/api/timetable?classroom=${activeClassroom.id}&start=${week.start}&end=${week.end}`,
+        `/api/timetable/my-schedule?start=${week.start}&end=${week.end}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.ok) {
         const data = await res.json();
-        setClasses(data.classes || []);
+        setAllClasses(data.classes || []);
+        setEnrolledClassrooms(data.classrooms || []);
 
         const classIds = (data.classes || []).map((c: ClassCardData) => c.id);
         if (classIds.length > 0) {
@@ -75,7 +89,7 @@ export default function StudentTimetable() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, week.start, week.end, getToken]);
+  }, [week.start, week.end, getToken]);
 
   const fetchHolidays = useCallback(async () => {
     if (!activeClassroom) return;
@@ -102,10 +116,12 @@ export default function StudentTimetable() {
   }, [activeClassroom, week.start, week.end, getToken]);
 
   const fetchMyData = async (classIds: string[], token: string) => {
-    if (!activeClassroom) return;
+    // Use the first available classroom for RSVP/attendance queries
+    // These APIs just verify enrollment, any enrolled classroom works
+    const fallbackClassroomId = activeClassroom?.id || enrolledClassrooms[0]?.id || '';
 
     const rsvpPromises = classIds.map((id) =>
-      fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${activeClassroom.id}`, {
+      fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${fallbackClassroomId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.ok ? r.json() : null)
@@ -113,7 +129,7 @@ export default function StudentTimetable() {
     );
 
     const attendancePromises = classIds.map((id) =>
-      fetch(`/api/timetable/attendance-report?class_id=${id}&classroom_id=${activeClassroom.id}`, {
+      fetch(`/api/timetable/attendance-report?class_id=${id}&classroom_id=${fallbackClassroomId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.ok ? r.json() : null)
@@ -156,7 +172,10 @@ export default function StudentTimetable() {
   };
 
   const submitRsvp = async (classId: string, response: 'attending' | 'not_attending', reason?: string) => {
-    if (!activeClassroom) return;
+    // Find the classroom_id from the class itself
+    const cls = allClasses.find((c) => c.id === classId);
+    const classroomId = cls?.classroom?.id || activeClassroom?.id;
+    if (!classroomId) return;
     try {
       const token = await getToken();
       if (!token) return;
@@ -169,7 +188,7 @@ export default function StudentTimetable() {
         },
         body: JSON.stringify({
           class_id: classId,
-          classroom_id: activeClassroom.id,
+          classroom_id: classroomId,
           response,
           reason: reason || undefined,
         }),
@@ -205,8 +224,9 @@ export default function StudentTimetable() {
       const token = await getToken();
       if (!token) return;
 
+      const reviewClassroomId = cls.classroom?.id || activeClassroom?.id || '';
       const res = await fetch(
-        `/api/timetable/reviews?class_id=${cls.id}&classroom_id=${activeClassroom?.id}`,
+        `/api/timetable/reviews?class_id=${cls.id}&classroom_id=${reviewClassroomId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -224,7 +244,9 @@ export default function StudentTimetable() {
   };
 
   const handleSubmitReview = async (rating: number, comment: string) => {
-    if (!reviewClass || !activeClassroom) return;
+    if (!reviewClass) return;
+    const reviewClassroomId = reviewClass.classroom?.id || activeClassroom?.id;
+    if (!reviewClassroomId) return;
     const token = await getToken();
     if (!token) return;
 
@@ -236,7 +258,7 @@ export default function StudentTimetable() {
       },
       body: JSON.stringify({
         class_id: reviewClass.id,
-        classroom_id: activeClassroom.id,
+        classroom_id: reviewClassroomId,
         rating,
         comment,
       }),
@@ -253,7 +275,7 @@ export default function StudentTimetable() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
           Timetable
         </Typography>
@@ -283,6 +305,46 @@ export default function StudentTimetable() {
         </Box>
       </Box>
 
+      {/* Classroom filter chips */}
+      {enrolledClassrooms.length > 1 && (
+        <Box sx={{ display: 'flex', gap: 0.75, mb: 2, flexWrap: 'wrap' }}>
+          <Chip
+            label="All"
+            size="small"
+            variant={classroomFilter === 'all' ? 'filled' : 'outlined'}
+            color={classroomFilter === 'all' ? 'primary' : 'default'}
+            onClick={() => setClassroomFilter('all')}
+            sx={{ minHeight: 32, fontWeight: 600 }}
+          />
+          {enrolledClassrooms
+            .filter((c) => c.type !== 'common')
+            .map((c) => (
+              <Chip
+                key={c.id}
+                label={c.name}
+                size="small"
+                variant={classroomFilter === c.id ? 'filled' : 'outlined'}
+                color={classroomFilter === c.id ? (c.type === 'nata' ? 'primary' : c.type === 'jee' ? 'secondary' : 'default') : 'default'}
+                onClick={() => setClassroomFilter(c.id)}
+                sx={{ minHeight: 32 }}
+              />
+            ))}
+          {enrolledClassrooms.some((c) => c.type === 'common') && (
+            <Chip
+              label="Common"
+              size="small"
+              variant={classroomFilter === enrolledClassrooms.find((c) => c.type === 'common')?.id ? 'filled' : 'outlined'}
+              color={classroomFilter === enrolledClassrooms.find((c) => c.type === 'common')?.id ? 'warning' : 'default'}
+              onClick={() => {
+                const common = enrolledClassrooms.find((c) => c.type === 'common');
+                if (common) setClassroomFilter(common.id);
+              }}
+              sx={{ minHeight: 32 }}
+            />
+          )}
+        </Box>
+      )}
+
       {viewMode === 'calendar' && isDesktop ? (
         <TimeSlotGrid
           classes={classes}
@@ -311,7 +373,7 @@ export default function StudentTimetable() {
         open={!!selectedClass}
         onClose={() => setSelectedClass(null)}
         role="student"
-        classroomId={activeClassroom?.id || ''}
+        classroomId={selectedClass?.classroom?.id || activeClassroom?.id || ''}
         getToken={getToken}
         myRsvp={selectedClass ? myRsvps[selectedClass.id] : null}
         myAttended={selectedClass ? myAttendance[selectedClass.id] ?? null : null}

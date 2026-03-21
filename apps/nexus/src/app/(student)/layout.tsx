@@ -18,6 +18,7 @@ import BottomNav from '@/components/BottomNav';
 import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import { useQBAccess } from '@/hooks/useQBAccess';
+import NavBadgeProvider from '@/components/NavBadgeProvider';
 
 const QB_PATH = '/student/question-bank';
 
@@ -71,39 +72,41 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   return (
     <RoleGuard allowedRoles={['student']}>
-      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-        <DesktopSidebar items={studentNavItems} />
+      <NavBadgeProvider>
+        <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+          <DesktopSidebar items={studentNavItems} />
 
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            flex: 1,
-            minWidth: 0,
-            minHeight: '100vh',
-            ml: { md: `${sidebarWidth}px` },
-            transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1)',
-          }}
-        >
-          <TopBar />
           <Box
-            component="main"
             sx={{
-              flexGrow: 1,
-              overflow: 'hidden',
-              bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
-              pt: { xs: 2, md: 3 },
-              pb: { xs: 10, md: 3 },
-              px: { xs: 2, sm: 3, md: 4 },
+              display: 'flex',
+              flexDirection: 'column',
+              flex: 1,
+              minWidth: 0,
+              minHeight: '100vh',
+              ml: { md: `${sidebarWidth}px` },
+              transition: 'margin-left 250ms cubic-bezier(0.2, 0, 0, 1)',
             }}
           >
-            <Container maxWidth="lg" disableGutters>
-              {children}
-            </Container>
+            <TopBar />
+            <Box
+              component="main"
+              sx={{
+                flexGrow: 1,
+                overflow: 'hidden',
+                bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
+                pt: { xs: 2, md: 3 },
+                pb: { xs: 10, md: 3 },
+                px: { xs: 2, sm: 3, md: 4 },
+              }}
+            >
+              <Container maxWidth="lg" disableGutters>
+                {children}
+              </Container>
+            </Box>
+            <BottomNav items={bottomNavItems} overflowItems={overflowItems} />
           </Box>
-          <BottomNav items={bottomNavItems} overflowItems={overflowItems} />
         </Box>
-      </Box>
+      </NavBadgeProvider>
     </RoleGuard>
   );
 }

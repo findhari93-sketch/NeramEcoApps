@@ -139,6 +139,7 @@ export async function POST(
     if (error) throw error;
 
     // Non-blocking: auto-add to Teams team if sync is enabled
+    // Also sync to Common classroom's Teams team (cross-classroom visibility)
     const userMsOid = body.ms_oid || null;
     if (userMsOid) {
       const { data: classroomConfig } = await supabase
@@ -151,6 +152,23 @@ export async function POST(
         addMemberToTeam(classroomConfig.ms_team_id, userMsOid).catch((err: unknown) =>
           console.error('[Teams auto-sync] Failed to add member:', err)
         );
+      }
+
+      // Also add to Common Teams team (the DB trigger auto-enrolls in Common classroom,
+      // but can't call external APIs — so we sync to Common team here)
+      if (role === 'student') {
+        const { data: commonClassroom } = await supabase
+          .from('nexus_classrooms')
+          .select('ms_team_id, ms_team_sync_enabled')
+          .eq('type', 'common')
+          .eq('is_active', true)
+          .single();
+
+        if (commonClassroom?.ms_team_id && commonClassroom?.ms_team_sync_enabled) {
+          addMemberToTeam(commonClassroom.ms_team_id, userMsOid).catch((err: unknown) =>
+            console.error('[Teams auto-sync] Failed to add member to Common team:', err)
+          );
+        }
       }
     }
 

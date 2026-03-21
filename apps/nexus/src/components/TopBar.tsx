@@ -22,6 +22,7 @@ import NotificationBell from '@/components/NotificationBell';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import MenuIcon from '@mui/icons-material/Menu';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -72,11 +73,13 @@ export default function TopBar() {
       position="sticky"
       elevation={0}
       sx={{
-        bgcolor: alpha(theme.palette.background.paper, 0.8),
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        bgcolor: alpha(theme.palette.background.paper, 0.92),
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
         color: 'text.primary',
-        borderBottom: `1px solid ${theme.palette.divider}`,
+        borderBottom: 'none',
+        borderRadius: 0,
+        boxShadow: `0 1px 3px ${alpha('#000', 0.04)}, 0 4px 12px ${alpha('#000', 0.02)}`,
         width: '100%',
       }}
     >
@@ -122,38 +125,60 @@ export default function TopBar() {
           Nexus
         </Typography>
 
-        {/* Active Classroom Chip - only in teaching panel */}
-        {activePanel === 'teaching' && activeClassroom && classrooms.length > 1 && (
-          <Chip
-            label={activeClassroom.name}
-            size="small"
-            icon={<SwapHorizIcon sx={{ fontSize: '0.9rem !important' }} />}
-            onClick={(e) => setClassroomAnchor(e.currentTarget)}
+        {/* Active Classroom Chip - shown for all roles */}
+        {activeClassroom && (
+          <Box
+            component="button"
+            onClick={classrooms.length > 1 ? (e: React.MouseEvent<HTMLButtonElement>) => setClassroomAnchor(e.currentTarget) : undefined}
             sx={{
-              cursor: 'pointer',
-              maxWidth: { xs: 140, sm: 220 },
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              color: 'primary.main',
-              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              px: 1.25,
+              py: 0.5,
+              borderRadius: 1.5,
               border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
-              '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.14) },
-              '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              cursor: classrooms.length > 1 ? 'pointer' : 'default',
+              maxWidth: { xs: 160, sm: 260 },
               transition: 'background-color 200ms ease',
-            }}
-          />
-        )}
-        {activePanel === 'teaching' && activeClassroom && classrooms.length <= 1 && (
-          <Typography
-            variant="body2"
-            noWrap
-            sx={{
-              maxWidth: { xs: 140, sm: 220 },
-              color: 'text.secondary',
-              fontWeight: 500,
+              '&:hover': classrooms.length > 1 ? { bgcolor: alpha(theme.palette.primary.main, 0.12) } : {},
+              outline: 'none',
             }}
           >
-            {activeClassroom.name}
-          </Typography>
+            <SchoolOutlinedIcon sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  display: 'block',
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  lineHeight: 1.2,
+                  color: 'text.primary',
+                }}
+              >
+                {activeClassroom.name}
+              </Typography>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  display: 'block',
+                  fontSize: '0.6rem',
+                  lineHeight: 1.2,
+                  color: 'text.secondary',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {activeClassroom.type} &middot; {activeClassroom.enrollmentRole}
+              </Typography>
+            </Box>
+            {classrooms.length > 1 && (
+              <SwapHorizIcon sx={{ fontSize: '0.85rem', color: 'text.secondary', flexShrink: 0, ml: 0.25 }} />
+            )}
+          </Box>
         )}
 
         <Box sx={{ flexGrow: 1 }} />
@@ -195,8 +220,8 @@ export default function TopBar() {
               name={user?.name}
               size={36}
               sx={{
-                border: `2.5px solid ${roleAccent}`,
-                boxShadow: `0 0 0 1.5px ${alpha(roleAccent, 0.2)}`,
+                border: `2px solid ${roleAccent}`,
+                boxShadow: `0 0 0 1.5px ${alpha(roleAccent, 0.12)}`,
                 transition: 'box-shadow 200ms ease',
               }}
             />
@@ -318,8 +343,8 @@ export default function TopBar() {
               name={user?.name}
               size={48}
               sx={{
-                border: `2.5px solid ${roleAccent}`,
-                boxShadow: `0 0 0 2px ${alpha(roleAccent, 0.15)}`,
+                border: `2px solid ${roleAccent}`,
+                boxShadow: `0 0 0 1.5px ${alpha(roleAccent, 0.1)}`,
                 flexShrink: 0,
               }}
             />
@@ -509,7 +534,7 @@ export default function TopBar() {
         >
           <Box sx={{ px: 2, py: 1 }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.625rem' }}>
-              Switch Classroom
+              Your Classrooms
             </Typography>
           </Box>
           {classrooms.map((c) => {
@@ -528,20 +553,24 @@ export default function TopBar() {
                   borderRadius: 1.5,
                   mx: 0.5,
                   gap: 1,
+                  bgcolor: selected ? alpha(theme.palette.primary.main, 0.06) : 'transparent',
+                  '&:hover': {
+                    bgcolor: selected
+                      ? alpha(theme.palette.primary.main, 0.1)
+                      : alpha(theme.palette.action.hover, 0.06),
+                  },
                 }}
               >
-                <Box
+                <SchoolOutlinedIcon
                   sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    bgcolor: selected ? 'primary.main' : 'divider',
+                    fontSize: '1.1rem',
+                    color: selected ? 'primary.main' : 'text.secondary',
                     flexShrink: 0,
                   }}
                 />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" sx={{ fontWeight: selected ? 600 : 400 }}>{c.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize', fontSize: '0.65rem' }}>
                     {c.type} &middot; {c.enrollmentRole}
                   </Typography>
                 </Box>

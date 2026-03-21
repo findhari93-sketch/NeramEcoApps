@@ -7,6 +7,7 @@ import BottomNav from '@/components/BottomNav';
 import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import PanelProvider, { usePanelContext } from '@/components/PanelProvider';
+import NavBadgeProvider from '@/components/NavBadgeProvider';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
@@ -54,7 +55,9 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   return (
     <RoleGuard allowedRoles={['teacher', 'admin']}>
       <PanelProvider>
-        <TeacherLayoutInner>{children}</TeacherLayoutInner>
+        <NavBadgeProvider>
+          <TeacherLayoutInner>{children}</TeacherLayoutInner>
+        </NavBadgeProvider>
       </PanelProvider>
     </RoleGuard>
   );

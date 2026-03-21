@@ -32,7 +32,8 @@ interface BatchOption {
 }
 
 export default function TeacherTimetable() {
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  const { activeClassroom, classrooms, getToken } = useNexusAuthContext();
+  const commonClassroom = classrooms.find((c) => c.type === 'common');
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
@@ -529,6 +530,8 @@ export default function TeacherTimetable() {
         holidays={holidays}
         onRemoveHoliday={handleRemoveHolidayForClass}
         hasLinkedTeam={!!activeClassroom?.ms_team_id}
+        commonClassroomId={commonClassroom?.id || null}
+        classroomName={activeClassroom?.name}
       />
 
       {/* Holiday Manager */}

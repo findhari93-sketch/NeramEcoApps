@@ -22,9 +22,11 @@ export interface ClassCardData {
   teams_meeting_scope: string | null;
   recording_url: string | null;
   batch_id: string | null;
+  target_scope?: string | null;
   topic: { id: string; title: string; category: string } | null;
   teacher: { id: string; name: string; avatar_url: string | null } | null;
   batch: { id: string; name: string } | null;
+  classroom?: { id: string; name: string; type: string } | null;
 }
 
 interface ClassCardProps {
@@ -130,8 +132,16 @@ export default function ClassCard({
         />
       </Box>
 
-      {/* Tags row: Topic + Batch */}
+      {/* Tags row: Classroom + Topic + Batch */}
       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+        {cls.classroom && (
+          <Chip
+            label={cls.classroom.type === 'common' ? 'All' : cls.classroom.name}
+            size="small"
+            color={cls.classroom.type === 'common' ? 'warning' : cls.classroom.type === 'nata' ? 'primary' : cls.classroom.type === 'jee' ? 'secondary' : 'default'}
+            sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
+          />
+        )}
         {cls.topic && (
           <Chip label={cls.topic.title} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
         )}
