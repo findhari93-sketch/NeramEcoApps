@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -9,7 +9,14 @@ import {
   Chip,
   Skeleton,
   TextField,
+  IconButton,
+  Snackbar,
+  Tooltip,
+  useTheme,
+  useMediaQuery,
+  alpha,
 } from '@neram/ui';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import GraphAvatar from '@/components/GraphAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
@@ -31,6 +38,8 @@ interface EnrolledStudent {
 }
 
 export default function TeacherStudents() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const router = useRouter();
   const { activeClassroom, getToken } = useNexusAuthContext();
   const [students, setStudents] = useState<EnrolledStudent[]>([]);
@@ -38,6 +47,7 @@ export default function TeacherStudents() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [batchFilter, setBatchFilter] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeClassroom) return;
@@ -80,6 +90,13 @@ export default function TeacherStudents() {
       (s.email && s.email.toLowerCase().includes(query))
     );
   });
+
+  const handleCopyEmail = useCallback((e: React.MouseEvent, email: string) => {
+    e.stopPropagation(); // Don't navigate to student detail
+    navigator.clipboard.writeText(email).then(() => {
+      setSnackbar(`Copied ${email}`);
+    });
+  }, []);
 
   return (
     <Box>
@@ -150,66 +167,151 @@ export default function TeacherStudents() {
         </Paper>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {filteredStudents.map((student) => (
-            <Paper
-              key={student.id}
-              variant="outlined"
-              onClick={() => router.push(`/teacher/students/${student.id}`)}
-              sx={{
-                p: 2,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-                cursor: 'pointer',
-                minHeight: 48,
-                '&:hover': { backgroundColor: 'action.hover' },
-                '&:active': { backgroundColor: 'action.selected' },
-              }}
-            >
-              <GraphAvatar
-                msOid={student.ms_oid}
-                name={student.name}
-                size={48}
-                presenceStatus={student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined}
-              />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
-                    {student.name}
-                  </Typography>
-                  {student.batch && (
-                    <Chip
-                      label={student.batch.name}
-                      size="small"
-                      variant="outlined"
-                      sx={{ height: 20, fontSize: '0.7rem' }}
-                    />
+          {filteredStudents.map((student) => {
+            const checklistPct = student.checklist.total > 0
+              ? Math.round((student.checklist.completed / student.checklist.total) * 100)
+              : 0;
+
+            return (
+              <Paper
+                key={student.id}
+                variant="outlined"
+                onClick={() => router.push(`/teacher/students/${student.id}`)}
+                sx={{
+                  p: 2,
+                  cursor: 'pointer',
+                  minHeight: 48,
+                  borderRadius: 2,
+                  '&:hover': { backgroundColor: 'action.hover' },
+                  '&:active': { backgroundColor: 'action.selected' },
+                }}
+              >
+                {/* Top row: Avatar + Name + Email action */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <GraphAvatar
+                    msOid={student.ms_oid}
+                    name={student.name}
+                    size={isMobile ? 44 : 48}
+                    presenceStatus={student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography
+                        variant="body1"
+                        sx={{ fontWeight: 600, fontSize: { xs: '0.9rem', sm: '1rem' } }}
+                        noWrap
+                      >
+                        {student.name}
+                      </Typography>
+                      {student.batch && (
+                        <Chip
+                          label={student.batch.name}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
+                        />
+                      )}
+                    </Box>
+
+                    {/* Email: visible on desktop, hidden on mobile */}
+                    {student.email && !isMobile && (
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {student.email}
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {/* Copy email icon on mobile */}
+                  {student.email && isMobile && (
+                    <Tooltip title={student.email} arrow>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleCopyEmail(e, student.email!)}
+                        sx={{
+                          flexShrink: 0,
+                          width: 36,
+                          height: 36,
+                          bgcolor: alpha(theme.palette.primary.main, 0.08),
+                          color: 'primary.main',
+                          '&:active': { bgcolor: alpha(theme.palette.primary.main, 0.16) },
+                        }}
+                      >
+                        <ContentCopyOutlinedIcon sx={{ fontSize: '1rem' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+
+                  {/* Copy email icon on desktop (inline after email) */}
+                  {student.email && !isMobile && (
+                    <Tooltip title="Copy email">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleCopyEmail(e, student.email!)}
+                        sx={{ flexShrink: 0, opacity: 0.5, '&:hover': { opacity: 1 } }}
+                      >
+                        <ContentCopyOutlinedIcon sx={{ fontSize: '0.9rem' }} />
+                      </IconButton>
+                    </Tooltip>
                   )}
                 </Box>
-                {student.email && (
-                  <Typography variant="body2" color="text.secondary" noWrap>
-                    {student.email}
-                  </Typography>
-                )}
-              </Box>
-              <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                <Chip
-                  label={`${student.attendance.percentage}% att`}
-                  size="small"
-                  color={student.attendance.percentage >= 75 ? 'success' : 'warning'}
-                  variant="outlined"
-                />
-                <Chip
-                  label={`${student.checklist.total > 0 ? Math.round((student.checklist.completed / student.checklist.total) * 100) : 0}% done`}
-                  size="small"
-                  color={student.checklist.total > 0 && (student.checklist.completed / student.checklist.total) >= 0.5 ? 'info' : 'default'}
-                  variant="outlined"
-                />
-              </Box>
-            </Paper>
-          ))}
+
+                {/* Bottom row: Stats */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 0.75,
+                    mt: 1,
+                    ml: { xs: 0, sm: 7.5 },
+                    alignItems: 'center',
+                  }}
+                >
+                  <Chip
+                    label={`${student.attendance.percentage}% att`}
+                    size="small"
+                    color={student.attendance.percentage >= 75 ? 'success' : 'warning'}
+                    variant="outlined"
+                    sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
+                  />
+                  <Chip
+                    label={`${checklistPct}% done`}
+                    size="small"
+                    color={checklistPct >= 50 ? 'info' : 'default'}
+                    variant="outlined"
+                    sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
+                  />
+                  {/* Show truncated email as subtle text on mobile */}
+                  {student.email && isMobile && (
+                    <Typography
+                      variant="caption"
+                      color="text.disabled"
+                      noWrap
+                      sx={{ ml: 'auto', maxWidth: 120, fontSize: '0.65rem' }}
+                    >
+                      {student.email}
+                    </Typography>
+                  )}
+                </Box>
+              </Paper>
+            );
+          })}
         </Box>
       )}
+
+      {/* Copy confirmation snackbar */}
+      <Snackbar
+        open={!!snackbar}
+        autoHideDuration={2000}
+        onClose={() => setSnackbar(null)}
+        message={snackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{
+          '& .MuiSnackbarContent-root': {
+            minWidth: 'auto',
+            borderRadius: 2,
+            fontSize: '0.85rem',
+          },
+        }}
+      />
     </Box>
   );
 }
