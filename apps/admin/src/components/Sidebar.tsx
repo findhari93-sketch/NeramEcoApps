@@ -45,6 +45,7 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WorkIcon from '@mui/icons-material/Work';
 import FeedbackIcon from '@mui/icons-material/Feedback';
+import DevicesIcon from '@mui/icons-material/Devices';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -75,6 +76,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
       { text: 'Students', icon: SchoolIcon, path: '/students' },
+      { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
       { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
       { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },

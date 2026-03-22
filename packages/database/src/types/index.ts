@@ -4112,6 +4112,76 @@ export interface UserErrorLog {
 
 export type UserErrorLogInsert = Omit<UserErrorLog, 'id' | 'created_at'>;
 
+// Student Device Registration & Usage Tracking
+export type DeviceCategory = 'desktop' | 'mobile';
+
+export interface StudentRegisteredDevice {
+  id: string;
+  user_id: string;
+  device_fingerprint: string;
+  device_category: DeviceCategory;
+  device_name: string | null;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+  os_version: string | null;
+  screen_width: number | null;
+  screen_height: number | null;
+  is_pwa: boolean;
+  last_latitude: number | null;
+  last_longitude: number | null;
+  last_location_accuracy: number | null;
+  last_city: string | null;
+  last_state: string | null;
+  last_country: string | null;
+  location_consent_given: boolean;
+  last_seen_at: string;
+  total_active_seconds: number;
+  session_count: number;
+  is_active: boolean;
+  registered_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StudentRegisteredDeviceInsert = Omit<
+  StudentRegisteredDevice,
+  'id' | 'created_at' | 'updated_at' | 'registered_at' | 'last_seen_at' | 'total_active_seconds' | 'session_count' | 'is_active' | 'last_latitude' | 'last_longitude' | 'last_location_accuracy' | 'last_city' | 'last_state' | 'last_country' | 'location_consent_given'
+>;
+
+export interface DeviceActivityLog {
+  id: string;
+  user_id: string;
+  device_id: string;
+  session_id: string | null;
+  active_seconds: number;
+  idle_seconds: number;
+  session_date: string;
+  created_at: string;
+}
+
+export type DeviceActivityLogInsert = Omit<DeviceActivityLog, 'id' | 'created_at'>;
+
+// Analytics aggregate types
+export interface DeviceDistributionStats {
+  total_students: number;
+  both_devices: number;
+  desktop_only: number;
+  mobile_only: number;
+  no_devices: number;
+}
+
+export interface StudentDeviceSummary {
+  user_id: string;
+  user_name: string;
+  user_email: string | null;
+  user_avatar: string | null;
+  devices: StudentRegisteredDevice[];
+  total_active_time: number;
+  last_active: string | null;
+  device_status: 'both' | 'desktop_only' | 'mobile_only' | 'none';
+}
+
 // ============================================
 // NEXUS CLASSROOM MANAGEMENT TYPES
 // ============================================

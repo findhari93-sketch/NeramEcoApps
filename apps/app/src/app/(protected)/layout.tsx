@@ -10,6 +10,9 @@ import AppShell from '@/components/shell/AppShell';
 import { SidebarProvider } from '@/contexts/SidebarContext';
 import { GlobalErrorLogger } from '@/components/ErrorBoundary';
 import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
+import { useDeviceRegistration } from '@/hooks/useDeviceRegistration';
+import { useActiveTimeTracker } from '@/hooks/useActiveTimeTracker';
+import { DeviceLimitModal } from '@/components/devices/DeviceLimitModal';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
@@ -45,7 +48,23 @@ function ProtectedLayoutInner({
   const [registrationError, setRegistrationError] = useState(false);
   const [idToken, setIdToken] = useState<string | null>(null);
   const [diagnosticSessionId, setDiagnosticSessionId] = useState<string | null>(null);
+  const [showDeviceLimitModal, setShowDeviceLimitModal] = useState(false);
   const sso = useSSOToken();
+
+  // Device registration: auto-register current device on login
+  const {
+    deviceId: registeredDeviceId,
+    limitReached: deviceLimitReached,
+    limitCategory,
+  } = useDeviceRegistration(idToken, !!supabaseUser);
+
+  // Active time tracker: sends heartbeat every 60s
+  useActiveTimeTracker({
+    deviceId: registeredDeviceId,
+    idToken,
+    sessionId: diagnosticSessionId,
+    enabled: !!registeredDeviceId && !!idToken,
+  });
 
   // Redirect to login if not authenticated (skip if SSO is processing)
   useEffect(() => {
@@ -141,6 +160,13 @@ function ProtectedLayoutInner({
 
     collectAndSend();
   }, [idToken, supabaseUser]);
+
+  // Show device limit modal when limit is reached
+  useEffect(() => {
+    if (deviceLimitReached) {
+      setShowDeviceLimitModal(true);
+    }
+  }, [deviceLimitReached]);
 
   const handleRetryRegistration = async () => {
     setCheckingUser(true);
@@ -348,6 +374,13 @@ function ProtectedLayoutInner({
       >
         {children}
       </AppShell>
+
+      {/* Device Limit Modal */}
+      <DeviceLimitModal
+        open={showDeviceLimitModal}
+        category={limitCategory}
+        onClose={() => setShowDeviceLimitModal(false)}
+      />
 
       {/* Phone Verification Modal */}
       {!phoneVerified && (
