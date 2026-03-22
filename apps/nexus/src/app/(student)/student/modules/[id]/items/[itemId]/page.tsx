@@ -36,7 +36,6 @@ import PDFReader from '@/components/reader/PDFReader';
 import AudioPlayer from '@/components/reader/AudioPlayer';
 import type {
   NexusFoundationSectionWithQuiz,
-  NexusFoundationSection,
   NexusAudioTrack,
 } from '@neram/database/types';
 
@@ -808,7 +807,7 @@ export default function StudentItemLearningPage() {
               {hasYouTube ? (
                 <VideoPlayer
                   videoId={data.youtube_video_id!}
-                  sections={sections as NexusFoundationSection[]}
+                  sections={sections}
                   currentSectionIndex={currentSectionIndex}
                   resumePosition={progress?.last_video_position_seconds || undefined}
                   onSectionEnd={handleSectionEnd}
