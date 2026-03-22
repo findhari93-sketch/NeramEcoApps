@@ -24,6 +24,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import CheckIcon from '@mui/icons-material/Check';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import MenuIcon from '@mui/icons-material/Menu';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -479,6 +480,33 @@ export default function TopBar() {
             </ListItemIcon>
             <ListItemText
               primary="My Profile"
+              primaryTypographyProps={{ variant: 'body2' }}
+            />
+          </MenuItem>
+
+          {/* Guide */}
+          <MenuItem
+            onClick={() => {
+              setProfileAnchor(null);
+              router.push(`/${nexusRole}/guide`);
+            }}
+            sx={{
+              py: 1,
+              px: 2.5,
+              mx: 1,
+              borderRadius: 2,
+              gap: 1.5,
+              minHeight: 42,
+              '&:hover': {
+                bgcolor: alpha(theme.palette.action.hover, 0.06),
+              },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 0, color: 'text.secondary' }}>
+              <HelpOutlineIcon sx={{ fontSize: '1.2rem' }} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Guide"
               primaryTypographyProps={{ variant: 'body2' }}
             />
           </MenuItem>

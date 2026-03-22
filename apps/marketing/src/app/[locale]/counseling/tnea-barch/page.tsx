@@ -6,6 +6,8 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import Link from 'next/link';
 
+const baseUrl = 'https://neramclasses.com';
+
 export async function generateMetadata({
   params: { locale },
 }: {
@@ -75,10 +77,11 @@ function SectionTitle({ children, id }: { children: React.ReactNode; id?: string
 export default function TneaBarchPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
+  const localePrefix = locale === 'en' ? '' : `/${locale}`;
   const breadcrumbs = generateBreadcrumbSchema([
-    { name: 'Home', url: `/${locale}` },
-    { name: 'Counseling', url: `/${locale}/counseling` },
-    { name: 'TNEA B.Arch', url: `/${locale}/counseling/tnea-barch` },
+    { name: 'Home', url: locale === 'en' ? baseUrl : `${baseUrl}/${locale}` },
+    { name: 'Counseling', url: `${baseUrl}${localePrefix}/counseling` },
+    { name: 'TNEA B.Arch', url: `${baseUrl}${localePrefix}/counseling/tnea-barch` },
   ]);
 
   const faqSchema = generateFAQSchema(FAQS);

@@ -6,6 +6,8 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import Link from 'next/link';
 
+const baseUrl = 'https://neramclasses.com';
+
 export async function generateMetadata({
   params: { locale },
 }: {
@@ -65,8 +67,8 @@ export default function CounselingHubPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
   const breadcrumbs = generateBreadcrumbSchema([
-    { name: 'Home', url: `/${locale}` },
-    { name: 'Counseling', url: `/${locale}/counseling` },
+    { name: 'Home', url: locale === 'en' ? baseUrl : `${baseUrl}/${locale}` },
+    { name: 'Counseling', url: locale === 'en' ? `${baseUrl}/counseling` : `${baseUrl}/${locale}/counseling` },
   ]);
 
   return (

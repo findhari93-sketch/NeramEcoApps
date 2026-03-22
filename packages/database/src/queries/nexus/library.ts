@@ -37,11 +37,7 @@ export async function getPublishedVideos(
   if (filters?.language) query = query.eq('language', filters.language);
   if (filters?.difficulty) query = query.eq('difficulty', filters.difficulty);
   if (filters?.search) {
-    query = query.textSearch(
-      'approved_title',
-      filters.search,
-      { type: 'websearch' }
-    );
+    query = query.ilike('original_title', `%${filters.search}%`);
   }
 
   const sortBy = filters?.sortBy || 'published_at';

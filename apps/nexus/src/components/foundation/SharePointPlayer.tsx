@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress } from '@neram/ui';
-import type { NexusFoundationSection } from '@neram/database/types';
+import type { NexusFoundationSectionWithQuiz } from '@neram/database/types';
 
 interface SharePointPlayerProps {
   videoUrl: string;
   chapterId: string;
   token?: string | null;
-  sections?: NexusFoundationSection[];
+  sections?: NexusFoundationSectionWithQuiz[];
   onSectionEnd?: (sectionIndex: number) => void;
   onTimeUpdate?: (seconds: number) => void;
 }
@@ -116,11 +116,22 @@ export default function SharePointPlayer({ videoUrl, chapterId, token, sections,
 
       // Check ALL sections for quiz triggers (same logic as VideoPlayer.tsx)
       const allSections = sectionsRef.current;
+      const videoDuration = video.duration || 0;
       if (allSections && onSectionEndRef.current) {
         for (let i = 0; i < allSections.length; i++) {
           const section = allSections[i];
+          // Skip sections whose quiz is already passed (e.g. when user seeks forward)
+          if (section.quiz_attempt?.passed && !hasTriggeredQuizRef.current.has(i)) {
+            hasTriggeredQuizRef.current.add(i);
+            continue;
+          }
+          // For the last section, clamp end_timestamp to (videoDuration - 10)
+          const isLastSection = i === allSections.length - 1;
+          const effectiveEnd = isLastSection && videoDuration > 0
+            ? Math.min(section.end_timestamp_seconds, videoDuration - 10)
+            : section.end_timestamp_seconds;
           if (
-            time >= section.end_timestamp_seconds &&
+            time >= effectiveEnd &&
             !hasTriggeredQuizRef.current.has(i)
           ) {
             hasTriggeredQuizRef.current.add(i);
@@ -138,8 +149,30 @@ export default function SharePointPlayer({ videoUrl, chapterId, token, sections,
         video.currentTime = rewatchMaxTimeRef.current - 2;
       }
     };
+    // Fallback: trigger any remaining untriggered quiz when video ends
+    const endedHandler = () => {
+      const allSections = sectionsRef.current;
+      if (allSections && onSectionEndRef.current) {
+        for (let i = 0; i < allSections.length; i++) {
+          // Skip already-passed sections
+          if (allSections[i].quiz_attempt?.passed) {
+            hasTriggeredQuizRef.current.add(i);
+            continue;
+          }
+          if (!hasTriggeredQuizRef.current.has(i)) {
+            hasTriggeredQuizRef.current.add(i);
+            onSectionEndRef.current(i);
+            break;
+          }
+        }
+      }
+    };
     video.addEventListener('timeupdate', handler);
-    return () => video.removeEventListener('timeupdate', handler);
+    video.addEventListener('ended', endedHandler);
+    return () => {
+      video.removeEventListener('timeupdate', handler);
+      video.removeEventListener('ended', endedHandler);
+    };
   }, [streamUrl, onTimeUpdate]);
 
   // Handle video error — retry with fresh URL (may have expired)

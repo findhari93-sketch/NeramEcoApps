@@ -6,7 +6,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
-import type { NexusFoundationSection } from '@neram/database/types';
+import type { NexusFoundationSectionWithQuiz } from '@neram/database/types';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -19,7 +19,7 @@ declare global {
 
 interface VideoPlayerProps {
   videoId: string;
-  sections: NexusFoundationSection[];
+  sections: NexusFoundationSectionWithQuiz[];
   currentSectionIndex: number;
   resumePosition?: number;
   onSectionEnd: (sectionIndex: number) => void;
@@ -93,10 +93,23 @@ export default function VideoPlayer({
       // Check ALL sections for quiz triggers (earliest untriggered first)
       // This ensures quizzes trigger even if currentSectionIndex is stale
       const allSections = sectionsRef.current;
+      const videoDuration = playerRef.current?.getDuration?.() || 0;
       for (let i = 0; i < allSections.length; i++) {
         const section = allSections[i];
+        // Skip sections whose quiz is already passed (e.g. when user seeks forward)
+        if (section.quiz_attempt?.passed && !hasTriggeredQuizRef.current.has(i)) {
+          hasTriggeredQuizRef.current.add(i);
+          continue;
+        }
+        // For the last section, clamp end_timestamp to (videoDuration - 10)
+        // so the quiz triggers before the video ends (handles cases where
+        // section end_timestamp exceeds actual video duration)
+        const isLastSection = i === allSections.length - 1;
+        const effectiveEnd = isLastSection && videoDuration > 0
+          ? Math.min(section.end_timestamp_seconds, videoDuration - 10)
+          : section.end_timestamp_seconds;
         if (
-          time >= section.end_timestamp_seconds &&
+          time >= effectiveEnd &&
           !hasTriggeredQuizRef.current.has(i)
         ) {
           hasTriggeredQuizRef.current.add(i);
@@ -159,6 +172,21 @@ export default function VideoPlayer({
           } else if (event.data === window.YT.PlayerState.ENDED) {
             setIsPlaying(false);
             if (intervalRef.current) clearInterval(intervalRef.current);
+            // Fallback: trigger any remaining untriggered section quiz
+            // (handles case where last section end_timestamp > video duration)
+            const allSections = sectionsRef.current;
+            for (let i = 0; i < allSections.length; i++) {
+              // Skip already-passed sections
+              if (allSections[i].quiz_attempt?.passed) {
+                hasTriggeredQuizRef.current.add(i);
+                continue;
+              }
+              if (!hasTriggeredQuizRef.current.has(i)) {
+                hasTriggeredQuizRef.current.add(i);
+                onSectionEndRef.current(i);
+                break;
+              }
+            }
           }
         },
       },

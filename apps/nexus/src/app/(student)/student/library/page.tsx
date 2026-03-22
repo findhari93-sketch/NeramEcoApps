@@ -17,8 +17,9 @@ import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ContinueWatchingRow from '@/components/library/ContinueWatchingRow';
 import CategoryRow from '@/components/library/CategoryRow';
+import VideoCard, { VideoCardSkeleton } from '@/components/library/VideoCard';
 import CollectionCard, { CollectionCardSkeleton } from '@/components/library/CollectionCard';
-import type { LibraryCollection } from '@neram/database/types';
+import type { LibraryCollection, LibraryVideo } from '@neram/database/types';
 
 const CATEGORIES = [
   { key: 'drawing', label: 'Drawing' },
@@ -53,6 +54,54 @@ export default function LibraryHomePage() {
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [collections, setCollections] = useState<LibraryCollection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
+  const [allVideos, setAllVideos] = useState<LibraryVideo[]>([]);
+  const [allVideosLoading, setAllVideosLoading] = useState(true);
+  const [allVideosTotal, setAllVideosTotal] = useState(0);
+  const [allVideosPage, setAllVideosPage] = useState(0);
+  const PAGE_SIZE = 20;
+
+  // Fetch all videos (no category filter)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchAllVideos() {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+
+        const params = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          offset: String(allVideosPage * PAGE_SIZE),
+        });
+        if (selectedExam) params.set('exam', selectedExam);
+        if (selectedLanguage) params.set('language', selectedLanguage);
+
+        const res = await fetch(`/api/library/videos?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Failed to fetch');
+        const data = await res.json();
+        if (!cancelled) {
+          setAllVideos(prev => allVideosPage === 0 ? (data.videos || []) : [...prev, ...(data.videos || [])]);
+          setAllVideosTotal(data.total || 0);
+        }
+      } catch (err) {
+        console.error('All videos fetch error:', err);
+      } finally {
+        if (!cancelled) setAllVideosLoading(false);
+      }
+    }
+
+    setAllVideosLoading(true);
+    fetchAllVideos();
+    return () => { cancelled = true; };
+  }, [getToken, allVideosPage, selectedExam, selectedLanguage]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setAllVideosPage(0);
+    setAllVideos([]);
+  }, [selectedExam, selectedLanguage]);
 
   // Fetch collections
   useEffect(() => {
@@ -205,10 +254,53 @@ export default function LibraryHomePage() {
         {/* Continue Watching */}
         <ContinueWatchingRow />
 
-        {/* Category Rows */}
+        {/* Category Rows (shown when categories are populated) */}
         {filteredCategories.map((cat) => (
           <CategoryRow key={cat.key} title={cat.label} category={cat.key} />
         ))}
+
+        {/* All Videos Grid */}
+        <Box sx={{ mb: 3, px: { xs: 2, sm: 0 } }}>
+          <Typography
+            variant="subtitle1"
+            sx={{ fontWeight: 700, fontSize: { xs: '1rem', sm: '1.1rem' }, mb: 1.5 }}
+          >
+            {selectedExam || selectedLanguage ? 'Filtered Videos' : 'All Recordings'}
+            {allVideosTotal > 0 && (
+              <Typography component="span" sx={{ fontWeight: 400, fontSize: '0.85rem', color: 'text.secondary', ml: 1 }}>
+                ({allVideosTotal})
+              </Typography>
+            )}
+          </Typography>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' },
+              gap: { xs: 1.5, sm: 2 },
+            }}
+          >
+            {allVideosLoading && allVideos.length === 0
+              ? Array.from({ length: 8 }).map((_, i) => <VideoCardSkeleton key={i} />)
+              : allVideos.map((video) => (
+                  <VideoCard key={video.id} video={video} fullWidth />
+                ))}
+          </Box>
+
+          {/* Load More */}
+          {allVideos.length < allVideosTotal && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={() => setAllVideosPage(p => p + 1)}
+                disabled={allVideosLoading}
+                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 4 }}
+              >
+                {allVideosLoading ? 'Loading...' : `Load More (${allVideosTotal - allVideos.length} remaining)`}
+              </Button>
+            </Box>
+          )}
+        </Box>
 
         {/* Collections */}
         {(collectionsLoading || collections.length > 0) && (

@@ -23,20 +23,39 @@ import NavBadgeProvider from '@/components/NavBadgeProvider';
 
 const QB_PATH = '/student/question-bank';
 
-const allStudentNavItems = [
-  { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
-  { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
-  { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
-  { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
-  { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
-  { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
-  { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
-  { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
-  { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
-  { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
-  { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
+// Sidebar: grouped into collapsible categories (Profile & Guide moved to TopBar dropdown)
+const allStudentNavGroups = [
+  {
+    label: 'Live Class',
+    items: [
+      { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
+    ],
+  },
+  {
+    label: 'Learn',
+    items: [
+      { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
+      { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
+    ],
+  },
+  {
+    label: 'Practice',
+    items: [
+      { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
+      { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
+    ],
+  },
+  {
+    label: 'Manage',
+    items: [
+      { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
+      { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
+    ],
+  },
 ];
 
+// Mobile bottom nav — primary items
 const allBottomNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
@@ -44,6 +63,7 @@ const allBottomNavItems = [
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
 ];
 
+// Mobile bottom nav — overflow "More" items (includes Guide & Profile for mobile access)
 const allOverflowItems = [
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
@@ -58,8 +78,13 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const { sidebarWidth } = useSidebarContext();
   const { isQBEnabled } = useQBAccess();
 
-  const studentNavItems = useMemo(
-    () => isQBEnabled ? allStudentNavItems : allStudentNavItems.filter((i) => i.path !== QB_PATH),
+  const studentNavGroups = useMemo(
+    () => isQBEnabled
+      ? allStudentNavGroups
+      : allStudentNavGroups.map(g => ({
+          ...g,
+          items: g.items.filter(i => i.path !== QB_PATH),
+        })).filter(g => g.items.length > 0),
     [isQBEnabled],
   );
 
@@ -77,7 +102,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     <RoleGuard allowedRoles={['student']}>
       <NavBadgeProvider>
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-          <DesktopSidebar items={studentNavItems} />
+          <DesktopSidebar groups={studentNavGroups} homePath="/student/dashboard" />
 
           <Box
             sx={{
