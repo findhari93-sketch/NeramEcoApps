@@ -17,3 +17,5 @@ export * from './rsvp';
 export * from './reviews';
 export * from './enrollment-history';
 export * from './documents';
+export * from './library';
+export * from './library-engagement';

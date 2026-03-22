@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "13.0.4"
   }
   public: {
     Tables: {
@@ -120,6 +120,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      aintra_knowledge_base: {
+        Row: {
+          answer: string
+          category: string
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean
+          question: string
+          updated_at: string
+        }
+        Insert: {
+          answer: string
+          category?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          question: string
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          category?: string
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          question?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       allotment_list_entries: {
         Row: {
@@ -905,6 +938,7 @@ export type Database = {
       }
       chatbot_conversations: {
         Row: {
+          admin_correction: string | null
           ai_response: string | null
           created_at: string
           error: string | null
@@ -913,13 +947,16 @@ export type Database = {
           lead_phone: string | null
           model_used: string | null
           page_url: string | null
+          promoted_to_kb: boolean
           response_time_ms: number | null
           session_id: string
           source: string | null
+          thumbs_up: boolean | null
           user_id: string | null
           user_message: string
         }
         Insert: {
+          admin_correction?: string | null
           ai_response?: string | null
           created_at?: string
           error?: string | null
@@ -928,13 +965,16 @@ export type Database = {
           lead_phone?: string | null
           model_used?: string | null
           page_url?: string | null
+          promoted_to_kb?: boolean
           response_time_ms?: number | null
           session_id: string
           source?: string | null
+          thumbs_up?: boolean | null
           user_id?: string | null
           user_message: string
         }
         Update: {
+          admin_correction?: string | null
           ai_response?: string | null
           created_at?: string
           error?: string | null
@@ -943,9 +983,11 @@ export type Database = {
           lead_phone?: string | null
           model_used?: string | null
           page_url?: string | null
+          promoted_to_kb?: boolean
           response_time_ms?: number | null
           session_id?: string
           source?: string | null
+          thumbs_up?: boolean | null
           user_id?: string | null
           user_message?: string
         }
@@ -3207,6 +3249,701 @@ export type Database = {
           },
         ]
       }
+      library_bookmarks: {
+        Row: {
+          created_at: string | null
+          id: string
+          note: string | null
+          student_id: string | null
+          timestamp_seconds: number | null
+          video_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          note?: string | null
+          student_id?: string | null
+          timestamp_seconds?: number | null
+          video_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          note?: string | null
+          student_id?: string | null
+          timestamp_seconds?: number | null
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_bookmarks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_bookmarks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_bookmarks_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "library_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_collection_items: {
+        Row: {
+          collection_id: string | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          sort_order: number
+          video_id: string | null
+        }
+        Insert: {
+          collection_id?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          sort_order: number
+          video_id?: string | null
+        }
+        Update: {
+          collection_id?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          sort_order?: number
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_collection_items_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "library_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_collection_items_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "library_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_collections: {
+        Row: {
+          classroom_id: string | null
+          cover_image_url: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          exam: string | null
+          id: string
+          is_published: boolean | null
+          sort_order: number | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          classroom_id?: string | null
+          cover_image_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          exam?: string | null
+          id?: string
+          is_published?: boolean | null
+          sort_order?: number | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          classroom_id?: string | null
+          cover_image_url?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          exam?: string | null
+          id?: string
+          is_published?: boolean | null
+          sort_order?: number | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_collections_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_collections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_collections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_engagement_daily: {
+        Row: {
+          activity_date: string
+          avg_completion_pct: number | null
+          bookmarks_created: number | null
+          created_at: string | null
+          id: string
+          search_queries: number | null
+          sessions_count: number | null
+          student_id: string
+          total_pauses: number | null
+          total_rewinds: number | null
+          total_seeks: number | null
+          total_session_seconds: number | null
+          total_watch_seconds: number | null
+          unique_videos: number | null
+          videos_completed: number | null
+          videos_watched: number | null
+        }
+        Insert: {
+          activity_date: string
+          avg_completion_pct?: number | null
+          bookmarks_created?: number | null
+          created_at?: string | null
+          id?: string
+          search_queries?: number | null
+          sessions_count?: number | null
+          student_id: string
+          total_pauses?: number | null
+          total_rewinds?: number | null
+          total_seeks?: number | null
+          total_session_seconds?: number | null
+          total_watch_seconds?: number | null
+          unique_videos?: number | null
+          videos_completed?: number | null
+          videos_watched?: number | null
+        }
+        Update: {
+          activity_date?: string
+          avg_completion_pct?: number | null
+          bookmarks_created?: number | null
+          created_at?: string | null
+          id?: string
+          search_queries?: number | null
+          sessions_count?: number | null
+          student_id?: string
+          total_pauses?: number | null
+          total_rewinds?: number | null
+          total_seeks?: number | null
+          total_session_seconds?: number | null
+          total_watch_seconds?: number | null
+          unique_videos?: number | null
+          videos_completed?: number | null
+          videos_watched?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_engagement_daily_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_engagement_daily_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_search_log: {
+        Row: {
+          clicked_video_id: string | null
+          created_at: string | null
+          id: string
+          query_text: string
+          results_count: number | null
+          student_id: string
+        }
+        Insert: {
+          clicked_video_id?: string | null
+          created_at?: string | null
+          id?: string
+          query_text: string
+          results_count?: number | null
+          student_id: string
+        }
+        Update: {
+          clicked_video_id?: string | null
+          created_at?: string | null
+          id?: string
+          query_text?: string
+          results_count?: number | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_search_log_clicked_video_id_fkey"
+            columns: ["clicked_video_id"]
+            isOneToOne: false
+            referencedRelation: "library_videos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_search_log_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_search_log_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_student_streaks: {
+        Row: {
+          best_streak_days: number | null
+          best_streak_end: string | null
+          best_streak_start: string | null
+          best_weekly_streak: number | null
+          current_streak_days: number | null
+          current_streak_start: string | null
+          current_weekly_streak: number | null
+          engagement_score: number | null
+          engagement_status: string | null
+          first_activity_date: string | null
+          last_activity_date: string | null
+          student_id: string
+          total_active_days: number | null
+          total_active_weeks: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          best_streak_days?: number | null
+          best_streak_end?: string | null
+          best_streak_start?: string | null
+          best_weekly_streak?: number | null
+          current_streak_days?: number | null
+          current_streak_start?: string | null
+          current_weekly_streak?: number | null
+          engagement_score?: number | null
+          engagement_status?: string | null
+          first_activity_date?: string | null
+          last_activity_date?: string | null
+          student_id: string
+          total_active_days?: number | null
+          total_active_weeks?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          best_streak_days?: number | null
+          best_streak_end?: string | null
+          best_streak_start?: string | null
+          best_weekly_streak?: number | null
+          current_streak_days?: number | null
+          current_streak_start?: string | null
+          current_weekly_streak?: number | null
+          engagement_score?: number | null
+          engagement_status?: string | null
+          first_activity_date?: string | null
+          last_activity_date?: string | null
+          student_id?: string
+          total_active_days?: number | null
+          total_active_weeks?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_student_streaks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: true
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_student_streaks_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_sync_log: {
+        Row: {
+          classifications_failed: number | null
+          classifications_run: number | null
+          completed_at: string | null
+          error_log: Json | null
+          id: string
+          new_videos_added: number | null
+          run_by: string | null
+          started_at: string | null
+          status: string | null
+          total_videos_found: number | null
+          transcripts_failed: number | null
+          transcripts_fetched: number | null
+        }
+        Insert: {
+          classifications_failed?: number | null
+          classifications_run?: number | null
+          completed_at?: string | null
+          error_log?: Json | null
+          id?: string
+          new_videos_added?: number | null
+          run_by?: string | null
+          started_at?: string | null
+          status?: string | null
+          total_videos_found?: number | null
+          transcripts_failed?: number | null
+          transcripts_fetched?: number | null
+        }
+        Update: {
+          classifications_failed?: number | null
+          classifications_run?: number | null
+          completed_at?: string | null
+          error_log?: Json | null
+          id?: string
+          new_videos_added?: number | null
+          run_by?: string | null
+          started_at?: string | null
+          status?: string | null
+          total_videos_found?: number | null
+          transcripts_failed?: number | null
+          transcripts_fetched?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_sync_log_run_by_fkey"
+            columns: ["run_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_sync_log_run_by_fkey"
+            columns: ["run_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_videos: {
+        Row: {
+          admin_notes: string | null
+          ai_confidence: number | null
+          approved_description: string | null
+          approved_title: string | null
+          bookmark_count: number | null
+          category: string | null
+          classification_error: string | null
+          classification_status: string | null
+          created_at: string | null
+          difficulty: string | null
+          duration_seconds: number | null
+          exam: string | null
+          id: string
+          is_practical_demo: boolean | null
+          is_published: boolean | null
+          key_concepts: string[] | null
+          language: string | null
+          original_description: string | null
+          original_title: string | null
+          privacy_status: string | null
+          published_at: string | null
+          review_status: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          search_vector: unknown
+          subcategories: string[] | null
+          suggested_description: string | null
+          suggested_title: string | null
+          synced_at: string | null
+          topics: string[] | null
+          total_watch_seconds: number | null
+          transcript_is_generated: boolean | null
+          transcript_language: string | null
+          transcript_segments: Json | null
+          transcript_status: string | null
+          transcript_text: string | null
+          updated_at: string | null
+          view_count: number | null
+          youtube_channel_id: string | null
+          youtube_thumbnail_hq_url: string | null
+          youtube_thumbnail_url: string | null
+          youtube_video_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          ai_confidence?: number | null
+          approved_description?: string | null
+          approved_title?: string | null
+          bookmark_count?: number | null
+          category?: string | null
+          classification_error?: string | null
+          classification_status?: string | null
+          created_at?: string | null
+          difficulty?: string | null
+          duration_seconds?: number | null
+          exam?: string | null
+          id?: string
+          is_practical_demo?: boolean | null
+          is_published?: boolean | null
+          key_concepts?: string[] | null
+          language?: string | null
+          original_description?: string | null
+          original_title?: string | null
+          privacy_status?: string | null
+          published_at?: string | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          search_vector?: unknown
+          subcategories?: string[] | null
+          suggested_description?: string | null
+          suggested_title?: string | null
+          synced_at?: string | null
+          topics?: string[] | null
+          total_watch_seconds?: number | null
+          transcript_is_generated?: boolean | null
+          transcript_language?: string | null
+          transcript_segments?: Json | null
+          transcript_status?: string | null
+          transcript_text?: string | null
+          updated_at?: string | null
+          view_count?: number | null
+          youtube_channel_id?: string | null
+          youtube_thumbnail_hq_url?: string | null
+          youtube_thumbnail_url?: string | null
+          youtube_video_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          ai_confidence?: number | null
+          approved_description?: string | null
+          approved_title?: string | null
+          bookmark_count?: number | null
+          category?: string | null
+          classification_error?: string | null
+          classification_status?: string | null
+          created_at?: string | null
+          difficulty?: string | null
+          duration_seconds?: number | null
+          exam?: string | null
+          id?: string
+          is_practical_demo?: boolean | null
+          is_published?: boolean | null
+          key_concepts?: string[] | null
+          language?: string | null
+          original_description?: string | null
+          original_title?: string | null
+          privacy_status?: string | null
+          published_at?: string | null
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          search_vector?: unknown
+          subcategories?: string[] | null
+          suggested_description?: string | null
+          suggested_title?: string | null
+          synced_at?: string | null
+          topics?: string[] | null
+          total_watch_seconds?: number | null
+          transcript_is_generated?: boolean | null
+          transcript_language?: string | null
+          transcript_segments?: Json | null
+          transcript_status?: string | null
+          transcript_text?: string | null
+          updated_at?: string | null
+          view_count?: number | null
+          youtube_channel_id?: string | null
+          youtube_thumbnail_hq_url?: string | null
+          youtube_thumbnail_url?: string | null
+          youtube_video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_videos_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_videos_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_watch_history: {
+        Row: {
+          completed: boolean | null
+          first_watched_at: string | null
+          id: string
+          last_position_seconds: number | null
+          last_watched_at: string | null
+          student_id: string | null
+          total_watched_seconds: number | null
+          video_id: string | null
+          watch_count: number | null
+        }
+        Insert: {
+          completed?: boolean | null
+          first_watched_at?: string | null
+          id?: string
+          last_position_seconds?: number | null
+          last_watched_at?: string | null
+          student_id?: string | null
+          total_watched_seconds?: number | null
+          video_id?: string | null
+          watch_count?: number | null
+        }
+        Update: {
+          completed?: boolean | null
+          first_watched_at?: string | null
+          id?: string
+          last_position_seconds?: number | null
+          last_watched_at?: string | null
+          student_id?: string | null
+          total_watched_seconds?: number | null
+          video_id?: string | null
+          watch_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_watch_history_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_watch_history_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_watch_history_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "library_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      library_watch_sessions: {
+        Row: {
+          completed: boolean | null
+          completion_pct: number | null
+          created_at: string | null
+          device_type: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          furthest_position_seconds: number | null
+          id: string
+          pause_count: number | null
+          play_count: number | null
+          replay_segments: Json | null
+          rewind_count: number | null
+          seek_count: number | null
+          started_at: string
+          student_id: string
+          video_id: string
+          watched_seconds: number | null
+        }
+        Insert: {
+          completed?: boolean | null
+          completion_pct?: number | null
+          created_at?: string | null
+          device_type?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          furthest_position_seconds?: number | null
+          id?: string
+          pause_count?: number | null
+          play_count?: number | null
+          replay_segments?: Json | null
+          rewind_count?: number | null
+          seek_count?: number | null
+          started_at?: string
+          student_id: string
+          video_id: string
+          watched_seconds?: number | null
+        }
+        Update: {
+          completed?: boolean | null
+          completion_pct?: number | null
+          created_at?: string | null
+          device_type?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          furthest_position_seconds?: number | null
+          id?: string
+          pause_count?: number | null
+          play_count?: number | null
+          replay_segments?: Json | null
+          rewind_count?: number | null
+          seek_count?: number | null
+          started_at?: string
+          student_id?: string
+          video_id?: string
+          watched_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "library_watch_sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_watch_sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "library_watch_sessions_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "library_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_content: {
         Row: {
           created_at: string
@@ -3631,6 +4368,83 @@ export type Database = {
           },
         ]
       }
+      nexus_audio_tracks: {
+        Row: {
+          audio_duration_seconds: number | null
+          audio_storage_path: string
+          audio_url: string
+          chapter_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          language: string
+          language_label: string
+          module_item_id: string | null
+          onedrive_item_id: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          audio_duration_seconds?: number | null
+          audio_storage_path: string
+          audio_url: string
+          chapter_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          language?: string
+          language_label?: string
+          module_item_id?: string | null
+          onedrive_item_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          audio_duration_seconds?: number | null
+          audio_storage_path?: string
+          audio_url?: string
+          chapter_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          language?: string
+          language_label?: string
+          module_item_id?: string | null
+          onedrive_item_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_audio_tracks_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_foundation_chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_audio_tracks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_audio_tracks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_audio_tracks_module_item_id_fkey"
+            columns: ["module_item_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_batches: {
         Row: {
           classroom_id: string
@@ -3665,6 +4479,161 @@ export type Database = {
             columns: ["classroom_id"]
             isOneToOne: false
             referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_checklist_classrooms: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          checklist_id: string
+          classroom_id: string
+          id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          checklist_id: string
+          classroom_id: string
+          id?: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          checklist_id?: string
+          classroom_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_checklist_classrooms_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_checklist_classrooms_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_checklist_classrooms_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_checklist_classrooms_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_checklist_entries: {
+        Row: {
+          checklist_id: string
+          created_at: string | null
+          description: string | null
+          entry_type: string
+          id: string
+          is_active: boolean | null
+          learning_outcome: string | null
+          module_id: string | null
+          sort_order: number | null
+          title: string | null
+          topic_id: string | null
+        }
+        Insert: {
+          checklist_id: string
+          created_at?: string | null
+          description?: string | null
+          entry_type: string
+          id?: string
+          is_active?: boolean | null
+          learning_outcome?: string | null
+          module_id?: string | null
+          sort_order?: number | null
+          title?: string | null
+          topic_id?: string | null
+        }
+        Update: {
+          checklist_id?: string
+          created_at?: string | null
+          description?: string | null
+          entry_type?: string
+          id?: string
+          is_active?: boolean | null
+          learning_outcome?: string | null
+          module_id?: string | null
+          sort_order?: number | null
+          title?: string | null
+          topic_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_checklist_entries_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_checklist_entries_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_checklist_entries_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_checklist_entry_resources: {
+        Row: {
+          created_at: string | null
+          entry_id: string
+          id: string
+          resource_type: string | null
+          sort_order: number | null
+          title: string
+          url: string
+        }
+        Insert: {
+          created_at?: string | null
+          entry_id: string
+          id?: string
+          resource_type?: string | null
+          sort_order?: number | null
+          title: string
+          url: string
+        }
+        Update: {
+          created_at?: string | null
+          entry_id?: string
+          id?: string
+          resource_type?: string | null
+          sort_order?: number | null
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_checklist_entry_resources_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_checklist_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -3761,6 +4730,207 @@ export type Database = {
           },
         ]
       }
+      nexus_checklists: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_published: boolean | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_checklists_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_checklists_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_class_reviews: {
+        Row: {
+          comment: string | null
+          created_at: string | null
+          id: string
+          rating: number
+          scheduled_class_id: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          rating: number
+          scheduled_class_id: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          rating?: number
+          scheduled_class_id?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_class_reviews_scheduled_class_id_fkey"
+            columns: ["scheduled_class_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_scheduled_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_class_reviews_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_class_reviews_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_class_rsvp: {
+        Row: {
+          id: string
+          reason: string | null
+          responded_at: string | null
+          response: string
+          scheduled_class_id: string
+          student_id: string
+        }
+        Insert: {
+          id?: string
+          reason?: string | null
+          responded_at?: string | null
+          response: string
+          scheduled_class_id: string
+          student_id: string
+        }
+        Update: {
+          id?: string
+          reason?: string | null
+          responded_at?: string | null
+          response?: string
+          scheduled_class_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_class_rsvp_scheduled_class_id_fkey"
+            columns: ["scheduled_class_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_scheduled_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_class_rsvp_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_class_rsvp_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_classroom_holidays: {
+        Row: {
+          classroom_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          holiday_date: string
+          id: string
+          title: string
+        }
+        Insert: {
+          classroom_id: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          holiday_date: string
+          id?: string
+          title: string
+        }
+        Update: {
+          classroom_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          holiday_date?: string
+          id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_classroom_holidays_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_classroom_holidays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_classroom_holidays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_classrooms: {
         Row: {
           created_at: string | null
@@ -3769,7 +4939,10 @@ export type Database = {
           id: string
           is_active: boolean | null
           ms_team_id: string | null
+          ms_team_name: string | null
+          ms_team_sync_enabled: boolean | null
           name: string
+          short_code: string | null
           type: string
           updated_at: string | null
         }
@@ -3780,7 +4953,10 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           ms_team_id?: string | null
+          ms_team_name?: string | null
+          ms_team_sync_enabled?: boolean | null
           name: string
+          short_code?: string | null
           type: string
           updated_at?: string | null
         }
@@ -3791,7 +4967,10 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           ms_team_id?: string | null
+          ms_team_name?: string | null
+          ms_team_sync_enabled?: boolean | null
           name?: string
+          short_code?: string | null
           type?: string
           updated_at?: string | null
         }
@@ -3805,6 +4984,154 @@ export type Database = {
           },
           {
             foreignKeyName: "nexus_classrooms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_document_audit_log: {
+        Row: {
+          action: string
+          classroom_id: string
+          created_at: string | null
+          document_id: string | null
+          id: string
+          metadata: Json | null
+          performed_by: string
+          student_id: string
+        }
+        Insert: {
+          action: string
+          classroom_id: string
+          created_at?: string | null
+          document_id?: string | null
+          id?: string
+          metadata?: Json | null
+          performed_by: string
+          student_id: string
+        }
+        Update: {
+          action?: string
+          classroom_id?: string
+          created_at?: string | null
+          document_id?: string | null
+          id?: string
+          metadata?: Json | null
+          performed_by?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_document_audit_log_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_document_audit_log_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_student_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_document_audit_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_document_audit_log_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_document_audit_log_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_document_audit_log_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_document_templates: {
+        Row: {
+          allowed_file_types: string[] | null
+          applicable_standards: string[]
+          category: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          exam_state_threshold: string | null
+          id: string
+          is_active: boolean | null
+          is_required: boolean | null
+          linked_exam: string | null
+          max_file_size_mb: number | null
+          name: string
+          sort_order: number | null
+          unlock_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          allowed_file_types?: string[] | null
+          applicable_standards?: string[]
+          category: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          exam_state_threshold?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          linked_exam?: string | null
+          max_file_size_mb?: number | null
+          name: string
+          sort_order?: number | null
+          unlock_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          allowed_file_types?: string[] | null
+          applicable_standards?: string[]
+          category?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          exam_state_threshold?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_required?: boolean | null
+          linked_exam?: string | null
+          max_file_size_mb?: number | null
+          name?: string
+          sort_order?: number | null
+          unlock_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_document_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_document_templates_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
@@ -4144,31 +5471,128 @@ export type Database = {
           },
         ]
       }
+      nexus_enrollment_history: {
+        Row: {
+          action: string
+          classroom_id: string
+          created_at: string
+          enrollment_id: string
+          id: string
+          notes: string | null
+          performed_by: string
+          progress_snapshot: Json | null
+          reason_category: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          classroom_id: string
+          created_at?: string
+          enrollment_id: string
+          id?: string
+          notes?: string | null
+          performed_by: string
+          progress_snapshot?: Json | null
+          reason_category?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          classroom_id?: string
+          created_at?: string
+          enrollment_id?: string
+          id?: string
+          notes?: string | null
+          performed_by?: string
+          progress_snapshot?: Json | null
+          reason_category?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_enrollment_history_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_enrollment_history_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_enrollment_history_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_enrollment_history_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_enrollment_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_enrollment_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_enrollments: {
         Row: {
           batch_id: string | null
           classroom_id: string
+          current_standard: string | null
           enrolled_at: string | null
           id: string
           is_active: boolean | null
+          removal_notes: string | null
+          removal_reason_category: string | null
+          removed_at: string | null
+          removed_by: string | null
           role: string
           user_id: string
         }
         Insert: {
           batch_id?: string | null
           classroom_id: string
+          current_standard?: string | null
           enrolled_at?: string | null
           id?: string
           is_active?: boolean | null
+          removal_notes?: string | null
+          removal_reason_category?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
           role: string
           user_id: string
         }
         Update: {
           batch_id?: string | null
           classroom_id?: string
+          current_standard?: string | null
           enrolled_at?: string | null
           id?: string
           is_active?: boolean | null
+          removal_notes?: string | null
+          removal_reason_category?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
           role?: string
           user_id?: string
         }
@@ -4188,6 +5612,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "nexus_enrollments_removed_by_fkey"
+            columns: ["removed_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_enrollments_removed_by_fkey"
+            columns: ["removed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "nexus_enrollments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -4203,6 +5641,118 @@ export type Database = {
           },
         ]
       }
+      nexus_exam_broadcasts: {
+        Row: {
+          broadcast_type: string
+          classroom_id: string
+          created_at: string | null
+          exam_type: string
+          id: string
+          message: string | null
+          sent_by: string
+        }
+        Insert: {
+          broadcast_type: string
+          classroom_id: string
+          created_at?: string | null
+          exam_type: string
+          id?: string
+          message?: string | null
+          sent_by: string
+        }
+        Update: {
+          broadcast_type?: string
+          classroom_id?: string
+          created_at?: string | null
+          exam_type?: string
+          id?: string
+          message?: string | null
+          sent_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_exam_broadcasts_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_exam_broadcasts_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_exam_broadcasts_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_exam_dates: {
+        Row: {
+          attempt_number: number
+          created_at: string | null
+          created_by: string | null
+          exam_date: string
+          exam_type: string
+          id: string
+          is_active: boolean | null
+          label: string | null
+          phase: string
+          registration_deadline: string | null
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          attempt_number?: number
+          created_at?: string | null
+          created_by?: string | null
+          exam_date: string
+          exam_type: string
+          id?: string
+          is_active?: boolean | null
+          label?: string | null
+          phase: string
+          registration_deadline?: string | null
+          updated_at?: string | null
+          year?: number
+        }
+        Update: {
+          attempt_number?: number
+          created_at?: string | null
+          created_by?: string | null
+          exam_date?: string
+          exam_type?: string
+          id?: string
+          is_active?: boolean | null
+          label?: string | null
+          phase?: string
+          registration_deadline?: string | null
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_exam_dates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_exam_dates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nexus_foundation_chapters: {
         Row: {
           chapter_number: number
@@ -4212,12 +5762,17 @@ export type Database = {
           id: string
           is_published: boolean
           min_quiz_score_pct: number
+          pdf_onedrive_item_id: string | null
+          pdf_page_count: number | null
+          pdf_source: string | null
+          pdf_storage_path: string | null
+          pdf_url: string | null
           sharepoint_video_url: string | null
           thumbnail_url: string | null
           title: string
           updated_at: string
           video_duration_seconds: number | null
-          video_source: string
+          video_source: string | null
           youtube_video_id: string | null
         }
         Insert: {
@@ -4228,12 +5783,17 @@ export type Database = {
           id?: string
           is_published?: boolean
           min_quiz_score_pct?: number
+          pdf_onedrive_item_id?: string | null
+          pdf_page_count?: number | null
+          pdf_source?: string | null
+          pdf_storage_path?: string | null
+          pdf_url?: string | null
           sharepoint_video_url?: string | null
           thumbnail_url?: string | null
           title: string
           updated_at?: string
           video_duration_seconds?: number | null
-          video_source?: string
+          video_source?: string | null
           youtube_video_id?: string | null
         }
         Update: {
@@ -4244,12 +5804,17 @@ export type Database = {
           id?: string
           is_published?: boolean
           min_quiz_score_pct?: number
+          pdf_onedrive_item_id?: string | null
+          pdf_page_count?: number | null
+          pdf_source?: string | null
+          pdf_storage_path?: string | null
+          pdf_url?: string | null
           sharepoint_video_url?: string | null
           thumbnail_url?: string | null
           title?: string
           updated_at?: string
           video_duration_seconds?: number | null
-          video_source?: string
+          video_source?: string | null
           youtube_video_id?: string | null
         }
         Relationships: [
@@ -4630,6 +6195,7 @@ export type Database = {
           description: string | null
           end_timestamp_seconds: number
           id: string
+          min_questions_to_pass: number | null
           sort_order: number
           start_timestamp_seconds: number
           title: string
@@ -4640,6 +6206,7 @@ export type Database = {
           description?: string | null
           end_timestamp_seconds: number
           id?: string
+          min_questions_to_pass?: number | null
           sort_order: number
           start_timestamp_seconds: number
           title: string
@@ -4650,6 +6217,7 @@ export type Database = {
           description?: string | null
           end_timestamp_seconds?: number
           id?: string
+          min_questions_to_pass?: number | null
           sort_order?: number
           start_timestamp_seconds?: number
           title?: string
@@ -4722,6 +6290,9 @@ export type Database = {
           completed_at: string | null
           created_at: string
           id: string
+          last_audio_language: string | null
+          last_audio_position_seconds: number | null
+          last_pdf_page: number | null
           last_section_id: string | null
           last_video_position_seconds: number
           started_at: string | null
@@ -4734,6 +6305,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           id?: string
+          last_audio_language?: string | null
+          last_audio_position_seconds?: number | null
+          last_pdf_page?: number | null
           last_section_id?: string | null
           last_video_position_seconds?: number
           started_at?: string | null
@@ -4746,6 +6320,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           id?: string
+          last_audio_language?: string | null
+          last_audio_position_seconds?: number | null
+          last_pdf_page?: number | null
           last_section_id?: string | null
           last_video_position_seconds?: number
           started_at?: string | null
@@ -4815,6 +6392,567 @@ export type Database = {
             columns: ["chapter_id"]
             isOneToOne: false
             referencedRelation: "nexus_foundation_chapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_item_issues: {
+        Row: {
+          assigned_to: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          module_item_id: string
+          priority: string
+          resolved_at: string | null
+          section_id: string | null
+          status: string
+          student_id: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          module_item_id: string
+          priority?: string
+          resolved_at?: string | null
+          section_id?: string | null
+          status?: string
+          student_id: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          module_item_id?: string
+          priority?: string
+          resolved_at?: string | null
+          section_id?: string | null
+          status?: string
+          student_id?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_item_issues_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_issues_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_issues_module_item_id_fkey"
+            columns: ["module_item_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_issues_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_item_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_issues_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_issues_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_item_quiz_questions: {
+        Row: {
+          correct_option: string
+          created_at: string | null
+          explanation: string | null
+          id: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          section_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          correct_option: string
+          created_at?: string | null
+          explanation?: string | null
+          id?: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          section_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          correct_option?: string
+          created_at?: string | null
+          explanation?: string | null
+          id?: string
+          option_a?: string
+          option_b?: string
+          option_c?: string
+          option_d?: string
+          question_text?: string
+          section_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_item_quiz_questions_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_item_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_item_reactions: {
+        Row: {
+          created_at: string | null
+          id: string
+          module_item_id: string
+          reaction: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          module_item_id: string
+          reaction: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          module_item_id?: string
+          reaction?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_item_reactions_module_item_id_fkey"
+            columns: ["module_item_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_reactions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_item_reactions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_item_sections: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          end_timestamp_seconds: number
+          id: string
+          min_questions_to_pass: number | null
+          module_item_id: string
+          sort_order: number | null
+          start_timestamp_seconds: number
+          title: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          end_timestamp_seconds: number
+          id?: string
+          min_questions_to_pass?: number | null
+          module_item_id: string
+          sort_order?: number | null
+          start_timestamp_seconds: number
+          title: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          end_timestamp_seconds?: number
+          id?: string
+          min_questions_to_pass?: number | null
+          module_item_id?: string
+          sort_order?: number | null
+          start_timestamp_seconds?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_item_sections_module_item_id_fkey"
+            columns: ["module_item_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_items: {
+        Row: {
+          chapter_number: number | null
+          content_url: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_published: boolean | null
+          item_type: string
+          metadata: Json | null
+          module_id: string
+          pdf_onedrive_item_id: string | null
+          pdf_page_count: number | null
+          pdf_storage_path: string | null
+          pdf_url: string | null
+          sharepoint_video_url: string | null
+          solution_sharepoint_video_url: string | null
+          solution_video_source: string | null
+          solution_youtube_video_id: string | null
+          sort_order: number | null
+          title: string
+          updated_at: string | null
+          video_duration_seconds: number | null
+          video_source: string | null
+          youtube_video_id: string | null
+        }
+        Insert: {
+          chapter_number?: number | null
+          content_url?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          item_type?: string
+          metadata?: Json | null
+          module_id: string
+          pdf_onedrive_item_id?: string | null
+          pdf_page_count?: number | null
+          pdf_storage_path?: string | null
+          pdf_url?: string | null
+          sharepoint_video_url?: string | null
+          solution_sharepoint_video_url?: string | null
+          solution_video_source?: string | null
+          solution_youtube_video_id?: string | null
+          sort_order?: number | null
+          title: string
+          updated_at?: string | null
+          video_duration_seconds?: number | null
+          video_source?: string | null
+          youtube_video_id?: string | null
+        }
+        Update: {
+          chapter_number?: number | null
+          content_url?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_published?: boolean | null
+          item_type?: string
+          metadata?: Json | null
+          module_id?: string
+          pdf_onedrive_item_id?: string | null
+          pdf_page_count?: number | null
+          pdf_storage_path?: string | null
+          pdf_url?: string | null
+          sharepoint_video_url?: string | null
+          solution_sharepoint_video_url?: string | null
+          solution_video_source?: string | null
+          solution_youtube_video_id?: string | null
+          sort_order?: number | null
+          title?: string
+          updated_at?: string | null
+          video_duration_seconds?: number | null
+          video_source?: string | null
+          youtube_video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_items_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_quiz_attempts: {
+        Row: {
+          answers: Json | null
+          attempt_number: number | null
+          created_at: string | null
+          id: string
+          passed: boolean | null
+          score_pct: number | null
+          section_id: string
+          student_id: string
+        }
+        Insert: {
+          answers?: Json | null
+          attempt_number?: number | null
+          created_at?: string | null
+          id?: string
+          passed?: boolean | null
+          score_pct?: number | null
+          section_id: string
+          student_id: string
+        }
+        Update: {
+          answers?: Json | null
+          attempt_number?: number | null
+          created_at?: string | null
+          id?: string
+          passed?: boolean | null
+          score_pct?: number | null
+          section_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_quiz_attempts_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_item_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_quiz_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_quiz_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_student_notes: {
+        Row: {
+          created_at: string | null
+          id: string
+          note_text: string | null
+          section_id: string
+          student_id: string
+          updated_at: string | null
+          video_timestamp_seconds: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          note_text?: string | null
+          section_id: string
+          student_id: string
+          updated_at?: string | null
+          video_timestamp_seconds?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          note_text?: string | null
+          section_id?: string
+          student_id?: string
+          updated_at?: string | null
+          video_timestamp_seconds?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_student_notes_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_item_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_student_notes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_student_notes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_module_student_progress: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          last_audio_language: string | null
+          last_audio_position_seconds: number | null
+          last_pdf_page: number | null
+          last_section_id: string | null
+          last_video_position_seconds: number | null
+          module_item_id: string
+          started_at: string | null
+          status: string | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          last_audio_language?: string | null
+          last_audio_position_seconds?: number | null
+          last_pdf_page?: number | null
+          last_section_id?: string | null
+          last_video_position_seconds?: number | null
+          module_item_id: string
+          started_at?: string | null
+          status?: string | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          last_audio_language?: string | null
+          last_audio_position_seconds?: number | null
+          last_pdf_page?: number | null
+          last_section_id?: string | null
+          last_video_position_seconds?: number | null
+          module_item_id?: string
+          started_at?: string | null
+          status?: string | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_module_student_progress_last_section_id_fkey"
+            columns: ["last_section_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_item_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_student_progress_module_item_id_fkey"
+            columns: ["module_item_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_student_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_module_student_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_modules: {
+        Row: {
+          category: string | null
+          color: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_published: boolean | null
+          module_type: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_published?: boolean | null
+          module_type?: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          color?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_published?: boolean | null
+          module_type?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_modules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_modules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -5005,10 +7143,14 @@ export type Database = {
           duration_minutes: number | null
           exam_type: string
           id: string
-          pdf_url: string
+          pdf_url: string | null
+          questions_answer_keyed: number | null
+          questions_complete: number | null
+          questions_parsed: number | null
           session: string | null
           total_marks: number | null
           total_questions: number | null
+          upload_status: string
           uploaded_by: string | null
           year: number
         }
@@ -5017,10 +7159,14 @@ export type Database = {
           duration_minutes?: number | null
           exam_type: string
           id?: string
-          pdf_url: string
+          pdf_url?: string | null
+          questions_answer_keyed?: number | null
+          questions_complete?: number | null
+          questions_parsed?: number | null
           session?: string | null
           total_marks?: number | null
           total_questions?: number | null
+          upload_status?: string
           uploaded_by?: string | null
           year: number
         }
@@ -5029,10 +7175,14 @@ export type Database = {
           duration_minutes?: number | null
           exam_type?: string
           id?: string
-          pdf_url?: string
+          pdf_url?: string | null
+          questions_answer_keyed?: number | null
+          questions_complete?: number | null
+          questions_parsed?: number | null
           session?: string | null
           total_marks?: number | null
           total_questions?: number | null
+          upload_status?: string
           uploaded_by?: string | null
           year?: number
         }
@@ -5047,6 +7197,84 @@ export type Database = {
           {
             foreignKeyName: "nexus_qb_original_papers_uploaded_by_fkey"
             columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_qb_question_reports: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          question_id: string
+          report_type: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          question_id: string
+          report_type: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          question_id?: string
+          report_type?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_qb_question_reports_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_question_reports_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_question_reports_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_question_reports_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_qb_question_reports_student_id_fkey"
+            columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -5095,16 +7323,17 @@ export type Database = {
         Row: {
           answer_tolerance: number | null
           categories: string[]
-          correct_answer: string
+          correct_answer: string | null
           created_at: string
           created_by: string | null
           difficulty: string
           display_order: number | null
           exam_relevance: string
-          explanation_brief: string
+          explanation_brief: string | null
           explanation_detailed: string | null
           id: string
           is_active: boolean
+          nta_question_id: string | null
           options: Json | null
           original_paper_id: string | null
           original_paper_page: number | null
@@ -5114,6 +7343,7 @@ export type Database = {
           repeat_group_id: string | null
           solution_image_url: string | null
           solution_video_url: string | null
+          status: string
           sub_topic: string | null
           topic_id: string | null
           updated_at: string
@@ -5121,16 +7351,17 @@ export type Database = {
         Insert: {
           answer_tolerance?: number | null
           categories?: string[]
-          correct_answer: string
+          correct_answer?: string | null
           created_at?: string
           created_by?: string | null
           difficulty?: string
           display_order?: number | null
           exam_relevance?: string
-          explanation_brief: string
+          explanation_brief?: string | null
           explanation_detailed?: string | null
           id?: string
           is_active?: boolean
+          nta_question_id?: string | null
           options?: Json | null
           original_paper_id?: string | null
           original_paper_page?: number | null
@@ -5140,6 +7371,7 @@ export type Database = {
           repeat_group_id?: string | null
           solution_image_url?: string | null
           solution_video_url?: string | null
+          status?: string
           sub_topic?: string | null
           topic_id?: string | null
           updated_at?: string
@@ -5147,16 +7379,17 @@ export type Database = {
         Update: {
           answer_tolerance?: number | null
           categories?: string[]
-          correct_answer?: string
+          correct_answer?: string | null
           created_at?: string
           created_by?: string | null
           difficulty?: string
           display_order?: number | null
           exam_relevance?: string
-          explanation_brief?: string
+          explanation_brief?: string | null
           explanation_detailed?: string | null
           id?: string
           is_active?: boolean
+          nta_question_id?: string | null
           options?: Json | null
           original_paper_id?: string | null
           original_paper_page?: number | null
@@ -5166,6 +7399,7 @@ export type Database = {
           repeat_group_id?: string | null
           solution_image_url?: string | null
           solution_video_url?: string | null
+          status?: string
           sub_topic?: string | null
           topic_id?: string | null
           updated_at?: string
@@ -5538,6 +7772,7 @@ export type Database = {
       }
       nexus_scheduled_classes: {
         Row: {
+          batch_id: string | null
           classroom_id: string
           created_at: string | null
           description: string | null
@@ -5545,19 +7780,25 @@ export type Database = {
           id: string
           notes: string | null
           recording_duration_minutes: number | null
+          recording_fetched_at: string | null
           recording_url: string | null
           rescheduled_to: string | null
           scheduled_date: string
           start_time: string
           status: string | null
+          target_scope: string | null
           teacher_id: string | null
           teams_meeting_id: string | null
+          teams_meeting_join_url: string | null
+          teams_meeting_scope: string | null
           teams_meeting_url: string | null
           title: string
           topic_id: string | null
+          transcript_url: string | null
           updated_at: string | null
         }
         Insert: {
+          batch_id?: string | null
           classroom_id: string
           created_at?: string | null
           description?: string | null
@@ -5565,19 +7806,25 @@ export type Database = {
           id?: string
           notes?: string | null
           recording_duration_minutes?: number | null
+          recording_fetched_at?: string | null
           recording_url?: string | null
           rescheduled_to?: string | null
           scheduled_date: string
           start_time: string
           status?: string | null
+          target_scope?: string | null
           teacher_id?: string | null
           teams_meeting_id?: string | null
+          teams_meeting_join_url?: string | null
+          teams_meeting_scope?: string | null
           teams_meeting_url?: string | null
           title: string
           topic_id?: string | null
+          transcript_url?: string | null
           updated_at?: string | null
         }
         Update: {
+          batch_id?: string | null
           classroom_id?: string
           created_at?: string | null
           description?: string | null
@@ -5585,19 +7832,31 @@ export type Database = {
           id?: string
           notes?: string | null
           recording_duration_minutes?: number | null
+          recording_fetched_at?: string | null
           recording_url?: string | null
           rescheduled_to?: string | null
           scheduled_date?: string
           start_time?: string
           status?: string | null
+          target_scope?: string | null
           teacher_id?: string | null
           teams_meeting_id?: string | null
+          teams_meeting_join_url?: string | null
+          teams_meeting_scope?: string | null
           teams_meeting_url?: string | null
           title?: string
           topic_id?: string | null
+          transcript_url?: string | null
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "nexus_scheduled_classes_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "nexus_scheduled_classes_classroom_id_fkey"
             columns: ["classroom_id"]
@@ -5714,44 +7973,83 @@ export type Database = {
         Row: {
           category: string
           classroom_id: string
+          deleted_at: string | null
+          deleted_by: string | null
+          exam_attempt_id: string | null
+          file_size_bytes: number | null
           file_type: string | null
           file_url: string
           id: string
+          is_current: boolean | null
+          is_deleted: boolean | null
           notes: string | null
+          previous_version_id: string | null
+          rejection_reason: string | null
+          sharepoint_item_id: string | null
+          sharepoint_web_url: string | null
           status: string | null
           student_id: string
+          template_id: string | null
           title: string
           uploaded_at: string | null
+          uploaded_by: string | null
           verified_at: string | null
           verified_by: string | null
+          version: number | null
         }
         Insert: {
           category: string
           classroom_id: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          exam_attempt_id?: string | null
+          file_size_bytes?: number | null
           file_type?: string | null
           file_url: string
           id?: string
+          is_current?: boolean | null
+          is_deleted?: boolean | null
           notes?: string | null
+          previous_version_id?: string | null
+          rejection_reason?: string | null
+          sharepoint_item_id?: string | null
+          sharepoint_web_url?: string | null
           status?: string | null
           student_id: string
+          template_id?: string | null
           title: string
           uploaded_at?: string | null
+          uploaded_by?: string | null
           verified_at?: string | null
           verified_by?: string | null
+          version?: number | null
         }
         Update: {
           category?: string
           classroom_id?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          exam_attempt_id?: string | null
+          file_size_bytes?: number | null
           file_type?: string | null
           file_url?: string
           id?: string
+          is_current?: boolean | null
+          is_deleted?: boolean | null
           notes?: string | null
+          previous_version_id?: string | null
+          rejection_reason?: string | null
+          sharepoint_item_id?: string | null
+          sharepoint_web_url?: string | null
           status?: string | null
           student_id?: string
+          template_id?: string | null
           title?: string
           uploaded_at?: string | null
+          uploaded_by?: string | null
           verified_at?: string | null
           verified_by?: string | null
+          version?: number | null
         }
         Relationships: [
           {
@@ -5759,6 +8057,34 @@ export type Database = {
             columns: ["classroom_id"]
             isOneToOne: false
             referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_exam_attempt_id_fkey"
+            columns: ["exam_attempt_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_student_exam_attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_previous_version_id_fkey"
+            columns: ["previous_version_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_student_documents"
             referencedColumns: ["id"]
           },
           {
@@ -5776,6 +8102,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "nexus_student_documents_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_document_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "nexus_student_documents_verified_by_fkey"
             columns: ["verified_by"]
             isOneToOne: false
@@ -5785,6 +8132,325 @@ export type Database = {
           {
             foreignKeyName: "nexus_student_documents_verified_by_fkey"
             columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_student_entry_progress: {
+        Row: {
+          completed_at: string | null
+          entry_id: string
+          id: string
+          is_completed: boolean | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["nexus_progress_status"] | null
+          student_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          entry_id: string
+          id?: string
+          is_completed?: boolean | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["nexus_progress_status"] | null
+          student_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          entry_id?: string
+          id?: string
+          is_completed?: boolean | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["nexus_progress_status"] | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_student_entry_progress_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_checklist_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_entry_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_entry_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_student_exam_attempts: {
+        Row: {
+          application_date: string | null
+          aptitude_score: number | null
+          attempt_number: number
+          classroom_id: string
+          created_at: string | null
+          drawing_score: number | null
+          exam_completed_at: string | null
+          exam_date_id: string | null
+          exam_type: string
+          id: string
+          notes: string | null
+          phase: string
+          scorecard_reminder_sent: boolean | null
+          state: string
+          student_id: string
+          total_score: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          application_date?: string | null
+          aptitude_score?: number | null
+          attempt_number?: number
+          classroom_id: string
+          created_at?: string | null
+          drawing_score?: number | null
+          exam_completed_at?: string | null
+          exam_date_id?: string | null
+          exam_type: string
+          id?: string
+          notes?: string | null
+          phase: string
+          scorecard_reminder_sent?: boolean | null
+          state?: string
+          student_id: string
+          total_score?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          application_date?: string | null
+          aptitude_score?: number | null
+          attempt_number?: number
+          classroom_id?: string
+          created_at?: string | null
+          drawing_score?: number | null
+          exam_completed_at?: string | null
+          exam_date_id?: string | null
+          exam_type?: string
+          id?: string
+          notes?: string | null
+          phase?: string
+          scorecard_reminder_sent?: boolean | null
+          state?: string
+          student_id?: string
+          total_score?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_student_exam_attempts_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_attempts_exam_date_id_fkey"
+            columns: ["exam_date_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_exam_dates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_attempts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_student_exam_plans: {
+        Row: {
+          application_number: string | null
+          classroom_id: string
+          created_at: string | null
+          exam_type: string
+          id: string
+          notes: string | null
+          state: string
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          application_number?: string | null
+          classroom_id: string
+          created_at?: string | null
+          exam_type: string
+          id?: string
+          notes?: string | null
+          state?: string
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          application_number?: string | null
+          classroom_id?: string
+          created_at?: string | null
+          exam_type?: string
+          id?: string
+          notes?: string | null
+          state?: string
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_student_exam_plans_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_plans_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_plans_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_student_exam_registrations: {
+        Row: {
+          application_number: string | null
+          application_summary_doc_id: string | null
+          classroom_id: string
+          created_at: string | null
+          exam_type: string
+          id: string
+          is_writing: boolean | null
+          notes: string | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          application_number?: string | null
+          application_summary_doc_id?: string | null
+          classroom_id: string
+          created_at?: string | null
+          exam_type: string
+          id?: string
+          is_writing?: boolean | null
+          notes?: string | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          application_number?: string | null
+          application_summary_doc_id?: string | null
+          classroom_id?: string
+          created_at?: string | null
+          exam_type?: string
+          id?: string
+          is_writing?: boolean | null
+          notes?: string | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_student_exam_registration_application_summary_doc_id_fkey"
+            columns: ["application_summary_doc_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_student_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_registrations_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_registrations_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_exam_registrations_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_student_module_item_progress: {
+        Row: {
+          completed_at: string | null
+          id: string
+          is_completed: boolean | null
+          module_item_id: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["nexus_progress_status"] | null
+          student_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          id?: string
+          is_completed?: boolean | null
+          module_item_id: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["nexus_progress_status"] | null
+          student_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          id?: string
+          is_completed?: boolean | null
+          module_item_id?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["nexus_progress_status"] | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_student_module_item_progress_module_item_id_fkey"
+            columns: ["module_item_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_module_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_module_item_progress_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_student_module_item_progress_student_id_fkey"
+            columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -5843,6 +8509,61 @@ export type Database = {
             columns: ["topic_id"]
             isOneToOne: false
             referencedRelation: "nexus_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_teams_sync_log: {
+        Row: {
+          action: string
+          classroom_id: string
+          created_at: string | null
+          details: Json | null
+          error_message: string | null
+          id: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          classroom_id: string
+          created_at?: string | null
+          details?: Json | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          classroom_id?: string
+          created_at?: string | null
+          details?: Json | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_teams_sync_log_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_teams_sync_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_teams_sync_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -5919,7 +8640,8 @@ export type Database = {
           id: string
           marks: number | null
           negative_marks: number | null
-          question_id: string
+          qb_question_id: string | null
+          question_id: string | null
           sort_order: number | null
           test_id: string
         }
@@ -5927,7 +8649,8 @@ export type Database = {
           id?: string
           marks?: number | null
           negative_marks?: number | null
-          question_id: string
+          qb_question_id?: string | null
+          question_id?: string | null
           sort_order?: number | null
           test_id: string
         }
@@ -5935,11 +8658,19 @@ export type Database = {
           id?: string
           marks?: number | null
           negative_marks?: number | null
-          question_id?: string
+          qb_question_id?: string | null
+          question_id?: string | null
           sort_order?: number | null
           test_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "nexus_test_questions_qb_question_id_fkey"
+            columns: ["qb_question_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_qb_questions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "nexus_test_questions_question_id_fkey"
             columns: ["question_id"]
@@ -5963,10 +8694,12 @@ export type Database = {
           classroom_id: string
           created_at: string | null
           created_by: string | null
+          created_by_student: string | null
           description: string | null
           duration_minutes: number | null
           id: string
           is_active: boolean | null
+          is_custom: boolean | null
           is_published: boolean | null
           passing_marks: number | null
           per_question_seconds: number | null
@@ -5983,10 +8716,12 @@ export type Database = {
           classroom_id: string
           created_at?: string | null
           created_by?: string | null
+          created_by_student?: string | null
           description?: string | null
           duration_minutes?: number | null
           id?: string
           is_active?: boolean | null
+          is_custom?: boolean | null
           is_published?: boolean | null
           passing_marks?: number | null
           per_question_seconds?: number | null
@@ -6003,10 +8738,12 @@ export type Database = {
           classroom_id?: string
           created_at?: string | null
           created_by?: string | null
+          created_by_student?: string | null
           description?: string | null
           duration_minutes?: number | null
           id?: string
           is_active?: boolean | null
+          is_custom?: boolean | null
           is_published?: boolean | null
           passing_marks?: number | null
           per_question_seconds?: number | null
@@ -6035,6 +8772,81 @@ export type Database = {
           {
             foreignKeyName: "nexus_tests_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_tests_created_by_student_fkey"
+            columns: ["created_by_student"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_tests_created_by_student_fkey"
+            columns: ["created_by_student"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nexus_timetable_notifications: {
+        Row: {
+          classroom_id: string
+          created_at: string | null
+          event_type: string
+          id: string
+          is_read: boolean | null
+          message: string
+          metadata: Json | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          classroom_id: string
+          created_at?: string | null
+          event_type: string
+          id?: string
+          is_read?: boolean | null
+          message: string
+          metadata?: Json | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          classroom_id?: string
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          metadata?: Json | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nexus_timetable_notifications_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "nexus_classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_timetable_notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nexus_timetable_notifications_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -6254,7 +9066,6 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           name: string
-          nearby_cities: Json | null
           operating_hours: Json | null
           photos: Json | null
           pincode: string | null
@@ -6288,7 +9099,6 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name: string
-          nearby_cities?: Json | null
           operating_hours?: Json | null
           photos?: Json | null
           pincode?: string | null
@@ -6322,7 +9132,6 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name?: string
-          nearby_cities?: Json | null
           operating_hours?: Json | null
           photos?: Json | null
           pincode?: string | null
@@ -9632,12 +12441,41 @@ export type Database = {
         Args: { p_exclude_user_id?: string; p_username: string }
         Returns: boolean
       }
+      cleanup_old_sessions: {
+        Args: { p_days_to_keep?: number }
+        Returns: number
+      }
       clone_centers_to_new_year: {
         Args: { source_year: number; target_year: number }
         Returns: number
       }
       create_lead_profile: { Args: { payload: Json }; Returns: Json }
+      create_notification: {
+        Args: {
+          p_data?: Json
+          p_message: string
+          p_priority?: string
+          p_title: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      end_user_session: {
+        Args: { p_metadata?: Json; p_session_id: string }
+        Returns: undefined
+      }
       ensure_qb_stats: { Args: { p_user_id: string }; Returns: undefined }
+      get_active_sessions: {
+        Args: { p_user_id: string }
+        Returns: {
+          app_section: string
+          device_info: Json
+          duration_so_far: string
+          session_id: string
+          session_start: string
+        }[]
+      }
       get_allotment_college_stats: {
         Args: { p_system_id: string; p_year: number }
         Returns: {
@@ -9730,6 +12568,17 @@ export type Database = {
           year: number
         }[]
       }
+      get_user_session_stats: {
+        Args: { p_days_back?: number; p_user_id: string }
+        Returns: {
+          active_sessions: number
+          avg_session_duration: string
+          last_session_start: string
+          most_used_sections: Json
+          total_sessions: number
+          total_time: string
+        }[]
+      }
       initialize_student_onboarding: {
         Args: {
           p_enrollment_type?: string
@@ -9737,6 +12586,14 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
+      }
+      log_session_event: {
+        Args: {
+          p_event_data?: Json
+          p_event_type: string
+          p_session_id: string
+        }
+        Returns: string
       }
       record_profile_change: {
         Args: {
@@ -9750,6 +12607,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      rollup_library_engagement: {
+        Args: { target_date?: string }
+        Returns: undefined
       }
       search_coa_colleges: {
         Args: { result_limit?: number; search_term: string }
@@ -9792,12 +12653,26 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      start_user_session: {
+        Args: { p_device_info?: Json; p_section?: string; p_user_id: string }
+        Returns: string
+      }
       suggest_usernames: {
         Args: { p_base_username: string; p_count?: number }
         Returns: string[]
       }
+      update_library_streaks: { Args: never; Returns: undefined }
+      update_session_section: {
+        Args: { p_metadata?: Json; p_new_section: string; p_session_id: string }
+        Returns: undefined
+      }
+      update_student_library_streak: {
+        Args: { p_student_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
+      account_type_t: "Free" | "Paid" | "Admin"
       app_feedback_category:
         | "bug_report"
         | "feature_request"
@@ -9869,6 +12744,7 @@ export type Database = {
       direct_enrollment_link_status: "active" | "used" | "expired" | "cancelled"
       enrollment_interest: "yes" | "maybe" | "no"
       exam_type: "NATA" | "JEE_PAPER_2" | "BOTH"
+      gender_t: "male" | "female" | "nonbinary" | "prefer_not_to_say"
       learning_mode: "hybrid" | "online_only"
       location_source: "geolocation" | "pincode" | "manual"
       marketing_content_status: "draft" | "published" | "archived"
@@ -9890,6 +12766,7 @@ export type Database = {
         | "logical_reasoning"
         | "aesthetic_sensitivity"
         | "other"
+      nexus_progress_status: "not_started" | "in_progress" | "completed"
       notification_event_type:
         | "new_onboarding"
         | "onboarding_skipped"
@@ -9906,12 +12783,12 @@ export type Database = {
         | "refund_requested"
         | "refund_approved"
         | "refund_rejected"
-        | "contact_message_received"
         | "direct_enrollment_completed"
         | "question_submitted"
         | "question_edit_requested"
         | "question_delete_requested"
         | "callback_reminder"
+        | "contact_message_received"
         | "ticket_created"
         | "ticket_resolved"
         | "link_regeneration_requested"
@@ -9925,6 +12802,8 @@ export type Database = {
         | "foundation_issue_in_progress"
         | "foundation_issue_delegated"
         | "classroom_access_requested"
+        | "classroom_removed"
+        | "classroom_restored"
       notification_recipient_role: "admin" | "team_lead" | "team_member"
       onboarding_question_type: "single_select" | "multi_select" | "scale"
       onboarding_session_status:
@@ -10095,6 +12974,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_type_t: ["Free", "Paid", "Admin"],
       app_feedback_category: [
         "bug_report",
         "feature_request",
@@ -10176,6 +13056,7 @@ export const Constants = {
       direct_enrollment_link_status: ["active", "used", "expired", "cancelled"],
       enrollment_interest: ["yes", "maybe", "no"],
       exam_type: ["NATA", "JEE_PAPER_2", "BOTH"],
+      gender_t: ["male", "female", "nonbinary", "prefer_not_to_say"],
       learning_mode: ["hybrid", "online_only"],
       location_source: ["geolocation", "pincode", "manual"],
       marketing_content_status: ["draft", "published", "archived"],
@@ -10200,6 +13081,7 @@ export const Constants = {
         "aesthetic_sensitivity",
         "other",
       ],
+      nexus_progress_status: ["not_started", "in_progress", "completed"],
       notification_event_type: [
         "new_onboarding",
         "onboarding_skipped",
@@ -10216,12 +13098,12 @@ export const Constants = {
         "refund_requested",
         "refund_approved",
         "refund_rejected",
-        "contact_message_received",
         "direct_enrollment_completed",
         "question_submitted",
         "question_edit_requested",
         "question_delete_requested",
         "callback_reminder",
+        "contact_message_received",
         "ticket_created",
         "ticket_resolved",
         "link_regeneration_requested",
@@ -10235,6 +13117,8 @@ export const Constants = {
         "foundation_issue_in_progress",
         "foundation_issue_delegated",
         "classroom_access_requested",
+        "classroom_removed",
+        "classroom_restored",
       ],
       notification_recipient_role: ["admin", "team_lead", "team_member"],
       onboarding_question_type: ["single_select", "multi_select", "scale"],

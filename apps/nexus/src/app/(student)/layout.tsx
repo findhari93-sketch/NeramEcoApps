@@ -12,6 +12,7 @@ import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -27,6 +28,7 @@ const allStudentNavItems = [
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
+  { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
   { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
   { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
@@ -38,11 +40,12 @@ const allStudentNavItems = [
 const allBottomNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
-  { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
+  { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
 ];
 
 const allOverflowItems = [
+  { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
   { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },

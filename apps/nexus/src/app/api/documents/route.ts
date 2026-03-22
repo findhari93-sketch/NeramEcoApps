@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, name')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -85,6 +85,13 @@ export async function POST(request: NextRequest) {
     if (!file || !classroomId || !title || !category) {
       return NextResponse.json({ error: 'Missing required fields: file, classroom_id, title, category' }, { status: 400 });
     }
+
+    // Fetch classroom name for human-readable SharePoint folder path
+    const { data: classroom } = await (supabase as any)
+      .from('nexus_classrooms')
+      .select('name')
+      .eq('id', classroomId)
+      .single();
 
     // Validate file size against template if provided
     if (templateId) {
@@ -112,11 +119,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Upload to SharePoint
+    // Upload to SharePoint with human-readable folder structure:
+    // nexus/documents/{Classroom Name}/{Student Name}/{Document Title}/{filename}
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const ext = file.name.split('.').pop() || 'bin';
-    const timestamp = Date.now();
-    const spPath = `nexus/documents/${classroomId}/${user.id}/${templateId || 'general'}/${timestamp}.${ext}`;
+    const sanitize = (s: string) => s.replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, '-').substring(0, 50);
+    const classroomFolder = sanitize(classroom?.name || classroomId);
+    const studentFolder = sanitize(user.name || user.id);
+    const docFolder = sanitize(title);
+    const spPath = `nexus/documents/${classroomFolder}/${studentFolder}/${docFolder}/${file.name}`;
     const token = await getAppOnlyToken();
     const spResult = await uploadToSharePoint(token, spPath, buffer, file.type);
 

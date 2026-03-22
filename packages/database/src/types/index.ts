@@ -5502,3 +5502,331 @@ export interface NexusCustomTestCreate {
   duration_minutes?: number;
   per_question_seconds?: number;
 }
+
+// ============================================
+// VIDEO LIBRARY
+// ============================================
+
+export type LibraryVideoLanguage = 'ta' | 'en' | 'ta_en';
+export type LibraryVideoExam = 'nata' | 'jee_barch' | 'both' | 'general';
+export type LibraryVideoDifficulty = 'beginner' | 'intermediate' | 'advanced' | 'mixed';
+export type LibraryTranscriptStatus = 'pending' | 'fetched' | 'unavailable' | 'error';
+export type LibraryClassificationStatus = 'pending' | 'classified' | 'error' | 'skipped';
+export type LibraryReviewStatus = 'pending' | 'approved' | 'rejected' | 'needs_reclass';
+export type LibrarySyncStatus = 'running' | 'completed' | 'failed';
+export type LibraryEngagementStatus = 'active' | 'moderate' | 'inactive' | 'new';
+export type LibraryDeviceType = 'mobile' | 'tablet' | 'desktop';
+
+export interface LibraryVideo {
+  id: string;
+  youtube_video_id: string;
+  youtube_channel_id: string | null;
+  original_title: string | null;
+  original_description: string | null;
+  youtube_thumbnail_url: string | null;
+  youtube_thumbnail_hq_url: string | null;
+  duration_seconds: number | null;
+  published_at: string | null;
+  privacy_status: string;
+  transcript_text: string | null;
+  transcript_language: string | null;
+  transcript_is_generated: boolean;
+  transcript_segments: unknown | null;
+  transcript_status: LibraryTranscriptStatus;
+  suggested_title: string | null;
+  suggested_description: string | null;
+  language: LibraryVideoLanguage | null;
+  exam: LibraryVideoExam | null;
+  category: string | null;
+  subcategories: string[];
+  topics: string[];
+  difficulty: LibraryVideoDifficulty | null;
+  key_concepts: string[];
+  is_practical_demo: boolean;
+  ai_confidence: number | null;
+  classification_status: LibraryClassificationStatus;
+  classification_error: string | null;
+  approved_title: string | null;
+  approved_description: string | null;
+  review_status: LibraryReviewStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  is_published: boolean;
+  view_count: number;
+  total_watch_seconds: number;
+  bookmark_count: number;
+  synced_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryVideoInsert {
+  youtube_video_id: string;
+  youtube_channel_id?: string;
+  original_title?: string;
+  original_description?: string;
+  youtube_thumbnail_url?: string;
+  youtube_thumbnail_hq_url?: string;
+  duration_seconds?: number;
+  published_at?: string;
+  privacy_status?: string;
+}
+
+export interface LibraryVideoUpdate {
+  suggested_title?: string;
+  suggested_description?: string;
+  approved_title?: string;
+  approved_description?: string;
+  language?: LibraryVideoLanguage;
+  exam?: LibraryVideoExam;
+  category?: string;
+  subcategories?: string[];
+  topics?: string[];
+  difficulty?: LibraryVideoDifficulty;
+  key_concepts?: string[];
+  is_practical_demo?: boolean;
+  ai_confidence?: number;
+  classification_status?: LibraryClassificationStatus;
+  classification_error?: string;
+  review_status?: LibraryReviewStatus;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  admin_notes?: string;
+  is_published?: boolean;
+  transcript_text?: string;
+  transcript_language?: string;
+  transcript_is_generated?: boolean;
+  transcript_segments?: unknown;
+  transcript_status?: LibraryTranscriptStatus;
+}
+
+export interface LibraryCollection {
+  id: string;
+  title: string;
+  description: string | null;
+  cover_image_url: string | null;
+  created_by: string | null;
+  classroom_id: string | null;
+  exam: LibraryVideoExam | null;
+  is_published: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryCollectionItem {
+  id: string;
+  collection_id: string;
+  video_id: string;
+  sort_order: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface LibraryBookmark {
+  id: string;
+  student_id: string;
+  video_id: string;
+  timestamp_seconds: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface LibraryWatchHistory {
+  id: string;
+  student_id: string;
+  video_id: string;
+  last_position_seconds: number;
+  total_watched_seconds: number;
+  completed: boolean;
+  watch_count: number;
+  first_watched_at: string;
+  last_watched_at: string;
+}
+
+export interface LibrarySyncLog {
+  id: string;
+  started_at: string;
+  completed_at: string | null;
+  total_videos_found: number | null;
+  new_videos_added: number | null;
+  transcripts_fetched: number | null;
+  transcripts_failed: number | null;
+  classifications_run: number | null;
+  classifications_failed: number | null;
+  status: LibrarySyncStatus;
+  error_log: unknown;
+  run_by: string | null;
+}
+
+// ============================================
+// VIDEO LIBRARY - Engagement Tracking
+// ============================================
+
+export interface LibraryReplaySegment {
+  start: number;
+  end: number;
+  count: number;
+}
+
+export interface LibraryWatchSession {
+  id: string;
+  student_id: string;
+  video_id: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number;
+  watched_seconds: number;
+  furthest_position_seconds: number;
+  play_count: number;
+  pause_count: number;
+  seek_count: number;
+  rewind_count: number;
+  replay_segments: LibraryReplaySegment[];
+  completion_pct: number;
+  completed: boolean;
+  device_type: LibraryDeviceType | null;
+  created_at: string;
+}
+
+export interface LibraryWatchSessionUpsert {
+  id: string;
+  video_id: string;
+  watched_seconds: number;
+  furthest_position_seconds: number;
+  completion_pct: number;
+  play_count: number;
+  pause_count: number;
+  seek_count: number;
+  rewind_count: number;
+  replay_segments: LibraryReplaySegment[];
+  device_type: LibraryDeviceType;
+}
+
+export interface LibraryEngagementDaily {
+  id: string;
+  student_id: string;
+  activity_date: string;
+  videos_watched: number;
+  videos_completed: number;
+  unique_videos: number;
+  total_watch_seconds: number;
+  total_session_seconds: number;
+  sessions_count: number;
+  total_seeks: number;
+  total_rewinds: number;
+  total_pauses: number;
+  bookmarks_created: number;
+  search_queries: number;
+  avg_completion_pct: number;
+  created_at: string;
+}
+
+export interface LibraryStudentStreak {
+  student_id: string;
+  current_streak_days: number;
+  current_streak_start: string | null;
+  best_streak_days: number;
+  best_streak_start: string | null;
+  best_streak_end: string | null;
+  current_weekly_streak: number;
+  best_weekly_streak: number;
+  total_active_days: number;
+  total_active_weeks: number;
+  first_activity_date: string | null;
+  last_activity_date: string | null;
+  engagement_status: LibraryEngagementStatus;
+  engagement_score: number;
+  updated_at: string;
+}
+
+export interface LibrarySearchLog {
+  id: string;
+  student_id: string;
+  query_text: string;
+  results_count: number;
+  clicked_video_id: string | null;
+  created_at: string;
+}
+
+// ============================================
+// VIDEO LIBRARY - Dashboard / API Response Types
+// ============================================
+
+export interface LibraryVideoWithProgress extends LibraryVideo {
+  watch_history: LibraryWatchHistory | null;
+  bookmarks: LibraryBookmark[];
+}
+
+export interface LibraryCollectionWithVideos extends LibraryCollection {
+  items: (LibraryCollectionItem & { video: LibraryVideo })[];
+}
+
+export interface LibraryEngagementDashboardStudent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+  engagement_status: LibraryEngagementStatus;
+  engagement_score: number;
+  videos_watched: number;
+  total_watch_hours: number;
+  avg_completion_pct: number;
+  current_streak: number;
+  last_active: string | null;
+  bookmark_count: number;
+  rewind_ratio: number;
+}
+
+export interface LibraryEngagementDashboard {
+  class_aggregates: {
+    total_students: number;
+    active_students: number;
+    moderate_students: number;
+    inactive_students: number;
+    new_students: number;
+    total_watch_hours: number;
+    avg_completion_pct: number;
+    videos_watched: number;
+  };
+  top_videos: { video_id: string; title: string; watch_count: number; avg_completion: number }[];
+  least_watched_videos: { video_id: string; title: string; watch_count: number }[];
+  students: LibraryEngagementDashboardStudent[];
+}
+
+export interface LibraryStudentEngagementDetail {
+  student: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url: string | null;
+  };
+  streak: LibraryStudentStreak;
+  daily_activity: LibraryEngagementDaily[];
+  videos_watched: {
+    video_id: string;
+    title: string;
+    completion_pct: number;
+    total_watched_seconds: number;
+    watch_count: number;
+    last_watched_at: string;
+  }[];
+  replay_patterns: {
+    video_id: string;
+    title: string;
+    segments: LibraryReplaySegment[];
+  }[];
+  bookmarks: (LibraryBookmark & { video_title: string })[];
+}
+
+export interface LibraryMyActivity {
+  streak: LibraryStudentStreak;
+  total_videos_available: number;
+  videos_watched_count: number;
+  videos_completed_count: number;
+  weekly_activity: { date: string; watched: boolean; watch_seconds: number }[];
+  watch_time_this_week: number;
+  continue_watching: LibraryVideoWithProgress[];
+  bookmarks: (LibraryBookmark & { video: LibraryVideo })[];
+}

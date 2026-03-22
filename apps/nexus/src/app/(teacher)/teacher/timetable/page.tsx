@@ -31,9 +31,16 @@ interface BatchOption {
   name: string;
 }
 
+interface ClassroomWithBatches {
+  id: string;
+  name: string;
+  type: string;
+  ms_team_id?: string | null;
+  batches: BatchOption[];
+}
+
 export default function TeacherTimetable() {
   const { activeClassroom, classrooms, getToken } = useNexusAuthContext();
-  const commonClassroom = classrooms.find((c) => c.type === 'common');
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
@@ -42,6 +49,7 @@ export default function TeacherTimetable() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
   const [topics, setTopics] = useState<TopicOption[]>([]);
   const [batches, setBatches] = useState<BatchOption[]>([]);
+  const [classroomsWithBatches, setClassroomsWithBatches] = useState<ClassroomWithBatches[]>([]);
   // Pre-fill data for calendar slot click
   const [prefillDate, setPrefillDate] = useState<string>('');
   const [prefillTime, setPrefillTime] = useState<string>('');
@@ -175,7 +183,7 @@ export default function TeacherTimetable() {
     fetchHolidays();
   }, [fetchClasses, fetchHolidays]);
 
-  // Fetch topics and batches for create dialog
+  // Fetch topics and batches for create dialog (batches for ALL classrooms)
   useEffect(() => {
     if (!activeClassroom) return;
 
@@ -184,30 +192,57 @@ export default function TeacherTimetable() {
         const token = await getToken();
         if (!token) return;
 
-        const [topicsRes, batchesRes] = await Promise.all([
-          fetch(`/api/topics?classroom=${activeClassroom!.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`/api/classrooms/${activeClassroom!.id}/batches`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-
+        // Fetch topics for active classroom
+        const topicsRes = await fetch(`/api/topics?classroom=${activeClassroom!.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (topicsRes.ok) {
           const data = await topicsRes.json();
           setTopics(data.topics || []);
         }
+
+        // Fetch batches for active classroom (legacy)
+        const batchesRes = await fetch(`/api/classrooms/${activeClassroom!.id}/batches`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (batchesRes.ok) {
           const data = await batchesRes.json();
           setBatches(data.batches || []);
         }
+
+        // Fetch batches for ALL classrooms (for the new classroom selector)
+        const nonCommonClassrooms = classrooms.filter((c) => c.type !== 'common');
+        const batchPromises = nonCommonClassrooms.map((c) =>
+          fetch(`/api/classrooms/${c.id}/batches`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => r.ok ? r.json() : { batches: [] }).catch(() => ({ batches: [] }))
+        );
+        const batchResults = await Promise.all(batchPromises);
+
+        const cwb: ClassroomWithBatches[] = [];
+        // Add common classroom first (no batches)
+        const common = classrooms.find((c) => c.type === 'common');
+        if (common) {
+          cwb.push({ id: common.id, name: common.name, type: common.type, ms_team_id: common.ms_team_id, batches: [] });
+        }
+        // Add regular classrooms with their batches
+        nonCommonClassrooms.forEach((c, i) => {
+          cwb.push({
+            id: c.id,
+            name: c.name,
+            type: c.type,
+            ms_team_id: c.ms_team_id,
+            batches: (batchResults[i].batches || []).map((b: any) => ({ id: b.id, name: b.name })),
+          });
+        });
+        setClassroomsWithBatches(cwb);
       } catch (err) {
         console.error('Failed to load metadata:', err);
       }
     }
 
     fetchMeta();
-  }, [activeClassroom, getToken]);
+  }, [activeClassroom, classrooms, getToken]);
 
   const handleClassClick = (cls: ClassCardData) => {
     setSelectedClass(cls);
@@ -515,8 +550,8 @@ export default function TeacherTimetable() {
         }}
         editingClass={editingClass}
         topics={topics}
-        batches={batches}
-        classroomId={activeClassroom?.id || ''}
+        classrooms={classroomsWithBatches}
+        defaultClassroomId={activeClassroom?.id || ''}
         getToken={getToken}
         onSaved={() => {
           setSnackbar({ open: true, message: editingClass ? 'Class updated' : 'Class created', severity: 'success' });
@@ -529,9 +564,6 @@ export default function TeacherTimetable() {
         prefillTime={prefillTime}
         holidays={holidays}
         onRemoveHoliday={handleRemoveHolidayForClass}
-        hasLinkedTeam={!!activeClassroom?.ms_team_id}
-        commonClassroomId={commonClassroom?.id || null}
-        classroomName={activeClassroom?.name}
       />
 
       {/* Holiday Manager */}

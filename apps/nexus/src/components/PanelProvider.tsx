@@ -18,6 +18,8 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import ViewModuleOutlinedIcon from '@mui/icons-material/ViewModuleOutlined';
 import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
+import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -81,16 +83,20 @@ const PANELS: PanelConfig[] = [
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
+      { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
+      { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
     bottomNavItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
+      { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
-      { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
     ],
     overflowItems: [
+      { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
+      { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
@@ -134,6 +140,8 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
   // Foundation pages are still accessible via Module Library (management panel)
   if (pathname.startsWith('/teacher/foundation')) return 'management';
+  // Library pages (review, engagement, collections)
+  if (pathname.startsWith('/teacher/library')) return 'management';
 
   for (const [path, panelId] of Object.entries(PATH_TO_PANEL)) {
     if (pathname.startsWith(path + '/')) return panelId;

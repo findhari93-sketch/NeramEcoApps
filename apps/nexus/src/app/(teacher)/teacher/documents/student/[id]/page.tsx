@@ -11,7 +11,13 @@ import {
   Button,
   alpha,
   useTheme,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
 } from '@neram/ui';
+import CloseIcon from '@mui/icons-material/Close';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import PendingOutlinedIcon from '@mui/icons-material/PendingOutlined';
@@ -46,6 +52,36 @@ export default function TeacherStudentDocumentsPage() {
   const [dialogAction, setDialogAction] = useState<'verify' | 'reject' | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const handleView = async (doc: Document) => {
+    // For images and PDFs, show inline preview
+    const isPreviewable = doc.file_type?.startsWith('image/') || doc.file_type === 'application/pdf';
+    if (!isPreviewable) {
+      // For other types, open SharePoint web URL in new tab
+      if (doc.file_url) window.open(doc.file_url, '_blank');
+      return;
+    }
+    setPreviewDoc(doc);
+    setPreviewLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/documents/${doc.id}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewUrl(data.url);
+      }
+    } catch (err) {
+      console.error('Failed to get preview URL:', err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const fetchDocuments = useCallback(async () => {
     if (!activeClassroom) return;
@@ -211,8 +247,7 @@ export default function TeacherStudentDocumentsPage() {
                   <Button
                     size="small"
                     variant="text"
-                    href={doc.file_url}
-                    target="_blank"
+                    onClick={() => handleView(doc)}
                     sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 'auto' }}
                   >
                     View
@@ -257,6 +292,53 @@ export default function TeacherStudentDocumentsPage() {
         onConfirm={handleConfirm}
         loading={actionLoading}
       />
+
+      {/* Document Preview Dialog */}
+      <Dialog
+        open={!!previewDoc}
+        onClose={() => { setPreviewDoc(null); setPreviewUrl(null); }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
+          <Typography variant="subtitle1" fontWeight={600} noWrap>
+            {previewDoc?.title}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            {previewUrl && (
+              <IconButton size="small" onClick={() => window.open(previewUrl, '_blank')} title="Open in new tab">
+                <OpenInNewIcon fontSize="small" />
+              </IconButton>
+            )}
+            <IconButton size="small" onClick={() => { setPreviewDoc(null); setPreviewUrl(null); }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {previewLoading ? (
+            <Skeleton variant="rectangular" width="100%" height={400} />
+          ) : previewUrl ? (
+            previewDoc?.file_type?.startsWith('image/') ? (
+              <img
+                src={previewUrl}
+                alt={previewDoc?.title}
+                style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+              />
+            ) : (
+              <iframe
+                src={previewUrl}
+                style={{ width: '100%', height: '70vh', border: 'none' }}
+                title={previewDoc?.title}
+              />
+            )
+          ) : (
+            <Typography color="text.secondary" sx={{ p: 4 }}>
+              Unable to load preview.
+            </Typography>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

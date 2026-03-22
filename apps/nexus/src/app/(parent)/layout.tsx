@@ -5,6 +5,7 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -14,6 +15,7 @@ import { useSidebarContext } from '@/components/SidebarProvider';
 const parentNavItems = [
   { label: 'Dashboard', path: '/parent/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/parent/timetable', icon: <CalendarTodayOutlinedIcon /> },
+  { label: 'Library', path: '/parent/library/engagement', icon: <VideoLibraryOutlinedIcon /> },
   { label: 'Checklist', path: '/parent/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'Tickets', path: '/parent/tickets', icon: <SupportAgentOutlinedIcon /> },
 ];
