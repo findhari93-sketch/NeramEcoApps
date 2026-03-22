@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { upsertChapterProgress } from '@neram/database/queries/nexus';
+import { upsertChapterProgress, upsertFoundationWatchSession } from '@neram/database/queries/nexus';
 
 /**
  * POST /api/foundation/chapters/[id]/progress
@@ -52,6 +52,15 @@ export async function POST(
     }
 
     const progress = await upsertChapterProgress(user.id, chapterId, updateData);
+
+    // Persist watch session data (non-blocking — don't fail the progress save)
+    if (body.watch_session?.id && body.watch_session?.section_id) {
+      try {
+        await upsertFoundationWatchSession(user.id, chapterId, body.watch_session);
+      } catch (wsErr) {
+        console.error('Watch session save error:', wsErr);
+      }
+    }
 
     return NextResponse.json({ progress });
   } catch (err) {

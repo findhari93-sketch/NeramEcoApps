@@ -9,6 +9,8 @@ import type { QBProgressStats } from '@neram/database';
 interface StatsRowProps {
   stats: QBProgressStats | null;
   loading: boolean;
+  /** Compact mode renders stats as a single inline text row */
+  compact?: boolean;
 }
 
 interface StatCardProps {
@@ -44,10 +46,13 @@ function StatCard({ icon, label, value, color }: StatCardProps) {
   );
 }
 
-export default function StatsRow({ stats, loading }: StatsRowProps) {
+export default function StatsRow({ stats, loading, compact = false }: StatsRowProps) {
   const theme = useTheme();
 
   if (loading) {
+    if (compact) {
+      return <Skeleton variant="text" width={220} height={20} />;
+    }
     return (
       <Box sx={{ display: 'flex', gap: 1 }}>
         {[1, 2, 3].map((i) => (
@@ -58,6 +63,18 @@ export default function StatsRow({ stats, loading }: StatsRowProps) {
   }
 
   if (!stats) return null;
+
+  if (compact) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+        <Box component="span" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>{stats.total_questions}</Box> questions
+        <Box component="span" sx={{ mx: 0.5, color: 'text.disabled' }}>·</Box>
+        <Box component="span" sx={{ fontWeight: 600, color: theme.palette.success.main }}>{stats.attempted_count}</Box> attempted
+        <Box component="span" sx={{ mx: 0.5, color: 'text.disabled' }}>·</Box>
+        <Box component="span" sx={{ fontWeight: 600, color: theme.palette.info.main }}>{stats.accuracy_percentage}%</Box> accuracy
+      </Typography>
+    );
+  }
 
   return (
     <Box sx={{ display: 'flex', gap: 1 }}>

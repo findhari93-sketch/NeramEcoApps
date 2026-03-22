@@ -23,16 +23,35 @@ interface ChapterStudentScore {
     score_pct: number | null;
     passed: boolean;
     attempt_count: number;
+    watched_seconds: number;
+    watch_completion_pct: number;
+    seek_count: number;
   }>;
   overall_score_pct: number;
   completed_sections: number;
   total_sections: number;
+  total_watch_seconds: number;
 }
 
 interface StudentScoresTableProps {
   chapterId: string;
   chapterNumber?: number;
   getToken: () => Promise<string | null>;
+}
+
+function formatWatchTime(seconds: number): string {
+  if (seconds <= 0) return '—';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  if (m === 0) return `${s}s`;
+  return `${m}m ${s}s`;
+}
+
+function getWatchColor(completionPct: number, theme: any): string {
+  if (completionPct >= 80) return theme.palette.success.main;
+  if (completionPct >= 40) return theme.palette.warning.main;
+  if (completionPct > 0) return theme.palette.error.main;
+  return theme.palette.text.disabled;
 }
 
 function ScoreCell({ score, passed }: { score: number | null; passed: boolean }) {
@@ -65,6 +84,34 @@ function ScoreCell({ score, passed }: { score: number | null; passed: boolean })
     >
       {Math.round(score)}%
     </Box>
+  );
+}
+
+function WatchDot({ watchedSeconds, completionPct, seekCount }: {
+  watchedSeconds: number;
+  completionPct: number;
+  seekCount: number;
+}) {
+  const theme = useTheme();
+  const color = getWatchColor(completionPct, theme);
+  const tooltip = watchedSeconds > 0
+    ? `Watched ${formatWatchTime(watchedSeconds)} (${Math.round(completionPct)}%)${seekCount > 0 ? ` · ${seekCount} seeks` : ''}`
+    : 'Not watched';
+
+  return (
+    <Tooltip title={tooltip} arrow>
+      <Box
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          bgcolor: color,
+          mx: 'auto',
+          mt: 0.5,
+          cursor: 'help',
+        }}
+      />
+    </Tooltip>
   );
 }
 
@@ -106,16 +153,29 @@ export default function StudentScoresTable({
 
   const exportCsv = useCallback(() => {
     if (!scores.length) return;
-    const sectionHeaders = scores[0].sections.map(
-      (s, i) => `${chapterNumber ?? ''}${String.fromCharCode(65 + i)} ${s.section_title}`
-    );
-    const header = ['Student Name', 'Email', ...sectionHeaders, 'Overall %', 'Sections Passed'].join(',');
+    const sectionHeaders: string[] = [];
+    scores[0].sections.forEach((s, i) => {
+      const label = chapterNumber != null
+        ? `${chapterNumber}${String.fromCharCode(65 + i)}`
+        : s.section_title;
+      sectionHeaders.push(`${label} Score`);
+      sectionHeaders.push(`${label} Watch Time`);
+      sectionHeaders.push(`${label} Watch %`);
+      sectionHeaders.push(`${label} Seeks`);
+    });
+    const header = ['Student Name', 'Email', ...sectionHeaders, 'Overall %', 'Sections Passed', 'Total Watch Time'].join(',');
     const rows = scores.map(s => [
       `"${s.student_name}"`,
       s.student_email,
-      ...s.sections.map(sec => sec.score_pct !== null ? `${Math.round(sec.score_pct)}%` : ''),
+      ...s.sections.flatMap(sec => [
+        sec.score_pct !== null ? `${Math.round(sec.score_pct)}%` : '',
+        formatWatchTime(sec.watched_seconds),
+        `${Math.round(sec.watch_completion_pct)}%`,
+        `${sec.seek_count}`,
+      ]),
       `${s.overall_score_pct}%`,
       `${s.completed_sections}/${s.total_sections}`,
+      formatWatchTime(s.total_watch_seconds),
     ].join(','));
 
     const csv = [header, ...rows].join('\n');
@@ -178,6 +238,25 @@ export default function StudentScoresTable({
         </Tooltip>
       </Box>
 
+      {/* Legend */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, px: 1 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+          Watch:
+        </Typography>
+        {[
+          { color: theme.palette.success.main, label: '80%+' },
+          { color: theme.palette.warning.main, label: '40-80%' },
+          { color: theme.palette.error.main, label: '<40%' },
+        ].map(({ color, label }) => (
+          <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color }} />
+            <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'text.secondary' }}>
+              {label}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+
       {/* Scrollable table */}
       <Box sx={{ overflowX: 'auto', borderRadius: 2, border: `1px solid ${theme.palette.divider}` }}>
         <Box
@@ -220,6 +299,7 @@ export default function StudentScoresTable({
               ))}
               <th>Overall</th>
               <th>Progress</th>
+              <th>Watch</th>
             </tr>
           </thead>
           <tbody>
@@ -248,6 +328,11 @@ export default function StudentScoresTable({
                 {student.sections.map((sec) => (
                   <td key={sec.section_id}>
                     <ScoreCell score={sec.score_pct} passed={sec.passed} />
+                    <WatchDot
+                      watchedSeconds={sec.watched_seconds}
+                      completionPct={sec.watch_completion_pct}
+                      seekCount={sec.seek_count}
+                    />
                   </td>
                 ))}
                 <td>
@@ -257,6 +342,21 @@ export default function StudentScoresTable({
                   <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
                     {student.completed_sections}/{student.total_sections}
                   </Typography>
+                </td>
+                <td>
+                  <Tooltip title={`Total watch time: ${formatWatchTime(student.total_watch_seconds)}`}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: '0.75rem',
+                        color: student.total_watch_seconds > 0 ? 'text.primary' : 'text.disabled',
+                        cursor: 'help',
+                      }}
+                    >
+                      {formatWatchTime(student.total_watch_seconds)}
+                    </Typography>
+                  </Tooltip>
                 </td>
               </tr>
             ))}

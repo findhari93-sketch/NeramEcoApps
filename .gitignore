@@ -2,6 +2,10 @@
 node_modules
 .pnpm-store
 
+# Google OAuth credentials (sensitive)
+scripts/google-oauth-credentials.json
+scripts/.google-token.json
+
 # Build outputs
 .next
 .vercel

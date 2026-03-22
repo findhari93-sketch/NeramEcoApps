@@ -23,6 +23,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import TranslateIcon from '@mui/icons-material/Translate';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, QB_CATEGORY_LABELS } from '@neram/database';
@@ -32,6 +33,7 @@ import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
 interface PaperWithBreakdown extends NexusQBOriginalPaper {
   section_breakdown?: Record<string, number>;
   active_count?: number;
+  hindi_count?: number;
 }
 
 export default function PapersListPage() {
@@ -77,6 +79,7 @@ export default function PapersListPage() {
                 const questions = detailJson.data?.questions || [];
                 const breakdown: Record<string, number> = {};
                 let activeCount = 0;
+                let hindiCount = 0;
                 for (const q of questions) {
                   const cats = q.categories as string[] | null;
                   if (cats && cats.length > 0) {
@@ -88,8 +91,9 @@ export default function PapersListPage() {
                     breakdown[fmt] = (breakdown[fmt] || 0) + 1;
                   }
                   if (q.is_active && q.status === 'active') activeCount++;
+                  if ((q as any).question_text_hi) hindiCount++;
                 }
-                return { ...paper, section_breakdown: breakdown, active_count: activeCount };
+                return { ...paper, section_breakdown: breakdown, active_count: activeCount, hindi_count: hindiCount };
               }
             } catch {
               // Ignore errors for individual papers
@@ -243,7 +247,8 @@ export default function PapersListPage() {
             const draft = total - keyed;
             const answerKeyedOnly = keyed - complete;
             const activeCount = paper.active_count || 0;
-            const completeNotActive = complete - activeCount;
+            // Activatable = answer_keyed + complete, minus already active
+            const activatable = keyed - activeCount;
             const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
             const isDeleting = actionLoading === paper.id + '-delete';
 
@@ -272,6 +277,20 @@ export default function PapersListPage() {
                   {paper.session && (
                     <Chip label={paper.session} size="small" variant="outlined" />
                   )}
+                  {(paper.hindi_count ?? 0) > 0 && (
+                    <Chip
+                      icon={<TranslateIcon sx={{ fontSize: 14 }} />}
+                      label={`हिंदी ${paper.hindi_count}/${total}`}
+                      size="small"
+                      sx={{
+                        bgcolor: '#fff3e0',
+                        color: '#e65100',
+                        fontWeight: 600,
+                        fontSize: '0.65rem',
+                        height: 22,
+                      }}
+                    />
+                  )}
                   <Box sx={{ flex: 1 }} />
                   <Typography variant="caption" color="text.secondary">
                     {formatDate(paper.created_at)}
@@ -284,7 +303,7 @@ export default function PapersListPage() {
                     total={total}
                     draft={draft > 0 ? draft : 0}
                     answerKeyed={answerKeyedOnly > 0 ? answerKeyedOnly : 0}
-                    complete={completeNotActive > 0 ? completeNotActive : 0}
+                    complete={complete - activeCount > 0 ? complete - activeCount : 0}
                     active={activeCount}
                   />
                 </Box>
@@ -314,7 +333,7 @@ export default function PapersListPage() {
                   sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {completeNotActive > 0 && (
+                  {activatable > 0 && (
                     <Button
                       size="small"
                       variant="outlined"
@@ -324,7 +343,7 @@ export default function PapersListPage() {
                       disabled={actionLoading === paper.id + '-activate'}
                       sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 32 }}
                     >
-                      {actionLoading === paper.id + '-activate' ? 'Activating...' : `Activate ${completeNotActive}`}
+                      {actionLoading === paper.id + '-activate' ? 'Activating...' : `Activate ${activatable}`}
                     </Button>
                   )}
                   {activeCount > 0 && (

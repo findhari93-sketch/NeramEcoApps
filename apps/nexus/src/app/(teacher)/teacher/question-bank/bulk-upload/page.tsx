@@ -162,10 +162,12 @@ export default function BulkUploadPage() {
         nta_question_id: q.nta_question_id,
         question_format: q.question_format,
         question_text: q.question_text || null,
+        question_text_hi: q.question_text_hi || null,
         question_image_url: q.question_image?.uploaded ? q.question_image.url : null,
         options: q.options.map((opt) => ({
           nta_id: opt.nta_id || '',
           text: opt.text || '',
+          text_hi: opt.text_hi || undefined,
           label: opt.label || '',
           image_url: opt.image?.uploaded ? opt.image.url : null,
         })),

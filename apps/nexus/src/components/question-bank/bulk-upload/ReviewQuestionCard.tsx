@@ -18,6 +18,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import TranslateIcon from '@mui/icons-material/Translate';
 import ImageUploadZone from '@/components/question-bank/ImageUploadZone';
 import type { ReviewQuestion, ReviewQuestionOption, ImageState } from '@/lib/bulk-upload-schema';
 import MathText from '@/components/common/MathText';
@@ -54,6 +55,7 @@ export default function ReviewQuestionCard({
   const [editing, setEditing] = useState(false);
 
   const formatColor = FORMAT_COLORS[question.question_format] || theme.palette.text.secondary;
+  const hasHindi = !!(question.question_text_hi || question.options.some(o => o.text_hi));
 
   const updateField = <K extends keyof ReviewQuestion>(key: K, value: ReviewQuestion[K]) => {
     onChange({ ...question, [key]: value, _modified: true });
@@ -155,6 +157,22 @@ export default function ReviewQuestionCard({
           <OndemandVideoOutlinedIcon sx={{ fontSize: '0.85rem', color: 'info.main', flexShrink: 0 }} />
         )}
 
+        {hasHindi && (
+          <Chip
+            label="HI"
+            size="small"
+            sx={{
+              height: 18,
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              bgcolor: alpha('#f57c00', 0.12),
+              color: '#e65100',
+              borderRadius: 1,
+              flexShrink: 0,
+            }}
+          />
+        )}
+
         {question._modified && (
           <Chip label="edited" size="small" color="warning" sx={{ height: 18, fontSize: '0.6rem' }} />
         )}
@@ -186,7 +204,7 @@ export default function ReviewQuestionCard({
             </IconButton>
           </Box>
 
-          {/* Question text */}
+          {/* Question text (English) */}
           {editing ? (
             <>
               <TextField
@@ -213,6 +231,41 @@ export default function ReviewQuestionCard({
             question.question_text && (
               <MathText text={question.question_text} variant="body2" sx={{ mb: 1.5 }} />
             )
+          )}
+
+          {/* Question text (Hindi) — shown in edit mode or if Hindi text exists */}
+          {(editing || question.question_text_hi) && (
+            <Box sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                <TranslateIcon sx={{ fontSize: '0.8rem', color: '#e65100' }} />
+                <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 600 }}>
+                  हिंदी
+                </Typography>
+              </Box>
+              {editing ? (
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  maxRows={6}
+                  value={question.question_text_hi || ''}
+                  onChange={(e) => updateField('question_text_hi', e.target.value || undefined)}
+                  placeholder="प्रश्न का हिंदी पाठ दर्ज करें..."
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderColor: alpha('#f57c00', 0.3),
+                    },
+                  }}
+                />
+              ) : (
+                <MathText
+                  text={question.question_text_hi!}
+                  variant="body2"
+                  sx={{ color: 'text.secondary', fontStyle: 'italic' }}
+                />
+              )}
+            </Box>
           )}
 
           {/* Question image */}
@@ -262,13 +315,35 @@ export default function ReviewQuestionCard({
                           value={opt.text}
                           onChange={(e) => updateOption(i, { text: e.target.value })}
                           placeholder={`Option ${opt.label || String.fromCharCode(65 + i)}`}
-                          sx={{ mb: opt.image ? 1 : 0 }}
+                          sx={{ mb: (editing || opt.text_hi) ? 0.5 : opt.image ? 1 : 0 }}
                         />
                       ) : (
                         opt.text && (
-                          <MathText text={opt.text} variant="body2" sx={{ mb: opt.image ? 1 : 0 }} />
+                          <MathText text={opt.text} variant="body2" sx={{ mb: opt.text_hi ? 0.5 : opt.image ? 1 : 0 }} />
                         )
                       )}
+
+                      {/* Hindi option text */}
+                      {editing ? (
+                        <TextField
+                          size="small"
+                          fullWidth
+                          value={opt.text_hi || ''}
+                          onChange={(e) => updateOption(i, { text_hi: e.target.value || undefined })}
+                          placeholder="हिंदी विकल्प..."
+                          sx={{
+                            mb: opt.image ? 1 : 0,
+                            '& .MuiInputBase-input': { fontSize: '0.8rem' },
+                            '& .MuiOutlinedInput-root': { borderColor: alpha('#f57c00', 0.2) },
+                          }}
+                        />
+                      ) : opt.text_hi ? (
+                        <MathText
+                          text={opt.text_hi}
+                          variant="caption"
+                          sx={{ color: 'text.secondary', fontStyle: 'italic', display: 'block', mb: opt.image ? 1 : 0 }}
+                        />
+                      ) : null}
 
                       {(editing || opt.image) && (
                         <ImageUploadZone

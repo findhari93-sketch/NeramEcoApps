@@ -21,6 +21,8 @@ import {
   Radio,
   Snackbar,
   Alert,
+  ToggleButton,
+  ToggleButtonGroup,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
@@ -29,6 +31,7 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import SelectAllIcon from '@mui/icons-material/SelectAll';
+import TranslateIcon from '@mui/icons-material/Translate';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import QuestionBankLayout from '@/components/question-bank/QuestionBankLayout';
 import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
@@ -131,6 +134,9 @@ export default function QuestionListPage() {
     message: '',
     severity: 'success',
   });
+
+  // Language toggle
+  const [lang, setLang] = useState<'en' | 'hi'>('en');
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const hasMore = questions.length < totalCount;
@@ -602,6 +608,28 @@ export default function QuestionListPage() {
           </Box>
         )}
 
+        {/* Language toggle */}
+        <ToggleButtonGroup
+          value={lang}
+          exclusive
+          onChange={(_, v) => v && setLang(v)}
+          size="small"
+          sx={{
+            '& .MuiToggleButton-root': {
+              px: 1,
+              py: 0.25,
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              textTransform: 'none',
+              minWidth: 32,
+              minHeight: 32,
+            },
+          }}
+        >
+          <ToggleButton value="en">EN</ToggleButton>
+          <ToggleButton value="hi">हि</ToggleButton>
+        </ToggleButtonGroup>
+
         <IconButton
           onClick={() => setFilterOpen(true)}
           sx={{ minWidth: 48, minHeight: 48 }}
@@ -682,6 +710,7 @@ export default function QuestionListPage() {
                   expanded={expandedQuestionId === q.id}
                   loading={expandedQuestionId === q.id && detailLoading}
                   questionIndex={idx}
+                  lang={lang}
                   onToggleExpand={() => handleExpandQuestion(q.id)}
                   onSubmit={handleInlineSubmit}
                   onStudyToggle={handleStudyToggle}

@@ -11,10 +11,16 @@ import {
   Select,
   MenuItem,
   CircularProgress,
+  IconButton,
+  useTheme,
+  useMediaQuery,
 } from '@neram/ui';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
+import MathText from '@/components/common/MathText';
 import AnswerKeyUpload from './AnswerKeyUpload';
 
 interface AnswerKeyGridProps {
@@ -24,6 +30,9 @@ interface AnswerKeyGridProps {
 }
 
 export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGridProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   // Initialize answers from existing data
   const [answers, setAnswers] = useState<Record<number, string>>(() => {
     const initial: Record<number, string> = {};
@@ -37,6 +46,16 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
 
   const [dirty, setDirty] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (qNum: number) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(qNum)) next.delete(qNum);
+      else next.add(qNum);
+      return next;
+    });
+  };
 
   const handleChange = (questionNumber: number, value: string) => {
     setAnswers((prev) => ({ ...prev, [questionNumber]: value }));
@@ -112,104 +131,234 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
             {section.title}
           </Typography>
-          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-            <Box
-              component="table"
-              sx={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                '& th, & td': {
-                  px: 1.5,
-                  py: 0.75,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  fontSize: '0.875rem',
-                },
-                '& th': {
-                  bgcolor: 'grey.50',
-                  fontWeight: 600,
-                  textAlign: 'left',
-                },
-              }}
-            >
-              <thead>
-                <tr>
-                  <th style={{ width: 50 }}>Q#</th>
-                  <th style={{ width: 70 }}>Type</th>
-                  <th>Correct Answer</th>
-                  <th style={{ width: 100 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {section.questions.map((q) => {
-                  const qNum = q.display_order ?? 0;
-                  const isMCQ = q.question_format === 'MCQ';
-                  const isDrawing = q.question_format === 'DRAWING_PROMPT';
-                  const currentAnswer = answers[qNum] || '';
 
-                  return (
-                    <tr key={q.id}>
-                      <td>
-                        <Typography variant="body2" fontWeight={500}>
-                          {qNum}
-                        </Typography>
-                      </td>
-                      <td>
-                        <Typography variant="caption" color="text.secondary">
-                          {q.question_format}
-                        </Typography>
-                      </td>
-                      <td>
-                        {isDrawing ? (
-                          <Typography variant="caption" color="text.disabled">
-                            N/A (self-assessed)
-                          </Typography>
-                        ) : isMCQ ? (
-                          <Select
-                            size="small"
-                            value={currentAnswer}
-                            onChange={(e) => handleChange(qNum, e.target.value)}
-                            displayEmpty
-                            sx={{ minWidth: 100, height: 32 }}
-                          >
-                            <MenuItem value="">
-                              <em>Select</em>
-                            </MenuItem>
-                            {(q.options || []).map((opt) => (
-                              <MenuItem key={opt.id} value={opt.id}>
-                                Option {opt.id.toUpperCase()}
-                                {opt.nta_id ? ` (${opt.nta_id})` : ''}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        ) : (
-                          <TextField
-                            size="small"
-                            value={currentAnswer}
-                            onChange={(e) => handleChange(qNum, e.target.value)}
-                            placeholder="Enter answer"
-                            sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
-                          />
-                        )}
-                      </td>
-                      <td>
-                        <Chip
-                          label={QB_QUESTION_STATUS_LABELS[q.status] || q.status}
-                          size="small"
+          {isMobile ? (
+            /* Mobile: Card layout with question text above answer input */
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {section.questions.map((q) => {
+                const qNum = q.display_order ?? 0;
+                const isMCQ = q.question_format === 'MCQ';
+                const isDrawing = q.question_format === 'DRAWING_PROMPT';
+                const currentAnswer = answers[qNum] || '';
+                const isExpanded = expandedRows.has(qNum);
+
+                return (
+                  <Paper key={q.id} variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
+                    {/* Header row: Q#, Type, Status */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Typography variant="body2" fontWeight={700} sx={{ minWidth: 32 }}>
+                        Q{qNum}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {q.question_format}
+                      </Typography>
+                      <Box sx={{ flex: 1 }} />
+                      <Chip
+                        label={QB_QUESTION_STATUS_LABELS[q.status] || q.status}
+                        size="small"
+                        sx={{
+                          bgcolor: QB_QUESTION_STATUS_COLORS[q.status] + '20',
+                          color: QB_QUESTION_STATUS_COLORS[q.status],
+                          fontWeight: 600,
+                          fontSize: '0.65rem',
+                          height: 20,
+                        }}
+                      />
+                    </Box>
+
+                    {/* Question text preview */}
+                    {q.question_text && (
+                      <Box
+                        onClick={() => toggleExpand(qNum)}
+                        sx={{ cursor: 'pointer', mb: 1, py: 0.5 }}
+                      >
+                        <MathText
+                          text={q.question_text}
+                          variant="caption"
                           sx={{
-                            bgcolor: QB_QUESTION_STATUS_COLORS[q.status] + '20',
-                            color: QB_QUESTION_STATUS_COLORS[q.status],
-                            fontWeight: 600,
-                            fontSize: '0.7rem',
+                            color: 'text.secondary',
+                            display: isExpanded ? 'block' : '-webkit-box',
+                            WebkitLineClamp: isExpanded ? undefined : 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: isExpanded ? 'visible' : 'hidden',
+                            lineHeight: 1.4,
                           }}
                         />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                      </Box>
+                    )}
+
+                    {/* Answer input */}
+                    {isDrawing ? (
+                      <Typography variant="caption" color="text.disabled">
+                        N/A (self-assessed)
+                      </Typography>
+                    ) : isMCQ ? (
+                      <Select
+                        size="small"
+                        value={currentAnswer}
+                        onChange={(e) => handleChange(qNum, e.target.value)}
+                        displayEmpty
+                        fullWidth
+                        sx={{ height: 36 }}
+                      >
+                        <MenuItem value="">
+                          <em>Select answer</em>
+                        </MenuItem>
+                        {(q.options || []).map((opt) => (
+                          <MenuItem key={opt.id} value={opt.id}>
+                            Option {opt.id.toUpperCase()}
+                            {opt.text ? ` — ${opt.text.substring(0, 60)}${opt.text.length > 60 ? '...' : ''}` : ''}
+                            {opt.nta_id ? ` (${opt.nta_id})` : ''}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    ) : (
+                      <TextField
+                        size="small"
+                        value={currentAnswer}
+                        onChange={(e) => handleChange(qNum, e.target.value)}
+                        placeholder="Enter answer"
+                        fullWidth
+                        sx={{ '& .MuiInputBase-input': { py: 0.75, fontSize: '0.875rem' } }}
+                      />
+                    )}
+                  </Paper>
+                );
+              })}
             </Box>
-          </Paper>
+          ) : (
+            /* Desktop: Table layout with question text column */
+            <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+              <Box
+                component="table"
+                sx={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  '& th, & td': {
+                    px: 1.5,
+                    py: 0.75,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    fontSize: '0.875rem',
+                  },
+                  '& th': {
+                    bgcolor: 'grey.50',
+                    fontWeight: 600,
+                    textAlign: 'left',
+                  },
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th style={{ width: 50 }}>Q#</th>
+                    <th>Question</th>
+                    <th style={{ width: 70 }}>Type</th>
+                    <th style={{ width: 220 }}>Correct Answer</th>
+                    <th style={{ width: 80 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.questions.map((q) => {
+                    const qNum = q.display_order ?? 0;
+                    const isMCQ = q.question_format === 'MCQ';
+                    const isDrawing = q.question_format === 'DRAWING_PROMPT';
+                    const currentAnswer = answers[qNum] || '';
+                    const isExpanded = expandedRows.has(qNum);
+
+                    return (
+                      <tr key={q.id}>
+                        <td>
+                          <Typography variant="body2" fontWeight={500}>
+                            {qNum}
+                          </Typography>
+                        </td>
+                        <td>
+                          {q.question_text ? (
+                            <Box
+                              onClick={() => toggleExpand(qNum)}
+                              sx={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 0.5 }}
+                            >
+                              <MathText
+                                text={q.question_text}
+                                variant="caption"
+                                sx={{
+                                  flex: 1,
+                                  color: 'text.secondary',
+                                  display: isExpanded ? 'block' : '-webkit-box',
+                                  WebkitLineClamp: isExpanded ? undefined : 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: isExpanded ? 'visible' : 'hidden',
+                                  lineHeight: 1.4,
+                                }}
+                              />
+                              <IconButton size="small" sx={{ mt: -0.25, p: 0.25 }}>
+                                {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                              </IconButton>
+                            </Box>
+                          ) : (
+                            <Typography variant="caption" color="text.disabled" fontStyle="italic">
+                              (no text)
+                            </Typography>
+                          )}
+                        </td>
+                        <td>
+                          <Typography variant="caption" color="text.secondary">
+                            {q.question_format}
+                          </Typography>
+                        </td>
+                        <td>
+                          {isDrawing ? (
+                            <Typography variant="caption" color="text.disabled">
+                              N/A (self-assessed)
+                            </Typography>
+                          ) : isMCQ ? (
+                            <Select
+                              size="small"
+                              value={currentAnswer}
+                              onChange={(e) => handleChange(qNum, e.target.value)}
+                              displayEmpty
+                              sx={{ minWidth: 100, height: 32 }}
+                            >
+                              <MenuItem value="">
+                                <em>Select</em>
+                              </MenuItem>
+                              {(q.options || []).map((opt) => (
+                                <MenuItem key={opt.id} value={opt.id}>
+                                  Option {opt.id.toUpperCase()}
+                                  {opt.text ? ` — ${opt.text.substring(0, 40)}${opt.text.length > 40 ? '...' : ''}` : ''}
+                                  {opt.nta_id ? ` (${opt.nta_id})` : ''}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          ) : (
+                            <TextField
+                              size="small"
+                              value={currentAnswer}
+                              onChange={(e) => handleChange(qNum, e.target.value)}
+                              placeholder="Enter answer"
+                              sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
+                            />
+                          )}
+                        </td>
+                        <td>
+                          <Chip
+                            label={QB_QUESTION_STATUS_LABELS[q.status] || q.status}
+                            size="small"
+                            sx={{
+                              bgcolor: QB_QUESTION_STATUS_COLORS[q.status] + '20',
+                              color: QB_QUESTION_STATUS_COLORS[q.status],
+                              fontWeight: 600,
+                              fontSize: '0.7rem',
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Box>
+            </Paper>
+          )}
         </Box>
       ))}
 

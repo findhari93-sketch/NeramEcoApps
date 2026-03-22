@@ -4909,6 +4909,37 @@ export interface NexusFoundationSectionWithQuiz extends NexusFoundationSection {
   note: NexusFoundationStudentNote | null;
 }
 
+// Foundation watch sessions (engagement analytics)
+
+export interface NexusFoundationWatchSession {
+  id: string;
+  student_id: string;
+  chapter_id: string;
+  section_id: string;
+  watched_seconds: number;
+  section_duration_seconds: number;
+  completion_pct: number;
+  play_count: number;
+  pause_count: number;
+  seek_count: number;
+  device_type: 'mobile' | 'tablet' | 'desktop' | null;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+}
+
+export interface NexusFoundationWatchSessionUpsert {
+  id: string;
+  section_id: string;
+  watched_seconds: number;
+  section_duration_seconds: number;
+  completion_pct: number;
+  play_count: number;
+  pause_count: number;
+  seek_count: number;
+  device_type: 'mobile' | 'tablet' | 'desktop';
+}
+
 // Foundation feedback & issues
 
 export type FoundationReactionType = 'like' | 'dislike';
@@ -5132,6 +5163,7 @@ export interface NexusQBTopic {
 export interface NexusQBQuestionOption {
   id: string;
   text: string;
+  text_hi?: string;
   image_url?: string;
   nta_id?: string;
 }
@@ -5139,6 +5171,7 @@ export interface NexusQBQuestionOption {
 export interface NexusQBQuestion {
   id: string;
   question_text: string | null;
+  question_text_hi: string | null;
   question_image_url: string | null;
   question_format: QBQuestionFormat;
   options: NexusQBQuestionOption[] | null;
@@ -5146,6 +5179,8 @@ export interface NexusQBQuestion {
   answer_tolerance: number | null;
   explanation_brief: string | null;
   explanation_detailed: string | null;
+  explanation_brief_hi: string | null;
+  explanation_detailed_hi: string | null;
   solution_image_url: string | null;
   solution_video_url: string | null;
   difficulty: QBDifficulty;
@@ -5417,10 +5452,12 @@ export interface NTAParsedQuestion {
   nta_question_id: string;
   question_format: QBQuestionFormat;
   question_text?: string | null;
+  question_text_hi?: string | null;
   question_image_url?: string | null;
   options: {
     nta_id: string;
     text?: string;
+    text_hi?: string;
     label?: string;
     image_url?: string | null;
   }[];

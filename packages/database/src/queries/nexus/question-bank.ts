@@ -1052,11 +1052,13 @@ export async function bulkCreateDraftQuestions(
   const questionInserts = questions.map((q) => ({
     question_format: q.question_format,
     question_text: q.question_text || null,
+    question_text_hi: q.question_text_hi || null,
     question_image_url: q.question_image_url || null,
     options: q.question_format === 'MCQ'
       ? q.options.map((opt, i) => ({
           id: String.fromCharCode(97 + i), // a, b, c, d
           text: opt.text || '',
+          text_hi: opt.text_hi || undefined,
           image_url: opt.image_url || null,
           nta_id: opt.nta_id,
         }))
@@ -1111,6 +1113,103 @@ export async function bulkCreateDraftQuestions(
     .eq('id', paperId);
 
   return { created: count };
+}
+
+/**
+ * Merge Hindi text into existing paper questions by matching question_number (display_order).
+ */
+export async function mergeHindiIntoQuestions(
+  paperId: string,
+  hindiData: {
+    question_number: number;
+    text_hi: string;
+    options_hi?: { label: string; text_hi: string }[];
+    explanation_brief_hi?: string;
+    explanation_detailed_hi?: string;
+  }[],
+  client?: TypedSupabaseClient
+): Promise<{
+  updated: number;
+  skipped: number;
+  details: { textUpdated: number; optionsUpdated: number; explanationsUpdated: number; overwrites: number };
+}> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Fetch existing questions for this paper
+  // Note: question_text_hi exists in DB but not yet in generated Supabase types, so we select without it and cast
+  const { data: existingQuestions, error: fetchError } = await supabase
+    .from('nexus_qb_questions')
+    .select('id, display_order, options')
+    .eq('original_paper_id', paperId)
+    .order('display_order', { ascending: true });
+  if (fetchError) throw fetchError;
+
+  // Build lookup by display_order (question_number)
+  const questionMap = new Map<number, { id: string; options: any; question_text_hi: string | null }>();
+  for (const q of (existingQuestions || []) as any[]) {
+    if (q.display_order != null) {
+      questionMap.set(q.display_order, { id: q.id, options: q.options, question_text_hi: q.question_text_hi || null });
+    }
+  }
+
+  let updated = 0;
+  let skipped = 0;
+  const details = { textUpdated: 0, optionsUpdated: 0, explanationsUpdated: 0, overwrites: 0 };
+
+  for (const hi of hindiData) {
+    const match = questionMap.get(hi.question_number);
+    if (!match) {
+      skipped++;
+      continue;
+    }
+
+    // Track overwrites
+    if (match.question_text_hi) {
+      details.overwrites++;
+    }
+
+    // Build updated options with text_hi merged in
+    let updatedOptions = match.options;
+    let hasOptionUpdates = false;
+    if (hi.options_hi && Array.isArray(match.options)) {
+      const hiMap = new Map(hi.options_hi.map((o) => [o.label.toLowerCase(), o.text_hi]));
+      updatedOptions = (match.options as any[]).map((opt: any) => ({
+        ...opt,
+        text_hi: hiMap.get(opt.id) || opt.text_hi || undefined,
+      }));
+      hasOptionUpdates = hi.options_hi.length > 0;
+    }
+
+    // Build update payload
+    const updatePayload: Record<string, any> = {
+      question_text_hi: hi.text_hi,
+      options: updatedOptions,
+    };
+
+    if (hi.explanation_brief_hi) {
+      updatePayload.explanation_brief_hi = hi.explanation_brief_hi;
+    }
+    if (hi.explanation_detailed_hi) {
+      updatePayload.explanation_detailed_hi = hi.explanation_detailed_hi;
+    }
+
+    const { error: updateError } = await supabase
+      .from('nexus_qb_questions')
+      .update(updatePayload as any)
+      .eq('id', match.id);
+
+    if (updateError) {
+      console.error(`Failed to update question ${match.id}:`, updateError);
+      skipped++;
+    } else {
+      updated++;
+      if (hi.text_hi) details.textUpdated++;
+      if (hasOptionUpdates) details.optionsUpdated++;
+      if (hi.explanation_brief_hi || hi.explanation_detailed_hi) details.explanationsUpdated++;
+    }
+  }
+
+  return { updated, skipped, details };
 }
 
 /**
@@ -1268,7 +1367,8 @@ export async function refreshPaperStats(
 }
 
 /**
- * Bulk activate complete questions in a paper.
+ * Bulk activate questions in a paper.
+ * Activates both 'answer_keyed' and 'complete' questions.
  */
 export async function bulkActivateQuestions(
   paperId: string,
@@ -1276,7 +1376,7 @@ export async function bulkActivateQuestions(
 ): Promise<{ activated: number }> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Only activate questions that are 'complete'
+  // Activate questions that are 'complete' or 'answer_keyed'
   const { data, error } = await supabase
     .from('nexus_qb_questions')
     .update({
@@ -1285,7 +1385,7 @@ export async function bulkActivateQuestions(
       updated_at: new Date().toISOString(),
     } as any)
     .eq('original_paper_id', paperId)
-    .eq('status' as any, 'complete')
+    .in('status' as any, ['complete', 'answer_keyed'])
     .select('id');
   if (error) throw error;
 

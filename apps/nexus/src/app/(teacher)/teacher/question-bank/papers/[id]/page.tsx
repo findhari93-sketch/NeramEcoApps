@@ -24,6 +24,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import TranslateIcon from '@mui/icons-material/Translate';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   QB_EXAM_TYPE_LABELS,
@@ -34,6 +35,7 @@ import {
 import type { NexusQBOriginalPaper, NexusQBQuestion } from '@neram/database';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
 import AnswerKeyGrid from '@/components/question-bank/AnswerKeyGrid';
+import HindiMergeDialog from '@/components/question-bank/HindiMergeDialog';
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -50,10 +52,11 @@ export default function PaperDetailPage() {
   const [deactivating, setDeactivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
   const [message, setMessage] = useState('');
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
@@ -69,7 +72,7 @@ export default function PaperDetailPage() {
     } catch (err) {
       console.error('Failed to fetch paper:', err);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [paperId, getToken]);
 
@@ -221,7 +224,7 @@ export default function PaperDetailPage() {
   const complete = paper.questions_complete || 0;
   const draft = total - keyed;
   const answerKeyedOnly = keyed - complete;
-  const completeCount = questions.filter((q) => q.status === 'complete').length;
+  const completeCount = questions.filter((q) => q.status === 'complete' || q.status === 'answer_keyed').length;
   const activeCount = questions.filter((q) => q.status === 'active' && q.is_active).length;
   const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
 
@@ -321,6 +324,15 @@ export default function PaperDetailPage() {
               {deactivating ? 'Deactivating...' : `Deactivate ${activeCount}`}
             </Button>
           )}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<TranslateIcon />}
+            onClick={() => setHindiMergeOpen(true)}
+            sx={{ borderColor: '#e65100', color: '#e65100', '&:hover': { borderColor: '#bf360c', bgcolor: 'rgba(230, 81, 0, 0.04)' } }}
+          >
+            Upload Hindi
+          </Button>
           <Button
             variant="outlined"
             size="small"
@@ -431,6 +443,19 @@ export default function PaperDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Hindi merge dialog */}
+      <HindiMergeDialog
+        open={hindiMergeOpen}
+        onClose={() => setHindiMergeOpen(false)}
+        paperId={paperId}
+        questions={questions}
+        getToken={getToken}
+        onSuccess={() => {
+          setMessage('Hindi text merged successfully');
+          fetchData(true);
+        }}
+      />
     </Box>
   );
 }

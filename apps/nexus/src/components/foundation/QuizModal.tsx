@@ -18,6 +18,7 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import QuizQuestion from './QuizQuestion';
 
 interface QuizQuestionData {
@@ -134,6 +135,27 @@ export default function QuizModal({
           </IconButton>
         )}
       </Box>
+
+      {/* Instructional message — shown before submission on mandatory quizzes */}
+      {!result && !dismissable && (
+        <Box
+          sx={{
+            p: 1.5,
+            borderRadius: 1.5,
+            mb: 2,
+            bgcolor: alpha(theme.palette.info.main, 0.06),
+            border: `1px solid ${alpha(theme.palette.info.main, 0.15)}`,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+          }}
+        >
+          <InfoOutlinedIcon sx={{ fontSize: '1.1rem', color: theme.palette.info.main, mt: 0.2, flexShrink: 0 }} />
+          <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.5 }}>
+            Complete this quiz to unlock the next section. You must answer correctly to proceed.
+          </Typography>
+        </Box>
+      )}
 
       {/* Result banner */}
       {result && (

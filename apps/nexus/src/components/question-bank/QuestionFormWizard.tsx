@@ -61,6 +61,7 @@ interface FormData {
   question_format: QBQuestionFormat;
   // Step 2: Content
   question_text: string;
+  question_text_hi: string;
   question_image?: ImageState;
   options: NexusQBQuestionOption[];
   correct_option_id: string;
@@ -104,6 +105,7 @@ function getInitialFormData(
     question_number: source?.question_number ? String(source.question_number) : '',
     question_format: initialData?.question_format ?? 'MCQ',
     question_text: initialData?.question_text ?? '',
+    question_text_hi: initialData?.question_text_hi ?? '',
     question_image: initialData?.question_image_url
       ? { url: initialData.question_image_url, uploaded: true }
       : undefined,
@@ -200,6 +202,14 @@ export default function QuestionFormWizard({
     });
   };
 
+  const handleOptionHindiChange = (idx: number, text_hi: string) => {
+    setForm((prev) => {
+      const next = [...prev.options];
+      next[idx] = { ...next[idx], text_hi: text_hi || undefined };
+      return { ...prev, options: next };
+    });
+  };
+
   const handleAddOption = () => {
     setForm((prev) => ({
       ...prev,
@@ -229,6 +239,7 @@ export default function QuestionFormWizard({
   const handleSubmit = async () => {
     const questionData: Partial<NexusQBQuestion> = {
       question_text: form.question_text || null,
+      question_text_hi: form.question_text_hi || null,
       question_image_url: form.question_image?.uploaded ? form.question_image.url : null,
       question_format: form.question_format,
       options: form.question_format === 'MCQ' ? form.options : null,
@@ -381,6 +392,20 @@ export default function QuestionFormWizard({
               onChange={(e) => updateField('question_text', e.target.value)}
               fullWidth
             />
+            <TextField
+              label="Question Text (Hindi) — हिंदी"
+              multiline
+              minRows={2}
+              maxRows={6}
+              value={form.question_text_hi}
+              onChange={(e) => updateField('question_text_hi', e.target.value)}
+              fullWidth
+              placeholder="प्रश्न का हिंदी पाठ (वैकल्पिक)"
+              sx={{
+                '& .MuiInputLabel-root': { color: '#e65100' },
+                '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#e65100' },
+              }}
+            />
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                 Question Image (optional)
@@ -411,14 +436,27 @@ export default function QuestionFormWizard({
                       size="small"
                       sx={{ p: 0.5 }}
                     />
-                    <TextField
-                      placeholder={`Option ${String.fromCharCode(65 + idx)}`}
-                      size="small"
-                      fullWidth
-                      value={opt.text}
-                      onChange={(e) => handleOptionChange(idx, e.target.value)}
-                      sx={{ '& .MuiInputBase-root': { minHeight: 40 } }}
-                    />
+                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <TextField
+                        placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                        size="small"
+                        fullWidth
+                        value={opt.text}
+                        onChange={(e) => handleOptionChange(idx, e.target.value)}
+                        sx={{ '& .MuiInputBase-root': { minHeight: 40 } }}
+                      />
+                      <TextField
+                        placeholder={`हिंदी ${String.fromCharCode(65 + idx)}`}
+                        size="small"
+                        fullWidth
+                        value={opt.text_hi || ''}
+                        onChange={(e) => handleOptionHindiChange(idx, e.target.value)}
+                        sx={{
+                          '& .MuiInputBase-input': { fontSize: '0.85rem' },
+                          '& .MuiOutlinedInput-root': { minHeight: 36 },
+                        }}
+                      />
+                    </Box>
                     {form.options.length > 2 && (
                       <IconButton
                         size="small"

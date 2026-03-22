@@ -156,7 +156,6 @@ export default function PDFReader({ pdfUrl, initialPage, onRetry }: PDFReaderPro
           setLoading(false);
           setError(true);
         }}
-        sandbox="allow-same-origin allow-scripts"
         style={{
           width: '100%',
           height: 'calc(100% - 40px)',

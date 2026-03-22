@@ -146,6 +146,11 @@ export default function VideoPlayer({
         },
         onStateChange: (event: any) => {
           if (event.data === window.YT.PlayerState.PLAYING) {
+            // If quiz is open, force re-pause (handles BUFFERING→PLAYING race)
+            if ((window as any).__foundationPlayer?.quizPaused) {
+              playerRef.current?.pauseVideo?.();
+              return;
+            }
             setIsPlaying(true);
             startPolling();
           } else if (event.data === window.YT.PlayerState.PAUSED) {
@@ -255,6 +260,7 @@ export default function VideoPlayer({
         isRewatchingRef.current = enabled;
         rewatchMaxTimeRef.current = maxTime;
       },
+      quizPaused: false,
     };
     return () => {
       delete (window as any).__foundationPlayer;

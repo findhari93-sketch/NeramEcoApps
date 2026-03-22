@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -22,6 +22,8 @@ import {
   TextField,
   RadioGroup,
   Radio,
+  ToggleButton,
+  ToggleButtonGroup,
   useTheme,
   useMediaQuery,
   Fade,
@@ -32,7 +34,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FlagOutlined from '@mui/icons-material/FlagOutlined';
 import type { NexusQBQuestionDetail } from '@neram/database';
 import { QB_REPORT_TYPE_LABELS } from '@neram/database';
@@ -61,21 +62,16 @@ function isSharePointUrl(url: string): boolean {
   return /\.sharepoint\.com\//i.test(url) || /onedrive\.live\.com\//i.test(url);
 }
 
-function getSharePointEmbedUrl(url: string): string {
-  if (/onedrive\.live\.com\//i.test(url)) {
-    return url.replace(/\/redir\?/i, '/embed?').replace(/\/view\?/i, '/embed?');
-  }
+function getSharePointDownloadUrl(url: string): string {
+  // Convert SharePoint sharing links to direct download URLs for HTML5 video playback
   try {
     const parsed = new URL(url);
-    const host = parsed.hostname;
-    if (parsed.pathname.includes('_layouts/15/embed.aspx')) return url;
-    if (parsed.pathname.includes('download.aspx') || parsed.pathname.includes('_api')) {
-      const srcParam = parsed.searchParams.get('UniqueId') || parsed.searchParams.get('sourcedoc');
-      if (srcParam) {
-        return `https://${host}/_layouts/15/embed.aspx?UniqueId=${encodeURIComponent(srcParam)}`;
-      }
-    }
-    return `https://${host}/_layouts/15/embed.aspx?url=${encodeURIComponent(url)}`;
+    // Already a download link
+    if (parsed.searchParams.has('download')) return url;
+    // SharePoint sharing link format: /:v:/s/SiteName/...
+    // Add download=1 to get direct file access
+    parsed.searchParams.set('download', '1');
+    return parsed.toString();
   } catch {
     return url;
   }
@@ -96,6 +92,7 @@ interface QuestionDetailProps {
   totalCount: number;
   inline?: boolean;
   showSourceBadges?: boolean;
+  initialLang?: 'en' | 'hi';
 }
 
 interface SolutionTab {
@@ -116,6 +113,7 @@ export default function QuestionDetail({
   totalCount,
   inline = false,
   showSourceBadges = true,
+  initialLang,
 }: QuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -128,6 +126,13 @@ export default function QuestionDetail({
   const [showFeedback, setShowFeedback] = useState(false);
   const [solutionTab, setSolutionTab] = useState(0);
   const [solutionImageZoomed, setSolutionImageZoomed] = useState(false);
+
+  // Language toggle — sync with parent's initialLang when it changes
+  const [lang, setLang] = useState<'en' | 'hi'>(initialLang || 'en');
+  useEffect(() => {
+    if (initialLang) setLang(initialLang);
+  }, [initialLang]);
+  const hasHindi = !!(question.question_text_hi || question.options?.some(o => o.text_hi) || question.explanation_brief_hi || question.explanation_detailed_hi);
 
   // Report dialog state
   const [reportOpen, setReportOpen] = useState(false);
@@ -152,7 +157,7 @@ export default function QuestionDetail({
 
   // Build available solution tabs dynamically
   const solutionTabs: SolutionTab[] = [];
-  if (question.explanation_brief || question.explanation_detailed) {
+  if (question.explanation_brief || question.explanation_detailed || question.explanation_brief_hi || question.explanation_detailed_hi) {
     solutionTabs.push({ label: 'Explanation', key: 'explanation' });
   }
   if (question.solution_video_url) {
@@ -264,6 +269,30 @@ export default function QuestionDetail({
         </Box>
       )}
 
+      {/* Language toggle — only shown when Hindi text exists */}
+      {hasHindi && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <ToggleButtonGroup
+            value={lang}
+            exclusive
+            onChange={(_, v) => v && setLang(v)}
+            size="small"
+            sx={{
+              '& .MuiToggleButton-root': {
+                px: 1.5,
+                py: 0.25,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                textTransform: 'none',
+              },
+            }}
+          >
+            <ToggleButton value="en">EN</ToggleButton>
+            <ToggleButton value="hi">हि</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      )}
+
       {/* Question image */}
       {question.question_image_url && (
         <>
@@ -311,7 +340,7 @@ export default function QuestionDetail({
       {/* Question text */}
       {question.question_text && (
         <MathText
-          text={question.question_text}
+          text={lang === 'hi' && question.question_text_hi ? question.question_text_hi : question.question_text}
           variant="body1"
           sx={{
             mb: 2.5,
@@ -330,6 +359,7 @@ export default function QuestionDetail({
             correctId={submitted ? question.correct_answer : undefined}
             submitted={submitted}
             onSelect={setSelectedAnswer}
+            lang={lang}
           />
         </Box>
       )}
@@ -405,38 +435,47 @@ export default function QuestionDetail({
           {/* Tab content */}
           <Box sx={{ pt: 2 }}>
             {/* Explanation tab */}
-            {activeTabKey === 'explanation' && (
-              <Box>
-                {question.explanation_brief && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 0.5, color: 'text.secondary' }}
-                    >
-                      Quick Explanation
-                    </Typography>
-                    <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
-                      {question.explanation_brief}
-                    </Typography>
-                  </Box>
-                )}
-                {question.explanation_detailed && (
-                  <Box>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ fontWeight: 600, mb: 0.5, color: 'text.secondary' }}
-                    >
-                      Detailed Solution
-                    </Typography>
-                    <MathText
-                      text={question.explanation_detailed}
-                      variant="body2"
-                      sx={{ lineHeight: 1.7 }}
-                    />
-                  </Box>
-                )}
-              </Box>
-            )}
+            {activeTabKey === 'explanation' && (() => {
+              const briefText = lang === 'hi' && question.explanation_brief_hi
+                ? question.explanation_brief_hi : question.explanation_brief;
+              const detailedText = lang === 'hi' && question.explanation_detailed_hi
+                ? question.explanation_detailed_hi : question.explanation_detailed;
+
+              return (
+                <Box>
+                  {briefText && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ fontWeight: 600, mb: 0.5, color: 'text.secondary' }}
+                      >
+                        {lang === 'hi' && question.explanation_brief_hi ? 'संक्षिप्त व्याख्या' : 'Quick Explanation'}
+                      </Typography>
+                      <MathText
+                        text={briefText}
+                        variant="body2"
+                        sx={{ lineHeight: 1.7 }}
+                      />
+                    </Box>
+                  )}
+                  {detailedText && (
+                    <Box>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ fontWeight: 600, mb: 0.5, color: 'text.secondary' }}
+                      >
+                        {lang === 'hi' && question.explanation_detailed_hi ? 'विस्तृत हल' : 'Detailed Solution'}
+                      </Typography>
+                      <MathText
+                        text={detailedText}
+                        variant="body2"
+                        sx={{ lineHeight: 1.7 }}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              );
+            })()}
 
             {/* Video tab */}
             {activeTabKey === 'video' && question.solution_video_url && (
@@ -447,18 +486,19 @@ export default function QuestionDetail({
                       position: 'relative',
                       width: '100%',
                       paddingTop: '56.25%',
-                      borderRadius: 1,
+                      borderRadius: 2,
                       overflow: 'hidden',
-                      bgcolor: 'grey.900',
+                      bgcolor: '#000',
                     }}
                   >
                     <Box
                       component="iframe"
-                      src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+                      src={`https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&showinfo=0&disablekb=0&fs=1&playsinline=1`}
                       title="Solution video"
                       loading="lazy"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                       allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
                       sx={{
                         position: 'absolute',
                         top: 0,
@@ -474,47 +514,47 @@ export default function QuestionDetail({
                     sx={{
                       position: 'relative',
                       width: '100%',
-                      paddingTop: '56.25%',
-                      borderRadius: 1,
+                      borderRadius: 2,
                       overflow: 'hidden',
-                      bgcolor: 'grey.900',
+                      bgcolor: '#000',
                     }}
                   >
                     <Box
-                      component="iframe"
-                      src={getSharePointEmbedUrl(question.solution_video_url)}
-                      title="Solution video"
-                      loading="lazy"
-                      allowFullScreen
+                      component="video"
+                      src={getSharePointDownloadUrl(question.solution_video_url)}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      controlsList="nodownload"
                       sx={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
                         width: '100%',
-                        height: '100%',
-                        border: 0,
+                        maxHeight: 480,
+                        display: 'block',
                       }}
                     />
                   </Box>
                 ) : (
-                  <Box>
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      width: '100%',
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                      bgcolor: '#000',
+                    }}
+                  >
                     <Box
-                      component="a"
-                      href={question.solution_video_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      component="video"
+                      src={question.solution_video_url}
+                      controls
+                      playsInline
+                      preload="metadata"
                       sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        color: 'primary.main',
-                        textDecoration: 'none',
-                        '&:hover': { textDecoration: 'underline' },
+                        width: '100%',
+                        maxHeight: 480,
+                        display: 'block',
                       }}
-                    >
-                      <OpenInNewIcon fontSize="small" />
-                      <Typography variant="body2">Open solution video</Typography>
-                    </Box>
+                    />
                   </Box>
                 )}
               </Box>

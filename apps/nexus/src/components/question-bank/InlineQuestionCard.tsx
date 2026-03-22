@@ -16,6 +16,7 @@ interface InlineQuestionCardProps {
   expanded: boolean;
   loading: boolean;
   questionIndex: number;
+  lang?: 'en' | 'hi';
   onToggleExpand: () => void;
   onSubmit: (answer: string) => Promise<void>;
   onStudyToggle: () => void;
@@ -28,6 +29,7 @@ export default function InlineQuestionCard({
   expanded,
   loading,
   questionIndex,
+  lang = 'en',
   onToggleExpand,
   onSubmit,
   onStudyToggle,
@@ -96,31 +98,36 @@ export default function InlineQuestionCard({
           </Box>
 
           {/* Question text preview (2 lines) */}
-          {!expanded && (
-            <Box
-              sx={{
-                mb: 0.5,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                lineHeight: 1.5,
-              }}
-            >
-              {question.question_text ? (
-                <MathText
-                  text={question.question_text}
-                  variant="body2"
-                  sx={{ color: 'text.primary' }}
-                />
-              ) : (
-                <Typography variant="body2" sx={{ color: 'text.primary' }}>
-                  Image-based question
-                </Typography>
-              )}
-            </Box>
-          )}
+          {!expanded && (() => {
+            const displayText = lang === 'hi' && question.question_text_hi
+              ? question.question_text_hi
+              : question.question_text;
+            return (
+              <Box
+                sx={{
+                  mb: 0.5,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  lineHeight: 1.5,
+                }}
+              >
+                {displayText ? (
+                  <MathText
+                    text={displayText}
+                    variant="body2"
+                    sx={{ color: 'text.primary' }}
+                  />
+                ) : (
+                  <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                    Image-based question
+                  </Typography>
+                )}
+              </Box>
+            );
+          })()}
 
           {/* Bottom row: difficulty, categories, attempt indicator */}
           {!expanded && (
@@ -213,6 +220,7 @@ export default function InlineQuestionCard({
               totalCount={0}
               inline
               showSourceBadges={false}
+              initialLang={lang}
             />
           ) : null}
         </Box>

@@ -10,6 +10,8 @@ interface MCQOptionsProps {
   correctId?: string | null;
   submitted: boolean;
   onSelect: (id: string) => void;
+  /** Language for option text display */
+  lang?: 'en' | 'hi';
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -20,6 +22,7 @@ export default function MCQOptions({
   correctId,
   submitted,
   onSelect,
+  lang = 'en',
 }: MCQOptionsProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
@@ -71,14 +74,28 @@ export default function MCQOptions({
     };
   };
 
+  // Check if Hindi mode is active but no options have Hindi text
+  const hindiActive = lang === 'hi';
+  const hasAnyHindiOption = hindiActive && options.some((o) => !!o.text_hi);
+  const showFallbackHint = hindiActive && !hasAnyHindiOption;
+
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: useGrid ? 'repeat(2, 1fr)' : '1fr',
-        gap: 1,
-      }}
-    >
+    <Box>
+      {showFallbackHint && (
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.disabled', mb: 0.5, display: 'block', fontStyle: 'italic' }}
+        >
+          Hindi options not available — showing English
+        </Typography>
+      )}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: useGrid ? 'repeat(2, 1fr)' : '1fr',
+          gap: 1,
+        }}
+      >
       {options.map((option, idx) => {
         const styles = getOptionStyles(option.id);
         return (
@@ -144,9 +161,12 @@ export default function MCQOptions({
 
             {/* Option content */}
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              {option.text ? (
-                <MathText text={option.text} variant="body2" sx={{ lineHeight: 1.5 }} />
-              ) : null}
+              {(() => {
+                const displayText = lang === 'hi' && option.text_hi ? option.text_hi : option.text;
+                return displayText ? (
+                  <MathText text={displayText} variant="body2" sx={{ lineHeight: 1.5 }} />
+                ) : null;
+              })()}
               {option.image_url && (
                 <Box
                   component="img"
@@ -165,6 +185,7 @@ export default function MCQOptions({
           </Paper>
         );
       })}
+      </Box>
     </Box>
   );
 }

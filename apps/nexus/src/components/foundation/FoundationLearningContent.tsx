@@ -13,6 +13,7 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  Snackbar,
   alpha,
   useTheme,
   useMediaQuery,
@@ -22,6 +23,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import VideoPlayer from '@/components/foundation/VideoPlayer';
 import SharePointPlayer from '@/components/foundation/SharePointPlayer';
@@ -75,10 +77,25 @@ export default function FoundationLearningContent({
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sections');
   const [msToken, setMsToken] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [chapterComplete, setChapterComplete] = useState(false);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
+
+  // Watch-time tracking refs (no re-renders)
+  const watchSessionId = useRef(
+    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+  );
+  const watchTracker = useRef<Map<string, {
+    sectionId: string;
+    watchedSeconds: number;
+    sectionDuration: number;
+    playCount: number;
+    pauseCount: number;
+    seekCount: number;
+    lastTickTime: number;
+  }>>(new Map());
 
   const fetchChapter = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -145,7 +162,7 @@ export default function FoundationLearningContent({
     if (!authLoading) fetchChapter();
   }, [authLoading, fetchChapter]);
 
-  // Auto-save video position every 30 seconds
+  // Auto-save video position every 30 seconds (includes watch session data)
   const saveProgress = useCallback(async (seconds: number) => {
     if (Math.abs(seconds - lastSavedPosRef.current) < 10) return;
     lastSavedPosRef.current = seconds;
@@ -153,6 +170,30 @@ export default function FoundationLearningContent({
     try {
       const token = await getToken();
       if (!token) return;
+
+      const section = data?.sections[currentSectionIndex];
+      // Build watch_session payload from tracker
+      let watchSession: any = undefined;
+      if (section) {
+        const tracker = watchTracker.current.get(section.id);
+        if (tracker && tracker.watchedSeconds > 0) {
+          const completionPct = tracker.sectionDuration > 0
+            ? Math.min(100, (tracker.watchedSeconds / tracker.sectionDuration) * 100)
+            : 0;
+          const width = typeof window !== 'undefined' ? window.innerWidth : 1200;
+          watchSession = {
+            id: watchSessionId.current,
+            section_id: section.id,
+            watched_seconds: Math.round(tracker.watchedSeconds),
+            section_duration_seconds: Math.round(tracker.sectionDuration),
+            completion_pct: Math.round(completionPct * 100) / 100,
+            play_count: tracker.playCount,
+            pause_count: tracker.pauseCount,
+            seek_count: tracker.seekCount,
+            device_type: width < 600 ? 'mobile' : width < 900 ? 'tablet' : 'desktop',
+          };
+        }
+      }
 
       await fetch(`/api/foundation/chapters/${chapterId}/progress`, {
         method: 'POST',
@@ -162,7 +203,8 @@ export default function FoundationLearningContent({
         },
         body: JSON.stringify({
           last_video_position_seconds: seconds,
-          last_section_id: data?.sections[currentSectionIndex]?.id,
+          last_section_id: section?.id,
+          watch_session: watchSession,
         }),
       });
     } catch {
@@ -172,9 +214,45 @@ export default function FoundationLearningContent({
 
   const handleTimeUpdate = useCallback((seconds: number) => {
     setCurrentVideoTime(seconds);
+
+    // Accumulate watch-time metrics per section
+    const sections = data?.sections;
+    if (sections?.length) {
+      // Find which section this time falls in
+      const sectionIdx = sections.findIndex(
+        (s) => seconds >= s.start_timestamp_seconds && seconds < s.end_timestamp_seconds
+      );
+      const section = sectionIdx >= 0 ? sections[sectionIdx] : sections[currentSectionIndex];
+      if (section) {
+        let tracker = watchTracker.current.get(section.id);
+        if (!tracker) {
+          tracker = {
+            sectionId: section.id,
+            watchedSeconds: 0,
+            sectionDuration: section.end_timestamp_seconds - section.start_timestamp_seconds,
+            playCount: 1,
+            pauseCount: 0,
+            seekCount: 0,
+            lastTickTime: seconds,
+          };
+          watchTracker.current.set(section.id, tracker);
+        } else {
+          const delta = seconds - tracker.lastTickTime;
+          if (delta > 0 && delta < 2) {
+            // Normal playback — accumulate
+            tracker.watchedSeconds += delta;
+          } else if (Math.abs(delta) >= 2) {
+            // Seek detected
+            tracker.seekCount += 1;
+          }
+          tracker.lastTickTime = seconds;
+        }
+      }
+    }
+
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => saveProgress(seconds), 30000);
-  }, [saveProgress]);
+  }, [saveProgress, data, currentSectionIndex]);
 
   // Save position on unmount
   useEffect(() => {
@@ -188,13 +266,35 @@ export default function FoundationLearningContent({
     };
   }, [saveProgress]);
 
+  // Ensure video stays paused while quiz is open (handles YouTube buffering race)
+  useEffect(() => {
+    const player = (window as any).__foundationPlayer;
+    if (!player) return;
+
+    if (quizOpen) {
+      player.quizPaused = true;
+      player.pause();
+      // Delayed pause catches YouTube BUFFERING→PLAYING transition
+      const timer = setTimeout(() => player.pause(), 300);
+      return () => clearTimeout(timer);
+    } else {
+      player.quizPaused = false;
+    }
+  }, [quizOpen]);
+
   const handleSectionEnd = useCallback((sectionIndex: number) => {
     const player = (window as any).__foundationPlayer;
     if (player?.pause) player.pause();
+    // Track pause for watch analytics
+    const section = data?.sections[sectionIndex];
+    if (section) {
+      const tracker = watchTracker.current.get(section.id);
+      if (tracker) tracker.pauseCount += 1;
+    }
     setQuizSectionIndex(sectionIndex);
     setQuizDismissable(false);
     setQuizOpen(true);
-  }, []);
+  }, [data]);
 
   const handleSectionClick = useCallback((index: number) => {
     setCurrentSectionIndex(index);
@@ -268,10 +368,22 @@ export default function FoundationLearningContent({
     const nextIndex = quizSectionIndex + 1;
     if (nextIndex < (data?.sections.length || 0)) {
       setCurrentSectionIndex(nextIndex);
+      // Track play count for the new section
+      const nextSection = data?.sections[nextIndex];
+      if (nextSection) {
+        const tracker = watchTracker.current.get(nextSection.id);
+        if (tracker) tracker.playCount += 1;
+      }
       const player = (window as any).__foundationPlayer;
       if (player?.play) player.play();
+    } else {
+      // All sections completed — show celebration and navigate to chapter list
+      setChapterComplete(true);
+      setTimeout(() => {
+        router.push(backUrl);
+      }, 2500);
     }
-  }, [quizSectionIndex, data]);
+  }, [quizSectionIndex, data, router, backUrl]);
 
   const handleNoteSave = useCallback(async (sectionId: string, noteText: string) => {
     const token = await getToken();
@@ -651,6 +763,25 @@ export default function FoundationLearningContent({
           </Box>
         )}
       </Box>
+
+      {/* Chapter completion celebration */}
+      <Snackbar
+        open={chapterComplete}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <CheckCircleOutlineIcon sx={{ color: '#4caf50' }} />
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#fff' }}>
+                Chapter Complete!
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                Great work! Moving to chapter list...
+              </Typography>
+            </Box>
+          </Box>
+        }
+      />
 
       {/* Quiz Modal */}
       {sections[quizSectionIndex] && (

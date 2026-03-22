@@ -16,6 +16,8 @@ import {
   Checkbox,
   Switch,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@neram/ui';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
@@ -47,6 +49,9 @@ export default function QuestionsListPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  // Language toggle
+  const [lang, setLang] = useState<'en' | 'hi'>('en');
 
   // Filters
   const [search, setSearch] = useState('');
@@ -264,6 +269,26 @@ export default function QuestionsListPage() {
         <Typography variant="h5" component="h1" sx={{ fontWeight: 700, flex: 1 }}>
           Questions
         </Typography>
+        <ToggleButtonGroup
+          value={lang}
+          exclusive
+          onChange={(_, v) => v && setLang(v)}
+          size="small"
+          sx={{
+            '& .MuiToggleButton-root': {
+              px: 1,
+              py: 0.25,
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              textTransform: 'none',
+              minWidth: 32,
+              minHeight: 32,
+            },
+          }}
+        >
+          <ToggleButton value="en">EN</ToggleButton>
+          <ToggleButton value="hi">हि</ToggleButton>
+        </ToggleButtonGroup>
         <Button
           variant="contained"
           size="small"
@@ -441,13 +466,18 @@ export default function QuestionsListPage() {
                         overflow: 'hidden',
                       }}
                     >
-                      {q.question_text ? (
-                        <MathText text={q.question_text} variant="body2" />
-                      ) : (
-                        <Typography variant="body2">
-                          {q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question'}
-                        </Typography>
-                      )}
+                      {(() => {
+                        const displayText = lang === 'hi' && (q as any).question_text_hi
+                          ? (q as any).question_text_hi
+                          : q.question_text;
+                        return displayText ? (
+                          <MathText text={displayText} variant="body2" />
+                        ) : (
+                          <Typography variant="body2">
+                            {q.nta_question_id ? `NTA ID: ${q.nta_question_id}` : 'Image-based question'}
+                          </Typography>
+                        );
+                      })()}
                     </Box>
 
                     {/* Source badges */}

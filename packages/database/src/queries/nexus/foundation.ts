@@ -20,6 +20,7 @@ import type {
   FoundationIssuePriority,
   NexusFoundationTranscript,
   TranscriptEntry,
+  NexusFoundationWatchSessionUpsert,
 } from '../../types';
 
 // ============================================
@@ -1083,10 +1084,14 @@ export interface ChapterStudentScore {
     score_pct: number | null;
     passed: boolean;
     attempt_count: number;
+    watched_seconds: number;
+    watch_completion_pct: number;
+    seek_count: number;
   }>;
   overall_score_pct: number;
   completed_sections: number;
   total_sections: number;
+  total_watch_seconds: number;
 }
 
 /**
@@ -1149,10 +1154,35 @@ export async function getChapterStudentScores(
     }
   }
 
+  // Fetch watch session data — aggregate across sessions per student per section
+  const { data: watchSessions } = await (supabase as any)
+    .from('nexus_foundation_watch_sessions')
+    .select('student_id, section_id, watched_seconds, completion_pct, seek_count')
+    .in('section_id', sectionIds)
+    .in('student_id', studentIds);
+
+  const watchMap = new Map<string, { watched_seconds: number; completion_pct: number; seek_count: number }>();
+  for (const ws of (watchSessions || [])) {
+    const key = `${ws.student_id}:${ws.section_id}`;
+    const existing = watchMap.get(key);
+    if (!existing) {
+      watchMap.set(key, {
+        watched_seconds: ws.watched_seconds,
+        completion_pct: Number(ws.completion_pct),
+        seek_count: ws.seek_count,
+      });
+    } else {
+      existing.watched_seconds += ws.watched_seconds;
+      existing.completion_pct = Math.max(existing.completion_pct, Number(ws.completion_pct));
+      existing.seek_count += ws.seek_count;
+    }
+  }
+
   return studentIds.map((studentId: string) => {
     const user = userMap.get(studentId);
     const sectionScores = sections.map((sec: any) => {
       const best = bestAttempts.get(`${studentId}:${sec.id}`);
+      const watch = watchMap.get(`${studentId}:${sec.id}`);
       return {
         section_id: sec.id,
         section_title: sec.title,
@@ -1160,12 +1190,16 @@ export async function getChapterStudentScores(
         score_pct: best?.score_pct ?? null,
         passed: best?.passed ?? false,
         attempt_count: best?.attempt_count ?? 0,
+        watched_seconds: watch?.watched_seconds ?? 0,
+        watch_completion_pct: watch?.completion_pct ?? 0,
+        seek_count: watch?.seek_count ?? 0,
       };
     });
     const attempted = sectionScores.filter((s: any) => s.score_pct !== null);
     const overallScore = attempted.length > 0
       ? Math.round(attempted.reduce((sum: number, s: any) => sum + (s.score_pct ?? 0), 0) / attempted.length)
       : 0;
+    const totalWatchSeconds = sectionScores.reduce((sum, s) => sum + s.watched_seconds, 0);
     return {
       student_id: studentId,
       student_name: user?.name || 'Unknown',
@@ -1174,6 +1208,46 @@ export async function getChapterStudentScores(
       overall_score_pct: overallScore,
       completed_sections: sectionScores.filter((s: any) => s.passed).length,
       total_sections: sections.length,
+      total_watch_seconds: totalWatchSeconds,
     };
   }).sort((a: any, b: any) => b.overall_score_pct - a.overall_score_pct);
+}
+
+// ============================================
+// WATCH SESSION TRACKING
+// ============================================
+
+/**
+ * Upsert a foundation watch session.
+ * Called from the progress API every ~30 seconds during video playback.
+ */
+export async function upsertFoundationWatchSession(
+  studentId: string,
+  chapterId: string,
+  session: NexusFoundationWatchSessionUpsert,
+  client?: TypedSupabaseClient,
+) {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { error } = await (supabase as any)
+    .from('nexus_foundation_watch_sessions')
+    .upsert(
+      {
+        id: session.id,
+        student_id: studentId,
+        chapter_id: chapterId,
+        section_id: session.section_id,
+        watched_seconds: session.watched_seconds,
+        section_duration_seconds: session.section_duration_seconds,
+        completion_pct: session.completion_pct,
+        play_count: session.play_count,
+        pause_count: session.pause_count,
+        seek_count: session.seek_count,
+        device_type: session.device_type,
+        ended_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    );
+
+  if (error) throw error;
 }
