@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Snackbar, Alert, ToggleButton, ToggleButtonGroup, Chip, useMediaQuery, useTheme } from '@neram/ui';
+import { Box, Typography, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, Chip, useMediaQuery, useTheme } from '@neram/ui';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import CloseIcon from '@mui/icons-material/Close';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
@@ -31,10 +32,19 @@ export default function StudentTimetable() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
 
+  const [liveBannerDismissed, setLiveBannerDismissed] = useState(false);
+
   // Filtered classes based on classroom filter
   const classes = classroomFilter === 'all'
     ? allClasses
     : allClasses.filter((c) => c.classroom?.id === classroomFilter);
+
+  // Find the nearest live class with a meeting URL
+  const liveClass = !liveBannerDismissed
+    ? allClasses.find(
+        (c) => c.status === 'live' && (c.teams_meeting_join_url || c.teams_meeting_url)
+      )
+    : null;
 
   // Detail panel
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
@@ -161,6 +171,10 @@ export default function StudentTimetable() {
     fetchClasses();
     fetchHolidays();
   }, [fetchClasses, fetchHolidays]);
+
+  useEffect(() => {
+    setLiveBannerDismissed(false);
+  }, [allClasses]);
 
   const handleRsvp = async (classId: string, response: 'attending' | 'not_attending') => {
     if (response === 'not_attending') {
@@ -343,6 +357,46 @@ export default function StudentTimetable() {
             />
           )}
         </Box>
+      )}
+
+      {/* Live class banner */}
+      {liveClass && (
+        <Alert
+          severity="info"
+          variant="filled"
+          sx={{
+            mb: 2,
+            bgcolor: 'success.main',
+            '& .MuiAlert-icon': { color: 'white' },
+            '& .MuiAlert-message': { color: 'white', width: '100%' },
+            '& .MuiAlert-action': { color: 'white' },
+          }}
+          action={
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Button
+                color="inherit"
+                size="small"
+                variant="outlined"
+                href={liveClass.teams_meeting_join_url || liveClass.teams_meeting_url || ''}
+                target="_blank"
+                sx={{ fontWeight: 700, borderColor: 'white', color: 'white', minHeight: 36 }}
+              >
+                Join Now
+              </Button>
+              <IconButton
+                size="small"
+                color="inherit"
+                onClick={() => setLiveBannerDismissed(true)}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          }
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {liveClass.title} is live now!
+          </Typography>
+        </Alert>
       )}
 
       {viewMode === 'calendar' && isDesktop ? (
