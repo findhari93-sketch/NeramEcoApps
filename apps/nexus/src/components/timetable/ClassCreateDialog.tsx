@@ -54,6 +54,7 @@ interface ClassFormData {
   /** Encoded target: "classroom:{id}" or "batch:{classroomId}:{batchId}" */
   target: string;
   create_meeting: boolean;
+  description: string;
 }
 
 const emptyForm: ClassFormData = {
@@ -64,6 +65,7 @@ const emptyForm: ClassFormData = {
   topic_id: '',
   target: '',
   create_meeting: false,
+  description: '',
 };
 
 /** Color map for classroom types */
@@ -90,6 +92,7 @@ interface ClassCreateDialogProps {
   prefillTime?: string;
   holidays?: Record<string, HolidayInfo>;
   onRemoveHoliday?: (date: string) => Promise<void>;
+  onMeetingError?: (error: string) => void;
 
   // Legacy props — kept for backward compatibility
   classroomId?: string;
@@ -125,6 +128,7 @@ export default function ClassCreateDialog({
   prefillTime,
   holidays,
   onRemoveHoliday,
+  onMeetingError,
   // Legacy
   classroomId: legacyClassroomId,
   batches: legacyBatches,
@@ -173,6 +177,7 @@ export default function ClassCreateDialog({
         topic_id: editingClass.topic?.id || '',
         target,
         create_meeting: false,
+        description: editingClass.description || '',
       });
     } else if (prefillDate || prefillTime) {
       setFormData({
@@ -250,6 +255,7 @@ export default function ClassCreateDialog({
         topic_id: formData.topic_id || null,
         batch_id: selectedBatchId || null,
         target_scope: scope === 'batch' ? 'batch' : (isCommon ? 'all' : 'classroom'),
+        description: formData.description || null,
       };
 
       const method = editingClass ? 'PATCH' : 'POST';
@@ -291,10 +297,13 @@ export default function ClassCreateDialog({
 
           if (!meetingRes.ok) {
             const meetingErr = await meetingRes.json().catch(() => ({}));
-            console.error('Teams meeting creation failed:', meetingErr.error);
+            const errMsg = meetingErr.error || 'Failed to create Teams meeting';
+            console.error('Teams meeting creation failed:', errMsg);
+            onMeetingError?.(errMsg);
           }
         } catch (meetingErr) {
           console.error('Teams meeting creation error:', meetingErr);
+          onMeetingError?.('Failed to create Teams meeting. You can retry from the class detail panel.');
         }
       }
 
@@ -488,6 +497,17 @@ export default function ClassCreateDialog({
               })()}
             </Select>
           </FormControl>
+
+          <TextField
+            label="Description"
+            fullWidth
+            multiline
+            minRows={2}
+            maxRows={4}
+            value={formData.description}
+            onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Optional notes or agenda for this class"
+          />
 
           {/* Create Teams Meeting toggle */}
           {!editingClass && (
