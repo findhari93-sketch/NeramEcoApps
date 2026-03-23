@@ -2419,7 +2419,13 @@ export type NotificationEventType =
   | 'classroom_restored'
   | 'device_swap_requested'
   | 'device_swap_approved'
-  | 'device_swap_rejected';
+  | 'device_swap_rejected'
+  | 'recall_version_added'
+  | 'recall_confirmed'
+  | 'recall_version_approved'
+  | 'recall_version_rejected'
+  | 'recall_comment_added'
+  | 'recall_published';
 
 // Classroom access request types
 export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -5961,4 +5967,263 @@ export interface LibraryMyActivity {
   watch_time_this_week: number;
   continue_watching: LibraryVideoWithProgress[];
   bookmarks: (LibraryBookmark & { video: LibraryVideo })[];
+}
+
+// ============================================
+// EXAM RECALL TYPES (NATA Question Reconstruction)
+// ============================================
+
+// Enums / Union Types
+export type ExamRecallQuestionType = 'mcq' | 'numerical' | 'fill_blank' | 'drawing';
+export type ExamRecallSection = 'part_a' | 'part_b';
+export type ExamRecallTopicCategory =
+  | 'visual_reasoning'
+  | 'logical_derivation'
+  | 'gk_architecture'
+  | 'language'
+  | 'design_sensitivity'
+  | 'numerical_ability'
+  | 'drawing';
+export type ExamRecallThreadStatus = 'raw' | 'under_review' | 'published' | 'dismissed';
+export type ExamRecallAuthorRole = 'student' | 'teacher' | 'admin' | 'staff';
+export type ExamRecallClarity = 'clear' | 'partial' | 'vague';
+export type ExamRecallVersionStatus = 'pending_review' | 'approved' | 'rejected';
+export type ExamRecallDrawingType = 'composition_2d' | 'object_sketching' | '3d_model';
+export type ExamRecallDifficulty = 'easy' | 'moderate' | 'hard';
+export type ExamRecallTimePressure = 'plenty' | 'just_enough' | 'rushed';
+export type ExamRecallVariantType = 'exact_repeat' | 'different_values' | 'same_topic';
+export type ExamRecallUploadType = 'handwritten_notes' | 'question_paper' | 'reference_image' | 'sketch' | 'drawing_attempt';
+export type ExamRecallOCRStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'not_needed';
+export type ExamRecallInputMode = 'type_it' | 'photo_notes' | 'quick_list' | 'paper_photo' | 'exam_tips';
+
+// Table Row Interfaces
+
+export interface NexusExamRecallThread {
+  id: string;
+  classroom_id: string;
+  exam_year: number;
+  exam_date: string;
+  session_number: number;
+  question_type: ExamRecallQuestionType;
+  section: ExamRecallSection;
+  topic_category: ExamRecallTopicCategory | null;
+  has_image: boolean;
+  status: ExamRecallThreadStatus;
+  published_question_id: string | null;
+  confirm_count: number;
+  vouch_count: number;
+  version_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusExamRecallVersion {
+  id: string;
+  thread_id: string;
+  version_number: number;
+  author_id: string;
+  author_role: ExamRecallAuthorRole;
+  recall_text: string | null;
+  recall_image_urls: string[] | null;
+  options: Array<{ id: string; text: string; image_url?: string }> | null;
+  my_answer: string | null;
+  my_working: string | null;
+  clarity: ExamRecallClarity;
+  has_image_in_original: boolean | null;
+  image_description: string | null;
+  sub_topic_hint: string | null;
+  parent_version_id: string | null;
+  vouch_count: number;
+  status: ExamRecallVersionStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface NexusExamRecallConfirm {
+  id: string;
+  thread_id: string;
+  user_id: string;
+  exam_date: string | null;
+  session_number: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface NexusExamRecallVouch {
+  id: string;
+  version_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface NexusExamRecallComment {
+  id: string;
+  thread_id: string;
+  parent_comment_id: string | null;
+  user_id: string;
+  body: string;
+  is_staff: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusExamRecallCheckpoint {
+  id: string;
+  user_id: string;
+  classroom_id: string;
+  exam_year: number;
+  exam_date: string;
+  session_number: number;
+  drawing_count: number;
+  aptitude_count: number;
+  topic_dump_count: number;
+  tip_submitted: boolean;
+  browse_unlocked: boolean;
+  unlocked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusExamRecallTopicDump {
+  id: string;
+  user_id: string;
+  classroom_id: string;
+  exam_year: number;
+  exam_date: string;
+  session_number: number;
+  topic_category: string;
+  estimated_count: number | null;
+  brief_details: string | null;
+  created_at: string;
+}
+
+export interface NexusExamRecallDrawing {
+  id: string;
+  thread_id: string;
+  question_number: number;
+  drawing_type: ExamRecallDrawingType;
+  prompt_text_en: string | null;
+  prompt_text_hi: string | null;
+  objects_materials: Array<{ name: string; count: number }> | null;
+  constraints: Record<string, any> | null;
+  marks: number | null;
+  paper_photo_url: string | null;
+  attempt_photo_url: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface NexusExamRecallTip {
+  id: string;
+  user_id: string;
+  classroom_id: string;
+  exam_year: number;
+  exam_date: string;
+  session_number: number;
+  insights_text: string;
+  topic_distribution: Record<string, number> | null;
+  difficulty: ExamRecallDifficulty | null;
+  time_pressure: ExamRecallTimePressure | null;
+  upvote_count: number;
+  created_at: string;
+}
+
+export interface NexusExamRecallVariant {
+  id: string;
+  thread_id: string;
+  linked_thread_id: string;
+  variant_type: ExamRecallVariantType;
+  confidence: number | null;
+  linked_by: string | null;
+  created_at: string;
+}
+
+export interface NexusExamRecallUpload {
+  id: string;
+  user_id: string;
+  version_id: string | null;
+  thread_id: string | null;
+  upload_type: ExamRecallUploadType;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string;
+  file_size_bytes: number;
+  ocr_status: ExamRecallOCRStatus;
+  ocr_extracted_text: string | null;
+  ocr_confidence: number | null;
+  ocr_extracted_questions: any[] | null;
+  created_at: string;
+}
+
+// Insert/Update partial types
+
+export type NexusExamRecallThreadInsert = Omit<NexusExamRecallThread, 'id' | 'confirm_count' | 'vouch_count' | 'version_count' | 'created_at' | 'updated_at'>;
+
+export type NexusExamRecallVersionInsert = Omit<NexusExamRecallVersion, 'id' | 'vouch_count' | 'status' | 'reviewed_by' | 'reviewed_at' | 'created_at'>;
+
+export type NexusExamRecallDrawingInsert = Omit<NexusExamRecallDrawing, 'id' | 'created_at'>;
+
+export type NexusExamRecallTipInsert = Omit<NexusExamRecallTip, 'id' | 'upvote_count' | 'created_at'>;
+
+// Joined / View types for queries
+
+export interface ExamRecallThreadListItem extends NexusExamRecallThread {
+  latest_version: {
+    recall_text: string | null;
+    clarity: ExamRecallClarity;
+    author_name: string | null;
+    author_avatar: string | null;
+  } | null;
+  contributors: Array<{
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+  }>;
+  user_has_confirmed: boolean;
+}
+
+export interface ExamRecallThreadDetail extends NexusExamRecallThread {
+  versions: Array<NexusExamRecallVersion & {
+    author: Pick<User, 'id' | 'name' | 'avatar_url'>;
+    vouch_count: number;
+    user_has_vouched: boolean;
+  }>;
+  confirms: Array<NexusExamRecallConfirm & {
+    user: Pick<User, 'id' | 'name' | 'avatar_url'>;
+  }>;
+  comments: Array<NexusExamRecallComment & {
+    user: Pick<User, 'id' | 'name' | 'avatar_url'>;
+  }>;
+  drawings: NexusExamRecallDrawing[];
+  variants: Array<NexusExamRecallVariant & {
+    linked_thread: Pick<NexusExamRecallThread, 'id' | 'exam_date' | 'session_number' | 'status'>;
+  }>;
+  uploads: NexusExamRecallUpload[];
+}
+
+export interface ExamRecallSessionSummary {
+  exam_date: string;
+  session_number: number;
+  thread_count: number;
+  contributor_count: number;
+  published_count: number;
+  under_review_count: number;
+  raw_count: number;
+}
+
+export interface ExamRecallCheckpointStatus {
+  checkpoint: NexusExamRecallCheckpoint | null;
+  is_unlocked: boolean;
+  drawing_remaining: number;  // 3 - drawing_count
+  aptitude_remaining: number; // 5 - aptitude_count
+}
+
+export interface ExamRecallDashboardStats {
+  total_threads: number;
+  pending_review: number;
+  published: number;
+  total_contributors: number;
+  sessions: ExamRecallSessionSummary[];
 }

@@ -21,6 +21,7 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -82,6 +83,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
@@ -101,6 +103,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
       { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
@@ -144,6 +147,8 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (pathname.startsWith('/teacher/foundation')) return 'management';
   // Library pages (review, engagement, collections)
   if (pathname.startsWith('/teacher/library')) return 'management';
+  // Exam recall moderation pages
+  if (pathname.startsWith('/teacher/exam-recall')) return 'management';
 
   for (const [path, panelId] of Object.entries(PATH_TO_PANEL)) {
     if (pathname.startsWith(path + '/')) return panelId;

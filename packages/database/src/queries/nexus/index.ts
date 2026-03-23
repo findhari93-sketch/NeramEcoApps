@@ -19,3 +19,4 @@ export * from './enrollment-history';
 export * from './documents';
 export * from './library';
 export * from './library-engagement';
+export * from './exam-recall';

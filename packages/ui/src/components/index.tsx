@@ -123,6 +123,10 @@ export {
   StepIcon,
   MobileStepper,
 
+  // Image List
+  ImageList,
+  ImageListItem,
+
   // Utils
   ClickAwayListener,
   Collapse,

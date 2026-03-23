@@ -17,7 +17,7 @@ import {
   DialogContent,
   Divider,
   Paper,
-} from '@mui/material';
+} from '@neram/ui';
 import DevicesIcon from '@mui/icons-material/Devices';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';

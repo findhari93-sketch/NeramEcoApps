@@ -685,6 +685,15 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     classroom_access_requested: null, // Telegram + admin in-app only
     classroom_removed: null, // In-app only (Nexus)
     classroom_restored: null, // In-app only (Nexus)
+    device_swap_requested: null, // In-app + Telegram only
+    device_swap_approved: null, // In-app only
+    device_swap_rejected: null, // In-app only
+    recall_version_added: null, // In-app only (Nexus)
+    recall_confirmed: null, // In-app only (Nexus)
+    recall_version_approved: null, // In-app only (Nexus)
+    recall_version_rejected: null, // In-app only (Nexus)
+    recall_comment_added: null, // In-app only (Nexus)
+    recall_published: null, // In-app only (Nexus)
   };
 
   return map[eventType];
