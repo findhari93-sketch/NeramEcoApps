@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -14,6 +14,16 @@ import {
   Chip,
   Avatar,
   Divider,
+  Badge,
+  Button,
+  TextField,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Snackbar,
 } from '@mui/material';
 import DevicesIcon from '@mui/icons-material/Devices';
 import LaptopIcon from '@mui/icons-material/Laptop';
@@ -23,7 +33,10 @@ import BlockIcon from '@mui/icons-material/Block';
 import CloseIcon from '@mui/icons-material/Close';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import type { DeviceDistributionStats, StudentDeviceSummary } from '@neram/database';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import CheckIcon from '@mui/icons-material/Check';
+import ClearIcon from '@mui/icons-material/Clear';
+import type { DeviceDistributionStats, StudentDeviceSummary, DeviceSwapRequestWithUser } from '@neram/database';
 import { DeviceDistributionChart } from '@/components/devices/DeviceDistributionChart';
 import { StudentDeviceTable } from '@/components/devices/StudentDeviceTable';
 
@@ -198,6 +211,209 @@ function StudentDetailDialog({
   );
 }
 
+function SwapRequestsSection() {
+  const [requests, setRequests] = useState<DeviceSwapRequestWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
+  const [snack, setSnack] = useState<string | null>(null);
+  const [rejectDialogId, setRejectDialogId] = useState<string | null>(null);
+  const [rejectNotes, setRejectNotes] = useState('');
+
+  const fetchRequests = useCallback(async () => {
+    try {
+      const res = await fetch('/api/devices/swap-requests?status=pending');
+      if (res.ok) {
+        const result = await res.json();
+        setRequests(result.data || []);
+      }
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
+
+  const handleAction = async (requestId: string, action: 'approve' | 'reject', notes?: string) => {
+    setProcessing(requestId);
+    try {
+      const res = await fetch('/api/devices/swap-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId, action, adminNotes: notes }),
+      });
+
+      if (res.ok) {
+        setRequests((prev) => prev.filter((r) => r.id !== requestId));
+        setSnack(`Request ${action === 'approve' ? 'approved' : 'rejected'} successfully`);
+        setRejectDialogId(null);
+        setRejectNotes('');
+      } else {
+        const { error } = await res.json();
+        setSnack(error || 'Failed to process request');
+      }
+    } catch {
+      setSnack('Failed to process request');
+    }
+    setProcessing(null);
+  };
+
+  if (loading) {
+    return <Skeleton variant="rounded" height={120} sx={{ borderRadius: 2, mb: 4 }} />;
+  }
+
+  if (requests.length === 0) return null;
+
+  return (
+    <>
+      <Paper
+        variant="outlined"
+        sx={{ p: 3, borderRadius: 2, mb: 4, borderColor: 'warning.main', borderWidth: 2 }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+          <Badge badgeContent={requests.length} color="warning">
+            <SwapHorizIcon sx={{ color: 'warning.main' }} />
+          </Badge>
+          <Typography variant="h6" fontWeight={600}>
+            Pending Device Change Requests
+          </Typography>
+        </Box>
+
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Student</TableCell>
+                <TableCell>Device</TableCell>
+                <TableCell>Reason</TableCell>
+                <TableCell>Requested</TableCell>
+                <TableCell align="center">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {requests.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Avatar
+                        src={req.user_avatar || undefined}
+                        sx={{ width: 32, height: 32, fontSize: 14 }}
+                      >
+                        {req.user_name?.[0]?.toUpperCase()}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>
+                          {req.user_name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {req.user_email}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      icon={
+                        req.device_category === 'desktop' ? (
+                          <LaptopIcon sx={{ fontSize: 16 }} />
+                        ) : (
+                          <PhoneAndroidIcon sx={{ fontSize: 16 }} />
+                        )
+                      }
+                      label={req.device_category === 'desktop' ? 'Laptop' : 'Mobile'}
+                      size="small"
+                      color={req.device_category === 'desktop' ? 'primary' : 'secondary'}
+                      sx={{ height: 24 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ maxWidth: 300 }}>
+                      {req.reason}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        startIcon={<CheckIcon />}
+                        disabled={processing === req.id}
+                        onClick={() => handleAction(req.id, 'approve')}
+                        sx={{ textTransform: 'none', minHeight: 32 }}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<ClearIcon />}
+                        disabled={processing === req.id}
+                        onClick={() => {
+                          setRejectDialogId(req.id);
+                          setRejectNotes('');
+                        }}
+                        sx={{ textTransform: 'none', minHeight: 32 }}
+                      >
+                        Reject
+                      </Button>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      {/* Reject dialog */}
+      <Dialog
+        open={!!rejectDialogId}
+        onClose={() => setRejectDialogId(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Reject Device Change</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Reason for rejection (optional)"
+            multiline
+            rows={3}
+            fullWidth
+            value={rejectNotes}
+            onChange={(e) => setRejectNotes(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, px: 3, pb: 2 }}>
+          <Button onClick={() => setRejectDialogId(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => rejectDialogId && handleAction(rejectDialogId, 'reject', rejectNotes)}
+            disabled={!!processing}
+          >
+            Reject
+          </Button>
+        </Box>
+      </Dialog>
+
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={3000}
+        onClose={() => setSnack(null)}
+        message={snack}
+      />
+    </>
+  );
+}
+
 export default function DevicesPage() {
   const [stats, setStats] = useState<DeviceDistributionStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -274,6 +490,9 @@ export default function DevicesPage() {
           </Grid>
         </Grid>
       ) : null}
+
+      {/* Pending swap requests */}
+      <SwapRequestsSection />
 
       {/* Distribution chart */}
       {stats && (

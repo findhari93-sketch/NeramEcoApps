@@ -2416,7 +2416,10 @@ export type NotificationEventType =
   | 'foundation_issue_delegated'
   | 'classroom_access_requested'
   | 'classroom_removed'
-  | 'classroom_restored';
+  | 'classroom_restored'
+  | 'device_swap_requested'
+  | 'device_swap_approved'
+  | 'device_swap_rejected';
 
 // Classroom access request types
 export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -4180,6 +4183,28 @@ export interface StudentDeviceSummary {
   total_active_time: number;
   last_active: string | null;
   device_status: 'both' | 'desktop_only' | 'mobile_only' | 'none';
+}
+
+// Device Swap Requests
+export type DeviceSwapRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface DeviceSwapRequest {
+  id: string;
+  user_id: string;
+  device_category: DeviceCategory;
+  reason: string;
+  status: DeviceSwapRequestStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceSwapRequestWithUser extends DeviceSwapRequest {
+  user_name: string;
+  user_email: string | null;
+  user_avatar: string | null;
 }
 
 // ============================================

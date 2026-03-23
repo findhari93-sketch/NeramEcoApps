@@ -48,3 +48,4 @@ export * from './app-feedback';
 export * from './account-tier';
 export * from './aintra-kb';
 export * from './device-registration';
+export * from './device-swap-requests';
