@@ -128,7 +128,7 @@ export function useScoreAutoSave({
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, hasData, JSON.stringify(resultData)]);
+  }, [user, hasData, resultData]);
 
   const setPurpose = useCallback(
     async (purpose: CalculationPurpose, label?: string) => {

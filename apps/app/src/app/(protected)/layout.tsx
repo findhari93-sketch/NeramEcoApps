@@ -9,6 +9,7 @@ import { OnboardingWizard } from '@/components/onboarding';
 import AppShell from '@/components/shell/AppShell';
 import { SidebarProvider } from '@/contexts/SidebarContext';
 import { GlobalErrorLogger } from '@/components/ErrorBoundary';
+import InstallPromptBanner from '@/components/InstallPromptBanner';
 import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
@@ -359,6 +360,9 @@ function ProtectedLayoutInner({
           phoneOnly={true}
         />
       )}
+
+      {/* PWA Install Prompt */}
+      {phoneVerified && onboardingCompleted && <InstallPromptBanner />}
 
       {/* Onboarding Wizard */}
       {phoneVerified && !onboardingCompleted && idToken && (

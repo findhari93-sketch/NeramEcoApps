@@ -473,7 +473,7 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
 
   return (
     <>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
 
       <Box>
         <Typography variant="h4" gutterBottom fontWeight={600}>

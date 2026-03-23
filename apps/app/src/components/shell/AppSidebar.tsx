@@ -31,6 +31,7 @@ import { neramTokens } from '@neram/ui';
 import { useThemeMode } from '@neram/ui';
 import { useSidebar } from '@/contexts/SidebarContext';
 import UserNotificationBell from '@/components/UserNotificationBell';
+import Image from 'next/image';
 import Link from 'next/link';
 import {
   NATA_TOOLS,
@@ -181,11 +182,12 @@ export default function AppSidebar({
         {!collapsed ? (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <Box
-                component="img"
+              <Image
                 src="/aiArchitect_logo.svg"
                 alt="aiArchitek logo"
-                sx={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0 }}
+                width={28}
+                height={28}
+                style={{ borderRadius: '50%', flexShrink: 0 }}
               />
               <Box>
                 <Typography
@@ -229,12 +231,13 @@ export default function AppSidebar({
           </>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-            <Box
-              component="img"
+            <Image
               src="/aiArchitect_logo.svg"
               alt="aiArchitek logo"
-              sx={{ width: 28, height: 28, borderRadius: '50%', cursor: 'pointer' }}
+              width={28}
+              height={28}
               onClick={toggleSidebar}
+              style={{ borderRadius: '50%', cursor: 'pointer' }}
             />
           </Box>
         )}

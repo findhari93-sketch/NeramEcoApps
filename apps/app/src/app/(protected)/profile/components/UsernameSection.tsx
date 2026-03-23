@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -37,6 +38,18 @@ export default function UsernameSection({
   handleSetUsername,
   saving,
 }: UsernameSectionProps) {
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedCheck = useCallback(
+    (value: string) => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        checkUsernameAvailability(value);
+      }, 400);
+    },
+    [checkUsernameAvailability]
+  );
+
   if (currentUsername) {
     return (
       <Box>
@@ -64,7 +77,7 @@ export default function UsernameSection({
             onChange={(e) => {
               const value = e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, '');
               setUsername(value);
-              checkUsernameAvailability(value);
+              debouncedCheck(value);
             }}
             placeholder="e.g., john_doe"
             helperText={

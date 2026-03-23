@@ -2,6 +2,7 @@
 
 import { Box, Typography, Stack } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
+import Image from 'next/image';
 import Link from 'next/link';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com';
@@ -45,11 +46,12 @@ export default function LandingFooter() {
           {/* Logo + tagline */}
           <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: { xs: 'center', md: 'flex-start' }, mb: 0.5 }}>
-              <Box
-                component="img"
+              <Image
                 src="/aiArchitect_logo.svg"
                 alt="aiArchitek logo"
-                sx={{ width: 36, height: 36, borderRadius: '50%' }}
+                width={36}
+                height={36}
+                style={{ borderRadius: '50%' }}
               />
               <Typography
                 sx={{
