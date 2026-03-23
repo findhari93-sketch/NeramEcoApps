@@ -27,6 +27,8 @@ export interface ClassCardData {
   teacher: { id: string; name: string; avatar_url: string | null } | null;
   batch: { id: string; name: string } | null;
   classroom?: { id: string; name: string; type: string } | null;
+  description?: string | null;
+  organizer_name?: string | null;
 }
 
 interface ClassCardProps {

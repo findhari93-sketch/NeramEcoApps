@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
-    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, teams_meeting_scope, target_scope } = body;
+    const { classroom_id, title, scheduled_date, start_time, end_time, topic_id, batch_id, teams_meeting_scope, target_scope, description } = body;
 
     if (!classroom_id || !title || !scheduled_date || !start_time || !end_time) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
       batch_id: batch_id || null,
       teams_meeting_scope: teams_meeting_scope || null,
       target_scope: target_scope || (batch_id ? 'batch' : 'classroom'),
+      description: description || null,
       status: 'scheduled',
     };
 
