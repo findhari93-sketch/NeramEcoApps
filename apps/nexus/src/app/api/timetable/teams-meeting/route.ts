@@ -81,6 +81,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 });
     }
 
+    // Race condition guard: ensure no meeting was created between page load and now
+    if (scheduledClass.teams_meeting_id) {
+      return NextResponse.json({
+        class: scheduledClass,
+        meeting: {
+          id: scheduledClass.teams_meeting_id,
+          joinUrl: scheduledClass.teams_meeting_join_url || scheduledClass.teams_meeting_url,
+          scope: scheduledClass.teams_meeting_scope,
+        },
+        alreadyExists: true,
+      });
+    }
+
     // Build date-times
     const startDateTime = `${scheduledClass.scheduled_date}T${scheduledClass.start_time}:00+05:30`;
     const endDateTime = `${scheduledClass.scheduled_date}T${scheduledClass.end_time}:00+05:30`;
