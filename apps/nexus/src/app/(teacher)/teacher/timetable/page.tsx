@@ -8,6 +8,8 @@ import EventBusyIcon from '@mui/icons-material/EventBusy';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import SyncIcon from '@mui/icons-material/Sync';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
 import TimeSlotGrid from '@/components/timetable/TimeSlotGrid';
@@ -344,6 +346,109 @@ export default function TeacherTimetable() {
     setRsvpDashboardOpen(true);
   };
 
+  const handleSyncMembers = async () => {
+    if (!activeClassroom) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      setSnackbar({ open: true, message: 'Syncing members to Teams...', severity: 'success' });
+
+      const res = await fetch(`/api/classrooms/${activeClassroom.id}/sync-members`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSnackbar({
+          open: true,
+          message: `Sync complete: ${data.added} added, ${data.alreadyInTeam} already in team, ${data.skipped} skipped`,
+          severity: 'success',
+        });
+      } else {
+        setSnackbar({ open: true, message: data.error || 'Sync failed', severity: 'error' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to sync members', severity: 'error' });
+    }
+  };
+
+  const handleSyncFromTeams = async () => {
+    if (!activeClassroom) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      setSnackbar({ open: true, message: 'Importing meetings from Teams...', severity: 'success' });
+
+      const res = await fetch('/api/timetable/sync-from-teams', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ classroom_id: activeClassroom.id }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSnackbar({
+          open: true,
+          message: `Imported ${data.imported} meeting(s), ${data.skipped} already existed`,
+          severity: 'success',
+        });
+        if (data.imported > 0) fetchClasses();
+      } else {
+        setSnackbar({ open: true, message: data.error || 'Import failed', severity: 'error' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to import from Teams', severity: 'error' });
+    }
+  };
+
+  const handleCreateMeeting = async (cls: ClassCardData) => {
+    if (!activeClassroom) return;
+    setSelectedClass(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      setSnackbar({ open: true, message: 'Creating Teams meeting...', severity: 'success' });
+
+      const res = await fetch('/api/timetable/teams-meeting', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          class_id: cls.id,
+          classroom_id: cls.classroom?.id || activeClassroom.id,
+          auto: true,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSnackbar({
+          open: true,
+          message: data.alreadyExists ? 'Meeting already exists' : 'Teams meeting created!',
+          severity: 'success',
+        });
+        fetchClasses();
+      } else {
+        setSnackbar({ open: true, message: data.error || 'Failed to create meeting', severity: 'error' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to create meeting', severity: 'error' });
+    }
+  };
+
+  const handleMeetingError = (error: string) => {
+    setSnackbar({ open: true, message: error, severity: 'error' });
+  };
+
   const handleSlotClick = (date: string, startTime: string, event?: React.MouseEvent) => {
     setSlotMenuDate(date);
     setSlotMenuTime(startTime);
@@ -470,6 +575,28 @@ export default function TeacherTimetable() {
           >
             RSVP
           </Button>
+          {activeClassroom?.ms_team_id && (
+            <>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<SyncIcon />}
+                onClick={handleSyncMembers}
+                sx={{ textTransform: 'none', minHeight: 40 }}
+              >
+                Sync Members
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<CloudDownloadIcon />}
+                onClick={handleSyncFromTeams}
+                sx={{ textTransform: 'none', minHeight: 40 }}
+              >
+                Sync from Teams
+              </Button>
+            </>
+          )}
           {activeClassroom && (
             <TimetableNotificationBell
               classroomId={activeClassroom.id}
@@ -537,6 +664,7 @@ export default function TeacherTimetable() {
         onViewAttendance={setAttendanceClass}
         onSyncRecording={handleSyncRecording}
         onViewRsvpDashboard={handleViewRsvpDashboard}
+        onCreateMeeting={handleCreateMeeting}
       />
 
       {/* Create/Edit Dialog */}
@@ -564,6 +692,7 @@ export default function TeacherTimetable() {
         prefillTime={prefillTime}
         holidays={holidays}
         onRemoveHoliday={handleRemoveHolidayForClass}
+        onMeetingError={handleMeetingError}
       />
 
       {/* Holiday Manager */}
