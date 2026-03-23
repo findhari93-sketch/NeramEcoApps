@@ -8,6 +8,7 @@ import { useFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
 import Link from 'next/link';
 
+import InstallPromptBanner from '@/components/InstallPromptBanner';
 import LandingNavbar from './LandingNavbar';
 import HeroSection from './HeroSection';
 import ToolsShowcase from './ToolsShowcase';
@@ -157,6 +158,7 @@ export default function LandingPageContent() {
         <FinalCTA />
       </main>
       <LandingFooter />
+      <InstallPromptBanner />
     </Box>
   );
 }

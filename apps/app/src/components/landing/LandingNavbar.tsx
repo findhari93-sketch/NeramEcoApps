@@ -5,6 +5,7 @@ import { AppBar, Toolbar, Box, Typography, Button, IconButton, SwipeableDrawer, 
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { neramTokens } from '@neram/ui';
+import Image from 'next/image';
 import Link from 'next/link';
 import { NAV_LINKS } from '@/lib/landing-data';
 
@@ -38,11 +39,13 @@ export default function LandingNavbar() {
               href="/"
               sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none' }}
             >
-              <Box
-                component="img"
+              <Image
                 src="/aiArchitect_logo.svg"
                 alt="aiArchitek logo"
-                sx={{ width: { xs: 32, md: 36 }, height: { xs: 32, md: 36 }, borderRadius: '50%' }}
+                width={36}
+                height={36}
+                priority
+                style={{ borderRadius: '50%' }}
               />
               <Typography
                 variant="h6"
