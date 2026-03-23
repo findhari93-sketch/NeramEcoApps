@@ -20,6 +20,7 @@ import PlaylistAddCheckOutlinedIcon from '@mui/icons-material/PlaylistAddCheckOu
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
+import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -85,6 +86,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
+      { label: 'Devices', path: '/teacher/devices', icon: <DevicesOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
