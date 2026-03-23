@@ -112,8 +112,34 @@ export default function ClassCard({
         cursor: onClick ? 'pointer' : 'default',
         '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.12)' },
         transition: 'box-shadow 0.2s',
+        position: 'relative',
       }}
     >
+      {/* Quick join button for upcoming/live classes */}
+      {(cls.status === 'scheduled' || cls.status === 'live') && (cls.teams_meeting_join_url || cls.teams_meeting_url) && (
+        <IconButton
+          size="small"
+          href={cls.teams_meeting_join_url || cls.teams_meeting_url || ''}
+          target="_blank"
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          sx={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            bgcolor: cls.status === 'live' ? 'success.main' : 'primary.main',
+            color: 'white',
+            '&:hover': { bgcolor: cls.status === 'live' ? 'success.dark' : 'primary.dark' },
+            width: 32,
+            height: 32,
+            animation: cls.status === 'live' ? 'pulse 1.5s infinite' : 'none',
+            '@keyframes pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.7 } },
+          }}
+          title="Join Teams Meeting"
+        >
+          <VideocamIcon sx={{ fontSize: 18 }} />
+        </IconButton>
+      )}
+
       {/* Header: Title + Status */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
