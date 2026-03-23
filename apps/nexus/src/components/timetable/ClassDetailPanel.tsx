@@ -49,6 +49,7 @@ interface ClassDetailPanelProps {
   onRate?: (cls: ClassCardData) => void;
   onViewAttendance?: (cls: ClassCardData) => void;
   onSyncRecording?: (cls: ClassCardData) => void;
+  onCreateMeeting?: (cls: ClassCardData) => void;
   onViewRsvpDashboard?: (classId: string) => void;
 }
 
@@ -97,6 +98,7 @@ export default function ClassDetailPanel({
   onRate,
   onViewAttendance,
   onSyncRecording,
+  onCreateMeeting,
   onViewRsvpDashboard,
 }: ClassDetailPanelProps) {
   const theme = useTheme();
@@ -218,6 +220,28 @@ export default function ClassDetailPanel({
               Teacher
             </Typography>
             <Typography variant="body2">{cls.teacher.name}</Typography>
+          </Box>
+        )}
+
+        {/* Organizer (if different from teacher) */}
+        {cls.organizer_name && cls.teacher && cls.organizer_name !== cls.teacher.name && (
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              Organized by
+            </Typography>
+            <Typography variant="body2">{cls.organizer_name}</Typography>
+          </Box>
+        )}
+
+        {/* Description */}
+        {cls.description && (
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              Description
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+              {cls.description}
+            </Typography>
           </Box>
         )}
 
@@ -383,6 +407,20 @@ export default function ClassDetailPanel({
                 </Button>
               )}
             </Box>
+          )}
+
+          {/* Create Teams Meeting (for classes without one) */}
+          {role === 'teacher' && isUpcoming && !isCancelled && !cls.teams_meeting_id && onCreateMeeting && (
+            <Button
+              variant="contained"
+              fullWidth
+              color="primary"
+              startIcon={<VideocamIcon />}
+              onClick={() => onCreateMeeting(cls)}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+            >
+              Create Teams Meeting
+            </Button>
           )}
 
           {role === 'teacher' && isUpcoming && !isCancelled && (
