@@ -5,9 +5,14 @@ export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclas
 export const ORG_LOGO = `${BASE_URL}/logo.png`;
 export const ORG_PHONE = '+91-9176137043';
 export const ORG_EMAIL = 'info@neramclasses.com';
-export const ORG_FOUNDED = '2020';
+export const ORG_FOUNDED = '2009';
+export const ORG_FORMALLY_ESTABLISHED = '2016';
 export const ORG_DESCRIPTION =
-  'Premier NATA and JEE Paper 2 coaching institute in Tamil Nadu, India. Expert IIT/NIT alumni faculty, comprehensive study materials, online and offline classes across India and Gulf countries.';
+  "India's #1 NATA and JEE Paper 2 coaching institute since 2009. Expert IIT/NIT/SPA alumni faculty, AI-powered study app, 99.9% success rate, 10,000+ students trained across 150+ cities in India and Gulf countries. Online and offline hybrid coaching with free tools.";
+
+// Differentiator tagline used across pages and structured data
+export const ORG_SLOGAN = "India's #1 AI-Powered NATA Coaching Since 2009";
+export const ORG_BEST_KNOWN_FOR = 'AI-powered study platform with free NATA tools, hybrid online-offline coaching across 150+ cities, and 99.9% success rate since 2009';
 
 export const ORG_ADDRESS = {
   streetAddress: 'Electronic City Phase 1, Near M5 Mall',

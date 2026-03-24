@@ -31,9 +31,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best Online NATA Coaching in Tamil Nadu 2026',
-    description: 'Neram Classes offers the best online NATA coaching in Tamil Nadu with 99.9% success rate. Expert IIT/NIT faculty, live classes, daily drawing practice. Online & offline NATA 2026 preparation from Chennai, Coimbatore, Madurai & across India.',
-    keywords: 'best online NATA coaching Tamil Nadu, NATA coaching Tamil Nadu, online NATA classes, NATA 2026 coaching, NATA preparation Tamil Nadu, NATA coaching Chennai, NATA coaching Coimbatore, best NATA coaching institute India, NATA online classes, Neram Classes NATA',
+    title: 'Best Online NATA Coaching in India 2026 | 150+ Cities | Neram Classes',
+    description: "India's #1 online NATA coaching since 2009. 99.9% success rate, 10,000+ students, 150+ cities. IIT/NIT/SPA alumni faculty, daily drawing practice, free AI study app. Max 25 per batch. Online + offline hybrid.",
+    keywords: 'best online NATA coaching India, NATA coaching online, best NATA coaching 2026, online NATA classes India, NATA coaching Tamil Nadu, NATA coaching Chennai, NATA coaching Coimbatore, NATA coaching Bangalore, NATA preparation online, AI NATA coaching, Neram Classes NATA',
     alternates: buildAlternates(locale, '/coaching/nata-coaching'),
   };
 }

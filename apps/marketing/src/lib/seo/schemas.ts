@@ -13,6 +13,8 @@ import {
   APP_NAME,
   APP_DESCRIPTION,
   APP_FEATURES,
+  ORG_SLOGAN,
+  ORG_BEST_KNOWN_FOR,
 } from './constants';
 
 // ─── Organization Schema ────────────────────────────────────────────────────
@@ -23,26 +25,69 @@ export function generateOrganizationSchema() {
     '@type': 'EducationalOrganization',
     '@id': `${BASE_URL}/#organization`,
     name: ORG_NAME,
-    alternateName: ORG_ALTERNATE_NAME,
+    alternateName: [ORG_ALTERNATE_NAME, 'Neram NATA Classes', 'Neram Architecture Coaching'],
     url: BASE_URL,
     logo: ORG_LOGO,
+    image: ORG_LOGO,
     description: ORG_DESCRIPTION,
+    slogan: ORG_SLOGAN,
     foundingDate: ORG_FOUNDED,
+    foundingLocation: {
+      '@type': 'Place',
+      name: 'Chennai, Tamil Nadu, India',
+    },
     address: {
       '@type': 'PostalAddress',
       ...ORG_ADDRESS,
     },
-    contactPoint: {
-      '@type': 'ContactPoint',
-      telephone: ORG_PHONE,
-      email: ORG_EMAIL,
-      contactType: 'customer service',
-      availableLanguage: ['English', 'Tamil', 'Hindi', 'Kannada', 'Malayalam'],
-    },
+    contactPoint: [
+      {
+        '@type': 'ContactPoint',
+        telephone: ORG_PHONE,
+        email: ORG_EMAIL,
+        contactType: 'customer service',
+        availableLanguage: ['English', 'Tamil', 'Hindi', 'Kannada', 'Malayalam'],
+        areaServed: 'IN',
+      },
+      {
+        '@type': 'ContactPoint',
+        telephone: ORG_PHONE,
+        contactType: 'sales',
+        availableLanguage: ['English', 'Tamil'],
+        areaServed: ['IN', 'AE', 'QA', 'OM', 'SA', 'KW', 'BH'],
+      },
+    ],
     sameAs: SOCIAL_PROFILES,
+    knowsAbout: [
+      'NATA Exam Preparation',
+      'JEE Paper 2 B.Arch Coaching',
+      'Architecture Entrance Exams',
+      'Drawing and Composition for NATA',
+      'Mathematics for Architecture Entrance',
+      'General Aptitude for NATA',
+      'B.Arch Admission Counselling',
+      'Architecture College Selection',
+    ],
     areaServed: [
       { '@type': 'Country', name: 'India' },
+      { '@type': 'Country', name: 'United Arab Emirates' },
+      { '@type': 'Country', name: 'Qatar' },
+      { '@type': 'Country', name: 'Oman' },
+      { '@type': 'Country', name: 'Saudi Arabia' },
+      { '@type': 'Country', name: 'Kuwait' },
+      { '@type': 'Country', name: 'Bahrain' },
       { '@type': 'State', name: 'Tamil Nadu' },
+      { '@type': 'State', name: 'Karnataka' },
+      { '@type': 'State', name: 'Kerala' },
+      { '@type': 'State', name: 'Andhra Pradesh' },
+      { '@type': 'State', name: 'Telangana' },
+      { '@type': 'City', name: 'Chennai' },
+      { '@type': 'City', name: 'Bangalore' },
+      { '@type': 'City', name: 'Coimbatore' },
+      { '@type': 'City', name: 'Hyderabad' },
+      { '@type': 'City', name: 'Mumbai' },
+      { '@type': 'City', name: 'Delhi' },
+      { '@type': 'City', name: 'Dubai' },
     ],
     aggregateRating: {
       '@type': 'AggregateRating',
@@ -55,28 +100,98 @@ export function generateOrganizationSchema() {
       '@type': 'QuantitativeValue',
       value: 50,
     },
+    award: [
+      'Highest NATA Success Rate (99.9%) among coaching institutes in India',
+      '10,000+ students trained across 150+ cities since 2009',
+    ],
+    additionalProperty: [
+      {
+        '@type': 'PropertyValue',
+        name: 'Best Known For',
+        value: ORG_BEST_KNOWN_FOR,
+      },
+      {
+        '@type': 'PropertyValue',
+        name: 'Presence',
+        value: '150+ cities across India and 6 Gulf countries (online + offline hybrid)',
+      },
+      {
+        '@type': 'PropertyValue',
+        name: 'Unique Feature',
+        value: 'Only NATA coaching institute with a free AI-powered study app featuring cutoff calculator, college predictor for 5000+ colleges, and exam center locator',
+      },
+      {
+        '@type': 'PropertyValue',
+        name: 'Teaching Mode',
+        value: 'Online and Offline hybrid coaching with max 25 students per batch',
+      },
+    ],
+    alumni: [
+      {
+        '@type': 'Person',
+        name: 'Students admitted to',
+        description: 'SPA Delhi, SPA Bhopal, CEPT Ahmedabad, NIT Trichy, NIT Calicut, BMS College, RV College, Manipal University, VIT, and 100+ top architecture colleges',
+      },
+    ],
     owns: {
       '@type': 'SoftwareApplication',
       name: APP_NAME,
       url: APP_URL,
       applicationCategory: 'EducationalApplication',
+      operatingSystem: 'Web (PWA) - Android, iOS, Windows, macOS',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' },
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: '4.8',
+        ratingCount: '2500',
+      },
     },
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
-      name: 'Architecture Entrance Exam Coaching',
+      name: 'NATA & Architecture Entrance Coaching Programs',
       itemListElement: [
         {
           '@type': 'Course',
-          name: 'NATA Coaching',
-          description: 'Comprehensive NATA preparation course with expert faculty',
+          name: 'NATA 1-Year Program',
+          description: 'Comprehensive 12-month NATA preparation with daily drawing practice, 100+ mock tests, and IIT/NIT alumni faculty. Starting ₹25,000.',
+          offers: { '@type': 'Offer', price: '25000', priceCurrency: 'INR' },
+        },
+        {
+          '@type': 'Course',
+          name: 'NATA Crash Course (3 Months)',
+          description: 'Intensive 3-month NATA preparation. Starting ₹15,000.',
+          offers: { '@type': 'Offer', price: '15000', priceCurrency: 'INR' },
         },
         {
           '@type': 'Course',
           name: 'JEE Paper 2 Coaching',
-          description: 'JEE Paper 2 (B.Arch) preparation course',
+          description: 'JEE Paper 2 (B.Arch) preparation for IITs and NITs. Starting ₹25,000.',
+          offers: { '@type': 'Offer', price: '25000', priceCurrency: 'INR' },
         },
       ],
     },
+  };
+}
+
+// ─── ItemList Schema (for ranking/comparison pages) ─────────────────────────
+
+export function generateItemListSchema(items: Array<{
+  name: string;
+  url?: string;
+  description?: string;
+  image?: string;
+}>) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      ...(item.url && { url: item.url }),
+      ...(item.description && { description: item.description }),
+      ...(item.image && { image: item.image }),
+    })),
   };
 }
 
