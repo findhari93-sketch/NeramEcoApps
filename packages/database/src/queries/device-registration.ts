@@ -25,9 +25,9 @@ import type {
 export async function registerDevice(
   client: TypedSupabaseClient,
   data: StudentRegisteredDeviceInsert
-): Promise<{ device: StudentRegisteredDevice | null; error: string | null }> {
-  // Check if category slot is already taken by a different fingerprint
-  const { data: existing } = await client
+): Promise<{ device: StudentRegisteredDevice | null; error: string | null; isLimitError?: boolean }> {
+  // Check if this category slot is already taken by an active device
+  const { data: existingByCategory } = await client
     .from('student_registered_devices')
     .select('id, device_fingerprint')
     .eq('user_id', data.user_id)
@@ -35,38 +35,72 @@ export async function registerDevice(
     .eq('is_active', true)
     .single();
 
-  if (existing && existing.device_fingerprint !== data.device_fingerprint) {
+  if (existingByCategory && existingByCategory.device_fingerprint !== data.device_fingerprint) {
+    // Different device already registered for this category
     return {
       device: null,
       error: `You already have a ${data.device_category} device registered. Please deregister it first.`,
+      isLimitError: true,
     };
   }
 
-  // Upsert: update if same fingerprint, insert if new
+  // Check if same fingerprint already exists (returning device)
+  const { data: existingByFingerprint } = await client
+    .from('student_registered_devices')
+    .select('*')
+    .eq('user_id', data.user_id)
+    .eq('device_fingerprint', data.device_fingerprint)
+    .eq('is_active', true)
+    .single();
+
+  if (existingByFingerprint) {
+    // Same device returning — update metadata and return
+    const { data: updated, error: updateError } = await client
+      .from('student_registered_devices')
+      .update({
+        device_name: data.device_name,
+        device_type: data.device_type,
+        browser: data.browser,
+        os: data.os,
+        os_version: data.os_version,
+        screen_width: data.screen_width,
+        screen_height: data.screen_height,
+        is_pwa: data.is_pwa,
+        last_seen_at: new Date().toISOString(),
+      })
+      .eq('id', existingByFingerprint.id)
+      .eq('user_id', data.user_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Failed to update device:', updateError);
+      return { device: null, error: 'Failed to update device.' };
+    }
+    return { device: updated as StudentRegisteredDevice, error: null };
+  }
+
+  // New device — insert
   const { data: device, error } = await client
     .from('student_registered_devices')
-    .upsert(
-      {
-        ...data,
-        is_active: true,
-        last_seen_at: new Date().toISOString(),
-        session_count: 1,
-      },
-      { onConflict: 'user_id,device_fingerprint' }
-    )
+    .insert({
+      ...data,
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
+      session_count: 1,
+    })
     .select()
     .single();
 
   if (error) {
     console.error('Failed to register device:', error);
-    // Check for unique constraint on category
     if (error.code === '23505') {
-      return { device: null, error: 'Device category slot is already taken.' };
+      return { device: null, error: 'Device category slot is already taken.', isLimitError: true };
     }
     return { device: null, error: 'Failed to register device.' };
   }
 
-  return { device, error: null };
+  return { device: device as StudentRegisteredDevice, error: null };
 }
 
 /**

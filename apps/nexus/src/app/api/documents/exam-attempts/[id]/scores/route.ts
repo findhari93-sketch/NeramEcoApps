@@ -26,7 +26,7 @@ export async function PATCH(
 
     // Validate the attempt belongs to the authenticated user
     const { data: attempt } = await (supabase as any)
-      .from('nexus_exam_attempts')
+      .from('nexus_student_exam_attempts')
       .select('id, student_id')
       .eq('id', id)
       .single();
@@ -52,7 +52,7 @@ export async function PATCH(
     if (total_score !== undefined) updateData.total_score = total_score;
 
     const { data, error } = await (supabase as any)
-      .from('nexus_exam_attempts')
+      .from('nexus_student_exam_attempts')
       .update(updateData)
       .eq('id', id)
       .select()

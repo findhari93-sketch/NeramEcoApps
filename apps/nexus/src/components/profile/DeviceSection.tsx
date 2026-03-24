@@ -18,7 +18,10 @@ interface RegisteredDevice {
   device_category: 'desktop' | 'mobile';
   device_name: string | null;
   os: string | null;
+  os_version: string | null;
   browser: string | null;
+  screen_width: number | null;
+  screen_height: number | null;
   last_seen_at: string;
   total_active_seconds: number;
   last_city: string | null;
@@ -228,13 +231,34 @@ function DeviceSlot({
         </Box>
 
         {device ? (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-            {device.os && (
-              <Chip label={device.os} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-            )}
-            {device.browser && (
-              <Chip label={device.browser} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-            )}
+          <Box sx={{ mt: 0.5 }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {device.os && (
+                <Chip
+                  label={device.os_version ? `${device.os} ${device.os_version}` : device.os}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 20, fontSize: 11 }}
+                />
+              )}
+              {device.browser && (
+                <Chip label={device.browser} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+              )}
+              {device.screen_width && device.screen_height && (
+                <Chip
+                  label={`${device.screen_width}x${device.screen_height}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 20, fontSize: 11 }}
+                />
+              )}
+            </Box>
+            <Typography
+              variant="caption"
+              sx={{ fontSize: 10, color: 'text.disabled', fontFamily: 'monospace', mt: 0.3, display: 'block' }}
+            >
+              ID: {device.device_fingerprint.slice(0, 12)}
+            </Typography>
           </Box>
         ) : (
           <Typography variant="caption" color="text.disabled">

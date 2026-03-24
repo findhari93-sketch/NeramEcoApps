@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Register the device
-    const { device, error } = await registerDevice(supabase, {
+    const { device, error, isLimitError } = await registerDevice(supabase, {
       user_id: user.id,
       device_fingerprint: fingerprint,
       device_category: deviceCategory,
@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error }, { status: 409 });
+      // 409 only for limit/conflict errors, 500 for other failures
+      return NextResponse.json({ error }, { status: isLimitError ? 409 : 500 });
     }
 
     // Increment session count for returning devices

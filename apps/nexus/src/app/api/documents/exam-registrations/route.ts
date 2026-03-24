@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const { data, error } = await (supabase as any)
-      .from('nexus_exam_registrations')
+      .from('nexus_student_exam_registrations')
       .select('*')
       .eq('student_id', user.id)
       .eq('classroom_id', classroomId);
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await (supabase as any)
-      .from('nexus_exam_registrations')
+      .from('nexus_student_exam_registrations')
       .upsert(
         {
           student_id: user.id,

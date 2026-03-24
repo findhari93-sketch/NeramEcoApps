@@ -85,7 +85,7 @@ export default function ExamSelectionPanel({ classroomId, getToken }: ExamSelect
       }
       if (datesRes.ok) {
         const data = await datesRes.json();
-        setExamDates(data.dates || []);
+        setExamDates(data.exam_dates || []);
       }
     } catch (err) {
       console.error('Failed to fetch exam data:', err);
