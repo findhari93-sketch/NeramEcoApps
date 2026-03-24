@@ -6,7 +6,7 @@ import { getSupabaseAdminClient, rewriteStorageUrl } from '@neram/database';
  * POST /api/question-bank/upload-image
  *
  * Upload a question/option image to Supabase storage.
- * Body: FormData with 'file' field.
+ * Body: FormData with 'file' field and optional 'subfolder' (e.g. 'options').
  * Returns: { url, path }
  */
 export async function POST(request: NextRequest) {
@@ -46,7 +46,11 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split('.').pop() || 'png';
     const timestamp = Date.now();
     const random = Math.random().toString(36).slice(2, 8);
-    const filePath = `nexus/question-bank/${user.id}/${timestamp}_${random}.${ext}`;
+    const subfolder = (formData.get('subfolder') as string | null) || '';
+    const basePath = subfolder
+      ? `nexus/question-bank/${user.id}/${subfolder}`
+      : `nexus/question-bank/${user.id}`;
+    const filePath = `${basePath}/${timestamp}_${random}.${ext}`;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);

@@ -33,8 +33,10 @@ import {
   QB_CATEGORY_LABELS,
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestion } from '@neram/database';
+import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
 import AnswerKeyGrid from '@/components/question-bank/AnswerKeyGrid';
+import { questionNeedsImage } from '@/components/question-bank/AnswerKeyGrid';
 import HindiMergeDialog from '@/components/question-bank/HindiMergeDialog';
 
 export default function PaperDetailPage() {
@@ -227,6 +229,7 @@ export default function PaperDetailPage() {
   const completeCount = questions.filter((q) => q.status === 'complete' || q.status === 'answer_keyed').length;
   const activeCount = questions.filter((q) => q.status === 'active' && q.is_active).length;
   const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
+  const needsImageCount = questions.filter(questionNeedsImage).length;
 
   // Section breakdown
   const sectionBreakdown: Record<string, number> = {};
@@ -282,6 +285,21 @@ export default function PaperDetailPage() {
         <Typography variant="body2" sx={{ mt: 1 }}>
           {total} total &middot; {keyed} with answers &middot; {complete} complete{activeCount > 0 ? ` \u00b7 ${activeCount} active` : ''}
         </Typography>
+        {needsImageCount > 0 && (
+          <Chip
+            icon={<ImageNotSupportedOutlinedIcon sx={{ fontSize: 14 }} />}
+            label={`${needsImageCount} need images`}
+            size="small"
+            sx={{
+              mt: 1,
+              bgcolor: '#F59E0B20',
+              color: '#D97706',
+              fontWeight: 600,
+              fontSize: '0.75rem',
+              '& .MuiChip-icon': { color: '#D97706' },
+            }}
+          />
+        )}
 
         {/* Section breakdown */}
         {Object.keys(sectionBreakdown).length > 0 && (
@@ -405,6 +423,21 @@ export default function PaperDetailPage() {
                     fontSize: '0.7rem',
                   }}
                 />
+                {questionNeedsImage(q) && (
+                  <Chip
+                    icon={<ImageNotSupportedOutlinedIcon sx={{ fontSize: 12 }} />}
+                    label="No Image"
+                    size="small"
+                    sx={{
+                      bgcolor: '#F59E0B20',
+                      color: '#D97706',
+                      fontWeight: 600,
+                      fontSize: '0.6rem',
+                      height: 20,
+                      '& .MuiChip-icon': { color: '#D97706' },
+                    }}
+                  />
+                )}
                 <Box sx={{ flex: 1 }} />
                 <Typography
                   variant="caption"

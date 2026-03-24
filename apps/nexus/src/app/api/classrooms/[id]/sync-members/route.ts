@@ -24,7 +24,7 @@ export async function POST(
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (!user || !['teacher', 'admin'].includes(user.user_type || '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

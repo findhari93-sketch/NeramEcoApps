@@ -21,6 +21,7 @@ import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import { useQBAccess } from '@/hooks/useQBAccess';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
+import DeviceRegistrationProvider from '@/components/DeviceRegistrationProvider';
 
 const QB_PATH = '/student/question-bank';
 
@@ -131,7 +132,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               }}
             >
               <Container maxWidth="lg" disableGutters>
-                {children}
+                <DeviceRegistrationProvider>
+                  {children}
+                </DeviceRegistrationProvider>
               </Container>
             </Box>
             <BottomNav items={bottomNavItems} overflowItems={overflowItems} />

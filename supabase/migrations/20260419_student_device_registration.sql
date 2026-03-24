@@ -41,11 +41,17 @@ CREATE TABLE IF NOT EXISTS student_registered_devices (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
 
-  -- Only one fingerprint per user
-  UNIQUE(user_id, device_fingerprint),
-  -- Only one device per category per user
-  UNIQUE(user_id, device_category)
 );
+
+-- Partial unique indexes: only enforce among active devices
+-- Allows deregistered devices to remain as history without blocking new registrations
+CREATE UNIQUE INDEX IF NOT EXISTS student_registered_devices_active_fingerprint_idx
+  ON student_registered_devices(user_id, device_fingerprint)
+  WHERE is_active = true;
+
+CREATE UNIQUE INDEX IF NOT EXISTS student_registered_devices_active_category_idx
+  ON student_registered_devices(user_id, device_category)
+  WHERE is_active = true;
 
 CREATE INDEX IF NOT EXISTS idx_registered_devices_user ON student_registered_devices(user_id);
 CREATE INDEX IF NOT EXISTS idx_registered_devices_category ON student_registered_devices(device_category);

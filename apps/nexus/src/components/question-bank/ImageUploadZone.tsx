@@ -21,6 +21,8 @@ interface ImageUploadZoneProps {
   getToken: () => Promise<string | null>;
   /** Listen for paste events on the whole document */
   enableGlobalPaste?: boolean;
+  /** Optional subfolder in storage path (e.g. 'options') */
+  subfolder?: string;
 }
 
 /**
@@ -54,6 +56,7 @@ export default function ImageUploadZone({
   height = 120,
   getToken,
   enableGlobalPaste = false,
+  subfolder,
 }: ImageUploadZoneProps) {
   const theme = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +100,7 @@ export default function ImageUploadZone({
 
       const formData = new FormData();
       formData.append('file', file);
+      if (subfolder) formData.append('subfolder', subfolder);
 
       const res = await fetch('/api/question-bank/upload-image', {
         method: 'POST',
@@ -120,7 +124,7 @@ export default function ImageUploadZone({
     } finally {
       setUploading(false);
     }
-  }, [getToken, onChange]);
+  }, [getToken, onChange, subfolder]);
 
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;

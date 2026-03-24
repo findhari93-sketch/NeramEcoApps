@@ -12,16 +12,29 @@ import {
   MenuItem,
   CircularProgress,
   IconButton,
+  Tooltip,
   useTheme,
   useMediaQuery,
 } from '@neram/ui';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
 import MathText from '@/components/common/MathText';
 import AnswerKeyUpload from './AnswerKeyUpload';
+
+const IMAGE_KEYWORDS = /figure|image|diagram|picture|given below|shown below|problem figure|shown in|refer to|look at the/i;
+
+export function questionNeedsImage(q: NexusQBQuestion): boolean {
+  if (q.question_image_url) return false;
+  if (q.question_format === 'IMAGE_BASED') return true;
+  if (q.question_text && IMAGE_KEYWORDS.test(q.question_text)) return true;
+  const opts = q.options as { id: string; text: string; image_url?: string }[] | null;
+  if (opts?.some((o) => IMAGE_KEYWORDS.test(o.text || '') && !o.image_url)) return true;
+  return false;
+}
 
 interface AnswerKeyGridProps {
   questions: NexusQBQuestion[];
@@ -141,6 +154,7 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
                 const isDrawing = q.question_format === 'DRAWING_PROMPT';
                 const currentAnswer = answers[qNum] || '';
                 const isExpanded = expandedRows.has(qNum);
+                const needsImage = questionNeedsImage(q);
 
                 return (
                   <Paper key={q.id} variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
@@ -153,6 +167,21 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
                         {q.question_format}
                       </Typography>
                       <Box sx={{ flex: 1 }} />
+                      {needsImage && (
+                        <Chip
+                          icon={<ImageNotSupportedOutlinedIcon sx={{ fontSize: 14 }} />}
+                          label="No Image"
+                          size="small"
+                          sx={{
+                            bgcolor: '#F59E0B20',
+                            color: '#D97706',
+                            fontWeight: 600,
+                            fontSize: '0.6rem',
+                            height: 20,
+                            '& .MuiChip-icon': { color: '#D97706' },
+                          }}
+                        />
+                      )}
                       <Chip
                         label={QB_QUESTION_STATUS_LABELS[q.status] || q.status}
                         size="small"
@@ -264,13 +293,21 @@ export default function AnswerKeyGrid({ questions, onSave, saving }: AnswerKeyGr
                     const isDrawing = q.question_format === 'DRAWING_PROMPT';
                     const currentAnswer = answers[qNum] || '';
                     const isExpanded = expandedRows.has(qNum);
+                    const needsImage = questionNeedsImage(q);
 
                     return (
                       <tr key={q.id}>
                         <td>
-                          <Typography variant="body2" fontWeight={500}>
-                            {qNum}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="body2" fontWeight={500}>
+                              {qNum}
+                            </Typography>
+                            {needsImage && (
+                              <Tooltip title="Image not uploaded — this question references a figure" arrow>
+                                <ImageNotSupportedOutlinedIcon sx={{ fontSize: 16, color: '#D97706' }} />
+                              </Tooltip>
+                            )}
+                          </Box>
                         </td>
                         <td>
                           {q.question_text ? (

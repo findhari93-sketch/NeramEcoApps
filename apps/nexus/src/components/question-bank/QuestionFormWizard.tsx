@@ -23,6 +23,7 @@ import {
   useTheme,
   useMediaQuery,
   IconButton,
+  Switch,
 } from '@neram/ui';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -64,6 +65,7 @@ interface FormData {
   question_text_hi: string;
   question_image?: ImageState;
   options: NexusQBQuestionOption[];
+  option_images: Record<string, ImageState | undefined>;
   correct_option_id: string;
   correct_answer: string;
   answer_tolerance: string;
@@ -112,6 +114,10 @@ function getInitialFormData(
     options: initialData?.options?.length
       ? initialData.options
       : [createDefaultOption(0), createDefaultOption(1), createDefaultOption(2), createDefaultOption(3)],
+    option_images: (initialData?.options ?? []).reduce<Record<string, ImageState | undefined>>((acc, opt) => {
+      if (opt.image_url) acc[opt.id] = { url: opt.image_url, uploaded: true };
+      return acc;
+    }, {}),
     correct_option_id: initialData?.correct_answer ?? '',
     correct_answer: initialData?.correct_answer ?? '',
     answer_tolerance: initialData?.answer_tolerance ? String(initialData.answer_tolerance) : '',
@@ -183,6 +189,9 @@ export default function QuestionFormWizard({
 
   const [activeStep, setActiveStep] = useState(0);
   const [form, setForm] = useState<FormData>(() => getInitialFormData(initialData, sources));
+  const [optionImagesEnabled, setOptionImagesEnabled] = useState(
+    () => initialData?.options?.some((o) => !!o.image_url) ?? false
+  );
 
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -219,9 +228,19 @@ export default function QuestionFormWizard({
 
   const handleRemoveOption = (idx: number) => {
     setForm((prev) => {
+      const removed = prev.options[idx];
       const next = prev.options.filter((_, i) => i !== idx);
-      return { ...prev, options: next };
+      const nextImages = { ...prev.option_images };
+      if (removed) delete nextImages[removed.id];
+      return { ...prev, options: next, option_images: nextImages };
     });
+  };
+
+  const handleOptionImageChange = (optionId: string, image: ImageState | undefined) => {
+    setForm((prev) => ({
+      ...prev,
+      option_images: { ...prev.option_images, [optionId]: image },
+    }));
   };
 
   const toggleCategory = (cat: string) => {
@@ -242,7 +261,15 @@ export default function QuestionFormWizard({
       question_text_hi: form.question_text_hi || null,
       question_image_url: form.question_image?.uploaded ? form.question_image.url : null,
       question_format: form.question_format,
-      options: form.question_format === 'MCQ' ? form.options : null,
+      options: form.question_format === 'MCQ'
+        ? form.options.map((opt) => {
+            const img = form.option_images[opt.id];
+            return {
+              ...opt,
+              image_url: img?.uploaded ? img.url : opt.image_url || undefined,
+            };
+          })
+        : null,
       correct_answer:
         form.question_format === 'MCQ' ? form.correct_option_id : form.correct_answer,
       answer_tolerance:
@@ -421,20 +448,33 @@ export default function QuestionFormWizard({
 
             {form.question_format === 'MCQ' && (
               <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
-                  Options (select correct answer)
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Typography variant="subtitle2" fontWeight={600}>
+                    Options (select correct answer)
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={optionImagesEnabled}
+                        onChange={(e) => setOptionImagesEnabled(e.target.checked)}
+                      />
+                    }
+                    label={<Typography variant="caption" color="text.secondary">Options have images</Typography>}
+                    sx={{ mr: 0 }}
+                  />
+                </Box>
                 {form.options.map((opt, idx) => (
                   <Box
                     key={opt.id}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}
+                    sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1.5 }}
                   >
                     <Radio
                       checked={form.correct_option_id === opt.id}
                       onChange={() => updateField('correct_option_id', opt.id)}
                       value={opt.id}
                       size="small"
-                      sx={{ p: 0.5 }}
+                      sx={{ p: 0.5, mt: 0.5 }}
                     />
                     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                       <TextField
@@ -456,13 +496,23 @@ export default function QuestionFormWizard({
                           '& .MuiOutlinedInput-root': { minHeight: 36 },
                         }}
                       />
+                      {optionImagesEnabled && (
+                        <ImageUploadZone
+                          image={form.option_images[opt.id]}
+                          onChange={(img) => handleOptionImageChange(opt.id, img)}
+                          label={`Option ${String.fromCharCode(65 + idx)} image`}
+                          height={100}
+                          getToken={getToken}
+                          subfolder="options"
+                        />
+                      )}
                     </Box>
                     {form.options.length > 2 && (
                       <IconButton
                         size="small"
                         onClick={() => handleRemoveOption(idx)}
                         aria-label={`Remove option ${String.fromCharCode(65 + idx)}`}
-                        sx={{ minWidth: 36, minHeight: 36 }}
+                        sx={{ minWidth: 36, minHeight: 36, mt: 0.5 }}
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>

@@ -196,7 +196,7 @@ async function fetchGroupCalendarView(
     `&$select=id,subject,start,end,onlineMeeting,organizer,body,isOnlineMeeting`;
 
   while (url && events.length < 100) {
-    const res = await fetch(url, {
+    const res: Response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Prefer: 'outlook.timezone="Asia/Kolkata"',

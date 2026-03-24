@@ -262,7 +262,7 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           display: { xs: 'none', md: 'flex' },
           flexDirection: 'column',
           width: currentWidth,
-          minHeight: '100vh',
+          height: '100vh',
           position: 'fixed',
           top: 0,
           left: 0,
