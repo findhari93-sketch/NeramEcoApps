@@ -6227,3 +6227,91 @@ export interface ExamRecallDashboardStats {
   total_contributors: number;
   sessions: ExamRecallSessionSummary[];
 }
+
+// ============================================
+// REVIEW CAMPAIGN TYPES
+// ============================================
+
+export type ReviewPlatform = 'google' | 'sulekha' | 'justdial';
+export type ReviewCampaignStatus = 'draft' | 'active' | 'paused' | 'completed';
+export type ReviewStudentStatus = 'pending' | 'sent' | 'clicked' | 'completed' | 'skipped';
+export type ReviewChannel = 'whatsapp' | 'email' | 'in_app';
+
+export interface ReviewPlatformUrl {
+  id: string;
+  center_id: string;
+  platform: ReviewPlatform;
+  review_url: string;
+  display_name: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewCampaign {
+  id: string;
+  name: string;
+  description: string | null;
+  target_city: string | null;
+  target_center_id: string | null;
+  platforms: ReviewPlatform[];
+  channels: ReviewChannel[];
+  status: ReviewCampaignStatus;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewCampaignStudent {
+  id: string;
+  campaign_id: string;
+  student_id: string;
+  platform: ReviewPlatform;
+  status: ReviewStudentStatus;
+  sent_at: string | null;
+  clicked_at: string | null;
+  completed_at: string | null;
+  screenshot_url: string | null;
+  reminder_count: number;
+  last_reminder_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// Joined types for UI
+export interface ReviewCampaignWithStats extends ReviewCampaign {
+  total_students: number;
+  sent_count: number;
+  completed_count: number;
+  creator_name: string | null;
+}
+
+export interface ReviewCampaignStudentWithUser extends ReviewCampaignStudent {
+  student_name: string;
+  student_email: string | null;
+  student_phone: string | null;
+  student_avatar: string | null;
+  student_city: string | null;
+}
+
+// City-wise student aggregation
+export interface CityStudentCount {
+  city: string;
+  student_count: number;
+  state: string | null;
+}
+
+export interface CityStudent {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  user_type: UserType;
+  city: string | null;
+  state: string | null;
+  course_name: string | null;
+  enrolled_at: string | null;
+}
