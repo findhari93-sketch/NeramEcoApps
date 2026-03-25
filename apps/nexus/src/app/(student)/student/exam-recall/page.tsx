@@ -135,7 +135,7 @@ export default function ExamRecallPage() {
       fetchCheckpoint();
     } else {
       // Past year: no checkpoint needed, auto-unlock
-      setCheckpoint({ is_unlocked: true, drawing_count: 0, aptitude_count: 0 } as ExamRecallCheckpointStatus);
+      setCheckpoint({ is_unlocked: true, checkpoint: null, drawing_remaining: 0, aptitude_remaining: 0 } as ExamRecallCheckpointStatus);
     }
     fetchThreads();
     fetchTips();

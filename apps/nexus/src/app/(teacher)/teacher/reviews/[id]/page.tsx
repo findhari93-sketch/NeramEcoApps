@@ -60,7 +60,7 @@ interface CampaignStudent {
   student_city: string | null;
 }
 
-const STATUS_ICONS: Record<string, React.ReactNode> = {
+const STATUS_ICONS: Record<string, React.ReactElement> = {
   pending: <PendingOutlinedIcon sx={{ fontSize: 16 }} />,
   sent: <MarkEmailReadOutlinedIcon sx={{ fontSize: 16 }} />,
   clicked: <MarkEmailReadOutlinedIcon sx={{ fontSize: 16, color: 'info.main' }} />,
