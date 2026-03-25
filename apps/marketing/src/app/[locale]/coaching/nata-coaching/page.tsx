@@ -283,9 +283,30 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
               NATA Coaching Centers
             </Typography>
-            <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-              Find NATA coaching near you - Available in 90+ cities
+            <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 4 }}>
+              Find NATA coaching near you - Available in 150+ cities
             </Typography>
+
+            {/* Featured: Chennai Flagship */}
+            <Card elevation={0} sx={{ border: '2px solid #e8a020', mb: 4, maxWidth: 600, mx: 'auto' }}>
+              <CardContent sx={{ p: 3, textAlign: 'center' }}>
+                <Chip label="Flagship Center • Since 2009" color="warning" size="small" sx={{ mb: 1 }} />
+                <Typography variant="h3" sx={{ fontSize: '1.2rem', fontWeight: 700, mb: 1 }}>
+                  Chennai — Our Flagship NATA Coaching Center
+                </Typography>
+                <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem', mb: 2 }}>
+                  PT Rajan Road, Ashok Nagar • Online + Offline • Max 25 per batch • Serving Anna Nagar, Adyar, Tambaram, T. Nagar, Velachery & all neighborhoods
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <Button component={Link} href="/coaching/best-nata-coaching-chennai" variant="contained" size="small" sx={{ bgcolor: '#e8a020', '&:hover': { bgcolor: '#d09010' }, fontWeight: 600 }}>
+                    Chennai Center Details
+                  </Button>
+                  <Button component={Link} href="/coaching/nata-coaching-chennai" variant="outlined" size="small" sx={{ fontWeight: 600 }}>
+                    Browse Chennai Neighborhoods
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2 }}>
               {popularCities.map((city, index) => (

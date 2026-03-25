@@ -22,6 +22,9 @@ import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
+import LocationCityOutlinedIcon from '@mui/icons-material/LocationCityOutlined';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -79,6 +82,8 @@ const PANELS: PanelConfig[] = [
     sidebarItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
+      { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
+      { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
@@ -99,6 +104,8 @@ const PANELS: PanelConfig[] = [
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
     ],
     overflowItems: [
+      { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
+      { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
@@ -119,10 +126,12 @@ const PANELS: PanelConfig[] = [
     defaultPath: '/teacher/admin/users',
     sidebarItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
+      { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
     bottomNavItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
+      { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
     overflowItems: [],
@@ -143,6 +152,10 @@ function detectPanelFromPath(pathname: string): PanelId | null {
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
+  // City-wise student pages
+  if (pathname.startsWith('/teacher/students/city-wise')) return 'management';
+  // Review campaign pages
+  if (pathname.startsWith('/teacher/reviews')) return 'management';
   // Foundation pages are still accessible via Module Library (management panel)
   if (pathname.startsWith('/teacher/foundation')) return 'management';
   // Library pages (review, engagement, collections)

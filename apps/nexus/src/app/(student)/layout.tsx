@@ -14,6 +14,7 @@ import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -53,6 +54,7 @@ const allStudentNavGroups = [
     label: 'Manage',
     items: [
       { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
+      { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
       { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
     ],
   },
@@ -73,6 +75,7 @@ const allOverflowItems = [
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },
   { label: 'Recall', path: '/student/exam-recall', icon: <HistoryEduOutlinedIcon /> },
   { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
+  { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
