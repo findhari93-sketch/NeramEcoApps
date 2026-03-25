@@ -47,11 +47,18 @@ const chennaiSchema = {
   email: ORG_EMAIL,
   address: {
     '@type': 'PostalAddress',
+    streetAddress: 'PT Rajan Road, Sector 13, Ashok Nagar',
     addressLocality: 'Chennai',
     addressRegion: 'Tamil Nadu',
+    postalCode: '600083',
     addressCountry: 'IN',
   },
-  sameAs: SOCIAL_PROFILES,
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: 13.0382,
+    longitude: 80.2120,
+  },
+  sameAs: [...SOCIAL_PROFILES, 'https://share.google/CUC4sm7hWYHZEajn7'],
   areaServed: [
     { '@type': 'City', name: 'Chennai' },
     { '@type': 'City', name: 'Kanchipuram' },
@@ -63,7 +70,7 @@ const chennaiSchema = {
   aggregateRating: {
     '@type': 'AggregateRating',
     ratingValue: '4.9',
-    reviewCount: '800',
+    reviewCount: '50',
     bestRating: '5',
     worstRating: '1',
   },
@@ -168,7 +175,7 @@ const faqs = [
   {
     question: 'Where is Neram Classes located in Chennai?',
     answer:
-      'Neram Classes Chennai is centrally located and easily accessible by public transport. For students who prefer online coaching, live interactive classes are available from anywhere in Chennai and surrounding areas including Kanchipuram, Chengalpattu, Tiruvallur, Vellore, and Pondicherry.',
+      'Neram Classes flagship Chennai center is at PT Rajan Road, Sector 13, Ashok Nagar, Chennai 600083 — a 5-minute walk from Ashok Nagar Metro Station (Blue Line). We also have a sub-center at Tambaram (Thiruneermalai, Jain Alpine Meadows). We serve students from Anna Nagar (7 km), T. Nagar (3 km), Adyar (8 km), Velachery (12 km), Tambaram (22 km), and all Chennai neighborhoods through our hybrid online-offline model. Students from Kanchipuram, Chengalpattu, Tiruvallur, Vellore, and Pondicherry also attend.',
   },
 ];
 
@@ -294,7 +301,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
               { value: '99.9%', label: 'Students Clear NATA' },
               { value: '70%+', label: 'Score Above 120' },
               { value: '50+', label: 'Top Colleges Placed' },
-              { value: '800+', label: 'Chennai Reviews (4.9/5)' },
+              { value: '50+', label: 'Chennai Reviews (4.9/5)' },
             ].map((stat, i) => (
               <Card key={i} elevation={0} sx={{ border: '1px solid #e0e0e0', py: 3 }}>
                 <Typography sx={{ fontSize: '1.75rem', fontWeight: 800, color: '#e8a020' }}>{stat.value}</Typography>
@@ -336,6 +343,114 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
                   </Button>
                 </CardContent>
               </Card>
+            ))}
+          </Box>
+        </Container>
+      </Box>
+
+      {/* Serving All Chennai Neighborhoods */}
+      <Box sx={{ py: { xs: 5, md: 7 }, bgcolor: '#f8f9fa' }}>
+        <Container maxWidth="lg">
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, fontWeight: 700, mb: 1, color: '#1a1a2e' }}>
+            Serving All Chennai Neighborhoods
+          </Typography>
+          <Typography sx={{ color: '#666', mb: 3 }}>
+            Our Ashok Nagar center + live online classes cover every part of Chennai
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+            {[
+              { name: 'Anna Nagar', dist: '7 km', slug: 'anna-nagar' },
+              { name: 'Adyar', dist: '8 km', slug: 'adyar' },
+              { name: 'Tambaram', dist: '22 km (sub-center)', slug: 'tambaram' },
+              { name: 'Ashok Nagar', dist: 'Center here', slug: 'ashok-nagar' },
+              { name: 'Velachery', dist: '12 km', slug: 'velachery' },
+              { name: 'T. Nagar', dist: '3 km', slug: 't-nagar' },
+            ].map((area) => (
+              <Card key={area.slug} elevation={0} sx={{ border: '1px solid #e0e0e0', '&:hover': { borderColor: '#e8a020' }, transition: 'border-color 0.2s' }}>
+                <CardContent component={Link} href={`/coaching/nata-coaching-chennai/${area.slug}`} sx={{ p: 2, display: 'block', textDecoration: 'none', color: 'inherit' }}>
+                  <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a2e' }}>
+                    {area.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: '#e8a020', fontWeight: 600 }}>
+                    {area.dist}
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+          <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {['OMR', 'Porur', 'Guindy', 'Chromepet', 'Saidapet', 'K.K. Nagar', 'West Mambalam', 'Sholinganallur', 'Mylapore', 'Nungambakkam'].map((area) => (
+              <Chip key={area} label={area} variant="outlined" size="small" />
+            ))}
+            <Chip label="+ more neighborhoods" variant="outlined" size="small" color="warning" />
+          </Box>
+          <Button component={Link} href="/coaching/nata-coaching-chennai" variant="text" sx={{ mt: 2, color: '#e8a020', fontWeight: 600 }}>
+            View all Chennai neighborhoods →
+          </Button>
+        </Container>
+      </Box>
+
+      {/* Center Location & Landmarks */}
+      <Box sx={{ py: { xs: 5, md: 7 } }}>
+        <Container maxWidth="lg">
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, fontWeight: 700, mb: 3, color: '#1a1a2e' }}>
+            Our Chennai Center
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+            <Card elevation={0} sx={{ border: '2px solid #e8a020' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Chip label="Flagship Center" color="warning" size="small" sx={{ mb: 1.5 }} />
+                <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>
+                  Neram Classes — Ashok Nagar, Chennai
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.95rem', mb: 1 }}>
+                  PT Rajan Road, Sector 13, Ashok Nagar, Chennai 600083
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>
+                  5 min walk from Ashok Nagar Metro Station (Blue Line)
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>
+                  Mon-Fri: 9 AM — 6 PM | Sat: 9 AM — 2 PM
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 1.5 }}>
+                  Phone: +91-9176137043
+                </Typography>
+                <Button component={Link} href="/demo-class" variant="contained" sx={{ bgcolor: '#e8a020', '&:hover': { bgcolor: '#d09010' }, fontWeight: 600 }}>
+                  Book Visit / Demo Class
+                </Button>
+              </CardContent>
+            </Card>
+            <Card elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Chip label="Sub-Center" size="small" sx={{ mb: 1.5 }} />
+                <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>
+                  Neram Classes — Tambaram
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.95rem', mb: 1 }}>
+                  Thiruneermalai, Jain Alpine Meadows, Tambaram, Chennai
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>
+                  Serving: Tambaram, Chengalpattu, Kanchipuram, ECR
+                </Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.9rem' }}>
+                  Near Tambaram Railway Station
+                </Typography>
+              </CardContent>
+            </Card>
+          </Box>
+
+          <Typography variant="h3" sx={{ fontSize: '1.1rem', fontWeight: 700, mt: 4, mb: 2, color: '#1a1a2e' }}>
+            Architecture Colleges in Chennai (Accepting NATA Scores)
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {[
+              'School of Architecture & Planning, Anna University (Govt)',
+              'MEASI Academy of Architecture',
+              'SRM School of Architecture',
+              'Hindustan Institute of Technology',
+              'B.S. Abdur Rahman Crescent University',
+            ].map((college, i) => (
+              <Chip key={i} label={college} variant="outlined" size="small" />
             ))}
           </Box>
         </Container>

@@ -101,6 +101,13 @@ export default function HomePage({
             Most NATA coaching institutes are limited to a single city or region. Neram Classes operates across 150+ cities with a hybrid model. Most institutes rely on pre-recorded videos or large batch sizes of 50-100+ students — Neram limits batches to 25 students with live interactive classes. No other NATA coaching offers a free AI-powered study app with college prediction for 5,000+ colleges. Our fee structure (starting ₹15,000 for crash course, ₹25,000 for 1-year program) is competitive while offering significantly more value — including free tools, multi-language support, and 24/7 doubt resolution. With 17+ years of experience, 10,000+ students trained, and a 99.9% success rate, Neram Classes is the clear choice for NATA 2026 preparation.
           </p>
 
+          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>
+            Our Flagship Centers
+          </h3>
+          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '0', maxWidth: '800px' }}>
+            Visit our flagship <a href="/coaching/best-nata-coaching-chennai" style={{ color: '#e8a020', textDecoration: 'underline' }}>NATA coaching center in Chennai</a> (Ashok Nagar — since 2009), our headquarters in Bangalore (Electronic City), and centers in Coimbatore. Our <a href="/coaching/nata-coaching-chennai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Chennai neighborhood pages</a> cover Anna Nagar, Adyar, Tambaram, T. Nagar, Velachery, and more. Compare us with other institutes on our <a href="/coaching/best-nata-coaching-india" style={{ color: '#e8a020', textDecoration: 'underline' }}>Best NATA Coaching in India</a> page.
+          </p>
+
         </div>
       </section>
     </>
