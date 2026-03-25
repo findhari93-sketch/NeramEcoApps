@@ -33,6 +33,15 @@ export async function GET(request: NextRequest) {
         .in('status', ['open', 'in_progress']);
 
       badges.issues = count ?? 0;
+
+      // Count pending onboarding reviews (submitted, not yet approved/rejected)
+      const db = supabase as any;
+      const { count: onboardingCount } = await db
+        .from('nexus_student_onboarding')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'submitted');
+
+      badges.onboarding = onboardingCount ?? 0;
     } else {
       // Student: count their own open + in_progress issues
       const { count } = await supabase

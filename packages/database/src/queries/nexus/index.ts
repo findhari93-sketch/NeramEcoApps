@@ -20,3 +20,4 @@ export * from './documents';
 export * from './library';
 export * from './library-engagement';
 export * from './exam-recall';
+export * from './onboarding';

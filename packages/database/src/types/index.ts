@@ -4414,7 +4414,7 @@ export interface NexusStudentTopicProgress {
 // ============================================
 
 export type DocumentStandard = '10th' | '11th' | '12th' | 'gap_year';
-export type DocumentCategory = 'identity' | 'academic' | 'exam' | 'photo' | 'other' | 'aadhaar' | 'marksheet' | 'hall_ticket';
+export type DocumentCategory = 'identity' | 'academic' | 'exam' | 'photo' | 'other';
 export type DocumentStatus = 'pending' | 'verified' | 'rejected';
 export type ExamPlanState = 'still_thinking' | 'planning_to_write' | 'applied' | 'completed';
 export type ExamPlanType = 'nata' | 'jee';
@@ -4435,6 +4435,7 @@ export interface NexusDocumentTemplate {
   sort_order: number;
   is_active: boolean;
   created_by: string | null;
+  is_onboarding_required: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -4447,6 +4448,9 @@ export interface NexusStudentExamPlan {
   state: ExamPlanState;
   application_number: string | null;
   notes: string | null;
+  last_prompted_at: string | null;
+  next_prompt_at: string | null;
+  prompt_snooze_until: string | null;
   updated_at: string;
   created_at: string;
 }
@@ -4553,6 +4557,35 @@ export interface NexusExamBroadcast {
   message: string | null;
   sent_by: string;
   created_at: string;
+}
+
+// ============================================
+// NEXUS STUDENT ONBOARDING TYPES
+// ============================================
+
+export type OnboardingStep = 'welcome' | 'documents' | 'student_info' | 'exam_status' | 'device_setup' | 'pending_review';
+export type OnboardingStatus = 'in_progress' | 'submitted' | 'approved' | 'rejected';
+
+export interface NexusStudentOnboarding {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  current_step: OnboardingStep;
+  current_standard: DocumentStandard | null;
+  academic_year: string | null;
+  status: OnboardingStatus;
+  submitted_at: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  last_nudge_at: string | null;
+  nudge_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusStudentOnboardingWithStudent extends NexusStudentOnboarding {
+  student: Pick<User, 'id' | 'name' | 'email' | 'avatar_url'>;
 }
 
 // Nexus joined types for queries

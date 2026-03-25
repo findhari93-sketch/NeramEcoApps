@@ -76,6 +76,23 @@ export async function GET(request: NextRequest) {
           ? 'teacher'
           : 'student';
 
+    // Check onboarding status for students
+    let onboardingStatus: string | null = null;
+    if (nexusRole === 'student' && enrollments && enrollments.length > 0) {
+      const firstClassroom = enrollments[0].classroom;
+      if (firstClassroom) {
+        const db = supabase as any;
+        const { data: onboarding } = await db
+          .from('nexus_student_onboarding')
+          .select('status')
+          .eq('student_id', user.id)
+          .eq('classroom_id', firstClassroom.id)
+          .single();
+
+        onboardingStatus = onboarding?.status || null;
+      }
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -86,6 +103,7 @@ export async function GET(request: NextRequest) {
         user_type: user.user_type,
       },
       nexusRole,
+      onboardingStatus,
       classrooms: (enrollments || []).map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,

@@ -27,6 +27,8 @@ interface NexusClassroom {
 
 type NexusRole = 'admin' | 'teacher' | 'student' | 'parent';
 
+type OnboardingStatus = 'in_progress' | 'submitted' | 'approved' | 'rejected' | null;
+
 interface NexusAuthState {
   // MS auth state
   msUser: ReturnType<typeof useMicrosoftAuth>['user'];
@@ -40,6 +42,11 @@ interface NexusAuthState {
   classrooms: NexusClassroom[];
   activeClassroom: NexusClassroom | null;
   setActiveClassroom: (classroom: NexusClassroom) => void;
+
+  // Onboarding
+  onboardingStatus: OnboardingStatus;
+  isOnboardingComplete: boolean;
+  refreshOnboardingStatus: () => void;
 
   // Combined loading
   loading: boolean;
@@ -68,6 +75,8 @@ export function useNexusAuth(): NexusAuthState {
   const [nexusRole, setNexusRole] = useState<NexusRole | null>(null);
   const [classrooms, setClassrooms] = useState<NexusClassroom[]>([]);
   const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(null);
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [dbLoading, setDbLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -155,6 +164,7 @@ export function useNexusAuth(): NexusAuthState {
         setUser(data.user);
         setNexusRole(data.nexusRole);
         setClassrooms(data.classrooms || []);
+        setOnboardingStatus(data.onboardingStatus || null);
 
         // Restore active classroom from localStorage or use first one
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
@@ -176,11 +186,15 @@ export function useNexusAuth(): NexusAuthState {
 
     fetchNexusUser();
     return () => { cancelled = true; };
-  }, [msUser, msLoading]);
+  }, [msUser, msLoading, refreshKey]);
 
   const setActiveClassroom = useCallback((classroom: NexusClassroom) => {
     setActiveClassroomState(classroom);
     localStorage.setItem(ACTIVE_CLASSROOM_KEY, classroom.id);
+  }, []);
+
+  const refreshOnboardingStatus = useCallback(() => {
+    setRefreshKey((k) => k + 1);
   }, []);
 
   const signIn = useCallback(async () => {
@@ -208,6 +222,9 @@ export function useNexusAuth(): NexusAuthState {
     setActiveClassroom,
     loading: testMode ? dbLoading : msLoading || dbLoading,
     error,
+    onboardingStatus,
+    isOnboardingComplete: onboardingStatus === 'approved' || nexusRole !== 'student',
+    refreshOnboardingStatus,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',
     isStudent: nexusRole === 'student',
     isAdmin: nexusRole === 'admin',

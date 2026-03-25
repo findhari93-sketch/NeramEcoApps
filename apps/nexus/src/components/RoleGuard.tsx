@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
@@ -10,19 +10,24 @@ interface RoleGuardProps {
   children: React.ReactNode;
   allowedRoles: ('admin' | 'teacher' | 'student' | 'parent')[];
   redirectTo?: string;
+  /** Skip onboarding check (used by the onboarding route itself) */
+  skipOnboardingCheck?: boolean;
 }
 
 /**
  * Guards routes based on the user's Nexus role.
  * Redirects unauthorized users to the appropriate route.
+ * For students: also checks onboarding completion status.
  */
 export default function RoleGuard({
   children,
   allowedRoles,
   redirectTo,
+  skipOnboardingCheck = false,
 }: RoleGuardProps) {
   const router = useRouter();
-  const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
+  const pathname = usePathname();
+  const { user, nexusRole, classrooms, loading, isOnboardingComplete } = useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
@@ -33,11 +38,22 @@ export default function RoleGuard({
     }
 
     if (nexusRole && !allowedRoles.includes(nexusRole)) {
-      // Redirect to the appropriate dashboard based on role
       const target = redirectTo || getRoleDashboard(nexusRole);
       router.push(target);
+      return;
     }
-  }, [user, nexusRole, loading, allowedRoles, redirectTo, router]);
+
+    // Onboarding gate: redirect students who haven't completed onboarding
+    if (
+      !skipOnboardingCheck &&
+      nexusRole === 'student' &&
+      classrooms.length > 0 &&
+      !isOnboardingComplete &&
+      !pathname.startsWith('/onboarding')
+    ) {
+      router.push('/onboarding');
+    }
+  }, [user, nexusRole, loading, allowedRoles, redirectTo, router, isOnboardingComplete, skipOnboardingCheck, classrooms, pathname]);
 
   if (loading) {
     return (
@@ -66,6 +82,16 @@ export default function RoleGuard({
   // User is authenticated but has no classrooms — show welcome/onboarding page
   if (classrooms.length === 0) {
     return <NoClassroomWelcome />;
+  }
+
+  // Student hasn't completed onboarding — don't render content (redirect in progress)
+  if (
+    !skipOnboardingCheck &&
+    nexusRole === 'student' &&
+    !isOnboardingComplete &&
+    !pathname.startsWith('/onboarding')
+  ) {
+    return null;
   }
 
   return <>{children}</>;

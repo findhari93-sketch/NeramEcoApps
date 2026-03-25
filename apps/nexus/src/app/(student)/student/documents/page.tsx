@@ -10,8 +10,6 @@ import {
   Button,
   alpha,
   useTheme,
-  Tabs,
-  Tab,
 } from '@neram/ui';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -21,7 +19,6 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import DocumentUploadSheet from '@/components/documents/DocumentUploadSheet';
-import ExamSelectionPanel from '@/components/documents/ExamSelectionPanel';
 
 interface Template {
   id: string;
@@ -56,9 +53,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   exam: 'Exam',
   photo: 'Photo',
   other: 'Other',
-  aadhaar: 'Identity',
-  marksheet: 'Academic',
-  hall_ticket: 'Exam',
 };
 
 const CATEGORY_ORDER = ['identity', 'academic', 'exam', 'photo', 'other'];
@@ -67,7 +61,6 @@ const CATEGORY_ORDER = ['identity', 'academic', 'exam', 'photo', 'other'];
 export default function StudentDocuments() {
   const theme = useTheme();
   const { activeClassroom, getToken } = useNexusAuthContext();
-  const [tab, setTab] = useState(0);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,7 +106,7 @@ export default function StudentDocuments() {
     }
     // Exam-linked templates are now managed via the Exam Tracker tab
     if (template.linked_exam && template.exam_state_threshold) {
-      return `Use the Exam Tracker tab to manage ${template.linked_exam.toUpperCase()} documents`;
+      return `Go to Exams page to manage ${template.linked_exam.toUpperCase()} documents`;
     }
     return null;
   };
@@ -159,24 +152,8 @@ export default function StudentDocuments() {
     <Box>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>Document Vault</Typography>
 
-      <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v)}
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Tab label="Documents" sx={{ textTransform: 'none', fontWeight: 600 }} />
-        <Tab label="Exam Tracker" sx={{ textTransform: 'none', fontWeight: 600 }} />
-      </Tabs>
-
-      {tab === 1 && (
-        <ExamSelectionPanel
-          classroomId={activeClassroom?.id || ''}
-          getToken={getToken}
-        />
-      )}
-
       {/* Document Templates grouped by category */}
-      {tab === 0 && (
+      {(
         templates.length === 0 ? (
           <Paper sx={{ p: 4, textAlign: 'center' }}>
             <DescriptionOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />

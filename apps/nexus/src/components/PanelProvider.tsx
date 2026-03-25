@@ -25,6 +25,7 @@ import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import LocationCityOutlinedIcon from '@mui/icons-material/LocationCityOutlined';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
+import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -60,6 +61,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
       { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
+      { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
     bottomNavItems: [
@@ -69,6 +71,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
     ],
     overflowItems: [
+      { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
   },
@@ -84,6 +87,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
+      { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
@@ -151,6 +155,7 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (PATH_TO_PANEL[pathname]) return PATH_TO_PANEL[pathname];
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
+  if (pathname.startsWith('/teacher/onboarding-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
   // City-wise student pages
   if (pathname.startsWith('/teacher/students/city-wise')) return 'management';

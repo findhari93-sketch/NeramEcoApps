@@ -15,6 +15,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -23,6 +24,7 @@ import { useSidebarContext } from '@/components/SidebarProvider';
 import { useQBAccess } from '@/hooks/useQBAccess';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
 import DeviceRegistrationProvider from '@/components/DeviceRegistrationProvider';
+import ExamReminderModal from '@/components/ExamReminderModal';
 
 const QB_PATH = '/student/question-bank';
 
@@ -55,6 +57,7 @@ const allStudentNavGroups = [
     items: [
       { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
+      { label: 'Exams', path: '/student/exams', icon: <EventNoteOutlinedIcon /> },
       { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
     ],
   },
@@ -76,6 +79,7 @@ const allOverflowItems = [
   { label: 'Recall', path: '/student/exam-recall', icon: <HistoryEduOutlinedIcon /> },
   { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
   { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
+  { label: 'Exams', path: '/student/exams', icon: <EventNoteOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },
@@ -136,6 +140,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             >
               <Container maxWidth="lg" disableGutters>
                 <DeviceRegistrationProvider>
+                  <ExamReminderModal />
                   {children}
                 </DeviceRegistrationProvider>
               </Container>

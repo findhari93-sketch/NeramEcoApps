@@ -8,7 +8,9 @@
  * The fingerprint is stored in localStorage for consistency across sessions.
  */
 
-const FINGERPRINT_KEY = 'neram_device_fingerprint';
+// Bump version when fingerprint algorithm changes to invalidate cached values
+const FINGERPRINT_VERSION = 2;
+const FINGERPRINT_KEY = `neram_device_fingerprint_v${FINGERPRINT_VERSION}`;
 
 /**
  * Generate a hash from a string using the Web Crypto API
@@ -22,14 +24,27 @@ async function hashString(input: string): Promise<string> {
 }
 
 /**
- * Collect stable device attributes for fingerprinting
+ * Round screen dimensions to nearest bucket to stay stable across
+ * display-scaling changes (100% vs 125% vs 150%).
+ * E.g. 1280 → 1300, 1366 → 1400, 800 → 800
+ */
+function roundScreen(value: number, bucket = 100): number {
+  return Math.round(value / bucket) * bucket;
+}
+
+/**
+ * Collect stable device attributes for fingerprinting.
+ *
+ * Intentionally excludes:
+ *  - devicePixelRatio (changes with Windows display scaling)
+ *  - PWA display-mode (changes between browser and installed PWA)
+ *  - exact screen dimensions (rounded to nearest 100px instead)
  */
 function getStableAttributes(): string {
   const parts: string[] = [];
 
-  // Screen dimensions (stable per device)
-  parts.push(`${window.screen.width}x${window.screen.height}`);
-  parts.push(`dpr:${window.devicePixelRatio || 1}`);
+  // Screen dimensions rounded to nearest 100px (stable across scaling changes)
+  parts.push(`${roundScreen(window.screen.width)}x${roundScreen(window.screen.height)}`);
 
   // OS detection (stable)
   const ua = navigator.userAgent;
@@ -62,10 +77,6 @@ function getStableAttributes(): string {
 
   // Color depth
   parts.push(`color:${window.screen.colorDepth}`);
-
-  // PWA mode
-  const isPWA = window.matchMedia('(display-mode: standalone)').matches;
-  parts.push(`pwa:${isPWA}`);
 
   return parts.join('|');
 }
@@ -128,4 +139,6 @@ export async function getDeviceFingerprint(): Promise<string> {
  */
 export function clearDeviceFingerprint(): void {
   localStorage.removeItem(FINGERPRINT_KEY);
+  // Clean up legacy keys from previous versions
+  localStorage.removeItem('neram_device_fingerprint');
 }
