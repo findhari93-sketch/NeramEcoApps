@@ -28,16 +28,17 @@ import TranslateIcon from '@mui/icons-material/Translate';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   QB_EXAM_TYPE_LABELS,
-  QB_QUESTION_STATUS_LABELS,
-  QB_QUESTION_STATUS_COLORS,
   QB_CATEGORY_LABELS,
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestion } from '@neram/database';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PaperProgressBar from '@/components/question-bank/PaperProgressBar';
 import AnswerKeyGrid from '@/components/question-bank/AnswerKeyGrid';
-import { questionNeedsImage } from '@/components/question-bank/AnswerKeyGrid';
+import { questionNeedsImage, questionMissingImages } from '@/components/question-bank/AnswerKeyGrid';
 import HindiMergeDialog from '@/components/question-bank/HindiMergeDialog';
+import BulkImageManager from '@/components/question-bank/BulkImageManager';
+import InlineQuestionEditor from '@/components/question-bank/InlineQuestionEditor';
+import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -56,6 +57,7 @@ export default function PaperDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
 
   const fetchData = useCallback(async (background = false) => {
     if (!background) setLoading(true);
@@ -230,6 +232,8 @@ export default function PaperDetailPage() {
   const activeCount = questions.filter((q) => q.status === 'active' && q.is_active).length;
   const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
   const needsImageCount = questions.filter(questionNeedsImage).length;
+  // Count questions that need images AND are still missing some
+  const missingAnyImageCount = questions.filter(questionMissingImages).length;
 
   // Section breakdown
   const sectionBreakdown: Record<string, number> = {};
@@ -379,9 +383,17 @@ export default function PaperDetailPage() {
         value={tab}
         onChange={(_, v) => setTab(v)}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+        variant="scrollable"
+        scrollButtons="auto"
       >
         <Tab label="Answer Key" />
         <Tab label={`Questions (${questions.length})`} />
+        <Tab
+          label={`Bulk Images${missingAnyImageCount > 0 ? ` (${missingAnyImageCount})` : ''}`}
+          icon={<CollectionsOutlinedIcon sx={{ fontSize: 18 }} />}
+          iconPosition="start"
+          sx={{ minHeight: 48 }}
+        />
       </Tabs>
 
       {/* Tab: Answer Key */}
@@ -389,72 +401,32 @@ export default function PaperDetailPage() {
         <AnswerKeyGrid questions={questions} onSave={handleSaveAnswers} saving={saving} />
       )}
 
-      {/* Tab: Questions List */}
+      {/* Tab: Questions List (Inline Editing) */}
       {tab === 1 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {questions.map((q) => (
-            <Paper
+            <InlineQuestionEditor
               key={q.id}
-              variant="outlined"
-              sx={{
-                p: 1.5,
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-              onClick={() => router.push(`/teacher/question-bank/questions/${q.id}/edit`)}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" fontWeight={600} sx={{ minWidth: 30 }}>
-                  Q{q.display_order}
-                </Typography>
-                <Chip
-                  label={q.question_format}
-                  size="small"
-                  variant="outlined"
-                  sx={{ fontSize: '0.7rem' }}
-                />
-                <Chip
-                  label={QB_QUESTION_STATUS_LABELS[q.status]}
-                  size="small"
-                  sx={{
-                    bgcolor: QB_QUESTION_STATUS_COLORS[q.status] + '20',
-                    color: QB_QUESTION_STATUS_COLORS[q.status],
-                    fontWeight: 600,
-                    fontSize: '0.7rem',
-                  }}
-                />
-                {questionNeedsImage(q) && (
-                  <Chip
-                    icon={<ImageNotSupportedOutlinedIcon sx={{ fontSize: 12 }} />}
-                    label="No Image"
-                    size="small"
-                    sx={{
-                      bgcolor: '#F59E0B20',
-                      color: '#D97706',
-                      fontWeight: 600,
-                      fontSize: '0.6rem',
-                      height: 20,
-                      '& .MuiChip-icon': { color: '#D97706' },
-                    }}
-                  />
-                )}
-                <Box sx={{ flex: 1 }} />
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: 200,
-                  }}
-                >
-                  {q.question_text || (q.nta_question_id ? `NTA: ${q.nta_question_id}` : 'No content')}
-                </Typography>
-              </Box>
-            </Paper>
+              question={q}
+              expanded={expandedQuestionId === q.id}
+              onToggle={() =>
+                setExpandedQuestionId((prev) => (prev === q.id ? null : q.id))
+              }
+              getToken={getToken}
+              onSaved={() => fetchData(true)}
+            />
           ))}
         </Box>
+      )}
+
+      {/* Tab: Bulk Images */}
+      {tab === 2 && (
+        <BulkImageManager
+          questions={questions}
+          paperId={paperId}
+          getToken={getToken}
+          onQuestionsUpdated={() => fetchData(true)}
+        />
       )}
 
       {/* Delete confirmation dialog */}

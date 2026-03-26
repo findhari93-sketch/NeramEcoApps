@@ -27,10 +27,21 @@ import AnswerKeyUpload from './AnswerKeyUpload';
 
 const IMAGE_KEYWORDS = /figure|image|diagram|picture|given below|shown below|problem figure|shown in|refer to|look at the/i;
 
+/** Does this question need images at all? (based on format/keywords) */
 export function questionNeedsImage(q: NexusQBQuestion): boolean {
-  if (q.question_image_url) return false;
   if (q.question_format === 'IMAGE_BASED') return true;
   if (q.question_text && IMAGE_KEYWORDS.test(q.question_text)) return true;
+  const opts = q.options as { id: string; text: string; image_url?: string }[] | null;
+  if (opts?.some((o) => IMAGE_KEYWORDS.test(o.text || ''))) return true;
+  return false;
+}
+
+/** Does this question need images AND is missing any of them? */
+export function questionMissingImages(q: NexusQBQuestion): boolean {
+  if (!questionNeedsImage(q)) return false;
+  // Check question image
+  if (!q.question_image_url) return true;
+  // Check option images (only for options with image keywords)
   const opts = q.options as { id: string; text: string; image_url?: string }[] | null;
   if (opts?.some((o) => IMAGE_KEYWORDS.test(o.text || '') && !o.image_url)) return true;
   return false;
