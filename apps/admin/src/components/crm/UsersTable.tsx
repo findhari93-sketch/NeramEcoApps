@@ -804,11 +804,6 @@ export default function UsersTable(props: UsersTableProps) {
     []
   );
 
-  // On mobile, render card layout instead of table
-  if (isMobile) {
-    return <MobileCardList {...props} />;
-  }
-
   const table = useMaterialReactTable({
     columns,
     data,
@@ -1070,6 +1065,11 @@ export default function UsersTable(props: UsersTableProps) {
       },
     },
   });
+
+  // On mobile, render card layout instead of table
+  if (isMobile) {
+    return <MobileCardList {...props} />;
+  }
 
   return <MaterialReactTable table={table} />;
 }
