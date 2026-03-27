@@ -56,6 +56,8 @@ interface InlineQuestionEditorProps {
   onToggle: () => void;
   getToken: () => Promise<string | null>;
   onSaved: () => void;
+  /** Zero-based index for alternating row backgrounds */
+  index?: number;
 }
 
 interface FormData {
@@ -168,6 +170,7 @@ export default function InlineQuestionEditor({
   onToggle,
   getToken,
   onSaved,
+  index = 0,
 }: InlineQuestionEditorProps) {
   const theme = useTheme();
   const [form, setForm] = useState<FormData>(() => getInitialFormData(question, sources));
@@ -304,21 +307,23 @@ export default function InlineQuestionEditor({
       <Paper
         variant="outlined"
         sx={{
-          p: 1.5,
+          p: { xs: 0.75, md: 1 },
           cursor: 'pointer',
-          '&:hover': { bgcolor: 'action.hover' },
+          bgcolor: index % 2 === 1 ? 'action.hover' : 'background.paper',
+          '&:hover': { bgcolor: 'action.selected' },
+          borderColor: 'divider',
         }}
         onClick={onToggle}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" fontWeight={600} sx={{ minWidth: 30 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body2" fontWeight={600} sx={{ minWidth: 28, fontSize: '0.8rem' }}>
             Q{question.display_order}
           </Typography>
           <Chip
             label={question.question_format}
             size="small"
             variant="outlined"
-            sx={{ fontSize: '0.7rem' }}
+            sx={{ fontSize: '0.65rem', height: 20 }}
           />
           <Chip
             label={QB_QUESTION_STATUS_LABELS[question.status]}
@@ -327,22 +332,41 @@ export default function InlineQuestionEditor({
               bgcolor: QB_QUESTION_STATUS_COLORS[question.status] + '20',
               color: QB_QUESTION_STATUS_COLORS[question.status],
               fontWeight: 600,
-              fontSize: '0.7rem',
+              fontSize: '0.65rem',
+              height: 20,
             }}
           />
-          <Box sx={{ flex: 1 }} />
           <Typography
             variant="caption"
             color="text.secondary"
+            title={question.question_text || undefined}
             sx={{
+              flex: 1,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              maxWidth: 300,
+              ml: 0.5,
+              fontSize: '0.75rem',
             }}
           >
             {question.question_text || 'No content'}
           </Typography>
+          {question.question_image_url && (
+            <Box
+              component="img"
+              src={question.question_image_url}
+              alt=""
+              sx={{
+                width: 32,
+                height: 32,
+                objectFit: 'cover',
+                borderRadius: 0.5,
+                flexShrink: 0,
+                border: 1,
+                borderColor: 'divider',
+              }}
+            />
+          )}
         </Box>
       </Paper>
     );

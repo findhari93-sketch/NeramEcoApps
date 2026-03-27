@@ -52,6 +52,7 @@ import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
 
 const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
+const MOBILE_DRAWER_WIDTH = 280;
 
 interface MenuItem {
   text: string;
@@ -140,7 +141,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useMicrosoftAuth();
-  const { collapsed, toggleSidebar, sidebarWidth } = useSidebar();
+  const { collapsed, toggleSidebar, sidebarWidth, isMobile, mobileOpen, setMobileOpen } = useSidebar();
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [careersNewCount, setCareersNewCount] = useState(0);
   const messageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -203,28 +204,17 @@ export default function Sidebar() {
     return iconEl;
   };
 
-  return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: sidebarWidth,
-        flexShrink: 0,
-        transition: TRANSITION,
-        '& .MuiDrawer-paper': {
-          width: sidebarWidth,
-          boxSizing: 'border-box',
-          transition: TRANSITION,
-          overflowX: 'hidden',
-        },
-      }}
-    >
+  const showCollapsed = !isMobile && collapsed;
+
+  const drawerContent = (
+    <>
       {/* Header — brand + bell + collapse toggle */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'space-between',
-          px: collapsed ? 0.5 : 2,
+          justifyContent: showCollapsed ? 'center' : 'space-between',
+          px: showCollapsed ? 0.5 : 2,
           py: 1.5,
           minHeight: 48,
           borderBottom: '1px solid',
@@ -232,7 +222,7 @@ export default function Sidebar() {
           transition: TRANSITION,
         }}
       >
-        {!collapsed ? (
+        {!showCollapsed ? (
           <>
             <Typography
               variant="body2"
@@ -245,13 +235,15 @@ export default function Sidebar() {
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <NotificationBell />
-              <IconButton
-                onClick={toggleSidebar}
-                size="small"
-                sx={{ width: 24, height: 24, color: 'text.secondary' }}
-              >
-                <ChevronLeftIcon sx={{ fontSize: 16 }} />
-              </IconButton>
+              {!isMobile && (
+                <IconButton
+                  onClick={toggleSidebar}
+                  size="small"
+                  sx={{ width: 24, height: 24, color: 'text.secondary' }}
+                >
+                  <ChevronLeftIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              )}
             </Box>
           </>
         ) : (
@@ -270,7 +262,7 @@ export default function Sidebar() {
         {menuGroups.map((group) => (
           <Box key={group.label} sx={{ mb: 0.5 }}>
             {/* Section label — hidden when collapsed */}
-            {!collapsed && (
+            {!showCollapsed && (
               <Typography
                 sx={{
                   fontSize: 11,
@@ -287,34 +279,39 @@ export default function Sidebar() {
                 {group.label}
               </Typography>
             )}
-            <List disablePadding sx={{ px: collapsed ? 0.5 : 0.75 }}>
+            <List disablePadding sx={{ px: showCollapsed ? 0.5 : 0.75 }}>
               {group.items.map((item) => {
                 const isActive =
                   pathname === item.path ||
                   (item.path !== '/' && pathname.startsWith(item.path));
 
+                const handleNavClick = () => {
+                  router.push(item.path);
+                  if (isMobile) setMobileOpen(false);
+                };
+
                 const button = (
                   <ListItemButton
-                    onClick={() => router.push(item.path)}
+                    onClick={handleNavClick}
                     selected={isActive}
                     sx={{
                       borderRadius: 1.5,
-                      justifyContent: collapsed ? 'center' : 'flex-start',
-                      px: collapsed ? 1 : 1.5,
+                      justifyContent: showCollapsed ? 'center' : 'flex-start',
+                      px: showCollapsed ? 1 : 1.5,
                       py: 0.5,
-                      minHeight: 34,
+                      minHeight: isMobile ? 44 : 34,
                       transition: TRANSITION,
                     }}
                   >
                     <ListItemIcon
                       sx={{
-                        minWidth: collapsed ? 'auto' : 32,
+                        minWidth: showCollapsed ? 'auto' : 32,
                         justifyContent: 'center',
                       }}
                     >
                       {renderIcon(item)}
                     </ListItemIcon>
-                    {!collapsed && (
+                    {!showCollapsed && (
                       <ListItemText
                         primary={item.text}
                         primaryTypographyProps={{
@@ -328,7 +325,7 @@ export default function Sidebar() {
 
                 return (
                   <ListItem key={item.text} disablePadding sx={{ mb: '1px' }}>
-                    {collapsed ? (
+                    {showCollapsed ? (
                       <Tooltip title={item.text} placement="right" arrow>
                         {button}
                       </Tooltip>
@@ -348,8 +345,8 @@ export default function Sidebar() {
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'space-between',
-          px: collapsed ? 0.5 : 2,
+          justifyContent: showCollapsed ? 'center' : 'space-between',
+          px: showCollapsed ? 0.5 : 2,
           py: 1,
           borderTop: '1px solid',
           borderColor: 'divider',
@@ -357,7 +354,7 @@ export default function Sidebar() {
           transition: TRANSITION,
         }}
       >
-        {!collapsed ? (
+        {!showCollapsed ? (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
               <Avatar
@@ -399,6 +396,44 @@ export default function Sidebar() {
           </Tooltip>
         )}
       </Box>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: MOBILE_DRAWER_WIDTH,
+            boxSizing: 'border-box',
+          },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+    );
+  }
+
+  return (
+    <Drawer
+      variant="permanent"
+      sx={{
+        width: sidebarWidth,
+        flexShrink: 0,
+        transition: TRANSITION,
+        '& .MuiDrawer-paper': {
+          width: sidebarWidth,
+          boxSizing: 'border-box',
+          transition: TRANSITION,
+          overflowX: 'hidden',
+        },
+      }}
+    >
+      {drawerContent}
     </Drawer>
   );
 }

@@ -244,8 +244,8 @@ export default function NataChatbot() {
           message: text.trim(),
           history: messages.slice(-10),
           sessionId,
-          userId: firebaseUser?.uid || null,
-          userName: firebaseUser?.displayName || firebaseUser?.phoneNumber || null,
+          userId: firebaseUser?.id || null,
+          userName: firebaseUser?.name || firebaseUser?.phone || null,
           pageUrl: typeof window !== 'undefined' ? window.location.pathname : null,
         }),
       });

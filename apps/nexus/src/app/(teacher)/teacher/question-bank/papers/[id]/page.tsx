@@ -403,8 +403,8 @@ export default function PaperDetailPage() {
 
       {/* Tab: Questions List (Inline Editing) */}
       {tab === 1 && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {questions.map((q) => (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {questions.map((q, i) => (
             <InlineQuestionEditor
               key={q.id}
               question={q}
@@ -414,6 +414,7 @@ export default function PaperDetailPage() {
               }
               getToken={getToken}
               onSaved={() => fetchData(true)}
+              index={i}
             />
           ))}
         </Box>

@@ -1,11 +1,15 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { useMediaQuery, useTheme } from '@neram/ui';
 
 interface SidebarContextValue {
   collapsed: boolean;
   toggleSidebar: () => void;
   sidebarWidth: number;
+  isMobile: boolean;
+  mobileOpen: boolean;
+  setMobileOpen: (open: boolean) => void;
 }
 
 const EXPANDED_WIDTH = 240;
@@ -16,11 +20,17 @@ const SidebarContext = createContext<SidebarContextValue>({
   collapsed: false,
   toggleSidebar: () => {},
   sidebarWidth: EXPANDED_WIDTH,
+  isMobile: false,
+  mobileOpen: false,
+  setMobileOpen: () => {},
 });
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -36,14 +46,30 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     }
   }, [collapsed, mounted]);
 
-  const toggleSidebar = () => setCollapsed((prev) => !prev);
+  // Close mobile drawer when switching to desktop
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileOpen(false);
+    }
+  }, [isMobile]);
+
+  const toggleSidebar = () => {
+    if (isMobile) {
+      setMobileOpen((prev) => !prev);
+    } else {
+      setCollapsed((prev) => !prev);
+    }
+  };
 
   return (
     <SidebarContext.Provider
       value={{
         collapsed,
         toggleSidebar,
-        sidebarWidth: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
+        sidebarWidth: isMobile ? 0 : collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
+        isMobile,
+        mobileOpen,
+        setMobileOpen,
       }}
     >
       {children}

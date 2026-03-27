@@ -9,10 +9,14 @@ import {
   IconButton,
   Tooltip,
   Paper,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import type {
   UserJourney,
   PipelineStageCounts,
@@ -29,12 +33,15 @@ export default function CRMPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { supabaseUserId } = useAdminProfile();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [users, setUsers] = useState<UserJourney[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [pipelineCounts, setPipelineCounts] = useState<PipelineStageCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [activeStage, setActiveStage] = useState<PipelineStage | null>(
     (searchParams.get('stage') as PipelineStage) || null
@@ -95,6 +102,19 @@ export default function CRMPage() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  // Escape key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const handleStageClick = (stage: PipelineStage | null) => {
     setActiveStage(stage);
@@ -185,34 +205,49 @@ export default function CRMPage() {
 
   return (
     <Box>
-      {/* Page header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      {/* Page header — stacks on mobile */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          alignItems: { xs: 'flex-start', md: 'center' },
+          justifyContent: 'space-between',
+          gap: { xs: 1, md: 0 },
+          mb: { xs: 1.5, md: 2 },
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box
-            sx={{
-              width: 42,
-              height: 42,
-              borderRadius: 1,
-              bgcolor: 'primary.main',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <PeopleAltIcon sx={{ color: 'white', fontSize: 22 }} />
-          </Box>
+          {!isMobile && (
+            <Box
+              sx={{
+                width: 42,
+                height: 42,
+                borderRadius: 1,
+                bgcolor: 'primary.main',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <PeopleAltIcon sx={{ color: 'white', fontSize: 22 }} />
+            </Box>
+          )}
           <Box>
-            <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            <Typography
+              variant={isMobile ? 'h6' : 'h5'}
+              fontWeight={700}
+              sx={{ lineHeight: 1.2 }}
+            >
               User Management
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 12, md: 14 } }}>
               {pipelineCounts
                 ? `${pipelineCounts.total} users across all stages`
                 : 'Loading...'}
             </Typography>
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
           <Chip
             label="Dead Leads"
             onClick={handleToggleDeadLeads}
@@ -221,6 +256,7 @@ export default function CRMPage() {
             size="small"
             sx={{
               fontWeight: 500,
+              height: { xs: 32, md: 'auto' },
               bgcolor: showDeadLeads ? 'grey.700' : undefined,
               color: showDeadLeads ? 'common.white' : 'text.secondary',
               borderColor: showDeadLeads ? 'grey.700' : 'grey.300',
@@ -237,6 +273,7 @@ export default function CRMPage() {
             size="small"
             sx={{
               fontWeight: 500,
+              height: { xs: 32, md: 'auto' },
               bgcolor: showIrrelevant ? '#E65100' : undefined,
               color: showIrrelevant ? 'common.white' : 'text.secondary',
               borderColor: showIrrelevant ? '#E65100' : 'grey.300',
@@ -252,7 +289,7 @@ export default function CRMPage() {
               color="primary"
               variant="outlined"
               size="small"
-              sx={{ fontWeight: 500 }}
+              sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
             />
           )}
           <Tooltip title="Refresh data">
@@ -262,27 +299,40 @@ export default function CRMPage() {
               </IconButton>
             </span>
           </Tooltip>
+          {!isMobile && (
+            <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen table'}>
+              <IconButton size="small" onClick={() => setIsFullscreen((prev) => !prev)}>
+                {isFullscreen ? (
+                  <FullscreenExitIcon fontSize="small" />
+                ) : (
+                  <FullscreenIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       </Box>
 
       {/* Error */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
+        <Alert severity="error" sx={{ mb: { xs: 1.5, md: 2 }, borderRadius: 1 }}>
           {error}
         </Alert>
       )}
 
-      {/* Pipeline funnel */}
-      <Box sx={{ mb: 2 }}>
-        <PipelineFunnel
-          counts={pipelineCounts}
-          activeStage={activeStage}
-          onStageClick={handleStageClick}
-          loading={loading && !pipelineCounts}
-        />
-      </Box>
+      {/* Pipeline funnel — hidden in fullscreen */}
+      {!isFullscreen && (
+        <Box sx={{ mb: { xs: 1.5, md: 2 } }}>
+          <PipelineFunnel
+            counts={pipelineCounts}
+            activeStage={activeStage}
+            onStageClick={handleStageClick}
+            loading={loading && !pipelineCounts}
+          />
+        </Box>
+      )}
 
-      {/* Table in card */}
+      {/* Table in card — supports fullscreen */}
       <Paper
         elevation={0}
         sx={{
@@ -290,8 +340,41 @@ export default function CRMPage() {
           border: '1px solid',
           borderColor: 'grey.200',
           overflow: 'hidden',
+          ...(isFullscreen && {
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 1300,
+            borderRadius: 0,
+            border: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+          }),
         }}
       >
+        {isFullscreen && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              px: 2,
+              py: 1,
+              borderBottom: '1px solid',
+              borderColor: 'grey.200',
+              bgcolor: 'grey.50',
+            }}
+          >
+            <Typography variant="body2" fontWeight={600}>
+              User Management — Fullscreen
+            </Typography>
+            <IconButton size="small" onClick={() => setIsFullscreen(false)}>
+              <FullscreenExitIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        )}
         <UsersTable
           data={users}
           totalCount={totalCount}
@@ -304,6 +387,7 @@ export default function CRMPage() {
           onGlobalFilterChange={handleGlobalFilterChange}
           onRowClick={handleRowClick}
           onBulkDeleteRequest={handleBulkDeleteRequest}
+          isFullscreen={isFullscreen}
         />
       </Paper>
 

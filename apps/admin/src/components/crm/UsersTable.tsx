@@ -9,10 +9,23 @@ import {
   type MRT_RowSelectionState,
   useMaterialReactTable,
 } from 'material-react-table';
-import { Avatar, Box, Button, Chip, Typography } from '@neram/ui';
+import {
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  Typography,
+  TextField,
+  InputAdornment,
+  Pagination,
+  Skeleton,
+  useMediaQuery,
+  useTheme,
+} from '@neram/ui';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import SearchIcon from '@mui/icons-material/Search';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 
@@ -28,6 +41,7 @@ interface UsersTableProps {
   onGlobalFilterChange: (filter: string) => void;
   onRowClick: (userId: string) => void;
   onBulkDeleteRequest?: (users: UserJourney[]) => void;
+  isFullscreen?: boolean;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -40,12 +54,9 @@ function formatDate(dateStr: string | null): string {
 }
 
 function getDisplayName(user: { name: string; first_name: string | null; last_name: string | null; phone: string | null }): string {
-  // If name is set and not the default 'User', use it
   if (user.name && user.name !== 'User') return user.name;
-  // Fall back to first_name + last_name
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
   if (fullName) return fullName;
-  // Fall back to phone
   if (user.phone) return user.phone;
   return 'Unnamed User';
 }
@@ -120,19 +131,319 @@ function handleExportCsv(rows: UserJourney[]) {
   document.body.removeChild(link);
 }
 
-export default function UsersTable({
+// ─── Mobile Card View ───────────────────────────────────────────────
+function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => void }) {
+  const stage = user.pipeline_stage;
+  const config = PIPELINE_STAGE_CONFIG[stage];
+  const isDimmed = user.contacted_status === 'dead_lead' || user.contacted_status === 'irrelevant';
+  const isEnrolled = stage === 'enrolled' || user.linked_classroom_email;
+
+  const courseLabels: Record<string, string> = {
+    nata: 'NATA',
+    jee_paper2: 'JEE P2',
+    both: 'Both',
+  };
+
+  return (
+    <Box
+      onClick={onClick}
+      sx={{
+        display: 'flex',
+        gap: 1.25,
+        p: 1.5,
+        borderBottom: '1px solid',
+        borderColor: 'grey.100',
+        cursor: 'pointer',
+        opacity: isDimmed ? 0.5 : 1,
+        bgcolor: isDimmed ? 'grey.50' : 'background.paper',
+        transition: 'background-color 0.15s',
+        '&:active': { bgcolor: 'primary.50' },
+        minHeight: 60,
+      }}
+    >
+      {/* Avatar */}
+      {isEnrolled ? (
+        <Box
+          sx={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #FFD700, #FFA000, #FFD700)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            mt: 0.25,
+          }}
+        >
+          <Avatar
+            src={user.avatar_url || undefined}
+            sx={{
+              width: 36,
+              height: 36,
+              fontSize: 14,
+              fontWeight: 600,
+              bgcolor: user.avatar_url ? 'transparent' : 'primary.light',
+              color: 'primary.contrastText',
+            }}
+          >
+            {getInitial(user)}
+          </Avatar>
+        </Box>
+      ) : (
+        <Avatar
+          src={user.avatar_url || undefined}
+          sx={{
+            width: 40,
+            height: 40,
+            fontSize: 14,
+            fontWeight: 600,
+            bgcolor: user.avatar_url ? 'transparent' : 'primary.light',
+            color: 'primary.contrastText',
+            flexShrink: 0,
+            mt: 0.25,
+          }}
+        >
+          {getInitial(user)}
+        </Avatar>
+      )}
+
+      {/* Content */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        {/* Name + time */}
+        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
+            {getDisplayName(user)}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.disabled', fontSize: 10, flexShrink: 0 }}
+          >
+            {timeAgo(user.created_at)}
+          </Typography>
+        </Box>
+
+        {/* Contact */}
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', lineHeight: 1.4, display: 'block' }}
+          noWrap
+        >
+          {user.email || user.phone || 'No contact'}
+        </Typography>
+
+        {/* Phone with verification */}
+        {user.phone && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
+              {user.phone}
+            </Typography>
+            {user.phone_verified && (
+              <VerifiedIcon sx={{ fontSize: 12, color: 'success.main' }} />
+            )}
+          </Box>
+        )}
+
+        {/* Status chips row */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
+          <Chip
+            label={config?.label || stage}
+            size="small"
+            sx={{
+              bgcolor: `${config?.color || '#9E9E9E'}14`,
+              color: config?.color || '#9E9E9E',
+              fontWeight: 600,
+              fontSize: 10,
+              borderRadius: 0.75,
+              border: '1px solid',
+              borderColor: `${config?.color || '#9E9E9E'}30`,
+              height: 22,
+            }}
+          />
+          {user.interest_course && (
+            <Chip
+              label={courseLabels[user.interest_course] || user.interest_course}
+              size="small"
+              sx={{
+                height: 22,
+                fontSize: 10,
+                fontWeight: 500,
+                bgcolor: 'grey.100',
+                color: 'text.secondary',
+                borderRadius: 0.75,
+              }}
+            />
+          )}
+          {user.application_status && user.application_status !== 'draft' && (
+            <Chip
+              label={user.application_status.replace(/_/g, ' ')}
+              size="small"
+              sx={{
+                height: 22,
+                fontSize: 10,
+                fontWeight: 500,
+                textTransform: 'capitalize',
+                borderRadius: 0.75,
+              }}
+              variant="outlined"
+              color={
+                user.application_status === 'submitted' ? 'info' :
+                user.application_status === 'approved' ? 'success' :
+                user.application_status === 'rejected' ? 'error' : 'default'
+              }
+            />
+          )}
+          {user.total_paid > 0 && (
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 600,
+                fontFamily: 'monospace',
+                fontSize: 10,
+                color: 'success.dark',
+              }}
+            >
+              {formatCurrency(user.total_paid)}
+            </Typography>
+          )}
+          {user.contacted_status === 'dead_lead' && (
+            <Chip label="Dead" size="small" sx={{ height: 20, fontSize: 9, bgcolor: '#9E9E9E14', color: '#757575', borderRadius: 0.75 }} />
+          )}
+          {user.contacted_status === 'irrelevant' && (
+            <Chip label="Irrelevant" size="small" sx={{ height: 20, fontSize: 9, bgcolor: '#FF980014', color: '#E65100', borderRadius: 0.75 }} />
+          )}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function MobileCardList({
   data,
   totalCount,
   loading,
   pagination,
   onPaginationChange,
-  sorting,
-  onSortingChange,
   globalFilter,
   onGlobalFilterChange,
   onRowClick,
-  onBulkDeleteRequest,
 }: UsersTableProps) {
+  const totalPages = Math.ceil(totalCount / pagination.pageSize);
+
+  return (
+    <Box>
+      {/* Search */}
+      <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'grey.100' }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search name, email, phone..."
+          value={globalFilter}
+          onChange={(e) => onGlobalFilterChange(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1,
+              bgcolor: 'grey.50',
+              fontSize: 14,
+            },
+          }}
+        />
+      </Box>
+
+      {/* Cards */}
+      {loading ? (
+        <Box sx={{ p: 1.5 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Box key={i} sx={{ display: 'flex', gap: 1.25, p: 1.5, borderBottom: '1px solid', borderColor: 'grey.100' }}>
+              <Skeleton variant="circular" width={40} height={40} />
+              <Box sx={{ flex: 1 }}>
+                <Skeleton width="60%" height={20} />
+                <Skeleton width="80%" height={16} sx={{ mt: 0.5 }} />
+                <Skeleton width="40%" height={16} sx={{ mt: 0.5 }} />
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      ) : data.length === 0 ? (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            No users found
+          </Typography>
+        </Box>
+      ) : (
+        <>
+          {data.map((user) => (
+            <MobileUserCard
+              key={user.id}
+              user={user}
+              onClick={() => onRowClick(user.id)}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Pagination */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: 1.5,
+          py: 1,
+          borderTop: '1px solid',
+          borderColor: 'grey.200',
+          bgcolor: 'grey.50',
+        }}
+      >
+        <Typography variant="caption" color="text.secondary">
+          {totalCount} users
+        </Typography>
+        {totalPages > 1 && (
+          <Pagination
+            count={totalPages}
+            page={pagination.pageIndex + 1}
+            onChange={(_, page) =>
+              onPaginationChange({ ...pagination, pageIndex: page - 1 })
+            }
+            size="small"
+            siblingCount={0}
+          />
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+// ─── Desktop Table View ─────────────────────────────────────────────
+export default function UsersTable(props: UsersTableProps) {
+  const {
+    data,
+    totalCount,
+    loading,
+    pagination,
+    onPaginationChange,
+    sorting,
+    onSortingChange,
+    globalFilter,
+    onGlobalFilterChange,
+    onRowClick,
+    onBulkDeleteRequest,
+    isFullscreen,
+  } = props;
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
 
   const columns = useMemo<MRT_ColumnDef<UserJourney>[]>(
@@ -392,14 +703,14 @@ export default function UsersTable({
             rejected: { label: 'Rejected', bgcolor: '#9E9E9E14', color: '#616161' },
             cancelled: { label: 'Cancelled', bgcolor: '#9E9E9E14', color: '#616161' },
           };
-          const config = statusConfig[status || ''] || { label: 'Requested', bgcolor: '#2196F314', color: '#1565C0' };
+          const cfg = statusConfig[status || ''] || { label: 'Requested', bgcolor: '#2196F314', color: '#1565C0' };
           return (
             <Chip
-              label={config.label}
+              label={cfg.label}
               size="small"
               sx={{
-                bgcolor: config.bgcolor,
-                color: config.color,
+                bgcolor: cfg.bgcolor,
+                color: cfg.color,
                 fontWeight: 600,
                 fontSize: 11,
                 height: 24,
@@ -492,6 +803,11 @@ export default function UsersTable({
     ],
     []
   );
+
+  // On mobile, render card layout instead of table
+  if (isMobile) {
+    return <MobileCardList {...props} />;
+  }
 
   const table = useMaterialReactTable({
     columns,
@@ -589,10 +905,10 @@ export default function UsersTable({
       );
     },
 
-    // Table container - Apple-like scrollbar, show on hover
+    // Table container
     muiTableContainerProps: {
       sx: {
-        maxHeight: 'calc(100vh - 380px)',
+        maxHeight: isFullscreen ? 'calc(100vh - 160px)' : 'calc(100vh - 380px)',
         '&::-webkit-scrollbar': { width: 8, height: 8 },
         '&::-webkit-scrollbar-track': { background: 'transparent' },
         '&::-webkit-scrollbar-thumb': {
@@ -623,7 +939,6 @@ export default function UsersTable({
       sx: { boxShadow: 'none', borderRadius: 0 },
     },
 
-    // Column headers - clean, hover-reveal actions
     muiTableHeadCellProps: {
       sx: {
         bgcolor: 'grey.50',
@@ -637,7 +952,6 @@ export default function UsersTable({
         py: 0.75,
         px: 1.25,
         whiteSpace: 'nowrap',
-        // Hide sort arrows and column menu by default
         '& .MuiTableSortLabel-icon': {
           opacity: 0,
           transition: 'opacity 0.2s ease',
@@ -646,14 +960,12 @@ export default function UsersTable({
           opacity: 0,
           transition: 'opacity 0.2s ease',
         },
-        // Show on hover
         '&:hover .MuiTableSortLabel-icon': {
           opacity: 0.5,
         },
         '&:hover .MuiBox-root > .MuiIconButton-root': {
           opacity: 0.7,
         },
-        // Always show when column is sorted
         '& .MuiTableSortLabel-root.Mui-active .MuiTableSortLabel-icon': {
           opacity: 1,
         },
