@@ -15,6 +15,8 @@ export default function robots(): MetadataRoute.Robots {
           '/*.json$',
           '/signout',
           '/sso',
+          '/my-enrollment',
+          '/enroll',
           // Legacy WordPress paths (old site)
           '/wp-admin/',
           '/wp-content/',

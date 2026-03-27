@@ -7,22 +7,26 @@ const baseUrl = 'https://neramclasses.com';
 
 // Static pages with realistic lastModified dates.
 // Google ignores lastmod if every page has the same date — use actual dates.
-const staticPages: Array<{ path: string; lastModified: string }> = [
-  { path: '', lastModified: '2026-03-10' },  // Homepage - updated frequently
-  { path: '/about', lastModified: '2026-02-15' },
-  { path: '/contact', lastModified: '2026-02-20' },
-  { path: '/apply', lastModified: '2026-03-01' },
-  { path: '/courses', lastModified: '2026-03-05' },
-  { path: '/coaching', lastModified: '2026-02-28' },
-  { path: '/premium', lastModified: '2026-02-10' },
-  { path: '/alumni', lastModified: '2026-01-20' },
-  { path: '/careers', lastModified: '2026-01-15' },
-  { path: '/fees', lastModified: '2026-03-01' },
-  { path: '/demo-class', lastModified: '2026-03-05' },
-  { path: '/centers', lastModified: '2026-02-25' },
-  { path: '/scholarship', lastModified: '2026-02-01' },
-  { path: '/youtube-reward', lastModified: '2026-01-10' },
-  { path: '/free-resources', lastModified: '2026-02-15' },
+// i18n: true = include all locale variants; false = English only (content is hardcoded English).
+// Pages with hardcoded English content waste crawl budget when included as /ta/*, /hi/*, etc.
+// Google marks them "Duplicate, Google chose different canonical" → skip non-English in sitemap.
+const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }> = [
+  { path: '', lastModified: '2026-03-10', i18n: true },  // Homepage - translated
+  { path: '/about', lastModified: '2026-02-15', i18n: true },
+  { path: '/contact', lastModified: '2026-02-20', i18n: true },
+  { path: '/apply', lastModified: '2026-03-01', i18n: true },
+  { path: '/courses', lastModified: '2026-03-05', i18n: true },
+  { path: '/coaching', lastModified: '2026-02-28', i18n: true },
+  { path: '/premium', lastModified: '2026-02-10', i18n: true },
+  { path: '/alumni', lastModified: '2026-01-20', i18n: true },
+  { path: '/careers', lastModified: '2026-01-15', i18n: true },
+  { path: '/fees', lastModified: '2026-03-01', i18n: true },
+  { path: '/demo-class', lastModified: '2026-03-05', i18n: true },
+  { path: '/centers', lastModified: '2026-02-25', i18n: true },
+  { path: '/scholarship', lastModified: '2026-02-01', i18n: true },
+  { path: '/youtube-reward', lastModified: '2026-01-10', i18n: true },
+  { path: '/free-resources', lastModified: '2026-02-15', i18n: true },
+  // English-only content pages (hardcoded, no translations)
   { path: '/previous-year-papers', lastModified: '2026-02-20' },
   { path: '/nata-syllabus', lastModified: '2026-02-10' },
   { path: '/nata-preparation-guide', lastModified: '2026-02-15' },
@@ -36,7 +40,7 @@ const staticPages: Array<{ path: string; lastModified: string }> = [
   { path: '/tools/question-bank', lastModified: '2026-03-13' },
   { path: '/nata-app', lastModified: '2026-02-28' },
   { path: '/best-nata-coaching-online', lastModified: '2026-02-20' },
-  { path: '/blog', lastModified: '2026-03-10' },  // Blog index - updated with new posts
+  { path: '/blog', lastModified: '2026-03-10' },
   { path: '/coaching/nata-coaching', lastModified: '2026-02-25' },
   { path: '/coaching/best-nata-coaching-india', lastModified: '2026-03-24' },
   { path: '/coaching/best-nata-coaching-chennai', lastModified: '2026-03-25' },
@@ -51,7 +55,7 @@ const staticPages: Array<{ path: string; lastModified: string }> = [
   { path: '/privacy', lastModified: '2025-12-01' },
   { path: '/terms', lastModified: '2025-12-01' },
   { path: '/refund-policy', lastModified: '2025-12-01' },
-  // NATA 2026 hub + spoke pages
+  // NATA 2026 hub + spoke pages (English-only content)
   { path: '/nata-2026', lastModified: '2026-03-08' },
   { path: '/nata-2026/how-to-apply', lastModified: '2026-03-05' },
   { path: '/nata-2026/eligibility', lastModified: '2026-03-05' },
@@ -64,7 +68,6 @@ const staticPages: Array<{ path: string; lastModified: string }> = [
   { path: '/nata-2026/scoring-and-results', lastModified: '2026-02-28' },
   { path: '/nata-2026/dos-and-donts', lastModified: '2026-02-15' },
   { path: '/nata-2026/cutoff-calculator', lastModified: '2026-03-01' },
-  // New spoke pages (SEO/AEO expansion)
   { path: '/nata-2026/drawing-test', lastModified: '2026-03-13' },
   { path: '/nata-2026/preparation-tips', lastModified: '2026-03-13' },
   { path: '/nata-2026/previous-year-papers', lastModified: '2026-03-13' },
@@ -111,25 +114,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const localeUrl = (locale: string, path: string) =>
     locale === 'en' ? `${baseUrl}${path}` : `${baseUrl}/${locale}${path}`;
 
-  // ─── Static pages: all locales (these have i18n translations) ───
-  for (const locale of locales) {
-    for (const page of staticPages) {
-      const isHomepage = page.path === '';
-      const isHighPriority = page.path.includes('coaching') || page.path.includes('nata') || page.path.includes('jee');
+  // ─── Static pages ───
+  // Pages with i18n: true → include all locale variants with hreflang alternates.
+  // Pages without i18n (default) → English only, saves crawl budget.
+  // This prevents "Duplicate, Google chose different canonical" for hardcoded English pages.
+  for (const page of staticPages) {
+    const isHomepage = page.path === '';
+    const isHighPriority = page.path.includes('coaching') || page.path.includes('nata') || page.path.includes('jee');
+    const pageLocales = page.i18n ? locales : (['en'] as const);
+
+    for (const locale of pageLocales) {
       entries.push({
         url: localeUrl(locale, page.path),
         lastModified: new Date(page.lastModified),
         changeFrequency: isHomepage ? 'daily' : isHighPriority ? 'weekly' : 'weekly',
         priority: isHomepage ? 1.0 : isHighPriority ? 0.9 : 0.8,
-        alternates: {
-          languages: Object.fromEntries(
-            locales.map((l) => [l, localeUrl(l, page.path)])
-          ),
-        },
+        ...(page.i18n
+          ? {
+              alternates: {
+                languages: Object.fromEntries(
+                  locales.map((l) => [l, localeUrl(l, page.path)])
+                ),
+              },
+            }
+          : {}),
       });
     }
+  }
 
-    // Course pages: all locales
+  // Course pages: all locales (course pages use translations)
+  for (const locale of locales) {
     for (const slug of courseSlugs) {
       const path = `/courses/${slug}`;
       entries.push({
@@ -144,22 +158,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         },
       });
     }
+  }
 
-    // Blog posts: all locales
-    for (const post of blogSlugs) {
-      const path = `/blog/${post.slug}`;
-      entries.push({
-        url: localeUrl(locale, path),
-        lastModified: new Date(post.date),
-        changeFrequency: 'monthly',
-        priority: post.isCityGuide ? 0.85 : 0.7,
-        alternates: {
-          languages: Object.fromEntries(
-            locales.map((l) => [l, localeUrl(l, path)])
-          ),
-        },
-      });
-    }
+  // Blog posts: English only (blog content is hardcoded English)
+  for (const post of blogSlugs) {
+    const path = `/blog/${post.slug}`;
+    entries.push({
+      url: `${baseUrl}${path}`,
+      lastModified: new Date(post.date),
+      changeFrequency: 'monthly',
+      priority: post.isCityGuide ? 0.85 : 0.7,
+    });
   }
 
   // ─── Location pages: ENGLISH ONLY, high+medium priority only ───

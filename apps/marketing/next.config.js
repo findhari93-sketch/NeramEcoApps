@@ -59,6 +59,29 @@ const nextConfig = {
           },
         ],
       },
+      // noindex non-content utility pages (SSO, signout, enrollment, etc.)
+      {
+        source: '/(signout|sso|my-enrollment|enroll)',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      },
+      // noindex non-English locale versions of hardcoded English content pages.
+      // These pages have no real translations — Google sees them as duplicates of the
+      // English version and reports "Duplicate, Google chose different canonical".
+      {
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online)/:path*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
+      // Also catch the root-level (non-nested) versions of these paths
+      {
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online)',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
       // Cache static assets (images, fonts, SVGs) for 1 year
       {
         source: '/images/:path*',
@@ -214,6 +237,64 @@ const nextConfig = {
 
       // Catch-all for .html extensions (strip .html and redirect)
       { source: '/:path*.html', destination: '/', permanent: true },
+
+      // ─── Additional WordPress/legacy catch-alls for 404 cleanup ───
+      // Common WordPress paths Google may still crawl
+      { source: '/wp-content/:path*', destination: '/', permanent: true },
+      { source: '/wp-includes/:path*', destination: '/', permanent: true },
+      { source: '/wp-json/:path*', destination: '/', permanent: true },
+      { source: '/wp-login.php', destination: '/', permanent: true },
+      { source: '/wp-admin/:path*', destination: '/', permanent: true },
+      { source: '/feed', destination: '/', permanent: true },
+      { source: '/feed/:path*', destination: '/', permanent: true },
+      { source: '/xmlrpc.php', destination: '/', permanent: true },
+      { source: '/trackback/:path*', destination: '/', permanent: true },
+      { source: '/comments/feed/:path*', destination: '/', permanent: true },
+
+      // Old WordPress taxonomy/archive patterns
+      { source: '/category/:path*', destination: '/blog', permanent: true },
+      { source: '/tag/:path*', destination: '/blog', permanent: true },
+      { source: '/author/:path*', destination: '/about', permanent: true },
+      { source: '/page/:path*', destination: '/', permanent: true },
+      { source: '/attachment/:path*', destination: '/', permanent: true },
+
+      // Old WordPress date-based archives
+      { source: '/2024/:path*', destination: '/blog', permanent: true },
+      { source: '/2025/:path*', destination: '/blog', permanent: true },
+
+      // Common crawled paths that don't exist
+      { source: '/sample-page', destination: '/', permanent: true },
+      { source: '/hello-world', destination: '/', permanent: true },
+      { source: '/test', destination: '/', permanent: true },
+      { source: '/test-page', destination: '/', permanent: true },
+      { source: '/uncategorized/:path*', destination: '/blog', permanent: true },
+
+      // Old registration/member paths
+      { source: '/register', destination: '/apply', permanent: true },
+      { source: '/register/:path*', destination: '/apply', permanent: true },
+      { source: '/signup', destination: '/apply', permanent: true },
+      { source: '/login', destination: 'https://app.neramclasses.com/login', permanent: true },
+      { source: '/members/:path*', destination: '/', permanent: true },
+      { source: '/my-account', destination: 'https://app.neramclasses.com', permanent: true },
+      { source: '/my-account/:path*', destination: 'https://app.neramclasses.com', permanent: true },
+
+      // Old NATA application form patterns
+      { source: '/NATA_Application_Form_:path*', destination: '/apply', permanent: true },
+      { source: '/nata-application-form', destination: '/apply', permanent: true },
+      { source: '/nata-registration', destination: '/nata-2026/how-to-apply', permanent: true },
+      { source: '/nata-admit-card', destination: '/nata-2026/admit-card', permanent: true },
+      { source: '/nata-result', destination: '/nata-2026/scoring-and-results', permanent: true },
+      { source: '/nata-results', destination: '/nata-2026/scoring-and-results', permanent: true },
+      { source: '/nata-exam-date', destination: '/nata-2026/important-dates', permanent: true },
+      { source: '/nata-exam-pattern', destination: '/nata-2026/exam-pattern', permanent: true },
+      { source: '/nata-eligibility', destination: '/nata-2026/eligibility', permanent: true },
+      { source: '/nata-fee', destination: '/nata-2026/fee-structure', permanent: true },
+      { source: '/nata-mock-test', destination: '/tools/question-bank', permanent: true },
+
+      // Favicon and common bot probes (prevent 404 noise)
+      { source: '/favicon.png', destination: '/favicon.ico', permanent: true },
+      { source: '/apple-touch-icon.png', destination: '/apple-icon-180x180.png', permanent: true },
+      { source: '/apple-touch-icon-precomposed.png', destination: '/apple-icon-180x180.png', permanent: true },
     ];
   },
 };
