@@ -150,9 +150,9 @@ export default function EnrollWizard() {
   const [requestResult, setRequestResult] = useState<{ ticketNumber: string; message: string } | null>(null);
   const [ticketResult, setTicketResult] = useState<{ ticketNumber: string } | null>(null);
 
-  // Restore state from localStorage when available
+  // Restore state from localStorage — only when token is confirmed valid (not used/expired)
   useEffect(() => {
-    if (restoredState && !initializedFromRestore.current) {
+    if (restoredState && !initializedFromRestore.current && tokenStatus === 'valid') {
       initializedFromRestore.current = true;
       setCurrentStep(restoredState.currentStep);
       setFormData(restoredState.formData as unknown as typeof DEFAULT_FORM_DATA);
@@ -161,7 +161,7 @@ export default function EnrollWizard() {
       setVerifiedPhone(restoredState.verifiedPhone || null);
       setTermsAccepted(restoredState.termsAccepted);
     }
-  }, [restoredState]);
+  }, [restoredState, tokenStatus]);
 
   // Save progress whenever form state changes
   useEffect(() => {
@@ -413,6 +413,13 @@ export default function EnrollWizard() {
       const data = await res.json();
 
       if (!res.ok) {
+        // If link was already used, redirect to success/owner view
+        if (data.error?.includes('Invalid or expired') || data.error?.includes('already enrolled')) {
+          clearProgress();
+          // Re-validate to show the owner view
+          validateToken(linkData.token, user ? (user.raw as any) : undefined);
+          return;
+        }
         throw new Error(data.error || 'Failed to complete enrollment');
       }
 

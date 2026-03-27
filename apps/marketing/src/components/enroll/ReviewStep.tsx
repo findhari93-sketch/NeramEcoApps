@@ -256,7 +256,7 @@ export default function ReviewStep({
         label={
           <Typography variant="body2">
             I confirm that the information provided is correct and I agree to the{' '}
-            <a href="/terms" target="_blank" style={{ color: 'inherit' }}>
+            <a href="/en/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2', textDecoration: 'underline' }}>
               Terms & Conditions
             </a>
             .
