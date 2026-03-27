@@ -31,6 +31,7 @@ import { useSearchParams } from 'next/navigation';
 import { invalidateApplicationStatus } from '@/hooks/useApplicationStatus';
 import PersonalDetailsStep from './PersonalDetailsStep';
 import AcademicDetailsStep from './AcademicDetailsStep';
+import PaymentDetailsStep from './PaymentDetailsStep';
 import ReviewStep from './ReviewStep';
 import SuccessScreen from './SuccessScreen';
 import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
@@ -38,10 +39,11 @@ import type {
   PersonalInfoData,
   LocationData,
   AcademicDetailsData,
+  PaymentDetailsData,
 } from '@/components/apply/types';
 import { DEFAULT_FORM_DATA } from '@/components/apply/types';
 
-const STEP_LABELS = ['Personal Details', 'Academic Details', 'Review & Confirm'];
+const STEP_LABELS = ['Personal Details', 'Academic Details', 'Payment Details', 'Review & Confirm'];
 
 interface LinkData {
   token: string;
@@ -59,6 +61,7 @@ interface LinkData {
   discountAmount: number;
   finalFee: number;
   amountPaid: number;
+  paymentMethod: string | null;
   expiresAt: string;
 }
 
@@ -189,7 +192,7 @@ export default function EnrollWizard() {
 
   // Save progress whenever form state changes
   useEffect(() => {
-    if (tokenStatus === 'valid' && currentStep < 3) {
+    if (tokenStatus === 'valid' && currentStep < 4) {
       saveProgress({
         currentStep,
         formData: formData as unknown as Record<string, unknown>,
@@ -298,6 +301,10 @@ export default function EnrollWizard() {
           email: user.email || prev.personal.email,
           phone: user.phone || prev.personal.phone || adminPhone,
         },
+        payment: {
+          ...prev.payment,
+          paymentMethod: prev.payment.paymentMethod || linkData.paymentMethod || '',
+        },
       }));
     }
   }, [user, linkData]);
@@ -383,8 +390,15 @@ export default function EnrollWizard() {
     }));
   }, []);
 
+  const updatePaymentData = useCallback((data: Partial<PaymentDetailsData>) => {
+    setFormData((prev) => ({
+      ...prev,
+      payment: { ...prev.payment, ...data },
+    }));
+  }, []);
+
   const handleNext = () => {
-    setCurrentStep((prev) => Math.min(prev + 1, 2));
+    setCurrentStep((prev) => Math.min(prev + 1, 3));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -438,6 +452,13 @@ export default function EnrollWizard() {
           parentPhone: formData.personal.parentPhone,
           phoneVerified,
           phoneVerifiedAt,
+          // Payment details from student
+          paymentDate: formData.payment.paymentDate,
+          paymentType: formData.payment.paymentType,
+          installmentNumber: formData.payment.installmentNumber,
+          paymentMethod: formData.payment.paymentMethod,
+          transactionReference: formData.payment.transactionReference,
+          paymentProofUrl: formData.payment.paymentProofUrl,
         }),
       });
 
@@ -454,7 +475,7 @@ export default function EnrollWizard() {
       invalidateApplicationStatus();
 
       setApplicationNumber(data.data.applicationNumber);
-      setCurrentStep(3); // Success
+      setCurrentStep(4); // Success
     } catch (err: any) {
       setSubmitError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -1203,7 +1224,7 @@ export default function EnrollWizard() {
   // SUCCESS SCREEN
   // ============================================
 
-  if (currentStep === 3 && applicationNumber) {
+  if (currentStep === 4 && applicationNumber) {
     return <SuccessScreen applicationNumber={applicationNumber} />;
   }
 
@@ -1260,7 +1281,7 @@ export default function EnrollWizard() {
       {isMobile ? (
         <MobileStepper
           variant="progress"
-          steps={3}
+          steps={4}
           position="static"
           activeStep={currentStep}
           sx={{ mb: 2, borderRadius: 1, bgcolor: 'grey.50' }}
@@ -1294,7 +1315,7 @@ export default function EnrollWizard() {
       {/* Step title on mobile */}
       {isMobile && (
         <Typography variant="subtitle2" color="text.secondary" mb={2}>
-          Step {currentStep + 1} of 3: {STEP_LABELS[currentStep]}
+          Step {currentStep + 1} of 4: {STEP_LABELS[currentStep]}
         </Typography>
       )}
 
@@ -1333,6 +1354,14 @@ export default function EnrollWizard() {
           />
         )}
         {currentStep === 2 && (
+          <PaymentDetailsStep
+            payment={formData.payment}
+            updatePayment={updatePaymentData}
+            linkData={linkData!}
+            token={linkData!.token}
+          />
+        )}
+        {currentStep === 3 && (
           <ReviewStep
             formData={formData}
             linkData={linkData!}
@@ -1363,7 +1392,7 @@ export default function EnrollWizard() {
         >
           Back
         </Button>
-        {currentStep < 2 && (
+        {currentStep < 3 && (
           <Button
             variant="contained"
             onClick={handleNext}

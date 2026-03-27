@@ -13,7 +13,7 @@ import {
   CircularProgress,
   Alert,
 } from '@neram/ui';
-import { VerifiedUser, School, Person, LocationOn } from '@mui/icons-material';
+import { VerifiedUser, School, Person, LocationOn, Payment, PictureAsPdf, Image as ImageIcon } from '@mui/icons-material';
 import type { ApplicationFormData } from '@/components/apply/types';
 
 const COURSE_LABELS: Record<string, string> = {
@@ -21,6 +21,12 @@ const COURSE_LABELS: Record<string, string> = {
   jee_paper2: 'JEE Paper 2',
   both: 'NATA + JEE Paper 2',
   not_sure: 'Not Sure Yet',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  upi_direct: 'UPI (GPay / PhonePe / Paytm)',
+  bank_transfer: 'Bank Transfer (NEFT / IMPS)',
+  cash: 'Cash',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -184,6 +190,52 @@ export default function ReviewStep({
         />
         <DetailRow label="Caste Category" value={formData.academic.casteCategory} />
         <DetailRow label="Target Exam Year" value={formData.academic.targetExamYear} />
+      </Paper>
+
+      {/* Payment Details */}
+      <Paper
+        elevation={0}
+        sx={{ p: 2, mb: 3, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+      >
+        <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+          <Payment fontSize="small" />
+          <Typography variant="subtitle1" fontWeight={600}>Payment Details</Typography>
+        </Box>
+        <DetailRow
+          label="Payment Date"
+          value={formData.payment.paymentDate ? new Date(formData.payment.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
+        />
+        <DetailRow
+          label="Payment Type"
+          value={formData.payment.paymentType === 'installment' ? `Installment #${formData.payment.installmentNumber}` : 'Full Payment'}
+        />
+        <DetailRow
+          label="Payment Method"
+          value={PAYMENT_METHOD_LABELS[formData.payment.paymentMethod] || formData.payment.paymentMethod || null}
+        />
+        {formData.payment.transactionReference && (
+          <DetailRow label="Transaction Ref" value={formData.payment.transactionReference} />
+        )}
+        {formData.payment.paymentProofUrl && (
+          <Box display="flex" justifyContent="space-between" alignItems="center" py={0.75}>
+            <Typography variant="body2" color="text.secondary">Payment Proof</Typography>
+            <Box display="flex" alignItems="center" gap={0.5}>
+              {formData.payment.paymentProofFileName && /\.(jpe?g|png|webp)$/i.test(formData.payment.paymentProofFileName) ? (
+                <Box
+                  component="img"
+                  src={formData.payment.paymentProofUrl}
+                  alt="Proof"
+                  sx={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 0.5, border: '1px solid', borderColor: 'divider' }}
+                />
+              ) : (
+                <PictureAsPdf sx={{ fontSize: 20, color: 'error.main' }} />
+              )}
+              <Typography variant="body2" fontWeight={500}>
+                {formData.payment.paymentProofFileName || 'Uploaded'}
+              </Typography>
+            </Box>
+          </Box>
+        )}
       </Paper>
 
       {/* Phone verification warning */}

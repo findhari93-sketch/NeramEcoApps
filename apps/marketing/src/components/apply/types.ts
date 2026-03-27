@@ -84,6 +84,19 @@ export interface AcademicDetailsData {
 }
 
 /**
+ * Payment details data (for direct enrollment)
+ */
+export interface PaymentDetailsData {
+  paymentDate: string;
+  paymentType: 'full' | 'installment';
+  installmentNumber: number;
+  paymentMethod: string;
+  transactionReference: string;
+  paymentProofUrl: string | null;
+  paymentProofFileName: string | null;
+}
+
+/**
  * Course selection data
  */
 export interface CourseSelectionData {
@@ -108,6 +121,9 @@ export interface ApplicationFormData {
 
   // Step 3: Course Selection
   course: CourseSelectionData;
+
+  // Payment details (direct enrollment)
+  payment: PaymentDetailsData;
 
   // Terms
   termsAccepted: boolean;
@@ -163,6 +179,15 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     selectedCenterName: null,
     hybridLearningAccepted: false,
     learningMode: 'hybrid',
+  },
+  payment: {
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentType: 'full',
+    installmentNumber: 1,
+    paymentMethod: '',
+    transactionReference: '',
+    paymentProofUrl: null,
+    paymentProofFileName: null,
   },
   termsAccepted: false,
   utmSource: null,

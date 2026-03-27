@@ -48,6 +48,11 @@ export interface UpdateDirectEnrollmentLinkInput {
   admin_notes?: string;
   regenerated_from?: string;
   regenerated_to?: string;
+  // Payment fields (student-provided during enrollment)
+  payment_method?: string;
+  payment_date?: string;
+  transaction_reference?: string;
+  payment_proof_url?: string;
 }
 
 export interface ListDirectEnrollmentLinksFilters {

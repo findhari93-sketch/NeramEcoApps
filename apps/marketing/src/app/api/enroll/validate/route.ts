@@ -227,6 +227,7 @@ export async function GET(request: NextRequest) {
         discountAmount: link.discount_amount,
         finalFee: link.final_fee,
         amountPaid: link.amount_paid,
+        paymentMethod: link.payment_method || null,
         expiresAt: link.expires_at,
       },
     });

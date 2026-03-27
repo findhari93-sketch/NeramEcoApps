@@ -243,6 +243,57 @@ describe('updateDirectEnrollmentLink', () => {
       updateDirectEnrollmentLink('missing', { status: 'cancelled' as any }, mock as any)
     ).rejects.toBeDefined();
   });
+
+  test('should accept payment fields (student-provided)', async () => {
+    const updated = {
+      id: 'link-1',
+      status: 'used',
+      payment_method: 'upi_direct',
+      payment_date: '2026-03-15',
+      transaction_reference: 'UTR123456',
+      payment_proof_url: 'https://storage.example.com/proof.jpg',
+    };
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: updated, error: null });
+
+    const result = await updateDirectEnrollmentLink(
+      'link-1',
+      {
+        status: 'used' as any,
+        payment_method: 'upi_direct',
+        payment_date: '2026-03-15',
+        transaction_reference: 'UTR123456',
+        payment_proof_url: 'https://storage.example.com/proof.jpg',
+      },
+      mock as any
+    );
+
+    expect(mock.update).toHaveBeenCalledWith({
+      status: 'used',
+      payment_method: 'upi_direct',
+      payment_date: '2026-03-15',
+      transaction_reference: 'UTR123456',
+      payment_proof_url: 'https://storage.example.com/proof.jpg',
+    });
+    expect(result).toEqual(updated);
+  });
+
+  test('should allow partial payment field updates', async () => {
+    const updated = { id: 'link-1', payment_proof_url: 'https://storage.example.com/proof.pdf' };
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: updated, error: null });
+
+    const result = await updateDirectEnrollmentLink(
+      'link-1',
+      { payment_proof_url: 'https://storage.example.com/proof.pdf' },
+      mock as any
+    );
+
+    expect(mock.update).toHaveBeenCalledWith({
+      payment_proof_url: 'https://storage.example.com/proof.pdf',
+    });
+    expect(result).toEqual(updated);
+  });
 });
 
 describe('expireOldDirectEnrollmentLinks', () => {

@@ -51,6 +51,13 @@ export async function POST(request: NextRequest) {
       parentPhone,
       phoneVerified,
       phoneVerifiedAt,
+      // Payment details (student-provided)
+      paymentDate,
+      paymentType,
+      installmentNumber,
+      paymentMethod: studentPaymentMethod,
+      transactionReference,
+      paymentProofUrl,
     } = body;
 
     if (!token) {
@@ -181,7 +188,7 @@ export async function POST(request: NextRequest) {
         // Admin
         reviewed_by: link.created_by,
         reviewed_at: new Date().toISOString(),
-        admin_notes: `Direct enrollment via link. Payment: ₹${link.amount_paid} via ${link.payment_method}${link.transaction_reference ? ` (Ref: ${link.transaction_reference})` : ''}`,
+        admin_notes: `Direct enrollment via link. Payment: ₹${link.amount_paid} via ${studentPaymentMethod || link.payment_method || 'unknown'}${(transactionReference || link.transaction_reference) ? ` (Ref: ${transactionReference || link.transaction_reference})` : ''}`,
         // Form
         form_step_completed: 4,
       })
@@ -194,6 +201,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Create payment record for the direct payment
+    const finalPaymentMethod = studentPaymentMethod || link.payment_method;
+    const finalPaymentDate = paymentDate || link.payment_date || new Date().toISOString();
+    const finalTransactionRef = transactionReference || link.transaction_reference || '';
     const receiptNumber = `NR-DE-${Date.now().toString(36).toUpperCase()}`;
     await supabase
       .from('payments')
@@ -204,20 +214,28 @@ export async function POST(request: NextRequest) {
         amount: link.amount_paid,
         currency: 'INR',
         status: 'paid',
-        payment_method: link.payment_method,
+        payment_method: finalPaymentMethod,
         receipt_number: receiptNumber,
-        paid_at: link.payment_date || new Date().toISOString(),
-        notes: `Direct payment. ${link.transaction_reference ? `Transaction: ${link.transaction_reference}` : ''}`,
+        paid_at: finalPaymentDate,
+        screenshot_url: paymentProofUrl || null,
+        installment_number: installmentNumber || 1,
+        notes: `Direct payment (${paymentType || 'full'}). ${finalTransactionRef ? `Transaction: ${finalTransactionRef}` : ''}`,
       });
 
-    // 6. Mark link as used
-    await updateDirectEnrollmentLink(link.id, {
+    // 6. Mark link as used + save student-provided payment details
+    const linkUpdate: Record<string, unknown> = {
       status: 'used',
       used_by: auth.userId,
       used_at: new Date().toISOString(),
       lead_profile_id: leadProfile?.id || null,
       student_profile_id: studentProfile.id,
-    }, supabase);
+    };
+    // Persist student-provided payment details on the link
+    if (studentPaymentMethod) linkUpdate.payment_method = studentPaymentMethod;
+    if (paymentDate) linkUpdate.payment_date = paymentDate;
+    if (transactionReference) linkUpdate.transaction_reference = transactionReference;
+    if (paymentProofUrl) linkUpdate.payment_proof_url = paymentProofUrl;
+    await updateDirectEnrollmentLink(link.id, linkUpdate, supabase);
 
     // 7. Increment batch enrollment
     if (link.batch_id) {
