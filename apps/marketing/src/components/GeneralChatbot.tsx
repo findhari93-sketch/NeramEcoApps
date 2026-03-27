@@ -258,8 +258,8 @@ export default function GeneralChatbot() {
           message: text.trim(),
           history: messages.slice(-10),
           sessionId,
-          userId: firebaseUser?.uid || null,
-          userName: firebaseUser?.displayName || firebaseUser?.phoneNumber || null,
+          userId: firebaseUser?.id || null,
+          userName: firebaseUser?.name || firebaseUser?.phone || null,
           pageUrl: typeof window !== 'undefined' ? window.location.pathname : null,
         }),
       });
@@ -347,7 +347,7 @@ export default function GeneralChatbot() {
   };
 
   // On /contact page, show nothing — TawkToChat is loaded by ContactPageContent there
-  if (pathname?.includes('/contact')) return null;
+  if (pathname?.includes('/contact') || pathname?.includes('/enroll')) return null;
 
   return (
     <>

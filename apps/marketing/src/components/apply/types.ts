@@ -239,6 +239,7 @@ export const CLASS_OPTIONS = [
   { value: '10', label: 'Class 10' },
   { value: '11', label: 'Class 11' },
   { value: '12', label: 'Class 12' },
+  { value: '12_completed', label: '12th Completed' },
 ] as const;
 
 export const YEAR_OF_STUDY_OPTIONS = [
@@ -265,7 +266,7 @@ export function getExamYearOptions() {
   const month = now.getMonth(); // 0=Jan, 8=Sep
   const baseYear = month >= 8 ? year + 1 : year;
   const years = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = -1; i < 4; i++) {
     const startYear = baseYear + i;
     const endYear = startYear + 1;
     const value = `${startYear}-${String(endYear).slice(2)}`;
