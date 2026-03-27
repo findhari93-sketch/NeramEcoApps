@@ -16,6 +16,7 @@ import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -42,6 +43,7 @@ const allStudentNavGroups = [
       { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
+      { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
     ],
   },
   {
@@ -73,6 +75,7 @@ const allBottomNavItems = [
 
 // Mobile bottom nav — overflow "More" items (includes Guide & Profile for mobile access)
 const allOverflowItems = [
+  { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
   { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
   { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
   { label: 'Drawings', path: '/student/drawings', icon: <BrushOutlinedIcon /> },

@@ -23,28 +23,45 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error && error.code === 'PGRST116') {
-      // User not found — auto-create as student (teachers are pre-set by admin)
-      const { data: newUser, error: createError } = await supabase
+      // User not found by ms_oid — try email match before creating new user
+      // This links existing enrollment users (Firebase) to their Microsoft identity
+      const { data: emailUser } = await supabase
         .from('users')
-        .insert({
-          name: msUser.name,
-          email: msUser.email,
-          ms_oid: msUser.oid,
-          user_type: 'student',
-          status: 'active',
-          email_verified: true,
-          phone_verified: false,
-          preferred_language: 'en',
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('email', msUser.email)
+        .maybeSingle();
 
-      if (createError) {
-        console.error('Failed to create user:', createError);
-        return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+      if (emailUser) {
+        // Found existing user by email — link Microsoft identity to them
+        await supabase
+          .from('users')
+          .update({ ms_oid: msUser.oid })
+          .eq('id', emailUser.id);
+        user = { ...emailUser, ms_oid: msUser.oid };
+      } else {
+        // No match — auto-create as student (teachers are pre-set by admin)
+        const { data: newUser, error: createError } = await supabase
+          .from('users')
+          .insert({
+            name: msUser.name,
+            email: msUser.email,
+            ms_oid: msUser.oid,
+            user_type: 'student',
+            status: 'active',
+            email_verified: true,
+            phone_verified: false,
+            preferred_language: 'en',
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Failed to create user:', createError);
+          return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+        }
+
+        user = newUser;
       }
-
-      user = newUser;
     } else if (error) {
       console.error('Database error:', error);
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
@@ -76,20 +93,42 @@ export async function GET(request: NextRequest) {
           ? 'teacher'
           : 'student';
 
-    // Check onboarding status for students
+    // Check onboarding status across ALL enrolled classrooms
+    // If ANY classroom is approved (or has onboarding_type='none'), the student passes the gate
     let onboardingStatus: string | null = null;
     if (nexusRole === 'student' && enrollments && enrollments.length > 0) {
-      const firstClassroom = enrollments[0].classroom;
-      if (firstClassroom) {
-        const db = supabase as any;
-        const { data: onboarding } = await db
-          .from('nexus_student_onboarding')
-          .select('status')
-          .eq('student_id', user.id)
-          .eq('classroom_id', firstClassroom.id)
-          .single();
+      // Classrooms with onboarding_type='none' auto-approve (e.g. Revit college students)
+      const hasNoOnboardingClassroom = enrollments.some(
+        (e: any) => e.classroom?.onboarding_type === 'none'
+      );
 
-        onboardingStatus = onboarding?.status || null;
+      if (hasNoOnboardingClassroom) {
+        onboardingStatus = 'approved';
+      } else {
+        const classroomIds = enrollments
+          .map((e: any) => e.classroom?.id)
+          .filter(Boolean);
+
+        if (classroomIds.length > 0) {
+          const { data: onboardings } = await supabase
+            .from('nexus_student_onboarding')
+            .select('status')
+            .eq('student_id', user.id)
+            .in('classroom_id', classroomIds);
+
+          if (onboardings && onboardings.length > 0) {
+            const statuses = onboardings.map((o: any) => o.status);
+            if (statuses.includes('approved')) {
+              onboardingStatus = 'approved';
+            } else if (statuses.includes('submitted')) {
+              onboardingStatus = 'submitted';
+            } else if (statuses.includes('in_progress')) {
+              onboardingStatus = 'in_progress';
+            } else {
+              onboardingStatus = statuses[0];
+            }
+          }
+        }
       }
     }
 

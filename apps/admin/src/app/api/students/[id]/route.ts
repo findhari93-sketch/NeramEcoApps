@@ -171,6 +171,7 @@ export async function PATCH(
     if (body.email !== undefined) userUpdates.email = body.email;
     if (body.phone !== undefined) userUpdates.phone = body.phone;
     if (body.status !== undefined) userUpdates.status = body.status;
+    if (body.msOid !== undefined) userUpdates.ms_oid = body.msOid;
 
     if (Object.keys(userUpdates).length > 0) {
       await updateUser(id, userUpdates as any, supabase);

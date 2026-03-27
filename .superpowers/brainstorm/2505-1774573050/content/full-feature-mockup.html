@@ -1,0 +1,269 @@
+<h2>Complete QB Scroll UX - All Features</h2>
+<p class="subtitle">Jump bar + scroll spy + mini-map + swipe + keyboard shortcuts</p>
+
+<div class="split">
+  <!-- MOBILE with swipe -->
+  <div class="mockup">
+    <div class="mockup-header">Mobile - Swipe Gestures + Scroll Spy</div>
+    <div class="mockup-body" style="background:#fafafa;max-width:375px;margin:0 auto;font-family:system-ui;position:relative;">
+
+      <!-- Sticky header zone -->
+      <div style="background:#fff;border-bottom:1px solid #e0e0e0;">
+        <!-- Context bar -->
+        <div style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px;">
+          <span style="font-weight:700;">NATA 2025 &bull; Test 1</span>
+          <span style="color:#888;">Q7 of 40</span>
+        </div>
+
+        <!-- Thin progress bar -->
+        <div style="height:3px;background:#e8eaf6;">
+          <div style="width:40%;height:100%;background:linear-gradient(90deg,#4caf50 75%,#ef5350 100%);border-radius:0 2px 2px 0;"></div>
+        </div>
+
+        <!-- Collapsible jump bar with scroll spy -->
+        <div style="padding:6px 12px 8px;">
+          <div style="display:flex;gap:3px;flex-wrap:wrap;">
+            <div style="width:24px;height:24px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;">1</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;">2</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#ef5350;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;">3</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;">4</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">5</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">6</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#1976d2;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:0 0 0 2px #90caf9;transform:scale(1.15);">7</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">8</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#ef5350;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;">9</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">10</div>
+            <div style="width:24px;height:24px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">&#8230;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question with swipe hint -->
+      <div style="padding:8px 12px;">
+        <!-- Swipe demonstration -->
+        <div style="position:relative;overflow:hidden;border-radius:10px;margin-bottom:8px;">
+          <!-- Swipe left reveal: "Studied" action -->
+          <div style="position:absolute;right:0;top:0;bottom:0;width:80px;background:#4caf50;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:600;border-radius:0 10px 10px 0;">
+            &#10003; Studied
+          </div>
+          <!-- Card (slightly shifted to show swipe) -->
+          <div style="background:#fff;border-radius:10px;padding:12px;border:1.5px solid #1976d2;box-shadow:0 2px 8px rgba(25,118,210,0.12);transform:translateX(-20px);transition:transform 0.2s;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-weight:700;font-size:13px;color:#1976d2;">Q7</span>
+              <span style="background:#fff3e0;color:#ef6c00;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;">MEDIUM</span>
+              <span style="margin-left:auto;font-size:9px;color:#aaa;">&#8592; swipe</span>
+            </div>
+            <div style="font-size:12px;line-height:1.5;color:#333;">A circle passes through the point (3, 4) and has its centre at (1, 2)...</div>
+          </div>
+        </div>
+
+        <!-- Swipe right reveal: "Bookmark" -->
+        <div style="position:relative;overflow:hidden;border-radius:10px;margin-bottom:8px;">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:80px;background:#ff9800;display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:600;border-radius:10px 0 0 10px;">
+            &#9733; Save
+          </div>
+          <div style="background:#fff;border-radius:10px;padding:12px;border:1px solid #e8e8e8;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-weight:700;font-size:13px;color:#555;">Q8</span>
+              <span style="background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;">EASY</span>
+              <span style="margin-left:auto;font-size:9px;color:#aaa;">swipe &#8594;</span>
+            </div>
+            <div style="font-size:12px;line-height:1.5;color:#555;">The Qutub Minar was built by...</div>
+          </div>
+        </div>
+
+        <!-- Long press hint -->
+        <div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #e8e8e8;border-left:3px solid #4caf50;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-weight:700;font-size:13px;color:#555;">Q9</span>
+            <span style="color:#4caf50;font-size:14px;">&#10003;</span>
+            <span style="margin-left:auto;font-size:9px;color:#aaa;">long-press to select</span>
+          </div>
+          <div style="font-size:12px;line-height:1.5;color:#888;">If the radius of a sphere is doubled...</div>
+        </div>
+      </div>
+
+      <!-- Swipe legend -->
+      <div style="margin:0 12px;padding:10px;background:#fff;border-radius:8px;border:1px solid #e0e0e0;font-size:10px;display:flex;gap:12px;justify-content:center;">
+        <span>&#8592; <span style="color:#4caf50;font-weight:600;">Studied</span></span>
+        <span>&#8594; <span style="color:#ff9800;font-weight:600;">Bookmark</span></span>
+        <span>&#128400; <span style="color:#1976d2;font-weight:600;">Select</span></span>
+      </div>
+
+      <!-- FAB -->
+      <div style="position:absolute;bottom:16px;right:16px;width:44px;height:44px;border-radius:22px;background:#1976d2;color:white;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.2);font-size:18px;">&#8593;</div>
+    </div>
+  </div>
+
+  <!-- DESKTOP with minimap + keyboard -->
+  <div class="mockup">
+    <div class="mockup-header">Desktop - Mini-map + Keyboard Shortcuts</div>
+    <div class="mockup-body" style="background:#fafafa;font-family:system-ui;position:relative;">
+      <div style="display:flex;height:100%;">
+
+        <!-- Left sidebar (exam tree) -->
+        <div style="width:200px;border-right:1px solid #e0e0e0;background:#fff;padding:12px;font-size:11px;">
+          <div style="font-weight:700;margin-bottom:10px;">Exam Papers</div>
+          <div style="padding:4px 8px;background:#e3f2fd;border-radius:4px;margin-bottom:3px;font-weight:600;color:#1976d2;">NATA</div>
+          <div style="padding:3px 8px 3px 16px;color:#1976d2;font-weight:600;font-size:10px;">2025 Test 1</div>
+        </div>
+
+        <!-- Main content -->
+        <div style="flex:1;display:flex;flex-direction:column;position:relative;">
+
+          <!-- Sticky header -->
+          <div style="background:#fff;border-bottom:1px solid #e0e0e0;">
+            <div style="padding:8px 16px;display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <span style="font-size:13px;font-weight:700;">NATA 2025 &bull; Test 1</span>
+                <span style="font-size:11px;color:#888;margin-left:8px;">40 questions</span>
+              </div>
+              <div style="display:flex;gap:8px;font-size:10px;color:#666;">
+                <span>&#10003; 12</span>
+                <span style="color:#ef5350;">&#10007; 4</span>
+                <span>24 left</span>
+              </div>
+            </div>
+            <div style="height:3px;background:#e8eaf6;">
+              <div style="width:40%;height:100%;background:linear-gradient(90deg,#4caf50 75%,#ef5350 100%);"></div>
+            </div>
+            <!-- Jump bar + keyboard hint -->
+            <div style="padding:6px 16px;display:flex;gap:3px;flex-wrap:wrap;align-items:center;">
+              <div style="width:26px;height:26px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;">1</div>
+              <div style="width:26px;height:26px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;">2</div>
+              <div style="width:26px;height:26px;border-radius:4px;background:#ef5350;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;">3</div>
+              <div style="width:26px;height:26px;border-radius:4px;background:#1976d2;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:0 0 0 2px #90caf9;">7</div>
+              <div style="width:26px;height:26px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">8</div>
+              <span style="font-size:9px;color:#aaa;">...40</span>
+              <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                <!-- Keyboard hint -->
+                <div style="display:flex;gap:4px;align-items:center;font-size:10px;color:#aaa;">
+                  <kbd style="background:#f5f5f5;border:1px solid #ddd;border-radius:3px;padding:1px 5px;font-size:9px;font-family:monospace;">J</kbd>
+                  <kbd style="background:#f5f5f5;border:1px solid #ddd;border-radius:3px;padding:1px 5px;font-size:9px;font-family:monospace;">K</kbd>
+                  nav
+                  <span style="margin:0 2px;">|</span>
+                  <kbd style="background:#f5f5f5;border:1px solid #ddd;border-radius:3px;padding:1px 5px;font-size:9px;font-family:monospace;">S</kbd>
+                  study
+                  <span style="margin:0 2px;">|</span>
+                  <kbd style="background:#f5f5f5;border:1px solid #ddd;border-radius:3px;padding:1px 5px;font-size:9px;font-family:monospace;">?</kbd>
+                  help
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Question list -->
+          <div style="flex:1;padding:12px 16px;overflow-y:auto;">
+            <div style="max-width:680px;">
+              <div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;border:1.5px solid #1976d2;box-shadow:0 2px 8px rgba(25,118,210,0.08);">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <span style="font-weight:700;font-size:13px;color:#1976d2;">Q7</span>
+                  <span style="background:#fff3e0;color:#ef6c00;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;">MEDIUM</span>
+                  <span style="background:#f3e5f5;color:#7b1fa2;padding:1px 6px;border-radius:8px;font-size:9px;">MATH</span>
+                  <span style="margin-left:auto;font-size:10px;color:#888;">&#9660; Enter to expand</span>
+                </div>
+                <div style="font-size:12px;line-height:1.5;color:#333;">A circle passes through the point (3, 4)...</div>
+              </div>
+              <div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #e8e8e8;">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:700;font-size:13px;color:#555;">Q8</span></div>
+                <div style="font-size:12px;color:#555;margin-top:4px;">The Qutub Minar was built by...</div>
+              </div>
+              <div style="background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #e8e8e8;border-left:3px solid #4caf50;">
+                <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:700;font-size:13px;color:#555;">Q9</span><span style="color:#4caf50;">&#10003;</span></div>
+                <div style="font-size:12px;color:#888;margin-top:4px;">If the radius of a sphere...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT EDGE: Mini-map -->
+        <div style="width:32px;background:#fafafa;border-left:1px solid #e8e8e8;padding:8px 4px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+          <div style="font-size:7px;color:#aaa;text-align:center;margin-bottom:4px;">MAP</div>
+          <!-- Each dot = 1 question -->
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#4caf50;cursor:pointer;" title="Q1 - Correct"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#4caf50;cursor:pointer;" title="Q2 - Correct"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#ef5350;cursor:pointer;" title="Q3 - Incorrect"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#4caf50;cursor:pointer;" title="Q4 - Correct"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;" title="Q5"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;" title="Q6"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#1976d2;cursor:pointer;box-shadow:0 0 0 2px #90caf9;" title="Q7 - Current"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;" title="Q8"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#ef5350;cursor:pointer;" title="Q9 - Incorrect"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;" title="Q10"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;"></div>
+          <div style="width:100%;aspect-ratio:1;border-radius:3px;background:#e0e0e0;cursor:pointer;"></div>
+        </div>
+      </div>
+
+      <!-- Keyboard shortcut overlay (toggled with ?) -->
+      <div style="position:absolute;bottom:8px;left:220px;right:40px;background:rgba(0,0,0,0.85);border-radius:8px;padding:12px 16px;color:white;font-size:11px;">
+        <div style="font-weight:700;margin-bottom:6px;font-size:12px;">Keyboard Shortcuts</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">J</kbd> / <kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">&#8595;</kbd> Next question</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">K</kbd> / <kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">&#8593;</kbd> Prev question</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">Enter</kbd> Expand/collapse</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">S</kbd> Toggle studied</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">1-4</kbd> Select MCQ option</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">Esc</kbd> Collapse / Exit</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">G</kbd> then <kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">#</kbd> Go to Q#</div>
+          <div><kbd style="background:rgba(255,255,255,0.15);border-radius:3px;padding:1px 6px;font-family:monospace;font-size:10px;">?</kbd> Toggle shortcuts</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:20px;">
+  <h3>Feature Summary</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="border-bottom:2px solid #e0e0e0;">
+        <th style="text-align:left;padding:8px;">Feature</th>
+        <th style="text-align:center;padding:8px;">Mobile</th>
+        <th style="text-align:center;padding:8px;">Desktop</th>
+        <th style="text-align:left;padding:8px;">Interaction</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:8px;font-weight:600;">Jump Bar</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="padding:8px;">Tap number to scroll, color = attempt status</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:8px;font-weight:600;">Scroll Spy</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="padding:8px;">Jump bar + minimap auto-track visible question</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:8px;font-weight:600;">Mini-map</td>
+        <td style="text-align:center;color:#999;">&#8212;</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="padding:8px;">Right edge strip, click dots to jump (desktop only)</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:8px;font-weight:600;">Swipe</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="text-align:center;color:#999;">&#8212;</td>
+        <td style="padding:8px;">Left=studied, Right=bookmark, Long-press=select</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:8px;font-weight:600;">Keyboard</td>
+        <td style="text-align:center;color:#999;">&#8212;</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="padding:8px;">J/K nav, Enter expand, S study, 1-4 MCQ, ? help</td>
+      </tr>
+      <tr>
+        <td style="padding:8px;font-weight:600;">FAB Scroll-to-top</td>
+        <td style="text-align:center;color:#4caf50;">&#10003;</td>
+        <td style="text-align:center;color:#999;">&#8212;</td>
+        <td style="padding:8px;">Floating button appears after scrolling 3+ screens</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

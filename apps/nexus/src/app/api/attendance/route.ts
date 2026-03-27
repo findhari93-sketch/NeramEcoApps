@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { recordGamificationEvent } from '@neram/database/queries/nexus';
 
 /**
  * GET /api/attendance?scheduled_class_id={id}
@@ -105,6 +106,39 @@ export async function POST(request: NextRequest) {
       .upsert(records, { onConflict: 'scheduled_class_id,student_id' });
 
     if (error) throw error;
+
+    // Record gamification points for students marked present
+    const presentStudents = attendees.filter((a: { user_id: string; present: boolean }) => a.present);
+    if (presentStudents.length > 0) {
+      // Get batch_id for students in this classroom
+      const { data: enrollments } = await supabase
+        .from('nexus_enrollments')
+        .select('user_id, batch_id')
+        .eq('classroom_id', scheduledClass.classroom_id)
+        .in('user_id', presentStudents.map((a: { user_id: string }) => a.user_id));
+
+      const batchMap: Record<string, string | null> = {};
+      for (const e of enrollments || []) {
+        batchMap[(e as any).user_id] = (e as any).batch_id;
+      }
+
+      // Fire-and-forget: don't block attendance response
+      Promise.allSettled(
+        presentStudents.map((a: { user_id: string }) =>
+          recordGamificationEvent({
+            student_id: a.user_id,
+            classroom_id: scheduledClass.classroom_id,
+            batch_id: batchMap[a.user_id] || null,
+            event_type: 'class_attended',
+            points: 10,
+            source_id: `att_${scheduled_class_id}_${a.user_id}`,
+            activity_type: 'class_attended',
+            activity_title: 'Attended class',
+            metadata: { scheduled_class_id },
+          })
+        )
+      ).catch(() => {});
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -61,6 +61,11 @@ export function createServerClient(): TypedSupabaseClient {
       persistSession: false,
       autoRefreshToken: false,
     },
+    global: {
+      fetch: (url, options = {}) => {
+        return fetch(url, { ...options, cache: 'no-store' as RequestCache });
+      },
+    },
   });
 }
 
@@ -84,6 +89,12 @@ export function getSupabaseAdminClient(): TypedSupabaseClient {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
+      },
+      global: {
+        fetch: (url, options = {}) => {
+          // Bypass Next.js fetch cache — ensures fresh data on every query
+          return fetch(url, { ...options, cache: 'no-store' as RequestCache });
+        },
       },
     });
   }

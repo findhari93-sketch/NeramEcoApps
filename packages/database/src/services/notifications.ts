@@ -776,14 +776,18 @@ export async function notifyNewApplication(
     city?: string;
     state?: string;
     applicationNumber?: string;
+    source?: string;
   },
   client?: TypedSupabaseClient
 ): Promise<void> {
+  const isDirect = data.source === 'direct_link';
   await dispatchNotification(
     {
-      type: 'new_application',
-      title: 'New Application Submitted',
-      message: `${data.userName} (${data.phone}) applied for ${data.course}`,
+      type: isDirect ? 'direct_enrollment_completed' : 'new_application',
+      title: isDirect ? 'Direct Enrollment Completed' : 'New Application Submitted',
+      message: isDirect
+        ? `${data.userName} (${data.phone}) completed direct enrollment for ${data.course}`
+        : `${data.userName} (${data.phone}) applied for ${data.course}`,
       data: {
         user_id: data.userId || '',
         user_name: data.userName,
@@ -793,6 +797,7 @@ export async function notifyNewApplication(
         city: data.city || '',
         state: data.state || '',
         application_number: data.applicationNumber || '',
+        source: data.source || '',
       },
     },
     client

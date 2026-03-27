@@ -13,6 +13,8 @@ interface QuestionBankLayoutProps {
   selectedYear: number | null;
   selectedSession: string | null;
   onSelect: (exam: string | null, year: number | null, session: string | null) => void;
+  /** Optional right-edge slot for MiniMap (desktop only) */
+  rightSlot?: React.ReactNode;
 }
 
 export default function QuestionBankLayout({
@@ -23,6 +25,7 @@ export default function QuestionBankLayout({
   selectedYear,
   selectedSession,
   onSelect,
+  rightSlot,
 }: QuestionBankLayoutProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
@@ -61,6 +64,9 @@ export default function QuestionBankLayout({
         >
           {children}
         </Box>
+
+        {/* Right slot for MiniMap */}
+        {rightSlot}
       </Box>
     );
   }

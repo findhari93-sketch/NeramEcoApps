@@ -6,6 +6,7 @@ import type {
   OnboardingStatus,
   DocumentStandard,
 } from '../../types';
+import { getEnrollmentPrefillData } from './onboarding-prefill';
 
 // Cast to 'any' — onboarding table is not in generated Supabase types yet
 const supabase = (): any => getSupabaseAdminClient();
@@ -50,7 +51,10 @@ export async function createOrGetOnboarding(
   const existing = await getOnboardingStatus(studentId, classroomId);
   if (existing) return existing;
 
-  // Create new
+  // Try to pre-fill from enrollment data
+  const prefill = await getEnrollmentPrefillData(studentId, supabase()).catch(() => null);
+
+  // Create new with pre-filled data if available
   const { data, error } = await supabase()
     .from('nexus_student_onboarding')
     .insert({
@@ -58,6 +62,8 @@ export async function createOrGetOnboarding(
       classroom_id: classroomId,
       current_step: 'welcome',
       status: 'in_progress',
+      current_standard: prefill?.currentStandard || null,
+      academic_year: prefill?.academicYear || null,
     })
     .select()
     .single();
@@ -166,27 +172,34 @@ export async function rejectOnboarding(
 // ============================================
 
 export async function getPendingOnboardingReviews(
-  classroomId: string
+  classroomId?: string
 ): Promise<NexusStudentOnboardingWithStudent[]> {
-  const { data, error } = await supabase()
+  let query = supabase()
     .from('nexus_student_onboarding')
-    .select('*, student:users!student_id(id, name, email, avatar_url)')
-    .eq('classroom_id', classroomId)
+    .select('*, student:users!student_id(id, name, email, avatar_url), classroom:nexus_classrooms!classroom_id(id, name)')
     .eq('status', 'submitted')
     .order('submitted_at', { ascending: true });
 
+  if (classroomId) {
+    query = query.eq('classroom_id', classroomId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []) as NexusStudentOnboardingWithStudent[];
 }
 
 export async function getAllOnboardingRecords(
-  classroomId: string,
+  classroomId?: string,
   statusFilter?: OnboardingStatus
 ): Promise<NexusStudentOnboardingWithStudent[]> {
   let query = supabase()
     .from('nexus_student_onboarding')
-    .select('*, student:users!student_id(id, name, email, avatar_url)')
-    .eq('classroom_id', classroomId);
+    .select('*, student:users!student_id(id, name, email, avatar_url), classroom:nexus_classrooms!classroom_id(id, name)');
+
+  if (classroomId) {
+    query = query.eq('classroom_id', classroomId);
+  }
 
   if (statusFilter) {
     query = query.eq('status', statusFilter);

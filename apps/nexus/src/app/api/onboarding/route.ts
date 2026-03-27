@@ -7,7 +7,9 @@ import {
   updateOnboardingStep,
   submitOnboarding,
   getOnboardingRequiredTemplates,
+  getEnrollmentPrefillData,
 } from '@neram/database/queries/nexus';
+import { notifyTeachersOnboardingSubmitted } from '@/lib/onboarding-notifications';
 
 /**
  * GET /api/onboarding?classroom=<id>
@@ -48,10 +50,18 @@ export async function GET(request: NextRequest) {
       .eq('is_deleted', false)
       .in('template_id', templateIds);
 
+    // Fetch enrollment prefill data if onboarding has pre-filled fields
+    let prefillSource: string | null = null;
+    if (onboarding?.current_standard || onboarding?.academic_year) {
+      const prefill = await getEnrollmentPrefillData(user.id, supabase).catch(() => null);
+      if (prefill) prefillSource = 'enrollment';
+    }
+
     return NextResponse.json({
       onboarding,
       requiredTemplates,
       uploadedDocs: uploadedDocs || [],
+      prefillSource,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to get onboarding status';
@@ -72,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, name')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -143,6 +153,11 @@ export async function POST(request: NextRequest) {
         }
 
         result = await submitOnboarding(user.id, classroom_id);
+
+        // Fire-and-forget: notify teachers in the Teams channel
+        notifyTeachersOnboardingSubmitted(user.name || 'A student', classroom_id)
+          .catch(err => console.error('Teams onboarding notification failed:', err));
+
         break;
       }
 

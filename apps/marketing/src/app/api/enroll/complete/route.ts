@@ -250,12 +250,12 @@ export async function POST(request: NextRequest) {
     try {
       await notifyNewApplication({
         applicationNumber,
-        studentName: firstName,
-        email: auth.email || '',
-        phone: auth.phone || '',
+        userName: firstName || link.student_name || 'Unknown',
+        phone: auth.phone || link.student_phone || '',
         course: link.interest_course,
         city: city || '',
         state: state || '',
+        source: 'direct_link',
       });
     } catch (e) {
       console.warn('Failed to send notification:', e);

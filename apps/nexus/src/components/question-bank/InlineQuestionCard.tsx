@@ -1,5 +1,6 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { Box, Paper, Typography, Collapse, Skeleton, IconButton, alpha, useTheme } from '@neram/ui';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import type { NexusQBQuestionListItem, NexusQBQuestionDetail } from '@neram/database';
@@ -23,7 +24,7 @@ interface InlineQuestionCardProps {
   onReport?: (questionId: string, reportType: string, description: string) => Promise<void>;
 }
 
-export default function InlineQuestionCard({
+const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(function InlineQuestionCard({
   question,
   questionDetail,
   expanded,
@@ -34,12 +35,14 @@ export default function InlineQuestionCard({
   onSubmit,
   onStudyToggle,
   onReport,
-}: InlineQuestionCardProps) {
+}, ref) {
   const theme = useTheme();
 
   return (
     <Paper
+      ref={ref}
       variant="outlined"
+      data-question-index={questionIndex}
       sx={{
         borderRadius: 2,
         transition: 'all 0.2s ease-in-out',
@@ -227,4 +230,6 @@ export default function InlineQuestionCard({
       </Collapse>
     </Paper>
   );
-}
+});
+
+export default InlineQuestionCard;

@@ -46,6 +46,7 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WorkIcon from '@mui/icons-material/Work';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import DevicesIcon from '@mui/icons-material/Devices';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -111,6 +112,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
       { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
       { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback' },
+      { text: 'WhatsApp Templates', icon: WhatsAppIcon, path: '/whatsapp-templates' },
       { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
       { text: 'Chat History', icon: ForumIcon, path: '/chat-history' },
       { text: 'Aintra Training', icon: SmartToyIcon, path: '/aintra-kb' },

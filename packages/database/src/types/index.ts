@@ -6348,3 +6348,197 @@ export interface CityStudent {
   course_name: string | null;
   enrolled_at: string | null;
 }
+
+// ============================================
+// WHATSAPP TEMPLATES
+// ============================================
+
+export interface WaCategory {
+  id: string;
+  name: string;
+  slug: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WaTemplate {
+  id: string;
+  category_id: string;
+  title: string;
+  body: string;
+  placeholders: string[];
+  sort_order: number;
+  is_archived: boolean;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  category?: WaCategory;
+}
+
+// ============================================
+// GAMIFICATION
+// ============================================
+
+export type GamificationBadgeCategory = 'attendance' | 'checklist' | 'growth' | 'leaderboard';
+export type GamificationBadgeRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export type GamificationPointEventType =
+  | 'class_attended'
+  | 'checklist_item_completed'
+  | 'full_checklist_completed'
+  | 'drawing_submitted'
+  | 'drawing_reviewed'
+  | 'streak_day'
+  | 'streak_milestone'
+  | 'quiz_completed'
+  | 'peer_help'
+  | 'badge_bonus'
+  | 'manual_teacher_award';
+
+export type GamificationActivityType =
+  | 'class_attended'
+  | 'checklist_completed'
+  | 'checklist_item_completed'
+  | 'drawing_submitted'
+  | 'drawing_reviewed'
+  | 'badge_earned'
+  | 'streak_milestone'
+  | 'rank_improved'
+  | 'manual_award';
+
+export interface GamificationBadgeDefinition {
+  id: string;
+  display_name: string;
+  description: string;
+  criteria_description: string;
+  category: GamificationBadgeCategory;
+  rarity_tier: GamificationBadgeRarity;
+  icon_svg_path: string;
+  icon_locked_svg_path: string;
+  points_bonus: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface GamificationStudentBadge {
+  id: string;
+  student_id: string;
+  badge_id: string;
+  earned_at: string;
+  earned_context: Record<string, unknown>;
+  notified: boolean;
+}
+
+export interface GamificationPointEvent {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  batch_id: string | null;
+  event_type: GamificationPointEventType;
+  points: number;
+  metadata: Record<string, unknown>;
+  source_id: string | null;
+  event_date: string;
+  created_at: string;
+}
+
+export interface GamificationStudentStreak {
+  student_id: string;
+  current_streak: number;
+  longest_streak: number;
+  last_active_date: string | null;
+  streak_started_date: string | null;
+  updated_at: string;
+}
+
+export interface GamificationWeeklyLeaderboard {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  batch_id: string | null;
+  week_start: string;
+  raw_score: number;
+  normalized_score: number;
+  max_possible_score: number;
+  rank_in_batch: number | null;
+  rank_all_neram: number | null;
+  streak_length: number;
+  attendance_pct: number;
+  rank_change: number;
+  is_rising_star: boolean;
+  is_comeback_kid: boolean;
+  created_at: string;
+}
+
+export interface GamificationMonthlyLeaderboard {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  batch_id: string | null;
+  month_start: string;
+  raw_score: number;
+  normalized_score: number;
+  max_possible_score: number;
+  rank_in_batch: number | null;
+  rank_all_neram: number | null;
+  streak_length: number;
+  attendance_pct: number;
+  rank_change: number;
+  badges_earned_this_month: number;
+  is_rising_star: boolean;
+  is_comeback_kid: boolean;
+  created_at: string;
+}
+
+export interface GamificationStudentActivityLog {
+  id: string;
+  student_id: string;
+  activity_type: GamificationActivityType;
+  title: string;
+  metadata: Record<string, unknown>;
+  activity_date: string;
+}
+
+// Composite types for API responses
+
+export interface LeaderboardEntry {
+  rank: number;
+  student_id: string;
+  student_name: string;
+  avatar_url: string | null;
+  batch_name: string | null;
+  raw_score: number;
+  normalized_score: number;
+  streak_length: number;
+  attendance_pct: number;
+  rank_change: number;
+  is_rising_star: boolean;
+  is_comeback_kid: boolean;
+  top_badges: GamificationBadgeDefinition[];
+}
+
+export interface StudentAchievementProfile {
+  student_id: string;
+  student_name: string;
+  avatar_url: string | null;
+  batch_name: string | null;
+  classroom_name: string | null;
+  current_rank: number | null;
+  streak: GamificationStudentStreak | null;
+  attendance_pct: number;
+  total_checklists_completed: number;
+  total_badges: number;
+  badges: (GamificationStudentBadge & { badge: GamificationBadgeDefinition })[];
+  recent_activity: GamificationStudentActivityLog[];
+  attendance_heatmap: { date: string; attended: boolean }[];
+}
+
+export interface BadgeCatalogEntry extends GamificationBadgeDefinition {
+  earned: boolean;
+  earned_at: string | null;
+}
+
+export type PlaceholderValues = Record<string, string>;

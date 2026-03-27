@@ -21,3 +21,5 @@ export * from './library';
 export * from './library-engagement';
 export * from './exam-recall';
 export * from './onboarding';
+export * from './onboarding-prefill';
+export * from './gamification';

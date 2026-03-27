@@ -1,0 +1,156 @@
+<h2>Question Bank - Scroll UX Approaches</h2>
+<p class="subtitle">Which scrolling experience feels right for browsing 100+ questions?</p>
+
+<div class="cards">
+  <!-- Approach A: Sticky Header + Scroll Position -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f0f4ff;padding:16px;">
+      <div style="font-size:13px;color:#666;margin-bottom:8px;">APPROACH A</div>
+      <div style="background:#fff;border-radius:8px;border:1px solid #e0e0e0;overflow:hidden;">
+        <!-- Sticky header -->
+        <div style="background:#1976d2;color:white;padding:8px 12px;font-size:12px;font-weight:600;display:flex;justify-content:space-between;position:sticky;top:0;">
+          <span>JEE 2025 Session 1</span>
+          <span>Q12/82 &bull; 15% done</span>
+        </div>
+        <!-- Floating progress bar -->
+        <div style="height:3px;background:#e3f2fd;">
+          <div style="width:15%;height:100%;background:#1976d2;border-radius:0 2px 2px 0;"></div>
+        </div>
+        <!-- Question cards -->
+        <div style="padding:8px;">
+          <div style="background:#f5f5f5;border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid #4caf50;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;">
+              <b>Q11</b> <span style="color:#4caf50;">&#10003;</span>
+            </div>
+            <div style="color:#888;margin-top:2px;">If log(x+1) + log(x-1) = log(3)...</div>
+          </div>
+          <div style="background:#e3f2fd;border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid #1976d2;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,0.1);">
+            <div style="display:flex;justify-content:space-between;">
+              <b>Q12</b> <span style="color:#1976d2;">current</span>
+            </div>
+            <div style="color:#555;margin-top:2px;">The area bounded by the curve y = x&sup2;...</div>
+          </div>
+          <div style="background:#f5f5f5;border-radius:6px;padding:8px;margin-bottom:6px;font-size:11px;opacity:0.7;">
+            <div><b>Q13</b></div>
+            <div style="color:#888;margin-top:2px;">For a triangle with vertices at...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Sticky Progress Header</h3>
+      <p>Persistent header showing current position (Q12/82), progress bar, and context. Scroll indicator shows where you are in the list. Current question highlighted with accent border.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Always know your position</li><li>Progress visible at all times</li><li>Minimal UI changes needed</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Takes vertical space on mobile</li><li>Still a long scroll</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach B: Virtual List + Jump-to -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f0fff4;padding:16px;">
+      <div style="font-size:13px;color:#666;margin-bottom:8px;">APPROACH B</div>
+      <div style="background:#fff;border-radius:8px;border:1px solid #e0e0e0;overflow:hidden;">
+        <!-- Jump bar -->
+        <div style="background:#f5f5f5;padding:6px 12px;display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #e0e0e0;">
+          <div style="width:20px;height:20px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;">1</div>
+          <div style="width:20px;height:20px;border-radius:4px;background:#4caf50;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;">2</div>
+          <div style="width:20px;height:20px;border-radius:4px;background:#ef5350;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;">3</div>
+          <div style="width:20px;height:20px;border-radius:4px;background:#1976d2;color:white;font-size:9px;display:flex;align-items:center;justify-content:center;">4</div>
+          <div style="width:20px;height:20px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">5</div>
+          <div style="width:20px;height:20px;border-radius:4px;background:#e0e0e0;color:#666;font-size:9px;display:flex;align-items:center;justify-content:center;">6</div>
+          <div style="font-size:9px;color:#888;display:flex;align-items:center;margin-left:4px;">...82</div>
+        </div>
+        <!-- Virtualized list -->
+        <div style="padding:8px;">
+          <div style="background:#fff3e0;border-radius:6px;padding:8px;margin-bottom:6px;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <b>Q4</b>
+              <span style="background:#ff9800;color:white;padding:1px 6px;border-radius:10px;font-size:9px;">MEDIUM</span>
+            </div>
+            <div style="color:#555;margin-top:4px;">The value of the determinant...</div>
+          </div>
+          <div style="background:#f5f5f5;border-radius:6px;padding:8px;margin-bottom:6px;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <b>Q5</b>
+              <span style="background:#e0e0e0;padding:1px 6px;border-radius:10px;font-size:9px;">EASY</span>
+            </div>
+            <div style="color:#888;margin-top:4px;">If the sum of first n terms...</div>
+          </div>
+        </div>
+        <!-- Scroll indicator on right edge -->
+        <div style="position:absolute;right:4px;top:50px;width:6px;height:40px;background:#1976d2;border-radius:3px;opacity:0.6;"></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Question Number Jump Bar + Virtual Scroll</h3>
+      <p>Sticky numbered grid at top - tap any number to jump. Color-coded: green=correct, red=incorrect, blue=current, gray=unattempted. Virtualized list renders only visible items for 60fps scrolling even with 200+ questions.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Jump to any question instantly</li><li>See attempt status at a glance</li><li>Butter-smooth with 200+ items</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Needs react-window/virtuoso</li><li>Jump bar takes space</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approach C: Card Swipe + Mini-map -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff0f5;padding:16px;">
+      <div style="font-size:13px;color:#666;margin-bottom:8px;">APPROACH C</div>
+      <div style="background:#fff;border-radius:8px;border:1px solid #e0e0e0;overflow:hidden;position:relative;">
+        <!-- Top nav -->
+        <div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e0e0e0;">
+          <div style="font-size:11px;color:#888;">&#9664; Q11</div>
+          <div style="font-size:13px;font-weight:700;">Q12 of 82</div>
+          <div style="font-size:11px;color:#888;">Q13 &#9654;</div>
+        </div>
+        <!-- Full question card -->
+        <div style="padding:12px;">
+          <div style="display:flex;gap:4px;margin-bottom:8px;">
+            <span style="background:#e3f2fd;color:#1976d2;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600;">JEE 2025</span>
+            <span style="background:#fff3e0;color:#ef6c00;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600;">MEDIUM</span>
+          </div>
+          <div style="font-size:12px;line-height:1.6;color:#333;">The area bounded by the curve y = x&sup2;, the x-axis, and the lines x = 1, x = 3 is equal to...</div>
+          <div style="margin-top:10px;">
+            <div style="background:#f5f5f5;border-radius:6px;padding:8px;margin-bottom:4px;font-size:11px;display:flex;align-items:center;gap:8px;">
+              <div style="width:22px;height:22px;border-radius:50%;border:2px solid #999;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">A</div>
+              <span>26/3</span>
+            </div>
+            <div style="background:#e8f5e9;border-radius:6px;padding:8px;margin-bottom:4px;font-size:11px;display:flex;align-items:center;gap:8px;border:1px solid #4caf50;">
+              <div style="width:22px;height:22px;border-radius:50%;background:#4caf50;color:white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;">B</div>
+              <span>8/3</span>
+            </div>
+          </div>
+        </div>
+        <!-- Bottom mini-map -->
+        <div style="border-top:1px solid #e0e0e0;padding:6px 12px;display:flex;gap:2px;overflow-x:auto;">
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#4caf50;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#4caf50;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#ef5350;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#1976d2;"></div>
+          <div style="min-width:8px;height:8px;border-radius:2px;background:#e0e0e0;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>One-at-a-Time Swipe Mode (Kindle-style)</h3>
+      <p>Full-screen question view with swipe left/right navigation. Bottom mini-map shows all questions as colored dots. No scrolling - just swipe through questions like a Kindle book. List mode still available as toggle.</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Zero scrolling fatigue</li><li>Focused, distraction-free</li><li>Great mobile UX (swipe)</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't scan multiple questions</li><li>Slower to browse/skim</li><li>Biggest code change</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;padding:16px;background:#f5f5f5;border-radius:8px;">
+  <h3 style="margin:0 0 8px;">My Recommendation: Hybrid B + A</h3>
+  <p style="margin:0;font-size:14px;line-height:1.6;">Combine the <b>jump bar with status dots</b> (B) for quick navigation with the <b>sticky progress header</b> (A) for context awareness. Keep the scrollable list (not one-at-a-time) since teachers need to scan/edit many questions quickly. Add virtual scrolling only if performance degrades with 100+ items. The Kindle swipe mode (C) is great as an <i>optional toggle</i> for students in practice/study mode.</p>
+</div>

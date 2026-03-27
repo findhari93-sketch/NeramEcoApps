@@ -6,6 +6,7 @@ import {
   getStudentSubmissions,
   getPendingSubmissions,
 } from '@neram/database/queries';
+import { recordGamificationEvent } from '@neram/database/queries/nexus';
 
 /**
  * GET /api/drawings/submissions?classroom={id}&exercise={id}
@@ -85,6 +86,33 @@ export async function POST(request: NextRequest) {
       student_id: user.id,
       submission_url,
     });
+
+    // Record gamification points for drawing submission
+    try {
+      const { data: enrollment } = await supabase
+        .from('nexus_enrollments')
+        .select('classroom_id, batch_id')
+        .eq('user_id', user.id)
+        .eq('role', 'student')
+        .limit(1)
+        .single();
+
+      if (enrollment) {
+        recordGamificationEvent({
+          student_id: user.id,
+          classroom_id: (enrollment as any).classroom_id,
+          batch_id: (enrollment as any).batch_id || null,
+          event_type: 'drawing_submitted',
+          points: 20,
+          source_id: `draw_${(submission as any).id}`,
+          activity_type: 'drawing_submitted',
+          activity_title: 'Submitted a drawing',
+          metadata: { exercise_id, submission_id: (submission as any).id },
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-critical
+    }
 
     return NextResponse.json({ submission }, { status: 201 });
   } catch (err) {

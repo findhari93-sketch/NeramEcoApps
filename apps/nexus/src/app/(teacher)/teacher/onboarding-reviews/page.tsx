@@ -41,22 +41,22 @@ interface OnboardingReview {
   reviewed_at: string | null;
   rejection_reason: string | null;
   student: { id: string; name: string; email: string | null; avatar_url: string | null };
+  classroom?: { id: string; name: string };
   documents: { id: string; title: string; file_url: string; file_type: string; status: string; sharepoint_web_url: string | null }[];
 }
 
 export default function OnboardingReviewsPage() {
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  const { getToken } = useNexusAuthContext();
   const [reviews, setReviews] = useState<OnboardingReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0); // 0 = pending, 1 = all
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [rejectDialog, setRejectDialog] = useState<{ studentId: string; name: string } | null>(null);
+  const [rejectDialog, setRejectDialog] = useState<{ studentId: string; classroomId: string; name: string } | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchReviews = useCallback(async () => {
-    if (!activeClassroom) return;
     setLoading(true);
     try {
       const token = await getToken();
@@ -64,7 +64,7 @@ export default function OnboardingReviewsPage() {
 
       const status = tab === 0 ? 'submitted' : '';
       const res = await fetch(
-        `/api/onboarding/review?classroom=${activeClassroom.id}${status ? `&status=${status}` : ''}`,
+        `/api/onboarding/review${status ? `?status=${status}` : ''}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -76,14 +76,13 @@ export default function OnboardingReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, getToken, tab]);
+  }, [getToken, tab]);
 
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
 
-  const handleApprove = async (studentId: string) => {
-    if (!activeClassroom) return;
+  const handleApprove = async (studentId: string, classroomId: string) => {
     setActionLoading(studentId);
     setError(null);
     try {
@@ -95,7 +94,7 @@ export default function OnboardingReviewsPage() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           student_id: studentId,
-          classroom_id: activeClassroom.id,
+          classroom_id: classroomId,
           action: 'approve',
         }),
       });
@@ -111,7 +110,7 @@ export default function OnboardingReviewsPage() {
   };
 
   const handleReject = async () => {
-    if (!rejectDialog || !activeClassroom || !rejectReason.trim()) return;
+    if (!rejectDialog || !rejectReason.trim()) return;
     setActionLoading(rejectDialog.studentId);
     setError(null);
     try {
@@ -123,7 +122,7 @@ export default function OnboardingReviewsPage() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           student_id: rejectDialog.studentId,
-          classroom_id: activeClassroom.id,
+          classroom_id: rejectDialog.classroomId,
           action: 'reject',
           reason: rejectReason,
         }),
@@ -204,9 +203,9 @@ export default function OnboardingReviewsPage() {
             <ReviewCard
               key={review.id}
               review={review}
-              onApprove={() => handleApprove(review.student_id)}
+              onApprove={() => handleApprove(review.student_id, review.classroom_id)}
               onReject={() =>
-                setRejectDialog({ studentId: review.student_id, name: review.student.name })
+                setRejectDialog({ studentId: review.student_id, classroomId: review.classroom_id, name: review.student.name })
               }
               isLoading={actionLoading === review.student_id}
             />
@@ -294,6 +293,11 @@ function ReviewCard({
             {review.current_standard && ` · ${review.current_standard}`}
             {review.academic_year && ` · ${review.academic_year}`}
           </Typography>
+          {review.classroom?.name && (
+            <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>
+              {review.classroom.name}
+            </Typography>
+          )}
         </Box>
         <Chip
           label={review.status}
