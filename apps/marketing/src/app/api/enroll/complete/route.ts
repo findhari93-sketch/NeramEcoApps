@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       user_type: 'student',
       status: 'active',
       phone_verified: true,
-      onboarding_completed: false, // Triggers onboarding in student app
+      onboarding_completed: true, // Direct enrollment students skip the quiz wizard (data already collected)
     }, supabase);
 
     // 3. Create student profile first (to get DB-generated student_id)

@@ -21,10 +21,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Checkbox,
-  LinearProgress,
 } from '@neram/ui';
-import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Edit as EditIcon, Save as SaveIcon, CheckCircle, RadioButtonUnchecked, OpenInNew, WhatsApp, Laptop, Groups, Person } from '@mui/icons-material';
+import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Edit as EditIcon, Save as SaveIcon, OpenInNew } from '@mui/icons-material';
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
@@ -100,27 +98,6 @@ interface UsedLinkData {
   isOwner?: boolean;
 }
 
-interface OnboardingStep {
-  id: string;
-  isCompleted: boolean;
-  completedAt: string | null;
-  completedByType: string | null;
-  stepKey: string;
-  title: string;
-  description: string | null;
-  iconName: string | null;
-  actionType: 'link' | 'in_app' | 'manual';
-  actionConfig: Record<string, unknown>;
-  displayOrder: number;
-  isRequired: boolean;
-}
-
-const ONBOARDING_ICONS: Record<string, React.ReactNode> = {
-  WhatsApp: <WhatsApp sx={{ color: '#25D366' }} />,
-  Laptop: <Laptop sx={{ color: '#0078D4' }} />,
-  Groups: <Groups sx={{ color: '#0078D4' }} />,
-  Person: <Person sx={{ color: '#1976d2' }} />,
-};
 
 export default function EnrollWizard() {
   const theme = useTheme();
@@ -161,10 +138,6 @@ export default function EnrollWizard() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Onboarding steps
-  const [onboardingSteps, setOnboardingSteps] = useState<OnboardingStep[]>([]);
-  const [onboardingLoading, setOnboardingLoading] = useState(false);
-  const [togglingStep, setTogglingStep] = useState<string | null>(null);
 
   // Error page state
   const [showRequestDialog, setShowRequestDialog] = useState(false);
@@ -260,31 +233,6 @@ export default function EnrollWizard() {
     }
   }, [usedLinkData?.isOwner, usedLinkData?.leadProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch onboarding steps when owner is identified
-  useEffect(() => {
-    if (!usedLinkData?.isOwner || !user) return;
-
-    const fetchOnboardingSteps = async () => {
-      setOnboardingLoading(true);
-      try {
-        const firebaseUser = (user.raw as any);
-        const idToken = await firebaseUser?.getIdToken();
-        const res = await fetch('/api/enroll/onboarding-steps', {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        const data = await res.json();
-        if (res.ok && data.data) {
-          setOnboardingSteps(data.data);
-        }
-      } catch {
-        // Onboarding steps are optional — don't block the page
-      } finally {
-        setOnboardingLoading(false);
-      }
-    };
-
-    fetchOnboardingSteps();
-  }, [usedLinkData?.isOwner, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fill from Google login + linkData phone (skip fields already filled from restore)
   useEffect(() => {
@@ -533,37 +481,6 @@ export default function EnrollWizard() {
     }
   };
 
-  // Toggle onboarding step completion
-  const handleToggleOnboardingStep = async (step: OnboardingStep) => {
-    if (!user) return;
-    setTogglingStep(step.id);
-    try {
-      const firebaseUser = (user.raw as any);
-      const idToken = await firebaseUser?.getIdToken();
-      const res = await fetch(`/api/enroll/onboarding-steps/${step.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ isCompleted: !step.isCompleted }),
-      });
-      const data = await res.json();
-      if (res.ok && data.data) {
-        setOnboardingSteps((prev) =>
-          prev.map((s) =>
-            s.id === step.id
-              ? { ...s, isCompleted: data.data.isCompleted, completedAt: data.data.completedAt }
-              : s
-          )
-        );
-      }
-    } catch {
-      // Silent fail — not critical
-    } finally {
-      setTogglingStep(null);
-    }
-  };
 
   // Request link regeneration
   const handleRequestRegeneration = async () => {
@@ -918,122 +835,34 @@ export default function EnrollWizard() {
             </fieldset>
           </Paper>
 
-          {/* Onboarding Steps */}
-          {(onboardingSteps.length > 0 || onboardingLoading) && (
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2, md: 3 },
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
-                mb: 3,
-              }}
+          {/* Onboarding CTA — steps live in the Student App */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 3 },
+              border: '1px solid',
+              borderColor: 'primary.200',
+              borderRadius: 2,
+              bgcolor: 'primary.50',
+              mb: 3,
+              textAlign: 'center',
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={700} mb={1}>
+              Complete Your Onboarding
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Open the Student App to view and complete your onboarding steps — join WhatsApp, install Teams, and more.
+            </Typography>
+            <Button
+              variant="contained"
+              href={`/sso?redirect=${encodeURIComponent(APP_URL + '/onboarding')}`}
+              endIcon={<OpenInNew sx={{ fontSize: 16 }} />}
+              sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="subtitle1" fontWeight={700}>
-                  Complete Your Onboarding
-                </Typography>
-                {onboardingSteps.length > 0 && (
-                  <Typography variant="body2" color="text.secondary">
-                    {onboardingSteps.filter((s) => s.isCompleted).length} of {onboardingSteps.length} complete
-                  </Typography>
-                )}
-              </Box>
-
-              {onboardingSteps.length > 0 && (
-                <LinearProgress
-                  variant="determinate"
-                  value={(onboardingSteps.filter((s) => s.isCompleted).length / onboardingSteps.length) * 100}
-                  sx={{ mb: 2, borderRadius: 1, height: 6 }}
-                />
-              )}
-
-              {onboardingLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                  <CircularProgress size={24} />
-                </Box>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {onboardingSteps.map((step) => (
-                    <Paper
-                      key={step.id}
-                      variant="outlined"
-                      sx={{
-                        p: { xs: 1.5, md: 2 },
-                        borderRadius: 1.5,
-                        bgcolor: step.isCompleted ? 'success.50' : 'transparent',
-                        borderColor: step.isCompleted ? 'success.light' : 'divider',
-                        opacity: togglingStep === step.id ? 0.7 : 1,
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-                        <Checkbox
-                          checked={step.isCompleted}
-                          onChange={() => handleToggleOnboardingStep(step)}
-                          disabled={togglingStep === step.id}
-                          icon={<RadioButtonUnchecked />}
-                          checkedIcon={<CheckCircle />}
-                          sx={{ p: 0.5, mt: 0.25 }}
-                        />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
-                            {step.iconName && ONBOARDING_ICONS[step.iconName] && (
-                              <Box sx={{ display: 'flex', fontSize: 20 }}>
-                                {ONBOARDING_ICONS[step.iconName]}
-                              </Box>
-                            )}
-                            <Typography
-                              variant="body1"
-                              fontWeight={600}
-                              sx={{
-                                textDecoration: step.isCompleted ? 'line-through' : 'none',
-                                color: step.isCompleted ? 'text.secondary' : 'text.primary',
-                              }}
-                            >
-                              {step.title}
-                            </Typography>
-                          </Box>
-                          {step.description && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                              {step.description}
-                            </Typography>
-                          )}
-                          {step.actionType === 'link' && !!(step.actionConfig?.url) && (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              href={step.actionConfig.url as string}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              endIcon={<OpenInNew sx={{ fontSize: 14 }} />}
-                              sx={{ borderRadius: 1, textTransform: 'none', fontSize: 12, py: 0.25 }}
-                            >
-                              Open
-                            </Button>
-                          )}
-                          {step.actionType === 'in_app' && !!(step.actionConfig?.route) && (
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              href={`${APP_URL}${step.actionConfig.route}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              endIcon={<OpenInNew sx={{ fontSize: 14 }} />}
-                              sx={{ borderRadius: 1, textTransform: 'none', fontSize: 12, py: 0.25 }}
-                            >
-                              Go to Student App
-                            </Button>
-                          )}
-                        </Box>
-                      </Box>
-                    </Paper>
-                  ))}
-                </Box>
-              )}
-            </Paper>
-          )}
+              Open Onboarding
+            </Button>
+          </Paper>
 
           {/* Navigation + Go to App */}
           <Box display="flex" justifyContent="space-between" gap={2}>

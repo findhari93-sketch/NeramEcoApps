@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, markOnboardingStepComplete } from '@neram/database';
+import { createAdminClient } from '@neram/database';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
@@ -37,7 +37,7 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string } | n
   }
 }
 
-// PATCH /api/onboarding-steps/[progressId] - Student marks a step as complete
+// PATCH /api/onboarding-steps/[progressId] - Update step status
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ progressId: string }> }
@@ -49,6 +49,8 @@ export async function PATCH(
     }
 
     const { progressId } = await params;
+    const body = await request.json();
+    const { status } = body;
     const supabase = createAdminClient();
 
     // Verify this progress row belongs to this user
@@ -62,16 +64,46 @@ export async function PATCH(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const result = await markOnboardingStepComplete(
-      progressId,
-      'student',
-      auth.userId,
-      supabase
-    );
+    // Build update data
+    const updateData: Record<string, unknown> = {};
 
-    return NextResponse.json({ success: true, data: result });
+    if (status === 'completed') {
+      updateData.is_completed = true;
+      updateData.completed_at = new Date().toISOString();
+      updateData.completed_by_type = 'student';
+      updateData.completed_by_user_id = auth.userId;
+      updateData.status = 'completed';
+    } else if (status === 'need_help') {
+      updateData.status = 'need_help';
+    } else if (status === 'in_progress') {
+      updateData.status = 'in_progress';
+    } else if (status === 'pending') {
+      updateData.is_completed = false;
+      updateData.completed_at = null;
+      updateData.completed_by_type = null;
+      updateData.completed_by_user_id = null;
+      updateData.status = 'pending';
+    } else {
+      // Legacy toggle: mark as complete (backward compatible)
+      updateData.is_completed = true;
+      updateData.completed_at = new Date().toISOString();
+      updateData.completed_by_type = 'student';
+      updateData.completed_by_user_id = auth.userId;
+      updateData.status = 'completed';
+    }
+
+    const { data: updated, error } = await supabase
+      .from('student_onboarding_progress')
+      .update(updateData)
+      .eq('id', progressId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, data: updated });
   } catch (error) {
-    console.error('Error marking step complete:', error);
+    console.error('Error updating onboarding step:', error);
     return NextResponse.json(
       { error: 'Failed to update step' },
       { status: 500 }

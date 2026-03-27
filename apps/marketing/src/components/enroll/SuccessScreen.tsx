@@ -1,21 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Box, Container, Typography, Button, Paper, Divider, Skeleton } from '@neram/ui';
+import { Box, Container, Typography, Button, Paper, Divider } from '@neram/ui';
 import { CheckCircleOutlined, ArrowForward, Check } from '@mui/icons-material';
-import { getAuth } from 'firebase/auth';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
-
-interface OnboardingStep {
-  id: string;
-  title: string;
-  description: string;
-  stepKey: string;
-  isCompleted: boolean;
-  actionType: string;
-  displayOrder: number;
-}
+const APP_ONBOARDING_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com') + '/onboarding';
 
 interface EnrollmentSummary {
   studentName?: string | null;
@@ -49,32 +37,6 @@ function formatCurrency(amount: number | null | undefined): string {
 }
 
 export default function SuccessScreen({ applicationNumber, enrollmentSummary }: SuccessScreenProps) {
-  const [onboardingSteps, setOnboardingSteps] = useState<OnboardingStep[]>([]);
-  const [loadingSteps, setLoadingSteps] = useState(true);
-
-  useEffect(() => {
-    async function fetchSteps() {
-      try {
-        const user = getAuth().currentUser;
-        if (!user) { setLoadingSteps(false); return; }
-        const token = await user.getIdToken();
-        const res = await fetch('/api/enroll/onboarding-steps', {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store',
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setOnboardingSteps(data.data || []);
-        }
-      } catch {
-        // Fallback to no steps — will show default
-      } finally {
-        setLoadingSteps(false);
-      }
-    }
-    fetchSteps();
-  }, []);
-
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
       <Box textAlign="center">
@@ -103,7 +65,7 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
           {applicationNumber}
         </Typography>
 
-        {/* Enrollment Summary (shown on revisit) */}
+        {/* Enrollment Summary */}
         {enrollmentSummary && (enrollmentSummary.studentName || enrollmentSummary.courseName) && (
           <Paper
             elevation={0}
@@ -156,11 +118,11 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
           </Paper>
         )}
 
-        {/* What's next — onboarding steps from database */}
+        {/* What's next — simple message */}
         <Paper
           elevation={0}
           sx={{
-            p: 3,
+            p: 2.5,
             mb: 4,
             border: '1px solid',
             borderColor: 'divider',
@@ -168,80 +130,46 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
             textAlign: 'left',
           }}
         >
-          <Typography variant="subtitle1" fontWeight={600} mb={2}>
+          <Typography variant="subtitle1" fontWeight={600} mb={1.5}>
             What happens next?
           </Typography>
-
-          {/* Step 1 is always "Enrollment confirmed" */}
-          <Box display="flex" alignItems="center" gap={2} mb={1.5}>
+          <Box display="flex" alignItems="center" gap={2} mb={1}>
             <Box
               sx={{
                 width: 28, height: 28, borderRadius: '50%',
                 bgcolor: 'success.main', color: 'white',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700, flexShrink: 0,
+                flexShrink: 0,
               }}
             >
               <Check sx={{ fontSize: 16 }} />
             </Box>
-            <Typography variant="body2" color="success.main">
+            <Typography variant="body2" color="success.main" fontWeight={500}>
               Enrollment confirmed
             </Typography>
           </Box>
-
-          {/* Dynamic onboarding steps from DB */}
-          {loadingSteps ? (
-            <>
-              <Skeleton variant="text" width="80%" height={28} sx={{ ml: 5, mb: 1 }} />
-              <Skeleton variant="text" width="70%" height={28} sx={{ ml: 5, mb: 1 }} />
-              <Skeleton variant="text" width="60%" height={28} sx={{ ml: 5 }} />
-            </>
-          ) : onboardingSteps.length > 0 ? (
-            onboardingSteps.map((step, idx) => (
-              <Box key={step.id} display="flex" alignItems="flex-start" gap={2} mb={1.5}>
-                <Box
-                  sx={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    bgcolor: step.isCompleted ? 'success.main' : 'grey.300',
-                    color: 'white',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, fontWeight: 700, flexShrink: 0,
-                  }}
-                >
-                  {step.isCompleted ? <Check sx={{ fontSize: 16 }} /> : idx + 2}
-                </Box>
-                <Box>
-                  <Typography variant="body2" fontWeight={500}>
-                    {step.title}
-                  </Typography>
-                  {step.description && (
-                    <Typography variant="caption" color="text.secondary">
-                      {step.description}
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-            ))
-          ) : (
-            /* Fallback if no steps loaded */
-            <>
-              <Box display="flex" alignItems="center" gap={2} mb={1.5}>
-                <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: 'grey.300', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>2</Box>
-                <Typography variant="body2">Open the Student App to complete your setup</Typography>
-              </Box>
-              <Box display="flex" alignItems="center" gap={2} mb={1.5}>
-                <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: 'grey.300', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>3</Box>
-                <Typography variant="body2">Start learning!</Typography>
-              </Box>
-            </>
-          )}
+          <Box display="flex" alignItems="center" gap={2}>
+            <Box
+              sx={{
+                width: 28, height: 28, borderRadius: '50%',
+                bgcolor: 'primary.main', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, fontWeight: 700, flexShrink: 0,
+              }}
+            >
+              2
+            </Box>
+            <Typography variant="body2">
+              Open the Student App to complete your onboarding steps
+            </Typography>
+          </Box>
         </Paper>
 
         <Button
           variant="contained"
           size="large"
           fullWidth
-          href={`/sso?redirect=${encodeURIComponent(APP_URL)}`}
+          href={`/sso?redirect=${encodeURIComponent(APP_ONBOARDING_URL)}`}
           endIcon={<ArrowForward />}
           sx={{
             py: 1.5,
@@ -251,7 +179,7 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
             mb: 2,
           }}
         >
-          Continue to Student App
+          Open Student App
         </Button>
 
         <Typography variant="caption" color="text.secondary">
