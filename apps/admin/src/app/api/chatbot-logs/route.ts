@@ -54,12 +54,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Resolve user names for conversations that have user_id but no lead_name
+  // Resolve user names for all conversations that have user_id
   const conversations = data || [];
   const userIdsToResolve = [
     ...new Set(
       conversations
-        .filter((c: any) => c.user_id && !c.lead_name)
+        .filter((c: any) => c.user_id)
         .map((c: any) => c.user_id)
     ),
   ];
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
   // Enrich conversations with resolved names
   const enriched = conversations.map((c: any) => ({
     ...c,
-    resolved_name: c.lead_name || userNameMap[c.user_id]?.name || null,
+    resolved_name: userNameMap[c.user_id]?.name || c.lead_name || null,
     resolved_avatar: userNameMap[c.user_id]?.avatar_url || null,
   }));
 
