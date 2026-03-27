@@ -8,6 +8,13 @@ export interface OnboardingPrefillData {
   currentStandard: string | null; // '10th' | '11th' | '12th' | 'gap_year'
   academicYear: string | null;    // '2025-26' format
   examInterest: string | null;    // 'nata' | 'jee_paper2' | 'both'
+  // Enhanced fields from enrollment
+  schoolName: string | null;
+  applicantCategory: string | null;
+  casteCategory: string | null;
+  schoolType: string | null;
+  parentContact: string | null;
+  enrollmentSource: string | null; // 'direct_link' | 'regular'
 }
 
 export async function getEnrollmentPrefillData(
@@ -16,7 +23,7 @@ export async function getEnrollmentPrefillData(
 ): Promise<OnboardingPrefillData | null> {
   const { data: lead, error } = await (supabase as any)
     .from('lead_profiles')
-    .select('academic_data, target_exam_year, interest_course, applicant_category')
+    .select('academic_data, target_exam_year, interest_course, applicant_category, caste_category, school_type, source')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -24,10 +31,23 @@ export async function getEnrollmentPrefillData(
 
   if (error || !lead) return null;
 
+  // Also fetch parent contact from student_profiles
+  const { data: studentProfile } = await (supabase as any)
+    .from('student_profiles')
+    .select('parent_contact')
+    .eq('user_id', userId)
+    .maybeSingle();
+
   return {
     currentStandard: mapClassToStandard(lead.academic_data, lead.applicant_category),
     academicYear: inferAcademicYear(lead.target_exam_year),
     examInterest: lead.interest_course || null,
+    schoolName: lead.academic_data?.school_name || lead.academic_data?.college_name || null,
+    applicantCategory: lead.applicant_category || null,
+    casteCategory: lead.caste_category || null,
+    schoolType: lead.school_type || null,
+    parentContact: studentProfile?.parent_contact || null,
+    enrollmentSource: lead.source || null,
   };
 }
 
@@ -49,6 +69,7 @@ function mapClassToStandard(
   if (!currentClass) return null;
 
   const classStr = String(currentClass).toLowerCase();
+  if (classStr === '12_completed' || classStr.includes('12th completed')) return 'gap_year';
   if (classStr.includes('12') || classStr === 'class 12') return '12th';
   if (classStr.includes('11') || classStr === 'class 11') return '11th';
   if (classStr.includes('10') || classStr === 'class 10') return '10th';
