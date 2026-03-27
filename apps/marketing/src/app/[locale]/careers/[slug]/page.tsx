@@ -7,6 +7,8 @@ import { createServerClient, getPublishedJobBySlug } from '@neram/database';
 import type { JobPosting, EmploymentType } from '@neram/database';
 import JobDetailContent from '@/components/careers/JobDetailContent';
 
+export const revalidate = 3600;
+
 const baseUrl = 'https://neramclasses.com';
 
 function mapEmploymentType(type: EmploymentType): string {

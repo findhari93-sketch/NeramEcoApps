@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action');
     const systemId = searchParams.get('systemId');
     const year = parseInt(searchParams.get('year') || '0', 10);
-    const limit = parseInt(searchParams.get('limit') || '25', 10);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '25', 10), 100);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     if (!action) {
@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
         .range(offset, offset + limit - 1);
 
       if (error) throw error;
-      return NextResponse.json({ entries: data || [], total: count || 0 });
+      return NextResponse.json({ entries: data || [], total: count || 0 }, {
+        headers: { 'Cache-Control': 'private, s-maxage=300, stale-while-revalidate=600' },
+      });
     }
 
     if (action === 'allotment-entries') {
@@ -59,7 +61,9 @@ export async function GET(request: NextRequest) {
         .range(offset, offset + limit - 1);
 
       if (error) throw error;
-      return NextResponse.json({ entries: data || [], total: count || 0 });
+      return NextResponse.json({ entries: data || [], total: count || 0 }, {
+        headers: { 'Cache-Control': 'private, s-maxage=300, stale-while-revalidate=600' },
+      });
     }
 
     if (action === 'cutoffs') {
@@ -84,7 +88,9 @@ export async function GET(request: NextRequest) {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return NextResponse.json({ entries: data || [], total: count || 0 });
+      return NextResponse.json({ entries: data || [], total: count || 0 }, {
+        headers: { 'Cache-Control': 'private, s-maxage=300, stale-while-revalidate=600' },
+      });
     }
 
     if (action === 'rank-list-year-summary') {

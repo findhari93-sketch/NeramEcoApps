@@ -5,6 +5,8 @@ import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import CoursesPageContent from '@/components/CoursesPageContent';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({

@@ -4,6 +4,8 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateSoftwareApplicationSchema } from '@/lib/seo/schemas';
 import HomePageContent from '@/components/HomePageContent';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({

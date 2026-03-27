@@ -8,6 +8,8 @@ import { BASE_URL, ORG_NAME } from '@/lib/seo/constants';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { chennaiNeighborhoods, CHENNAI_CENTER_ADDRESS } from '@/lib/seo/chennai-neighborhoods';
 
+export const revalidate = 86400;
+
 export async function generateMetadata({
   params: { locale },
 }: {

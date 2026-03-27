@@ -21,6 +21,8 @@ import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import RelatedContent from '@/components/seo/RelatedContent';
 
+export const revalidate = 86400;
+
 export async function generateMetadata({
   params: { locale },
 }: {

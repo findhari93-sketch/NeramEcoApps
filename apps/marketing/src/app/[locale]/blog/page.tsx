@@ -15,6 +15,8 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 export async function generateMetadata({
   params: { locale },
 }: {

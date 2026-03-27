@@ -5,6 +5,8 @@ import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import ScholarshipPageContent from '@/components/ScholarshipPageContent';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({ params: { locale } }: { params: { locale: string } }): Promise<Metadata> {

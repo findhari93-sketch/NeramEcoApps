@@ -4,6 +4,8 @@ import { Box, Container, Paper } from '@neram/ui';
 import TermsContent from '../../../components/legal/TermsContent';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 export async function generateMetadata({
   params: { locale },
 }: {

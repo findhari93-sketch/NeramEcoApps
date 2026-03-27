@@ -10,6 +10,8 @@ import CourseDetailContent, {
   coursesData,
 } from '@/components/CourseDetailContent';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 // Generate static params for all known course slugs

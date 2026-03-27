@@ -6,6 +6,8 @@ import { generateBreadcrumbSchema, generateTestimonialsPageSchema } from '@/lib/
 import { buildAlternates } from '@/lib/seo/metadata';
 import TestimonialsPageContent from '@/components/TestimonialsPageContent';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export function generateStaticParams() {

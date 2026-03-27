@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       newOnly: searchParams.get('new_only') === 'true' || undefined,
       year: searchParams.get('year') ? Number(searchParams.get('year')) : undefined,
       search: searchParams.get('search') || undefined,
-      limit: searchParams.get('limit') ? Number(searchParams.get('limit')) : 500,
+      limit: Math.min(searchParams.get('limit') ? Number(searchParams.get('limit')) : 50, 100),
       offset: searchParams.get('offset') ? Number(searchParams.get('offset')) : 0,
     };
 

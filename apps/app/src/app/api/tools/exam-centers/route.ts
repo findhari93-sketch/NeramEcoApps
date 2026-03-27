@@ -39,13 +39,17 @@ export async function GET(request: NextRequest) {
 
     if (action === 'states') {
       const states = await getNataExamCenterStates(undefined, supabase);
-      return NextResponse.json({ states });
+      return NextResponse.json({ states }, {
+        headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+      });
     }
 
     if (action === 'cities') {
       const state = searchParams.get('state') || undefined;
       const cities = await getNataExamCenterCities(state, undefined, supabase);
-      return NextResponse.json({ cities });
+      return NextResponse.json({ cities }, {
+        headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+      });
     }
 
     // Default: list all centers with optional filters (public preview)
@@ -63,7 +67,9 @@ export async function GET(request: NextRequest) {
       supabase
     );
 
-    return NextResponse.json({ centers, count });
+    return NextResponse.json({ centers, count }, {
+      headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+    });
   } catch (error) {
     console.error('Error fetching exam centers:', error);
     return NextResponse.json(
@@ -134,6 +140,8 @@ export async function POST(request: NextRequest) {
       centers,
       count,
       executionTime,
+    }, {
+      headers: { 'Cache-Control': 'private, s-maxage=300, stale-while-revalidate=600' },
     });
   } catch (error) {
     console.error('Error searching exam centers:', error);

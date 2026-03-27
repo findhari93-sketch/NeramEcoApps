@@ -35,6 +35,8 @@ import {
 import { buildAlternates } from '@/lib/seo/metadata';
 import RelatedContent from '@/components/seo/RelatedContent';
 
+export const revalidate = 86400;
+
 interface PageProps {
   params: { locale: string; slug: string };
 }

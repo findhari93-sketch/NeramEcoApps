@@ -14,16 +14,18 @@ export async function GET(req: NextRequest) {
     const academicYear = searchParams.get('academic_year');
     const yearsOnly = searchParams.get('years_only') === 'true';
 
+    const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+
     // Special endpoint: get list of academic years
     if (yearsOnly) {
       const years = await getAchievementAcademicYears();
-      return NextResponse.json({ years });
+      return NextResponse.json({ years }, { headers: cacheHeaders });
     }
 
     // Special endpoint: achievements by academic year
     if (type === 'achievement' && academicYear) {
       const content = await getAchievementsByAcademicYear(academicYear);
-      return NextResponse.json({ content });
+      return NextResponse.json({ content }, { headers: cacheHeaders });
     }
 
     const content = await getPublishedMarketingContent({
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
       pinnedOnly,
     });
 
-    return NextResponse.json({ content });
+    return NextResponse.json({ content }, { headers: cacheHeaders });
   } catch (error) {
     console.error('Error fetching marketing content:', error);
     return NextResponse.json(

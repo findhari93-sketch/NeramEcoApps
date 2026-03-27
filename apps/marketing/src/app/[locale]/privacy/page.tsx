@@ -3,6 +3,8 @@ import { setRequestLocale } from 'next-intl/server';
 import { Box, Container, Typography, Paper } from '@neram/ui';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 export async function generateMetadata({
   params: { locale },
 }: {

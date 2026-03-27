@@ -27,22 +27,24 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
+    const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+
     // Homepage testimonials
     if (searchParams.get('homepage') === 'true') {
       const data = await getHomepageTestimonials(supabase);
-      return NextResponse.json({ success: true, data });
+      return NextResponse.json({ success: true, data }, { headers: cacheHeaders });
     }
 
     // Filter options
     if (searchParams.get('filters') === 'true') {
       const data = await getTestimonialFilterOptions(supabase);
-      return NextResponse.json({ success: true, data });
+      return NextResponse.json({ success: true, data }, { headers: cacheHeaders });
     }
 
     // Stats
     if (searchParams.get('stats') === 'true') {
       const data = await getTestimonialStats(supabase);
-      return NextResponse.json({ success: true, data });
+      return NextResponse.json({ success: true, data }, { headers: cacheHeaders });
     }
 
     // Filtered list with pagination
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: result.data,
       count: result.count,
-    });
+    }, { headers: cacheHeaders });
   } catch (error) {
     console.error('Get testimonials error:', error);
     return NextResponse.json(

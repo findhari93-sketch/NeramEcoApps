@@ -2,6 +2,8 @@ import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import AchievementsPageContent from '@/components/AchievementsPageContent';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({ params: { locale } }: { params: { locale: string } }): Promise<Metadata> {

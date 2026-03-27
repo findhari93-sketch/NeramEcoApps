@@ -20,6 +20,8 @@ import { generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo/schem
 import { blogPosts as sharedBlogPosts } from '@/lib/blog/posts';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 interface PageProps {
   params: { locale: string; slug: string };
 }

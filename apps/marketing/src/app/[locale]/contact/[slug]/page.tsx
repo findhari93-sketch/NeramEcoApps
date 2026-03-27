@@ -30,6 +30,8 @@ import CenterDetailPageContent from '@/components/CenterDetailPageContent';
 import { getCenterBySeoSlug, getAllCenterSeoSlugs } from '@neram/database/queries';
 import type { OfflineCenter } from '@neram/database';
 
+export const revalidate = 3600;
+
 const baseUrl = 'https://neramclasses.com';
 
 // ─── Static Params ──────────────────────────────────────────────────────────

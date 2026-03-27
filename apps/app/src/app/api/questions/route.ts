@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     const examType = searchParams.get('examType') || undefined;
     const category = (searchParams.get('category') as any) || undefined;
     const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50);
     const sortBy =
       (searchParams.get('sortBy') as 'newest' | 'most_voted') || 'newest';
 
@@ -91,6 +91,8 @@ export async function GET(req: NextRequest) {
         total: count,
         totalPages: Math.ceil(count / limit),
       },
+    }, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
     });
   } catch (error) {
     console.error('Error listing questions:', error);

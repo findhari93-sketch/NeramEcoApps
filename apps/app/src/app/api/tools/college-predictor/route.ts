@@ -16,7 +16,9 @@ export async function GET() {
     const supabase = getSupabaseBrowserClient();
     const states = await getDistinctStates(supabase);
 
-    return NextResponse.json({ states });
+    return NextResponse.json({ states }, {
+      headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+    });
   } catch (error) {
     console.error('Error fetching states:', error);
     return NextResponse.json(
@@ -98,6 +100,8 @@ export async function POST(request: NextRequest) {
       predictions,
       count: predictions.length,
       executionTime,
+    }, {
+      headers: { 'Cache-Control': 'private, s-maxage=300, stale-while-revalidate=600' },
     });
   } catch (error) {
     console.error('Error predicting colleges:', error);

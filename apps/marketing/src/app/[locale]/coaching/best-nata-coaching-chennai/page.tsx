@@ -10,6 +10,8 @@ import {
 import { BASE_URL, ORG_NAME, ORG_PHONE, ORG_EMAIL, SOCIAL_PROFILES, ORG_LOGO } from '@/lib/seo/constants';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 export async function generateMetadata({
   params: { locale },
 }: {

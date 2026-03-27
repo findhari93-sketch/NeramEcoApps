@@ -5,6 +5,8 @@ import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import YouTubeRewardPageContent from '@/components/YouTubeRewardPageContent';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({

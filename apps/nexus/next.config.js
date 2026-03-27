@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth'],
   images: {
+    minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable
     remotePatterns: [
       {
         protocol: 'https',

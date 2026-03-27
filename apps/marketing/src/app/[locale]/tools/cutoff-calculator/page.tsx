@@ -8,6 +8,8 @@ import {
 import CutoffCalculatorContent from '@/components/CutoffCalculatorContent';
 import { buildAlternates } from '@/lib/seo/metadata';
 
+export const revalidate = 86400;
+
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({

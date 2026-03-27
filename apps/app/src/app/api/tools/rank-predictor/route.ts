@@ -67,13 +67,17 @@ export async function GET(request: NextRequest) {
         if (allotmentYear) allotmentCount = allotmentYear.totalEntries;
       }
 
-      return NextResponse.json({ years, yearsWithSource, communityStats, statsYear: targetYear, allotmentCount });
+      return NextResponse.json({ years, yearsWithSource, communityStats, statsYear: targetYear, allotmentCount }, {
+        headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+      });
     }
 
     // Default: return systems
     const supabase = getSupabaseBrowserClient();
     const systems = await getCounselingSystems(supabase);
-    return NextResponse.json({ systems });
+    return NextResponse.json({ systems }, {
+      headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+    });
   } catch (error: any) {
     console.error('Rank predictor GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
