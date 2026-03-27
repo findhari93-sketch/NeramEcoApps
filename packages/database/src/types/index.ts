@@ -6542,3 +6542,25 @@ export interface BadgeCatalogEntry extends GamificationBadgeDefinition {
 }
 
 export type PlaceholderValues = Record<string, string>;
+
+// ============================================
+// STUDENT CREDENTIALS
+// ============================================
+
+export type CredentialType = 'ms_teams';
+
+export interface StudentCredential {
+  id: string;
+  student_profile_id: string;
+  user_id: string;
+  credential_type: CredentialType;
+  email: string;
+  password: string;
+  published_by: string | null;
+  published_at: string | null;
+  viewed_at: string | null;
+  destroyed_at: string | null;
+  auto_destroy_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}

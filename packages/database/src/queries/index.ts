@@ -53,3 +53,4 @@ export * from './city-students';
 export * from './review-campaigns';
 export * from './review-platforms';
 export * from './wa-templates';
+export * from './credentials';
