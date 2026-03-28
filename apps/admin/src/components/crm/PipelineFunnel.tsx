@@ -63,7 +63,7 @@ export default function PipelineFunnel({
           <Skeleton
             key={stage}
             variant="rounded"
-            sx={{ height: isMobile ? 72 : 100, borderRadius: 1.5 }}
+            sx={{ height: isMobile ? 48 : 100, borderRadius: 1.5 }}
           />
         ))}
       </Box>
@@ -117,7 +117,7 @@ export default function PipelineFunnel({
             ? {
                 display: 'grid',
                 gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: 1,
+                gap: 0.75,
               }
             : {
                 display: 'flex',
@@ -167,73 +167,133 @@ export default function PipelineFunnel({
                 }),
               }}
             >
-              {/* Top gradient accent */}
-              <Box
-                sx={{
-                  height: 3,
-                  background: `linear-gradient(90deg, ${config.color}, ${config.color}88)`,
-                  opacity: isActive ? 1 : 0.6,
-                }}
-              />
+              {/* Top gradient accent (desktop only) */}
+              {!isMobile && (
+                <Box
+                  sx={{
+                    height: 3,
+                    background: `linear-gradient(90deg, ${config.color}, ${config.color}88)`,
+                    opacity: isActive ? 1 : 0.6,
+                  }}
+                />
+              )}
 
-              <Box sx={{ p: isMobile ? 1.25 : 2, pt: isMobile ? 1 : 1.5 }}>
-                {/* Icon + percentage row */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isMobile ? 0.5 : 1 }}>
-                  <Box
-                    sx={{
-                      width: isMobile ? 28 : 34,
-                      height: isMobile ? 28 : 34,
-                      borderRadius: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: `${config.color}14`,
-                    }}
-                  >
-                    <Icon sx={{ fontSize: isMobile ? 14 : 18, color: config.color }} />
-                  </Box>
-                  {count > 0 && (
+              <Box sx={{ p: isMobile ? 0.75 : 2, pt: isMobile ? 0.75 : 1.5 }}>
+                {isMobile ? (
+                  <>
+                    {/* Mobile: Icon + Count + Percentage inline */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                      <Box
+                        sx={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 0.75,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: `${config.color}14`,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Icon sx={{ fontSize: 12, color: config.color }} />
+                      </Box>
+                      <Typography
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: 17,
+                          lineHeight: 1,
+                          color: count > 0 ? config.color : 'text.disabled',
+                          fontFamily: '"Inter", "Roboto", sans-serif',
+                        }}
+                      >
+                        {count}
+                      </Typography>
+                      {count > 0 && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            ml: 'auto',
+                            color: 'text.disabled',
+                            fontSize: 9,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {percentage}%
+                        </Typography>
+                      )}
+                    </Box>
+                    {/* Label */}
                     <Typography
-                      variant="caption"
                       sx={{
-                        color: 'text.disabled',
-                        fontSize: isMobile ? 9 : 10,
-                        fontWeight: 600,
+                        color: 'text.secondary',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 500,
+                        fontSize: 10,
+                        letterSpacing: 0.15,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
-                      {percentage}%
+                      {config.label}
                     </Typography>
-                  )}
-                </Box>
-
-                {/* Count */}
-                <Typography
-                  sx={{
-                    fontWeight: 800,
-                    fontSize: isMobile ? 20 : 26,
-                    lineHeight: 1.1,
-                    color: count > 0 ? config.color : 'text.disabled',
-                    mb: 0.25,
-                    fontFamily: '"Inter", "Roboto", sans-serif',
-                  }}
-                >
-                  {count}
-                </Typography>
-
-                {/* Label */}
-                <Typography
-                  sx={{
-                    color: 'text.secondary',
-                    whiteSpace: 'nowrap',
-                    fontWeight: 500,
-                    fontSize: isMobile ? 10 : 11.5,
-                    letterSpacing: 0.15,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {config.label}
-                </Typography>
+                  </>
+                ) : (
+                  <>
+                    {/* Desktop: Original layout */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                      <Box
+                        sx={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: `${config.color}14`,
+                        }}
+                      >
+                        <Icon sx={{ fontSize: 18, color: config.color }} />
+                      </Box>
+                      {count > 0 && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: 'text.disabled',
+                            fontSize: 10,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {percentage}%
+                        </Typography>
+                      )}
+                    </Box>
+                    <Typography
+                      sx={{
+                        fontWeight: 800,
+                        fontSize: 26,
+                        lineHeight: 1.1,
+                        color: count > 0 ? config.color : 'text.disabled',
+                        mb: 0.25,
+                        fontFamily: '"Inter", "Roboto", sans-serif',
+                      }}
+                    >
+                      {count}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        color: 'text.secondary',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 500,
+                        fontSize: 11.5,
+                        letterSpacing: 0.15,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {config.label}
+                    </Typography>
+                  </>
+                )}
               </Box>
             </Paper>
           );
