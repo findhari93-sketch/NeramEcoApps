@@ -672,6 +672,8 @@ export interface DirectEnrollmentLink extends Timestamps {
 export type OnboardingStepActionType = 'link' | 'in_app' | 'manual';
 export type OnboardingCompletedByType = 'student' | 'admin';
 export type EnrollmentType = 'regular' | 'direct';
+export type OnboardingPhase = 'get_ready' | 'access_your_account' | 'complete_nexus_setup' | 'secure_your_account';
+export type OnboardingStepStatus = 'pending' | 'in_progress' | 'completed' | 'need_help';
 
 /**
  * Admin-configurable onboarding step template
@@ -688,6 +690,7 @@ export interface OnboardingStepDefinition extends Timestamps {
   is_active: boolean;
   is_required: boolean;
   applies_to: EnrollmentType[];
+  phase: OnboardingPhase;
 }
 
 /**
@@ -703,6 +706,10 @@ export interface StudentOnboardingProgress extends Timestamps {
   completed_by_type: OnboardingCompletedByType | null;
   completed_by_user_id: string | null;
   admin_notes: string | null;
+  status: OnboardingStepStatus;
+  terms_accepted_at: string | null;
+  auto_add_attempted: boolean;
+  auto_add_result: string | null;
 }
 
 /**
@@ -710,6 +717,20 @@ export interface StudentOnboardingProgress extends Timestamps {
  */
 export interface StudentOnboardingStepWithDefinition extends StudentOnboardingProgress {
   step_definition: OnboardingStepDefinition;
+}
+
+/**
+ * Per-course group links for WhatsApp and Teams
+ */
+export interface CourseGroupLinks extends Timestamps {
+  id: string;
+  course_id: string;
+  whatsapp_group_url: string | null;
+  teams_group_chat_url: string | null;
+  teams_group_chat_id: string | null;
+  teams_class_team_url: string | null;
+  teams_class_team_id: string | null;
+  updated_by: string | null;
 }
 
 // ============================================
@@ -3894,6 +3915,12 @@ interface _LegacyDatabase {
         Row: StudentOnboardingProgress;
         Insert: Omit<StudentOnboardingProgress, 'id' | 'created_at' | 'updated_at'> & { id?: string };
         Update: Partial<Omit<StudentOnboardingProgress, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      // Course group links (migration 20260328)
+      course_group_links: {
+        Row: CourseGroupLinks;
+        Insert: Omit<CourseGroupLinks, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+        Update: Partial<Omit<CourseGroupLinks, 'id' | 'created_at' | 'updated_at'>>;
       };
       // NATA 2026 content tables (migration 20260311)
       nata_brochures: {

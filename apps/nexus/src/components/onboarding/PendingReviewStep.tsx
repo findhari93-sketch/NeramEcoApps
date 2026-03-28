@@ -14,6 +14,7 @@ import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsAc
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 
 interface PendingReviewStepProps {
   classroomId: string;
@@ -22,6 +23,8 @@ interface PendingReviewStepProps {
   onApproved: () => void;
 }
 
+const APP_ONBOARDING_URL = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com'}/onboarding`;
+
 export default function PendingReviewStep({
   classroomId,
   getToken,
@@ -29,6 +32,14 @@ export default function PendingReviewStep({
   onApproved,
 }: PendingReviewStepProps) {
   const [nudging, setNudging] = useState(false);
+  const [fromAppOnboarding, setFromAppOnboarding] = useState(false);
+
+  // Check if user came from student app onboarding
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setFromAppOnboarding(sessionStorage.getItem('nexus_from') === 'app-onboarding');
+    }
+  }, []);
   const [nudgeResult, setNudgeResult] = useState<{
     teamsLink?: string;
     whatsappLink?: string;
@@ -124,6 +135,24 @@ export default function PendingReviewStep({
           Your documents have been verified. Redirecting to Nexus...
         </Typography>
         <CircularProgress size={24} />
+
+        {fromAppOnboarding && (
+          <Button
+            variant="outlined"
+            color="primary"
+            href={APP_ONBOARDING_URL}
+            startIcon={<ArrowBackOutlinedIcon />}
+            sx={{
+              mt: 3,
+              py: 1.5,
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 600,
+            }}
+          >
+            Return to Student App
+          </Button>
+        )}
       </Box>
     );
   }
@@ -248,6 +277,25 @@ export default function PendingReviewStep({
       <Typography variant="caption" color="text.disabled" sx={{ textAlign: 'center' }}>
         This page auto-refreshes. You&apos;ll be redirected once approved.
       </Typography>
+
+      {/* Return to Student App button (when coming from app onboarding) */}
+      {fromAppOnboarding && (
+        <Button
+          variant="outlined"
+          color="primary"
+          href={APP_ONBOARDING_URL}
+          fullWidth
+          startIcon={<ArrowBackOutlinedIcon />}
+          sx={{
+            py: 1.5,
+            borderRadius: 2,
+            textTransform: 'none',
+            fontWeight: 600,
+          }}
+        >
+          Return to Student App
+        </Button>
+      )}
     </Box>
   );
 }

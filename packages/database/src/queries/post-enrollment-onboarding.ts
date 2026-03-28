@@ -11,6 +11,7 @@ import type {
   StudentOnboardingStepWithDefinition,
   OnboardingCompletedByType,
   EnrollmentType,
+  OnboardingPhase,
 } from '../types';
 
 // ============================================
@@ -61,6 +62,7 @@ export async function createOnboardingStepDefinition(
     is_active?: boolean;
     is_required?: boolean;
     applies_to?: EnrollmentType[];
+    phase?: OnboardingPhase;
   },
   supabase: SupabaseClient
 ) {
@@ -77,6 +79,7 @@ export async function createOnboardingStepDefinition(
       is_active: input.is_active ?? true,
       is_required: input.is_required ?? true,
       applies_to: input.applies_to || ['regular', 'direct'],
+      phase: input.phase || 'get_ready',
     })
     .select()
     .single();
@@ -98,6 +101,7 @@ export async function updateOnboardingStepDefinition(
     is_active: boolean;
     is_required: boolean;
     applies_to: EnrollmentType[];
+    phase: OnboardingPhase;
   }>,
   supabase: SupabaseClient
 ) {

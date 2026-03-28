@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, getStudentOnboardingProgressByUserId } from '@neram/database';
+import { createAdminClient } from '@neram/database';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
@@ -37,7 +37,7 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string } | n
   }
 }
 
-// GET /api/onboarding-steps - Get current student's onboarding progress, course group links, and nexus status
+// GET /api/nexus-status - Check if student has completed Nexus onboarding
 export async function GET(request: NextRequest) {
   try {
     const auth = await verifyToken(request);
@@ -47,46 +47,20 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 1. Fetch onboarding steps (existing)
-    const progress = await getStudentOnboardingProgressByUserId(auth.userId, supabase);
-
-    // 2. Get student's course_id from student_profiles
-    const { data: studentProfile } = await supabase
-      .from('student_profiles')
-      .select('course_id')
-      .eq('user_id', auth.userId)
-      .maybeSingle();
-
-    // 3. Fetch course group links if student has a course
-    let courseGroupLinks = null;
-    if (studentProfile?.course_id) {
-      const { data: links } = await supabase
-        .from('course_group_links')
-        .select('*')
-        .eq('course_id', studentProfile.course_id)
-        .maybeSingle();
-      courseGroupLinks = links || null;
-    }
-
-    // 4. Fetch nexus onboarding status
-    const { data: nexusOnboarding } = await supabase
+    // Query nexus_student_onboarding — student may not have started yet
+    const { data } = await supabase
       .from('nexus_student_onboarding')
       .select('status')
       .eq('student_id', auth.userId)
       .maybeSingle();
 
-    const nexusStatus = nexusOnboarding?.status || 'not_started';
-
     return NextResponse.json({
-      success: true,
-      data: progress,
-      courseGroupLinks,
-      nexusStatus,
+      status: data?.status || 'not_started',
     });
   } catch (error) {
-    console.error('Error fetching onboarding progress:', error);
+    console.error('Error fetching nexus status:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch onboarding progress' },
+      { error: 'Failed to fetch nexus status' },
       { status: 500 }
     );
   }

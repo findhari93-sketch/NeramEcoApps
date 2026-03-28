@@ -25,6 +25,7 @@ import {
   TableHead,
   TableRow,
   Collapse,
+  Snackbar,
 } from '@neram/ui';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AddIcon from '@mui/icons-material/Add';
@@ -34,6 +35,9 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
 import GroupIcon from '@mui/icons-material/Group';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import LinkIcon from '@mui/icons-material/Link';
+import SaveIcon from '@mui/icons-material/Save';
 
 interface CourseWithStats {
   id: string;
@@ -59,6 +63,24 @@ interface BatchRow {
   is_active: boolean;
   schedule: any[];
 }
+
+interface GroupLinks {
+  id?: string;
+  course_id: string;
+  whatsapp_group_url: string;
+  teams_group_chat_url: string;
+  teams_group_chat_id: string;
+  teams_class_team_url: string;
+  teams_class_team_id: string;
+}
+
+const EMPTY_GROUP_LINKS: Omit<GroupLinks, 'course_id'> = {
+  whatsapp_group_url: '',
+  teams_group_chat_url: '',
+  teams_group_chat_id: '',
+  teams_class_team_url: '',
+  teams_class_team_id: '',
+};
 
 const COURSE_TYPE_LABELS: Record<string, string> = {
   nata: 'NATA',
@@ -93,6 +115,12 @@ export default function CoursesPage() {
   const [batchForCourse, setBatchForCourse] = useState<string | null>(null);
   const [batchForm, setBatchForm] = useState({ name: '', start_date: '', end_date: '', capacity: '30' });
   const [batchCreating, setBatchCreating] = useState(false);
+
+  // Group links state
+  const [groupLinks, setGroupLinks] = useState<Record<string, GroupLinks>>({});
+  const [groupLinksForm, setGroupLinksForm] = useState<Record<string, Omit<GroupLinks, 'course_id'>>>({});
+  const [groupLinksSaving, setGroupLinksSaving] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   // Edit batch dialog
   const [editBatchDialogOpen, setEditBatchDialogOpen] = useState(false);
@@ -131,12 +159,80 @@ export default function CoursesPage() {
     }
   };
 
+  const fetchGroupLinks = async (courseId: string) => {
+    try {
+      const res = await fetch(`/api/course-group-links?courseId=${courseId}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const links = json.data;
+      if (links) {
+        setGroupLinks((prev) => ({ ...prev, [courseId]: links }));
+        setGroupLinksForm((prev) => ({
+          ...prev,
+          [courseId]: {
+            whatsapp_group_url: links.whatsapp_group_url || '',
+            teams_group_chat_url: links.teams_group_chat_url || '',
+            teams_group_chat_id: links.teams_group_chat_id || '',
+            teams_class_team_url: links.teams_class_team_url || '',
+            teams_class_team_id: links.teams_class_team_id || '',
+          },
+        }));
+      } else {
+        setGroupLinksForm((prev) => ({ ...prev, [courseId]: { ...EMPTY_GROUP_LINKS } }));
+      }
+    } catch {
+      // Silently fail - links are optional
+    }
+  };
+
+  const saveGroupLinks = async (courseId: string) => {
+    const form = groupLinksForm[courseId];
+    if (!form) return;
+    setGroupLinksSaving(courseId);
+    try {
+      const res = await fetch('/api/course-group-links', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          course_id: courseId,
+          whatsapp_group_url: form.whatsapp_group_url || null,
+          teams_group_chat_url: form.teams_group_chat_url || null,
+          teams_group_chat_id: form.teams_group_chat_id || null,
+          teams_class_team_url: form.teams_class_team_url || null,
+          teams_class_team_id: form.teams_class_team_id || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Failed to save group links');
+      }
+      const json = await res.json();
+      setGroupLinks((prev) => ({ ...prev, [courseId]: json.data }));
+      setSnackbar({ open: true, message: 'Group links saved successfully', severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to save group links', severity: 'error' });
+    } finally {
+      setGroupLinksSaving(null);
+    }
+  };
+
+  const updateGroupLinksField = (courseId: string, field: string, value: string) => {
+    setGroupLinksForm((prev) => ({
+      ...prev,
+      [courseId]: {
+        ...(prev[courseId] || { ...EMPTY_GROUP_LINKS }),
+        [field]: value,
+      },
+    }));
+  };
+
   const toggleCourse = (courseId: string) => {
     if (expandedCourse === courseId) {
       setExpandedCourse(null);
     } else {
       setExpandedCourse(courseId);
       if (!batches[courseId]) fetchBatches(courseId);
+      if (!groupLinksForm[courseId]) fetchGroupLinks(courseId);
     }
   };
 
@@ -439,6 +535,107 @@ export default function CoursesPage() {
                     </TableContainer>
                   )}
                 </Box>
+
+                {/* Group Links Section */}
+                <Box sx={{ borderTop: '1px solid', borderTopColor: 'grey.200', px: 2, py: 1.5, bgcolor: 'grey.50' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1.5 }}>
+                    <LinkIcon sx={{ fontSize: 18 }} />
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      Group Links
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    {/* WhatsApp Group URL */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TextField
+                        label="WhatsApp Group URL"
+                        size="small"
+                        fullWidth
+                        value={groupLinksForm[course.id]?.whatsapp_group_url || ''}
+                        onChange={(e) => updateGroupLinksField(course.id, 'whatsapp_group_url', e.target.value)}
+                        placeholder="https://chat.whatsapp.com/..."
+                      />
+                      {groupLinksForm[course.id]?.whatsapp_group_url && (
+                        <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22, flexShrink: 0 }} />
+                      )}
+                    </Box>
+
+                    {/* Teams Group Chat */}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField
+                        label="Teams Group Chat URL"
+                        size="small"
+                        sx={{ flex: 2 }}
+                        value={groupLinksForm[course.id]?.teams_group_chat_url || ''}
+                        onChange={(e) => updateGroupLinksField(course.id, 'teams_group_chat_url', e.target.value)}
+                        placeholder="https://teams.microsoft.com/..."
+                        InputProps={{
+                          endAdornment: groupLinksForm[course.id]?.teams_group_chat_url ? (
+                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                          ) : null,
+                        }}
+                      />
+                      <TextField
+                        label="Chat ID"
+                        size="small"
+                        sx={{ flex: 1 }}
+                        value={groupLinksForm[course.id]?.teams_group_chat_id || ''}
+                        onChange={(e) => updateGroupLinksField(course.id, 'teams_group_chat_id', e.target.value)}
+                        placeholder="19:abc123..."
+                        InputProps={{
+                          endAdornment: groupLinksForm[course.id]?.teams_group_chat_id ? (
+                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                          ) : null,
+                        }}
+                      />
+                    </Box>
+
+                    {/* Teams Class Team */}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField
+                        label="Teams Class Team URL"
+                        size="small"
+                        sx={{ flex: 2 }}
+                        value={groupLinksForm[course.id]?.teams_class_team_url || ''}
+                        onChange={(e) => updateGroupLinksField(course.id, 'teams_class_team_url', e.target.value)}
+                        placeholder="https://teams.microsoft.com/..."
+                        InputProps={{
+                          endAdornment: groupLinksForm[course.id]?.teams_class_team_url ? (
+                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                          ) : null,
+                        }}
+                      />
+                      <TextField
+                        label="Team ID"
+                        size="small"
+                        sx={{ flex: 1 }}
+                        value={groupLinksForm[course.id]?.teams_class_team_id || ''}
+                        onChange={(e) => updateGroupLinksField(course.id, 'teams_class_team_id', e.target.value)}
+                        placeholder="abc-123-..."
+                        InputProps={{
+                          endAdornment: groupLinksForm[course.id]?.teams_class_team_id ? (
+                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                          ) : null,
+                        }}
+                      />
+                    </Box>
+
+                    {/* Save Button */}
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<SaveIcon />}
+                        onClick={() => saveGroupLinks(course.id)}
+                        disabled={groupLinksSaving === course.id}
+                        sx={{ textTransform: 'none', fontWeight: 600 }}
+                      >
+                        {groupLinksSaving === course.id ? 'Saving...' : 'Save Links'}
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
               </Collapse>
             </Paper>
           ))}
@@ -597,6 +794,15 @@ export default function CoursesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        message={snackbar.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

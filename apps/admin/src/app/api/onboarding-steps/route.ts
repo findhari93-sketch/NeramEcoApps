@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       is_active,
       is_required,
       applies_to,
+      phase,
     } = body;
 
     if (!step_key || !title) {
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
     const step = await createOnboardingStepDefinition(
-      { step_key, title, description, icon_name, action_type, action_config, display_order, is_active, is_required, applies_to },
+      { step_key, title, description, icon_name, action_type, action_config, display_order, is_active, is_required, applies_to, phase },
       supabase
     );
 

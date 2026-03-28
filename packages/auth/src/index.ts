@@ -64,6 +64,12 @@ export {
 } from './microsoft';
 export type { AccountInfo, AuthenticationResult } from './microsoft';
 
+// Microsoft Graph API (server-side only)
+export {
+  getAppOnlyToken,
+  addMemberToTeam,
+} from './graph';
+
 // Hooks
 export {
   useFirebaseAuth,

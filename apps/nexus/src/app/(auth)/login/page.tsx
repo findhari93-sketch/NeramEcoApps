@@ -1,15 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Typography, CircularProgress, Alert } from '@neram/ui';
 import { useMicrosoftAuth, getMsalErrorMessage } from '@neram/auth';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn, user, loading } = useMicrosoftAuth();
   const [signingIn, setSigningIn] = useState(false);
   const [loginError, setLoginError] = useState<{ message: string; canRetry: boolean } | null>(null);
+  const [showOnboardingHint, setShowOnboardingHint] = useState(false);
+
+  // Detect app-onboarding flow from query param or sessionStorage
+  useEffect(() => {
+    const fromParam = searchParams.get('from');
+    if (fromParam === 'app-onboarding') {
+      sessionStorage.setItem('nexus_from', 'app-onboarding');
+      setShowOnboardingHint(true);
+    } else if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('nexus_from');
+      if (stored === 'app-onboarding') {
+        setShowOnboardingHint(true);
+      }
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (user) {
@@ -56,6 +72,12 @@ export default function LoginPage() {
 
   return (
     <Box sx={{ textAlign: 'center' }}>
+      {showOnboardingHint && (
+        <Alert severity="info" sx={{ mb: 3, textAlign: 'left' }}>
+          Use the Microsoft Teams credentials from your student app to sign in here.
+        </Alert>
+      )}
+
       <Typography
         variant="h4"
         component="h1"
@@ -105,5 +127,19 @@ export default function LoginPage() {
         By signing in, you agree to our Terms of Service and Privacy Policy
       </Typography>
     </Box>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

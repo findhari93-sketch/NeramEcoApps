@@ -67,6 +67,7 @@ interface OnboardingStep {
   is_required: boolean;
   is_active: boolean;
   applies_to: string[];
+  phase: string;
   created_at: string;
   updated_at: string;
 }
@@ -112,12 +113,20 @@ const EMPTY_STEP: Omit<OnboardingStep, 'id' | 'created_at' | 'updated_at'> = {
   is_required: true,
   is_active: true,
   applies_to: ['regular'],
+  phase: 'get_ready',
 };
 
 const ACTION_TYPE_OPTIONS = [
   { value: 'link', label: 'External Link' },
   { value: 'in_app', label: 'In-App Action' },
   { value: 'manual', label: 'Manual / Admin Verified' },
+];
+
+const PHASE_OPTIONS = [
+  { value: 'get_ready', label: 'Get Ready' },
+  { value: 'access_your_account', label: 'Access Your Account' },
+  { value: 'complete_nexus_setup', label: 'Complete Nexus Setup' },
+  { value: 'secure_your_account', label: 'Secure Your Account' },
 ];
 
 const ENROLLMENT_TYPE_OPTIONS = [
@@ -308,6 +317,7 @@ function StepDefinitionsTab({
       is_required: step.is_required,
       is_active: step.is_active,
       applies_to: step.applies_to || ['regular'],
+      phase: step.phase || 'get_ready',
     });
     setDialogOpen(true);
   };
@@ -342,6 +352,7 @@ function StepDefinitionsTab({
         is_required: formData.is_required,
         is_active: formData.is_active,
         applies_to: formData.applies_to,
+        phase: formData.phase || 'get_ready',
       };
 
       let res;
@@ -476,6 +487,7 @@ function StepDefinitionsTab({
                   <TableCell sx={{ fontWeight: 600 }}>Key</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Title</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Phase</TableCell>
                   <TableCell sx={{ fontWeight: 600 }} align="center">Required</TableCell>
                   <TableCell sx={{ fontWeight: 600 }} align="center">Active</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Applies To</TableCell>
@@ -516,6 +528,15 @@ function StepDefinitionsTab({
                           size="small"
                           variant="outlined"
                           sx={{ fontWeight: 500, fontSize: '0.75rem' }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={PHASE_OPTIONS.find((o) => o.value === step.phase)?.label || step.phase || 'Get Ready'}
+                          size="small"
+                          variant="outlined"
+                          color="info"
+                          sx={{ fontWeight: 500, fontSize: '0.7rem' }}
                         />
                       </TableCell>
                       <TableCell align="center">
@@ -621,6 +642,20 @@ function StepDefinitionsTab({
               size="small"
             >
               {ACTION_TYPE_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Phase"
+              value={formData.phase || 'get_ready'}
+              onChange={(e) => setFormData((p) => ({ ...p, phase: e.target.value }))}
+              size="small"
+              helperText="Which onboarding phase this step belongs to"
+            >
+              {PHASE_OPTIONS.map((opt) => (
                 <MenuItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </MenuItem>
