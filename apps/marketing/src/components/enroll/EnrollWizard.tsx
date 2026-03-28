@@ -22,7 +22,7 @@ import {
   DialogContent,
   DialogActions,
 } from '@neram/ui';
-import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Edit as EditIcon, Save as SaveIcon, OpenInNew } from '@mui/icons-material';
+import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Edit as EditIcon, Save as SaveIcon, OpenInNew, Person, LocationOn, School } from '@mui/icons-material';
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
@@ -698,9 +698,19 @@ export default function EnrollWizard() {
       (user.raw as any)?.uid === usedLinkData.enrolledByFirebaseUid
     );
 
-    // Owner viewing their enrollment — show form in view/edit mode
+    // Owner viewing their enrollment — show summary or edit form
     if (isOwner && usedLinkData?.leadProfile) {
       const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
+      const lp = usedLinkData.leadProfile;
+
+      // Helper for summary rows
+      const SummaryRow = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
+        <Box display="flex" justifyContent="space-between" py={0.75}>
+          <Typography variant="body2" color="text.secondary">{label}</Typography>
+          <Typography variant="body2" fontWeight={500} textAlign="right">{value || '-'}</Typography>
+        </Box>
+      );
+
       return (
         <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
           {/* Header with status */}
@@ -777,7 +787,81 @@ export default function EnrollWizard() {
             </Alert>
           )}
 
-          {/* Stepper navigation for viewing */}
+          {/* VIEW MODE: Read-only summary */}
+          {viewMode ? (
+            <>
+              {/* Personal Details Summary */}
+              <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                  <Person fontSize="small" />
+                  <Typography variant="subtitle1" fontWeight={600}>Personal Details</Typography>
+                </Box>
+                <SummaryRow label="Name" value={formData.personal.firstName} />
+                <SummaryRow label="Father's Name" value={formData.personal.fatherName || lp.fatherName} />
+                <SummaryRow label="Email" value={formData.personal.email} />
+                <SummaryRow label="Phone" value={formData.personal.phone} />
+                <SummaryRow label="Parent's Phone" value={formData.personal.parentPhone || lp.parentPhone} />
+                <SummaryRow label="Date of Birth" value={formData.personal.dateOfBirth || lp.dateOfBirth} />
+                <SummaryRow label="Gender" value={formData.personal.gender || lp.gender} />
+              </Paper>
+
+              {/* Address Summary */}
+              <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                  <LocationOn fontSize="small" />
+                  <Typography variant="subtitle1" fontWeight={600}>Address</Typography>
+                </Box>
+                <SummaryRow label="Pincode" value={formData.location.pincode || lp.pincode} />
+                <SummaryRow label="City" value={formData.location.city || lp.city} />
+                <SummaryRow label="District" value={formData.location.district || lp.district} />
+                <SummaryRow label="State" value={formData.location.state || lp.state} />
+                <SummaryRow label="Address" value={formData.location.address || lp.address} />
+              </Paper>
+
+              {/* Academic Details Summary */}
+              <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                  <School fontSize="small" />
+                  <Typography variant="subtitle1" fontWeight={600}>Academic Details</Typography>
+                </Box>
+                <SummaryRow label="Category" value={lp.applicantCategory} />
+                <SummaryRow label="Caste Category" value={formData.academic.casteCategory || lp.casteCategory} />
+                <SummaryRow label="Target Exam Year" value={formData.academic.targetExamYear || (lp.targetExamYear ? String(lp.targetExamYear) : null)} />
+              </Paper>
+
+              {/* Course & Fee Summary */}
+              <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 1 }}>
+                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+                  <Laptop fontSize="small" color="primary" />
+                  <Typography variant="subtitle1" fontWeight={600} color="primary.main">Course & Fees</Typography>
+                </Box>
+                <SummaryRow label="Course" value={usedLinkData.courseName || usedLinkData.interestCourse?.toUpperCase()} />
+                {usedLinkData.totalFee != null && (
+                  <SummaryRow label="Total Fee" value={`₹${Number(usedLinkData.totalFee).toLocaleString('en-IN')}`} />
+                )}
+                {usedLinkData.amountPaid != null && (
+                  <SummaryRow label="Amount Paid" value={`₹${Number(usedLinkData.amountPaid).toLocaleString('en-IN')}`} />
+                )}
+                {usedLinkData.enrolledAt && (
+                  <SummaryRow label="Enrolled On" value={new Date(usedLinkData.enrolledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} />
+                )}
+              </Paper>
+
+              {/* Go to Student App */}
+              <Button
+                variant="contained"
+                fullWidth
+                href={`/sso?redirect=${encodeURIComponent(APP_URL + '/onboarding')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none', py: 1.5, mb: 2 }}
+              >
+                Open Student App
+              </Button>
+            </>
+          ) : (
+            /* EDIT MODE: Editable form with stepper */
+            <>
           {isMobile ? (
             <MobileStepper
               variant="progress"
@@ -908,6 +992,8 @@ export default function EnrollWizard() {
               </Button>
             </Box>
           </Box>
+            </>
+          )}
         </Container>
       );
     }
