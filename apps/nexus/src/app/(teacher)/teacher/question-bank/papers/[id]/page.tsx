@@ -38,7 +38,9 @@ import { questionNeedsImage, questionMissingImages } from '@/components/question
 import HindiMergeDialog from '@/components/question-bank/HindiMergeDialog';
 import BulkImageManager from '@/components/question-bank/BulkImageManager';
 import InlineQuestionEditor from '@/components/question-bank/InlineQuestionEditor';
+import BulkVideoLinksDialog from '@/components/question-bank/BulkVideoLinksDialog';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -56,6 +58,7 @@ export default function PaperDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
+  const [videoLinksOpen, setVideoLinksOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
 
@@ -349,6 +352,15 @@ export default function PaperDetailPage() {
           <Button
             variant="outlined"
             size="small"
+            startIcon={<ContentPasteIcon />}
+            onClick={() => setVideoLinksOpen(true)}
+            sx={{ borderColor: '#7c3aed', color: '#7c3aed', '&:hover': { borderColor: '#6d28d9', bgcolor: 'rgba(124, 58, 237, 0.04)' } }}
+          >
+            Paste Video Links
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
             startIcon={<TranslateIcon />}
             onClick={() => setHindiMergeOpen(true)}
             sx={{ borderColor: '#e65100', color: '#e65100', '&:hover': { borderColor: '#bf360c', bgcolor: 'rgba(230, 81, 0, 0.04)' } }}
@@ -459,6 +471,19 @@ export default function PaperDetailPage() {
         getToken={getToken}
         onSuccess={() => {
           setMessage('Hindi text merged successfully');
+          fetchData(true);
+        }}
+      />
+
+      {/* Bulk video links dialog */}
+      <BulkVideoLinksDialog
+        open={videoLinksOpen}
+        onClose={() => setVideoLinksOpen(false)}
+        questions={questions}
+        paperId={paperId}
+        getToken={getToken}
+        onSuccess={(msg) => {
+          setMessage(msg);
           fetchData(true);
         }}
       />
