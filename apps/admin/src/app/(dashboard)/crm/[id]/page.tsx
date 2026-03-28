@@ -21,6 +21,7 @@ import DeviceDiagnosticsSection from '../../../../components/crm/DeviceDiagnosti
 import DocumentsSection from '../../../../components/crm/DocumentsSection';
 import HistoryTimeline from '../../../../components/crm/HistoryTimeline';
 import AdminNotesSection from '../../../../components/crm/AdminNotesSection';
+import CredentialsSection from '../../../../components/crm/CredentialsSection';
 import EditUserDialog from '../../../../components/crm/EditUserDialog';
 import GenerateLinkDialog from '../../../../components/direct-enrollment/GenerateLinkDialog';
 import ShareLinkPanel from '../../../../components/direct-enrollment/ShareLinkPanel';
@@ -166,6 +167,14 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           </Box>
           <Box id="crm-section-onboarding" sx={{ borderRadius: 1 }}>
             <OnboardingSection detail={detail} />
+          </Box>
+          <Box id="crm-section-credentials" sx={{ borderRadius: 1 }}>
+            <CredentialsSection
+              userId={detail.user.id}
+              studentName={detail.user.name || detail.user.first_name || 'Student'}
+              adminId={adminId}
+              isStudent={detail.user.user_type === 'student'}
+            />
           </Box>
           <Box id="crm-section-score-calculations" sx={{ borderRadius: 1 }}>
             <ScoreCalculationsSection userId={detail.user.id} />
