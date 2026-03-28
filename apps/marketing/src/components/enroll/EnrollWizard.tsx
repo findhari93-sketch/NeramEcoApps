@@ -190,9 +190,15 @@ export default function EnrollWizard() {
   }, [token, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-validate when user signs in AFTER initial validate already returned 'used' without owner info
+  // Also re-validate when isOwner is true client-side but leadProfile is missing (server-side ownership check failed)
   useEffect(() => {
-    if (user && token && tokenStatus === 'used' && usedLinkData && !usedLinkData.isOwner) {
-      validateToken(token, (user.raw as any));
+    if (user && token && tokenStatus === 'used' && usedLinkData) {
+      const isOwnerClientSide = usedLinkData.isOwner || (
+        usedLinkData.enrolledByFirebaseUid && (user.raw as any)?.uid === usedLinkData.enrolledByFirebaseUid
+      );
+      if (!usedLinkData.isOwner || (isOwnerClientSide && !usedLinkData.leadProfile)) {
+        validateToken(token, (user.raw as any));
+      }
     }
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
