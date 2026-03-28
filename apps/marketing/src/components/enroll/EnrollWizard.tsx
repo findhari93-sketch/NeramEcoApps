@@ -832,7 +832,7 @@ export default function EnrollWizard() {
               {/* Course & Fee Summary */}
               <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 1 }}>
                 <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-                  <Laptop fontSize="small" color="primary" />
+                  <School fontSize="small" color="primary" />
                   <Typography variant="subtitle1" fontWeight={600} color="primary.main">Course & Fees</Typography>
                 </Box>
                 <SummaryRow label="Course" value={usedLinkData.courseName || usedLinkData.interestCourse?.toUpperCase()} />
