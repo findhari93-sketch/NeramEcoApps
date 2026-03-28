@@ -400,15 +400,24 @@ export default function OnboardingPage() {
   }
 
   if (steps.length === 0) {
+    const marketingUrl = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
+    const applyUrl = `${marketingUrl}/en/apply`;
+
     return (
       <Container maxWidth="sm" sx={{ py: 4, textAlign: 'center' }}>
-        <CelebrationIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-        <Typography variant="h5" fontWeight={700}>All set!</Typography>
-        <Typography color="text.secondary" mb={3}>
-          No onboarding steps pending. You&apos;re ready to start learning.
+        <Typography variant="h5" fontWeight={700} gutterBottom>
+          You&apos;re not enrolled yet
         </Typography>
-        <Button variant="contained" href="/dashboard" sx={{ borderRadius: 1, fontWeight: 600 }}>
-          Go to Dashboard
+        <Typography color="text.secondary" mb={3}>
+          To access onboarding, you need to enroll in a class first. Fill out the application form to get started.
+        </Typography>
+        <Button
+          variant="contained"
+          href={applyUrl}
+          target="_blank"
+          sx={{ borderRadius: 1, fontWeight: 600, minHeight: 48 }}
+        >
+          Apply Now
         </Button>
       </Container>
     );
