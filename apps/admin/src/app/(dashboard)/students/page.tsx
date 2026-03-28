@@ -22,6 +22,10 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Collapse,
+  Pagination,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import SearchIcon from '@mui/icons-material/Search';
@@ -33,6 +37,8 @@ import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import LinkIcon from '@mui/icons-material/Link';
 import ClassIcon from '@mui/icons-material/Class';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 
@@ -127,13 +133,74 @@ function StatCard({
   icon,
   color,
   loading,
+  compact,
 }: {
   title: string;
   value: string | number;
   icon: React.ReactNode;
   color: string;
   loading: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <Paper
+        elevation={0}
+        sx={{
+          p: 0.75,
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: 'grey.200',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+          <Box
+            sx={{
+              width: 22,
+              height: 22,
+              borderRadius: 0.75,
+              bgcolor: `${color}15`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {icon}
+          </Box>
+          {loading ? (
+            <Skeleton width={40} height={20} />
+          ) : (
+            <Typography
+              sx={{
+                fontWeight: 800,
+                fontSize: 17,
+                lineHeight: 1,
+                color,
+                fontFamily: '"Inter", "Roboto", sans-serif',
+              }}
+            >
+              {value}
+            </Typography>
+          )}
+        </Box>
+        <Typography
+          sx={{
+            color: 'text.secondary',
+            fontWeight: 500,
+            fontSize: 10,
+            letterSpacing: 0.15,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {title}
+        </Typography>
+      </Paper>
+    );
+  }
+
   return (
     <Paper
       elevation={0}
@@ -181,6 +248,8 @@ function StatCard({
 
 export default function StudentsPage() {
   const router = useRouter();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -203,6 +272,9 @@ export default function StudentsPage() {
   const [courseFilter, setCourseFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [mobilePage, setMobilePage] = useState(1);
+  const mobilePageSize = 10;
 
   // Batches for assignment
   const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string; course_id: string; capacity: number; enrolled_count: number }[]>([]);
@@ -691,12 +763,12 @@ export default function StudentsPage() {
   return (
     <Box>
       {/* Page Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isMobile ? 1.5 : 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 1 : 1.5 }}>
           <Box
             sx={{
-              width: 42,
-              height: 42,
+              width: isMobile ? 32 : 42,
+              height: isMobile ? 32 : 42,
               borderRadius: 1,
               bgcolor: 'primary.main',
               display: 'flex',
@@ -704,13 +776,13 @@ export default function StudentsPage() {
               justifyContent: 'center',
             }}
           >
-            <SchoolIcon sx={{ color: 'white', fontSize: 22 }} />
+            <SchoolIcon sx={{ color: 'white', fontSize: isMobile ? 16 : 22 }} />
           </Box>
           <Box>
-            <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+            <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight={700} sx={{ lineHeight: 1.2 }}>
               Enrolled Students
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: isMobile ? 11 : undefined }}>
               {loading ? 'Loading...' : `${stats.totalStudents} students enrolled`}
             </Typography>
           </Box>
@@ -732,115 +804,387 @@ export default function StudentsPage() {
       )}
 
       {/* Stats Cards */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+      <Box
+        sx={
+          isMobile
+            ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.75, mb: 1.5 }
+            : { display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }
+        }
+      >
         <StatCard
           title="Total Students"
           value={stats.totalStudents}
-          icon={<PeopleAltIcon sx={{ color: '#1976d2', fontSize: 24 }} />}
+          icon={<PeopleAltIcon sx={{ color: '#1976d2', fontSize: isMobile ? 12 : 24 }} />}
           color="#1976d2"
           loading={loading}
+          compact={isMobile}
         />
         <StatCard
           title="Fully Paid"
           value={stats.fullyPaid}
-          icon={<CheckCircleIcon sx={{ color: '#2e7d32', fontSize: 24 }} />}
+          icon={<CheckCircleIcon sx={{ color: '#2e7d32', fontSize: isMobile ? 12 : 24 }} />}
           color="#2e7d32"
           loading={loading}
+          compact={isMobile}
         />
         <StatCard
           title="Partial Payment"
           value={stats.partialPayment}
-          icon={<HourglassBottomIcon sx={{ color: '#ed6c02', fontSize: 24 }} />}
+          icon={<HourglassBottomIcon sx={{ color: '#ed6c02', fontSize: isMobile ? 12 : 24 }} />}
           color="#ed6c02"
           loading={loading}
+          compact={isMobile}
         />
         <StatCard
           title="Total Revenue"
           value={formatCurrency(stats.totalRevenue)}
-          icon={<CurrencyRupeeIcon sx={{ color: '#9c27b0', fontSize: 24 }} />}
+          icon={<CurrencyRupeeIcon sx={{ color: '#9c27b0', fontSize: isMobile ? 12 : 24 }} />}
           color="#9c27b0"
           loading={loading}
+          compact={isMobile}
         />
       </Box>
 
       {/* Filters */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
-          size="small"
-          placeholder="Search by name, email, or phone..."
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          sx={{ minWidth: 300 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" color="action" />
-              </InputAdornment>
-            ),
-          }}
-        />
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Course</InputLabel>
-          <Select
-            value={courseFilter}
-            label="Course"
-            onChange={(e) => setCourseFilter(e.target.value)}
-          >
-            <MenuItem value="">All Courses</MenuItem>
-            <MenuItem value="nata">NATA</MenuItem>
-            <MenuItem value="jee_paper2">JEE Paper 2</MenuItem>
-            <MenuItem value="both">Both</MenuItem>
-            <MenuItem value="not_sure">Not Sure</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 170 }}>
-          <InputLabel>Payment Status</InputLabel>
-          <Select
-            value={paymentFilter}
-            label="Payment Status"
-            onChange={(e) => setPaymentFilter(e.target.value)}
-          >
-            <MenuItem value="">All Statuses</MenuItem>
-            <MenuItem value="paid">Paid</MenuItem>
-            <MenuItem value="pending">Pending / Partial</MenuItem>
-            <MenuItem value="failed">Failed</MenuItem>
-            <MenuItem value="refunded">Refunded</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Batch</InputLabel>
-          <Select
-            value={batchFilter}
-            label="Batch"
-            onChange={(e) => setBatchFilter(e.target.value)}
-          >
-            <MenuItem value="">All Batches</MenuItem>
-            <MenuItem value="unassigned">Unassigned</MenuItem>
-            {availableBatches.map((b) => (
-              <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
+      {isMobile ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1.5 }}>
+          <TextField
+            size="small"
+            placeholder="Search name, email, phone..."
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            fullWidth
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip
+              icon={<FilterListIcon sx={{ fontSize: 14 }} />}
+              label={`Filters${(courseFilter || paymentFilter || batchFilter) ? ` (${[courseFilter, paymentFilter, batchFilter].filter(Boolean).length})` : ''}`}
+              onClick={() => setFiltersExpanded(!filtersExpanded)}
+              variant={filtersExpanded ? 'filled' : 'outlined'}
+              size="small"
+              sx={{ fontSize: 11, height: 28 }}
+            />
+            {(courseFilter || paymentFilter || batchFilter) && (
+              <Chip
+                label="Clear"
+                size="small"
+                onDelete={() => {
+                  setCourseFilter('');
+                  setPaymentFilter('');
+                  setBatchFilter('');
+                }}
+                sx={{ fontSize: 10, height: 24 }}
+              />
+            )}
+          </Box>
+          <Collapse in={filtersExpanded}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0.5 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Course</InputLabel>
+                <Select
+                  value={courseFilter}
+                  label="Course"
+                  onChange={(e) => setCourseFilter(e.target.value)}
+                >
+                  <MenuItem value="">All Courses</MenuItem>
+                  <MenuItem value="nata">NATA</MenuItem>
+                  <MenuItem value="jee_paper2">JEE Paper 2</MenuItem>
+                  <MenuItem value="both">Both</MenuItem>
+                  <MenuItem value="not_sure">Not Sure</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Payment Status</InputLabel>
+                <Select
+                  value={paymentFilter}
+                  label="Payment Status"
+                  onChange={(e) => setPaymentFilter(e.target.value)}
+                >
+                  <MenuItem value="">All Statuses</MenuItem>
+                  <MenuItem value="paid">Paid</MenuItem>
+                  <MenuItem value="pending">Pending / Partial</MenuItem>
+                  <MenuItem value="failed">Failed</MenuItem>
+                  <MenuItem value="refunded">Refunded</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Batch</InputLabel>
+                <Select
+                  value={batchFilter}
+                  label="Batch"
+                  onChange={(e) => setBatchFilter(e.target.value)}
+                >
+                  <MenuItem value="">All Batches</MenuItem>
+                  <MenuItem value="unassigned">Unassigned</MenuItem>
+                  {availableBatches.map((b) => (
+                    <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          </Collapse>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <TextField
+            size="small"
+            placeholder="Search by name, email, or phone..."
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            sx={{ minWidth: 300 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Course</InputLabel>
+            <Select
+              value={courseFilter}
+              label="Course"
+              onChange={(e) => setCourseFilter(e.target.value)}
+            >
+              <MenuItem value="">All Courses</MenuItem>
+              <MenuItem value="nata">NATA</MenuItem>
+              <MenuItem value="jee_paper2">JEE Paper 2</MenuItem>
+              <MenuItem value="both">Both</MenuItem>
+              <MenuItem value="not_sure">Not Sure</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 170 }}>
+            <InputLabel>Payment Status</InputLabel>
+            <Select
+              value={paymentFilter}
+              label="Payment Status"
+              onChange={(e) => setPaymentFilter(e.target.value)}
+            >
+              <MenuItem value="">All Statuses</MenuItem>
+              <MenuItem value="paid">Paid</MenuItem>
+              <MenuItem value="pending">Pending / Partial</MenuItem>
+              <MenuItem value="failed">Failed</MenuItem>
+              <MenuItem value="refunded">Refunded</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Batch</InputLabel>
+            <Select
+              value={batchFilter}
+              label="Batch"
+              onChange={(e) => setBatchFilter(e.target.value)}
+            >
+              <MenuItem value="">All Batches</MenuItem>
+              <MenuItem value="unassigned">Unassigned</MenuItem>
+              {availableBatches.map((b) => (
+                <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      )}
 
-      {/* Data Table */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 1,
-          border: '1px solid',
-          borderColor: 'grey.200',
-          overflow: 'hidden',
-        }}
-      >
-        <DataTable
-          rows={batchFilter ? (batchFilter === 'unassigned' ? students.filter((s) => !s.batch_id) : students.filter((s) => s.batch_id === batchFilter)) : students}
-          columns={columns}
-          loading={loading}
-          onRowClick={handleRowClick}
-          defaultRowsPerPage={25}
-        />
-      </Paper>
+      {/* Data Table / Mobile Card List */}
+      {(() => {
+        const filteredStudents = batchFilter
+          ? batchFilter === 'unassigned'
+            ? students.filter((s) => !s.batch_id)
+            : students.filter((s) => s.batch_id === batchFilter)
+          : students;
+
+        if (isMobile) {
+          const totalPages = Math.ceil(filteredStudents.length / mobilePageSize);
+          const paginatedStudents = filteredStudents.slice(
+            (mobilePage - 1) * mobilePageSize,
+            mobilePage * mobilePageSize
+          );
+
+          return (
+            <Paper
+              elevation={0}
+              sx={{
+                borderRadius: 1,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                overflow: 'hidden',
+              }}
+            >
+              {loading ? (
+                <Box sx={{ p: 1 }}>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Box key={i} sx={{ p: 1.25, borderBottom: '1px solid', borderColor: 'grey.100' }}>
+                      <Skeleton width="60%" height={16} sx={{ mb: 0.5 }} />
+                      <Skeleton width="40%" height={12} sx={{ mb: 0.5 }} />
+                      <Skeleton width="80%" height={12} />
+                    </Box>
+                  ))}
+                </Box>
+              ) : filteredStudents.length === 0 ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 120 }}>
+                  <Typography color="text.secondary" sx={{ fontSize: 13 }}>No students found</Typography>
+                </Box>
+              ) : (
+                <>
+                  {paginatedStudents.map((student) => {
+                    const name = [student.first_name, student.last_name].filter(Boolean).join(' ') || '-';
+                    return (
+                      <Box
+                        key={student.id}
+                        onClick={() => handleRowClick(student)}
+                        sx={{
+                          p: 1.25,
+                          borderBottom: '1px solid',
+                          borderColor: 'grey.100',
+                          cursor: 'pointer',
+                          '&:active': { bgcolor: 'grey.50' },
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 1.25,
+                        }}
+                      >
+                        {/* Content */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          {/* Row 1: Name + Date */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
+                            <Typography
+                              sx={{
+                                fontWeight: 600,
+                                fontSize: 14,
+                                lineHeight: 1.3,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1,
+                                mr: 1,
+                              }}
+                            >
+                              {name}
+                            </Typography>
+                            <Typography sx={{ fontSize: 10, color: 'text.disabled', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {formatDate(student.enrollment_date)}
+                            </Typography>
+                          </Box>
+
+                          {/* Row 2: Student ID */}
+                          <Typography
+                            sx={{
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: 'text.secondary',
+                              mb: 0.25,
+                            }}
+                          >
+                            {student.student_id || 'No ID'}
+                          </Typography>
+
+                          {/* Row 3: Email/Phone */}
+                          <Typography
+                            sx={{
+                              fontSize: 11,
+                              color: 'text.secondary',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              mb: 0.75,
+                            }}
+                          >
+                            {student.email || student.phone || '-'}
+                          </Typography>
+
+                          {/* Row 4: Chips */}
+                          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Chip
+                              label={getPaymentStatusLabel(student.payment_status)}
+                              color={getPaymentStatusColor(student.payment_status)}
+                              size="small"
+                              sx={{ height: 20, fontSize: 10, fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
+                            />
+                            {student.interest_course && (
+                              <Chip
+                                label={COURSE_LABELS[student.interest_course] || student.interest_course}
+                                size="small"
+                                variant="outlined"
+                                sx={{ height: 20, fontSize: 10, '& .MuiChip-label': { px: 0.75 } }}
+                              />
+                            )}
+                            {student.fee_paid > 0 && (
+                              <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'success.main', fontFamily: 'monospace' }}>
+                                {formatCurrency(student.fee_paid)}
+                              </Typography>
+                            )}
+                            {student.fee_due > 0 && (
+                              <Typography sx={{ fontSize: 10, fontWeight: 600, color: 'error.main', fontFamily: 'monospace' }}>
+                                Due: {formatCurrency(student.fee_due)}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+
+                        {/* Chevron */}
+                        <ChevronRightIcon sx={{ fontSize: 16, color: 'text.disabled', mt: 0.5, flexShrink: 0 }} />
+                      </Box>
+                    );
+                  })}
+
+                  {/* Pagination */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      px: 1.5,
+                      py: 1,
+                      borderTop: '1px solid',
+                      borderColor: 'grey.200',
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>
+                      {filteredStudents.length} students
+                    </Typography>
+                    {totalPages > 1 && (
+                      <Pagination
+                        count={totalPages}
+                        page={mobilePage}
+                        onChange={(_, page) => setMobilePage(page)}
+                        size="small"
+                        sx={{ '& .MuiPaginationItem-root': { fontSize: 11, minWidth: 28, height: 28 } }}
+                      />
+                    )}
+                  </Box>
+                </>
+              )}
+            </Paper>
+          );
+        }
+
+        return (
+          <Paper
+            elevation={0}
+            sx={{
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'grey.200',
+              overflow: 'hidden',
+            }}
+          >
+            <DataTable
+              rows={filteredStudents}
+              columns={columns}
+              loading={loading}
+              onRowClick={handleRowClick}
+              defaultRowsPerPage={25}
+            />
+          </Paper>
+        );
+      })()}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)}>
