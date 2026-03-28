@@ -170,6 +170,8 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
           size="large"
           fullWidth
           href={`/sso?redirect=${encodeURIComponent(APP_ONBOARDING_URL)}`}
+          target="_blank"
+          rel="noopener noreferrer"
           endIcon={<ArrowForward />}
           sx={{
             py: 1.5,
