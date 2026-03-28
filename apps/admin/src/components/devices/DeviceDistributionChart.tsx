@@ -5,6 +5,7 @@ import type { DeviceDistributionStats } from '@neram/database';
 
 interface DeviceDistributionChartProps {
   stats: DeviceDistributionStats;
+  isMobile?: boolean;
 }
 
 interface Segment {
@@ -17,7 +18,7 @@ interface Segment {
  * Custom donut chart for device distribution.
  * No external chart library - pure CSS/SVG.
  */
-export function DeviceDistributionChart({ stats }: DeviceDistributionChartProps) {
+export function DeviceDistributionChart({ stats, isMobile }: DeviceDistributionChartProps) {
   const theme = useTheme();
   const total = stats.total_students || 1;
 
@@ -28,16 +29,26 @@ export function DeviceDistributionChart({ stats }: DeviceDistributionChartProps)
     { label: 'No devices', value: stats.no_devices, color: theme.palette.grey[400] },
   ];
 
-  // Calculate SVG donut chart
-  const radius = 80;
+  // Mobile: smaller donut
+  const chartSize = isMobile ? 120 : 200;
+  const radius = isMobile ? 48 : 80;
+  const strokeWidth = isMobile ? 16 : 24;
   const circumference = 2 * Math.PI * radius;
   let cumulativeOffset = 0;
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: 'center',
+        gap: isMobile ? 2 : 4,
+        flexWrap: 'wrap',
+      }}
+    >
       {/* Donut chart */}
-      <Box sx={{ position: 'relative', width: 200, height: 200, flexShrink: 0 }}>
-        <svg viewBox="0 0 200 200" width={200} height={200}>
+      <Box sx={{ position: 'relative', width: chartSize, height: chartSize, flexShrink: 0 }}>
+        <svg viewBox={`0 0 ${chartSize} ${chartSize}`} width={chartSize} height={chartSize}>
           {segments.map((seg) => {
             const pct = seg.value / total;
             const dashLength = pct * circumference;
@@ -49,15 +60,15 @@ export function DeviceDistributionChart({ stats }: DeviceDistributionChartProps)
             return (
               <circle
                 key={seg.label}
-                cx="100"
-                cy="100"
+                cx={chartSize / 2}
+                cy={chartSize / 2}
                 r={radius}
                 fill="none"
                 stroke={seg.color}
-                strokeWidth="24"
+                strokeWidth={strokeWidth}
                 strokeDasharray={`${dashLength} ${circumference - dashLength}`}
                 strokeDashoffset={-offset}
-                transform="rotate(-90 100 100)"
+                transform={`rotate(-90 ${chartSize / 2} ${chartSize / 2})`}
                 strokeLinecap="round"
               />
             );
@@ -72,33 +83,48 @@ export function DeviceDistributionChart({ stats }: DeviceDistributionChartProps)
             textAlign: 'center',
           }}
         >
-          <Typography variant="h4" fontWeight={700}>
+          <Typography variant={isMobile ? 'h6' : 'h4'} fontWeight={700}>
             {stats.total_students}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Total Students
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? 9 : undefined }}>
+            Total
           </Typography>
         </Box>
       </Box>
 
       {/* Legend */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box
+        sx={
+          isMobile
+            ? {
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 1,
+                width: '100%',
+              }
+            : {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.5,
+              }
+        }
+      >
         {segments.map((seg) => (
-          <Box key={seg.label} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box key={seg.label} sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.75 : 1.5 }}>
             <Box
               sx={{
-                width: 12,
-                height: 12,
+                width: isMobile ? 8 : 12,
+                height: isMobile ? 8 : 12,
                 borderRadius: '50%',
                 bgcolor: seg.color,
                 flexShrink: 0,
               }}
             />
-            <Box>
-              <Typography variant="body2" fontWeight={600}>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={600} sx={{ fontSize: isMobile ? 12 : undefined, lineHeight: 1.2 }}>
                 {seg.value} ({total > 0 ? Math.round((seg.value / total) * 100) : 0}%)
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? 10 : undefined }}>
                 {seg.label}
               </Typography>
             </Box>

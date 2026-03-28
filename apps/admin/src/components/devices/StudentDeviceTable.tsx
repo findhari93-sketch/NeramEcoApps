@@ -17,17 +17,22 @@ import {
   TablePagination,
   IconButton,
   Tooltip,
+  Skeleton,
+  Pagination,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useState, useEffect, useCallback } from 'react';
 import type { StudentDeviceSummary } from '@neram/database';
 
 interface StudentDeviceTableProps {
   onViewStudent?: (userId: string) => void;
+  isMobile?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -60,18 +65,18 @@ const statusColors: Record<string, 'success' | 'primary' | 'warning' | 'default'
 
 const statusLabels: Record<string, string> = {
   both: 'Both',
-  desktop_only: 'Desktop only',
-  mobile_only: 'Mobile only',
-  none: 'No devices',
+  desktop_only: 'Desktop',
+  mobile_only: 'Mobile',
+  none: 'None',
 };
 
-export function StudentDeviceTable({ onViewStudent }: StudentDeviceTableProps) {
+export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTableProps) {
   const [data, setData] = useState<StudentDeviceSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [rowsPerPage, setRowsPerPage] = useState(isMobile ? 10 : 25);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -110,6 +115,187 @@ export function StudentDeviceTable({ onViewStudent }: StudentDeviceTableProps) {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  if (isMobile) {
+    const totalPages = Math.ceil(total / rowsPerPage);
+
+    return (
+      <Box>
+        <TextField
+          placeholder="Search name or email..."
+          size="small"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          fullWidth
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mb: 1.5 }}
+        />
+
+        {loading ? (
+          <Box>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Box key={i} sx={{ p: 1.25, borderBottom: '1px solid', borderColor: 'grey.100' }}>
+                <Skeleton width="60%" height={16} sx={{ mb: 0.5 }} />
+                <Skeleton width="80%" height={12} sx={{ mb: 0.5 }} />
+                <Skeleton width="50%" height={12} />
+              </Box>
+            ))}
+          </Box>
+        ) : data.length === 0 ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 100 }}>
+            <Typography color="text.secondary" sx={{ fontSize: 13 }}>No students found</Typography>
+          </Box>
+        ) : (
+          <>
+            {data.map((student) => {
+              const lastActiveText = formatLastActive(student.last_active);
+              const isOnline = lastActiveText === 'Online';
+              const location = student.devices.find((d) => d.last_city)?.last_city;
+
+              return (
+                <Box
+                  key={student.user_id}
+                  onClick={() => onViewStudent?.(student.user_id)}
+                  sx={{
+                    p: 1.25,
+                    borderBottom: '1px solid',
+                    borderColor: 'grey.100',
+                    cursor: 'pointer',
+                    '&:active': { bgcolor: 'grey.50' },
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 1,
+                  }}
+                >
+                  <Avatar
+                    src={student.user_avatar || undefined}
+                    sx={{ width: 28, height: 28, fontSize: 11, mt: 0.25, flexShrink: 0 }}
+                  >
+                    {student.user_name?.[0]?.toUpperCase()}
+                  </Avatar>
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {/* Row 1: Name + Last Active */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
+                      <Typography
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: 13,
+                          lineHeight: 1.3,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          flex: 1,
+                          mr: 0.75,
+                        }}
+                      >
+                        {student.user_name}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: 10,
+                          fontWeight: isOnline ? 600 : 400,
+                          color: isOnline ? 'success.main' : 'text.disabled',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {lastActiveText}
+                      </Typography>
+                    </Box>
+
+                    {/* Row 2: Email */}
+                    <Typography
+                      sx={{
+                        fontSize: 11,
+                        color: 'text.secondary',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        mb: 0.5,
+                      }}
+                    >
+                      {student.user_email}
+                    </Typography>
+
+                    {/* Row 3: Device icons + Status + Active time */}
+                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {student.devices.map((d) => (
+                        d.device_category === 'desktop' ? (
+                          <LaptopIcon key={d.id} sx={{ fontSize: 14, color: 'primary.main' }} />
+                        ) : (
+                          <PhoneAndroidIcon key={d.id} sx={{ fontSize: 14, color: 'secondary.main' }} />
+                        )
+                      ))}
+                      <Chip
+                        label={statusLabels[student.device_status]}
+                        color={statusColors[student.device_status]}
+                        size="small"
+                        sx={{ height: 18, fontSize: 9, '& .MuiChip-label': { px: 0.5 } }}
+                      />
+                      {student.total_active_time > 0 && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
+                          <AccessTimeIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
+                          <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>
+                            {formatTime(student.total_active_time)}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+
+                    {/* Row 4: Location (if available) */}
+                    {location && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mt: 0.25 }}>
+                        <LocationOnIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
+                        <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>
+                          {location}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+
+                  <ChevronRightIcon sx={{ fontSize: 16, color: 'text.disabled', mt: 0.5, flexShrink: 0 }} />
+                </Box>
+              );
+            })}
+
+            {/* Pagination */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 1.5,
+                py: 1,
+                borderTop: '1px solid',
+                borderColor: 'grey.200',
+              }}
+            >
+              <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>
+                {total} students
+              </Typography>
+              {totalPages > 1 && (
+                <Pagination
+                  count={totalPages}
+                  page={page + 1}
+                  onChange={(_, p) => setPage(p - 1)}
+                  size="small"
+                  sx={{ '& .MuiPaginationItem-root': { fontSize: 11, minWidth: 28, height: 28 } }}
+                />
+              )}
+            </Box>
+          </>
+        )}
+      </Box>
+    );
+  }
+
+  // Desktop: original table layout
   return (
     <Box>
       <TextField
