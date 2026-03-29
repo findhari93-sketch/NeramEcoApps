@@ -319,14 +319,21 @@ export default function StudentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ classroomId }),
       });
-      if (!res.ok) throw new Error('Failed to assign classroom');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to assign classroom');
       setNexusEnrollments((prev) => {
         const existing = prev[userId] || [];
-        // Don't duplicate
         if (existing.some((e) => e.classroom_id === classroomId)) return prev;
         return { ...prev, [userId]: [...existing, { classroom_id: classroomId, batch_id: null }] };
       });
       fetchNexusBatches(classroomId);
+
+      // Show Teams auto-add result
+      if (data.teamsAutoAdd?.success) {
+        setError(''); // Clear any previous error
+      } else if (data.teamsAutoAdd?.reason === 'no_ms_teams_email') {
+        setError('Classroom assigned but Teams auto-add skipped — share credentials first so the student gets a Teams email.');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

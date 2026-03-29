@@ -3,10 +3,14 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { addMemberToTeam } from '@neram/auth';
 
 /**
  * POST /api/students/[id]/nexus-enroll — Enroll student in a Nexus classroom + optional batch
- * Body: { classroomId, batchId? }
+ * Body: { classroomId, batchId?, remove? }
+ *
+ * When a classroom with ms_team_sync_enabled is assigned, the student is
+ * automatically added to the corresponding Microsoft Teams team via Graph API.
  */
 export async function POST(
   request: NextRequest,
@@ -54,7 +58,95 @@ export async function POST(
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, enrollment });
+    // Auto-add student to Microsoft Teams team if classroom has sync enabled
+    let teamsResult: { success: boolean; reason?: string } | null = null;
+    try {
+      // 1. Check if classroom has a Teams team linked
+      const { data: classroom } = await supabase
+        .from('nexus_classrooms')
+        .select('ms_team_id, ms_team_sync_enabled, name')
+        .eq('id', classroomId)
+        .single();
+
+      if (classroom?.ms_team_id && classroom.ms_team_sync_enabled) {
+        // 2. Get student's ms_teams_email
+        const { data: studentProfile } = await supabase
+          .from('student_profiles')
+          .select('ms_teams_email')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (studentProfile?.ms_teams_email) {
+          // 3. Add to Teams via Graph API
+          teamsResult = await addMemberToTeam(classroom.ms_team_id, studentProfile.ms_teams_email);
+
+          // 4. Log the sync attempt
+          await supabase.from('nexus_teams_sync_log').insert({
+            classroom_id: classroomId,
+            user_id: userId,
+            action: 'add_member',
+            status: teamsResult.success ? 'success' : 'failed',
+            error_message: teamsResult.success ? null : teamsResult.reason,
+            details: { source: 'admin_enroll', classroom_name: classroom.name },
+          }).catch(() => {});
+        } else {
+          teamsResult = { success: false, reason: 'no_ms_teams_email' };
+        }
+      }
+    } catch (teamsErr: any) {
+      console.warn('[nexus-enroll] Teams auto-add failed:', teamsErr?.message);
+      teamsResult = { success: false, reason: teamsErr?.message || 'unknown_error' };
+    }
+
+    // Auto-complete the join_teams_class onboarding step if ALL enrolled classrooms are synced
+    if (teamsResult?.success) {
+      try {
+        // Check if all enrolled classrooms with Teams sync have been added
+        const { data: allEnrollments } = await supabase
+          .from('nexus_enrollments')
+          .select('classroom_id, classroom:nexus_classrooms(ms_team_id, ms_team_sync_enabled)')
+          .eq('user_id', userId)
+          .eq('is_active', true);
+
+        const teamsClassrooms = (allEnrollments || []).filter(
+          (e: any) => e.classroom?.ms_team_id && e.classroom?.ms_team_sync_enabled
+        );
+
+        // Check sync log for successful adds
+        const classroomIds = teamsClassrooms.map((e: any) => e.classroom_id);
+        const { data: successLogs } = await supabase
+          .from('nexus_teams_sync_log')
+          .select('classroom_id')
+          .eq('user_id', userId)
+          .eq('action', 'add_member')
+          .eq('status', 'success')
+          .in('classroom_id', classroomIds);
+
+        const syncedCount = new Set((successLogs || []).map((l: any) => l.classroom_id)).size;
+
+        if (syncedCount >= teamsClassrooms.length) {
+          // All Teams classrooms synced — mark onboarding step complete
+          await supabase
+            .from('student_onboarding_progress')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              auto_add_attempted: true,
+              auto_add_result: 'success',
+            })
+            .eq('user_id', userId)
+            .eq('step_key', 'join_teams_class');
+        }
+      } catch {
+        // Don't block enrollment if onboarding update fails
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      enrollment,
+      teamsAutoAdd: teamsResult,
+    });
   } catch (error: any) {
     console.error('Error enrolling student:', error);
     return NextResponse.json({ error: error.message || 'Failed to enroll student' }, { status: 500 });
