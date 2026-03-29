@@ -229,6 +229,14 @@ export default function StudentsPage() {
   const [credError, setCredError] = useState('');
   const [credSuccess, setCredSuccess] = useState(false);
 
+  // Legacy student reconciliation
+  const [legacyStudents, setLegacyStudents] = useState<any[]>([]);
+  const [legacyCount, setLegacyCount] = useState(0);
+  const [showReconcileDialog, setShowReconcileDialog] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileResults, setReconcileResults] = useState<any>(null);
+  const [selectedLegacy, setSelectedLegacy] = useState<Set<string>>(new Set());
+
   // Group chat config
   const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', auto_add_enabled: false });
   const [editingGroupChat, setEditingGroupChat] = useState(false);
@@ -309,6 +317,46 @@ export default function StudentsPage() {
       setError(err.message || 'Failed to save group chat config');
     } finally {
       setSavingGroupChat(false);
+    }
+  };
+
+  // Fetch legacy students count
+  useEffect(() => {
+    fetch('/api/students/reconcile')
+      .then((r) => r.json())
+      .then((d) => {
+        setLegacyStudents(d.students || []);
+        setLegacyCount(d.count || 0);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleReconcile = async () => {
+    const userIds = Array.from(selectedLegacy);
+    if (userIds.length === 0) return;
+    setReconciling(true);
+    setReconcileResults(null);
+    try {
+      const res = await fetch('/api/students/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setReconcileResults(data);
+      // Refresh legacy count
+      const refreshRes = await fetch('/api/students/reconcile');
+      const refreshData = await refreshRes.json();
+      setLegacyStudents(refreshData.students || []);
+      setLegacyCount(refreshData.count || 0);
+      setSelectedLegacy(new Set());
+      // Also refresh main student list
+      fetchStudents();
+    } catch (err: any) {
+      setError(err.message || 'Reconciliation failed');
+    } finally {
+      setReconciling(false);
     }
   };
 
@@ -820,6 +868,32 @@ export default function StudentsPage() {
         />
       </Box>
 
+      {/* Legacy Students Banner */}
+      {legacyCount > 0 && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2, borderRadius: 1 }}
+          action={
+            <Button
+              color="warning"
+              size="small"
+              variant="contained"
+              onClick={() => {
+                setShowReconcileDialog(true);
+                setReconcileResults(null);
+                setSelectedLegacy(new Set(legacyStudents.map((s: any) => s.userId)));
+              }}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Setup Onboarding
+            </Button>
+          }
+        >
+          <strong>{legacyCount} legacy students</strong> have Nexus classrooms but no onboarding pipeline.
+          Click to initialize their onboarding, verify Teams membership, and set up identity document collection.
+        </Alert>
+      )}
+
       {/* Group Chat Config */}
       <Paper elevation={0} sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
         <GroupsIcon sx={{ color: '#7B1FA2', fontSize: 20 }} />
@@ -1064,6 +1138,119 @@ export default function StudentsPage() {
           >
             {credSharing ? 'Sharing...' : 'Share with Student'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Legacy Student Reconciliation Dialog */}
+      <Dialog open={showReconcileDialog} onClose={() => !reconciling && setShowReconcileDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Setup Onboarding for Legacy Students
+        </DialogTitle>
+        <DialogContent>
+          {reconcileResults ? (
+            // Results view
+            <Box>
+              <Alert severity={reconcileResults.summary.failed > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
+                Reconciled {reconcileResults.summary.success} of {reconcileResults.summary.total} students.
+                {reconcileResults.summary.failed > 0 && ` ${reconcileResults.summary.failed} failed.`}
+              </Alert>
+              <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                {(reconcileResults.results || []).map((r: any) => (
+                  <Paper key={r.userId} elevation={0} sx={{ p: 1.5, mb: 1, border: '1px solid', borderColor: r.success ? 'success.200' : 'error.200', borderRadius: 1, bgcolor: r.success ? 'success.50' : 'error.50' }}>
+                    <Typography variant="body2" fontWeight={600}>{r.userId.slice(0, 8)}...</Typography>
+                    {r.error && <Typography variant="caption" color="error">{r.error}</Typography>}
+                    {r.steps && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                        {Object.entries(r.steps).map(([key, val]: [string, any]) => (
+                          <Chip
+                            key={key}
+                            label={`${key}: ${val}`}
+                            size="small"
+                            color={String(val).includes('error') || String(val).includes('failed') ? 'error' : 'success'}
+                            variant="outlined"
+                            sx={{ fontSize: 10, height: 20 }}
+                          />
+                        ))}
+                      </Box>
+                    )}
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          ) : (
+            // Selection view
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                These students have Nexus classrooms but no formal onboarding pipeline.
+                This will create student profiles, auto-complete steps they&apos;ve already done
+                (Teams, Authenticator, credentials), verify Teams membership, and set up identity document collection in Nexus.
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Button
+                  size="small"
+                  onClick={() => setSelectedLegacy(new Set(legacyStudents.map((s: any) => s.userId)))}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Select All ({legacyStudents.length})
+                </Button>
+                <Button size="small" onClick={() => setSelectedLegacy(new Set())} sx={{ textTransform: 'none' }}>
+                  Deselect All
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  {selectedLegacy.size} selected
+                </Typography>
+              </Box>
+              <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                {legacyStudents.map((s: any) => (
+                  <Paper
+                    key={s.userId}
+                    elevation={0}
+                    sx={{
+                      p: 1.5, mb: 1, border: '1px solid', borderRadius: 1,
+                      borderColor: selectedLegacy.has(s.userId) ? 'primary.main' : 'divider',
+                      cursor: 'pointer',
+                      bgcolor: selectedLegacy.has(s.userId) ? 'primary.50' : 'transparent',
+                    }}
+                    onClick={() => {
+                      setSelectedLegacy((prev) => {
+                        const next = new Set(prev);
+                        next.has(s.userId) ? next.delete(s.userId) : next.add(s.userId);
+                        return next;
+                      });
+                    }}
+                  >
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">{s.email}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {(s.classrooms || []).map((c: any) => (
+                          <Chip key={c.id} label={c.name} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />
+                        ))}
+                      </Box>
+                    </Box>
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setShowReconcileDialog(false)} disabled={reconciling} sx={{ textTransform: 'none' }}>
+            {reconcileResults ? 'Close' : 'Cancel'}
+          </Button>
+          {!reconcileResults && (
+            <Button
+              variant="contained"
+              onClick={handleReconcile}
+              disabled={reconciling || selectedLegacy.size === 0}
+              startIcon={reconciling ? <CircularProgress size={16} color="inherit" /> : null}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              {reconciling ? 'Processing...' : `Initialize ${selectedLegacy.size} Students`}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>
