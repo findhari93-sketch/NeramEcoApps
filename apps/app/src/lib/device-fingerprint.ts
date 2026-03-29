@@ -52,7 +52,7 @@ function getStableAttributes(): string {
   }
 
   // Device memory (Chrome only, stable per device)
-  const nav = navigator as Record<string, unknown>;
+  const nav = navigator as unknown as Record<string, unknown>;
   if (nav.deviceMemory) {
     parts.push(`mem:${nav.deviceMemory}`);
   }

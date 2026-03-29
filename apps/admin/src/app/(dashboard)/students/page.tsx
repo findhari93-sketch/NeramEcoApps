@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  CircularProgress,
 } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import SearchIcon from '@mui/icons-material/Search';
@@ -31,8 +32,12 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
-import LinkIcon from '@mui/icons-material/Link';
-import ClassIcon from '@mui/icons-material/Class';
+import KeyIcon from '@mui/icons-material/Key';
+import SendIcon from '@mui/icons-material/Send';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 
@@ -204,21 +209,22 @@ export default function StudentsPage() {
   const [paymentFilter, setPaymentFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
 
-  // Batches for assignment
-  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string; course_id: string; capacity: number; enrolled_count: number }[]>([]);
-  const [assigningBatch, setAssigningBatch] = useState<string | null>(null); // user_id being assigned
+  // (Legacy batch assignment removed — using Nexus classrooms only)
 
   // Nexus classrooms & batches
   const [nexusClassrooms, setNexusClassrooms] = useState<{ id: string; name: string; type: string }[]>([]);
   const [nexusBatchesMap, setNexusBatchesMap] = useState<Record<string, { id: string; name: string }[]>>({});
-  const [nexusEnrollments, setNexusEnrollments] = useState<Record<string, { classroom_id: string; batch_id: string | null }>>({});
+  const [nexusEnrollments, setNexusEnrollments] = useState<Record<string, { classroom_id: string; batch_id: string | null }[]>>({});
   const [assigningNexus, setAssigningNexus] = useState<string | null>(null);
 
-  // Link MS Account
-  const [msLinkTarget, setMsLinkTarget] = useState<StudentRow | null>(null);
-  const [msOidInput, setMsOidInput] = useState('');
-  const [msLinking, setMsLinking] = useState(false);
-  const [msLinkError, setMsLinkError] = useState('');
+  // Share Credentials
+  const [credTarget, setCredTarget] = useState<StudentRow | null>(null);
+  const [credEmail, setCredEmail] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [credShowPassword, setCredShowPassword] = useState(false);
+  const [credSharing, setCredSharing] = useState(false);
+  const [credError, setCredError] = useState('');
+  const [credSuccess, setCredSuccess] = useState(false);
 
   // Debounce
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -257,14 +263,6 @@ export default function StudentsPage() {
     fetchStudents();
   }, [fetchStudents]);
 
-  // Fetch available batches for assignment
-  useEffect(() => {
-    fetch('/api/batches?isActive=true')
-      .then((r) => r.json())
-      .then((d) => setAvailableBatches(d.data || []))
-      .catch(() => {});
-  }, []);
-
   // Fetch Nexus classrooms
   useEffect(() => {
     fetch('/api/nexus/classrooms')
@@ -273,21 +271,21 @@ export default function StudentsPage() {
       .catch(() => {});
   }, []);
 
-  // Fetch Nexus enrollments for all loaded students
+  // Fetch Nexus enrollments for all loaded students (supports multiple classrooms per student)
   useEffect(() => {
     if (students.length === 0) return;
     const fetchEnrollments = async () => {
-      const enrollmentMap: Record<string, { classroom_id: string; batch_id: string | null }> = {};
+      const enrollmentMap: Record<string, { classroom_id: string; batch_id: string | null }[]> = {};
       await Promise.all(
         students.map(async (s) => {
           try {
             const res = await fetch(`/api/students/${s.user_id}/nexus-enroll`);
             const data = await res.json();
             if (data.data && data.data.length > 0) {
-              enrollmentMap[s.user_id] = {
-                classroom_id: data.data[0].classroom_id,
-                batch_id: data.data[0].batch_id,
-              };
+              enrollmentMap[s.user_id] = data.data.map((e: any) => ({
+                classroom_id: e.classroom_id,
+                batch_id: e.batch_id,
+              }));
             }
           } catch {}
         })
@@ -295,7 +293,7 @@ export default function StudentsPage() {
       setNexusEnrollments(enrollmentMap);
 
       // Pre-fetch batches for all enrolled classrooms
-      const classroomIds = [...new Set(Object.values(enrollmentMap).map((e) => e.classroom_id))];
+      const classroomIds = [...new Set(Object.values(enrollmentMap).flatMap((enrollments) => enrollments.map((e) => e.classroom_id)))];
       for (const cid of classroomIds) {
         if (cid) fetchNexusBatches(cid);
       }
@@ -313,7 +311,7 @@ export default function StudentsPage() {
     } catch {}
   };
 
-  const handleNexusClassroomAssign = async (userId: string, classroomId: string) => {
+  const handleNexusClassroomAdd = async (userId: string, classroomId: string) => {
     setAssigningNexus(userId);
     try {
       const res = await fetch(`/api/students/${userId}/nexus-enroll`, {
@@ -322,11 +320,32 @@ export default function StudentsPage() {
         body: JSON.stringify({ classroomId }),
       });
       if (!res.ok) throw new Error('Failed to assign classroom');
-      setNexusEnrollments((prev) => ({
-        ...prev,
-        [userId]: { classroom_id: classroomId, batch_id: null },
-      }));
-      if (classroomId) fetchNexusBatches(classroomId);
+      setNexusEnrollments((prev) => {
+        const existing = prev[userId] || [];
+        // Don't duplicate
+        if (existing.some((e) => e.classroom_id === classroomId)) return prev;
+        return { ...prev, [userId]: [...existing, { classroom_id: classroomId, batch_id: null }] };
+      });
+      fetchNexusBatches(classroomId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setAssigningNexus(null);
+    }
+  };
+
+  const handleNexusClassroomRemove = async (userId: string, classroomId: string) => {
+    setAssigningNexus(userId);
+    try {
+      const supabase = await fetch(`/api/students/${userId}/nexus-enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classroomId, remove: true }),
+      });
+      setNexusEnrollments((prev) => {
+        const existing = prev[userId] || [];
+        return { ...prev, [userId]: existing.filter((e) => e.classroom_id !== classroomId) };
+      });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -343,10 +362,15 @@ export default function StudentsPage() {
         body: JSON.stringify({ classroomId, batchId: batchId || null }),
       });
       if (!res.ok) throw new Error('Failed to assign batch');
-      setNexusEnrollments((prev) => ({
-        ...prev,
-        [userId]: { classroom_id: classroomId, batch_id: batchId || null },
-      }));
+      setNexusEnrollments((prev) => {
+        const existing = prev[userId] || [];
+        return {
+          ...prev,
+          [userId]: existing.map((e) =>
+            e.classroom_id === classroomId ? { ...e, batch_id: batchId || null } : e
+          ),
+        };
+      });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -354,40 +378,28 @@ export default function StudentsPage() {
     }
   };
 
-  const handleLinkMsAccount = async () => {
-    if (!msLinkTarget || !msOidInput.trim()) return;
-    setMsLinking(true);
-    setMsLinkError('');
+  const handleShareCredentials = async () => {
+    if (!credTarget || !credEmail || !credPassword) return;
+    setCredSharing(true);
+    setCredError('');
     try {
-      const res = await fetch(`/api/students/${msLinkTarget.user_id}`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/students/${credTarget.user_id}/credentials`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ msOid: msOidInput.trim() }),
+        body: JSON.stringify({ email: credEmail, password: credPassword, credentialType: 'ms_teams' }),
       });
-      if (!res.ok) throw new Error('Failed to link Microsoft account');
-      setMsLinkTarget(null);
-      setMsOidInput('');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to share credentials');
+      setCredSuccess(true);
+      setCredTarget(null);
+      setCredEmail('');
+      setCredPassword('');
+      setCredShowPassword(false);
+      setTimeout(() => setCredSuccess(false), 5000);
     } catch (err: any) {
-      setMsLinkError(err.message || 'Failed to link');
+      setCredError(err.message || 'Failed to share');
     } finally {
-      setMsLinking(false);
-    }
-  };
-
-  const handleAssignBatch = async (userId: string, batchId: string) => {
-    setAssigningBatch(userId);
-    try {
-      const res = await fetch(`/api/students/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId: batchId || null }),
-      });
-      if (!res.ok) throw new Error('Failed to assign batch');
-      fetchStudents();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAssigningBatch(null);
+      setCredSharing(false);
     }
   };
 
@@ -514,34 +526,6 @@ export default function StudentsPage() {
       },
     },
     {
-      field: 'batch_name',
-      headerName: 'Batch',
-      width: 160,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Select
-          size="small"
-          value={row.batch_id || ''}
-          onChange={(e) => {
-            e.stopPropagation();
-            handleAssignBatch(row.user_id, e.target.value as string);
-          }}
-          onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          displayEmpty
-          disabled={assigningBatch === row.user_id}
-          sx={{ fontSize: 12, height: 28, minWidth: 120, '& .MuiSelect-select': { py: 0.5 } }}
-        >
-          <MenuItem value="" sx={{ fontSize: 12 }}>
-            <em>Unassigned</em>
-          </MenuItem>
-          {availableBatches.map((b) => (
-            <MenuItem key={b.id} value={b.id} sx={{ fontSize: 12 }}>
-              {b.name} ({b.enrolled_count}/{b.capacity})
-            </MenuItem>
-          ))}
-        </Select>
-      ),
-    },
-    {
       field: 'payment_status',
       headerName: 'Payment',
       width: 110,
@@ -580,89 +564,109 @@ export default function StudentsPage() {
     },
     {
       field: 'nexus_classroom',
-      headerName: 'Nexus Classroom',
-      width: 170,
+      headerName: 'Classrooms & Batches',
+      width: 320,
       renderCell: ({ row }: { row: StudentRow; value: any }) => {
-        const enrollment = nexusEnrollments[row.user_id];
+        const enrollments = nexusEnrollments[row.user_id] || [];
+        const enrolledClassroomIds = enrollments.map((e) => e.classroom_id);
+        const unassignedClassrooms = nexusClassrooms.filter((c) => !enrolledClassroomIds.includes(c.id));
+
         return (
-          <Select
-            size="small"
-            value={enrollment?.classroom_id || ''}
-            onChange={(e) => {
-              e.stopPropagation();
-              handleNexusClassroomAssign(row.user_id, e.target.value as string);
-            }}
+          <Box
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            displayEmpty
-            disabled={assigningNexus === row.user_id}
-            sx={{ fontSize: 12, height: 28, minWidth: 140, '& .MuiSelect-select': { py: 0.5 } }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.5, width: '100%' }}
           >
-            <MenuItem value="" sx={{ fontSize: 12 }}>
-              <em>Not assigned</em>
-            </MenuItem>
-            {nexusClassrooms.map((c) => (
-              <MenuItem key={c.id} value={c.id} sx={{ fontSize: 12 }}>
-                {c.name}
-              </MenuItem>
-            ))}
-          </Select>
+            {/* Enrolled classrooms with batch selectors */}
+            {enrollments.map((enrollment) => {
+              const classroom = nexusClassrooms.find((c) => c.id === enrollment.classroom_id);
+              const batches = nexusBatchesMap[enrollment.classroom_id] || [];
+              return (
+                <Box key={enrollment.classroom_id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Chip
+                    label={classroom?.name || 'Unknown'}
+                    size="small"
+                    onDelete={() => handleNexusClassroomRemove(row.user_id, enrollment.classroom_id)}
+                    deleteIcon={<CloseIcon sx={{ fontSize: '14px !important' }} />}
+                    sx={{ fontSize: 11, height: 22, fontWeight: 500 }}
+                  />
+                  <Select
+                    size="small"
+                    value={enrollment.batch_id || ''}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleNexusBatchAssign(row.user_id, enrollment.classroom_id, e.target.value as string);
+                    }}
+                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                    displayEmpty
+                    disabled={assigningNexus === row.user_id}
+                    sx={{ fontSize: 11, height: 22, minWidth: 90, '& .MuiSelect-select': { py: 0, px: 1 } }}
+                  >
+                    <MenuItem value="" sx={{ fontSize: 11 }}>
+                      <em>No batch</em>
+                    </MenuItem>
+                    {batches.map((b: any) => (
+                      <MenuItem key={b.id} value={b.id} sx={{ fontSize: 11 }}>
+                        {b.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </Box>
+              );
+            })}
+
+            {/* Add classroom selector */}
+            {unassignedClassrooms.length > 0 && (
+              <Select
+                size="small"
+                value=""
+                onChange={(e) => {
+                  e.stopPropagation();
+                  if (e.target.value) handleNexusClassroomAdd(row.user_id, e.target.value as string);
+                }}
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                displayEmpty
+                disabled={assigningNexus === row.user_id}
+                sx={{ fontSize: 11, height: 22, minWidth: 120, '& .MuiSelect-select': { py: 0, px: 1 }, color: 'text.secondary' }}
+              >
+                <MenuItem value="" sx={{ fontSize: 11 }}>
+                  <em><AddIcon sx={{ fontSize: 12, mr: 0.5, verticalAlign: 'middle' }} /> Add classroom</em>
+                </MenuItem>
+                {unassignedClassrooms.map((c) => (
+                  <MenuItem key={c.id} value={c.id} sx={{ fontSize: 11 }}>
+                    {c.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            )}
+
+            {enrollments.length === 0 && unassignedClassrooms.length === 0 && (
+              <Typography variant="body2" color="text.disabled" sx={{ fontSize: 11 }}>No classrooms</Typography>
+            )}
+          </Box>
         );
       },
     },
     {
-      field: 'nexus_batch',
-      headerName: 'Nexus Batch',
-      width: 160,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => {
-        const enrollment = nexusEnrollments[row.user_id];
-        if (!enrollment?.classroom_id) {
-          return <Typography variant="body2" color="text.disabled" sx={{ fontSize: 12 }}>—</Typography>;
-        }
-        const batches = nexusBatchesMap[enrollment.classroom_id] || [];
-        return (
-          <Select
-            size="small"
-            value={enrollment.batch_id || ''}
-            onChange={(e) => {
-              e.stopPropagation();
-              handleNexusBatchAssign(row.user_id, enrollment.classroom_id, e.target.value as string);
-            }}
-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            displayEmpty
-            disabled={assigningNexus === row.user_id}
-            sx={{ fontSize: 12, height: 28, minWidth: 130, '& .MuiSelect-select': { py: 0.5 } }}
-          >
-            <MenuItem value="" sx={{ fontSize: 12 }}>
-              <em>No batch</em>
-            </MenuItem>
-            {batches.map((b: any) => (
-              <MenuItem key={b.id} value={b.id} sx={{ fontSize: 12 }}>
-                {b.name}
-              </MenuItem>
-            ))}
-          </Select>
-        );
-      },
-    },
-    {
-      field: 'ms_link',
-      headerName: 'MS Account',
-      width: 110,
+      field: 'credentials',
+      headerName: 'Credentials',
+      width: 130,
       renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Tooltip title="Link Microsoft account for Nexus access">
+        <Tooltip title="Share Teams login credentials">
           <Button
             size="small"
             variant="outlined"
-            startIcon={<LinkIcon sx={{ fontSize: 14 }} />}
+            startIcon={<KeyIcon sx={{ fontSize: 14 }} />}
             onClick={(e: React.MouseEvent) => {
               e.stopPropagation();
-              setMsLinkTarget(row);
-              setMsOidInput('');
-              setMsLinkError('');
+              setCredTarget(row);
+              setCredEmail('');
+              setCredPassword('');
+              setCredShowPassword(false);
+              setCredError('');
             }}
             sx={{ fontSize: 11, height: 28, textTransform: 'none' }}
           >
-            Link MS
+            Share
           </Button>
         </Tooltip>
       ),
@@ -724,10 +728,15 @@ export default function StudentsPage() {
         </Tooltip>
       </Box>
 
-      {/* Error Alert */}
+      {/* Alerts */}
       {error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
           {error}
+        </Alert>
+      )}
+      {credSuccess && (
+        <Alert severity="success" sx={{ mb: 2, borderRadius: 1 }} onClose={() => setCredSuccess(false)}>
+          Credentials shared successfully! The student can view them in their onboarding page.
         </Alert>
       )}
 
@@ -807,17 +816,17 @@ export default function StudentsPage() {
             <MenuItem value="refunded">Refunded</MenuItem>
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Batch</InputLabel>
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <InputLabel>Classroom</InputLabel>
           <Select
             value={batchFilter}
-            label="Batch"
+            label="Classroom"
             onChange={(e) => setBatchFilter(e.target.value)}
           >
-            <MenuItem value="">All Batches</MenuItem>
-            <MenuItem value="unassigned">Unassigned</MenuItem>
-            {availableBatches.map((b) => (
-              <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+            <MenuItem value="">All Classrooms</MenuItem>
+            <MenuItem value="unassigned">No Classroom</MenuItem>
+            {nexusClassrooms.map((c) => (
+              <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
             ))}
           </Select>
         </FormControl>
@@ -834,7 +843,7 @@ export default function StudentsPage() {
         }}
       >
         <DataTable
-          rows={batchFilter ? (batchFilter === 'unassigned' ? students.filter((s) => !s.batch_id) : students.filter((s) => s.batch_id === batchFilter)) : students}
+          rows={batchFilter ? (batchFilter === 'unassigned' ? students.filter((s) => !nexusEnrollments[s.user_id]?.length) : students.filter((s) => nexusEnrollments[s.user_id]?.some((e) => e.classroom_id === batchFilter))) : students}
           columns={columns}
           loading={loading}
           onRowClick={handleRowClick}
@@ -879,45 +888,66 @@ export default function StudentsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Link Microsoft Account Dialog */}
-      <Dialog open={!!msLinkTarget} onClose={() => !msLinking && setMsLinkTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Link Microsoft Account</DialogTitle>
+      {/* Share Credentials Dialog */}
+      <Dialog open={!!credTarget} onClose={() => !credSharing && setCredTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Share Teams Credentials
+        </DialogTitle>
         <DialogContent>
-          <Typography sx={{ mb: 2 }}>
-            Link a Microsoft account to{' '}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Share Microsoft Teams login credentials with{' '}
             <strong>
-              {msLinkTarget
-                ? [msLinkTarget.first_name, msLinkTarget.last_name].filter(Boolean).join(' ') || msLinkTarget.email
+              {credTarget
+                ? [credTarget.first_name, credTarget.last_name].filter(Boolean).join(' ') || credTarget.email
                 : ''}
             </strong>
-            {' '}so they can access Nexus with their Microsoft/Teams login.
+            . The student will see these in their onboarding page. Credentials auto-destruct 24 hours after first view.
           </Typography>
-          <TextField
-            label="Microsoft Object ID (OID)"
-            value={msOidInput}
-            onChange={(e) => setMsOidInput(e.target.value)}
-            fullWidth
-            size="small"
-            placeholder="e.g., 5b3c917c-7d27-4bda-b009-26460aee806c"
-            helperText="The Azure AD Object ID for this student's Microsoft account. Find it in Microsoft Entra admin center → Users → select user → Object ID."
-            disabled={msLinking}
-          />
-          {msLinkError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {msLinkError}
-            </Alert>
+
+          {credError && (
+            <Alert severity="error" sx={{ mb: 2 }}>{credError}</Alert>
           )}
+
+          <TextField
+            label="Teams Email"
+            fullWidth
+            value={credEmail}
+            onChange={(e) => setCredEmail(e.target.value)}
+            placeholder="student@neramclasses.onmicrosoft.com"
+            size="small"
+            sx={{ mb: 2 }}
+            disabled={credSharing}
+          />
+          <TextField
+            label="Temporary Password"
+            fullWidth
+            value={credPassword}
+            onChange={(e) => setCredPassword(e.target.value)}
+            type={credShowPassword ? 'text' : 'password'}
+            placeholder="Enter the temporary password"
+            size="small"
+            disabled={credSharing}
+            InputProps={{
+              endAdornment: (
+                <IconButton onClick={() => setCredShowPassword(!credShowPassword)} size="small">
+                  {credShowPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                </IconButton>
+              ),
+            }}
+          />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setMsLinkTarget(null); setMsLinkError(''); }} disabled={msLinking}>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setCredTarget(null); setCredError(''); }} disabled={credSharing} sx={{ textTransform: 'none' }}>
             Cancel
           </Button>
           <Button
-            onClick={handleLinkMsAccount}
             variant="contained"
-            disabled={msLinking || !msOidInput.trim()}
+            onClick={handleShareCredentials}
+            disabled={!credEmail || !credPassword || credSharing}
+            startIcon={credSharing ? <CircularProgress size={16} color="inherit" /> : <SendIcon />}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            {msLinking ? 'Linking...' : 'Link Account'}
+            {credSharing ? 'Sharing...' : 'Share with Student'}
           </Button>
         </DialogActions>
       </Dialog>

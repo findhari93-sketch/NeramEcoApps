@@ -58,6 +58,12 @@ interface CourseGroupLinks {
   teams_class_team_id: string | null;
 }
 
+interface NexusTeamInfo {
+  classroomId: string;
+  classroomName: string;
+  msTeamId: string;
+}
+
 type NexusStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
 
 const PHASE_CONFIG = [
@@ -169,6 +175,7 @@ export default function OnboardingPage() {
   const [credential, setCredential] = useState<CredentialData | null>(null);
   const [credentialLoading, setCredentialLoading] = useState(false);
   const [courseGroupLinks, setCourseGroupLinks] = useState<CourseGroupLinks | null>(null);
+  const [nexusTeamIds, setNexusTeamIds] = useState<NexusTeamInfo[]>([]);
   const [nexusStatus, setNexusStatus] = useState<NexusStatus>('not_started');
   const [showCongrats, setShowCongrats] = useState(false);
   const [snackbar, setSnackbar] = useState('');
@@ -209,6 +216,7 @@ export default function OnboardingPage() {
       const data = await res.json();
       setSteps(data.data || []);
       if (data.courseGroupLinks) setCourseGroupLinks(data.courseGroupLinks);
+      if (data.nexusTeamIds) setNexusTeamIds(data.nexusTeamIds);
       if (data.nexusStatus) setNexusStatus(data.nexusStatus as NexusStatus);
     } catch (err: any) {
       setError(err.message || 'Failed to load');
@@ -306,10 +314,16 @@ export default function OnboardingPage() {
   };
 
   const handleTeamsAutoAdd = async (step: OnboardingStep) => {
-    const teamId = courseGroupLinks?.teams_class_team_id;
-    if (!teamId) {
-      // No team ID configured — just open the link
-      handleStepAction(step);
+    // Collect team IDs from nexus enrollments (primary) and course_group_links (fallback)
+    const teamIds: string[] = [];
+    if (nexusTeamIds.length > 0) {
+      teamIds.push(...nexusTeamIds.map((t) => t.msTeamId));
+    } else if (courseGroupLinks?.teams_class_team_id) {
+      teamIds.push(courseGroupLinks.teams_class_team_id);
+    }
+
+    if (teamIds.length === 0) {
+      setSnackbar('No Teams class assigned yet — contact your admin');
       return;
     }
 
@@ -319,20 +333,21 @@ export default function OnboardingPage() {
       const res = await fetch('/api/teams/add-member', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId }),
+        body: JSON.stringify({ teamIds }),
       });
       const data = await res.json();
 
       if (data.success) {
-        setSnackbar('Added to Teams group!');
+        const count = nexusTeamIds.length || 1;
+        setSnackbar(count > 1 ? `Added to ${count} Teams classes!` : 'Added to Teams class!');
         updateStepStatus(step.id, 'completed');
+      } else if (data.reason === 'no_ms_account') {
+        setSnackbar('Teams account not set up yet — complete the credentials step first');
       } else {
-        // Fallback to manual link
-        setSnackbar('Auto-add failed — opening Teams link');
-        handleStepAction(step);
+        setSnackbar('Auto-add failed — contact your admin for help');
       }
     } catch {
-      handleStepAction(step);
+      setSnackbar('Failed to join Teams — please try again');
     }
   };
 

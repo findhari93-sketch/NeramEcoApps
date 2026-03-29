@@ -57,6 +57,14 @@ export async function POST(
 
     if (insertError) throw insertError;
 
+    // Auto-set ms_teams_email on student_profiles so Teams auto-add works
+    if (credentialType === 'ms_teams' || !credentialType) {
+      await supabase
+        .from('student_profiles')
+        .update({ ms_teams_email: email })
+        .eq('id', profile.id);
+    }
+
     // Mask password in response
     return NextResponse.json({
       success: true,

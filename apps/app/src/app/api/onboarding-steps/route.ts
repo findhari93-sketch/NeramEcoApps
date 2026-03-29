@@ -68,6 +68,27 @@ export async function GET(request: NextRequest) {
       courseGroupLinks = links || null;
     }
 
+    // 3b. Fetch Teams team IDs from nexus_enrollments → nexus_classrooms
+    // This is the primary source for Teams auto-add (course_group_links is fallback)
+    let nexusTeamIds: { classroomId: string; classroomName: string; msTeamId: string }[] = [];
+    {
+      const { data: enrollments } = await supabase
+        .from('nexus_enrollments')
+        .select('classroom_id, classroom:nexus_classrooms(id, name, ms_team_id)')
+        .eq('user_id', auth.userId)
+        .eq('is_active', true);
+
+      if (enrollments) {
+        nexusTeamIds = enrollments
+          .filter((e: any) => e.classroom?.ms_team_id)
+          .map((e: any) => ({
+            classroomId: e.classroom.id,
+            classroomName: e.classroom.name,
+            msTeamId: e.classroom.ms_team_id,
+          }));
+      }
+    }
+
     // 4. Fetch nexus onboarding status
     const { data: nexusOnboarding } = await supabase
       .from('nexus_student_onboarding')
@@ -81,6 +102,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: progress,
       courseGroupLinks,
+      nexusTeamIds,
       nexusStatus,
     });
   } catch (error) {

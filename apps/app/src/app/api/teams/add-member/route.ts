@@ -38,7 +38,8 @@ async function verifyToken(request: NextRequest): Promise<{ userId: string } | n
   }
 }
 
-// POST /api/teams/add-member - Add student to a Microsoft Teams team
+// POST /api/teams/add-member - Add student to Microsoft Teams team(s)
+// Accepts either { teams_class_team_id } (legacy single) or { teamIds: string[] } (multi-team)
 export async function POST(request: NextRequest) {
   try {
     const auth = await verifyToken(request);
@@ -47,9 +48,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { teams_class_team_id } = body;
+    // Support both legacy single team ID and new multi-team array
+    const teamIds: string[] = body.teamIds || (body.teams_class_team_id ? [body.teams_class_team_id] : []);
 
-    if (!teams_class_team_id) {
+    if (teamIds.length === 0) {
       return NextResponse.json(
         { success: false, reason: 'missing_team_id' },
         { status: 400 }
@@ -72,38 +74,40 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Call Graph API to add member to team
-    const result = await addMemberToTeam(teams_class_team_id, studentProfile.ms_teams_email);
+    // Add member to all teams
+    const results = await Promise.all(
+      teamIds.map(async (teamId) => {
+        const result = await addMemberToTeam(teamId, studentProfile.ms_teams_email);
+        return { teamId, ...result };
+      })
+    );
 
-    if (result.success) {
-      // Update student_onboarding_progress for the join_teams_class step
-      await supabase
-        .from('student_onboarding_progress')
-        .update({
-          auto_add_attempted: true,
-          auto_add_result: 'success',
-        })
-        .eq('user_id', auth.userId)
-        .eq('step_key', 'join_teams_class');
+    const allSuccess = results.every((r) => r.success);
+    const anySuccess = results.some((r) => r.success);
 
-      return NextResponse.json({ success: true, reason: result.reason });
-    }
-
-    // On failure, still record the attempt
+    // Update student_onboarding_progress for the join_teams_class step
     await supabase
       .from('student_onboarding_progress')
       .update({
         auto_add_attempted: true,
-        auto_add_result: result.reason || 'failed',
+        auto_add_result: allSuccess ? 'success' : anySuccess ? 'partial' : (results[0]?.reason || 'failed'),
       })
       .eq('user_id', auth.userId)
       .eq('step_key', 'join_teams_class');
 
-    // Provide fallback URL for manual join
+    if (anySuccess) {
+      return NextResponse.json({
+        success: true,
+        reason: allSuccess ? 'all_added' : 'partial',
+        results,
+      });
+    }
+
+    // All failed
     return NextResponse.json({
       success: false,
-      reason: result.reason,
-      fallbackUrl: `https://teams.microsoft.com/l/team/${teams_class_team_id}`,
+      reason: results[0]?.reason || 'failed',
+      results,
     });
   } catch (error) {
     console.error('Error adding member to Teams:', error);

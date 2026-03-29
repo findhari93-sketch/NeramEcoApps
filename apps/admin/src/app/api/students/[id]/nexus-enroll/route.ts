@@ -15,13 +15,26 @@ export async function POST(
   try {
     const { id: userId } = await params;
     const body = await request.json();
-    const { classroomId, batchId } = body;
+    const { classroomId, batchId, remove } = body;
 
     if (!classroomId) {
       return NextResponse.json({ error: 'classroomId is required' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdminClient() as any;
+
+    // Remove enrollment if requested
+    if (remove) {
+      const { error } = await supabase
+        .from('nexus_enrollments')
+        .delete()
+        .eq('user_id', userId)
+        .eq('classroom_id', classroomId);
+
+      if (error) throw error;
+
+      return NextResponse.json({ success: true, removed: true });
+    }
 
     // Upsert enrollment (user_id + classroom_id is unique)
     const { data: enrollment, error } = await supabase
