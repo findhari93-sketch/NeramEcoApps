@@ -21,6 +21,7 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
@@ -53,6 +54,7 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [foundationChapters, setFoundationChapters] = useState<NexusFoundationChapterWithProgress[] | null>(null);
   const [foundationLoading, setFoundationLoading] = useState(true);
+  const [profileIncomplete, setProfileIncomplete] = useState(false);
 
   const noClassrooms = !authLoading && classrooms.length === 0;
 
@@ -80,6 +82,30 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!authLoading) fetchFoundation();
   }, [authLoading, fetchFoundation]);
+
+  // Check if profile is incomplete — quick heuristic first, then API if needed
+  useEffect(() => {
+    if (authLoading || !user) return;
+    // Quick check: if user has phone, profile is likely complete (skip API call)
+    if (user.phone) {
+      setProfileIncomplete(false);
+      return;
+    }
+    // No phone = likely incomplete, confirm with API
+    const checkProfile = async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/student/profile-completion', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProfileIncomplete(!data.isComplete);
+        }
+      } catch { /* ignore */ }
+    };
+    checkProfile();
+  }, [authLoading, user, getToken]);
 
   useEffect(() => {
     if (!activeClassroom) {
@@ -168,6 +194,41 @@ export default function StudentDashboard() {
           {activeClassroom?.name || 'No classroom selected'}
         </Typography>
       </Box>
+
+      {/* ── Complete Profile Banner ── */}
+      {profileIncomplete && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            p: 2,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'warning.light',
+            bgcolor: alpha(theme.palette.warning.main, 0.06),
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <PersonOutlineIcon sx={{ fontSize: 32, color: 'warning.main' }} />
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={700}>Complete Your Profile</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Add your phone, academic details, and location so we can serve you better.
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            size="small"
+            color="warning"
+            onClick={() => router.push('/student/complete-profile')}
+            sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600, flexShrink: 0 }}
+          >
+            Complete
+          </Button>
+        </Paper>
+      )}
 
       {/* ── Foundation Progress ── */}
       <Box sx={{ mb: 2 }}>

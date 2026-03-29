@@ -4,6 +4,7 @@ import { Box, Chip, Divider, Paper, Typography } from '@neram/ui';
 import PersonIcon from '@mui/icons-material/Person';
 import SchoolIcon from '@mui/icons-material/School';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import type { UserJourneyDetail, AcademicData, SchoolStudentAcademicData, DiplomaStudentAcademicData, CollegeStudentAcademicData, WorkingProfessionalAcademicData, ApplicantCategory } from '@neram/database';
 import { EDUCATION_BOARD_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
 
@@ -124,8 +125,22 @@ function renderAcademicData(data: AcademicData, category: ApplicantCategory | nu
   }
 }
 
+const ONBOARDING_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  approved: { bg: '#4CAF5014', color: '#2E7D32' },
+  submitted: { bg: '#1976d214', color: '#1976d2' },
+  in_progress: { bg: '#F57C0014', color: '#F57C00' },
+  rejected: { bg: '#D32F2F14', color: '#D32F2F' },
+};
+
+const EXAM_STATE_LABELS: Record<string, string> = {
+  still_thinking: 'Still Thinking',
+  planning_to_write: 'Planning to Write',
+  applied: 'Applied',
+  completed: 'Completed',
+};
+
 export default function UserProfileSection({ detail }: UserProfileSectionProps) {
-  const { user, leadProfile } = detail;
+  const { user, leadProfile, nexusOnboarding, nexusExamPlans } = detail;
 
   return (
     <Paper
@@ -195,6 +210,45 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
             <InfoRow label="State" value={leadProfile.state} />
             <InfoRow label="Pincode" value={leadProfile.pincode} />
             <InfoRow label="Country" value={leadProfile.country} />
+          </>
+        )}
+
+        {/* Nexus Onboarding Data */}
+        {nexusOnboarding && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <SectionLabel icon={AssignmentIcon} label="Nexus Onboarding" />
+            <InfoRow label="Status" value={
+              <Chip
+                label={nexusOnboarding.status.replace(/_/g, ' ')}
+                size="small"
+                sx={{
+                  height: 22, fontSize: 10.5, fontWeight: 700, textTransform: 'capitalize',
+                  bgcolor: (ONBOARDING_STATUS_COLORS[nexusOnboarding.status] || ONBOARDING_STATUS_COLORS.in_progress).bg,
+                  color: (ONBOARDING_STATUS_COLORS[nexusOnboarding.status] || ONBOARDING_STATUS_COLORS.in_progress).color,
+                  borderRadius: 1,
+                }}
+              />
+            } />
+            <InfoRow label="Current Standard" value={nexusOnboarding.current_standard?.replace(/_/g, ' ')} />
+            <InfoRow label="Academic Year" value={nexusOnboarding.academic_year} />
+            {nexusOnboarding.submitted_at && (
+              <InfoRow label="Submitted" value={new Date(nexusOnboarding.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+            )}
+            {nexusExamPlans && nexusExamPlans.length > 0 && nexusExamPlans.map((plan) => (
+              <InfoRow
+                key={plan.id}
+                label={`${plan.exam_type.toUpperCase()} Exam`}
+                value={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>{EXAM_STATE_LABELS[plan.state] || plan.state}</span>
+                    {plan.application_number && (
+                      <Chip label={plan.application_number} size="small" sx={{ height: 20, fontSize: 10, fontFamily: 'monospace', borderRadius: 1 }} />
+                    )}
+                  </Box>
+                }
+              />
+            ))}
           </>
         )}
       </Box>

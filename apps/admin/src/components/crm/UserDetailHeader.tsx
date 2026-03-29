@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Avatar, Box, Button, Chip, Paper, Typography, TextField, CircularProgress, Alert } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import EditIcon from '@mui/icons-material/Edit';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import EmailIcon from '@mui/icons-material/Email';
 import PhoneIcon from '@mui/icons-material/Phone';
 import TagIcon from '@mui/icons-material/Tag';
@@ -268,6 +270,28 @@ export default function UserDetailHeader({
                 </Box>
               </Box>
             </Box>
+
+            {/* Right: Action buttons */}
+            <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<EditIcon sx={{ fontSize: 16 }} />}
+                onClick={onEditClick}
+                sx={{ textTransform: 'none', borderRadius: 1, fontSize: 13, fontWeight: 600 }}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<NoteAddIcon sx={{ fontSize: 16 }} />}
+                onClick={onAddNoteClick}
+                sx={{ textTransform: 'none', borderRadius: 1, fontSize: 13, fontWeight: 600, color: 'text.secondary', borderColor: 'grey.300' }}
+              >
+                Note
+              </Button>
+            </Box>
           </Box>
 
           {/* Nexus Classrooms & Classroom Link Section */}
@@ -306,7 +330,9 @@ export default function UserDetailHeader({
               </Box>
             )}
 
-            {/* Classroom Email Link */}
+            {/* Classroom Email Link — hide when student has nexus enrollments */}
+            {!hasNexusEnrollments && (
+            <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <SchoolIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" fontWeight={600} color="text.secondary">
@@ -394,6 +420,8 @@ export default function UserDetailHeader({
                   </Alert>
                 )}
               </Box>
+            )}
+            </>
             )}
           </Box>
         </Box>
