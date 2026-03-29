@@ -65,6 +65,8 @@ export async function addMemberToTeam(
   teamId: string,
   userPrincipalName: string
 ): Promise<{ success: boolean; reason?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
     const token = await getAppOnlyToken();
 
@@ -81,6 +83,7 @@ export async function addMemberToTeam(
           'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userPrincipalName}')`,
           roles: ['member'],
         }),
+        signal: controller.signal,
       }
     );
 
@@ -97,6 +100,8 @@ export async function addMemberToTeam(
     return { success: false, reason: `Graph API error: ${res.status} ${errText}` };
   } catch (error) {
     return { success: false, reason: error instanceof Error ? error.message : 'Unknown error' };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -112,6 +117,8 @@ export async function addMemberToGroupChat(
   chatId: string,
   userPrincipalName: string
 ): Promise<{ success: boolean; reason?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
   try {
     const token = await getAppOnlyToken();
 
@@ -126,8 +133,9 @@ export async function addMemberToGroupChat(
         body: JSON.stringify({
           '@odata.type': '#microsoft.graph.aadUserConversationMember',
           'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userPrincipalName}')`,
-          roles: ['guest'],
+          roles: ['member'],
         }),
+        signal: controller.signal,
       }
     );
 
@@ -144,5 +152,7 @@ export async function addMemberToGroupChat(
     return { success: false, reason: `Graph API error: ${res.status} ${errText}` };
   } catch (error) {
     return { success: false, reason: error instanceof Error ? error.message : 'Unknown error' };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

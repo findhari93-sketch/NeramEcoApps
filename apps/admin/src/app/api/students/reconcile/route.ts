@@ -142,10 +142,11 @@ export async function POST(request: NextRequest) {
             ? new Date(enrollments[0].created_at).toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0];
 
-          // Create student_profile
+          // Create student_profile (use upsert to handle race conditions where
+          // another request may have created the profile between the check and insert)
           const { data: newProfile, error: profileErr } = await supabase
             .from('student_profiles')
-            .insert({
+            .upsert({
               user_id: userId,
               enrollment_date: enrollmentDate,
               ms_teams_email: user.email,
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
               total_fee: 0,
               fee_paid: 0,
               fee_due: 0,
-            })
+            }, { onConflict: 'user_id' })
             .select()
             .single();
 
@@ -229,7 +230,8 @@ export async function POST(request: NextRequest) {
                 ? (addResult.reason === 'already_member' ? 'already_member' : 'added')
                 : `failed: ${addResult.reason}`;
               if (!addResult.success) allTeamsOk = false;
-            } catch {
+            } catch (teamsErr) {
+              console.warn(`[reconcile] Failed to add user ${userId} to Teams team ${classroom.ms_team_id}:`, teamsErr);
               allTeamsOk = false;
             }
           }
@@ -242,7 +244,8 @@ export async function POST(request: NextRequest) {
             result.steps.group_chat = chatResult.success
               ? (chatResult.reason === 'already_member' ? 'already_member' : 'added')
               : `failed: ${chatResult.reason}`;
-          } catch {
+          } catch (chatErr) {
+            console.warn(`[reconcile] Failed to add user ${userId} to group chat:`, chatErr);
             result.steps.group_chat = 'error';
           }
         }

@@ -14,24 +14,34 @@ export async function GET() {
     const token = await getAppOnlyToken();
     const supabase = getSupabaseAdminClient() as any;
 
-    // 1. Fetch all users from Azure AD (paginated)
+    // 1. Fetch all users from Azure AD (paginated, with 30s timeout per page)
     let allAdUsers: any[] = [];
     let nextLink = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses&$top=100';
 
     while (nextLink) {
-      const res = await fetch(nextLink, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const err = await res.text().catch(() => '');
-        throw new Error(`Graph API error: ${res.status} ${err}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const res = await fetch(nextLink, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const err = await res.text().catch(() => '');
+          throw new Error(`Graph API error: ${res.status} ${err}`);
+        }
+        const data = await res.json();
+        allAdUsers = allAdUsers.concat(data.value || []);
+        nextLink = data['@odata.nextLink'] || null;
+      } finally {
+        clearTimeout(timeoutId);
       }
-      const data = await res.json();
-      allAdUsers = allAdUsers.concat(data.value || []);
-      nextLink = data['@odata.nextLink'] || null;
     }
 
     // 2. Filter to student accounts only (exclude admin/teacher patterns)
+    // NOTE: These staff patterns are hardcoded. In the future, this should be moved
+    // to a configurable app_settings entry (e.g., 'entra_staff_email_patterns') so that
+    // new staff accounts don't require a code change to be excluded from student sync.
     const staffPatterns = ['admin', 'teacher', 'hari', 'info@neramclasses.com', 'shanthi', 'paramesh', 'tamil'];
     const studentAccounts = allAdUsers.filter((u: any) => {
       if (!u.accountEnabled) return false;
@@ -191,7 +201,13 @@ export async function POST(request: NextRequest) {
           result.actions.push('user_created');
         }
 
-        // 2. Determine classrooms based on course
+        // 2. Validate course and determine classrooms
+        const validCourses = ['nata', 'jee_paper2', 'both'];
+        if (!student.course || !validCourses.includes(student.course)) {
+          console.warn(`[sync-entra] Student ${student.email} has invalid/missing course: '${student.course}'. Only common classroom will be assigned.`);
+          result.actions.push(`warning_invalid_course_${student.course || 'none'}`);
+        }
+
         const targetClassrooms: any[] = [];
         if (commonClassroom) targetClassrooms.push(commonClassroom);
         if (student.course === 'nata' || student.course === 'both') {
@@ -218,7 +234,10 @@ export async function POST(request: NextRequest) {
             try {
               const teamsResult = await addMemberToTeam(classroom.ms_team_id, student.email);
               result.actions.push(`teams_${classroom.name}_${teamsResult.success ? (teamsResult.reason || 'added') : 'failed'}`);
-            } catch {}
+            } catch (teamsErr) {
+              console.warn(`[sync-entra] Failed to add ${student.email} to Teams team ${classroom.ms_team_id}:`, teamsErr);
+              result.actions.push(`teams_${classroom.name}_error`);
+            }
           }
 
           // Create nexus_student_onboarding
@@ -235,7 +254,10 @@ export async function POST(request: NextRequest) {
           try {
             const chatResult = await addMemberToGroupChat(groupChatConfig.chat_id, student.email);
             result.actions.push(`group_chat_${chatResult.success ? (chatResult.reason || 'added') : 'failed'}`);
-          } catch {}
+          } catch (chatErr) {
+            console.warn(`[sync-entra] Failed to add ${student.email} to group chat:`, chatErr);
+            result.actions.push('group_chat_error');
+          }
         }
 
         // 5. Create student_profile
@@ -245,11 +267,11 @@ export async function POST(request: NextRequest) {
           .eq('user_id', userId)
           .maybeSingle();
 
-        let studentProfileId: string;
+        let studentProfileId: string | null;
         if (existingProfile) {
           studentProfileId = existingProfile.id;
         } else {
-          const { data: newProfile } = await supabase
+          const { data: newProfile, error: profileErr } = await supabase
             .from('student_profiles')
             .insert({
               user_id: userId,
@@ -262,8 +284,15 @@ export async function POST(request: NextRequest) {
             })
             .select()
             .single();
-          studentProfileId = newProfile?.id;
-          result.actions.push('profile_created');
+
+          if (profileErr || !newProfile) {
+            console.warn(`[sync-entra] Failed to create student_profile for user ${userId}:`, profileErr?.message);
+            result.actions.push('profile_creation_failed');
+            studentProfileId = null;
+          } else {
+            studentProfileId = newProfile.id;
+            result.actions.push('profile_created');
+          }
         }
 
         // 6. Initialize onboarding + auto-complete steps
@@ -274,7 +303,9 @@ export async function POST(request: NextRequest) {
               p_user_id: userId,
               p_enrollment_type: 'direct',
             });
-          } catch {}
+          } catch (initErr) {
+            console.warn(`[sync-entra] Failed to initialize onboarding for profile ${studentProfileId}:`, initErr);
+          }
 
           const now = new Date().toISOString();
           for (const stepKey of autoCompleteStepKeys) {
