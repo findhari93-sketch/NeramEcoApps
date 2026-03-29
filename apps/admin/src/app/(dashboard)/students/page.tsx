@@ -246,6 +246,7 @@ export default function StudentsPage() {
   const [entraEnrolling, setEntraEnrolling] = useState(false);
   const [entraResults, setEntraResults] = useState<any>(null);
   const [entraCourseMap, setEntraCourseMap] = useState<Record<string, string>>({});
+  const [entraSelected, setEntraSelected] = useState<Set<string>>(new Set());
 
   // Group chat config
   const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', auto_add_enabled: false });
@@ -378,12 +379,17 @@ export default function StudentsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setEntraStudents(data.students || []);
-      // Default course to 'nata' for new students
+      // Default course to 'nata' and select all needing setup
       const courseMap: Record<string, string> = {};
+      const selected = new Set<string>();
       (data.students || []).forEach((s: any) => {
-        if (s.needsSetup) courseMap[s.msOid] = 'nata';
+        if (s.needsSetup) {
+          courseMap[s.msOid] = 'nata';
+          selected.add(s.msOid);
+        }
       });
       setEntraCourseMap(courseMap);
+      setEntraSelected(selected);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch from Entra');
     } finally {
@@ -393,7 +399,7 @@ export default function StudentsPage() {
 
   const handleEntraEnroll = async () => {
     const studentsToEnroll = entraStudents
-      .filter((s: any) => s.needsSetup && entraCourseMap[s.msOid])
+      .filter((s: any) => s.needsSetup && entraSelected.has(s.msOid) && entraCourseMap[s.msOid])
       .map((s: any) => ({
         msOid: s.msOid,
         email: s.email,
@@ -1252,30 +1258,78 @@ export default function StudentsPage() {
               </Typography>
 
               {entraStudents.length > 0 && (
-                <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+                <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
                   <Chip label={`${entraStudents.filter((s: any) => !s.needsSetup).length} already in Nexus`} color="success" size="small" />
                   <Chip label={`${entraStudents.filter((s: any) => s.needsSetup).length} need setup`} color="warning" size="small" />
+                  <Chip label={`${entraSelected.size} selected`} color="primary" size="small" variant="outlined" />
                 </Box>
               )}
 
               <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
                 {/* Students needing setup */}
                 {entraStudents.filter((s: any) => s.needsSetup).length > 0 && (
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, mt: 1 }}>
-                    Needs Setup ({entraStudents.filter((s: any) => s.needsSetup).length})
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, mt: 1 }}>
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      Needs Setup ({entraStudents.filter((s: any) => s.needsSetup).length})
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        size="small"
+                        onClick={() => setEntraSelected(new Set(entraStudents.filter((s: any) => s.needsSetup).map((s: any) => s.msOid)))}
+                        sx={{ textTransform: 'none', fontSize: 11 }}
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => setEntraSelected(new Set())}
+                        sx={{ textTransform: 'none', fontSize: 11 }}
+                      >
+                        Deselect All
+                      </Button>
+                    </Box>
+                  </Box>
                 )}
                 {entraStudents.filter((s: any) => s.needsSetup).map((s: any) => (
-                  <Paper key={s.msOid} elevation={0} sx={{ p: 1.5, mb: 1, border: '1px solid', borderColor: 'warning.200', borderRadius: 1 }}>
+                  <Paper
+                    key={s.msOid}
+                    elevation={0}
+                    sx={{
+                      p: 1.5, mb: 1, border: '1px solid', borderRadius: 1, cursor: 'pointer',
+                      borderColor: entraSelected.has(s.msOid) ? 'primary.main' : 'grey.300',
+                      bgcolor: entraSelected.has(s.msOid) ? 'primary.50' : 'grey.50',
+                      opacity: entraSelected.has(s.msOid) ? 1 : 0.6,
+                    }}
+                    onClick={() => {
+                      setEntraSelected((prev) => {
+                        const next = new Set(prev);
+                        next.has(s.msOid) ? next.delete(s.msOid) : next.add(s.msOid);
+                        return next;
+                      });
+                    }}
+                  >
                     <Box display="flex" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{s.email}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={entraSelected.has(s.msOid)}
+                          onChange={() => {}}
+                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+                        />
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{s.email}</Typography>
+                        </Box>
                       </Box>
                       <Select
                         size="small"
                         value={entraCourseMap[s.msOid] || 'nata'}
-                        onChange={(e) => setEntraCourseMap((prev) => ({ ...prev, [s.msOid]: e.target.value }))}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setEntraCourseMap((prev) => ({ ...prev, [s.msOid]: e.target.value }));
+                        }}
+                        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                        disabled={!entraSelected.has(s.msOid)}
                         sx={{ fontSize: 12, height: 28, minWidth: 130 }}
                       >
                         <MenuItem value="nata" sx={{ fontSize: 12 }}>NATA</MenuItem>
@@ -1315,15 +1369,15 @@ export default function StudentsPage() {
           <Button onClick={() => { setShowEntraSync(false); setEntraResults(null); }} disabled={entraEnrolling} sx={{ textTransform: 'none' }}>
             {entraResults ? 'Close' : 'Cancel'}
           </Button>
-          {!entraResults && !entraLoading && entraStudents.filter((s: any) => s.needsSetup).length > 0 && (
+          {!entraResults && !entraLoading && entraSelected.size > 0 && (
             <Button
               variant="contained"
               onClick={handleEntraEnroll}
-              disabled={entraEnrolling}
+              disabled={entraEnrolling || entraSelected.size === 0}
               startIcon={entraEnrolling ? <CircularProgress size={16} color="inherit" /> : <SyncIcon />}
               sx={{ textTransform: 'none', fontWeight: 600 }}
             >
-              {entraEnrolling ? 'Enrolling...' : `Enroll ${entraStudents.filter((s: any) => s.needsSetup).length} Students`}
+              {entraEnrolling ? 'Enrolling...' : `Enroll ${entraSelected.size} Selected Students`}
             </Button>
           )}
         </DialogActions>
