@@ -47,6 +47,9 @@ import WorkIcon from '@mui/icons-material/Work';
 import FeedbackIcon from '@mui/icons-material/Feedback';
 import DevicesIcon from '@mui/icons-material/Devices';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -98,6 +101,9 @@ const menuGroups: MenuGroup[] = [
     items: [
       { text: 'Payments', icon: PaymentIcon, path: '/payments' },
       { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
+      { text: 'Expenses', icon: ReceiptLongIcon, path: '/expenses' },
+      { text: 'Staff Assignments', icon: BusinessCenterIcon, path: '/staff-assignments' },
+      { text: 'Financial Dashboard', icon: AnalyticsIcon, path: '/financial-dashboard' },
     ],
   },
   {

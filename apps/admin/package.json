@@ -19,10 +19,12 @@
     "jspdf": "^4.2.0",
     "material-react-table": "^3.0.1",
     "next": "14.2.21",
+    "next-pwa": "5.6.0",
     "papaparse": "^5.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-easy-crop": "^5.5.6"
+    "react-easy-crop": "^5.5.6",
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
