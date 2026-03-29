@@ -41,6 +41,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import GroupsIcon from '@mui/icons-material/Groups';
 import SaveIcon from '@mui/icons-material/Save';
+import SyncIcon from '@mui/icons-material/Sync';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 
@@ -237,6 +239,14 @@ export default function StudentsPage() {
   const [reconcileResults, setReconcileResults] = useState<any>(null);
   const [selectedLegacy, setSelectedLegacy] = useState<Set<string>>(new Set());
 
+  // Entra sync
+  const [showEntraSync, setShowEntraSync] = useState(false);
+  const [entraStudents, setEntraStudents] = useState<any[]>([]);
+  const [entraLoading, setEntraLoading] = useState(false);
+  const [entraEnrolling, setEntraEnrolling] = useState(false);
+  const [entraResults, setEntraResults] = useState<any>(null);
+  const [entraCourseMap, setEntraCourseMap] = useState<Record<string, string>>({});
+
   // Group chat config
   const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', auto_add_enabled: false });
   const [editingGroupChat, setEditingGroupChat] = useState(false);
@@ -357,6 +367,58 @@ export default function StudentsPage() {
       setError(err.message || 'Reconciliation failed');
     } finally {
       setReconciling(false);
+    }
+  };
+
+  const handleFetchEntra = async () => {
+    setEntraLoading(true);
+    setEntraResults(null);
+    try {
+      const res = await fetch('/api/students/sync-entra');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEntraStudents(data.students || []);
+      // Default course to 'nata' for new students
+      const courseMap: Record<string, string> = {};
+      (data.students || []).forEach((s: any) => {
+        if (s.needsSetup) courseMap[s.msOid] = 'nata';
+      });
+      setEntraCourseMap(courseMap);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch from Entra');
+    } finally {
+      setEntraLoading(false);
+    }
+  };
+
+  const handleEntraEnroll = async () => {
+    const studentsToEnroll = entraStudents
+      .filter((s: any) => s.needsSetup && entraCourseMap[s.msOid])
+      .map((s: any) => ({
+        msOid: s.msOid,
+        email: s.email,
+        name: s.name,
+        course: entraCourseMap[s.msOid],
+      }));
+
+    if (studentsToEnroll.length === 0) return;
+    setEntraEnrolling(true);
+    try {
+      const res = await fetch('/api/students/sync-entra', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students: studentsToEnroll }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEntraResults(data);
+      // Refresh
+      handleFetchEntra();
+      fetchStudents();
+    } catch (err: any) {
+      setError(err.message || 'Enrollment failed');
+    } finally {
+      setEntraEnrolling(false);
     }
   };
 
@@ -815,13 +877,24 @@ export default function StudentsPage() {
             </Typography>
           </Box>
         </Box>
-        <Tooltip title="Refresh data">
-          <span>
-            <IconButton size="small" onClick={fetchStudents} disabled={loading}>
-              <RefreshIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            onClick={() => { setShowEntraSync(true); handleFetchEntra(); }}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
+          >
+            Sync from Entra
+          </Button>
+          <Tooltip title="Refresh data">
+            <span>
+              <IconButton size="small" onClick={fetchStudents} disabled={loading}>
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Alerts */}
@@ -1138,6 +1211,121 @@ export default function StudentsPage() {
           >
             {credSharing ? 'Sharing...' : 'Share with Student'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Entra Sync Dialog */}
+      <Dialog open={showEntraSync} onClose={() => !entraEnrolling && setShowEntraSync(false)} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CloudDownloadIcon color="primary" /> Sync Students from Microsoft Entra
+        </DialogTitle>
+        <DialogContent>
+          {entraResults ? (
+            <Box>
+              <Alert severity={entraResults.summary.failed > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
+                Enrolled {entraResults.summary.success} of {entraResults.summary.total} students.
+                {entraResults.summary.failed > 0 && ` ${entraResults.summary.failed} failed.`}
+              </Alert>
+              <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                {(entraResults.results || []).map((r: any, i: number) => (
+                  <Paper key={i} elevation={0} sx={{ p: 1, mb: 0.5, border: '1px solid', borderColor: r.success ? 'success.200' : 'error.200', borderRadius: 1, fontSize: 12 }}>
+                    <Typography variant="body2" fontWeight={600}>{r.name} ({r.email})</Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                      {(r.actions || []).map((a: string, j: number) => (
+                        <Chip key={j} label={a} size="small" sx={{ fontSize: 10, height: 18 }} />
+                      ))}
+                    </Box>
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          ) : entraLoading ? (
+            <Box textAlign="center" py={4}>
+              <CircularProgress size={40} />
+              <Typography variant="body2" color="text.secondary" mt={2}>Fetching students from Azure AD...</Typography>
+            </Box>
+          ) : (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Students from Microsoft Entra. Set the course for each student not yet in Nexus, then click Enroll.
+                They&apos;ll be added to classrooms (Common + course-specific), Teams teams, group chat, and the onboarding pipeline.
+              </Typography>
+
+              {entraStudents.length > 0 && (
+                <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+                  <Chip label={`${entraStudents.filter((s: any) => !s.needsSetup).length} already in Nexus`} color="success" size="small" />
+                  <Chip label={`${entraStudents.filter((s: any) => s.needsSetup).length} need setup`} color="warning" size="small" />
+                </Box>
+              )}
+
+              <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
+                {/* Students needing setup */}
+                {entraStudents.filter((s: any) => s.needsSetup).length > 0 && (
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, mt: 1 }}>
+                    Needs Setup ({entraStudents.filter((s: any) => s.needsSetup).length})
+                  </Typography>
+                )}
+                {entraStudents.filter((s: any) => s.needsSetup).map((s: any) => (
+                  <Paper key={s.msOid} elevation={0} sx={{ p: 1.5, mb: 1, border: '1px solid', borderColor: 'warning.200', borderRadius: 1 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">{s.email}</Typography>
+                      </Box>
+                      <Select
+                        size="small"
+                        value={entraCourseMap[s.msOid] || 'nata'}
+                        onChange={(e) => setEntraCourseMap((prev) => ({ ...prev, [s.msOid]: e.target.value }))}
+                        sx={{ fontSize: 12, height: 28, minWidth: 130 }}
+                      >
+                        <MenuItem value="nata" sx={{ fontSize: 12 }}>NATA</MenuItem>
+                        <MenuItem value="jee_paper2" sx={{ fontSize: 12 }}>JEE Paper 2</MenuItem>
+                        <MenuItem value="both" sx={{ fontSize: 12 }}>Both</MenuItem>
+                      </Select>
+                    </Box>
+                  </Paper>
+                ))}
+
+                {/* Already in Nexus */}
+                {entraStudents.filter((s: any) => !s.needsSetup).length > 0 && (
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, mt: 2, color: 'text.secondary' }}>
+                    Already in Nexus ({entraStudents.filter((s: any) => !s.needsSetup).length})
+                  </Typography>
+                )}
+                {entraStudents.filter((s: any) => !s.needsSetup).map((s: any) => (
+                  <Paper key={s.msOid} elevation={0} sx={{ p: 1, mb: 0.5, border: '1px solid', borderColor: 'divider', borderRadius: 1, opacity: 0.7 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="body2">{s.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">{s.email}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        {(s.nexusClassrooms || []).map((c: string, i: number) => (
+                          <Chip key={i} label={c} size="small" color="success" variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+                        ))}
+                      </Box>
+                    </Box>
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { setShowEntraSync(false); setEntraResults(null); }} disabled={entraEnrolling} sx={{ textTransform: 'none' }}>
+            {entraResults ? 'Close' : 'Cancel'}
+          </Button>
+          {!entraResults && !entraLoading && entraStudents.filter((s: any) => s.needsSetup).length > 0 && (
+            <Button
+              variant="contained"
+              onClick={handleEntraEnroll}
+              disabled={entraEnrolling}
+              startIcon={entraEnrolling ? <CircularProgress size={16} color="inherit" /> : <SyncIcon />}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              {entraEnrolling ? 'Enrolling...' : `Enroll ${entraStudents.filter((s: any) => s.needsSetup).length} Students`}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
