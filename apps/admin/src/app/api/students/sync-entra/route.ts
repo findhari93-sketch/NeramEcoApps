@@ -179,14 +179,28 @@ export async function POST(request: NextRequest) {
           .eq('ms_oid', student.msOid)
           .maybeSingle();
 
+        // Split display name into first_name
+        const nameParts = (student.name || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || student.email?.split('@')[0] || '';
+
         if (existingUser) {
           userId = existingUser.id;
+          // Update name/first_name if missing
+          await supabase
+            .from('users')
+            .update({
+              name: student.name || undefined,
+              first_name: firstName || undefined,
+            })
+            .eq('id', existingUser.id)
+            .is('first_name', null);
           result.actions.push('user_exists');
         } else {
           const { data: newUser, error: userErr } = await supabase
             .from('users')
             .insert({
               name: student.name,
+              first_name: firstName,
               email: student.email,
               ms_oid: student.msOid,
               user_type: 'student',
@@ -260,7 +274,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 5. Create student_profile
+        // 5. Create student_profile with course linkage
+        const courseClassroom = student.course === 'jee_paper2' ? jeeClassroom : nataClassroom;
+
         const { data: existingProfile } = await supabase
           .from('student_profiles')
           .select('id')
@@ -270,6 +286,14 @@ export async function POST(request: NextRequest) {
         let studentProfileId: string | null;
         if (existingProfile) {
           studentProfileId = existingProfile.id;
+          // Update missing fields on existing profile
+          await supabase
+            .from('student_profiles')
+            .update({
+              ms_teams_email: student.email,
+              course_id: courseClassroom?.id || null,
+            })
+            .eq('id', existingProfile.id);
         } else {
           const { data: newProfile, error: profileErr } = await supabase
             .from('student_profiles')
@@ -277,6 +301,7 @@ export async function POST(request: NextRequest) {
               user_id: userId,
               enrollment_date: new Date().toISOString().split('T')[0],
               ms_teams_email: student.email,
+              course_id: courseClassroom?.id || null,
               payment_status: 'paid',
               total_fee: 0,
               fee_paid: 0,
@@ -293,6 +318,22 @@ export async function POST(request: NextRequest) {
             studentProfileId = newProfile.id;
             result.actions.push('profile_created');
           }
+        }
+
+        // 5b. Create lead_profile for tracking (interest_course, source)
+        // source enum: 'website_form' | 'app' | 'referral' | 'manual' | 'direct_link'
+        if (studentProfileId) {
+          await supabase
+            .from('lead_profiles')
+            .insert({
+              user_id: userId,
+              source: 'manual',
+              status: 'enrolled',
+              interest_course: student.course === 'jee_paper2' ? 'jee_paper2' : student.course === 'both' ? 'both' : 'nata',
+              first_name: firstName,
+            })
+            .then(() => {})
+            .catch(() => {}); // Non-blocking — lead_profile is for record-keeping
         }
 
         // 6. Initialize onboarding + auto-complete steps
