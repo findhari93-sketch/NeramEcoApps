@@ -5,6 +5,7 @@ import {
   getUserJourneyDetail,
   adminUpdateUserProfile,
   adminUpdateLeadProfile,
+  createAdminClient,
 } from '@neram/database';
 
 export async function GET(
@@ -34,7 +35,7 @@ export async function PATCH(
 ) {
   try {
     const body = await request.json();
-    const { userUpdates, leadUpdates, adminId } = body;
+    const { userUpdates, leadUpdates, studentProfileUpdates, adminId } = body;
 
     if (!adminId) {
       return NextResponse.json(
@@ -63,6 +64,24 @@ export async function PATCH(
           updates,
           adminId
         );
+      }
+    }
+
+    // Update student profile fields if provided (fees)
+    if (studentProfileUpdates && studentProfileUpdates.studentProfileId) {
+      const { studentProfileId, ...spUpdates } = studentProfileUpdates;
+      if (Object.keys(spUpdates).length > 0) {
+        const supabase = createAdminClient();
+        // Verify the student profile belongs to this user
+        const { data, error: spError } = await supabase
+          .from('student_profiles')
+          .update({ ...spUpdates, updated_at: new Date().toISOString() })
+          .eq('id', studentProfileId)
+          .eq('user_id', params.id)
+          .select()
+          .single();
+        if (spError) throw spError;
+        results.studentProfile = data;
       }
     }
 

@@ -3018,6 +3018,10 @@ export interface UserJourneyDetail {
   // Callback rescheduling (migration 20260307)
   callbackRequests: CallbackRequest[];
   callbackAttempts: CallbackAttempt[];
+  // Nexus classroom enrollments
+  nexusEnrollments: (NexusEnrollment & { classroom?: NexusClassroom })[];
+  // Nexus onboarding documents
+  nexusDocuments: NexusStudentDocument[];
 }
 
 /**

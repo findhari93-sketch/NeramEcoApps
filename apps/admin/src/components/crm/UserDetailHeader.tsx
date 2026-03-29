@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Avatar, Box, Button, Chip, Divider, Paper, Typography, TextField, CircularProgress, Alert } from '@neram/ui';
+import { Avatar, Box, Button, Chip, Paper, Typography, TextField, CircularProgress, Alert } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import EditIcon from '@mui/icons-material/Edit';
-import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import EmailIcon from '@mui/icons-material/Email';
 import PhoneIcon from '@mui/icons-material/Phone';
 import TagIcon from '@mui/icons-material/Tag';
@@ -13,8 +11,9 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import SchoolIcon from '@mui/icons-material/School';
 import LinkIcon from '@mui/icons-material/Link';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
+import ClassIcon from '@mui/icons-material/Class';
 import { useRouter } from 'next/navigation';
-import type { UserJourneyDetail, PipelineStage } from '@neram/database';
+import type { UserJourneyDetail } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 
 interface UserDetailHeaderProps {
@@ -34,6 +33,13 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+const CLASSROOM_TYPE_COLORS: Record<string, string> = {
+  nata: '#1976d2',
+  jee: '#e65100',
+  revit: '#2e7d32',
+  other: '#757575',
+};
+
 export default function UserDetailHeader({
   detail,
   onEditClick,
@@ -42,7 +48,7 @@ export default function UserDetailHeader({
   onStatusChange,
 }: UserDetailHeaderProps) {
   const router = useRouter();
-  const { user, pipelineStage } = detail;
+  const { user, pipelineStage, nexusEnrollments } = detail;
   const stageConfig = PIPELINE_STAGE_CONFIG[pipelineStage];
 
   // Classroom linking state
@@ -53,6 +59,7 @@ export default function UserDetailHeader({
   const [showLinkInput, setShowLinkInput] = useState(false);
 
   const linkedEmail = (user as any).linked_classroom_email as string | null;
+  const hasNexusEnrollments = nexusEnrollments && nexusEnrollments.length > 0;
 
   const handleLinkClassroom = async () => {
     if (!classroomEmail.trim() || !adminId) return;
@@ -263,8 +270,43 @@ export default function UserDetailHeader({
             </Box>
           </Box>
 
-          {/* Classroom Linking Section */}
+          {/* Nexus Classrooms & Classroom Link Section */}
           <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'grey.100' }}>
+            {/* Show enrolled classrooms when they exist */}
+            {hasNexusEnrollments && (
+              <Box sx={{ mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <ClassIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                  <Typography variant="body2" fontWeight={600} color="text.secondary">
+                    Enrolled Classrooms
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {nexusEnrollments.map((enrollment) => {
+                    const classroom = enrollment.classroom;
+                    const typeColor = CLASSROOM_TYPE_COLORS[classroom?.type || 'other'] || CLASSROOM_TYPE_COLORS.other;
+                    return (
+                      <Chip
+                        key={enrollment.id}
+                        icon={<SchoolIcon sx={{ fontSize: 14 }} />}
+                        label={classroom?.name || 'Unknown Classroom'}
+                        size="small"
+                        sx={{
+                          bgcolor: `${typeColor}14`,
+                          color: typeColor,
+                          fontWeight: 600,
+                          fontSize: 12,
+                          border: '1px solid',
+                          borderColor: `${typeColor}30`,
+                        }}
+                      />
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+
+            {/* Classroom Email Link */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <SchoolIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
               <Typography variant="body2" fontWeight={600} color="text.secondary">

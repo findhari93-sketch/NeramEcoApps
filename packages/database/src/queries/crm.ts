@@ -242,6 +242,8 @@ export async function getUserJourneyDetail(
     notesResult,
     callbackRequestsResult,
     callbackAttemptsResult,
+    nexusEnrollmentsResult,
+    nexusDocumentsResult,
   ] = await Promise.all([
     // Lead profile (most recent non-deleted)
     supabase
@@ -343,6 +345,22 @@ export async function getUserJourneyDetail(
       .select('*')
       .eq('user_id', userId)
       .order('attempted_at', { ascending: false }),
+
+    // Nexus classroom enrollments
+    supabase
+      .from('nexus_enrollments')
+      .select('*, classroom:nexus_classrooms(*)')
+      .eq('user_id', userId)
+      .eq('role', 'student')
+      .eq('is_active', true)
+      .order('enrolled_at', { ascending: false }),
+
+    // Nexus student documents (identity, academic, exam docs from Nexus onboarding)
+    supabase
+      .from('nexus_student_documents')
+      .select('*')
+      .eq('student_id', userId)
+      .order('uploaded_at', { ascending: false }),
   ]);
 
   const leadProfile = leadProfileResult.data as LeadProfile | null;
@@ -387,6 +405,8 @@ export async function getUserJourneyDetail(
     pipelineStage,
     callbackRequests: (callbackRequestsResult.data || []) as CallbackRequest[],
     callbackAttempts: (callbackAttemptsResult.data || []) as CallbackAttempt[],
+    nexusEnrollments: (nexusEnrollmentsResult.data || []) as any[],
+    nexusDocuments: (nexusDocumentsResult.data || []) as any[],
   };
 }
 
