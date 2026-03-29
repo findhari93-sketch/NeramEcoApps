@@ -58,6 +58,18 @@ export async function POST(
 
     if (error) throw error;
 
+    // Auto-approve Nexus onboarding (admin-assigned = pre-approved, skip request flow)
+    try {
+      await supabase
+        .from('nexus_student_onboarding')
+        .upsert(
+          { student_id: userId, classroom_id: classroomId, status: 'approved' },
+          { onConflict: 'student_id,classroom_id' }
+        );
+    } catch {
+      // Non-blocking
+    }
+
     // Auto-add student to Microsoft Teams team if classroom has sync enabled
     let teamsResult: { success: boolean; reason?: string } | null = null;
     try {
