@@ -3022,6 +3022,10 @@ export interface UserJourneyDetail {
   nexusEnrollments: (NexusEnrollment & { classroom?: NexusClassroom })[];
   // Nexus onboarding documents
   nexusDocuments: NexusStudentDocument[];
+  // Nexus onboarding status
+  nexusOnboarding: NexusStudentOnboarding | null;
+  // Nexus exam plans
+  nexusExamPlans: NexusStudentExamPlan[];
 }
 
 /**
@@ -6595,3 +6599,5 @@ export interface StudentCredential {
   is_active: boolean;
   created_at: string;
 }
+
+export * from './expenses';
