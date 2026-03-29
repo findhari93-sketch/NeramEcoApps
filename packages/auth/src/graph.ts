@@ -99,3 +99,50 @@ export async function addMemberToTeam(
     return { success: false, reason: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
+
+/**
+ * Add a member to a Microsoft Teams group chat using the Graph API.
+ * Requires ChatMember.ReadWrite.All or Chat.ReadWrite.All application permission.
+ *
+ * @param chatId - The Teams chat thread ID (e.g., "19:xxx@thread.v2")
+ * @param userPrincipalName - The user's email/UPN in Azure AD
+ * @returns Object with success status and optional reason
+ */
+export async function addMemberToGroupChat(
+  chatId: string,
+  userPrincipalName: string
+): Promise<{ success: boolean; reason?: string }> {
+  try {
+    const token = await getAppOnlyToken();
+
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/chats/${chatId}/members`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          '@odata.type': '#microsoft.graph.aadUserConversationMember',
+          'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userPrincipalName}')`,
+          roles: ['guest'],
+        }),
+      }
+    );
+
+    if (res.ok) {
+      return { success: true };
+    }
+
+    // 409 = already a member
+    if (res.status === 409) {
+      return { success: true, reason: 'already_member' };
+    }
+
+    const errText = await res.text().catch(() => '');
+    return { success: false, reason: `Graph API error: ${res.status} ${errText}` };
+  } catch (error) {
+    return { success: false, reason: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}

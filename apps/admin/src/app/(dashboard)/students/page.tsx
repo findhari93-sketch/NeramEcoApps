@@ -38,6 +38,9 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import GroupsIcon from '@mui/icons-material/Groups';
+import SaveIcon from '@mui/icons-material/Save';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 
@@ -226,6 +229,13 @@ export default function StudentsPage() {
   const [credError, setCredError] = useState('');
   const [credSuccess, setCredSuccess] = useState(false);
 
+  // Group chat config
+  const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', auto_add_enabled: false });
+  const [editingGroupChat, setEditingGroupChat] = useState(false);
+  const [groupChatInput, setGroupChatInput] = useState('');
+  const [groupChatNameInput, setGroupChatNameInput] = useState('');
+  const [savingGroupChat, setSavingGroupChat] = useState(false);
+
   // Debounce
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -270,6 +280,37 @@ export default function StudentsPage() {
       .then((d) => setNexusClassrooms(d.data || []))
       .catch(() => {});
   }, []);
+
+  // Fetch group chat config
+  useEffect(() => {
+    fetch('/api/settings/teams-group-chat')
+      .then((r) => r.json())
+      .then((d) => { if (d.data) setGroupChatConfig(d.data); })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveGroupChat = async () => {
+    setSavingGroupChat(true);
+    try {
+      const res = await fetch('/api/settings/teams-group-chat', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: groupChatInput,
+          chatName: groupChatNameInput,
+          autoAddEnabled: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setGroupChatConfig(data.data);
+      setEditingGroupChat(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save group chat config');
+    } finally {
+      setSavingGroupChat(false);
+    }
+  };
 
   // Fetch Nexus enrollments for all loaded students (supports multiple classrooms per student)
   useEffect(() => {
@@ -778,6 +819,73 @@ export default function StudentsPage() {
           loading={loading}
         />
       </Box>
+
+      {/* Group Chat Config */}
+      <Paper elevation={0} sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <GroupsIcon sx={{ color: '#7B1FA2', fontSize: 20 }} />
+        {editingGroupChat ? (
+          <>
+            <TextField
+              size="small"
+              label="Chat Name"
+              value={groupChatNameInput}
+              onChange={(e) => setGroupChatNameInput(e.target.value)}
+              sx={{ width: 200 }}
+              placeholder="e.g., 2026 - Neramclasses"
+            />
+            <TextField
+              size="small"
+              label="Teams Chat ID"
+              value={groupChatInput}
+              onChange={(e) => setGroupChatInput(e.target.value)}
+              sx={{ flex: 1, minWidth: 300 }}
+              placeholder="19:xxx@thread.v2"
+              helperText="From the Teams chat URL"
+            />
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={savingGroupChat ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+              onClick={handleSaveGroupChat}
+              disabled={savingGroupChat || !groupChatInput}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Save
+            </Button>
+            <Button size="small" onClick={() => setEditingGroupChat(false)} sx={{ textTransform: 'none' }}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Auto-join Group Chat:
+            </Typography>
+            {groupChatConfig.chat_id ? (
+              <>
+                <Chip label={groupChatConfig.chat_name || 'Configured'} size="small" color="primary" variant="outlined" />
+                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                  {groupChatConfig.chat_id.slice(0, 30)}...
+                </Typography>
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary">Not configured</Typography>
+            )}
+            <Tooltip title="Edit group chat config">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setGroupChatInput(groupChatConfig.chat_id);
+                  setGroupChatNameInput(groupChatConfig.chat_name);
+                  setEditingGroupChat(true);
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
+      </Paper>
 
       {/* Filters */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>

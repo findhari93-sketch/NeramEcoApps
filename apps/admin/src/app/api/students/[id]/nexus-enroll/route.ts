@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
-import { addMemberToTeam } from '@neram/auth';
+import { addMemberToTeam, addMemberToGroupChat } from '@neram/auth';
 
 /**
  * POST /api/students/[id]/nexus-enroll — Enroll student in a Nexus classroom + optional batch
@@ -142,10 +142,40 @@ export async function POST(
       }
     }
 
+    // Also auto-add to the configured Teams group chat (if enabled)
+    let groupChatResult: { success: boolean; reason?: string } | null = null;
+    try {
+      const { data: chatSetting } = await supabase
+        .from('app_settings')
+        .select('setting_value')
+        .eq('setting_key', 'teams_group_chat')
+        .maybeSingle();
+
+      const chatConfig = chatSetting?.setting_value;
+      if (chatConfig?.chat_id && chatConfig?.auto_add_enabled) {
+        // Get student's ms_teams_email (may already be fetched above)
+        const { data: sp } = await supabase
+          .from('student_profiles')
+          .select('ms_teams_email')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (sp?.ms_teams_email) {
+          groupChatResult = await addMemberToGroupChat(chatConfig.chat_id, sp.ms_teams_email);
+        } else {
+          groupChatResult = { success: false, reason: 'no_ms_teams_email' };
+        }
+      }
+    } catch (chatErr: any) {
+      console.warn('[nexus-enroll] Group chat auto-add failed:', chatErr?.message);
+      groupChatResult = { success: false, reason: chatErr?.message || 'unknown_error' };
+    }
+
     return NextResponse.json({
       success: true,
       enrollment,
       teamsAutoAdd: teamsResult,
+      groupChatAutoAdd: groupChatResult,
     });
   } catch (error: any) {
     console.error('Error enrolling student:', error);

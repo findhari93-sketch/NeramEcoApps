@@ -68,6 +68,7 @@ export type { AccountInfo, AuthenticationResult } from './microsoft';
 export {
   getAppOnlyToken,
   addMemberToTeam,
+  addMemberToGroupChat,
 } from './graph';
 
 // Hooks
