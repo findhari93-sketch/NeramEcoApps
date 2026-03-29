@@ -17,7 +17,7 @@ export async function GET() {
       .from('users')
       .select(`
         id, email, first_name, name, ms_oid, firebase_uid, user_type,
-        nexus_enrollments!inner(classroom_id, batch_id, is_active, classroom:nexus_classrooms(id, name, type, ms_team_id))
+        nexus_enrollments!nexus_enrollments_user_id_fkey!inner(classroom_id, batch_id, is_active, classroom:nexus_classrooms(id, name, type, ms_team_id))
       `)
       .eq('nexus_enrollments.is_active', true)
       .not('ms_oid', 'is', null);
