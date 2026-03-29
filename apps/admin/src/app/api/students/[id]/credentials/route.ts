@@ -63,6 +63,36 @@ export async function POST(
         .from('student_profiles')
         .update({ ms_teams_email: email })
         .eq('id', profile.id);
+
+      // Also look up the Microsoft OID for this email and link it to the user
+      // This ensures Nexus login (by ms_oid) finds the same user record
+      try {
+        const { getAppOnlyToken } = await import('@neram/auth');
+        const token = await getAppOnlyToken();
+        const graphRes = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email)}?$select=id,userPrincipalName`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (graphRes.ok) {
+          const msUser = await graphRes.json();
+          if (msUser.id) {
+            // Clear ms_oid from any orphan user that might have this OID
+            await supabase
+              .from('users')
+              .update({ ms_oid: null })
+              .eq('ms_oid', msUser.id)
+              .neq('id', id);
+            // Set ms_oid on the actual student user
+            await supabase
+              .from('users')
+              .update({ ms_oid: msUser.id })
+              .eq('id', id);
+          }
+        }
+      } catch (msErr) {
+        console.warn('[Credentials] Failed to auto-link ms_oid:', msErr);
+        // Non-blocking — enrollment still works without ms_oid pre-linking
+      }
     }
 
     // Mask password in response
