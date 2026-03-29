@@ -13,6 +13,7 @@ import {
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import LaptopIcon from '@mui/icons-material/Laptop';
@@ -120,8 +121,8 @@ export default function StepCard({
         p: 2,
         borderRadius: 2,
         border: '1px solid',
-        borderColor: stepStatus === 'completed' ? 'success.light' : stepStatus === 'need_help' ? 'warning.light' : 'divider',
-        bgcolor: stepStatus === 'completed' ? 'success.50' : stepStatus === 'need_help' ? 'warning.50' : 'background.paper',
+        borderColor: stepStatus === 'completed' ? 'success.light' : stepStatus === 'need_help' ? 'warning.light' : stepStatus === 'in_progress' ? 'info.light' : 'divider',
+        bgcolor: stepStatus === 'completed' ? 'success.50' : stepStatus === 'need_help' ? 'warning.50' : stepStatus === 'in_progress' ? 'info.50' : 'background.paper',
         opacity: isUpdating ? 0.7 : isLocked ? 0.5 : 1,
         cursor: isLocked ? 'not-allowed' : children ? 'default' : 'pointer',
         transition: 'all 0.2s',
@@ -150,6 +151,8 @@ export default function StepCard({
             <CheckCircleIcon sx={{ fontSize: 24, color: 'success.main' }} />
           ) : stepStatus === 'need_help' ? (
             <HelpOutlineIcon sx={{ fontSize: 24, color: 'warning.main' }} />
+          ) : stepStatus === 'in_progress' ? (
+            <HourglassEmptyIcon sx={{ fontSize: 24, color: 'info.main' }} />
           ) : (
             <RadioButtonUncheckedIcon sx={{ fontSize: 24, color: isLocked ? 'grey.300' : 'grey.400' }} />
           )}

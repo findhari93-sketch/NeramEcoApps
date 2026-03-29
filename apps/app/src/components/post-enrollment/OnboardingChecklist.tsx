@@ -14,11 +14,14 @@ import {
 } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
+import KeyIcon from '@mui/icons-material/Key';
+import LockIcon from '@mui/icons-material/Lock';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import { getFirebaseAuth } from '@neram/auth';
 import { useRouter } from 'next/navigation';
@@ -29,6 +32,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Laptop: LaptopIcon,
   Groups: GroupsIcon,
   Person: PersonIcon,
+  Key: KeyIcon,
+  Lock: LockIcon,
 };
 
 export default function OnboardingChecklist() {
@@ -99,6 +104,12 @@ export default function OnboardingChecklist() {
   const handleStepAction = (step: StudentOnboardingStepWithDefinition) => {
     const def = step.step_definition;
     if (!def) return;
+
+    // WhatsApp step has a special flow — redirect to full onboarding page
+    if (def.step_key === 'join_whatsapp') {
+      router.push('/onboarding');
+      return;
+    }
 
     if (def.action_type === 'link' && def.action_config?.url) {
       window.open(def.action_config.url as string, '_blank');
@@ -187,7 +198,9 @@ export default function OnboardingChecklist() {
           if (!def) return null;
           const Icon = ICON_MAP[def.icon_name || ''] || AssignmentTurnedInIcon;
           const isCompleting = completing === step.id;
-          const hasAction = (def.action_type === 'link' && def.action_config?.url) ||
+          const isWhatsApp = def.step_key === 'join_whatsapp';
+          const hasAction = isWhatsApp ||
+                           (def.action_type === 'link' && def.action_config?.url) ||
                            (def.action_type === 'in_app' && def.action_config?.route);
 
           return (
@@ -232,6 +245,8 @@ export default function OnboardingChecklist() {
                     }}
                   />
                 </Box>
+              ) : (step as any).status === 'in_progress' ? (
+                <HourglassEmptyIcon sx={{ fontSize: 24, color: 'info.main', flexShrink: 0 }} />
               ) : (
                 <RadioButtonUncheckedIcon sx={{ fontSize: 24, color: 'grey.400', flexShrink: 0 }} />
               )}
@@ -270,9 +285,13 @@ export default function OnboardingChecklist() {
               </Box>
 
               {/* Action indicator */}
-              {!step.is_completed && hasAction && (
+              {!step.is_completed && (step as any).status === 'in_progress' ? (
+                <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 600, flexShrink: 0, fontSize: '0.7rem' }}>
+                  Pending
+                </Typography>
+              ) : !step.is_completed && hasAction ? (
                 <OpenInNewIcon sx={{ fontSize: 16, color: 'grey.400', flexShrink: 0 }} />
-              )}
+              ) : null}
             </Box>
           );
         })}

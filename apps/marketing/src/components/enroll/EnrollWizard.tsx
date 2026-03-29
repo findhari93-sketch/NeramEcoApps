@@ -22,7 +22,7 @@ import {
   DialogContent,
   DialogActions,
 } from '@neram/ui';
-import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Edit as EditIcon, Save as SaveIcon, OpenInNew, Person, LocationOn, School } from '@mui/icons-material';
+import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Save as SaveIcon } from '@mui/icons-material';
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
@@ -32,6 +32,7 @@ import AcademicDetailsStep from './AcademicDetailsStep';
 import PaymentDetailsStep from './PaymentDetailsStep';
 import ReviewStep from './ReviewStep';
 import SuccessScreen from './SuccessScreen';
+import ApplicationDetailsDialog from './ApplicationDetailsDialog';
 import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
 import type {
   PersonalInfoData,
@@ -66,6 +67,8 @@ interface LinkData {
 interface LeadProfileData {
   id: string;
   firstName: string | null;
+  email: string | null;
+  phone: string | null;
   fatherName: string | null;
   dateOfBirth: string | null;
   gender: string | null;
@@ -135,6 +138,8 @@ export default function EnrollWizard() {
 
   // View/edit mode for revisiting completed enrollment
   const [viewMode, setViewMode] = useState(true); // true = read-only, false = editing
+  const [editMode, setEditMode] = useState(false); // true = show edit form, false = show success screen
+  const [showApplicationDialog, setShowApplicationDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -211,11 +216,12 @@ export default function EnrollWizard() {
         personal: {
           ...prev.personal,
           firstName: lp.firstName || prev.personal.firstName,
+          email: lp.email || prev.personal.email,
+          phone: lp.phone || prev.personal.phone,
           fatherName: lp.fatherName || prev.personal.fatherName,
           dateOfBirth: lp.dateOfBirth || prev.personal.dateOfBirth,
           gender: (lp.gender as 'male' | 'female' | 'other') || prev.personal.gender,
           parentPhone: lp.parentPhone || prev.personal.parentPhone,
-          phone: lp.parentPhone || prev.personal.phone,
         },
         location: {
           ...prev.location,
@@ -274,6 +280,21 @@ export default function EnrollWizard() {
       }
     }
   }, [user, linkData, phoneVerified]);
+
+  // Auto-fill from Google auth for USED tokens (revisiting enrollment)
+  useEffect(() => {
+    if (user && tokenStatus === 'used' && usedLinkData) {
+      setFormData((prev) => ({
+        ...prev,
+        personal: {
+          ...prev.personal,
+          email: prev.personal.email || user.email || '',
+          phone: prev.personal.phone || user.phone || '',
+          firstName: prev.personal.firstName || user.name?.split(' ')[0] || '',
+        },
+      }));
+    }
+  }, [user, tokenStatus, usedLinkData]);
 
   // Derive whether phone is currently verified (resets when user edits number)
   const isPhoneCurrentlyVerified = phoneVerified && !!verifiedPhone && verifiedPhone === formData.personal.phone;
@@ -698,22 +719,69 @@ export default function EnrollWizard() {
       (user.raw as any)?.uid === usedLinkData.enrolledByFirebaseUid
     );
 
-    // Owner viewing their enrollment — show summary or edit form
+    // Owner viewing their enrollment — show Welcome screen or edit form
     if (isOwner && usedLinkData?.leadProfile) {
       const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
       const lp = usedLinkData.leadProfile;
 
-      // Helper for summary rows
-      const SummaryRow = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
-        <Box display="flex" justifyContent="space-between" py={0.75}>
-          <Typography variant="body2" color="text.secondary">{label}</Typography>
-          <Typography variant="body2" fontWeight={500} textAlign="right">{value || '-'}</Typography>
-        </Box>
-      );
+      // Not in edit mode — show the Welcome/SuccessScreen with View/Edit buttons
+      if (!editMode) {
+        return (
+          <>
+            <SuccessScreen
+              applicationNumber={usedLinkData.applicationNumber || '-'}
+              enrollmentSummary={{
+                studentName: formData.personal.firstName || usedLinkData.studentName,
+                courseName: usedLinkData.courseName || usedLinkData.interestCourse?.toUpperCase(),
+                totalFee: usedLinkData.totalFee,
+                amountPaid: usedLinkData.amountPaid,
+                enrolledAt: usedLinkData.enrolledAt,
+              }}
+              isRevisit
+              onViewApplication={() => setShowApplicationDialog(true)}
+              onEdit={() => { setEditMode(true); setCurrentStep(0); }}
+            />
+            <ApplicationDetailsDialog
+              open={showApplicationDialog}
+              onClose={() => setShowApplicationDialog(false)}
+              personalData={{
+                firstName: formData.personal.firstName || lp.firstName,
+                email: formData.personal.email || lp.email,
+                phone: formData.personal.phone || lp.phone,
+                fatherName: formData.personal.fatherName || lp.fatherName,
+                parentPhone: formData.personal.parentPhone || lp.parentPhone,
+                dateOfBirth: formData.personal.dateOfBirth || lp.dateOfBirth,
+                gender: formData.personal.gender || lp.gender,
+              }}
+              locationData={{
+                pincode: formData.location.pincode || lp.pincode,
+                city: formData.location.city || lp.city,
+                district: formData.location.district || lp.district,
+                state: formData.location.state || lp.state,
+                address: formData.location.address || lp.address,
+              }}
+              academicData={{
+                applicantCategory: lp.applicantCategory,
+                casteCategory: formData.academic.casteCategory || lp.casteCategory,
+                targetExamYear: formData.academic.targetExamYear || (lp.targetExamYear ? String(lp.targetExamYear) : null),
+              }}
+              courseData={{
+                courseName: usedLinkData.courseName || usedLinkData.interestCourse?.toUpperCase(),
+                totalFee: usedLinkData.totalFee,
+                amountPaid: usedLinkData.amountPaid,
+                finalFee: usedLinkData.finalFee,
+                enrolledAt: usedLinkData.enrolledAt,
+              }}
+              applicationNumber={usedLinkData.applicationNumber}
+            />
+          </>
+        );
+      }
 
+      // EDIT MODE: Editable form with stepper
       return (
         <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
-          {/* Header with status */}
+          {/* Header with Save/Cancel */}
           <Paper
             elevation={0}
             sx={{
@@ -730,47 +798,35 @@ export default function EnrollWizard() {
                 <CheckCircleOutlined sx={{ fontSize: 32, color: 'success.main' }} />
                 <Box>
                   <Typography variant="h6" fontWeight={700} color="success.dark">
-                    Enrollment Complete
+                    Edit Details
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Application: <strong>{usedLinkData.applicationNumber || '-'}</strong>
-                    {usedLinkData.courseName && ` | ${usedLinkData.courseName}`}
                   </Typography>
                 </Box>
               </Box>
               <Box sx={{ display: 'flex', gap: 1 }}>
-                {viewMode ? (
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<EditIcon />}
-                    onClick={() => setViewMode(false)}
-                    sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600 }}
-                  >
-                    Edit Details
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => { setViewMode(true); setSaveSuccess(false); }}
-                      sx={{ borderRadius: 1, textTransform: 'none' }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-                      onClick={handleSaveUpdates}
-                      disabled={saving}
-                      sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600 }}
-                    >
-                      {saving ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => { setEditMode(false); setSaveSuccess(false); setSubmitError(null); }}
+                  sx={{ borderRadius: 1, textTransform: 'none' }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                  onClick={async () => {
+                    await handleSaveUpdates();
+                    setEditMode(false);
+                  }}
+                  disabled={saving}
+                  sx={{ borderRadius: 1, textTransform: 'none', fontWeight: 600 }}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </Button>
               </Box>
             </Box>
           </Paper>
@@ -787,81 +843,7 @@ export default function EnrollWizard() {
             </Alert>
           )}
 
-          {/* VIEW MODE: Read-only summary */}
-          {viewMode ? (
-            <>
-              {/* Personal Details Summary */}
-              <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-                  <Person fontSize="small" />
-                  <Typography variant="subtitle1" fontWeight={600}>Personal Details</Typography>
-                </Box>
-                <SummaryRow label="Name" value={formData.personal.firstName} />
-                <SummaryRow label="Father's Name" value={formData.personal.fatherName || lp.fatherName} />
-                <SummaryRow label="Email" value={formData.personal.email} />
-                <SummaryRow label="Phone" value={formData.personal.phone} />
-                <SummaryRow label="Parent's Phone" value={formData.personal.parentPhone || lp.parentPhone} />
-                <SummaryRow label="Date of Birth" value={formData.personal.dateOfBirth || lp.dateOfBirth} />
-                <SummaryRow label="Gender" value={formData.personal.gender || lp.gender} />
-              </Paper>
-
-              {/* Address Summary */}
-              <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-                  <LocationOn fontSize="small" />
-                  <Typography variant="subtitle1" fontWeight={600}>Address</Typography>
-                </Box>
-                <SummaryRow label="Pincode" value={formData.location.pincode || lp.pincode} />
-                <SummaryRow label="City" value={formData.location.city || lp.city} />
-                <SummaryRow label="District" value={formData.location.district || lp.district} />
-                <SummaryRow label="State" value={formData.location.state || lp.state} />
-                <SummaryRow label="Address" value={formData.location.address || lp.address} />
-              </Paper>
-
-              {/* Academic Details Summary */}
-              <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-                  <School fontSize="small" />
-                  <Typography variant="subtitle1" fontWeight={600}>Academic Details</Typography>
-                </Box>
-                <SummaryRow label="Category" value={lp.applicantCategory} />
-                <SummaryRow label="Caste Category" value={formData.academic.casteCategory || lp.casteCategory} />
-                <SummaryRow label="Target Exam Year" value={formData.academic.targetExamYear || (lp.targetExamYear ? String(lp.targetExamYear) : null)} />
-              </Paper>
-
-              {/* Course & Fee Summary */}
-              <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 1 }}>
-                <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-                  <School fontSize="small" color="primary" />
-                  <Typography variant="subtitle1" fontWeight={600} color="primary.main">Course & Fees</Typography>
-                </Box>
-                <SummaryRow label="Course" value={usedLinkData.courseName || usedLinkData.interestCourse?.toUpperCase()} />
-                {usedLinkData.totalFee != null && (
-                  <SummaryRow label="Total Fee" value={`₹${Number(usedLinkData.totalFee).toLocaleString('en-IN')}`} />
-                )}
-                {usedLinkData.amountPaid != null && (
-                  <SummaryRow label="Amount Paid" value={`₹${Number(usedLinkData.amountPaid).toLocaleString('en-IN')}`} />
-                )}
-                {usedLinkData.enrolledAt && (
-                  <SummaryRow label="Enrolled On" value={new Date(usedLinkData.enrolledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} />
-                )}
-              </Paper>
-
-              {/* Go to Student App */}
-              <Button
-                variant="contained"
-                fullWidth
-                href={`/sso?redirect=${encodeURIComponent(APP_URL + '/onboarding')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none', py: 1.5, mb: 2 }}
-              >
-                Open Student App
-              </Button>
-            </>
-          ) : (
-            /* EDIT MODE: Editable form with stepper */
-            <>
+          {/* Stepper */}
           {isMobile ? (
             <MobileStepper
               variant="progress"
@@ -898,7 +880,7 @@ export default function EnrollWizard() {
             </Stepper>
           )}
 
-          {/* Form content — disabled in view mode via fieldset */}
+          {/* Form content */}
           <Paper
             elevation={0}
             sx={{
@@ -910,8 +892,8 @@ export default function EnrollWizard() {
             }}
           >
             <fieldset
-              disabled={viewMode}
-              style={{ border: 'none', padding: 0, margin: 0, opacity: viewMode ? 0.85 : 1 }}
+              disabled={false}
+              style={{ border: 'none', padding: 0, margin: 0 }}
             >
               {currentStep === 0 && (
                 <PersonalDetailsStep
@@ -932,36 +914,7 @@ export default function EnrollWizard() {
             </fieldset>
           </Paper>
 
-          {/* Onboarding CTA — steps live in the Student App */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 2, md: 3 },
-              border: '1px solid',
-              borderColor: 'primary.200',
-              borderRadius: 2,
-              bgcolor: 'primary.50',
-              mb: 3,
-              textAlign: 'center',
-            }}
-          >
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>
-              Complete Your Onboarding
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              Open the Student App to view and complete your onboarding steps — join WhatsApp, install Teams, and more.
-            </Typography>
-            <Button
-              variant="contained"
-              href={`/sso?redirect=${encodeURIComponent(APP_URL + '/onboarding')}`}
-              endIcon={<OpenInNew sx={{ fontSize: 16 }} />}
-              sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
-            >
-              Open Onboarding
-            </Button>
-          </Paper>
-
-          {/* Navigation + Go to App */}
+          {/* Navigation */}
           <Box display="flex" justifyContent="space-between" gap={2}>
             <Button
               variant="outlined"
@@ -983,17 +936,8 @@ export default function EnrollWizard() {
                   Next
                 </Button>
               )}
-              <Button
-                variant="contained"
-                href={`/sso?redirect=${encodeURIComponent(APP_URL)}`}
-                sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
-              >
-                Go to Student App
-              </Button>
             </Box>
           </Box>
-            </>
-          )}
         </Container>
       );
     }
@@ -1010,6 +954,9 @@ export default function EnrollWizard() {
             amountPaid: usedLinkData.amountPaid,
             enrolledAt: usedLinkData.enrolledAt,
           } : undefined}
+          isRevisit
+          onViewApplication={() => setShowApplicationDialog(true)}
+          onEdit={() => setEditMode(true)}
         />
       );
     }
@@ -1153,7 +1100,18 @@ export default function EnrollWizard() {
   // ============================================
 
   if (currentStep === 4 && applicationNumber) {
-    return <SuccessScreen applicationNumber={applicationNumber} />;
+    return (
+      <SuccessScreen
+        applicationNumber={applicationNumber}
+        enrollmentSummary={{
+          studentName: formData.personal.firstName || null,
+          courseName: linkData?.courseName || linkData?.interestCourse?.toUpperCase() || null,
+          totalFee: linkData?.totalFee ?? null,
+          amountPaid: linkData?.amountPaid ?? null,
+          enrolledAt: new Date().toISOString(),
+        }}
+      />
+    );
   }
 
   // ============================================

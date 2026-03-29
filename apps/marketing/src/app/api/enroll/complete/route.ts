@@ -114,6 +114,8 @@ export async function POST(request: NextRequest) {
       status: 'active',
       phone_verified: true,
       onboarding_completed: true, // Direct enrollment students skip the quiz wizard (data already collected)
+      date_of_birth: dateOfBirth || null,
+      gender: gender || null,
     }, supabase);
 
     // 3. Create student profile first (to get DB-generated student_id)
@@ -158,7 +160,10 @@ export async function POST(request: NextRequest) {
         source: 'direct_link',
         status: 'enrolled',
         // Personal
+        first_name: firstName || null,
         father_name: fatherName || null,
+        date_of_birth: dateOfBirth || null,
+        gender: gender || null,
         parent_phone: parentPhone || null,
         // Location
         country: country || 'India',

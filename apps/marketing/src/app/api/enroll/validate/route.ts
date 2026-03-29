@@ -93,6 +93,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Fetch owner user details (email, phone, first_name) for enrichment
+      let ownerUser: Record<string, unknown> | null = null;
+
       if (link.lead_profile_id) {
         try {
           // If authenticated, check if they're the owner
@@ -106,6 +109,16 @@ export async function GET(request: NextRequest) {
             if (leadProfile) {
               applicationNumber = leadProfile.application_number || null;
               fullLeadProfile = leadProfile;
+
+              // Also fetch user email/phone for the response
+              if (leadProfile.user_id) {
+                const { data: userData } = await (supabase
+                  .from('users') as any)
+                  .select('first_name, email, phone')
+                  .eq('id', leadProfile.user_id)
+                  .maybeSingle();
+                ownerUser = userData || null;
+              }
             }
           }
 
@@ -154,7 +167,9 @@ export async function GET(request: NextRequest) {
       if (isOwner && fullLeadProfile) {
         responseData.leadProfile = {
           id: fullLeadProfile.id,
-          firstName: fullLeadProfile.first_name || (fullLeadProfile as any).users?.first_name,
+          firstName: fullLeadProfile.first_name || (ownerUser as any)?.first_name || null,
+          email: (ownerUser as any)?.email || null,
+          phone: (ownerUser as any)?.phone || null,
           fatherName: fullLeadProfile.father_name,
           dateOfBirth: fullLeadProfile.date_of_birth,
           gender: fullLeadProfile.gender,

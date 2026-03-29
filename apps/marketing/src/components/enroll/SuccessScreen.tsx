@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Container, Typography, Button, Paper, Divider } from '@neram/ui';
-import { CheckCircleOutlined, ArrowForward, Check } from '@mui/icons-material';
+import { CheckCircleOutlined, ArrowForward, Check, Visibility, Edit as EditIcon } from '@mui/icons-material';
 
 const APP_ONBOARDING_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com') + '/onboarding';
 
@@ -16,6 +16,9 @@ interface EnrollmentSummary {
 interface SuccessScreenProps {
   applicationNumber: string;
   enrollmentSummary?: EnrollmentSummary;
+  isRevisit?: boolean;
+  onViewApplication?: () => void;
+  onEdit?: () => void;
 }
 
 function formatDate(dateStr: string | null | undefined): string {
@@ -36,7 +39,7 @@ function formatCurrency(amount: number | null | undefined): string {
   return `\u20B9${Number(amount).toLocaleString('en-IN')}`;
 }
 
-export default function SuccessScreen({ applicationNumber, enrollmentSummary }: SuccessScreenProps) {
+export default function SuccessScreen({ applicationNumber, enrollmentSummary, isRevisit, onViewApplication, onEdit }: SuccessScreenProps) {
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
       <Box textAlign="center">
@@ -164,6 +167,41 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary }: 
             </Typography>
           </Box>
         </Paper>
+
+        {isRevisit && (
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, justifyContent: 'center' }}>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={onViewApplication}
+              startIcon={<Visibility />}
+              sx={{
+                borderRadius: 1,
+                fontWeight: 600,
+                textTransform: 'none',
+                flex: 1,
+                maxWidth: 220,
+              }}
+            >
+              View Application
+            </Button>
+            <Button
+              variant="outlined"
+              size="large"
+              onClick={onEdit}
+              startIcon={<EditIcon />}
+              sx={{
+                borderRadius: 1,
+                fontWeight: 600,
+                textTransform: 'none',
+                flex: 1,
+                maxWidth: 220,
+              }}
+            >
+              Edit Details
+            </Button>
+          </Box>
+        )}
 
         <Button
           variant="contained"

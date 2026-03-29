@@ -26,6 +26,7 @@ import CredentialCard, { CredentialData } from '@/components/onboarding/Credenti
 import ConfirmLoginTermsStep from '@/components/onboarding/ConfirmLoginTermsStep';
 import NexusStatusPoller from '@/components/onboarding/NexusStatusPoller';
 import CongratulationsModal from '@/components/onboarding/CongratulationsModal';
+import WhatsAppJoinStep from '@/components/onboarding/WhatsAppJoinStep';
 
 // ─── Types ───
 
@@ -279,6 +280,28 @@ export default function OnboardingPage() {
 
     if (!step.is_completed && step.status !== 'completed') {
       updateStepStatus(step.id, 'completed');
+    }
+  };
+
+  const resolveWhatsAppUrl = (step: OnboardingStep): string => {
+    // Priority 1: Course-specific group link from DB
+    if (courseGroupLinks?.whatsapp_group_url) return courseGroupLinks.whatsapp_group_url;
+    // Priority 2: action_config.url
+    const cfg = step.step_definition.action_config || {};
+    if (cfg.url) return cfg.url as string;
+    // Priority 3: URL-like key in action_config (handles malformed JSON)
+    const urlKey = Object.keys(cfg).find((k) => k.startsWith('http'));
+    if (urlKey) return urlKey;
+    return '';
+  };
+
+  const handleWhatsAppJoin = (step: OnboardingStep) => {
+    const url = resolveWhatsAppUrl(step);
+    if (url) {
+      window.open(url, '_blank');
+    }
+    if (!step.is_completed && step.status !== 'completed' && step.status !== 'in_progress') {
+      updateStepStatus(step.id, 'in_progress');
     }
   };
 
@@ -565,7 +588,31 @@ export default function OnboardingPage() {
                 );
               }
 
-              // Default step (WhatsApp, Install Teams, Install Authenticator)
+              // Join WhatsApp Group step (approval-based)
+              if (stepKey === 'join_whatsapp') {
+                const groupUrl = resolveWhatsAppUrl(step);
+                return (
+                  <StepCard
+                    key={step.id}
+                    step={step}
+                    isUpdating={updating === step.id}
+                    disabled={!active}
+                    onToggle={updateStepStatus}
+                    onAction={() => handleWhatsAppJoin(step)}
+                  >
+                    <WhatsAppJoinStep
+                      status={(step.status || 'pending') as any}
+                      actionConfig={step.step_definition.action_config || {}}
+                      groupUrl={groupUrl}
+                      onJoinClicked={() => handleWhatsAppJoin(step)}
+                      onApproved={() => updateStepStatus(step.id, 'completed')}
+                      disabled={!active}
+                    />
+                  </StepCard>
+                );
+              }
+
+              // Default step (Install Teams, Install Authenticator, etc.)
               return (
                 <StepCard
                   key={step.id}

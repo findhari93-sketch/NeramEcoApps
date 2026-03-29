@@ -1,20 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { getDeviceFingerprint, getDeviceCategory, getDeviceName } from '@/lib/device-fingerprint';
 import { collectDeviceInfo } from '@/lib/device-collector';
 
 interface DeviceRegistrationResult {
   deviceId: string | null;
   isNewDevice: boolean;
-  limitReached: boolean;
-  limitCategory: string | null;
   loading: boolean;
 }
 
 /**
  * Automatically registers the current device on login.
  * Returns the device ID for heartbeat tracking.
+ * No device limit enforced — tools app allows unlimited devices.
  */
 export function useDeviceRegistration(
   idToken: string | null,
@@ -22,8 +21,6 @@ export function useDeviceRegistration(
 ): DeviceRegistrationResult {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isNewDevice, setIsNewDevice] = useState(false);
-  const [limitReached, setLimitReached] = useState(false);
-  const [limitCategory, setLimitCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -71,12 +68,6 @@ export function useDeviceRegistration(
             sessionStorage.setItem('neram_device_registered', device.id);
             setIsNewDevice(true);
           }
-        } else if (response.status === 409) {
-          // Device limit reached for this category
-          const { error } = await response.json();
-          setLimitReached(true);
-          setLimitCategory(category);
-          console.warn('Device limit reached:', error);
         }
       } catch {
         // Registration failure should not break the app
@@ -88,5 +79,5 @@ export function useDeviceRegistration(
     register();
   }, [idToken, enabled]);
 
-  return { deviceId, isNewDevice, limitReached, limitCategory, loading };
+  return { deviceId, isNewDevice, loading };
 }
