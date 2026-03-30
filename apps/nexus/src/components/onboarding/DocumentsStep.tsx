@@ -24,7 +24,6 @@ const IMAGE_DROPPER_URL = 'https://app.neramclasses.com/tools/nata/image-crop';
 const NEEDS_CROP = ['Passport Photo', 'Signature'];
 
 interface DocumentsStepProps {
-  classroomId: string;
   templates: any[];
   uploadedDocs: any[];
   getToken: () => Promise<string | null>;
@@ -33,7 +32,6 @@ interface DocumentsStepProps {
 }
 
 export default function DocumentsStep({
-  classroomId,
   templates,
   uploadedDocs,
   getToken,
@@ -70,7 +68,6 @@ export default function DocumentsStep({
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('classroom_id', classroomId);
       formData.append('template_id', activeTemplateId);
       formData.append('title', template?.name || 'Document');
       formData.append('category', template?.category || 'identity');

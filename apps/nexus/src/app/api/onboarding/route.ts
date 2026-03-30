@@ -12,7 +12,7 @@ import {
 import { notifyTeachersOnboardingSubmitted } from '@/lib/onboarding-notifications';
 
 /**
- * GET /api/onboarding?classroom=<id>
+ * GET /api/onboarding
  * Get student's onboarding status + required templates
  */
 export async function GET(request: NextRequest) {
@@ -30,12 +30,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const classroomId = request.nextUrl.searchParams.get('classroom');
-    if (!classroomId) {
-      return NextResponse.json({ error: 'classroom param required' }, { status: 400 });
-    }
-
-    const onboarding = await getOnboardingStatus(user.id, classroomId);
+    const onboarding = await getOnboardingStatus(user.id);
     const requiredTemplates = await getOnboardingRequiredTemplates();
 
     // Get student's uploaded docs for these templates
@@ -45,7 +40,6 @@ export async function GET(request: NextRequest) {
       .from('nexus_student_documents')
       .select('id, template_id, status, file_url, title')
       .eq('student_id', user.id)
-      .eq('classroom_id', classroomId)
       .eq('is_current', true)
       .eq('is_deleted', false)
       .in('template_id', templateIds);
@@ -73,7 +67,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/onboarding
  * Create or update onboarding progress
- * Body: { classroom_id, action: 'start' | 'update_step' | 'submit', step?, current_standard?, academic_year? }
+ * Body: { action: 'start' | 'update_step' | 'submit', step?, current_standard?, academic_year? }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -91,21 +85,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { classroom_id, action } = body;
-
-    if (!classroom_id) {
-      return NextResponse.json({ error: 'classroom_id required' }, { status: 400 });
-    }
+    const { action } = body;
 
     let result;
 
     switch (action) {
       case 'start':
-        result = await createOrGetOnboarding(user.id, classroom_id);
+        result = await createOrGetOnboarding(user.id);
         break;
 
       case 'update_step':
-        result = await updateOnboardingStep(user.id, classroom_id, body.step, {
+        result = await updateOnboardingStep(user.id, body.step, {
           current_standard: body.current_standard,
           academic_year: body.academic_year,
         });
@@ -117,7 +107,7 @@ export async function POST(request: NextRequest) {
             .from('nexus_enrollments')
             .update({ current_standard: body.current_standard })
             .eq('user_id', user.id)
-            .eq('classroom_id', classroom_id);
+            .eq('is_active', true);
         }
         break;
 
@@ -136,7 +126,6 @@ export async function POST(request: NextRequest) {
           .from('nexus_student_documents')
           .select('template_id')
           .eq('student_id', user.id)
-          .eq('classroom_id', classroom_id)
           .eq('is_current', true)
           .eq('is_deleted', false)
           .in('template_id', requiredIds);
@@ -152,10 +141,10 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        result = await submitOnboarding(user.id, classroom_id);
+        result = await submitOnboarding(user.id);
 
         // Fire-and-forget: notify teachers in the Teams channel
-        notifyTeachersOnboardingSubmitted(user.name || 'A student', classroom_id)
+        notifyTeachersOnboardingSubmitted(user.name || 'A student', user.id)
           .catch(err => console.error('Teams onboarding notification failed:', err));
 
         break;

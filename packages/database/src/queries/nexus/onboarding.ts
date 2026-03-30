@@ -16,14 +16,12 @@ const supabase = (): any => getSupabaseAdminClient();
 // ============================================
 
 export async function getOnboardingStatus(
-  studentId: string,
-  classroomId: string
+  studentId: string
 ): Promise<NexusStudentOnboarding | null> {
   const { data, error } = await supabase()
     .from('nexus_student_onboarding')
     .select('*')
     .eq('student_id', studentId)
-    .eq('classroom_id', classroomId)
     .single();
 
   if (error && error.code === 'PGRST116') return null; // not found
@@ -32,10 +30,9 @@ export async function getOnboardingStatus(
 }
 
 export async function isOnboardingComplete(
-  studentId: string,
-  classroomId: string
+  studentId: string
 ): Promise<boolean> {
-  const record = await getOnboardingStatus(studentId, classroomId);
+  const record = await getOnboardingStatus(studentId);
   return record?.status === 'approved';
 }
 
@@ -44,11 +41,10 @@ export async function isOnboardingComplete(
 // ============================================
 
 export async function createOrGetOnboarding(
-  studentId: string,
-  classroomId: string
+  studentId: string
 ): Promise<NexusStudentOnboarding> {
   // Try to get existing
-  const existing = await getOnboardingStatus(studentId, classroomId);
+  const existing = await getOnboardingStatus(studentId);
   if (existing) return existing;
 
   // Try to pre-fill from enrollment data
@@ -59,7 +55,6 @@ export async function createOrGetOnboarding(
     .from('nexus_student_onboarding')
     .insert({
       student_id: studentId,
-      classroom_id: classroomId,
       current_step: 'welcome',
       status: 'in_progress',
       current_standard: prefill?.currentStandard || null,
@@ -74,7 +69,6 @@ export async function createOrGetOnboarding(
 
 export async function updateOnboardingStep(
   studentId: string,
-  classroomId: string,
   step: OnboardingStep,
   extraData?: {
     current_standard?: DocumentStandard;
@@ -89,7 +83,6 @@ export async function updateOnboardingStep(
     .from('nexus_student_onboarding')
     .update(updates)
     .eq('student_id', studentId)
-    .eq('classroom_id', classroomId)
     .select()
     .single();
 
@@ -98,8 +91,7 @@ export async function updateOnboardingStep(
 }
 
 export async function submitOnboarding(
-  studentId: string,
-  classroomId: string
+  studentId: string
 ): Promise<NexusStudentOnboarding> {
   const { data, error } = await supabase()
     .from('nexus_student_onboarding')
@@ -109,7 +101,6 @@ export async function submitOnboarding(
       submitted_at: new Date().toISOString(),
     })
     .eq('student_id', studentId)
-    .eq('classroom_id', classroomId)
     .select()
     .single();
 
@@ -123,7 +114,6 @@ export async function submitOnboarding(
 
 export async function approveOnboarding(
   studentId: string,
-  classroomId: string,
   reviewerId: string
 ): Promise<NexusStudentOnboarding> {
   const { data, error } = await supabase()
@@ -135,7 +125,6 @@ export async function approveOnboarding(
       rejection_reason: null,
     })
     .eq('student_id', studentId)
-    .eq('classroom_id', classroomId)
     .select()
     .single();
 
@@ -145,7 +134,6 @@ export async function approveOnboarding(
 
 export async function rejectOnboarding(
   studentId: string,
-  classroomId: string,
   reviewerId: string,
   reason: string
 ): Promise<NexusStudentOnboarding> {
@@ -159,7 +147,6 @@ export async function rejectOnboarding(
       current_step: 'documents', // Send back to documents step
     })
     .eq('student_id', studentId)
-    .eq('classroom_id', classroomId)
     .select()
     .single();
 
@@ -176,12 +163,23 @@ export async function getPendingOnboardingReviews(
 ): Promise<NexusStudentOnboardingWithStudent[]> {
   let query = supabase()
     .from('nexus_student_onboarding')
-    .select('*, student:users!student_id(id, name, email, avatar_url), classroom:nexus_classrooms!classroom_id(id, name)')
+    .select('*, student:users!student_id(id, name, email, avatar_url)')
     .eq('status', 'submitted')
     .order('submitted_at', { ascending: true });
 
   if (classroomId) {
-    query = query.eq('classroom_id', classroomId);
+    // Get student IDs enrolled in this classroom
+    const { data: enrollments } = await supabase()
+      .from('nexus_enrollments')
+      .select('user_id')
+      .eq('classroom_id', classroomId)
+      .eq('is_active', true);
+    const studentIds = (enrollments || []).map((e: any) => e.user_id);
+    if (studentIds.length > 0) {
+      query = query.in('student_id', studentIds);
+    } else {
+      return []; // No students in this classroom
+    }
   }
 
   const { data, error } = await query;
@@ -195,10 +193,21 @@ export async function getAllOnboardingRecords(
 ): Promise<NexusStudentOnboardingWithStudent[]> {
   let query = supabase()
     .from('nexus_student_onboarding')
-    .select('*, student:users!student_id(id, name, email, avatar_url), classroom:nexus_classrooms!classroom_id(id, name)');
+    .select('*, student:users!student_id(id, name, email, avatar_url)');
 
   if (classroomId) {
-    query = query.eq('classroom_id', classroomId);
+    // Get student IDs enrolled in this classroom
+    const { data: enrollments } = await supabase()
+      .from('nexus_enrollments')
+      .select('user_id')
+      .eq('classroom_id', classroomId)
+      .eq('is_active', true);
+    const studentIds = (enrollments || []).map((e: any) => e.user_id);
+    if (studentIds.length > 0) {
+      query = query.in('student_id', studentIds);
+    } else {
+      return []; // No students in this classroom
+    }
   }
 
   if (statusFilter) {
@@ -215,10 +224,9 @@ export async function getAllOnboardingRecords(
 // ============================================
 
 export async function recordNudge(
-  studentId: string,
-  classroomId: string
+  studentId: string
 ): Promise<{ allowed: boolean; nextNudgeAt: string | null }> {
-  const record = await getOnboardingStatus(studentId, classroomId);
+  const record = await getOnboardingStatus(studentId);
   if (!record) return { allowed: false, nextNudgeAt: null };
 
   // Check 24-hour cooldown
@@ -239,8 +247,7 @@ export async function recordNudge(
       last_nudge_at: new Date().toISOString(),
       nudge_count: (record.nudge_count || 0) + 1,
     })
-    .eq('student_id', studentId)
-    .eq('classroom_id', classroomId);
+    .eq('student_id', studentId);
 
   if (error) throw error;
   return { allowed: true, nextNudgeAt: null };

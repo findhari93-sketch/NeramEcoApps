@@ -42,6 +42,7 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/best-nata-coaching-online', lastModified: '2026-02-20' },
   { path: '/blog', lastModified: '2026-03-10' },
   { path: '/coaching/nata-coaching', lastModified: '2026-02-25' },
+  { path: '/coaching/nata-coaching-center', lastModified: '2026-03-30', i18n: true },
   { path: '/coaching/best-nata-coaching-india', lastModified: '2026-03-24' },
   { path: '/coaching/best-nata-coaching-chennai', lastModified: '2026-03-25' },
   { path: '/coaching/nata-coaching-chennai', lastModified: '2026-03-25' },

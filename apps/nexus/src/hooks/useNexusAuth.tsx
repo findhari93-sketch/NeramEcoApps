@@ -46,6 +46,7 @@ interface NexusAuthState {
   // Onboarding
   onboardingStatus: OnboardingStatus;
   isOnboardingComplete: boolean;
+  isProfileComplete: boolean;
   refreshOnboardingStatus: () => void;
 
   // Combined loading
@@ -76,6 +77,7 @@ export function useNexusAuth(): NexusAuthState {
   const [classrooms, setClassrooms] = useState<NexusClassroom[]>([]);
   const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(null);
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>(null);
+  const [profileComplete, setProfileComplete] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dbLoading, setDbLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +167,7 @@ export function useNexusAuth(): NexusAuthState {
         setNexusRole(data.nexusRole);
         setClassrooms(data.classrooms || []);
         setOnboardingStatus(data.onboardingStatus || null);
+        setProfileComplete(data.profileComplete ?? true);
 
         // Restore active classroom from localStorage or use first one
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
@@ -224,6 +227,7 @@ export function useNexusAuth(): NexusAuthState {
     error,
     onboardingStatus,
     isOnboardingComplete: onboardingStatus === 'approved' || nexusRole !== 'student',
+    isProfileComplete: profileComplete,
     refreshOnboardingStatus,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',
     isStudent: nexusRole === 'student',

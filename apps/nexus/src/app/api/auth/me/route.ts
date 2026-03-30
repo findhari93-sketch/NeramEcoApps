@@ -93,11 +93,12 @@ export async function GET(request: NextRequest) {
           ? 'teacher'
           : 'student';
 
-    // Check onboarding status across ALL enrolled classrooms
-    // If ANY classroom is approved (or has onboarding_type='none'), the student passes the gate
+    // Check onboarding status — single record per student
     let onboardingStatus: string | null = null;
+    let profileComplete = true;
+
     if (nexusRole === 'student' && enrollments && enrollments.length > 0) {
-      // Classrooms with onboarding_type='none' auto-approve (e.g. Revit college students)
+      // Classrooms with onboarding_type='none' auto-approve
       const hasNoOnboardingClassroom = enrollments.some(
         (e: any) => e.classroom?.onboarding_type === 'none'
       );
@@ -105,47 +106,18 @@ export async function GET(request: NextRequest) {
       if (hasNoOnboardingClassroom) {
         onboardingStatus = 'approved';
       } else {
-        const classroomIds = enrollments
-          .map((e: any) => e.classroom?.id)
-          .filter(Boolean);
-
-        if (classroomIds.length > 0) {
-          const { data: onboardings } = await supabase
-            .from('nexus_student_onboarding')
-            .select('status')
-            .eq('student_id', user.id)
-            .in('classroom_id', classroomIds);
-
-          if (onboardings && onboardings.length > 0) {
-            const statuses = onboardings.map((o: any) => o.status);
-            if (statuses.includes('approved')) {
-              onboardingStatus = 'approved';
-            } else if (statuses.includes('submitted')) {
-              onboardingStatus = 'submitted';
-            } else if (statuses.includes('in_progress')) {
-              onboardingStatus = 'in_progress';
-            } else {
-              onboardingStatus = statuses[0];
-            }
-          }
-        }
-      }
-
-      // Fallback: if no approved status found from current enrollments,
-      // check if student has ANY approved onboarding across all classrooms.
-      // Identity documents are student-level, not classroom-specific,
-      // so a prior approval should carry over when students transfer classrooms.
-      if (onboardingStatus !== 'approved') {
-        const { data: anyApproved } = await supabase
+        const { data: onboarding } = await supabase
           .from('nexus_student_onboarding')
           .select('status')
           .eq('student_id', user.id)
-          .eq('status', 'approved')
-          .limit(1);
+          .maybeSingle();
 
-        if (anyApproved && anyApproved.length > 0) {
-          onboardingStatus = 'approved';
-        }
+        onboardingStatus = onboarding?.status || null;
+      }
+
+      // Check profile completeness (for the profile gate)
+      if (onboardingStatus === 'approved') {
+        profileComplete = !!(user.phone && user.date_of_birth && user.gender);
       }
     }
 
@@ -160,6 +132,7 @@ export async function GET(request: NextRequest) {
       },
       nexusRole,
       onboardingStatus,
+      profileComplete,
       classrooms: (enrollments || []).map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,

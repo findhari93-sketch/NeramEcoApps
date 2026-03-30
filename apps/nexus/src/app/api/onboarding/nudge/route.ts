@@ -16,7 +16,7 @@ const WHATSAPP_NUMBER = '919176137043';
 /**
  * POST /api/onboarding/nudge
  * Send a reminder to reviewers (24h cooldown)
- * Body: { classroom_id }
+ * Body: {}
  */
 export async function POST(request: NextRequest) {
   try {
@@ -33,15 +33,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const body = await request.json();
-    const { classroom_id } = body;
-
-    if (!classroom_id) {
-      return NextResponse.json({ error: 'classroom_id required' }, { status: 400 });
-    }
-
     // Check cooldown and record nudge
-    const { allowed, nextNudgeAt } = await recordNudge(user.id, classroom_id);
+    const { allowed, nextNudgeAt } = await recordNudge(user.id);
 
     if (!allowed) {
       return NextResponse.json({

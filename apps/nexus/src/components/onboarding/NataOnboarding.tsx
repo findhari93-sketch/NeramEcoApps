@@ -36,7 +36,6 @@ interface AttemptSelection {
 }
 
 interface NataOnboardingProps {
-  classroomId: string;
   getToken: () => Promise<string | null>;
   examState: string;
   examDates: any[];
@@ -53,7 +52,6 @@ const NATA_ATTEMPTS: { phase: string; attempt: number; label: string }[] = [
 ];
 
 export default function NataOnboarding({
-  classroomId,
   getToken,
   examState,
   examDates,
@@ -121,7 +119,6 @@ export default function NataOnboarding({
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('classroom_id', classroomId);
       formData.append('title', template?.name || uploadTarget.type);
       formData.append('category', 'exam');
       if (template) formData.append('template_id', template.id);
@@ -165,7 +162,6 @@ export default function NataOnboarding({
           method: 'POST',
           headers,
           body: JSON.stringify({
-            classroom_id: classroomId,
             exam_type: 'nata',
             is_writing: true,
             application_number: applicationNumber.trim(),
@@ -179,7 +175,6 @@ export default function NataOnboarding({
           method: 'POST',
           headers,
           body: JSON.stringify({
-            classroom_id: classroomId,
             exam_type: 'nata',
             phase: attempt.phase,
             attempt_number: attempt.attempt,
@@ -193,7 +188,7 @@ export default function NataOnboarding({
       if (isCompleted && aptitudeScore && selectedAttempts.length > 0) {
         // Get the created attempt to get its ID
         const attemptsRes = await fetch(
-          `/api/documents/exam-attempts?classroom=${classroomId}&exam_type=nata`,
+          `/api/documents/exam-attempts?exam_type=nata`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (attemptsRes.ok) {

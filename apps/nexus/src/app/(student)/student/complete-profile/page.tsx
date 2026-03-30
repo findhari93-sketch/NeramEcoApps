@@ -63,7 +63,8 @@ interface FeeData {
 
 export default function CompleteProfilePage() {
   const router = useRouter();
-  const { getToken, loading: authLoading } = useNexusAuthContext();
+  const { getToken, loading: authLoading, isProfileComplete, refreshOnboardingStatus } = useNexusAuthContext();
+  const isMandatory = !isProfileComplete;
   const [activeStep, setActiveStep] = useState(0);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [feeData, setFeeData] = useState<FeeData | null>(null);
@@ -162,6 +163,13 @@ export default function CompleteProfilePage() {
 
       if (activeStep === 0) {
         // Personal
+        if (isMandatory) {
+          if (!phone || !dob || !gender) {
+            setError('Phone, date of birth, and gender are required.');
+            setSaving(false);
+            return;
+          }
+        }
         userUpdates = { phone: phone || null, date_of_birth: dob || null, gender: gender || null, first_name: firstName || null };
         leadUpdates = { father_name: fatherName || null };
       } else if (activeStep === 1) {
@@ -266,6 +274,27 @@ export default function CompleteProfilePage() {
         Please fill in your details so we can serve you better. You can save each section and come back later.
       </Typography>
 
+      {isMandatory && (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            mb: 3,
+            borderRadius: 2,
+            bgcolor: 'primary.50',
+            border: '1px solid',
+            borderColor: 'primary.100',
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'primary.main', mb: 0.5 }}>
+            Almost there!
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            We need a few more details to complete your profile. This helps us serve you better and is required to continue.
+          </Typography>
+        </Paper>
+      )}
+
       <Stepper activeStep={activeStep} sx={{ mb: 3 }} alternativeLabel>
         {STEPS.map((label) => (
           <Step key={label}>
@@ -281,7 +310,7 @@ export default function CompleteProfilePage() {
             <Typography variant="subtitle2" fontWeight={700}>Personal Details</Typography>
             <TextField
               label="Phone Number" value={phone} onChange={(e) => setPhone(e.target.value)}
-              fullWidth size="small" placeholder="+91XXXXXXXXXX"
+              fullWidth size="small" placeholder="+91XXXXXXXXXX" required={isMandatory}
               helperText="Your primary contact number (WhatsApp preferred)"
             />
             <TextField
@@ -295,11 +324,11 @@ export default function CompleteProfilePage() {
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
                 label="Date of Birth" type="date" value={dob} onChange={(e) => setDob(e.target.value)}
-                fullWidth size="small" InputLabelProps={{ shrink: true }}
+                fullWidth size="small" InputLabelProps={{ shrink: true }} required={isMandatory}
               />
               <TextField
                 label="Gender" select value={gender} onChange={(e) => setGender(e.target.value)}
-                fullWidth size="small"
+                fullWidth size="small" required={isMandatory}
               >
                 <MenuItem value="">-- Select --</MenuItem>
                 {GENDER_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
@@ -484,7 +513,7 @@ export default function CompleteProfilePage() {
             Back
           </Button>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {activeStep < 3 && (
+            {activeStep < 3 && !isMandatory && (
               <Button
                 variant="text"
                 onClick={() => { setActiveStep((prev) => prev + 1); setError(''); setSuccess(''); }}
@@ -506,7 +535,7 @@ export default function CompleteProfilePage() {
               <Button
                 variant="contained"
                 startIcon={<ArrowBackIcon />}
-                onClick={() => router.push('/student/dashboard')}
+                onClick={() => { refreshOnboardingStatus(); router.push('/student/dashboard'); }}
                 sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600, px: 3 }}
               >
                 Back to Dashboard

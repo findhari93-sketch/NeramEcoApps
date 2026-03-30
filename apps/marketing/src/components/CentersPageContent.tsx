@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
   Container,
@@ -66,6 +66,7 @@ export default function CentersPageContent() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const params = useParams();
+  const router = useRouter();
   const locale = (params?.locale as string) || 'en';
 
   const [centers, setCenters] = useState<OfflineCenter[]>([]);
@@ -284,7 +285,11 @@ export default function CentersPageContent() {
               variant="contained"
               color="success"
               component={Link}
-              href={`/${locale}/apply?mode=online`}
+              href={locale === 'en' ? '/apply' : `/${locale}/apply`}
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault();
+                router.push(`${locale === 'en' ? '' : '/' + locale}/apply?mode=online`);
+              }}
               sx={{ minHeight: 48, minWidth: 180, whiteSpace: 'nowrap' }}
             >
               {t('applyOnline') || 'Apply for Online Classes'}
@@ -484,7 +489,11 @@ export default function CentersPageContent() {
                       color="secondary"
                       startIcon={<SchoolOutlined />}
                       component={Link}
-                      href={`/${locale}/apply?center=${center.slug}`}
+                      href={locale === 'en' ? '/apply' : `/${locale}/apply`}
+                      onClick={(e: React.MouseEvent) => {
+                        e.preventDefault();
+                        router.push(`${locale === 'en' ? '' : '/' + locale}/apply?center=${center.slug}`);
+                      }}
                       fullWidth
                       sx={{ minHeight: 48 }}
                     >

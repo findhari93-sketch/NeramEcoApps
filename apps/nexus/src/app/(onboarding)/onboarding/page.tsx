@@ -12,8 +12,9 @@ import {
   IconButton,
   Tooltip,
 } from '@neram/ui';
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import GraphAvatar from '@/components/GraphAvatar';
 import WelcomeStep from '@/components/onboarding/WelcomeStep';
 import DocumentsStep from '@/components/onboarding/DocumentsStep';
 import StudentInfoStep from '@/components/onboarding/StudentInfoStep';
@@ -47,7 +48,7 @@ interface OnboardingData {
 }
 
 export default function OnboardingPage() {
-  const { user, activeClassroom, getToken, refreshOnboardingStatus, onboardingStatus, signOut } =
+  const { user, getToken, refreshOnboardingStatus, onboardingStatus, signOut } =
     useNexusAuthContext();
 
   const [currentStep, setCurrentStep] = useState<OnboardingStepType>('welcome');
@@ -72,14 +73,13 @@ export default function OnboardingPage() {
 
   // Fetch onboarding status
   const fetchStatus = useCallback(async () => {
-    if (!activeClassroom) return;
     setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
 
       const res = await fetch(
-        `/api/onboarding?classroom=${activeClassroom.id}`,
+        `/api/onboarding`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -107,7 +107,7 @@ export default function OnboardingPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, getToken]);
+  }, [getToken]);
 
   useEffect(() => {
     fetchStatus();
@@ -116,13 +116,11 @@ export default function OnboardingPage() {
   // Navigate to next step
   const goToStep = useCallback(
     async (step: OnboardingStepType, extraData?: Record<string, unknown>) => {
-      if (!activeClassroom) return;
       try {
         const token = await getToken();
         if (!token) return;
 
         const body: Record<string, unknown> = {
-          classroom_id: activeClassroom.id,
           action: step === 'pending_review' ? 'submit' : 'update_step',
           step,
         };
@@ -134,7 +132,7 @@ export default function OnboardingPage() {
           await fetch('/api/onboarding', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ classroom_id: activeClassroom.id, action: 'start' }),
+            body: JSON.stringify({ action: 'start' }),
           });
         }
 
@@ -181,7 +179,7 @@ export default function OnboardingPage() {
         setError(err instanceof Error ? err.message : 'Something went wrong');
       }
     },
-    [activeClassroom, getToken, currentStep]
+    [getToken, currentStep]
   );
 
   // Get visible step index (skip exam_status if not applicable)
@@ -209,24 +207,8 @@ export default function OnboardingPage() {
 
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      {/* Header with logo and sign-out */}
-      <Box sx={{ position: 'relative', textAlign: 'center', mb: 2 }}>
-        <Tooltip title="Sign out">
-          <IconButton
-            onClick={signOut}
-            size="small"
-            sx={{
-              position: 'absolute',
-              right: 0,
-              top: 0,
-              color: 'text.secondary',
-              '&:hover': { color: 'error.main' },
-            }}
-            aria-label="Sign out"
-          >
-            <LogoutOutlinedIcon sx={{ fontSize: '1.2rem' }} />
-          </IconButton>
-        </Tooltip>
+      {/* Header with logo */}
+      <Box sx={{ textAlign: 'center', mb: 1 }}>
         <Typography
           variant="h5"
           sx={{ fontWeight: 700, color: 'primary.main', letterSpacing: '-0.02em' }}
@@ -236,6 +218,67 @@ export default function OnboardingPage() {
         <Typography variant="body2" color="text.secondary">
           Student Onboarding
         </Typography>
+      </Box>
+
+      {/* Logged-in user identity bar */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          mb: 2,
+          px: 2,
+          py: 1,
+          borderRadius: 2,
+          bgcolor: 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <GraphAvatar self name={user?.name} size={36} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+              lineHeight: 1.3,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {user?.name || 'Student'}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {user?.email || ''}
+          </Typography>
+        </Box>
+        <Tooltip title="Sign out & switch account">
+          <IconButton
+            onClick={signOut}
+            size="small"
+            sx={{
+              color: 'text.secondary',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1.5,
+              px: 1,
+              '&:hover': { color: 'error.main', borderColor: 'error.light', bgcolor: 'error.50' },
+            }}
+            aria-label="Sign out and switch account"
+          >
+            <SwapHorizIcon sx={{ fontSize: '1.1rem' }} />
+          </IconButton>
+        </Tooltip>
       </Box>
 
       {/* Stepper — compact on mobile */}
@@ -281,7 +324,6 @@ export default function OnboardingPage() {
 
         {currentStep === 'documents' && (
           <DocumentsStep
-            classroomId={activeClassroom?.id || ''}
             templates={requiredTemplates}
             uploadedDocs={uploadedDocs}
             getToken={getToken}
@@ -307,7 +349,6 @@ export default function OnboardingPage() {
 
         {currentStep === 'exam_status' && (
           <ExamStatusStep
-            classroomId={activeClassroom?.id || ''}
             getToken={getToken}
             onNext={() => goToStep('device_setup')}
             onBack={() => setCurrentStep('student_info')}
@@ -325,7 +366,6 @@ export default function OnboardingPage() {
 
         {currentStep === 'pending_review' && (
           <PendingReviewStep
-            classroomId={activeClassroom?.id || ''}
             getToken={getToken}
             onboardingStatus={onboardingStatus}
             onApproved={() => refreshOnboardingStatus()}

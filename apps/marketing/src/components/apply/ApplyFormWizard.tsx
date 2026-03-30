@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Container,
@@ -156,6 +157,7 @@ function FormWizardInner() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { user } = useFirebaseAuth();
+  const router = useRouter();
 
   const {
     formData,
@@ -339,9 +341,9 @@ function FormWizardInner() {
             });
           }
         }
-        setApplicationNumber(result.data.application_number || (isEditing ? 'Updated' : 'NERAM-PENDING'));
-        setSubmitted(true);
         clearSavedForm();
+        const appNum = result.data.application_number || (isEditing ? 'Updated' : 'NERAM-PENDING');
+        router.push(`/thank-you?app=${encodeURIComponent(appNum)}`);
       } else {
         console.error('Application submission failed:', result);
         if (result.debug) {

@@ -34,6 +34,16 @@ export default function robots(): MetadataRoute.Robots {
           '/members/*',
           '/NATA_Application_Form_*',
           // Note: removed '/&' and '/$' — '/$' was blocking the homepage for generic crawlers
+          // Prevent crawling of URL variants with query parameters
+          // Fixes GSC "Alternate page with proper canonical tag" (crawl budget waste)
+          '/*?center=*',
+          '/*?course=*',
+          '/*?mode=*',
+          '/*?trk=*',
+          '/*?utm_*',
+          '/*?fbclid=*',
+          '/*?gclid=*',
+          '/*?ref=*',
         ],
       },
       // AI Crawlers — ALLOW for AEO (AI Engine Optimization)

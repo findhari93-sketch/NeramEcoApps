@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
   Container,
@@ -36,6 +36,7 @@ interface CenterDetailPageContentProps {
 
 export default function CenterDetailPageContent({ center }: CenterDetailPageContentProps) {
   const params = useParams();
+  const router = useRouter();
   const locale = (params.locale as string) || 'en';
   const { status } = useApplicationStatus();
   const { goToApp } = useGoToApp();
@@ -374,7 +375,11 @@ export default function CenterDetailPageContent({ center }: CenterDetailPageCont
                   ) : (
                     <Button
                       component={Link}
-                      href={`/${locale}/apply?center=${center.slug}`}
+                      href={locale === 'en' ? '/apply' : `/${locale}/apply`}
+                      onClick={(e: React.MouseEvent) => {
+                        e.preventDefault();
+                        router.push(`${locale === 'en' ? '' : '/' + locale}/apply?center=${center.slug}`);
+                      }}
                       variant="contained"
                       size="large"
                       fullWidth

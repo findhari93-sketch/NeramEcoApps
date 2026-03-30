@@ -33,7 +33,6 @@ const EXAM_STATES: { value: ExamState; label: string; description: string }[] = 
 ];
 
 interface ExamStatusStepProps {
-  classroomId: string;
   getToken: () => Promise<string | null>;
   onNext: () => void;
   onBack: () => void;
@@ -42,7 +41,7 @@ interface ExamStatusStepProps {
 // Sub-steps within the exam flow
 type SubStep = 'select' | 'nata_detail' | 'jee_detail';
 
-export default function ExamStatusStep({ classroomId, getToken, onNext, onBack }: ExamStatusStepProps) {
+export default function ExamStatusStep({ getToken, onNext, onBack }: ExamStatusStepProps) {
   const [selections, setSelections] = useState<ExamSelection[]>([
     { exam_type: 'nata', enabled: false, state: 'still_thinking' },
     { exam_type: 'jee', enabled: false, state: 'still_thinking' },
@@ -109,7 +108,6 @@ export default function ExamStatusStep({ classroomId, getToken, onNext, onBack }
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            classroom_id: classroomId,
             exam_type: exam.exam_type,
             is_writing: exam.state !== 'still_thinking',
           }),
@@ -119,7 +117,6 @@ export default function ExamStatusStep({ classroomId, getToken, onNext, onBack }
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            classroom_id: classroomId,
             exam_type: exam.exam_type,
             state: exam.state,
           }),
@@ -159,7 +156,6 @@ export default function ExamStatusStep({ classroomId, getToken, onNext, onBack }
   if (subStep === 'nata_detail') {
     return (
       <NataOnboarding
-        classroomId={classroomId}
         getToken={getToken}
         examState={nata.state}
         examDates={examDates.filter((d: any) => d.exam_type === 'nata')}
@@ -174,7 +170,6 @@ export default function ExamStatusStep({ classroomId, getToken, onNext, onBack }
   if (subStep === 'jee_detail') {
     return (
       <JeeOnboarding
-        classroomId={classroomId}
         getToken={getToken}
         examState={jee.state}
         examDates={examDates.filter((d: any) => d.exam_type === 'jee')}

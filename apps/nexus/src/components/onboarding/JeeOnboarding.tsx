@@ -34,7 +34,6 @@ interface SessionSelection {
 }
 
 interface JeeOnboardingProps {
-  classroomId: string;
   getToken: () => Promise<string | null>;
   examState: string;
   examDates: any[];
@@ -44,7 +43,6 @@ interface JeeOnboardingProps {
 }
 
 export default function JeeOnboarding({
-  classroomId,
   getToken,
   examState,
   examDates,
@@ -118,7 +116,6 @@ export default function JeeOnboarding({
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('classroom_id', classroomId);
       formData.append('title', template?.name || uploadTarget.type);
       formData.append('category', 'exam');
       if (template) formData.append('template_id', template.id);
@@ -161,7 +158,6 @@ export default function JeeOnboarding({
           method: 'POST',
           headers,
           body: JSON.stringify({
-            classroom_id: classroomId,
             exam_type: 'jee',
             is_writing: true,
             application_number: applicationNumber.trim(),
@@ -175,7 +171,6 @@ export default function JeeOnboarding({
           method: 'POST',
           headers,
           body: JSON.stringify({
-            classroom_id: classroomId,
             exam_type: 'jee',
             phase: session.phase,
             attempt_number: 1,

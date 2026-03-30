@@ -48,11 +48,17 @@ export async function GET(request: NextRequest) {
           .from('nexus_student_documents')
           .select('id, title, file_url, file_type, status, template_id, sharepoint_web_url')
           .eq('student_id', record.student_id)
-          .eq('classroom_id', record.classroom_id)
           .eq('is_current', true)
           .eq('is_deleted', false);
 
-        return { ...record, documents: docs || [] };
+        // Fetch student's enrolled classrooms
+        const { data: studentEnrollments } = await db
+          .from('nexus_enrollments')
+          .select('classroom:nexus_classrooms(id, name)')
+          .eq('user_id', record.student_id)
+          .eq('is_active', true);
+
+        return { ...record, documents: docs || [], classrooms: (studentEnrollments || []).map((e: any) => e.classroom).filter(Boolean) };
       })
     );
 
@@ -67,7 +73,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/onboarding/review
  * Approve or reject a student's onboarding
- * Body: { student_id, classroom_id, action: 'approve' | 'reject', reason? }
+ * Body: { student_id, action: 'approve' | 'reject', reason? }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -85,10 +91,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { student_id, classroom_id, action, reason } = body;
+    const { student_id, action, reason } = body;
 
-    if (!student_id || !classroom_id || !action) {
-      return NextResponse.json({ error: 'student_id, classroom_id, action required' }, { status: 400 });
+    if (!student_id || !action) {
+      return NextResponse.json({ error: 'student_id and action required' }, { status: 400 });
     }
 
     // Verify reviewer is teacher/admin (management-level access)
@@ -98,12 +104,12 @@ export async function POST(request: NextRequest) {
 
     let result;
     if (action === 'approve') {
-      result = await approveOnboarding(student_id, classroom_id, reviewer.id);
+      result = await approveOnboarding(student_id, reviewer.id);
     } else if (action === 'reject') {
       if (!reason) {
         return NextResponse.json({ error: 'Rejection reason required' }, { status: 400 });
       }
-      result = await rejectOnboarding(student_id, classroom_id, reviewer.id, reason);
+      result = await rejectOnboarding(student_id, reviewer.id, reason);
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }

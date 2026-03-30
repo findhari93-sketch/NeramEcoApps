@@ -17,7 +17,6 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 
 interface PendingReviewStepProps {
-  classroomId: string;
   getToken: () => Promise<string | null>;
   onboardingStatus: string | null;
   onApproved: () => void;
@@ -26,7 +25,6 @@ interface PendingReviewStepProps {
 const APP_ONBOARDING_URL = `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com'}/onboarding`;
 
 export default function PendingReviewStep({
-  classroomId,
   getToken,
   onboardingStatus,
   onApproved,
@@ -76,7 +74,7 @@ export default function PendingReviewStep({
       try {
         const token = await getToken();
         if (!token) return;
-        const res = await fetch(`/api/onboarding?classroom=${classroomId}`, {
+        const res = await fetch(`/api/onboarding`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -90,7 +88,7 @@ export default function PendingReviewStep({
       }
     }
     fetchDetails();
-  }, [classroomId, getToken]);
+  }, [getToken]);
 
   const handleNudge = async () => {
     setNudging(true);
@@ -101,7 +99,7 @@ export default function PendingReviewStep({
       const res = await fetch('/api/onboarding/nudge', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroom_id: classroomId }),
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();

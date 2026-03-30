@@ -27,7 +27,7 @@ export default function RoleGuard({
 }: RoleGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, nexusRole, classrooms, loading, isOnboardingComplete } = useNexusAuthContext();
+  const { user, nexusRole, classrooms, loading, isOnboardingComplete, isProfileComplete } = useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
@@ -52,8 +52,22 @@ export default function RoleGuard({
       !pathname.startsWith('/onboarding')
     ) {
       router.push('/onboarding');
+      return;
     }
-  }, [user, nexusRole, loading, allowedRoles, redirectTo, router, isOnboardingComplete, skipOnboardingCheck, classrooms, pathname]);
+
+    // Profile completion gate: redirect approved students with missing profile fields
+    if (
+      !skipOnboardingCheck &&
+      nexusRole === 'student' &&
+      classrooms.length > 0 &&
+      isOnboardingComplete &&
+      !isProfileComplete &&
+      !pathname.startsWith('/student/complete-profile')
+    ) {
+      router.push('/student/complete-profile');
+      return;
+    }
+  }, [user, nexusRole, loading, allowedRoles, redirectTo, router, isOnboardingComplete, isProfileComplete, skipOnboardingCheck, classrooms, pathname]);
 
   if (loading) {
     return (
@@ -90,6 +104,17 @@ export default function RoleGuard({
     nexusRole === 'student' &&
     !isOnboardingComplete &&
     !pathname.startsWith('/onboarding')
+  ) {
+    return null;
+  }
+
+  // Student hasn't completed profile — don't render content (redirect in progress)
+  if (
+    !skipOnboardingCheck &&
+    nexusRole === 'student' &&
+    isOnboardingComplete &&
+    !isProfileComplete &&
+    !pathname.startsWith('/student/complete-profile')
   ) {
     return null;
   }

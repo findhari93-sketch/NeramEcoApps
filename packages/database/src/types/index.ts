@@ -4604,7 +4604,7 @@ export type OnboardingStatus = 'in_progress' | 'submitted' | 'approved' | 'rejec
 export interface NexusStudentOnboarding {
   id: string;
   student_id: string;
-  classroom_id: string;
+  classroom_id: string | null;
   current_step: OnboardingStep;
   current_standard: DocumentStandard | null;
   academic_year: string | null;
