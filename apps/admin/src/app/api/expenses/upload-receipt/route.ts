@@ -14,6 +14,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File is required' }, { status: 400 });
     }
 
+    // Validate file type and size
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: 'Only image files (JPEG, PNG, WebP, GIF) are allowed' }, { status: 400 });
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File size must be under 5MB' }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdminClient();
 
     const fileExt = file.name.split('.').pop();

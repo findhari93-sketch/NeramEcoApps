@@ -203,7 +203,7 @@ export default function ExpensesPage() {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell padding="checkbox"><Checkbox checked={selected.length > 0} onChange={(_, c) => handleSelectAll(c)} /></TableCell>
+                  <TableCell padding="checkbox"><Checkbox checked={selected.length > 0 && selected.length === transactions.filter(t => t.type === 'expense' && t.settlement_status === 'pending').length} indeterminate={selected.length > 0 && selected.length < transactions.filter(t => t.type === 'expense' && t.settlement_status === 'pending').length} onChange={(_, c) => handleSelectAll(c)} /></TableCell>
                   <TableCell>Date</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>Category</TableCell>

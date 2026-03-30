@@ -69,6 +69,10 @@ export default function AddExpenseDialog({
       setError('Please fill all required fields');
       return;
     }
+    if (parseFloat(amount) <= 0) {
+      setError('Amount must be greater than 0');
+      return;
+    }
 
     setSaving(true);
     setError('');

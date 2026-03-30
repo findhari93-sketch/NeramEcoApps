@@ -33,9 +33,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const body = await request.json();
     const supabase = getSupabaseAdminClient();
 
+    // Whitelist allowed fields to prevent unauthorized settlement_status changes
+    const allowed = ['type', 'category', 'amount', 'description', 'transaction_date', 'assignment_id', 'receipt_url', 'notes'];
+    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+    for (const key of allowed) {
+      if (body[key] !== undefined) updates[key] = body[key];
+    }
+
     const { data, error } = await supabase
       .from('financial_transactions')
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', params.id)
       .select()
       .single();

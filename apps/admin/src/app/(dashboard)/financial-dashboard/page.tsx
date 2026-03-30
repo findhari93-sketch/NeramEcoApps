@@ -50,6 +50,10 @@ export default function FinancialDashboardPage() {
   const [endDate, setEndDate] = useState(defaultEnd);
 
   const fetchDashboard = useCallback(async () => {
+    if (startDate > endDate) {
+      setError('Start date must be before end date');
+      return;
+    }
     setLoading(true); setError('');
     try {
       const res = await fetch(`/api/financial-dashboard?startDate=${startDate}&endDate=${endDate}`);

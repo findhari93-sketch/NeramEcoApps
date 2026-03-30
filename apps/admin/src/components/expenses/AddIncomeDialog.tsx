@@ -47,6 +47,10 @@ export default function AddIncomeDialog({ open, onClose, onSaved, adminId, editD
       setError('Please fill all required fields');
       return;
     }
+    if (parseFloat(amount) <= 0) {
+      setError('Amount must be greater than 0');
+      return;
+    }
 
     setSaving(true);
     setError('');
