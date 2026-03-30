@@ -115,7 +115,7 @@ export default function VideoPlayer({
           hasTriggeredQuizRef.current.add(i);
           isRewatchingRef.current = false;
           rewatchMaxTimeRef.current = 0;
-          playerRef.current?.pauseVideo?.();
+          // Don't auto-pause — parent shows a non-blocking quiz notification
           onSectionEndRef.current(i);
           return;
         }

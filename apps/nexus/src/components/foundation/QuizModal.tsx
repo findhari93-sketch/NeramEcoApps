@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -46,8 +46,10 @@ interface QuizModalProps {
   onClose: () => void;
   onSubmit: (answers: Record<string, string>) => Promise<QuizResult>;
   onRetry: () => void;
+  /** In-place retry: reset answers and stay in the drawer (no rewatch) */
+  onRetryQuiz?: () => void;
   onContinue: () => void;
-  /** If true, the student can dismiss the quiz (e.g., redo on a passed section) */
+  /** If true, the student can dismiss the quiz. Defaults to true. */
   dismissable?: boolean;
 }
 
@@ -58,27 +60,16 @@ export default function QuizModal({
   onClose,
   onSubmit,
   onRetry,
+  onRetryQuiz,
   onContinue,
-  dismissable = false,
+  dismissable = true,
 }: QuizModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const autoContinueRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Auto-continue after pass (1.5s delay to show success animation)
-  useEffect(() => {
-    if (result?.passed && open) {
-      autoContinueRef.current = setTimeout(() => {
-        handleContinue();
-      }, 1500);
-    }
-    return () => {
-      if (autoContinueRef.current) clearTimeout(autoContinueRef.current);
-    };
-  }, [result, open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // No auto-continue — student clicks "Continue" manually
 
   const handleAnswerChange = useCallback((questionId: string, answer: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: answer }));
@@ -101,6 +92,12 @@ export default function QuizModal({
     setAnswers({});
     setResult(null);
     onRetry();
+  };
+
+  const handleRetryInPlace = () => {
+    setAnswers({});
+    setResult(null);
+    onRetryQuiz?.();
   };
 
   const handleContinue = () => {
@@ -274,20 +271,38 @@ export default function QuizModal({
             Continue
           </Button>
         ) : (
-          <Button
-            variant="contained"
-            onClick={handleRetry}
-            startIcon={<ReplayIcon />}
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              fontWeight: 600,
-              px: 3,
-              minHeight: 44,
-            }}
-          >
-            Try Again
-          </Button>
+          <>
+            {onRetryQuiz && (
+              <Button
+                variant="contained"
+                onClick={handleRetryInPlace}
+                startIcon={<ReplayIcon />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 3,
+                  minHeight: 44,
+                }}
+              >
+                Retry Quiz
+              </Button>
+            )}
+            <Button
+              variant={onRetryQuiz ? 'outlined' : 'contained'}
+              onClick={handleRetry}
+              startIcon={<ReplayIcon />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                minHeight: 44,
+              }}
+            >
+              {onRetryQuiz ? 'Rewatch & Retry' : 'Try Again'}
+            </Button>
+          </>
         )}
       </Box>
     </Box>

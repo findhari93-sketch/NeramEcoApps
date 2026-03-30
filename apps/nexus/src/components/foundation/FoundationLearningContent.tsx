@@ -29,6 +29,7 @@ import VideoPlayer from '@/components/foundation/VideoPlayer';
 import SharePointPlayer from '@/components/foundation/SharePointPlayer';
 import SectionList from '@/components/foundation/SectionList';
 import QuizModal from '@/components/foundation/QuizModal';
+import QuizReadyChip from '@/components/foundation/QuizReadyChip';
 import NoteEditor from '@/components/foundation/NoteEditor';
 import ChapterFeedback from '@/components/foundation/ChapterFeedback';
 import FoundationProgressBar from '@/components/foundation/ProgressBar';
@@ -72,7 +73,7 @@ export default function FoundationLearningContent({
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [quizOpen, setQuizOpen] = useState(false);
   const [quizSectionIndex, setQuizSectionIndex] = useState(0);
-  const [quizDismissable, setQuizDismissable] = useState(false);
+  const [quizPendingSectionIndex, setQuizPendingSectionIndex] = useState<number | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>('watch');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sections');
   const [msToken, setMsToken] = useState<string | null>(null);
@@ -329,18 +330,24 @@ export default function FoundationLearningContent({
   }, [quizOpen]);
 
   const handleSectionEnd = useCallback((sectionIndex: number) => {
-    const player = (window as any).__foundationPlayer;
-    if (player?.pause) player.pause();
-    // Track pause for watch analytics
+    // Non-blocking: show quiz notification chip instead of immediately opening modal
+    // Video keeps playing — student opens quiz when ready
     const section = data?.sections[sectionIndex];
     if (section) {
       const tracker = watchTracker.current.get(section.id);
       if (tracker) tracker.pauseCount += 1;
     }
-    setQuizSectionIndex(sectionIndex);
-    setQuizDismissable(false);
-    setQuizOpen(true);
+    setQuizPendingSectionIndex(sectionIndex);
   }, [data]);
+
+  const handleOpenPendingQuiz = useCallback((index: number) => {
+    // Student explicitly chose to take the quiz — now pause video and open drawer
+    const player = (window as any).__foundationPlayer;
+    if (player?.pause) player.pause();
+    setQuizSectionIndex(index);
+    setQuizOpen(true);
+    setQuizPendingSectionIndex(null);
+  }, []);
 
   const handleSectionClick = useCallback((index: number) => {
     setCurrentSectionIndex(index);
@@ -395,7 +402,7 @@ export default function FoundationLearningContent({
     return result;
   }, [data, quizSectionIndex, getToken, fetchChapter]);
 
-  const handleQuizRetry = useCallback(() => {
+  const handleQuizRetryWithRewatch = useCallback(() => {
     setQuizOpen(false);
     const section = data?.sections[quizSectionIndex];
     if (section) {
@@ -408,6 +415,12 @@ export default function FoundationLearningContent({
       }
     }
   }, [data, quizSectionIndex]);
+
+  // In-place retry: stay in the quiz drawer, just reset answers (no rewatch)
+  const handleQuizRetryInPlace = useCallback(() => {
+    // QuizModal handles answer reset internally via its onRetryQuiz prop
+    // Nothing to do here — the drawer stays open
+  }, []);
 
   const handleQuizContinue = useCallback(() => {
     setQuizOpen(false);
@@ -499,6 +512,8 @@ export default function FoundationLearningContent({
       chapterNumber={chapter.chapter_number}
       onSectionClick={handleSectionClick}
       onRedoQuiz={handleRedoQuiz}
+      pendingQuizSectionIndex={quizPendingSectionIndex}
+      onTakeQuiz={handleOpenPendingQuiz}
     />
   );
 
@@ -564,6 +579,13 @@ export default function FoundationLearningContent({
           />
         )}
       </Box>
+      {/* Non-blocking quiz notification over video */}
+      <QuizReadyChip
+        visible={quizPendingSectionIndex !== null}
+        sectionTitle={quizPendingSectionIndex !== null ? sections[quizPendingSectionIndex]?.title ?? '' : ''}
+        onOpen={() => quizPendingSectionIndex !== null && handleOpenPendingQuiz(quizPendingSectionIndex)}
+        onDismiss={() => setQuizPendingSectionIndex(null)}
+      />
     </Box>
   );
 
@@ -835,14 +857,17 @@ export default function FoundationLearningContent({
           open={quizOpen}
           sectionTitle={sections[quizSectionIndex].title}
           questions={sections[quizSectionIndex].quiz_questions}
-          dismissable={quizDismissable}
+          dismissable
           onClose={() => {
             setQuizOpen(false);
+            // Re-show the chip so student can reopen the quiz later
+            setQuizPendingSectionIndex(quizSectionIndex);
             const player = (window as any).__foundationPlayer;
             if (player?.play) player.play();
           }}
           onSubmit={handleQuizSubmit}
-          onRetry={handleQuizRetry}
+          onRetry={handleQuizRetryWithRewatch}
+          onRetryQuiz={handleQuizRetryInPlace}
           onContinue={handleQuizContinue}
         />
       )}

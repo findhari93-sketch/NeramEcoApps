@@ -7,6 +7,7 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import ReplayIcon from '@mui/icons-material/Replay';
+import TouchAppOutlinedIcon from '@mui/icons-material/TouchAppOutlined';
 import type { NexusFoundationSectionWithQuiz } from '@neram/database/types';
 
 interface SectionListProps {
@@ -15,6 +16,10 @@ interface SectionListProps {
   chapterNumber?: number;
   onSectionClick: (index: number) => void;
   onRedoQuiz?: (index: number) => void;
+  /** Index of section whose quiz is ready but not yet opened */
+  pendingQuizSectionIndex?: number | null;
+  /** Called when student taps "Take Quiz" for a pending section */
+  onTakeQuiz?: (index: number) => void;
 }
 
 function formatTimestamp(totalSeconds: number): string {
@@ -39,6 +44,8 @@ export default function SectionList({
   chapterNumber,
   onSectionClick,
   onRedoQuiz,
+  pendingQuizSectionIndex,
+  onTakeQuiz,
 }: SectionListProps) {
   const theme = useTheme();
 
@@ -57,6 +64,7 @@ export default function SectionList({
         const isLocked = !isPassed && index > 0 && !sections[index - 1]?.quiz_attempt?.passed;
         const isFirst = index === 0;
         const isAccessible = isFirst || !isLocked;
+        const isQuizPending = index === pendingQuizSectionIndex && !isPassed;
 
         return (
           <Box
@@ -135,7 +143,7 @@ export default function SectionList({
               </Typography>
             </Box>
 
-            {/* Quiz indicator with score */}
+            {/* Quiz indicator / Take Quiz button */}
             {section.quiz_questions.length > 0 && (
               <Box
                 sx={{
@@ -145,45 +153,80 @@ export default function SectionList({
                   flexShrink: 0,
                 }}
               >
-                <QuizOutlinedIcon
-                  sx={{
-                    fontSize: '0.9rem',
-                    color: isPassed ? theme.palette.success.main : theme.palette.text.secondary,
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontSize: '0.65rem',
-                    color: isPassed ? theme.palette.success.main : 'text.secondary',
-                    fontWeight: isPassed ? 600 : 400,
-                  }}
-                >
-                  {isPassed
-                    ? `${Math.round(section.quiz_attempt?.score_pct ?? 100)}%`
-                    : section.min_questions_to_pass
-                      ? `${section.min_questions_to_pass}/${section.quiz_questions.length}`
-                      : `${section.quiz_questions.length}Q`
-                  }
-                </Typography>
-                {isPassed && onRedoQuiz && (
-                  <Tooltip title="Redo section to improve score">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRedoQuiz(index);
-                      }}
+                {isQuizPending && onTakeQuiz ? (
+                  <Box
+                    component="button"
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      onTakeQuiz(index);
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      px: 1.25,
+                      py: 0.5,
+                      borderRadius: 1.5,
+                      border: 'none',
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      color: theme.palette.primary.main,
+                      cursor: 'pointer',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      minHeight: 32,
+                      transition: 'background-color 150ms ease',
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.18),
+                      },
+                    }}
+                  >
+                    <TouchAppOutlinedIcon sx={{ fontSize: '0.85rem' }} />
+                    Take Quiz
+                  </Box>
+                ) : (
+                  <>
+                    <QuizOutlinedIcon
                       sx={{
-                        ml: 0.25,
-                        p: 0.5,
-                        color: 'text.secondary',
-                        '&:hover': { color: 'primary.main' },
+                        fontSize: '0.9rem',
+                        color: isPassed ? theme.palette.success.main : theme.palette.text.secondary,
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: '0.65rem',
+                        color: isPassed ? theme.palette.success.main : 'text.secondary',
+                        fontWeight: isPassed ? 600 : 400,
                       }}
                     >
-                      <ReplayIcon sx={{ fontSize: '0.85rem' }} />
-                    </IconButton>
-                  </Tooltip>
+                      {isPassed
+                        ? `${Math.round(section.quiz_attempt?.score_pct ?? 100)}%`
+                        : section.min_questions_to_pass
+                          ? `${section.min_questions_to_pass}/${section.quiz_questions.length}`
+                          : `${section.quiz_questions.length}Q`
+                      }
+                    </Typography>
+                    {isPassed && onRedoQuiz && (
+                      <Tooltip title="Redo section to improve score">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRedoQuiz(index);
+                          }}
+                          sx={{
+                            ml: 0.25,
+                            p: 0.5,
+                            color: 'text.secondary',
+                            '&:hover': { color: 'primary.main' },
+                          }}
+                        >
+                          <ReplayIcon sx={{ fontSize: '0.85rem' }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </>
                 )}
               </Box>
             )}
