@@ -130,6 +130,23 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+
+      // Fallback: if no approved status found from current enrollments,
+      // check if student has ANY approved onboarding across all classrooms.
+      // Identity documents are student-level, not classroom-specific,
+      // so a prior approval should carry over when students transfer classrooms.
+      if (onboardingStatus !== 'approved') {
+        const { data: anyApproved } = await supabase
+          .from('nexus_student_onboarding')
+          .select('status')
+          .eq('student_id', user.id)
+          .eq('status', 'approved')
+          .limit(1);
+
+        if (anyApproved && anyApproved.length > 0) {
+          onboardingStatus = 'approved';
+        }
+      }
     }
 
     return NextResponse.json({

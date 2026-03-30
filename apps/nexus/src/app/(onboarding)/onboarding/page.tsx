@@ -9,7 +9,10 @@ import {
   StepLabel,
   CircularProgress,
   Alert,
+  IconButton,
+  Tooltip,
 } from '@neram/ui';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WelcomeStep from '@/components/onboarding/WelcomeStep';
 import DocumentsStep from '@/components/onboarding/DocumentsStep';
@@ -44,7 +47,7 @@ interface OnboardingData {
 }
 
 export default function OnboardingPage() {
-  const { user, activeClassroom, getToken, refreshOnboardingStatus, onboardingStatus } =
+  const { user, activeClassroom, getToken, refreshOnboardingStatus, onboardingStatus, signOut } =
     useNexusAuthContext();
 
   const [currentStep, setCurrentStep] = useState<OnboardingStepType>('welcome');
@@ -206,8 +209,24 @@ export default function OnboardingPage() {
 
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      {/* Logo */}
-      <Box sx={{ textAlign: 'center', mb: 2 }}>
+      {/* Header with logo and sign-out */}
+      <Box sx={{ position: 'relative', textAlign: 'center', mb: 2 }}>
+        <Tooltip title="Sign out">
+          <IconButton
+            onClick={signOut}
+            size="small"
+            sx={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              color: 'text.secondary',
+              '&:hover': { color: 'error.main' },
+            }}
+            aria-label="Sign out"
+          >
+            <LogoutOutlinedIcon sx={{ fontSize: '1.2rem' }} />
+          </IconButton>
+        </Tooltip>
         <Typography
           variant="h5"
           sx={{ fontWeight: 700, color: 'primary.main', letterSpacing: '-0.02em' }}
