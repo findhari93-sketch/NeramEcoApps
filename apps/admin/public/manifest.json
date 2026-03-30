@@ -1,12 +1,12 @@
 {
-  "name": "Admin — Neram Classes",
-  "short_name": "Admin",
+  "name": "Neram Admin — Dashboard",
+  "short_name": "Neram Admin",
   "id": "/",
-  "description": "Administrative dashboard for Neram Classes. Manage users, applications, payments, courses, and system settings.",
+  "description": "Administrative dashboard for Neram Classes. Manage leads, students, payments, and enrollment.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
+  "background_color": "#ffffff",
   "theme_color": "#0051C3",
   "orientation": "any",
   "icons": [
@@ -33,25 +33,31 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/icons/favicon-32x32.png",
-      "sizes": "32x32",
-      "type": "image/png",
-      "purpose": "any"
     }
   ],
   "shortcuts": [
     {
-      "name": "Dashboard",
-      "short_name": "Dashboard",
-      "url": "/dashboard",
+      "name": "CRM — User Management",
+      "short_name": "CRM",
+      "url": "/crm",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Enrolled Students",
+      "short_name": "Students",
+      "url": "/students",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Notifications",
+      "short_name": "Alerts",
+      "url": "/settings/notifications",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     }
   ],
   "related_applications": [],
   "prefer_related_applications": false,
-  "categories": ["education", "productivity", "business"],
+  "categories": ["education", "business", "productivity"],
   "lang": "en-IN",
   "dir": "ltr"
 }
