@@ -108,12 +108,14 @@ export default function CompleteProfilePage() {
   const [district, setDistrict] = useState('');
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
+  const [pincodeLoading, setPincodeLoading] = useState(false);
 
   // Fee report state
   const [reportAmount, setReportAmount] = useState('');
   const [reportNotes, setReportNotes] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [reportingPayment, setReportingPayment] = useState(false);
+  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -148,6 +150,24 @@ export default function CompleteProfilePage() {
     }
   }, [getToken]);
 
+  const lookupPincode = useCallback(async (code: string) => {
+    if (!/^\d{6}$/.test(code)) return;
+    setPincodeLoading(true);
+    try {
+      const res = await fetch(`/api/pincode/${code}`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        if (data.data.city) setCity(data.data.city);
+        if (data.data.district) setDistrict(data.data.district);
+        if (data.data.state) setState(data.data.state);
+      }
+    } catch {
+      // Silently fail — user can still type manually
+    } finally {
+      setPincodeLoading(false);
+    }
+  }, []);
+
   const fetchFees = useCallback(async () => {
     try {
       const token = await getToken();
@@ -165,6 +185,19 @@ export default function CompleteProfilePage() {
       fetchFees();
     }
   }, [authLoading, fetchProfile, fetchFees]);
+
+  // Restore last saved step from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('nexus_profile_step');
+    if (saved) {
+      const step = parseInt(saved, 10);
+      if (step >= 0 && step <= 3) setActiveStep(step);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_profile_step', activeStep.toString());
+  }, [activeStep]);
 
   const handleSaveStep = async () => {
     setSaving(true);
@@ -246,6 +279,7 @@ export default function CompleteProfilePage() {
       const token = await getToken();
       const formData = new FormData();
       formData.append('amount', reportAmount);
+      formData.append('payment_date', reportDate);
       if (reportNotes) formData.append('notes', reportNotes);
       if (proofFile) formData.append('proof', proofFile);
 
@@ -409,14 +443,23 @@ export default function CompleteProfilePage() {
               label="Address" value={address} onChange={(e) => setAddress(e.target.value)}
               fullWidth size="small" multiline rows={2}
             />
+            <TextField
+              label="Pincode"
+              value={pincode}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                setPincode(val);
+                if (val.length === 6) lookupPincode(val);
+              }}
+              fullWidth size="small"
+              inputProps={{ maxLength: 6, inputMode: 'numeric' }}
+              helperText={pincodeLoading ? 'Looking up...' : pincode.length === 6 ? 'Auto-filled from pincode' : ''}
+            />
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField label="City" value={city} onChange={(e) => setCity(e.target.value)} fullWidth size="small" />
               <TextField label="District" value={district} onChange={(e) => setDistrict(e.target.value)} fullWidth size="small" />
             </Box>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField label="State" value={state} onChange={(e) => setState(e.target.value)} fullWidth size="small" />
-              <TextField label="Pincode" value={pincode} onChange={(e) => setPincode(e.target.value)} fullWidth size="small" inputProps={{ maxLength: 6 }} />
-            </Box>
+            <TextField label="State" value={state} onChange={(e) => setState(e.target.value)} fullWidth size="small" />
           </Box>
         )}
 
@@ -449,10 +492,16 @@ export default function CompleteProfilePage() {
             )}
 
             {/* Report Payment */}
-            {feeData?.feeSummary && feeData.feeSummary.fee_due > 0 && (
+            {(
               <>
                 <Divider sx={{ my: 1 }} />
                 <Typography variant="subtitle2" fontWeight={600}>Report a Payment</Typography>
+                <TextField
+                  label="Payment Date" type="date" value={reportDate}
+                  onChange={(e) => setReportDate(e.target.value)}
+                  fullWidth size="small"
+                  InputLabelProps={{ shrink: true }}
+                />
                 <TextField
                   label="Amount Paid (\u20B9)" type="number" value={reportAmount}
                   onChange={(e) => setReportAmount(e.target.value)}
@@ -531,15 +580,6 @@ export default function CompleteProfilePage() {
             Back
           </Button>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {activeStep < 3 && !isMandatory && (
-              <Button
-                variant="text"
-                onClick={() => { setActiveStep((prev) => prev + 1); setError(''); setSuccess(''); }}
-                sx={{ textTransform: 'none' }}
-              >
-                Skip
-              </Button>
-            )}
             {activeStep < 3 ? (
               <Button
                 variant="contained"
@@ -553,7 +593,7 @@ export default function CompleteProfilePage() {
               <Button
                 variant="contained"
                 startIcon={<ArrowBackIcon />}
-                onClick={() => { refreshOnboardingStatus(); router.push('/student/dashboard'); }}
+                onClick={() => { localStorage.removeItem('nexus_profile_step'); refreshOnboardingStatus(); router.push('/student/dashboard'); }}
                 sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600, px: 3 }}
               >
                 Back to Dashboard

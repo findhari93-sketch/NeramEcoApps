@@ -214,7 +214,22 @@ export default function OnboardingPage() {
       });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setSteps(data.data || []);
+      const allSteps: OnboardingStep[] = data.data || [];
+
+      // Auto-complete and hide "Join MS Teams Class" — this is now automated
+      const teamsStep = allSteps.find((s) => s.step_definition?.step_key === 'join_teams_class');
+      if (teamsStep && !teamsStep.is_completed && teamsStep.status !== 'completed') {
+        // Mark completed in background so it doesn't block other phases
+        fetch(`/api/onboarding-steps/${teamsStep.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'completed' }),
+        }).catch(() => {});
+      }
+
+      // Filter out the Teams step — students don't need to see it
+      const visibleSteps = allSteps.filter((s) => s.step_definition?.step_key !== 'join_teams_class');
+      setSteps(visibleSteps);
       if (data.courseGroupLinks) setCourseGroupLinks(data.courseGroupLinks);
       if (data.nexusTeamIds) setNexusTeamIds(data.nexusTeamIds);
       if (data.nexusStatus) setNexusStatus(data.nexusStatus as NexusStatus);
