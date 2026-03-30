@@ -503,7 +503,7 @@ export default function CompleteProfilePage() {
                   InputLabelProps={{ shrink: true }}
                 />
                 <TextField
-                  label="Amount Paid (\u20B9)" type="number" value={reportAmount}
+                  label="Amount Paid (₹)" type="number" value={reportAmount}
                   onChange={(e) => setReportAmount(e.target.value)}
                   fullWidth size="small"
                 />
