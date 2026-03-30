@@ -357,6 +357,8 @@ export default function FoundationLearningContent({
     if (section) {
       const player = (window as any).__foundationPlayer;
       if (player?.seekTo) {
+        // Reset quiz trigger so it can fire again when rewatching this section
+        player.resetSectionTrigger?.(index);
         player.seekTo(section.start_timestamp_seconds);
         player.play();
       }
