@@ -42,6 +42,21 @@ const SCHOOL_TYPES = [
   { value: 'government_school', label: 'Government School' },
 ];
 
+// Generate academic year options: current year and next 3 years in "YYYY-YY" format
+const generateAcademicYears = () => {
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-indexed
+  const currentYear = now.getFullYear();
+  // Academic year runs June-June. If before June, start from previous year
+  const startYear = currentMonth < 5 ? currentYear - 1 : currentYear;
+  return Array.from({ length: 4 }, (_, i) => {
+    const yr = startYear + i;
+    return { value: yr.toString(), label: `${yr}-${String(yr + 1).slice(2)}` };
+  });
+};
+
+const ACADEMIC_YEAR_OPTIONS = generateAcademicYears();
+
 const GENDER_OPTIONS = [
   { value: 'male', label: 'Male' },
   { value: 'female', label: 'Female' },
@@ -367,10 +382,13 @@ export default function CompleteProfilePage() {
                 {CASTE_CATEGORIES.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
               </TextField>
               <TextField
-                label="Target Exam Year" type="number" value={targetExamYear}
+                label="Target Exam Year" select value={targetExamYear}
                 onChange={(e) => setTargetExamYear(e.target.value)}
-                fullWidth size="small" placeholder="2026"
-              />
+                fullWidth size="small"
+              >
+                <MenuItem value="">-- Select --</MenuItem>
+                {ACADEMIC_YEAR_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+              </TextField>
             </Box>
             <TextField
               label="School Type" select value={schoolType}
