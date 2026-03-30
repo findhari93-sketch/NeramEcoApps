@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -48,8 +49,10 @@ interface OnboardingData {
 }
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const { user, getToken, refreshOnboardingStatus, onboardingStatus, signOut, activeClassroom } =
     useNexusAuthContext();
+  const redirectedRef = useRef(false);
 
   const [currentStep, setCurrentStep] = useState<OnboardingStepType>('welcome');
   const [loading, setLoading] = useState(true);
@@ -70,6 +73,14 @@ export default function OnboardingPage() {
     currentMonth < 5
       ? `${currentYear - 1}-${String(currentYear).slice(2)}`
       : `${currentYear}-${String(currentYear + 1).slice(2)}`;
+
+  // Redirect already-approved students to dashboard
+  useEffect(() => {
+    if (onboardingStatus === 'approved' && !redirectedRef.current) {
+      redirectedRef.current = true;
+      router.replace('/student/dashboard');
+    }
+  }, [onboardingStatus, router]);
 
   // Fetch onboarding status
   const fetchStatus = useCallback(async () => {

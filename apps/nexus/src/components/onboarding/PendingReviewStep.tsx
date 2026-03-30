@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -29,8 +30,10 @@ export default function PendingReviewStep({
   onboardingStatus,
   onApproved,
 }: PendingReviewStepProps) {
+  const router = useRouter();
   const [nudging, setNudging] = useState(false);
   const [fromAppOnboarding, setFromAppOnboarding] = useState(false);
+  const redirectedRef = useRef(false);
 
   // Check if user came from student app onboarding
   useEffect(() => {
@@ -54,10 +57,17 @@ export default function PendingReviewStep({
   const canNudge = hoursSinceSubmission >= 24;
   const showWhatsApp = hoursSinceSubmission >= 48;
 
-  // Poll for approval every 30 seconds
+  // Poll for approval every 30 seconds, redirect when approved
   useEffect(() => {
     if (onboardingStatus === 'approved') {
-      onApproved();
+      if (!redirectedRef.current) {
+        redirectedRef.current = true;
+        // Brief delay to show success message before redirecting
+        const timer = setTimeout(() => {
+          router.replace('/student/dashboard');
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
       return;
     }
 
@@ -66,7 +76,7 @@ export default function PendingReviewStep({
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [onboardingStatus, onApproved]);
+  }, [onboardingStatus, onApproved, router]);
 
   // Fetch submission time
   useEffect(() => {
