@@ -14,7 +14,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    // Support token from header (normal) or query param (sendBeacon on unmount)
+    const url = new URL(request.url);
+    const tokenFromQuery = url.searchParams.get('token');
+    const authHeader = request.headers.get('Authorization');
+    const tokenValue = authHeader || (tokenFromQuery ? `Bearer ${tokenFromQuery}` : null);
+    const msUser = await verifyMsToken(tokenValue);
     const { id: chapterId } = await params;
     const body = await request.json();
     const supabase = getSupabaseAdminClient();
@@ -54,11 +59,15 @@ export async function POST(
     const progress = await upsertChapterProgress(user.id, chapterId, updateData);
 
     // Persist watch session data (non-blocking — don't fail the progress save)
-    if (body.watch_session?.id && body.watch_session?.section_id) {
-      try {
-        await upsertFoundationWatchSession(user.id, chapterId, body.watch_session);
-      } catch (wsErr) {
-        console.error('Watch session save error:', wsErr);
+    // Support both watch_sessions (array, new) and watch_session (single, backward-compat)
+    const sessions = body.watch_sessions || (body.watch_session ? [body.watch_session] : []);
+    for (const ws of sessions) {
+      if (ws?.id && ws?.section_id) {
+        try {
+          await upsertFoundationWatchSession(user.id, chapterId, ws);
+        } catch (wsErr) {
+          console.error('Watch session save error:', wsErr);
+        }
       }
     }
 

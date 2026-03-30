@@ -84,9 +84,18 @@ export default function FoundationLearningContent({
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
 
   // Watch-time tracking refs (no re-renders)
-  const watchSessionId = useRef(
-    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
-  );
+  // Per-section session IDs so each section gets its own DB row (not overwritten by other sections)
+  const sectionSessionIds = useRef<Map<string, string>>(new Map());
+  const getSessionIdForSection = (sectionId: string): string => {
+    let sid = sectionSessionIds.current.get(sectionId);
+    if (!sid) {
+      sid = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}-${sectionId}`;
+      sectionSessionIds.current.set(sectionId, sid);
+    }
+    return sid;
+  };
   const watchTracker = useRef<Map<string, {
     sectionId: string;
     watchedSeconds: number;
@@ -162,9 +171,36 @@ export default function FoundationLearningContent({
     if (!authLoading) fetchChapter();
   }, [authLoading, fetchChapter]);
 
+  // Build watch_sessions payload from all tracked sections
+  const buildWatchSessions = useCallback(() => {
+    const width = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const deviceType = width < 600 ? 'mobile' : width < 900 ? 'tablet' : 'desktop';
+    const sessions: any[] = [];
+    watchTracker.current.forEach((tracker, sectionId) => {
+      if (tracker.watchedSeconds > 0) {
+        const completionPct = tracker.sectionDuration > 0
+          ? Math.min(100, (tracker.watchedSeconds / tracker.sectionDuration) * 100)
+          : 0;
+        sessions.push({
+          id: getSessionIdForSection(sectionId),
+          section_id: sectionId,
+          watched_seconds: Math.round(tracker.watchedSeconds),
+          section_duration_seconds: Math.round(tracker.sectionDuration),
+          completion_pct: Math.round(completionPct * 100) / 100,
+          play_count: tracker.playCount,
+          pause_count: tracker.pauseCount,
+          seek_count: tracker.seekCount,
+          device_type: deviceType,
+        });
+      }
+    });
+    return sessions;
+  }, []);
+
   // Auto-save video position every 30 seconds (includes watch session data)
-  const saveProgress = useCallback(async (seconds: number) => {
-    if (Math.abs(seconds - lastSavedPosRef.current) < 10) return;
+  // force=true bypasses the 10-second dedup guard (used on unmount)
+  const saveProgress = useCallback(async (seconds: number, force = false) => {
+    if (!force && Math.abs(seconds - lastSavedPosRef.current) < 10) return;
     lastSavedPosRef.current = seconds;
 
     try {
@@ -172,28 +208,7 @@ export default function FoundationLearningContent({
       if (!token) return;
 
       const section = data?.sections[currentSectionIndex];
-      // Build watch_session payload from tracker
-      let watchSession: any = undefined;
-      if (section) {
-        const tracker = watchTracker.current.get(section.id);
-        if (tracker && tracker.watchedSeconds > 0) {
-          const completionPct = tracker.sectionDuration > 0
-            ? Math.min(100, (tracker.watchedSeconds / tracker.sectionDuration) * 100)
-            : 0;
-          const width = typeof window !== 'undefined' ? window.innerWidth : 1200;
-          watchSession = {
-            id: watchSessionId.current,
-            section_id: section.id,
-            watched_seconds: Math.round(tracker.watchedSeconds),
-            section_duration_seconds: Math.round(tracker.sectionDuration),
-            completion_pct: Math.round(completionPct * 100) / 100,
-            play_count: tracker.playCount,
-            pause_count: tracker.pauseCount,
-            seek_count: tracker.seekCount,
-            device_type: width < 600 ? 'mobile' : width < 900 ? 'tablet' : 'desktop',
-          };
-        }
-      }
+      const watchSessions = buildWatchSessions();
 
       await fetch(`/api/foundation/chapters/${chapterId}/progress`, {
         method: 'POST',
@@ -204,13 +219,13 @@ export default function FoundationLearningContent({
         body: JSON.stringify({
           last_video_position_seconds: seconds,
           last_section_id: section?.id,
-          watch_session: watchSession,
+          watch_sessions: watchSessions.length > 0 ? watchSessions : undefined,
         }),
       });
     } catch {
       // Silent fail for position saves
     }
-  }, [chapterId, getToken, currentSectionIndex, data]);
+  }, [chapterId, getToken, currentSectionIndex, data, buildWatchSessions]);
 
   const handleTimeUpdate = useCallback((seconds: number) => {
     setCurrentVideoTime(seconds);
@@ -254,17 +269,48 @@ export default function FoundationLearningContent({
     saveTimerRef.current = setTimeout(() => saveProgress(seconds), 30000);
   }, [saveProgress, data, currentSectionIndex]);
 
-  // Save position on unmount
+  // Keep a ref to the latest token for unmount (can't do async in cleanup)
+  const msTokenRef = useRef(msToken);
+  useEffect(() => { msTokenRef.current = msToken; }, [msToken]);
+
+  // Save position on unmount using sendBeacon (browser won't cancel it during navigation)
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       const player = (window as any).__foundationPlayer;
-      if (player?.getCurrentTime) {
-        const pos = player.getCurrentTime();
-        if (pos > 0) saveProgress(pos);
+      const pos = player?.getCurrentTime?.() ?? 0;
+      if (pos <= 0) return;
+
+      const watchSessions = buildWatchSessions();
+      const section = data?.sections[currentSectionIndex];
+      const token = msTokenRef.current;
+      if (!token) return;
+
+      const payload = JSON.stringify({
+        last_video_position_seconds: pos,
+        last_section_id: section?.id,
+        watch_sessions: watchSessions.length > 0 ? watchSessions : undefined,
+      });
+
+      // sendBeacon survives page unload; fetch does not
+      if (typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([payload], { type: 'application/json' });
+        // sendBeacon can't set custom headers, so pass token as query param
+        navigator.sendBeacon(
+          `/api/foundation/chapters/${chapterId}/progress?token=${encodeURIComponent(token)}`,
+          blob
+        );
+      } else {
+        // Fallback: fire-and-forget fetch with keepalive
+        fetch(`/api/foundation/chapters/${chapterId}/progress`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
       }
     };
-  }, [saveProgress]);
+  }, [buildWatchSessions, chapterId, data, currentSectionIndex]);
 
   // Ensure video stays paused while quiz is open (handles YouTube buffering race)
   useEffect(() => {

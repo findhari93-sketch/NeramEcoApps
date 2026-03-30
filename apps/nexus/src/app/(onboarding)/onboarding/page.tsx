@@ -48,7 +48,7 @@ interface OnboardingData {
 }
 
 export default function OnboardingPage() {
-  const { user, getToken, refreshOnboardingStatus, onboardingStatus, signOut } =
+  const { user, getToken, refreshOnboardingStatus, onboardingStatus, signOut, activeClassroom } =
     useNexusAuthContext();
 
   const [currentStep, setCurrentStep] = useState<OnboardingStepType>('welcome');
@@ -326,6 +326,7 @@ export default function OnboardingPage() {
           <DocumentsStep
             templates={requiredTemplates}
             uploadedDocs={uploadedDocs}
+            classroomId={activeClassroom?.id}
             getToken={getToken}
             onNext={() => goToStep('student_info')}
             onDocsChange={(docs) => setUploadedDocs(docs)}

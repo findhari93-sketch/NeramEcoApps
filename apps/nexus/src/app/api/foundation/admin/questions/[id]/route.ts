@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import {
   updateFoundationQuizQuestion,
   deleteFoundationQuizQuestion,
+  recalculateMinQuestionsToPass,
 } from '@neram/database/queries/nexus';
 
 async function verifyTeacher(request: NextRequest) {
@@ -49,7 +50,22 @@ export async function DELETE(
 ) {
   try {
     await verifyTeacher(request);
+
+    // Look up section_id before deleting so we can recalculate pass threshold
+    const supabase = getSupabaseAdminClient();
+    const { data: question } = await supabase
+      .from('nexus_foundation_quiz_questions')
+      .select('section_id')
+      .eq('id', params.id)
+      .single();
+
     await deleteFoundationQuizQuestion(params.id);
+
+    // Recalculate pass threshold after deletion
+    if (question?.section_id) {
+      await recalculateMinQuestionsToPass(question.section_id);
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to delete question';

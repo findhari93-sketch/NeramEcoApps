@@ -273,3 +273,29 @@ export async function deleteFoundationQuizQuestion(
     .eq('id', id);
   if (error) throw error;
 }
+
+/**
+ * Recalculate min_questions_to_pass for a section based on current question count.
+ * Formula: Math.max(1, totalQuestions - 1) — allows 1 wrong answer.
+ */
+export async function recalculateMinQuestionsToPass(
+  sectionId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { count, error: countError } = await supabase
+    .from('nexus_foundation_quiz_questions')
+    .select('*', { count: 'exact', head: true })
+    .eq('section_id', sectionId);
+  if (countError) throw countError;
+
+  const totalQuestions = count ?? 0;
+  const minToPass = totalQuestions > 0 ? Math.max(1, totalQuestions - 1) : null;
+
+  const { error: updateError } = await supabase
+    .from('nexus_foundation_sections')
+    .update({ min_questions_to_pass: minToPass })
+    .eq('id', sectionId);
+  if (updateError) throw updateError;
+}

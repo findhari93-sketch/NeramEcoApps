@@ -81,7 +81,7 @@ export async function addMemberToTeam(
         body: JSON.stringify({
           '@odata.type': '#microsoft.graph.aadUserConversationMember',
           'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userPrincipalName}')`,
-          roles: ['member'],
+          roles: [],
         }),
         signal: controller.signal,
       }
@@ -133,7 +133,7 @@ export async function addMemberToGroupChat(
         body: JSON.stringify({
           '@odata.type': '#microsoft.graph.aadUserConversationMember',
           'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userPrincipalName}')`,
-          roles: ['member'],
+          roles: [],
         }),
         signal: controller.signal,
       }

@@ -4,6 +4,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import {
   getSectionQuestionsAdmin,
   createFoundationQuizQuestion,
+  recalculateMinQuestionsToPass,
 } from '@neram/database/queries/nexus';
 
 async function verifyTeacher(request: NextRequest) {
@@ -68,6 +69,9 @@ export async function POST(
       explanation: body.explanation?.trim() || null,
       sort_order: body.sort_order ?? 0,
     });
+
+    // Auto-set pass threshold: total - 1 (allows 1 wrong answer)
+    await recalculateMinQuestionsToPass(params.id);
 
     return NextResponse.json({ question }, { status: 201 });
   } catch (err) {

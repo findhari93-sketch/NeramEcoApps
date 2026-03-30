@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       user: {
         id: user.id,
         name: user.name,
-        email: user.email,
+        email: msUser.email || user.email,
         phone: user.phone,
         avatar_url: user.avatar_url,
         user_type: user.user_type,

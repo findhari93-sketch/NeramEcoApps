@@ -26,6 +26,7 @@ const NEEDS_CROP = ['Passport Photo', 'Signature'];
 interface DocumentsStepProps {
   templates: any[];
   uploadedDocs: any[];
+  classroomId: string | undefined;
   getToken: () => Promise<string | null>;
   onNext: () => void;
   onDocsChange: (docs: any[]) => void;
@@ -34,6 +35,7 @@ interface DocumentsStepProps {
 export default function DocumentsStep({
   templates,
   uploadedDocs,
+  classroomId,
   getToken,
   onNext,
   onDocsChange,
@@ -66,8 +68,11 @@ export default function DocumentsStep({
 
       const template = templates.find((t: any) => t.id === activeTemplateId);
 
+      if (!classroomId) throw new Error('No classroom selected');
+
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('classroom_id', classroomId);
       formData.append('template_id', activeTemplateId);
       formData.append('title', template?.name || 'Document');
       formData.append('category', template?.category || 'identity');
