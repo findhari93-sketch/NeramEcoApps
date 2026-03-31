@@ -10,7 +10,8 @@ import { type ClassCardData } from './ClassCard';
 import { type HolidayInfo } from './WeeklyCalendarGrid';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
+const DEFAULT_START_HOUR = 8;
+const DEFAULT_END_HOUR = 20;
 const ROW_HEIGHT = 68; // px per day row
 const DATE_COL_WIDTH = 56; // px for the left date column
 
@@ -90,6 +91,19 @@ export default function TimeSlotGrid({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // Compute hour range dynamically: expand to fit earliest/latest class times
+  const HOURS = useMemo(() => {
+    let startHour = DEFAULT_START_HOUR;
+    let endHour = DEFAULT_END_HOUR;
+    for (const cls of classes) {
+      const sh = parseInt(cls.start_time.split(':')[0]);
+      const eh = parseInt(cls.end_time.split(':')[0]);
+      if (sh < startHour) startHour = sh;
+      if (eh >= endHour) endHour = eh + 1;
+    }
+    return Array.from({ length: endHour - startHour + 1 }, (_, i) => i + startHour);
+  }, [classes]);
+
   // Measure available width and compute cell width dynamically
   const [cellWidth, setCellWidth] = useState(80);
 
@@ -112,8 +126,8 @@ export default function TimeSlotGrid({
     if (scrollRef.current && weekOffset === 0) {
       const now = new Date();
       const currentHour = now.getHours();
-      if (currentHour >= 8 && currentHour <= 20) {
-        const scrollTo = (currentHour - 8) * cellWidth - cellWidth; // show 1 hour before current
+      if (currentHour >= HOURS[0] && currentHour <= HOURS[HOURS.length - 1]) {
+        const scrollTo = (currentHour - HOURS[0]) * cellWidth - cellWidth; // show 1 hour before current
         scrollRef.current.scrollLeft = Math.max(0, scrollTo);
       }
     }
@@ -132,7 +146,7 @@ export default function TimeSlotGrid({
   /** Convert a time string to a pixel offset from the left edge of the time grid */
   const timeToX = (time: string): number => {
     const [h, m] = time.split(':').map(Number);
-    return ((h - 8) + m / 60) * cellWidth;
+    return ((h - HOURS[0]) + m / 60) * cellWidth;
   };
 
   const handleSlotClick = (dayIdx: number, hourIdx: number, event: React.MouseEvent) => {
