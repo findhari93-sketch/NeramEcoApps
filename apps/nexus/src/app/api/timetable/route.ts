@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
+import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyClassCreated, notifyClassCancelled } from '@/lib/timetable-notifications';
 
@@ -275,6 +275,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const token = extractBearerToken(request.headers.get('Authorization'));
     const { id, classroom_id, permanent } = await request.json();
 
     if (!id || !classroom_id) {
@@ -284,8 +285,20 @@ export async function DELETE(request: NextRequest) {
     await verifyTeacherRole(msUser.oid, classroom_id);
     const supabase = getSupabaseAdminClient();
 
+    // Fetch the class first to get Teams meeting info for cancellation
+    const { data: classToDelete } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('teams_meeting_id, teams_meeting_scope')
+      .eq('id', id)
+      .eq('classroom_id', classroom_id)
+      .single();
+
     if (permanent) {
-      // Hard delete — permanently remove from database
+      // Cancel Teams event before deleting from DB
+      if (classToDelete?.teams_meeting_id && token) {
+        await cancelTeamsEvent(token, supabase, classroom_id, classToDelete.teams_meeting_id, classToDelete.teams_meeting_scope);
+      }
+
       const { error } = await supabase
         .from('nexus_scheduled_classes')
         .delete()
@@ -308,6 +321,11 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
+    // Cancel Teams event (best-effort)
+    if (classToDelete?.teams_meeting_id && token) {
+      await cancelTeamsEvent(token, supabase, classroom_id, classToDelete.teams_meeting_id, classToDelete.teams_meeting_scope);
+    }
+
     // Notify students
     try {
       if (data) {
@@ -322,5 +340,52 @@ export async function DELETE(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'Failed to cancel class';
     const status = message.includes('Only teachers') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
+  }
+}
+
+/**
+ * Cancel/delete a Teams meeting event (best-effort, non-blocking).
+ *
+ * For channel_meeting (group calendar events): DELETE /groups/{teamId}/calendar/events/{eventId}
+ * For standalone meetings: DELETE /me/onlineMeetings/{meetingId}
+ */
+async function cancelTeamsEvent(
+  token: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  classroomId: string,
+  meetingId: string,
+  scope: string | null,
+) {
+  try {
+    if (scope === 'channel_meeting') {
+      // Group calendar event — need teamId
+      const { data: classroom } = await supabase
+        .from('nexus_classrooms')
+        .select('ms_team_id')
+        .eq('id', classroomId)
+        .single();
+
+      if (classroom?.ms_team_id) {
+        const res = await fetch(
+          `https://graph.microsoft.com/v1.0/groups/${classroom.ms_team_id}/calendar/events/${meetingId}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) {
+          console.error('Failed to cancel group calendar event:', res.status, await res.text().catch(() => ''));
+        }
+      }
+    } else {
+      // Standalone online meeting or personal calendar event
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) {
+        console.error('Failed to cancel online meeting:', res.status, await res.text().catch(() => ''));
+      }
+    }
+  } catch (err) {
+    console.error('Failed to cancel Teams event:', err);
+    // Best-effort — don't fail the class cancellation
   }
 }

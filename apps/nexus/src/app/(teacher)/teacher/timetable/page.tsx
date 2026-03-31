@@ -266,7 +266,6 @@ export default function TeacherTimetable() {
   const handleDelete = async (classId: string) => {
     if (!activeClassroom) return;
     const classroomId = getClassroomIdForClass(classId);
-    setSelectedClass(null);
     try {
       const token = await getToken();
       if (!token) return;
@@ -281,18 +280,22 @@ export default function TeacherTimetable() {
       });
 
       if (res.ok) {
+        setSelectedClass(null);
         setSnackbar({ open: true, message: 'Class cancelled', severity: 'success' });
         fetchClasses();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSnackbar({ open: true, message: data.error || 'Failed to cancel class', severity: 'error' });
       }
     } catch (err) {
       console.error('Failed to cancel class:', err);
+      setSnackbar({ open: true, message: 'Failed to cancel class', severity: 'error' });
     }
   };
 
   const handleDeletePermanent = async (classId: string) => {
     if (!activeClassroom) return;
     const classroomId = getClassroomIdForClass(classId);
-    setSelectedClass(null);
     try {
       const token = await getToken();
       if (!token) return;
@@ -307,6 +310,7 @@ export default function TeacherTimetable() {
       });
 
       if (res.ok) {
+        setSelectedClass(null);
         setSnackbar({ open: true, message: 'Class permanently deleted', severity: 'success' });
         fetchClasses();
       }

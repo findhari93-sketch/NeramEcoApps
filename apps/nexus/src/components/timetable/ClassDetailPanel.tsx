@@ -10,6 +10,10 @@ import {
   SwipeableDrawer,
   Drawer,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Snackbar,
   useMediaQuery,
   useTheme,
@@ -105,6 +109,7 @@ export default function ClassDetailPanel({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'cancel' | 'delete' | null>(null);
 
   if (!cls) return null;
 
@@ -442,7 +447,7 @@ export default function ClassDetailPanel({
                   fullWidth
                   color="error"
                   startIcon={<DeleteIcon />}
-                  onClick={() => onDelete(cls.id)}
+                  onClick={() => setConfirmAction('cancel')}
                   sx={{ minHeight: 48, textTransform: 'none' }}
                 >
                   Cancel Class
@@ -458,7 +463,7 @@ export default function ClassDetailPanel({
               fullWidth
               color="error"
               startIcon={<DeleteForeverIcon />}
-              onClick={() => onDeletePermanent(cls.id)}
+              onClick={() => setConfirmAction('delete')}
               sx={{ minHeight: 48, textTransform: 'none' }}
             >
               Delete Permanently
@@ -592,6 +597,40 @@ export default function ClassDetailPanel({
         {drawerContent}
       </Drawer>
       {snackbarElement}
+
+      {/* Confirmation dialog for cancel/delete */}
+      <Dialog open={!!confirmAction} onClose={() => setConfirmAction(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {confirmAction === 'cancel' ? 'Cancel this class?' : 'Delete permanently?'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {confirmAction === 'cancel'
+              ? `"${cls.title}" will be marked as cancelled. Students will be notified.${cls.teams_meeting_id ? ' The Teams meeting will also be cancelled.' : ''}`
+              : `"${cls.title}" will be permanently removed. This cannot be undone.`}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmAction(null)} sx={{ minHeight: 44 }}>
+            Go Back
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            sx={{ minHeight: 44 }}
+            onClick={() => {
+              setConfirmAction(null);
+              if (confirmAction === 'cancel') {
+                onDelete?.(cls.id);
+              } else {
+                onDeletePermanent?.(cls.id);
+              }
+            }}
+          >
+            {confirmAction === 'cancel' ? 'Yes, Cancel Class' : 'Yes, Delete Forever'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
