@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
+import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
@@ -100,17 +101,42 @@ export async function POST(request: NextRequest) {
     let joinUrl: string;
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
-      // ── REAL TEAMS MEETING via group calendar ──
-      // This creates a proper Teams meeting that shows up in the channel,
-      // everyone's calendar, with the native Teams meeting join bar.
-      const result = await createGroupCalendarEvent(
-        supabase, token, classroom.ms_team_id, classroom_id,
-        scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
-      );
-      meetingId = result.meetingId;
-      joinUrl = result.joinUrl;
-      extras.invitedCount = result.attendeeCount;
-      extras.channelPosted = true; // group calendar events auto-appear in channel
+      // ── REAL TEAMS MEETING via group calendar (app-only token) ──
+      // Uses app-only token (client credentials) which has Group.ReadWrite.All
+      // This creates a proper Teams meeting visible in the channel with join bar.
+      // Falls back to standalone meeting + channel post if group calendar fails.
+      try {
+        const appToken = await getAppOnlyToken();
+        const result = await createGroupCalendarEvent(
+          supabase, appToken, classroom.ms_team_id, classroom_id,
+          scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
+        );
+        meetingId = result.meetingId;
+        joinUrl = result.joinUrl;
+        extras.invitedCount = result.attendeeCount;
+        extras.channelPosted = true;
+      } catch (groupErr) {
+        console.error('Group calendar failed, falling back to standalone:', groupErr);
+        // Fallback: standalone meeting + channel post + calendar invites
+        const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
+        meetingId = meeting.id;
+        joinUrl = meeting.joinWebUrl;
+
+        // Post to Teams channel (best-effort)
+        try {
+          await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, meeting);
+          extras.channelPosted = true;
+        } catch {
+          // non-blocking
+        }
+
+        // Send calendar invites
+        const invited = await createPersonalCalendarEvent(
+          supabase, token, classroom_id,
+          scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec
+        );
+        extras.invitedCount = invited;
+      }
     } else if (scope === 'calendar_event') {
       // ── STANDALONE MEETING + PERSONAL CALENDAR INVITES ──
       const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
@@ -352,4 +378,50 @@ async function getEnrolledAttendees(
       emailAddress: { address: u.email, name: u.name || u.email },
       type: 'required' as const,
     }));
+}
+
+/**
+ * Post a meeting notification to the Teams General channel (fallback).
+ * Used when group calendar event creation fails.
+ */
+async function postToTeamsChannel(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  token: string,
+  teamId: string,
+  scheduledClass: Record<string, unknown>,
+  meeting: Record<string, unknown>,
+) {
+  // Get the General channel
+  const channelsRes = await fetch(
+    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq 'General'`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!channelsRes.ok) return;
+
+  const channelsData = await channelsRes.json();
+  const generalChannel = channelsData.value?.[0];
+  if (!generalChannel) return;
+
+  const messageBody = {
+    body: {
+      contentType: 'html',
+      content: `<h3>📅 ${scheduledClass.title}</h3>
+<p><strong>Date:</strong> ${scheduledClass.scheduled_date}<br/>
+<strong>Time:</strong> ${scheduledClass.start_time} – ${scheduledClass.end_time}</p>
+<p><a href="${meeting.joinWebUrl}">🔗 Join Meeting</a></p>`,
+    },
+  };
+
+  await fetch(
+    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${generalChannel.id}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messageBody),
+    }
+  );
 }
