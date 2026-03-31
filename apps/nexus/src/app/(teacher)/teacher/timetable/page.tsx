@@ -42,7 +42,7 @@ interface ClassroomWithBatches {
 }
 
 export default function TeacherTimetable() {
-  const { activeClassroom, classrooms, getToken } = useNexusAuthContext();
+  const { activeClassroom, classrooms, getToken, getTeacherToken } = useNexusAuthContext();
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [classes, setClasses] = useState<ClassCardData[]>([]);
@@ -434,7 +434,7 @@ export default function TeacherTimetable() {
     if (!activeClassroom) return;
     setSelectedClass(null);
     try {
-      const token = await getToken();
+      const token = await getTeacherToken();
       if (!token) return;
 
       setSnackbar({ open: true, message: 'Creating Teams meeting...', severity: 'success' });
@@ -476,7 +476,7 @@ export default function TeacherTimetable() {
   const handleCreateMeetingInBackground = async (classId: string, classroomId: string) => {
     setSnackbar({ open: true, message: 'Setting up Teams meeting...', severity: 'success' });
     try {
-      const token = await getToken();
+      const token = await getTeacherToken();
       if (!token) return;
       const res = await fetch('/api/timetable/teams-meeting', {
         method: 'POST',
