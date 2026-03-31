@@ -29,6 +29,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Verify class belongs to this classroom
+    const { data: classCheck } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id')
+      .eq('id', classId)
+      .eq('classroom_id', classroomId)
+      .single();
+
+    if (!classCheck) {
+      return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
+    }
+
     const { data: enrollment } = await supabase
       .from('nexus_enrollments')
       .select('role')
@@ -110,6 +122,18 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Verify class belongs to this classroom
+    const { data: classCheck } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id')
+      .eq('id', class_id)
+      .eq('classroom_id', classroom_id)
+      .single();
+
+    if (!classCheck) {
+      return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
     }
 
     // Verify student is enrolled

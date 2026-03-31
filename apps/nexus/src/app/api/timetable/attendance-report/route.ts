@@ -110,16 +110,29 @@ export async function POST(request: NextRequest) {
       .select('role')
       .eq('user_id', user.id)
       .eq('classroom_id', classroom_id)
+      .eq('is_active', true)
       .single();
 
     if (!enrollment || enrollment.role !== 'teacher') {
       return NextResponse.json({ error: 'Only teachers can manage attendance' }, { status: 403 });
     }
 
+    // Verify the class belongs to this classroom
+    const { data: classCheck } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('id')
+      .eq('id', class_id)
+      .eq('classroom_id', classroom_id)
+      .single();
+
+    if (!classCheck) {
+      return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
+    }
+
     if (action === 'sync_teams') {
       return await syncTeamsAttendance(class_id, classroom_id, token!, supabase);
     } else if (action === 'manual_mark') {
-      return await manualMarkAttendance(class_id, body.records, supabase);
+      return await manualMarkAttendance(class_id, classroom_id, body.records, supabase);
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -255,6 +268,7 @@ async function syncTeamsAttendance(
  */
 async function manualMarkAttendance(
   classId: string,
+  classroomId: string,
   records: Array<{ student_id: string; attended: boolean }>,
   supabase: any
 ) {
@@ -262,9 +276,19 @@ async function manualMarkAttendance(
     return NextResponse.json({ error: 'Missing records array' }, { status: 400 });
   }
 
+  // Fetch enrolled student IDs to validate records
+  const { data: enrolledStudents } = await supabase
+    .from('nexus_enrollments')
+    .select('user_id')
+    .eq('classroom_id', classroomId)
+    .eq('is_active', true);
+
+  const enrolledIds = new Set((enrolledStudents || []).map((e: any) => e.user_id));
+  const validRecords = records.filter((r) => enrolledIds.has(r.student_id));
+
   let updated = 0;
 
-  for (const record of records) {
+  for (const record of validRecords) {
     const { error } = await supabase
       .from('nexus_attendance')
       .upsert(

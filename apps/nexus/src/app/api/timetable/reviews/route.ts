@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       if (error) throw error;
 
       // Calculate average
-      const ratings = (data || []).map((r: any) => r.rating);
+      const ratings = (data || []).map((r: any) => r.rating).filter((r: any) => r != null && !isNaN(r));
       const average = ratings.length > 0
         ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length
         : 0;
@@ -121,14 +121,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not enrolled' }, { status: 403 });
     }
 
-    // Verify the class is completed
-    const { data: scheduledClass } = await supabase
+    // Verify the class belongs to this classroom
+    const { data: classCheck } = await supabase
       .from('nexus_scheduled_classes')
-      .select('status')
+      .select('id, status')
       .eq('id', class_id)
+      .eq('classroom_id', classroom_id)
       .single();
 
-    if (!scheduledClass || scheduledClass.status !== 'completed') {
+    if (!classCheck) {
+      return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
+    }
+
+    if (classCheck.status !== 'completed') {
       return NextResponse.json({ error: 'Can only review completed classes' }, { status: 400 });
     }
 

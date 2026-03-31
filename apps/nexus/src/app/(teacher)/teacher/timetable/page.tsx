@@ -260,7 +260,7 @@ export default function TeacherTimetable() {
   const getClassroomIdForClass = (classId: string): string => {
     const cls = classes.find((c) => c.id === classId);
     // Use the class's own classroom_id (from API's SELECT *), fall back to activeClassroom
-    return (cls as Record<string, unknown>)?.classroom_id as string || cls?.classroom?.id || activeClassroom?.id || '';
+    return (cls as unknown as Record<string, unknown>)?.classroom_id as string || cls?.classroom?.id || activeClassroom?.id || '';
   };
 
   const handleDelete = async (classId: string) => {

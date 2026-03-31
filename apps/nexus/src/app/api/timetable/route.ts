@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ classes: allClasses, role: enrollment.role });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load timetable';
-    return NextResponse.json({ error: message }, { status: 401 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
