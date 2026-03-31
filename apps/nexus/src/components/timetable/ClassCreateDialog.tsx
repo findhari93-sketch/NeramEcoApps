@@ -93,6 +93,8 @@ interface ClassCreateDialogProps {
   holidays?: Record<string, HolidayInfo>;
   onRemoveHoliday?: (date: string) => Promise<void>;
   onMeetingError?: (error: string) => void;
+  /** Called with class data when a new class with meeting toggle is created — parent handles background meeting creation */
+  onCreateMeetingInBackground?: (classId: string, classroomId: string) => void;
 
   // Legacy props — kept for backward compatibility
   classroomId?: string;
@@ -129,6 +131,7 @@ export default function ClassCreateDialog({
   holidays,
   onRemoveHoliday,
   onMeetingError,
+  onCreateMeetingInBackground,
   // Legacy
   classroomId: legacyClassroomId,
   batches: legacyBatches,
@@ -279,36 +282,18 @@ export default function ClassCreateDialog({
 
       const data = await res.json();
 
-      // If meeting toggle is on and this is a new class, create the Teams meeting
-      if (!editingClass && formData.create_meeting && data.class?.id) {
-        try {
-          const meetingRes = await fetch('/api/timetable/teams-meeting', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              class_id: data.class.id,
-              classroom_id: selectedClassroomId,
-              auto: true,
-            }),
-          });
-
-          if (!meetingRes.ok) {
-            const meetingErr = await meetingRes.json().catch(() => ({}));
-            const errMsg = meetingErr.error || 'Failed to create Teams meeting';
-            console.error('Teams meeting creation failed:', errMsg);
-            onMeetingError?.(errMsg);
-          }
-        } catch (meetingErr) {
-          console.error('Teams meeting creation error:', meetingErr);
-          onMeetingError?.('Failed to create Teams meeting. You can retry from the class detail panel.');
-        }
-      }
+      // Close dialog and refresh list immediately — don't wait for Teams meeting
+      const wantsMeeting = !editingClass && formData.create_meeting && data.class?.id;
+      const createdClassId = data.class?.id;
+      const createdClassroomId = selectedClassroomId;
 
       onClose();
       onSaved();
+
+      // Tell the parent to create the Teams meeting in the background
+      if (wantsMeeting && onCreateMeetingInBackground) {
+        onCreateMeetingInBackground(createdClassId, createdClassroomId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save class');
     } finally {

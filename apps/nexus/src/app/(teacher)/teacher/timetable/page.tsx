@@ -449,6 +449,32 @@ export default function TeacherTimetable() {
     setSnackbar({ open: true, message: error, severity: 'error' });
   };
 
+  /** Background meeting creation — fired after dialog closes */
+  const handleCreateMeetingInBackground = async (classId: string, classroomId: string) => {
+    setSnackbar({ open: true, message: 'Setting up Teams meeting...', severity: 'success' });
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/timetable/teams-meeting', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ class_id: classId, classroom_id: classroomId, auto: true }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSnackbar({ open: true, message: 'Teams meeting created!', severity: 'success' });
+        fetchClasses();
+      } else {
+        setSnackbar({ open: true, message: data.error || 'Failed to create Teams meeting', severity: 'error' });
+      }
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to create Teams meeting', severity: 'error' });
+    }
+  };
+
   const handleSlotClick = (date: string, startTime: string, event?: React.MouseEvent) => {
     setSlotMenuDate(date);
     setSlotMenuTime(startTime);
@@ -693,6 +719,7 @@ export default function TeacherTimetable() {
         holidays={holidays}
         onRemoveHoliday={handleRemoveHolidayForClass}
         onMeetingError={handleMeetingError}
+        onCreateMeetingInBackground={handleCreateMeetingInBackground}
       />
 
       {/* Holiday Manager */}

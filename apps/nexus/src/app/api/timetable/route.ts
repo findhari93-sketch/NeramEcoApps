@@ -78,7 +78,58 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ classes: data || [], role: enrollment.role });
+    let allClasses = data || [];
+
+    // Merge Common Classes into every classroom view
+    // (skip if the active classroom IS the common classroom)
+    const { data: commonClassroom } = await supabase
+      .from('nexus_classrooms')
+      .select('id')
+      .eq('type', 'common')
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+
+    if (commonClassroom && commonClassroom.id !== classroomId) {
+      // Check user is enrolled in common classroom too
+      const { data: commonEnrollment } = await supabase
+        .from('nexus_enrollments')
+        .select('role, batch_id')
+        .eq('user_id', user.id)
+        .eq('classroom_id', commonClassroom.id)
+        .eq('is_active', true)
+        .single();
+
+      if (commonEnrollment) {
+        let commonQuery = supabase
+          .from('nexus_scheduled_classes')
+          .select(CLASS_SELECT)
+          .eq('classroom_id', commonClassroom.id)
+          .gte('scheduled_date', start)
+          .lte('scheduled_date', end)
+          .order('scheduled_date', { ascending: true })
+          .order('start_time', { ascending: true });
+
+        if (commonEnrollment.role === 'student') {
+          if (commonEnrollment.batch_id) {
+            commonQuery = commonQuery.or(`batch_id.is.null,batch_id.eq.${commonEnrollment.batch_id}`);
+          } else {
+            commonQuery = commonQuery.is('batch_id', null);
+          }
+        }
+
+        const { data: commonData } = await commonQuery;
+        if (commonData && commonData.length > 0) {
+          allClasses = [...allClasses, ...commonData].sort((a, b) => {
+            const dateCmp = a.scheduled_date.localeCompare(b.scheduled_date);
+            if (dateCmp !== 0) return dateCmp;
+            return a.start_time.localeCompare(b.start_time);
+          });
+        }
+      }
+    }
+
+    return NextResponse.json({ classes: allClasses, role: enrollment.role });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load timetable';
     return NextResponse.json({ error: message }, { status: 401 });
