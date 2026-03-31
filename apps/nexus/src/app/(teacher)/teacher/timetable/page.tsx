@@ -256,8 +256,16 @@ export default function TeacherTimetable() {
     setCreateDialogOpen(true);
   };
 
+  // Find the actual classroom_id for a class (may differ from activeClassroom for Common Classes)
+  const getClassroomIdForClass = (classId: string): string => {
+    const cls = classes.find((c) => c.id === classId);
+    // Use the class's own classroom_id (from API's SELECT *), fall back to activeClassroom
+    return (cls as Record<string, unknown>)?.classroom_id as string || cls?.classroom?.id || activeClassroom?.id || '';
+  };
+
   const handleDelete = async (classId: string) => {
     if (!activeClassroom) return;
+    const classroomId = getClassroomIdForClass(classId);
     setSelectedClass(null);
     try {
       const token = await getToken();
@@ -269,7 +277,7 @@ export default function TeacherTimetable() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id: classId, classroom_id: activeClassroom.id }),
+        body: JSON.stringify({ id: classId, classroom_id: classroomId }),
       });
 
       if (res.ok) {
@@ -283,6 +291,7 @@ export default function TeacherTimetable() {
 
   const handleDeletePermanent = async (classId: string) => {
     if (!activeClassroom) return;
+    const classroomId = getClassroomIdForClass(classId);
     setSelectedClass(null);
     try {
       const token = await getToken();
@@ -294,7 +303,7 @@ export default function TeacherTimetable() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id: classId, classroom_id: activeClassroom.id, permanent: true }),
+        body: JSON.stringify({ id: classId, classroom_id: classroomId, permanent: true }),
       });
 
       if (res.ok) {
@@ -518,7 +527,7 @@ export default function TeacherTimetable() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ id: classId, classroom_id: activeClassroom.id }),
+      body: JSON.stringify({ id: classId, classroom_id: getClassroomIdForClass(classId) }),
     });
 
     if (!res.ok) {
