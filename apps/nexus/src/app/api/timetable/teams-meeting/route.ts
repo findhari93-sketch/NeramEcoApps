@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       // everyone's calendar, with the native Teams meeting join bar.
       const result = await createGroupCalendarEvent(
         supabase, token, classroom.ms_team_id, classroom_id,
-        scheduledClass.batch_id, scheduledClass, user.email, ensureSec
+        scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
       );
       meetingId = result.meetingId;
       joinUrl = result.joinUrl;
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       // Send personal calendar invites to all enrolled users
       const invited = await createPersonalCalendarEvent(
         supabase, token, classroom_id,
-        scheduledClass.batch_id, scheduledClass, meeting, user.email, ensureSec
+        scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec
       );
       extras.invitedCount = invited;
     } else {
