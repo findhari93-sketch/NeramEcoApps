@@ -27,6 +27,22 @@ export async function POST(
 
     const supabase = getSupabaseAdminClient() as any;
 
+    // Block enrollment if credentials haven't been shared (ms_teams_email not set)
+    if (!remove) {
+      const { data: studentProfile } = await supabase
+        .from('student_profiles')
+        .select('ms_teams_email')
+        .eq('user_id', userId)
+        .single();
+
+      if (!studentProfile?.ms_teams_email) {
+        return NextResponse.json(
+          { error: 'Share credentials before assigning classrooms. The student needs a Teams email for automation to work.' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Remove enrollment if requested
     if (remove) {
       const { error } = await supabase

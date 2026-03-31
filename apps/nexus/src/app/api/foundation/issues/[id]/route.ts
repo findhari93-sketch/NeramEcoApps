@@ -11,6 +11,9 @@ import {
   updateFoundationIssuePriority,
   getIssueActivityLog,
   addIssueComment,
+  confirmFoundationIssue,
+  reopenFoundationIssue,
+  cleanupIssueScreenshots,
 } from '@neram/database/queries/nexus';
 import { createUserNotification } from '@neram/database/queries';
 import type { FoundationIssueStatus } from '@neram/database/types';
@@ -30,6 +33,21 @@ async function verifyTeacherOrAdmin(request: NextRequest) {
   return user;
 }
 
+async function verifyStudent(request: NextRequest) {
+  const msUser = await verifyMsToken(request.headers.get('Authorization'));
+  const supabase = getSupabaseAdminClient();
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, user_type, name')
+    .eq('ms_oid', msUser.oid)
+    .single();
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+  return user;
+}
+
 /**
  * GET /api/foundation/issues/[id]
  * Get issue details + activity log
@@ -39,13 +57,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await verifyTeacherOrAdmin(request);
+    const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const supabase = getSupabaseAdminClient();
     const { id } = await params;
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, user_type')
+      .eq('ms_oid', msUser.oid)
+      .single();
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
 
     const [issue, activity] = await Promise.all([
       getFoundationIssueById(id),
       getIssueActivityLog(id),
     ]);
+
+    // Students can only see their own issues
+    if (user.user_type === 'student' && issue.student_id !== user.id) {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+    }
 
     return NextResponse.json({ issue, activity });
   } catch (err) {
@@ -72,17 +106,23 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await verifyTeacherOrAdmin(request);
     const { id: issueId } = await params;
     const body = await request.json();
     const action = body.action || 'status'; // backward compat
 
     const supabase = getSupabaseAdminClient();
 
+    // Student-only actions — verified inside each case
+    const studentActions = ['confirm', 'reopen'];
+    // Teacher/admin actions — verify upfront; null only for student-only actions
+    const user = studentActions.includes(action)
+      ? (null as unknown as Awaited<ReturnType<typeof verifyTeacherOrAdmin>>)
+      : await verifyTeacherOrAdmin(request);
+
     // Get issue details for notifications
     const { data: issueData } = await supabase
       .from('nexus_foundation_issues')
-      .select('student_id, title, chapter:nexus_foundation_chapters!nexus_foundation_issues_chapter_id_fkey(title)')
+      .select('student_id, title, resolved_by, chapter:nexus_foundation_chapters!nexus_foundation_issues_chapter_id_fkey(title)')
       .eq('id', issueId)
       .single();
 
@@ -158,9 +198,9 @@ export async function PATCH(
         if (issueData) {
           await createUserNotification({
             user_id: issueData.student_id,
-            event_type: 'foundation_issue_resolved',
-            title: 'Issue Resolved',
-            message: `Your issue "${issueData.title}" has been resolved: ${note}`,
+            event_type: 'foundation_issue_awaiting_confirmation',
+            title: 'Issue Resolved — Please Confirm',
+            message: `Your issue "${issueData.title}" has been resolved: ${note}. Please confirm if the fix works.`,
             metadata: {
               issue_id: issueId,
               resolution_note: note,
@@ -187,6 +227,70 @@ export async function PATCH(
         return NextResponse.json({ activity });
       }
 
+      case 'confirm': {
+        const student = await verifyStudent(request);
+        const { data: ownIssue } = await supabase
+          .from('nexus_foundation_issues')
+          .select('student_id, status, ticket_number')
+          .eq('id', issueId)
+          .single();
+
+        if (!ownIssue || ownIssue.student_id !== student.id) {
+          return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+        }
+        if (ownIssue.status !== 'awaiting_confirmation') {
+          return NextResponse.json({ error: 'Issue is not awaiting confirmation' }, { status: 400 });
+        }
+
+        issue = await confirmFoundationIssue(issueId, student.id);
+        await cleanupIssueScreenshots(issueId).catch(console.error);
+
+        if (issueData) {
+          await createUserNotification({
+            user_id: issueData.resolved_by || issueData.student_id,
+            event_type: 'foundation_issue_closed',
+            title: 'Issue Confirmed Resolved',
+            message: `Student confirmed ${ownIssue.ticket_number} is resolved.`,
+            metadata: { issue_id: issueId, ticket_number: ownIssue.ticket_number },
+          }).catch(console.error);
+        }
+        break;
+      }
+
+      case 'reopen': {
+        const student = await verifyStudent(request);
+        if (!body.reason?.trim()) {
+          return NextResponse.json({ error: 'reason is required' }, { status: 400 });
+        }
+
+        const { data: ownIssue } = await supabase
+          .from('nexus_foundation_issues')
+          .select('student_id, status, ticket_number, assigned_to')
+          .eq('id', issueId)
+          .single();
+
+        if (!ownIssue || ownIssue.student_id !== student.id) {
+          return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+        }
+        if (ownIssue.status !== 'awaiting_confirmation') {
+          return NextResponse.json({ error: 'Issue is not awaiting confirmation' }, { status: 400 });
+        }
+
+        issue = await reopenFoundationIssue(issueId, student.id, body.reason.trim());
+
+        const notifyUserId = ownIssue.assigned_to || issueData?.resolved_by;
+        if (notifyUserId) {
+          await createUserNotification({
+            user_id: notifyUserId,
+            event_type: 'foundation_issue_reopened',
+            title: 'Issue Reopened',
+            message: `Student reopened ${ownIssue.ticket_number}: "${body.reason.trim()}"`,
+            metadata: { issue_id: issueId, ticket_number: ownIssue.ticket_number, reason: body.reason.trim() },
+          }).catch(console.error);
+        }
+        break;
+      }
+
       // Backward-compatible: status change
       case 'status':
       default: {
@@ -196,15 +300,16 @@ export async function PATCH(
         }
 
         if (status === 'resolved') {
-          issue = await resolveFoundationIssue(issueId, user.id, body.resolution_note || 'Issue resolved');
+          const note = body.resolution_note || 'Issue resolved';
+          issue = await resolveFoundationIssue(issueId, user.id, note);
 
           if (issueData) {
             await createUserNotification({
               user_id: issueData.student_id,
-              event_type: 'foundation_issue_resolved',
-              title: 'Issue Resolved',
-              message: `Your issue "${issueData.title}" has been resolved.`,
-              metadata: { issue_id: issueId, resolved_by: user.name },
+              event_type: 'foundation_issue_awaiting_confirmation',
+              title: 'Issue Resolved — Please Confirm',
+              message: `Your issue "${issueData.title}" has been resolved: ${note}. Please confirm if the fix works.`,
+              metadata: { issue_id: issueId, resolution_note: note, resolved_by: user.name },
             }).catch(console.error);
           }
         } else {

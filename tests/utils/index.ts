@@ -7,3 +7,7 @@
 export * from './supabase';
 export * from './auth';
 export * from './lifecycle-helpers';
+export * from './credentials';
+export * from './auth-helpers';
+export * from './mobile-helpers';
+export * from './test-data-factory';

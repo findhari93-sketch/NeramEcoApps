@@ -20,6 +20,7 @@ out
 .env.development
 .env.production
 .env.development.local
+.env.test
 .env.test.local
 .env.production.local
 .env.staging
@@ -50,6 +51,7 @@ coverage
 # Playwright
 playwright-report
 test-results
+blob-report
 tests/.auth/*.json
 
 # TypeScript

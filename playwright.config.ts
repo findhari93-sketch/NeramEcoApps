@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
+import dotenv from 'dotenv';
+
+// Load E2E test credentials from .env.test (then .env.local as fallback)
+dotenv.config({ path: path.resolve(__dirname, '.env.test') });
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 
 /**
  * Playwright E2E Testing Configuration

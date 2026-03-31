@@ -71,11 +71,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Update last login
+    // Sync name/email from Microsoft and update last login
+    const updates: Record<string, string> = { last_login_at: new Date().toISOString() };
+    if (msUser.name && msUser.name !== user.name) updates.name = msUser.name;
+    if (msUser.email && msUser.email !== user.email) updates.email = msUser.email;
+
     await supabase
       .from('users')
-      .update({ last_login_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', user.id);
+
+    // Use latest values for response
+    if (updates.name) user = { ...user, name: updates.name };
+    if (updates.email) user = { ...user, email: updates.email };
 
     // Fetch enrolled classrooms with role
     const { data: enrollments } = await supabase

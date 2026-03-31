@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/foundation/issues
- * Body: { chapter_id, section_id?, title, description }
+ * Body: { title, category, chapter_id?, section_id?, description?, page_url?, screenshot_urls? }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -59,8 +59,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const supabase = getSupabaseAdminClient();
 
-    if (!body.chapter_id || !body.title?.trim()) {
-      return NextResponse.json({ error: 'chapter_id and title are required' }, { status: 400 });
+    if (!body.title?.trim()) {
+      return NextResponse.json({ error: 'title is required' }, { status: 400 });
+    }
+
+    if (!body.category) {
+      return NextResponse.json({ error: 'category is required' }, { status: 400 });
     }
 
     const { data: user } = await supabase
@@ -73,32 +77,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Get chapter title for notification
-    const { data: chapter } = await supabase
-      .from('nexus_foundation_chapters')
-      .select('title, chapter_number')
-      .eq('id', body.chapter_id)
-      .single();
+    // Get chapter title for notification (if chapter_id provided)
+    let chapter: { title: string; chapter_number: number } | null = null;
+    if (body.chapter_id) {
+      const { data: ch } = await supabase
+        .from('nexus_foundation_chapters')
+        .select('title, chapter_number')
+        .eq('id', body.chapter_id)
+        .single();
+      chapter = ch;
+    }
 
     const issue = await createFoundationIssue({
       student_id: user.id,
-      chapter_id: body.chapter_id,
+      chapter_id: body.chapter_id || undefined,
       section_id: body.section_id || undefined,
       title: body.title.trim(),
       description: (body.description || '').trim(),
+      category: body.category,
+      page_url: body.page_url || undefined,
+      screenshot_urls: body.screenshot_urls || undefined,
     });
 
     // Notify teachers/admins about the new issue
     try {
+      const chapterInfo = chapter
+        ? ` on Ch ${chapter.chapter_number}: ${chapter.title}`
+        : '';
       await createAdminNotification({
         event_type: 'foundation_issue_reported',
-        title: 'New Issue Reported',
-        message: `${user.name} reported: "${body.title.trim()}" on Ch ${chapter?.chapter_number || '?'}: ${chapter?.title || 'Unknown'}`,
+        title: `New Ticket ${issue.ticket_number}`,
+        message: `${user.name} reported: "${body.title.trim()}"${chapterInfo}`,
         metadata: {
           issue_id: issue.id,
+          ticket_number: issue.ticket_number,
           student_name: user.name,
-          chapter_title: chapter?.title || '',
-          chapter_number: chapter?.chapter_number || 0,
+          category: body.category,
+          chapter_title: chapter?.title || null,
+          chapter_number: chapter?.chapter_number || null,
         },
       });
     } catch (notifErr) {

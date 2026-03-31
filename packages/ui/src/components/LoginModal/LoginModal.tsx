@@ -290,12 +290,41 @@ export default function LoginModal({
     setPhoneError('');
     setPhoneLoading(true);
     try {
-      const { sendPhoneOTP } = await import('@neram/auth');
+      const { sendPhoneOTP, initRecaptcha, clearRecaptcha } = await import('@neram/auth');
+
+      // Ensure reCAPTCHA is initialized before sending OTP
+      // It may have been consumed by a previous attempt
+      if (!recaptchaInitialized.current) {
+        clearRecaptcha();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        initRecaptcha('recaptcha-container-login-modal');
+        recaptchaInitialized.current = true;
+      }
+
       await sendPhoneOTP(phoneNumber);
       setStep('otp');
       setResendTimer(60);
     } catch (err: any) {
-      setPhoneError(getFirebaseErrorMessage(err));
+      const errMsg = getFirebaseErrorMessage(err);
+      // If reCAPTCHA error, try reinitializing and retry once
+      if (err?.message?.includes('reCAPTCHA') || err?.code === 'auth/captcha-check-failed') {
+        try {
+          const { clearRecaptcha, initRecaptcha, sendPhoneOTP } = await import('@neram/auth');
+          clearRecaptcha();
+          recaptchaInitialized.current = false;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          initRecaptcha('recaptcha-container-login-modal');
+          recaptchaInitialized.current = true;
+          await sendPhoneOTP(phoneNumber);
+          setStep('otp');
+          setResendTimer(60);
+          return;
+        } catch (retryErr: any) {
+          setPhoneError(getFirebaseErrorMessage(retryErr));
+          return;
+        }
+      }
+      setPhoneError(errMsg);
     } finally {
       setPhoneLoading(false);
     }
@@ -338,6 +367,19 @@ export default function LoginModal({
         // Go back to phone step so user can enter a different number
         setStep('phone');
         setOtp('');
+        // Re-initialize reCAPTCHA since it was consumed during OTP send
+        try {
+          const { clearRecaptcha, initRecaptcha } = await import('@neram/auth');
+          clearRecaptcha();
+          recaptchaInitialized.current = false;
+          // Wait for DOM to update after step change, then reinitialize
+          setTimeout(() => {
+            initRecaptcha('recaptcha-container-login-modal');
+            recaptchaInitialized.current = true;
+          }, 500);
+        } catch (recaptchaErr) {
+          console.error('Failed to reinitialize reCAPTCHA:', recaptchaErr);
+        }
       } else {
         setPhoneError(getFirebaseErrorMessage(err));
       }
@@ -346,10 +388,22 @@ export default function LoginModal({
     }
   };
 
-  const handleChangePhone = () => {
+  const handleChangePhone = async () => {
     setStep('phone');
     setOtp('');
     setPhoneError('');
+    // Re-initialize reCAPTCHA since it was consumed during OTP send
+    try {
+      const { clearRecaptcha, initRecaptcha } = await import('@neram/auth');
+      clearRecaptcha();
+      recaptchaInitialized.current = false;
+      setTimeout(() => {
+        initRecaptcha('recaptcha-container-login-modal');
+        recaptchaInitialized.current = true;
+      }, 500);
+    } catch (recaptchaErr) {
+      console.error('Failed to reinitialize reCAPTCHA:', recaptchaErr);
+    }
   };
 
   const handleResendOtp = async () => {

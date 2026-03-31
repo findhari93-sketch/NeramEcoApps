@@ -140,6 +140,8 @@ export default function ChapterFeedback({
           section_id: issueSectionId || undefined,
           title: issueTitle.trim(),
           description: issueDescription.trim(),
+          category: 'content_issue',
+          page_url: window.location.pathname,
         }),
       });
 

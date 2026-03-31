@@ -290,6 +290,35 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 > **After implementing ANY feature, run relevant Playwright E2E tests to verify the implementation works end-to-end.**
 > **All frontend UI/UX work MUST use the `/ui-ux-pro-max` skill for design quality — aim for Amazon-level polished interfaces.**
 
+### E2E Test Credentials (IMPORTANT — Read Before Writing Tests)
+
+Test accounts are **Microsoft Entra ID** users with **MFA disabled** for Playwright automation:
+
+| Role | Email | Password | Used For |
+|------|-------|----------|----------|
+| Student | `e2etestingstudent@neramclasses.com` | See `.env.test` | Nexus student features, onboarding |
+| Teacher/Admin | `e2etestingteacher@neramclasses.com` | See `.env.test` | Nexus teacher, Admin dashboard |
+
+**How credentials work:**
+- **`.env.test`** (gitignored) — contains real passwords. Loaded automatically by `playwright.config.ts`
+- **`tests/utils/credentials.ts`** — centralized credential module. **Always import from here, never hardcode credentials:**
+  ```typescript
+  import { STUDENT_ACCOUNT, TEACHER_ACCOUNT, ADMIN_ACCOUNT, APP_URLS, getTestAuthToken, injectAuthForPage } from '../utils/credentials';
+  ```
+- **`tests/e2e/auth.setup.ts`** — runs ONCE before all tests, saves auth state to `tests/.auth/`. Subsequent tests reuse saved state — **no repeated logins**.
+- **`tests/.auth/teacher.json`** / **`tests/.auth/user.json`** — saved auth state, reused by all test projects
+
+**Auth flow for tests:**
+- **Nexus/Admin API tests**: Use `getTestAuthToken(request, 'teacher')` to get a test token
+- **Nexus/Admin UI tests**: Use `injectAuthForPage(page, 'teacher')` to inject auth into browser
+- **Admin API tests** (no browser auth needed): Admin API routes work without client-side auth in dev
+- **Student tests**: Use role `'student'` in above helpers
+
+**When writing new E2E tests:**
+1. Import credentials from `tests/utils/credentials.ts`
+2. Use `--project=admin-chrome --no-deps` to skip student auth setup if only testing admin
+3. Use `APP_URLS.admin`, `APP_URLS.nexus` etc. for base URLs (not hardcoded ports)
+
 ### Rules
 1. After implementing a feature, run `pnpm test:e2e` (or the relevant project) to verify
 2. If tests fail, fix the issues before considering the implementation complete
@@ -303,6 +332,8 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 |-------------|---------|---------|
 | Marketing | `*marketing*.spec.ts` | `marketing-chrome` |
 | Student App | `*app*.spec.ts` or `*profile*.spec.ts` | `app-chrome` |
+| Nexus | `*nexus*.spec.ts` | `nexus-chrome` |
+| Admin | `*admin*.spec.ts` | `admin-chrome` |
 | Cross-app SSO | `*integration*.spec.ts` | `integration` |
 | Mobile/PWA | `*mobile*.spec.ts` | `mobile-chrome` |
 
@@ -520,3 +551,105 @@ RESEND_API_KEY=
 2. Update types in `packages/database/src/types/index.ts`
 3. Add queries in `packages/database/src/queries/[domain].ts`
 4. Run `pnpm supabase:gen:types`
+
+---
+
+## Testing Requirements
+
+> Every feature Claude implements MUST ship with tests. No exceptions.
+
+### Testing Stack
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Unit | Vitest | Business logic, calculations, transformations |
+| Integration | Vitest + MSW | API calls, Supabase queries |
+| E2E | Playwright | Full user flows in real browser |
+| Accessibility | axe-playwright | WCAG compliance |
+
+### 4 Mandatory Rules
+
+**Rule 1: Every feature ships with tests.**
+Claude writes unit tests for logic, integration tests for APIs, and E2E tests for user flows — all in the same PR as the feature.
+
+**Rule 2: Mobile-first testing.**
+All E2E tests run on mobile viewport (375x812) as primary. Desktop is secondary. Use existing Playwright projects: `mobile-chrome`, `nexus-mobile`.
+
+**Rule 3: Role-based testing.**
+Every feature is tested for all 4 roles: Admin, Teacher, Student, Parent.
+If a role should NOT have access, write an `assertAccessDenied` test.
+
+**Rule 4: Test file locations.**
+- Unit tests: colocated next to source file (`Component.test.tsx`)
+- E2E tests: `tests/e2e/[module]/[test-name].spec.ts` or flat in `tests/e2e/`
+- Test utilities: `tests/utils/`
+- Test data: `tests/fixtures/`
+
+### Test Utilities Available
+- `tests/utils/credentials.ts` — `STUDENT_ACCOUNT`, `TEACHER_ACCOUNT`, `ADMIN_ACCOUNT`, `PARENT_ACCOUNT`, `TEST_USERS`, `APP_URLS`, `getTestAuthToken()`, `injectAuthForPage()`
+- `tests/utils/auth-helpers.ts` — `loginAsRole()`, `loginWithPhoneOTP()`, `loginWithGoogle()`, `assertAccessDenied()`
+- `tests/utils/mobile-helpers.ts` — `assertNoHorizontalOverflow()`, `assertTouchTargetSize()`, `goOffline()`, `goOnline()`, `simulateSlow3G()`, `checkAccessibility()`
+- `tests/utils/test-data-factory.ts` — `seedClassroom()`, `seedQuestionBank()`, `seedTNEAData()`, `cleanupAllTestData()`
+- `tests/utils/supabase.ts` — `createTestClient()`, `createTestAdminClient()`, `createMockSupabaseClient()`, `seedTestData()`, `cleanupTestData()`
+- `tests/utils/auth.ts` — Vitest mocks: `mockFirebaseAuth()`, `mockMicrosoftAuth()`
+
+### E2E Test Template
+Every Playwright test file MUST follow this structure:
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { loginAsRole, assertAccessDenied } from '../../utils/auth-helpers';
+import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../../utils/mobile-helpers';
+import { seedClassroom, cleanupAllTestData } from '../../utils/test-data-factory';
+
+test.describe('[Feature Name]', () => {
+  test.beforeAll(async () => { /* seed test data */ });
+  test.afterAll(async () => { await cleanupAllTestData(); });
+
+  // Happy path tests (all acceptance criteria)
+  test('AC1: [description]', async ({ page }) => { });
+  test('AC2: [description]', async ({ page }) => { });
+
+  // Role-based access tests
+  test('admin can access', async ({ page }) => { });
+  test('parent sees read-only', async ({ page }) => { });
+  test('unauthorized role is denied', async ({ page }) => { });
+
+  // Mobile tests
+  test('mobile: no horizontal overflow', async ({ page }) => { });
+  test('mobile: touch targets >= 44px', async ({ page }) => { });
+
+  // Edge cases
+  test('empty state shows message', async ({ page }) => { });
+  test('slow 3G shows loading state', async ({ page }) => { });
+  test('offline shows cached data', async ({ page }) => { });
+
+  // Boundary values
+  test('handles 0 items', async ({ page }) => { });
+  test('handles 100+ items', async ({ page }) => { });
+});
+```
+
+### Common Bugs to Test Against
+| Bug | How Claude causes it | Test to prevent it |
+|-----|---------------------|-------------------|
+| Desktop-only layout | Writes fixed widths | `assertNoHorizontalOverflow()` |
+| Tiny tap targets | Uses small icons without padding | `assertTouchTargetSize()` |
+| Missing role check | Forgets RBAC on new route | `assertAccessDenied()` for each role |
+| No loading state | Renders empty during fetch | `simulateSlow3G()` + check loader |
+| No empty state | Crashes with 0 records | Seed empty data + check message |
+| Crash offline | No PWA cache handling | `goOffline()` + verify graceful UI |
+| Wrong calculation | Logic error in marks/rank | Unit test every formula |
+| English only | Misses Tamil/Hindi text | Test with bilingual fixture data |
+| Token expiry | Session dies mid-use | Test with expired auth state |
+| Hardcoded data | Works in dev, fails in staging | Use test-data-factory, never hardcode |
+
+### Running Tests
+```bash
+pnpm test                                         # Unit tests (Vitest)
+pnpm test:e2e                                     # All E2E (all projects)
+pnpm test:e2e --project="mobile-chrome"            # Mobile only
+pnpm test:e2e --project="admin-chrome" --no-deps   # Admin only (skip auth setup)
+pnpm test:e2e tests/e2e/attendance/                # Specific module
+pnpm test:e2e --ui                                 # Visual debugging
+npx playwright show-report                         # View results
+```

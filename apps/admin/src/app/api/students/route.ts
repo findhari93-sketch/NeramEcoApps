@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         total_fee,
         fee_paid,
         fee_due,
+        ms_teams_email,
         batches:batch_id (id, name),
         users!inner (
           id,
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest) {
         full_payment_discount: lead?.full_payment_discount || null,
         discount_amount: lead?.discount_amount || null,
         source: lead?.source || null,
+        ms_teams_email: sp.ms_teams_email || null,
       };
     });
 

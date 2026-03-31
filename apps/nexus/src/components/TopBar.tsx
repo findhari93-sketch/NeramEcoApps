@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
+import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import {
   AppBar,
   Toolbar,
@@ -21,6 +23,8 @@ import GraphAvatar from '@/components/GraphAvatar';
 import NotificationBell from '@/components/NotificationBell';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import CheckIcon from '@mui/icons-material/Check';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -48,12 +52,22 @@ export default function TopBar() {
   const {
     user,
     nexusRole,
+    activeClassroom,
+    classrooms,
+    setActiveClassroom,
     signOut,
+    getToken,
   } = useNexusAuthContext();
 
   const { sidebarState, expand } = useSidebarContext();
   const { activePanel, setActivePanel, availablePanels } = usePanelContext();
+  const pathname = usePathname();
+  const [reportIssueOpen, setReportIssueOpen] = useState(false);
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
+  const [classroomAnchor, setClassroomAnchor] = useState<null | HTMLElement>(null);
+
+  // Show classroom selector for students (always) and teachers only on the Teaching panel
+  const showClassroomSelector = !!activeClassroom && (nexusRole === 'student' || activePanel === 'teaching');
 
   const handleLogout = async () => {
     setProfileAnchor(null);
@@ -119,6 +133,62 @@ export default function TopBar() {
         >
           Nexus
         </Typography>
+
+        {/* Active Classroom Chip - shown for students (always) and teachers on Teaching panel */}
+        {showClassroomSelector && (
+          <Box
+            component="button"
+            onClick={classrooms.length > 1 ? (e: React.MouseEvent<HTMLButtonElement>) => setClassroomAnchor(e.currentTarget) : undefined}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              px: 1.25,
+              py: 0.5,
+              borderRadius: 1.5,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+              bgcolor: alpha(theme.palette.primary.main, 0.06),
+              cursor: classrooms.length > 1 ? 'pointer' : 'default',
+              maxWidth: { xs: 160, sm: 260 },
+              transition: 'background-color 200ms ease',
+              '&:hover': classrooms.length > 1 ? { bgcolor: alpha(theme.palette.primary.main, 0.12) } : {},
+              outline: 'none',
+            }}
+          >
+            <SchoolOutlinedIcon sx={{ fontSize: '0.95rem', color: theme.palette.primary.main, flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  display: 'block',
+                  fontWeight: 600,
+                  fontSize: '0.7rem',
+                  lineHeight: 1.2,
+                  color: 'text.primary',
+                }}
+              >
+                {activeClassroom.name}
+              </Typography>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  display: 'block',
+                  fontSize: '0.6rem',
+                  lineHeight: 1.2,
+                  color: 'text.secondary',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {activeClassroom.type} &middot; {activeClassroom.enrollmentRole}
+              </Typography>
+            </Box>
+            {classrooms.length > 1 && (
+              <SwapHorizIcon sx={{ fontSize: '0.85rem', color: 'text.secondary', flexShrink: 0, ml: 0.25 }} />
+            )}
+          </Box>
+        )}
 
         <Box sx={{ flexGrow: 1 }} />
 
@@ -449,6 +519,35 @@ export default function TopBar() {
             />
           </MenuItem>
 
+          {/* Report Issue — students only */}
+          {nexusRole === 'student' && (
+            <MenuItem
+              onClick={() => {
+                setProfileAnchor(null);
+                setReportIssueOpen(true);
+              }}
+              sx={{
+                py: 1,
+                px: 2.5,
+                mx: 1,
+                borderRadius: 2,
+                gap: 1.5,
+                minHeight: 42,
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.warning.main, 0.06),
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, color: 'warning.main' }}>
+                <BugReportOutlinedIcon sx={{ fontSize: '1.2rem' }} />
+              </ListItemIcon>
+              <ListItemText
+                primary="Report Issue"
+                primaryTypographyProps={{ variant: 'body2' }}
+              />
+            </MenuItem>
+          )}
+
           <Divider sx={{ my: 0.75, mx: 1.5 }} />
 
           {/* Logout */}
@@ -481,6 +580,81 @@ export default function TopBar() {
           </MenuItem>
         </Menu>
 
+        {/* Classroom Switcher Menu */}
+        {showClassroomSelector && (
+          <Menu
+            anchorEl={classroomAnchor}
+            open={Boolean(classroomAnchor)}
+            onClose={() => setClassroomAnchor(null)}
+            slotProps={{
+              paper: {
+                sx: {
+                  mt: 1,
+                  minWidth: 240,
+                  borderRadius: 2.5,
+                  border: `1px solid ${theme.palette.divider}`,
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+                },
+              },
+            }}
+          >
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '0.625rem' }}>
+                Your Classrooms
+              </Typography>
+            </Box>
+            {classrooms.map((c) => {
+              const selected = c.id === activeClassroom?.id;
+              return (
+                <MenuItem
+                  key={c.id}
+                  selected={selected}
+                  onClick={() => {
+                    setActiveClassroom(c);
+                    setClassroomAnchor(null);
+                  }}
+                  sx={{
+                    py: 1,
+                    px: 2,
+                    borderRadius: 1.5,
+                    mx: 0.5,
+                    gap: 1,
+                    bgcolor: selected ? alpha(theme.palette.primary.main, 0.06) : 'transparent',
+                    '&:hover': {
+                      bgcolor: selected
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.action.hover, 0.06),
+                    },
+                  }}
+                >
+                  <SchoolOutlinedIcon
+                    sx={{
+                      fontSize: '1.1rem',
+                      color: selected ? 'primary.main' : 'text.secondary',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: selected ? 600 : 400 }}>{c.name}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize', fontSize: '0.65rem' }}>
+                      {c.type} &middot; {c.enrollmentRole}
+                    </Typography>
+                  </Box>
+                  {selected && <CheckIcon sx={{ fontSize: '1rem', color: 'primary.main' }} />}
+                </MenuItem>
+              );
+            })}
+          </Menu>
+        )}
+        {/* Report Issue Dialog */}
+        {nexusRole === 'student' && (
+          <ReportIssueDialog
+            open={reportIssueOpen}
+            onClose={() => setReportIssueOpen(false)}
+            getToken={getToken}
+            pageUrl={pathname}
+          />
+        )}
       </Toolbar>
     </AppBar>
   );

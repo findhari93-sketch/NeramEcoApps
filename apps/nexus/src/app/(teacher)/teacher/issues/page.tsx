@@ -55,6 +55,15 @@ import type {
   NexusFoundationIssueActivity,
 } from '@neram/database/types';
 
+const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
+  bug: { label: 'Bug', color: '#d32f2f' },
+  content_issue: { label: 'Content', color: '#ed6c02' },
+  ui_ux: { label: 'UI/UX', color: '#1976d2' },
+  feature_request: { label: 'Feature', color: '#7b1fa2' },
+  class_schedule: { label: 'Class', color: '#2e7d32' },
+  other: { label: 'Other', color: '#757575' },
+};
+
 interface StaffUser {
   id: string;
   name: string;
@@ -279,7 +288,7 @@ export default function TeacherIssuesPage() {
   const filteredIssues = issues.filter((issue) => {
     if (tab === 1) return issue.status === 'open';
     if (tab === 2) return issue.status === 'in_progress';
-    if (tab === 3) return issue.status === 'resolved';
+    if (tab === 3) return issue.status === 'resolved' || issue.status === 'awaiting_confirmation' || issue.status === 'closed';
     return true;
   });
 
@@ -287,11 +296,15 @@ export default function TeacherIssuesPage() {
     if (status === 'open') return 'warning';
     if (status === 'in_progress') return 'info';
     if (status === 'resolved') return 'success';
+    if (status === 'awaiting_confirmation') return 'info';
+    if (status === 'closed') return 'default';
     return 'default';
   };
 
   const statusLabel = (status: string) => {
     if (status === 'in_progress') return 'In Progress';
+    if (status === 'awaiting_confirmation') return 'Awaiting Confirmation';
+    if (status === 'closed') return 'Closed';
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -340,7 +353,7 @@ export default function TeacherIssuesPage() {
 
   const openCount = issues.filter((i) => i.status === 'open').length;
   const inProgressCount = issues.filter((i) => i.status === 'in_progress').length;
-  const resolvedCount = issues.filter((i) => i.status === 'resolved').length;
+  const resolvedCount = issues.filter((i) => i.status === 'resolved' || i.status === 'awaiting_confirmation' || i.status === 'closed').length;
 
   // ============================================
   // ACTIVITY LOG TIMELINE
@@ -609,7 +622,43 @@ export default function TeacherIssuesPage() {
         </Box>
       )}
 
-      <Divider sx={{ mb: 2 }} />
+      {/* Screenshots */}
+      {selectedIssue?.screenshot_urls && selectedIssue.screenshot_urls.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.5 }}>
+            Screenshots
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {selectedIssue.screenshot_urls.map((path: string, idx: number) => (
+              <Box
+                key={idx}
+                component="img"
+                src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/issue-screenshots/${path}`}
+                alt={`Screenshot ${idx + 1}`}
+                onClick={() => window.open(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/issue-screenshots/${path}`, '_blank')}
+                sx={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: 1.5,
+                  objectFit: 'cover',
+                  border: `1px solid ${theme.palette.divider}`,
+                  cursor: 'pointer',
+                  '&:hover': { opacity: 0.8 },
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Page URL */}
+      {selectedIssue?.page_url && (
+        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 1 }}>
+          Reported from: {selectedIssue.page_url}
+        </Typography>
+      )}
+
+      <Divider sx={{ mb: 2, mt: 2 }} />
 
       {/* Actions */}
       {selectedIssue.status === 'resolved' ? (
@@ -884,6 +933,24 @@ export default function TeacherIssuesPage() {
                   {issue.student_name?.charAt(0) || 'S'}
                 </Avatar>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                    <Typography variant="caption" sx={{ color: 'text.disabled', fontWeight: 600, fontSize: '0.7rem' }}>
+                      {issue.ticket_number}
+                    </Typography>
+                    {issue.category && (
+                      <Chip
+                        label={CATEGORY_CONFIG[issue.category]?.label || issue.category}
+                        size="small"
+                        sx={{
+                          height: 18,
+                          fontSize: '0.6rem',
+                          bgcolor: alpha(CATEGORY_CONFIG[issue.category]?.color || '#757575', 0.08),
+                          color: CATEGORY_CONFIG[issue.category]?.color || '#757575',
+                          '& .MuiChip-label': { px: 0.5 },
+                        }}
+                      />
+                    )}
+                  </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }} noWrap>
                       {issue.title}

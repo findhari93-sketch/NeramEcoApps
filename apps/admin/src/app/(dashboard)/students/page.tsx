@@ -69,6 +69,7 @@ interface StudentRow {
   full_payment_discount: number | null;
   discount_amount: number | null;
   source: string | null;
+  ms_teams_email: string | null;
 }
 
 interface Stats {
@@ -547,13 +548,21 @@ export default function StudentsPage() {
     setCredSharing(true);
     setCredError('');
     try {
-      const res = await fetch(`/api/students/${credTarget.user_id}/credentials`, {
+      const targetUserId = credTarget.user_id;
+      const sharedEmail = credEmail;
+      const res = await fetch(`/api/students/${targetUserId}/credentials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: credEmail, password: credPassword, credentialType: 'ms_teams' }),
+        body: JSON.stringify({ email: sharedEmail, password: credPassword, credentialType: 'ms_teams' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to share credentials');
+      // Update local student data so classroom assignment becomes enabled immediately
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.user_id === targetUserId ? { ...s, ms_teams_email: sharedEmail } : s
+        )
+      );
       setCredSuccess(true);
       setCredTarget(null);
       setCredEmail('');
@@ -734,6 +743,24 @@ export default function StudentsPage() {
         const enrollments = nexusEnrollments[row.user_id] || [];
         const enrolledClassroomIds = enrollments.map((e) => e.classroom_id);
         const unassignedClassrooms = nexusClassrooms.filter((c) => !enrolledClassroomIds.includes(c.id));
+        const hasCredentials = !!row.ms_teams_email;
+
+        // If no credentials shared yet, show disabled state with guidance
+        if (!hasCredentials) {
+          return (
+            <Tooltip title="Share credentials first to enable classroom assignment" arrow>
+              <Box
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.5, width: '100%', opacity: 0.5, cursor: 'not-allowed' }}
+              >
+                <KeyIcon sx={{ fontSize: 14, color: 'warning.main' }} />
+                <Typography variant="body2" color="text.disabled" sx={{ fontSize: 11 }}>
+                  Share credentials first
+                </Typography>
+              </Box>
+            </Tooltip>
+          );
+        }
 
         return (
           <Box
@@ -813,27 +840,38 @@ export default function StudentsPage() {
     {
       field: 'credentials',
       headerName: 'Credentials',
-      width: 130,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Tooltip title="Share Teams login credentials">
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<KeyIcon sx={{ fontSize: 14 }} />}
-            onClick={(e: React.MouseEvent) => {
-              e.stopPropagation();
-              setCredTarget(row);
-              setCredEmail('');
-              setCredPassword('');
-              setCredShowPassword(false);
-              setCredError('');
-            }}
-            sx={{ fontSize: 11, height: 28, textTransform: 'none' }}
-          >
-            Share
-          </Button>
-        </Tooltip>
-      ),
+      width: 150,
+      renderCell: ({ row }: { row: StudentRow; value: any }) => {
+        const hasCredentials = !!row.ms_teams_email;
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {hasCredentials && (
+              <Tooltip title={`Credentials shared: ${row.ms_teams_email}`}>
+                <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
+              </Tooltip>
+            )}
+            <Tooltip title={hasCredentials ? 'Re-share Teams login credentials' : 'Share Teams login credentials'}>
+              <Button
+                size="small"
+                variant={hasCredentials ? 'text' : 'outlined'}
+                color={hasCredentials ? 'inherit' : 'primary'}
+                startIcon={<KeyIcon sx={{ fontSize: 14 }} />}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  setCredTarget(row);
+                  setCredEmail(row.ms_teams_email || '');
+                  setCredPassword('');
+                  setCredShowPassword(false);
+                  setCredError('');
+                }}
+                sx={{ fontSize: 11, height: 28, textTransform: 'none' }}
+              >
+                {hasCredentials ? 'Re-share' : 'Share'}
+              </Button>
+            </Tooltip>
+          </Box>
+        );
+      },
     },
     {
       field: 'actions',

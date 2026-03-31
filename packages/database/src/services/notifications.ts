@@ -694,6 +694,9 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     recall_version_rejected: null, // In-app only (Nexus)
     recall_comment_added: null, // In-app only (Nexus)
     recall_published: null, // In-app only (Nexus)
+    foundation_issue_awaiting_confirmation: null, // In-app only (Nexus)
+    foundation_issue_reopened: null, // In-app only (Nexus)
+    foundation_issue_closed: null, // In-app only (Nexus)
   };
 
   return map[eventType];

@@ -18,7 +18,7 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
-import MenuOpenIcon from "@mui/icons-material/MenuOpen";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
@@ -270,7 +270,7 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           background: `linear-gradient(180deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 50%, ${theme.palette.primary.dark} 100%)`,
           color: '#fff',
           borderRight: 'none',
-          overflowX: 'hidden',
+          overflow: 'visible',
           transition: TRANSITION,
           transform: isHidden ? 'translateX(-100%)' : 'translateX(0)',
           opacity: isHidden ? 0 : 1,
@@ -341,31 +341,9 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           {renderNavContent()}
         </Box>
 
-        {/* Collapse toggle — fixed bottom */}
+        {/* User section + collapse toggle — fixed bottom */}
         <Divider sx={{ borderColor: alpha('#fff', 0.12), mx: isExpanded ? 2 : 1, flexShrink: 0 }} />
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: isExpanded ? 'flex-end' : 'center',
-            px: isExpanded ? 1.5 : 0,
-            py: 1,
-            flexShrink: 0,
-          }}
-        >
-          <Tooltip title="Click: cycle · Double-click: hide/show" placement={isIcons ? 'right' : 'left'} arrow>
-            <IconButton
-              onClick={handleCollapseClick}
-              size="small"
-              sx={{ color: alpha('#fff', 0.7), '&:hover': { color: '#fff', bgcolor: alpha('#fff', 0.1) } }}
-            >
-              <MenuOpenIcon sx={{ fontSize: '1.25rem' }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-
-        {/* User section — fixed bottom */}
-        <Divider sx={{ borderColor: alpha('#fff', 0.12), mx: isExpanded ? 2 : 1, flexShrink: 0 }} />
-        <Box sx={{ p: isExpanded ? 2 : 1, display: 'flex', alignItems: 'center', gap: isExpanded ? 1.5 : 0, justifyContent: isIcons ? 'center' : 'flex-start', flexShrink: 0 }}>
+        <Box sx={{ position: 'relative', p: isExpanded ? 2 : 1, display: 'flex', alignItems: 'center', gap: isExpanded ? 1.5 : 0, justifyContent: isIcons ? 'center' : 'flex-start', flexShrink: 0, overflow: 'visible' }}>
           <Tooltip title={isIcons ? `${user?.name || 'User'} (${nexusRole || 'member'})` : ''} placement="right" arrow>
             <Avatar
               sx={{
@@ -382,14 +360,50 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
             </Avatar>
           </Tooltip>
           {isExpanded && (
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" sx={{ color: '#fff', fontWeight: 600, lineHeight: 1.2 }} noWrap>
-                {user?.name || 'User'}
-              </Typography>
-              <Typography variant="caption" sx={{ color: alpha('#fff', 0.5), textTransform: 'capitalize', fontSize: '0.6875rem' }}>
-                {nexusRole || 'member'}
-              </Typography>
-            </Box>
+            <>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ color: '#fff', fontWeight: 600, lineHeight: 1.2 }} noWrap>
+                  {user?.name || 'User'}
+                </Typography>
+                <Typography variant="caption" sx={{ color: alpha('#fff', 0.5), textTransform: 'capitalize', fontSize: '0.6875rem' }}>
+                  {nexusRole || 'member'}
+                </Typography>
+              </Box>
+              <Tooltip title="Click: cycle · Double-click: hide/show" placement="top" arrow>
+                <IconButton
+                  onClick={handleCollapseClick}
+                  size="small"
+                  sx={{ color: alpha('#fff', 0.7), '&:hover': { color: '#fff', bgcolor: alpha('#fff', 0.1) } }}
+                >
+                  <ChevronLeftIcon sx={{ fontSize: '1.25rem' }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+          {/* Half-projecting pull-tab in icons-only mode */}
+          {isIcons && (
+            <Tooltip title="Click: cycle · Double-click: hide/show" placement="right" arrow>
+              <IconButton
+                onClick={handleCollapseClick}
+                size="small"
+                sx={{
+                  position: 'absolute',
+                  right: -16,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 24,
+                  height: 40,
+                  borderRadius: '0 8px 8px 0',
+                  bgcolor: theme.palette.primary.main,
+                  color: alpha('#fff', 0.7),
+                  '&:hover': { color: '#fff', bgcolor: theme.palette.primary.dark },
+                  boxShadow: '2px 0 8px rgba(0,0,0,0.15)',
+                  zIndex: 1,
+                }}
+              >
+                <ChevronLeftIcon sx={{ fontSize: '1rem' }} />
+              </IconButton>
+            </Tooltip>
           )}
         </Box>
       </Box>

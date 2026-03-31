@@ -2446,7 +2446,10 @@ export type NotificationEventType =
   | 'recall_version_approved'
   | 'recall_version_rejected'
   | 'recall_comment_added'
-  | 'recall_published';
+  | 'recall_published'
+  | 'foundation_issue_awaiting_confirmation'
+  | 'foundation_issue_reopened'
+  | 'foundation_issue_closed';
 
 // Classroom access request types
 export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -5112,7 +5115,7 @@ export interface NexusFoundationWatchSessionUpsert {
 // Foundation feedback & issues
 
 export type FoundationReactionType = 'like' | 'dislike';
-export type FoundationIssueStatus = 'open' | 'in_progress' | 'resolved';
+export type FoundationIssueStatus = 'open' | 'in_progress' | 'resolved' | 'awaiting_confirmation' | 'closed';
 
 export interface NexusFoundationReaction {
   id: string;
@@ -5125,6 +5128,8 @@ export interface NexusFoundationReaction {
 
 export type FoundationIssuePriority = 'low' | 'medium' | 'high';
 
+export type FoundationIssueCategory = 'bug' | 'content_issue' | 'ui_ux' | 'feature_request' | 'class_schedule' | 'other';
+
 export type FoundationIssueAction =
   | 'created'
   | 'assigned'
@@ -5134,12 +5139,14 @@ export type FoundationIssueAction =
   | 'marked_in_progress'
   | 'resolved'
   | 'reopened'
-  | 'comment';
+  | 'comment'
+  | 'confirmed'
+  | 'auto_closed';
 
 export interface NexusFoundationIssue {
   id: string;
   student_id: string;
-  chapter_id: string;
+  chapter_id: string | null;
   section_id: string | null;
   title: string;
   description: string;
@@ -5151,6 +5158,11 @@ export interface NexusFoundationIssue {
   resolved_by: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
+  ticket_number: string;
+  category: FoundationIssueCategory;
+  screenshot_urls: string[] | null;
+  page_url: string | null;
+  auto_close_at: string | null;
   created_at: string;
   updated_at: string;
 }

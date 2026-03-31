@@ -18,6 +18,7 @@ import type {
   FoundationIssueStatus,
   FoundationIssueAction,
   FoundationIssuePriority,
+  FoundationIssueCategory,
   NexusFoundationTranscript,
   TranscriptEntry,
   NexusFoundationWatchSessionUpsert,
@@ -698,10 +699,13 @@ function mapIssueRow(row: any): NexusFoundationIssueWithDetails {
 export async function createFoundationIssue(
   data: {
     student_id: string;
-    chapter_id: string;
+    chapter_id?: string;
     section_id?: string;
     title: string;
     description: string;
+    category?: FoundationIssueCategory;
+    page_url?: string;
+    screenshot_urls?: string[];
   },
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssue> {
@@ -710,10 +714,13 @@ export async function createFoundationIssue(
     .from('nexus_foundation_issues')
     .insert({
       student_id: data.student_id,
-      chapter_id: data.chapter_id,
+      chapter_id: data.chapter_id || null,
       section_id: data.section_id || null,
       title: data.title,
       description: data.description,
+      category: data.category || 'other',
+      page_url: data.page_url || null,
+      screenshot_urls: data.screenshot_urls || null,
     })
     .select()
     .single();
@@ -886,13 +893,17 @@ export async function resolveFoundationIssue(
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssue> {
   const supabase = client || getSupabaseAdminClient();
+  const autoCloseAt = new Date();
+  autoCloseAt.setDate(autoCloseAt.getDate() + 3);
+
   const { data, error } = await supabase
     .from('nexus_foundation_issues')
     .update({
-      status: 'resolved' as FoundationIssueStatus,
+      status: 'awaiting_confirmation' as FoundationIssueStatus,
       resolved_by: resolvedBy,
       resolved_at: new Date().toISOString(),
       resolution_note: resolutionNote,
+      auto_close_at: autoCloseAt.toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq('id', issueId)
@@ -905,11 +916,112 @@ export async function resolveFoundationIssue(
     actor_id: resolvedBy,
     action: 'resolved',
     old_status: 'in_progress',
-    new_status: 'resolved',
+    new_status: 'awaiting_confirmation',
     reason: resolutionNote,
   });
 
   return data as unknown as NexusFoundationIssue;
+}
+
+export async function confirmFoundationIssue(
+  issueId: string,
+  studentId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: 'closed' as FoundationIssueStatus,
+      auto_close_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: studentId,
+    action: 'confirmed',
+    old_status: 'awaiting_confirmation',
+    new_status: 'closed',
+  });
+
+  return data as unknown as NexusFoundationIssue;
+}
+
+export async function reopenFoundationIssue(
+  issueId: string,
+  studentId: string,
+  reason: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: 'open' as FoundationIssueStatus,
+      resolved_by: null,
+      resolved_at: null,
+      resolution_note: null,
+      auto_close_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: studentId,
+    action: 'reopened',
+    old_status: 'awaiting_confirmation',
+    new_status: 'open',
+    reason,
+  });
+
+  return data as unknown as NexusFoundationIssue;
+}
+
+export async function cleanupIssueScreenshots(
+  issueId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: issue } = await supabase
+    .from('nexus_foundation_issues')
+    .select('screenshot_urls')
+    .eq('id', issueId)
+    .single();
+
+  if (issue?.screenshot_urls && issue.screenshot_urls.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from('issue-screenshots')
+      .remove(issue.screenshot_urls);
+    if (storageError) console.error('Failed to delete screenshots:', storageError);
+
+    await supabase
+      .from('nexus_foundation_issues')
+      .update({ screenshot_urls: null, updated_at: new Date().toISOString() })
+      .eq('id', issueId);
+  }
+}
+
+export async function getExpiredAwaitingIssues(
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .select('*')
+    .eq('status', 'awaiting_confirmation')
+    .lt('auto_close_at', new Date().toISOString());
+  if (error) throw error;
+  return (data || []) as unknown as NexusFoundationIssue[];
 }
 
 export async function updateFoundationIssueStatus(

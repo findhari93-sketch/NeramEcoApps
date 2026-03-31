@@ -6815,17 +6815,22 @@ export type Database = {
           assigned_at: string | null
           assigned_by: string | null
           assigned_to: string | null
-          chapter_id: string
+          auto_close_at: string | null
+          category: string
+          chapter_id: string | null
           created_at: string
           description: string
           id: string
+          page_url: string | null
           priority: string
           resolution_note: string | null
           resolved_at: string | null
           resolved_by: string | null
+          screenshot_urls: string[] | null
           section_id: string | null
           status: string
           student_id: string
+          ticket_number: string
           title: string
           updated_at: string
         }
@@ -6833,17 +6838,22 @@ export type Database = {
           assigned_at?: string | null
           assigned_by?: string | null
           assigned_to?: string | null
-          chapter_id: string
+          auto_close_at?: string | null
+          category?: string
+          chapter_id?: string | null
           created_at?: string
           description?: string
           id?: string
+          page_url?: string | null
           priority?: string
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          screenshot_urls?: string[] | null
           section_id?: string | null
           status?: string
           student_id: string
+          ticket_number?: string
           title: string
           updated_at?: string
         }
@@ -6851,17 +6861,22 @@ export type Database = {
           assigned_at?: string | null
           assigned_by?: string | null
           assigned_to?: string | null
-          chapter_id?: string
+          auto_close_at?: string | null
+          category?: string
+          chapter_id?: string | null
           created_at?: string
           description?: string
           id?: string
+          page_url?: string | null
           priority?: string
           resolution_note?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          screenshot_urls?: string[] | null
           section_id?: string | null
           status?: string
           student_id?: string
+          ticket_number?: string
           title?: string
           updated_at?: string
         }
