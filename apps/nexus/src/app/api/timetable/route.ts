@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       .eq('type', 'common')
       .eq('is_active', true)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (commonClassroom && commonClassroom.id !== classroomId) {
       // Check user is enrolled in common classroom too
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
         .eq('user_id', user.id)
         .eq('classroom_id', commonClassroom.id)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (commonEnrollment) {
         let commonQuery = supabase
