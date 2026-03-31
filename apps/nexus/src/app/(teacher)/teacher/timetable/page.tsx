@@ -143,21 +143,23 @@ export default function TeacherTimetable() {
   const fetchRsvpAndRatings = async (classIds: string[], token: string) => {
     if (!activeClassroom) return;
 
-    const rsvpPromises = classIds.map((id) =>
-      fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${activeClassroom.id}`, {
+    const rsvpPromises = classIds.map((id) => {
+      const cid = getClassroomIdForClass(id);
+      return fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${cid}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.ok ? r.json() : null)
-        .catch(() => null)
-    );
+        .catch(() => null);
+    });
 
-    const ratingPromises = classIds.map((id) =>
-      fetch(`/api/timetable/reviews?class_id=${id}&classroom_id=${activeClassroom.id}`, {
+    const ratingPromises = classIds.map((id) => {
+      const cid = getClassroomIdForClass(id);
+      return fetch(`/api/timetable/reviews?class_id=${id}&classroom_id=${cid}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.ok ? r.json() : null)
-        .catch(() => null)
-    );
+        .catch(() => null);
+    });
 
     const [rsvpResults, ratingResults] = await Promise.all([
       Promise.all(rsvpPromises),
@@ -334,7 +336,7 @@ export default function TeacherTimetable() {
         },
         body: JSON.stringify({
           class_id: cls.id,
-          classroom_id: activeClassroom.id,
+          classroom_id: cls.classroom?.id || getClassroomIdForClass(cls.id),
         }),
       });
 
