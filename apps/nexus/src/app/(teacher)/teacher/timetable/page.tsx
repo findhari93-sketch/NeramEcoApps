@@ -477,7 +477,10 @@ export default function TeacherTimetable() {
     setSnackbar({ open: true, message: 'Setting up Teams meeting...', severity: 'success' });
     try {
       const token = await getTeacherToken();
-      if (!token) return;
+      if (!token) {
+        setSnackbar({ open: true, message: 'Please sign in again to create Teams meetings (extended permissions needed)', severity: 'error' });
+        return;
+      }
       const res = await fetch('/api/timetable/teams-meeting', {
         method: 'POST',
         headers: {

@@ -101,42 +101,25 @@ export async function POST(request: NextRequest) {
     let joinUrl: string;
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
-      // ── REAL TEAMS MEETING via group calendar (app-only token) ──
-      // Uses app-only token (client credentials) which has Group.ReadWrite.All
-      // This creates a proper Teams meeting visible in the channel with join bar.
-      // Falls back to standalone meeting + channel post if group calendar fails.
+      // ── CHANNEL MEETING: standalone meeting + channel post + calendar invites ──
+      const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
+      meetingId = meeting.id;
+      joinUrl = meeting.joinWebUrl;
+
+      // Post to Teams channel (best-effort)
       try {
-        const appToken = await getAppOnlyToken();
-        const result = await createGroupCalendarEvent(
-          supabase, appToken, classroom.ms_team_id, classroom_id,
-          scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
-        );
-        meetingId = result.meetingId;
-        joinUrl = result.joinUrl;
-        extras.invitedCount = result.attendeeCount;
+        await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, meeting);
         extras.channelPosted = true;
-      } catch (groupErr) {
-        console.error('Group calendar failed, falling back to standalone:', groupErr);
-        // Fallback: standalone meeting + channel post + calendar invites
-        const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
-        meetingId = meeting.id;
-        joinUrl = meeting.joinWebUrl;
-
-        // Post to Teams channel (best-effort)
-        try {
-          await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, meeting);
-          extras.channelPosted = true;
-        } catch {
-          // non-blocking
-        }
-
-        // Send calendar invites
-        const invited = await createPersonalCalendarEvent(
-          supabase, token, classroom_id,
-          scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec
-        );
-        extras.invitedCount = invited;
+      } catch (err) {
+        console.error('Channel post failed (non-blocking):', err);
       }
+
+      // Send calendar invites to all enrolled users
+      const invited = await createPersonalCalendarEvent(
+        supabase, token, classroom_id,
+        scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec
+      );
+      extras.invitedCount = invited;
     } else if (scope === 'calendar_event') {
       // ── STANDALONE MEETING + PERSONAL CALENDAR INVITES ──
       const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
