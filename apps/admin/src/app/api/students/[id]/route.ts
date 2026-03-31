@@ -97,34 +97,8 @@ export async function DELETE(
     const { id } = await params;
     const supabase = getSupabaseAdminClient();
 
-    // Skip existence checks — go straight to deletion.
-    // The RPC uses SECURITY DEFINER (bypasses RLS completely).
-    // PostgREST queries with service_role can be blocked by restrictive RLS,
-    // but the RPC runs as postgres owner and always works.
-
-    // Nullify FK references on direct_enrollment_links (not covered by RPC)
-    const { error: linkErr } = await supabase
-      .from('direct_enrollment_links')
-      .update({ used_by: null, lead_profile_id: null, student_profile_id: null })
-      .eq('used_by', id);
-    if (linkErr) console.warn('Warning: direct_enrollment_links cleanup:', linkErr.message);
-
-    // Clean up tables not covered by the bulk delete RPC
-    const extraTables = [
-      'student_onboarding_progress',
-      'user_exam_attempts',
-      'user_exam_profiles',
-      'user_notifications',
-      'score_calculations',
-      'prediction_logs',
-      'post_enrollment_details', // FK user_id → users(id) NO CASCADE — must clean before RPC
-    ];
-    for (const table of extraTables) {
-      const { error: cleanErr } = await supabase.from(table).delete().eq('user_id', id);
-      if (cleanErr) console.warn(`Warning: failed to clean ${table}:`, cleanErr.message);
-    }
-
-    // Use atomic RPC to delete user and all related data (SECURITY DEFINER — bypasses RLS)
+    // The RPC handles ALL FK cleanup in a single atomic transaction.
+    // It uses SECURITY DEFINER (bypasses RLS completely).
     const result = await adminBulkDeleteUsers([id], id, supabase);
 
     if (result.deletedUsers === 0) {

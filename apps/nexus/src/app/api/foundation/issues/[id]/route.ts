@@ -250,7 +250,7 @@ export async function PATCH(
             user_id: issueData.resolved_by || issueData.student_id,
             event_type: 'foundation_issue_closed',
             title: 'Issue Confirmed Resolved',
-            message: `Student confirmed ${ownIssue.ticket_number} is resolved.`,
+            message: `${student.name} confirmed ${ownIssue.ticket_number} "${issueData.title}" is resolved.`,
             metadata: { issue_id: issueId, ticket_number: ownIssue.ticket_number },
           }).catch(console.error);
         }
@@ -284,7 +284,7 @@ export async function PATCH(
             user_id: notifyUserId,
             event_type: 'foundation_issue_reopened',
             title: 'Issue Reopened',
-            message: `Student reopened ${ownIssue.ticket_number}: "${body.reason.trim()}"`,
+            message: `${student.name} reopened ${ownIssue.ticket_number}: "${body.reason.trim()}"`,
             metadata: { issue_id: issueId, ticket_number: ownIssue.ticket_number, reason: body.reason.trim() },
           }).catch(console.error);
         }

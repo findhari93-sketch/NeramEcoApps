@@ -30,6 +30,14 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   scholarship_rejected: '#f44336',
   scholarship_opened: '#2196f3',
   scholarship_revision_requested: '#ff5722',
+  foundation_issue_reported: '#ed6c02',
+  foundation_issue_resolved: '#4caf50',
+  foundation_issue_awaiting_confirmation: '#2196f3',
+  foundation_issue_in_progress: '#2196f3',
+  foundation_issue_assigned: '#9c27b0',
+  foundation_issue_delegated: '#ff9800',
+  foundation_issue_reopened: '#f44336',
+  foundation_issue_closed: '#4caf50',
 };
 
 function getNavigationUrl(
@@ -48,6 +56,17 @@ function getNavigationUrl(
       if (classroomId) return `/${nexusRole || 'student'}/classrooms/${classroomId}`;
       return `/${nexusRole || 'student'}/classrooms`;
     }
+    // Foundation issue notifications → navigate to issues page
+    case 'foundation_issue_resolved':
+    case 'foundation_issue_awaiting_confirmation':
+    case 'foundation_issue_in_progress':
+    case 'foundation_issue_assigned':
+    case 'foundation_issue_delegated':
+    case 'foundation_issue_reopened':
+    case 'foundation_issue_closed':
+      return `/${nexusRole || 'student'}/issues`;
+    case 'foundation_issue_reported':
+      return `/${nexusRole || 'teacher'}/issues`;
     default:
       return null;
   }

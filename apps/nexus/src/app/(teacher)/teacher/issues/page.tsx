@@ -30,6 +30,8 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  Snackbar,
+  Alert,
 } from '@neram/ui';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -113,6 +115,9 @@ export default function TeacherIssuesPage() {
   // More actions menu
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
 
+  // Success feedback
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string }>({ open: false, message: '' });
+
   useEffect(() => {
     fetchIssues();
   }, []);
@@ -191,7 +196,8 @@ export default function TeacherIssuesPage() {
   async function handleAction(
     issueId: string,
     action: string,
-    payload: Record<string, any> = {}
+    payload: Record<string, any> = {},
+    successMessage?: string
   ) {
     setUpdating(true);
     try {
@@ -208,6 +214,9 @@ export default function TeacherIssuesPage() {
         if (selectedIssue) {
           fetchIssueDetail(issueId);
         }
+        if (successMessage) {
+          setSnackbar({ open: true, message: successMessage });
+        }
       }
     } catch (err) {
       console.error('Failed to update issue:', err);
@@ -218,7 +227,7 @@ export default function TeacherIssuesPage() {
 
   async function handleAssign() {
     if (!selectedIssue || !selectedStaff) return;
-    await handleAction(selectedIssue.id, 'assign', { assigned_to: selectedStaff.id });
+    await handleAction(selectedIssue.id, 'assign', { assigned_to: selectedStaff.id }, `Assigned to ${selectedStaff.name}`);
     setAssignDialogOpen(false);
     setSelectedStaff(null);
     setStaffSearch('');
@@ -229,7 +238,7 @@ export default function TeacherIssuesPage() {
     await handleAction(selectedIssue.id, 'delegate', {
       delegated_to: delegateTarget.id,
       reason: delegateReason.trim(),
-    });
+    }, `Delegated to ${delegateTarget.name}`);
     setDelegateDialogOpen(false);
     setDelegateTarget(null);
     setDelegateReason('');
@@ -237,7 +246,7 @@ export default function TeacherIssuesPage() {
 
   async function handleReturn() {
     if (!selectedIssue || !returnReason.trim()) return;
-    await handleAction(selectedIssue.id, 'return', { reason: returnReason.trim() });
+    await handleAction(selectedIssue.id, 'return', { reason: returnReason.trim() }, 'Issue returned to open pool');
     setReturnDialogOpen(false);
     setReturnReason('');
   }
@@ -246,7 +255,7 @@ export default function TeacherIssuesPage() {
     if (!selectedIssue) return;
     await handleAction(selectedIssue.id, 'resolve', {
       resolution_note: resolutionNote.trim() || 'Issue resolved',
-    });
+    }, 'Issue resolved. Awaiting student confirmation.');
     setResolutionNote('');
   }
 
@@ -347,6 +356,8 @@ export default function TeacherIssuesPage() {
       resolved: 'resolved this issue',
       reopened: 'reopened this issue',
       comment: 'commented',
+      confirmed: 'confirmed this issue is resolved',
+      auto_closed: 'auto-closed (no response after 3 days)',
     };
     return labels[action] || action;
   };
@@ -450,7 +461,7 @@ export default function TeacherIssuesPage() {
       )}
 
       {/* Comment input */}
-      {selectedIssue && selectedIssue.status !== 'resolved' && (
+      {selectedIssue && selectedIssue.status !== 'closed' && (
         <Box sx={{ display: 'flex', gap: 1, mt: 2, alignItems: 'flex-end' }}>
           <TextField
             placeholder="Add a comment..."
@@ -492,7 +503,7 @@ export default function TeacherIssuesPage() {
           {selectedIssue.title}
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-          {selectedIssue.status !== 'resolved' && (
+          {selectedIssue.status !== 'resolved' && selectedIssue.status !== 'awaiting_confirmation' && selectedIssue.status !== 'closed' && (
             <IconButton
               size="small"
               onClick={(e) => setMenuAnchor(e.currentTarget)}
@@ -573,7 +584,7 @@ export default function TeacherIssuesPage() {
             Unassigned
           </Typography>
         )}
-        {selectedIssue.status !== 'resolved' && (
+        {selectedIssue.status !== 'resolved' && selectedIssue.status !== 'awaiting_confirmation' && selectedIssue.status !== 'closed' && (
           <Button
             size="small"
             variant="outlined"
@@ -661,7 +672,7 @@ export default function TeacherIssuesPage() {
       <Divider sx={{ mb: 2, mt: 2 }} />
 
       {/* Actions */}
-      {selectedIssue.status === 'resolved' ? (
+      {(selectedIssue.status === 'resolved' || selectedIssue.status === 'awaiting_confirmation' || selectedIssue.status === 'closed') ? (
         <Box
           sx={{
             p: 2,
@@ -673,7 +684,12 @@ export default function TeacherIssuesPage() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
             <CheckCircleOutlineIcon sx={{ fontSize: '1rem', color: theme.palette.success.main }} />
             <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
-              Resolved{selectedIssue.resolved_by_name ? ` by ${selectedIssue.resolved_by_name}` : ''}
+              {selectedIssue.status === 'closed'
+                ? 'Closed'
+                : selectedIssue.status === 'awaiting_confirmation'
+                  ? 'Awaiting Student Confirmation'
+                  : 'Resolved'}
+              {selectedIssue.resolved_by_name ? ` by ${selectedIssue.resolved_by_name}` : ''}
             </Typography>
           </Box>
           {selectedIssue.resolution_note && (
@@ -1141,6 +1157,22 @@ export default function TeacherIssuesPage() {
 
       {/* More actions menu */}
       {moreMenu}
+
+      {/* Success Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar({ open: false, message: '' })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          onClose={() => setSnackbar({ open: false, message: '' })}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

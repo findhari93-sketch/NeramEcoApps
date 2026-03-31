@@ -94,9 +94,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Build date-times
-    const startDateTime = `${scheduledClass.scheduled_date}T${scheduledClass.start_time}:00+05:30`;
-    const endDateTime = `${scheduledClass.scheduled_date}T${scheduledClass.end_time}:00+05:30`;
+    // Build date-times (start_time may be HH:MM or HH:MM:SS from Supabase)
+    const ensureSeconds = (t: string) => t.length === 5 ? `${t}:00` : t;
+    const startDateTime = `${scheduledClass.scheduled_date}T${ensureSeconds(scheduledClass.start_time)}+05:30`;
+    const endDateTime = `${scheduledClass.scheduled_date}T${ensureSeconds(scheduledClass.end_time)}+05:30`;
 
     // Step 1: Create the online meeting (common to all scopes)
     const meetingPayload = {
@@ -282,14 +283,15 @@ async function createCalendarEvent(
   }
 
   // Create calendar event with online meeting
+  const ensureSec = (t: string) => t.length === 5 ? `${t}:00` : t;
   const eventPayload = {
     subject: scheduledClass.title as string,
     start: {
-      dateTime: `${scheduledClass.scheduled_date}T${scheduledClass.start_time}:00`,
+      dateTime: `${scheduledClass.scheduled_date}T${ensureSec(scheduledClass.start_time as string)}`,
       timeZone: 'Asia/Kolkata',
     },
     end: {
-      dateTime: `${scheduledClass.scheduled_date}T${scheduledClass.end_time}:00`,
+      dateTime: `${scheduledClass.scheduled_date}T${ensureSec(scheduledClass.end_time as string)}`,
       timeZone: 'Asia/Kolkata',
     },
     isOnlineMeeting: true,
