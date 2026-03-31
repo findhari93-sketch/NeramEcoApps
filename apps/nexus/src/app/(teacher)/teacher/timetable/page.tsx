@@ -101,12 +101,12 @@ export default function TeacherTimetable() {
 
       if (res.ok) {
         const data = await res.json();
-        setClasses(data.classes || []);
+        const fetchedClasses = data.classes || [];
+        setClasses(fetchedClasses);
 
         // Fetch RSVP summaries and ratings for each class
-        const classIds = (data.classes || []).map((c: ClassCardData) => c.id);
-        if (classIds.length > 0) {
-          fetchRsvpAndRatings(classIds, token);
+        if (fetchedClasses.length > 0) {
+          fetchRsvpAndRatings(fetchedClasses, token);
         }
       }
     } catch (err) {
@@ -140,11 +140,19 @@ export default function TeacherTimetable() {
     }
   }, [activeClassroom, week.start, week.end, getToken]);
 
-  const fetchRsvpAndRatings = async (classIds: string[], token: string) => {
-    if (!activeClassroom) return;
+  const fetchRsvpAndRatings = async (fetchedClasses: ClassCardData[], token: string) => {
+    if (!activeClassroom || fetchedClasses.length === 0) return;
+
+    // Use the fetched classes directly to get classroom_id (state may not be updated yet)
+    const getClassroomId = (classId: string): string => {
+      const cls = fetchedClasses.find((c) => c.id === classId);
+      return (cls as unknown as Record<string, unknown>)?.classroom_id as string || cls?.classroom?.id || activeClassroom.id;
+    };
+
+    const classIds = fetchedClasses.map((c) => c.id);
 
     const rsvpPromises = classIds.map((id) => {
-      const cid = getClassroomIdForClass(id);
+      const cid = getClassroomId(id);
       return fetch(`/api/timetable/rsvp?class_id=${id}&classroom_id=${cid}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -153,7 +161,7 @@ export default function TeacherTimetable() {
     });
 
     const ratingPromises = classIds.map((id) => {
-      const cid = getClassroomIdForClass(id);
+      const cid = getClassroomId(id);
       return fetch(`/api/timetable/reviews?class_id=${id}&classroom_id=${cid}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
