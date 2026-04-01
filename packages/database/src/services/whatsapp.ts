@@ -439,20 +439,14 @@ export async function sendFirstTouchQuickQuestion(
  * Send first-touch: Template B — Student Results Video
  *
  * Meta template: first_touch_results_video
- * Header: VIDEO (Mumbai exam center interview)
+ * Video is baked into the Meta template (uploaded in editor), no URL needed at send time.
  * Body: {{1}} = userName
  */
 export async function sendFirstTouchResultsVideo(
   phone: string,
-  data: { userName: string; videoUrl: string }
+  data: { userName: string }
 ): Promise<WhatsAppSendResult> {
   return sendWhatsAppTemplate(phone, 'first_touch_results_video', 'en', [
-    {
-      type: 'header',
-      parameters: [
-        { type: 'video' as any, video: { link: data.videoUrl } } as any,
-      ],
-    },
     {
       type: 'body',
       parameters: [
@@ -463,23 +457,17 @@ export async function sendFirstTouchResultsVideo(
 }
 
 /**
- * Send first-touch: Template C — Drawing Tip
+ * Send first-touch: English Intro (for non-Tamil Nadu leads)
  *
- * Meta template: first_touch_drawing_tip
- * Header: VIDEO (Anna University student testimonials)
+ * Meta template: first_touch_english_intro
+ * Video is baked into the Meta template (Q paper discussion in English).
  * Body: {{1}} = userName
  */
-export async function sendFirstTouchDrawingTip(
+export async function sendFirstTouchEnglishIntro(
   phone: string,
-  data: { userName: string; videoUrl: string }
+  data: { userName: string }
 ): Promise<WhatsAppSendResult> {
-  return sendWhatsAppTemplate(phone, 'first_touch_drawing_tip', 'en', [
-    {
-      type: 'header',
-      parameters: [
-        { type: 'video' as any, video: { link: data.videoUrl } } as any,
-      ],
-    },
+  return sendWhatsAppTemplate(phone, 'first_touch_english_intro', 'en', [
     {
       type: 'body',
       parameters: [

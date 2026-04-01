@@ -8,7 +8,7 @@
 
 import type { TypedSupabaseClient } from '../client';
 import { getSupabaseAdminClient } from '../client';
-import type { AutoMessage, AutoMessageInsert } from '../types';
+import type { AutoMessage, AutoMessageInsert, FIRST_TOUCH_TEMPLATES } from '../types';
 
 /**
  * Insert a pending auto message (e.g., first-touch after registration).
@@ -198,4 +198,59 @@ export async function getAutoMessageStats(
     failed: rows.filter((r: any) => r.delivery_status === 'failed').length,
     pending: rows.filter((r: any) => r.delivery_status === 'pending').length,
   };
+}
+
+/**
+ * Get active leads who don't have a first_touch auto_message yet.
+ * Used by the backfill endpoint to send first-touch to existing leads.
+ * Includes state from lead_profiles for template selection (TN = video, others = text).
+ */
+export async function getLeadsWithoutFirstTouch(
+  client?: TypedSupabaseClient
+): Promise<{ id: string; name: string | null; phone: string | null; email: string | null; state: string | null }[]> {
+  const supabase = client ?? getSupabaseAdminClient();
+
+  // Get all active leads with firebase_uid (app users)
+  // LEFT JOIN lead_profiles for state info
+  // Exclude those already in auto_messages with first_touch
+  const { data, error } = await (supabase as any).rpc('get_leads_without_first_touch');
+
+  if (error) {
+    // Fallback: manual query if RPC doesn't exist
+    // Query leads not in auto_messages
+    const { data: leads, error: leadError } = await supabase
+      .from('users')
+      .select('id, name, phone, email')
+      .eq('user_type', 'lead')
+      .eq('status', 'active')
+      .not('firebase_uid', 'is', null);
+
+    if (leadError) throw leadError;
+
+    // Get user IDs that already have first_touch
+    const { data: existing } = await supabase
+      .from('auto_messages')
+      .select('user_id')
+      .eq('message_type', 'first_touch');
+
+    const existingIds = new Set((existing ?? []).map((e: any) => e.user_id));
+
+    // Get state from lead_profiles
+    const userIds = (leads ?? []).filter((l: any) => !existingIds.has(l.id)).map((l: any) => l.id);
+    const { data: profiles } = await supabase
+      .from('lead_profiles')
+      .select('user_id, state')
+      .in('user_id', userIds.length > 0 ? userIds : ['__none__']);
+
+    const stateMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p.state]));
+
+    return (leads ?? [])
+      .filter((l: any) => !existingIds.has(l.id))
+      .map((l: any) => ({
+        ...l,
+        state: stateMap.get(l.id) ?? null,
+      }));
+  }
+
+  return data ?? [];
 }

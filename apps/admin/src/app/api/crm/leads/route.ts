@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       search: searchParams.get('search') || undefined,
       pipelineStage: (searchParams.get('pipeline_stage') as PipelineStage) || undefined,
       excludeStages: EXCLUDED_STAGES,
+      excludeLinkedToClassroom: true,
       status: searchParams.get('status') as any || undefined,
       userType: searchParams.get('user_type') as any || undefined,
       applicationStatus: searchParams.get('application_status') as any || undefined,

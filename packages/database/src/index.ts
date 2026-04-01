@@ -68,7 +68,7 @@ export {
   sendTicketConfirmation as sendWhatsAppTicketConfirmation,
   sendFirstTouchQuickQuestion,
   sendFirstTouchResultsVideo,
-  sendFirstTouchDrawingTip,
+  sendFirstTouchEnglishIntro,
 } from './services/whatsapp';
 
 // Services - Unified Notifications

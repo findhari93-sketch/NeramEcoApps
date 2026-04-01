@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, FIRST_TOUCH_TEMPLATES } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -64,14 +64,16 @@ export async function POST(req: NextRequest) {
         const phone = decodedToken.phone_number || user.phone;
         const email = decodedToken.email || user.email;
         const channel = phone ? 'whatsapp' : 'email';
-        const randomTemplate = FIRST_TOUCH_TEMPLATES[Math.floor(Math.random() * FIRST_TOUCH_TEMPLATES.length)];
+        // Use text-only template for new registrations (state unknown at this point)
+        // Video templates (Tamil) are used in backfill for Tamil Nadu leads
+        const templateName = 'first_touch_quick_question';
         const delayMs = 30 * 60 * 1000; // 30 minutes
 
         await createAutoMessage({
           user_id: user.id,
           message_type: 'first_touch',
           channel: channel as 'whatsapp' | 'email',
-          template_name: randomTemplate,
+          template_name: templateName,
           send_after: new Date(Date.now() + delayMs).toISOString(),
           metadata: {
             user_name: user.name || decodedToken.name || null,

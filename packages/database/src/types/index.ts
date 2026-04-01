@@ -2979,6 +2979,7 @@ export interface UserJourneyListOptions {
   contactedStatus?: ContactedStatus;
   isDeadLead?: boolean;
   isIrrelevant?: boolean;
+  excludeLinkedToClassroom?: boolean;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -6629,7 +6630,7 @@ export type AutoMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'fai
 export const FIRST_TOUCH_TEMPLATES = [
   'first_touch_quick_question',
   'first_touch_results_video',
-  'first_touch_drawing_tip',
+  'first_touch_english_intro',
 ] as const;
 
 export type FirstTouchTemplateName = typeof FIRST_TOUCH_TEMPLATES[number];
@@ -6664,10 +6665,6 @@ export interface AutoFirstTouchSettings {
   enabled: boolean;
   delay_minutes: number;
   email_enabled: boolean;
-  video_urls: {
-    first_touch_results_video: string;
-    first_touch_drawing_tip: string;
-  };
 }
 
 export * from './expenses';

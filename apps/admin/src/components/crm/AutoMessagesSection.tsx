@@ -49,8 +49,8 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 const TEMPLATE_LABELS: Record<string, string> = {
   first_touch_quick_question: 'Quick Question (text)',
-  first_touch_results_video: 'Student Results (video)',
-  first_touch_drawing_tip: 'Drawing Tip (video)',
+  first_touch_results_video: 'Tamil Video (TN leads)',
+  first_touch_english_intro: 'English Video (other states)',
 };
 
 function formatRelativeTime(dateStr: string): string {

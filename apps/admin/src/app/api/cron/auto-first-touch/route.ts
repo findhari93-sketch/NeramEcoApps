@@ -19,7 +19,7 @@ import {
   updateAutoMessageResult,
   sendFirstTouchQuickQuestion,
   sendFirstTouchResultsVideo,
-  sendFirstTouchDrawingTip,
+  sendFirstTouchEnglishIntro,
   sendFirstTouchEmail,
   isWhatsAppConfigured,
   dispatchNotification,
@@ -95,26 +95,14 @@ export async function GET(request: Request) {
           }
 
           // Route to the correct template send function
+          // Videos are baked into Meta templates (uploaded in editor), no URL needed
           switch (msg.template_name) {
-            case 'first_touch_results_video': {
-              const videoUrl = settings.video_urls?.first_touch_results_video;
-              if (videoUrl) {
-                result = await sendFirstTouchResultsVideo(phone, { userName, videoUrl });
-              } else {
-                // Fall back to text-only if no video URL configured
-                result = await sendFirstTouchQuickQuestion(phone, { userName });
-              }
+            case 'first_touch_results_video':
+              result = await sendFirstTouchResultsVideo(phone, { userName });
               break;
-            }
-            case 'first_touch_drawing_tip': {
-              const videoUrl = settings.video_urls?.first_touch_drawing_tip;
-              if (videoUrl) {
-                result = await sendFirstTouchDrawingTip(phone, { userName, videoUrl });
-              } else {
-                result = await sendFirstTouchQuickQuestion(phone, { userName });
-              }
+            case 'first_touch_english_intro':
+              result = await sendFirstTouchEnglishIntro(phone, { userName });
               break;
-            }
             case 'first_touch_quick_question':
             default:
               result = await sendFirstTouchQuickQuestion(phone, { userName });

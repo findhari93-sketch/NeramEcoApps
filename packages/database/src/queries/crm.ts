@@ -45,6 +45,7 @@ export async function listUserJourneys(
     contactedStatus,
     isDeadLead,
     isIrrelevant,
+    excludeLinkedToClassroom,
     dateFrom,
     dateTo,
     limit = 25,
@@ -104,6 +105,10 @@ export async function listUserJourneys(
 
   if (isIrrelevant) {
     query = query.eq('contacted_status', 'irrelevant');
+  }
+
+  if (excludeLinkedToClassroom) {
+    query = query.is('linked_classroom_email', null);
   }
 
   if (dateFrom) {
@@ -208,7 +213,7 @@ export async function getPipelineStageCounts(
 }
 
 /**
- * Get pipeline stage counts excluding specific stages (for Leads view)
+ * Get pipeline stage counts excluding specific stages and linked-to-classroom users (for Leads view)
  */
 export async function getLeadPipelineStageCounts(
   excludeStages: PipelineStage[] = ['enrolled', 'payment_complete'],
@@ -216,9 +221,14 @@ export async function getLeadPipelineStageCounts(
 ): Promise<PipelineStageCounts> {
   const supabase = client || getSupabaseAdminClient();
 
-  const { data: rows, error } = await supabase
+  let query = supabase
     .from('user_journey_view')
     .select('pipeline_stage');
+
+  // Exclude users already linked to a classroom (they're identified students)
+  query = query.is('linked_classroom_email', null);
+
+  const { data: rows, error } = await query;
 
   if (error) throw error;
 
