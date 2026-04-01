@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Drawer,
@@ -17,8 +17,16 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
-import type { QBFilterState, NexusQBTopic, QBDifficulty, QBQuestionFormat } from '@neram/database';
-import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
+import type {
+  QBFilterState,
+  NexusQBTopic,
+  QBDifficulty,
+  QBQuestionFormat,
+  QBExamTree,
+  QBExamType,
+} from '@neram/database';
+import { QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS, type QBCategory } from '@neram/database';
+import SubjectTree from './SubjectTree';
 
 interface FilterDrawerProps {
   open: boolean;
@@ -27,6 +35,9 @@ interface FilterDrawerProps {
   onApply: (filters: QBFilterState) => void;
   topics: NexusQBTopic[];
   contextLabel?: string;
+  examTree?: QBExamTree | null;
+  matchCount?: number;
+  topicCounts?: Map<string, number>;
 }
 
 const DIFFICULTY_OPTIONS: { value: QBDifficulty; label: string }[] = [
@@ -51,7 +62,23 @@ const STATUS_OPTIONS: { value: NonNullable<QBFilterState['attempt_status']>; lab
 
 const ALL_CATEGORIES = Object.keys(QB_CATEGORY_LABELS) as QBCategory[];
 
-export default function FilterDrawer({ open, onClose, filters, onApply, topics, contextLabel }: FilterDrawerProps) {
+const EXAM_TYPE_OPTIONS: { value: QBExamType | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'JEE_PAPER_2', label: QB_EXAM_TYPE_LABELS.JEE_PAPER_2 },
+  { value: 'NATA', label: QB_EXAM_TYPE_LABELS.NATA },
+];
+
+export default function FilterDrawer({
+  open,
+  onClose,
+  filters,
+  onApply,
+  topics,
+  contextLabel,
+  examTree,
+  matchCount,
+  topicCounts,
+}: FilterDrawerProps) {
   const [draft, setDraft] = useState<QBFilterState>(filters);
 
   const handleOpen = () => setDraft(filters);
@@ -67,8 +94,42 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
     });
   };
 
+  // Derive available years from the exam tree based on selected exam type
+  const availableYears = useMemo(() => {
+    if (!examTree) return [];
+    const selectedExamType = draft.exam_type;
+    const yearsSet = new Set<number>();
+
+    for (const exam of examTree.exams) {
+      if (!selectedExamType || exam.exam_type === selectedExamType) {
+        for (const yr of exam.years) {
+          yearsSet.add(yr.year);
+        }
+      }
+    }
+
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [examTree, draft.exam_type]);
+
+  const handleExamTypeChange = (value: QBExamType | 'ALL') => {
+    setDraft((prev) => ({
+      ...prev,
+      exam_type: value === 'ALL' ? undefined : value,
+      // Reset year selection when exam type changes
+      exam_years: undefined,
+    }));
+  };
+
+  const handleTopicSelectionChange = (ids: string[]) => {
+    setDraft((prev) => ({
+      ...prev,
+      topic_ids: ids.length > 0 ? ids : undefined,
+    }));
+  };
+
   const handleApply = () => {
     const cleaned: QBFilterState = {};
+    if (draft.exam_type) cleaned.exam_type = draft.exam_type;
     if (draft.exam_relevance) cleaned.exam_relevance = draft.exam_relevance;
     if (draft.exam_years?.length) cleaned.exam_years = draft.exam_years;
     if (draft.categories?.length) cleaned.categories = draft.categories;
@@ -85,6 +146,9 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
     setDraft({});
   };
 
+  const applyLabel =
+    matchCount !== undefined ? `Apply (${matchCount} Qs)` : 'Apply Filters';
+
   return (
     <Drawer
       anchor="right"
@@ -95,6 +159,7 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
         sx: { width: { xs: '100%', sm: 360 }, p: 0 },
       }}
     >
+      {/* Header */}
       <Box
         sx={{
           display: 'flex',
@@ -113,7 +178,9 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
         </IconButton>
       </Box>
 
+      {/* Scrollable content */}
       <Box sx={{ flex: 1, overflowY: 'auto', pb: 10 }}>
+        {/* Search text */}
         <Box sx={{ px: 2, py: 1.5 }}>
           <TextField
             fullWidth
@@ -137,6 +204,74 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
           </Box>
         )}
 
+        {/* Exam Type */}
+        {examTree && (
+          <Accordion disableGutters elevation={0} defaultExpanded>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="subtitle2">Exam Type</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {EXAM_TYPE_OPTIONS.map((opt) => {
+                  const isSelected =
+                    opt.value === 'ALL' ? !draft.exam_type : draft.exam_type === opt.value;
+                  return (
+                    <Chip
+                      key={opt.value}
+                      label={opt.label}
+                      onClick={() => handleExamTypeChange(opt.value)}
+                      variant={isSelected ? 'filled' : 'outlined'}
+                      color={isSelected ? 'primary' : 'default'}
+                      size="small"
+                    />
+                  );
+                })}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+        )}
+
+        {/* Year */}
+        {availableYears.length > 0 && (
+          <Accordion disableGutters elevation={0} defaultExpanded>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="subtitle2">Year</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {availableYears.map((year) => (
+                  <Chip
+                    key={year}
+                    label={String(year)}
+                    onClick={() => toggleArrayValue('exam_years', year)}
+                    variant={(draft.exam_years || []).includes(year) ? 'filled' : 'outlined'}
+                    color={(draft.exam_years || []).includes(year) ? 'primary' : 'default'}
+                    size="small"
+                  />
+                ))}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+        )}
+
+        {/* Subject / Chapter Tree */}
+        {topics.length > 0 && (
+          <Accordion disableGutters elevation={0}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="subtitle2">Subject &amp; Chapter</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 0 }}>
+              <SubjectTree
+                topics={topics}
+                selectedIds={draft.topic_ids || []}
+                onSelectionChange={handleTopicSelectionChange}
+                topicCounts={topicCounts}
+              />
+            </AccordionDetails>
+          </Accordion>
+        )}
+
+        {/* Category */}
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Category</Typography>
@@ -157,6 +292,7 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
           </AccordionDetails>
         </Accordion>
 
+        {/* Difficulty */}
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Difficulty</Typography>
@@ -177,6 +313,7 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
           </AccordionDetails>
         </Accordion>
 
+        {/* Question Format */}
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Question Format</Typography>
@@ -197,6 +334,7 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
           </AccordionDetails>
         </Accordion>
 
+        {/* Attempt Status */}
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Attempt Status</Typography>
@@ -221,30 +359,9 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
             </Box>
           </AccordionDetails>
         </Accordion>
-
-        {topics.length > 0 && (
-          <Accordion disableGutters elevation={0}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle2">Topic</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                {topics.map((topic) => (
-                  <Chip
-                    key={topic.id}
-                    label={topic.name}
-                    onClick={() => toggleArrayValue('topic_ids', topic.id)}
-                    variant={(draft.topic_ids || []).includes(topic.id) ? 'filled' : 'outlined'}
-                    color={(draft.topic_ids || []).includes(topic.id) ? 'primary' : 'default'}
-                    size="small"
-                  />
-                ))}
-              </Box>
-            </AccordionDetails>
-          </Accordion>
-        )}
       </Box>
 
+      {/* Bottom action bar */}
       <Box
         sx={{
           position: 'absolute',
@@ -263,7 +380,7 @@ export default function FilterDrawer({ open, onClose, filters, onApply, topics, 
           Reset
         </Button>
         <Button variant="contained" onClick={handleApply} fullWidth>
-          Apply Filters
+          {applyLabel}
         </Button>
       </Box>
     </Drawer>

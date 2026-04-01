@@ -44,17 +44,16 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
       variant="outlined"
       data-question-index={questionIndex}
       sx={{
-        borderRadius: 2,
-        transition: 'all 0.2s ease-in-out',
+        borderRadius: 1.5,
+        transition: 'all 0.15s ease-in-out',
         borderColor: expanded
           ? alpha(theme.palette.primary.main, 0.5)
           : 'divider',
-        boxShadow: expanded ? theme.shadows[2] : 'none',
+        boxShadow: expanded ? theme.shadows[1] : 'none',
         '&:hover': expanded
           ? {}
           : {
-              boxShadow: theme.shadows[4],
-              borderColor: alpha(theme.palette.primary.main, 0.4),
+              borderColor: alpha(theme.palette.primary.main, 0.3),
             },
       }}
     >
@@ -74,10 +73,10 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
               }
         }
         sx={{
-          p: { xs: 1.5, md: 2 },
+          p: { xs: 1, md: 1.5 },
           cursor: expanded ? 'default' : 'pointer',
           display: 'flex',
-          gap: 1.5,
+          gap: 1,
         }}
       >
         {/* Question number */}
@@ -86,8 +85,9 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
           sx={{
             fontWeight: 700,
             color: expanded ? 'primary.main' : 'text.secondary',
-            minWidth: 32,
+            minWidth: 28,
             pt: 0.25,
+            fontSize: '0.8rem',
           }}
         >
           Q{questionIndex + 1}
@@ -95,9 +95,10 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
 
         {/* Main content */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          {/* Source badges */}
-          <Box sx={{ mb: 0.5 }}>
+          {/* Source badges + difficulty in one row */}
+          <Box sx={{ mb: 0.25, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
             <SourceBadges sources={question.sources} />
+            {!expanded && <DifficultyChip difficulty={question.difficulty} size="small" />}
           </Box>
 
           {/* Question text preview (2 lines) */}
@@ -132,7 +133,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
             );
           })()}
 
-          {/* Bottom row: difficulty, categories, attempt indicator */}
+          {/* Bottom row: categories, attempt indicator */}
           {!expanded && (
             <Box
               sx={{
@@ -142,7 +143,6 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
                 flexWrap: 'wrap',
               }}
             >
-              <DifficultyChip difficulty={question.difficulty} size="small" />
               <CategoryChips
                 categories={(question.categories || []).slice(0, 2)}
                 size="small"

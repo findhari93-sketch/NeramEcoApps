@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -8,7 +8,6 @@ import {
   Skeleton,
   Paper,
   IconButton,
-  Badge,
   Button,
   Checkbox,
   Dialog,
@@ -21,30 +20,19 @@ import {
   Radio,
   Snackbar,
   Alert,
-  ToggleButton,
-  ToggleButtonGroup,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
-import SelectAllIcon from '@mui/icons-material/SelectAll';
-import TranslateIcon from '@mui/icons-material/Translate';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { useScrollSpy } from '@/hooks/useScrollSpy';
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import QuestionBankLayout from '@/components/question-bank/QuestionBankLayout';
+import TopFilterBar from '@/components/question-bank/TopFilterBar';
 import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
 import FilterDrawer from '@/components/question-bank/FilterDrawer';
-import FilterChips, { countActiveFilters } from '@/components/question-bank/FilterChips';
-import { ProgressHeader } from '@/components/question-bank/ProgressHeader';
-import { JumpBar, type QuestionStatus } from '@/components/question-bank/JumpBar';
-import { MiniMap } from '@/components/question-bank/MiniMap';
+import { countActiveFilters } from '@/components/question-bank/FilterChips';
 import SwipeableQuestionCard from '@/components/question-bank/SwipeableQuestionCard';
-import ScrollToTopFab from '@/components/question-bank/ScrollToTopFab';
-import KeyboardShortcutsOverlay from '@/components/question-bank/KeyboardShortcutsOverlay';
 import type {
   QBExamTree,
   QBFilterState,
@@ -92,7 +80,7 @@ export default function QuestionListPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { activeClassroom, getToken } = useNexusAuthContext();
 
-  // Exam sidebar state
+  // Exam context from URL params
   const [examTree, setExamTree] = useState<QBExamTree | null>(null);
   const [examTreeLoading, setExamTreeLoading] = useState(true);
   const [selectedExam, setSelectedExam] = useState<string | null>(
@@ -115,7 +103,6 @@ export default function QuestionListPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [topics, setTopics] = useState<NexusQBTopic[]>([]);
 
@@ -146,80 +133,22 @@ export default function QuestionListPage() {
   // Language toggle
   const [lang, setLang] = useState<'en' | 'hi'>('en');
 
-  // Keyboard shortcuts overlay
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const hasMore = questions.length < totalCount;
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  // Context detection: Year Paper view vs Full Bank view
+  const isYearPaperView = !!(selectedExam || selectedYear || selectedSession);
 
-  // Scroll spy for tracking visible question
-  const { currentIndex: scrollSpyIndex, containerRef: scrollContainerRef, scrollToIndex } = useScrollSpy({
-    itemSelector: '[data-question-index]',
-  });
+  // Build context label
+  const contextLabelParts: string[] = [];
+  if (selectedExam) contextLabelParts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
+  if (selectedYear) contextLabelParts.push(String(selectedYear));
+  if (selectedSession) contextLabelParts.push(selectedSession);
+  const contextLabel = contextLabelParts.length > 0 ? contextLabelParts.join(' ') : undefined;
 
-  // Build question status map for JumpBar + MiniMap
-  const questionStatuses = useMemo(() => {
-    const statuses = new Map<number, QuestionStatus>();
-    questions.forEach((q, idx) => {
-      const summary = q.attempt_summary;
-      if (summary && summary.total_attempts > 0) {
-        statuses.set(idx, summary.best_result ? 'correct' : 'incorrect');
-      } else {
-        statuses.set(idx, 'unattempted');
-      }
-    });
-    return statuses;
-  }, [questions]);
+  const activeFilterCount = countActiveFilters(filters);
 
-  // Compute correct/incorrect counts for progress header
-  const { correctCount, incorrectCount } = useMemo(() => {
-    let correct = 0;
-    let incorrect = 0;
-    questionStatuses.forEach((s) => {
-      if (s === 'correct') correct++;
-      else if (s === 'incorrect') incorrect++;
-    });
-    return { correctCount: correct, incorrectCount: incorrect };
-  }, [questionStatuses]);
+  // ─── Effects ──────────────────────────────────────────────────────────────
 
-  // Keyboard shortcuts
-  const handleJumpToQuestion = useCallback((qNum: number) => {
-    const idx = Math.max(0, Math.min(qNum - 1, questions.length - 1));
-    scrollToIndex(idx);
-  }, [questions.length, scrollToIndex]);
-
-  const { goToMode, goToBuffer } = useKeyboardShortcuts({
-    enabled: isDesktop && !createTestOpen && !filterOpen,
-    actions: {
-      onNext: () => {
-        const nextIdx = Math.min(scrollSpyIndex + 1, questions.length - 1);
-        scrollToIndex(nextIdx);
-      },
-      onPrev: () => {
-        const prevIdx = Math.max(scrollSpyIndex - 1, 0);
-        scrollToIndex(prevIdx);
-      },
-      onToggleExpand: () => {
-        const q = questions[scrollSpyIndex];
-        if (q) handleExpandQuestion(q.id);
-      },
-      onToggleStudied: () => handleStudyToggle(),
-      onSelectOption: () => { /* MCQ option selection handled within QuestionDetail */ },
-      onEscape: () => {
-        if (expandedQuestionId) {
-          setExpandedQuestionId(null);
-          setExpandedDetail(null);
-        } else if (selectionMode) {
-          exitSelectionMode();
-        }
-      },
-      onToggleHelp: () => setShortcutsOpen((prev) => !prev),
-      onGoToQuestion: handleJumpToQuestion,
-    },
-  });
-
-  // Fetch exam tree on mount
+  // Fetch exam tree and topics on mount
   useEffect(() => {
     if (!activeClassroom) return;
     fetchExamTree();
@@ -234,13 +163,13 @@ export default function QuestionListPage() {
     }
   }, [searchParams, activeClassroom]);
 
-  // Fetch questions when filters, sidebar selection, or mode change
+  // Fetch questions when filters or exam context change
   useEffect(() => {
     if (!activeClassroom) return;
-    fetchQuestions(1, false);
+    fetchQuestions(1);
   }, [activeClassroom, filters, selectedExam, selectedYear, selectedSession]);
 
-  // Sync filters + sidebar to URL
+  // Sync filters + exam context to URL
   useEffect(() => {
     const params = serializeFilters(filters);
     if (selectedExam) params.set('exam', selectedExam);
@@ -255,23 +184,22 @@ export default function QuestionListPage() {
     }
   }, [filters, selectedExam, selectedYear, selectedSession]);
 
-  // Infinite scroll observer
+  // Total pages for pagination
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  // Auto-suggest test title when create dialog opens
   useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
+    if (createTestOpen && !testTitle) {
+      const parts: string[] = [];
+      if (selectedExam) parts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
+      if (selectedYear) parts.push(String(selectedYear));
+      parts.push('Practice');
+      parts.push(`- ${selectedQuestionIds.size} questions`);
+      setTestTitle(parts.join(' '));
+    }
+  }, [createTestOpen]);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          loadNextPage();
-        }
-      },
-      { rootMargin: '200px' },
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, page]);
+  // ─── Fetch functions ──────────────────────────────────────────────────────
 
   async function fetchExamTree() {
     setExamTreeLoading(true);
@@ -327,13 +255,9 @@ export default function QuestionListPage() {
     }
   }
 
-  async function fetchQuestions(pageNum: number, append: boolean) {
-    if (append) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-      setQuestions([]);
-    }
+  async function fetchQuestions(pageNum: number) {
+    setLoading(true);
+    setQuestions([]);
 
     try {
       const token = await getToken();
@@ -343,7 +267,7 @@ export default function QuestionListPage() {
       params.set('page_size', String(PAGE_SIZE));
       params.set('mode', 'practice');
 
-      // Sidebar source filters
+      // Exam context filters
       if (selectedExam) params.set('exam_type', selectedExam);
       if (selectedYear) params.set('year', String(selectedYear));
       if (selectedSession) params.set('session', selectedSession);
@@ -367,110 +291,24 @@ export default function QuestionListPage() {
       const items: NexusQBQuestionListItem[] = payload?.questions || (Array.isArray(payload) ? payload : []);
       const total: number = payload?.total ?? json.total_count ?? items.length;
 
-      if (append) {
-        setQuestions((prev) => [...prev, ...items]);
-      } else {
-        setQuestions(items);
-      }
+      setQuestions(items);
       setTotalCount(total);
       setPage(pageNum);
     } catch (err) {
       console.error('Failed to fetch questions:', err);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
   }
 
-  function loadNextPage() {
-    fetchQuestions(page + 1, true);
-  }
-
-  function handleExamSelect(exam: string | null, year: number | null, session: string | null) {
-    setSelectedExam(exam);
-    setSelectedYear(year);
-    setSelectedSession(session);
+  function goToPage(pageNum: number) {
     setExpandedQuestionId(null);
     setExpandedDetail(null);
+    fetchQuestions(pageNum);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Auto-suggest test title when create dialog opens
-  useEffect(() => {
-    if (createTestOpen && !testTitle) {
-      const parts: string[] = [];
-      if (selectedExam) parts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
-      if (selectedYear) parts.push(String(selectedYear));
-      parts.push('Practice');
-      parts.push(`- ${selectedQuestionIds.size} questions`);
-      setTestTitle(parts.join(' '));
-    }
-  }, [createTestOpen]);
-
-  // Selection mode helpers
-  function toggleQuestionSelection(questionId: string) {
-    setSelectedQuestionIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(questionId)) {
-        next.delete(questionId);
-      } else {
-        next.add(questionId);
-      }
-      return next;
-    });
-  }
-
-  function selectAllFiltered() {
-    setSelectedQuestionIds(new Set(questions.map((q) => q.id)));
-  }
-
-  function exitSelectionMode() {
-    setSelectionMode(false);
-    setSelectedQuestionIds(new Set());
-  }
-
-  // Create test handler
-  async function handleCreateTest() {
-    if (!activeClassroom || selectedQuestionIds.size === 0) return;
-
-    setCreatingTest(true);
-    try {
-      const token = await getToken();
-      const res = await fetch('/api/question-bank/custom-tests', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: testTitle.trim(),
-          question_ids: Array.from(selectedQuestionIds),
-          timer_type: timerType,
-          duration_minutes: timerType === 'full' ? durationMinutes : undefined,
-          per_question_seconds: timerType === 'per_question' ? perQuestionSeconds : undefined,
-          classroom_id: activeClassroom.id,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to create test');
-      }
-
-      setSnackbar({ open: true, message: 'Custom test created successfully!', severity: 'success' });
-      setCreateTestOpen(false);
-      exitSelectionMode();
-      setTestTitle('');
-      setTimerType('none');
-      setDurationMinutes(60);
-      setPerQuestionSeconds(120);
-      router.push('/student/tests');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create test';
-      setSnackbar({ open: true, message, severity: 'error' });
-    } finally {
-      setCreatingTest(false);
-    }
-  }
+  // ─── Question handlers ────────────────────────────────────────────────────
 
   async function handleExpandQuestion(questionId: string) {
     // In selection mode, toggle selection instead of expanding
@@ -527,7 +365,6 @@ export default function QuestionListPage() {
       );
       if (res.ok) {
         const json = await res.json();
-        // Refresh the detail to show result
         setExpandedDetail((prev) => prev ? { ...prev, ...json.data } : prev);
       }
     } catch (err) {
@@ -601,6 +438,8 @@ export default function QuestionListPage() {
     }
   }
 
+  // ─── Filter handlers ─────────────────────────────────────────────────────
+
   function handleFilterApply(newFilters: QBFilterState) {
     setFilters(newFilters);
   }
@@ -631,240 +470,286 @@ export default function QuestionListPage() {
     setFilters({});
   }
 
-  const activeFilterCount = countActiveFilters(filters);
+  // ─── Selection mode helpers ───────────────────────────────────────────────
 
-  // Build context label for filter drawer
-  const contextLabelParts: string[] = [];
-  if (selectedExam) contextLabelParts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
-  if (selectedYear) contextLabelParts.push(String(selectedYear));
-  if (selectedSession) contextLabelParts.push(selectedSession);
-  const contextLabel = contextLabelParts.length > 0 ? contextLabelParts.join(' ') : undefined;
+  function toggleQuestionSelection(questionId: string) {
+    setSelectedQuestionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  }
+
+  async function selectAllFiltered() {
+    // Fetch ALL question IDs matching current filters (not just current page)
+    try {
+      const token = await getToken();
+      const params = new URLSearchParams();
+      params.set('classroom_id', activeClassroom!.id);
+      params.set('page', '1');
+      params.set('page_size', '1000'); // fetch all matching IDs
+      if (selectedExam) params.set('exam_type', selectedExam);
+      if (selectedYear) params.set('year', String(selectedYear));
+      if (selectedSession) params.set('session', selectedSession);
+      if (filters.categories?.length) params.set('categories', filters.categories.join(','));
+      if (filters.difficulty?.length) params.set('difficulty', filters.difficulty.join(','));
+      if (filters.question_format?.length) params.set('question_format', filters.question_format.join(','));
+      if (filters.attempt_status && filters.attempt_status !== 'all') params.set('attempt_status', filters.attempt_status);
+      if (filters.search_text) params.set('search_text', filters.search_text);
+      if (filters.topic_ids?.length) params.set('topic_ids', filters.topic_ids.join(','));
+
+      const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const payload = json.data || json;
+        const items: NexusQBQuestionListItem[] = payload?.questions || (Array.isArray(payload) ? payload : []);
+        setSelectedQuestionIds(new Set(items.map((q) => q.id)));
+      }
+    } catch {
+      // Fallback: select only current page
+      setSelectedQuestionIds(new Set(questions.map((q) => q.id)));
+    }
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedQuestionIds(new Set());
+  }
+
+  // ─── Create test handler ─────────────────────────────────────────────────
+
+  async function handleCreateTest() {
+    if (!activeClassroom || selectedQuestionIds.size === 0) return;
+
+    setCreatingTest(true);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/question-bank/custom-tests', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: testTitle.trim(),
+          question_ids: Array.from(selectedQuestionIds),
+          timer_type: timerType,
+          duration_minutes: timerType === 'full' ? durationMinutes : undefined,
+          per_question_seconds: timerType === 'per_question' ? perQuestionSeconds : undefined,
+          classroom_id: activeClassroom.id,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to create test');
+      }
+
+      setSnackbar({ open: true, message: 'Custom test created successfully!', severity: 'success' });
+      setCreateTestOpen(false);
+      exitSelectionMode();
+      setTestTitle('');
+      setTimerType('none');
+      setDurationMinutes(60);
+      setPerQuestionSeconds(120);
+      router.push('/student/tests');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create test';
+      setSnackbar({ open: true, message, severity: 'error' });
+    } finally {
+      setCreatingTest(false);
+    }
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <QuestionBankLayout
-      examTree={examTree}
-      examTreeLoading={examTreeLoading}
-      selectedExam={selectedExam}
-      selectedYear={selectedYear}
-      selectedSession={selectedSession}
-      onSelect={handleExamSelect}
-      rightSlot={
-        !loading && questions.length > 0 ? (
-          <MiniMap
-            totalQuestions={questions.length}
-            currentIndex={scrollSpyIndex}
-            questionStatuses={questionStatuses}
-            onJump={scrollToIndex}
-          />
-        ) : undefined
-      }
-    >
-      {/* Sticky Progress Header + Jump Bar + Actions */}
-      <ProgressHeader
-        contextLabel={contextLabel || 'Question Bank'}
-        currentIndex={scrollSpyIndex}
-        totalQuestions={totalCount || questions.length}
-        correctCount={correctCount}
-        incorrectCount={incorrectCount}
-      >
-        {/* Jump bar (inside progress header) */}
-        {!loading && questions.length > 0 && (
-          <JumpBar
-            totalQuestions={questions.length}
-            currentIndex={scrollSpyIndex}
-            questionStatuses={questionStatuses}
-            onJump={scrollToIndex}
-            collapsible={isMobile}
-          />
-        )}
-
-        {/* Actions row: create test, language, filter */}
-        <Box
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Back button */}
+      <Box sx={{ px: 2, pt: 1 }}>
+        <Button
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => router.push('/student/question-bank')}
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mt: 1,
-            flexWrap: 'wrap',
+            textTransform: 'none',
+            color: 'text.secondary',
+            fontWeight: 500,
+            '&:hover': { bgcolor: 'action.hover' },
           }}
         >
-          {/* Go-to mode indicator */}
-          {goToMode && (
-            <Typography variant="caption" sx={{ bgcolor: 'warning.light', px: 1, py: 0.25, borderRadius: 1, fontWeight: 600 }}>
-              Go to: {goToBuffer || '...'}
-            </Typography>
-          )}
+          {contextLabel || 'Question Bank'}
+        </Button>
+      </Box>
 
-          <Box sx={{ flexGrow: 1 }} />
-
-          {/* Create Test / Cancel button */}
-          {!selectionMode ? (
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => setSelectionMode(true)}
-              sx={{ textTransform: 'none', minHeight: 40 }}
-            >
-              Create Test
-            </Button>
-          ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<SelectAllIcon />}
-                onClick={selectAllFiltered}
-                sx={{ textTransform: 'none', minHeight: 40 }}
-              >
-                Select All ({questions.length})
-              </Button>
-              <Button
-                size="small"
-                variant="text"
-                color="inherit"
-                onClick={exitSelectionMode}
-                sx={{ textTransform: 'none', minHeight: 40 }}
-              >
-                Cancel
-              </Button>
-            </Box>
-          )}
-
-          {/* Language toggle */}
-          <ToggleButtonGroup
-            value={lang}
-            exclusive
-            onChange={(_, v) => v && setLang(v)}
-            size="small"
-            sx={{
-              '& .MuiToggleButton-root': {
-                px: 1,
-                py: 0.25,
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                textTransform: 'none',
-                minWidth: 32,
-                minHeight: 32,
-              },
-            }}
-          >
-            <ToggleButton value="en">EN</ToggleButton>
-            <ToggleButton value="hi">हि</ToggleButton>
-          </ToggleButtonGroup>
-
-          <IconButton
-            onClick={() => setFilterOpen(true)}
-            sx={{ minWidth: 48, minHeight: 48 }}
-            aria-label="Open filters"
-          >
-            <Badge
-              badgeContent={activeFilterCount}
-              color="primary"
-              invisible={activeFilterCount === 0}
-            >
-              <FilterListIcon />
-            </Badge>
-          </IconButton>
-        </Box>
-      </ProgressHeader>
-
-      {/* Filter chips (below sticky header) */}
-      <FilterChips
+      {/* Top Filter Bar (sticky) */}
+      <TopFilterBar
         filters={filters}
-        onRemove={handleFilterRemove}
-        onClearAll={handleClearFilters}
+        onFilterChange={(newFilters) => setFilters(newFilters)}
+        onOpenDrawer={() => setFilterOpen(true)}
+        activeFilterCount={activeFilterCount}
+        totalCount={totalCount}
+        filteredCount={questions.length}
+        selectionMode={selectionMode}
+        selectedCount={selectedQuestionIds.size}
+        onToggleSelectionMode={() => {
+          if (selectionMode) {
+            exitSelectionMode();
+          } else {
+            setSelectionMode(true);
+          }
+        }}
+        onSelectAll={selectAllFiltered}
+        onCreateTest={() => setCreateTestOpen(true)}
+        contextLabel={contextLabel}
+        isYearPaperView={isYearPaperView}
+        lang={lang}
+        onLangChange={(v) => setLang(v)}
       />
 
-      {/* Question list with scroll spy container */}
-      {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 2 }} />
-          ))}
-        </Box>
-      ) : questions.length === 0 ? (
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 4,
-            textAlign: 'center',
-            borderRadius: 2,
-          }}
-        >
-          <QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            No questions match your filters
-          </Typography>
-          <Button variant="outlined" onClick={handleClearFilters}>
-            Reset Filters
-          </Button>
-        </Paper>
-      ) : (
-        <Box
-          ref={scrollContainerRef as React.RefObject<HTMLDivElement>}
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pb: selectionMode && selectedQuestionIds.size > 0 ? 10 : 0 }}
-        >
-          {questions.map((q, idx) => (
-            <Box key={q.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
-              {/* Checkbox in selection mode */}
-              {selectionMode && (
-                <Checkbox
-                  checked={selectedQuestionIds.has(q.id)}
-                  onChange={() => toggleQuestionSelection(q.id)}
-                  sx={{
-                    mt: 1,
-                    mr: -0.5,
-                    minWidth: 42,
-                    minHeight: 42,
-                  }}
-                  inputProps={{ 'aria-label': `Select question ${idx + 1}` }}
-                />
-              )}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <SwipeableQuestionCard
-                  onStudied={() => handleSwipeStudy(q.id)}
-                  onBookmark={() => setSnackbar({ open: true, message: 'Bookmarked!', severity: 'success' })}
-                  onLongPress={() => {
-                    if (!selectionMode) {
-                      setSelectionMode(true);
-                      setSelectedQuestionIds(new Set([q.id]));
-                    }
-                  }}
-                  disabled={selectionMode}
-                >
-                  <InlineQuestionCard
-                    question={q}
-                    questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
-                    expanded={expandedQuestionId === q.id}
-                    loading={expandedQuestionId === q.id && detailLoading}
-                    questionIndex={idx}
-                    lang={lang}
-                    onToggleExpand={() => handleExpandQuestion(q.id)}
-                    onSubmit={handleInlineSubmit}
-                    onStudyToggle={handleStudyToggle}
-                    onReport={handleReport}
+      {/* Question list (scrollable) */}
+      <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 1, md: 2 }, pb: 2 }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, pt: 1 }}>
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 2 }} />
+            ))}
+          </Box>
+        ) : questions.length === 0 ? (
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 4,
+              mt: 2,
+              textAlign: 'center',
+              borderRadius: 2,
+            }}
+          >
+            <QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+              No questions match your filters
+            </Typography>
+            <Button variant="outlined" onClick={handleClearFilters}>
+              Reset Filters
+            </Button>
+          </Paper>
+        ) : (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.75,
+              pt: 1,
+              pb: selectionMode && selectedQuestionIds.size > 0 ? 10 : 0,
+            }}
+          >
+            {questions.map((q, idx) => (
+              <Box key={q.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+                {/* Checkbox in selection mode */}
+                {selectionMode && (
+                  <Checkbox
+                    checked={selectedQuestionIds.has(q.id)}
+                    onChange={() => toggleQuestionSelection(q.id)}
+                    sx={{
+                      mt: 1,
+                      mr: -0.5,
+                      minWidth: 42,
+                      minHeight: 42,
+                    }}
+                    inputProps={{ 'aria-label': `Select question ${idx + 1}` }}
                   />
-                </SwipeableQuestionCard>
+                )}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <SwipeableQuestionCard
+                    onStudied={() => handleSwipeStudy(q.id)}
+                    onBookmark={() => setSnackbar({ open: true, message: 'Bookmarked!', severity: 'success' })}
+                    onLongPress={() => {
+                      if (!selectionMode) {
+                        setSelectionMode(true);
+                        setSelectedQuestionIds(new Set([q.id]));
+                      }
+                    }}
+                    disabled={selectionMode}
+                  >
+                    <InlineQuestionCard
+                      question={q}
+                      questionDetail={expandedQuestionId === q.id ? expandedDetail : null}
+                      expanded={expandedQuestionId === q.id}
+                      loading={expandedQuestionId === q.id && detailLoading}
+                      questionIndex={idx}
+                      lang={lang}
+                      onToggleExpand={() => handleExpandQuestion(q.id)}
+                      onSubmit={handleInlineSubmit}
+                      onStudyToggle={handleStudyToggle}
+                      onReport={handleReport}
+                    />
+                  </SwipeableQuestionCard>
+                </Box>
               </Box>
-            </Box>
-          ))}
+            ))}
 
-          {/* Loading more indicator */}
-          {loadingMore && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              {[1, 2].map((i) => (
-                <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 2 }} />
-              ))}
-            </Box>
-          )}
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={page <= 1}
+                    onClick={() => goToPage(page - 1)}
+                    sx={{ minWidth: 40, minHeight: 40 }}
+                  >
+                    ‹
+                  </Button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                    .map((p, idx, arr) => {
+                      const showEllipsis = idx > 0 && p - arr[idx - 1] > 1;
+                      return (
+                        <Box key={p} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {showEllipsis && (
+                            <Typography variant="body2" color="text.disabled" sx={{ px: 0.5 }}>
+                              ...
+                            </Typography>
+                          )}
+                          <Button
+                            size="small"
+                            variant={p === page ? 'contained' : 'text'}
+                            onClick={() => goToPage(p)}
+                            sx={{
+                              minWidth: 40,
+                              minHeight: 40,
+                              fontWeight: p === page ? 700 : 400,
+                            }}
+                          >
+                            {p}
+                          </Button>
+                        </Box>
+                      );
+                    })}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={page >= totalPages}
+                    onClick={() => goToPage(page + 1)}
+                    sx={{ minWidth: 40, minHeight: 40 }}
+                  >
+                    ›
+                  </Button>
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
 
-          {/* Infinite scroll sentinel */}
-          <div ref={sentinelRef} style={{ height: 1 }} />
-        </Box>
-      )}
-
-      {/* Sticky bottom bar when questions are selected */}
+      {/* Selection bottom bar (fixed) */}
       {selectionMode && selectedQuestionIds.size > 0 && (
         <Paper
           elevation={8}
@@ -1015,15 +900,6 @@ export default function QuestionListPage() {
         contextLabel={contextLabel}
       />
 
-      {/* Scroll to top FAB (mobile only) */}
-      <ScrollToTopFab />
-
-      {/* Keyboard shortcuts overlay (desktop only) */}
-      <KeyboardShortcutsOverlay
-        open={shortcutsOpen}
-        onClose={() => setShortcutsOpen(false)}
-      />
-
       {/* Snackbar for feedback */}
       <Snackbar
         open={snackbar.open}
@@ -1040,6 +916,6 @@ export default function QuestionListPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </QuestionBankLayout>
+    </Box>
   );
 }
