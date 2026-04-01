@@ -5,6 +5,7 @@ import { Box, Typography, IconButton, useMediaQuery, useTheme, Skeleton } from '
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TodayIcon from '@mui/icons-material/Today';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
 import ClassCard, { type ClassCardData } from './ClassCard';
 
 export interface HolidayInfo {
@@ -18,9 +19,7 @@ interface WeeklyCalendarGridProps {
   weekOffset: number;
   onWeekChange: (offset: number) => void;
   role: 'teacher' | 'student' | 'parent';
-  /** Holidays keyed by date string (YYYY-MM-DD) */
   holidays?: Record<string, HolidayInfo>;
-  // Pass-through to ClassCard
   rsvpData?: Record<string, { attending: number; total: number }>;
   myRsvps?: Record<string, 'attending' | 'not_attending'>;
   averageRatings?: Record<string, number>;
@@ -40,7 +39,6 @@ const DAY_NAMES_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 function getWeekDates(offset: number) {
   const now = new Date();
   const monday = new Date(now);
-  // Adjust to Monday of the current week
   const dayOfWeek = now.getDay();
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   monday.setDate(now.getDate() + diff + offset * 7);
@@ -85,20 +83,12 @@ export default function WeeklyCalendarGrid({
   averageRatings,
   myAttendance,
   onClassClick,
-  onEdit,
-  onDelete,
-  onRsvp,
-  onRate,
-  onViewAttendance,
-  onSyncRecording,
 }: WeeklyCalendarGridProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
 
-  // On mobile, show single day with date scroller
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => {
-    // Default to today if within the current week, else Monday
     const today = new Date();
     const todayStr = formatDateISO(today);
     const idx = week.days.findIndex((d) => formatDateISO(d) === todayStr);
@@ -115,31 +105,50 @@ export default function WeeklyCalendarGrid({
     return map;
   }, [classes]);
 
+  // For desktop: determine which days have content (classes or holidays)
+  const daysWithContent = useMemo(() => {
+    return week.days.map((day, idx) => {
+      const dateStr = formatDateISO(day);
+      const hasClasses = (classesByDate[dateStr]?.length || 0) > 0;
+      const isHoliday = !!holidays?.[dateStr];
+      const today = isToday(day);
+      return { day, idx, dateStr, hasClasses, isHoliday, today, hasContent: hasClasses || isHoliday || today };
+    });
+  }, [week.days, classesByDate, holidays]);
+
+  const activeDays = useMemo(() => daysWithContent.filter((d) => d.hasContent), [daysWithContent]);
+  const emptyDayNames = useMemo(
+    () => daysWithContent.filter((d) => !d.hasContent).map((d) => DAY_NAMES[d.idx]),
+    [daysWithContent]
+  );
+
   const renderClassCards = (dateStr: string) => {
     const holiday = holidays?.[dateStr];
     const dayClasses = classesByDate[dateStr] || [];
 
     return (
       <>
-        {/* Holiday indicator */}
         {holiday && (
           <Box
             sx={{
-              p: 1,
+              p: 0.75,
               borderRadius: 1,
               bgcolor: 'error.50',
               border: '1px dashed',
               borderColor: 'error.200',
-              textAlign: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
             }}
           >
-            <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.main' }}>
-              🏖️ {holiday.title}
+            <EventBusyIcon sx={{ fontSize: 14, color: 'error.main' }} />
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'error.main', fontSize: '0.7rem' }}>
+              {holiday.title}
             </Typography>
           </Box>
         )}
         {dayClasses.length === 0 && !holiday && (
-          <Typography variant="caption" color="text.disabled" sx={{ py: 2, textAlign: 'center', display: 'block' }}>
+          <Typography variant="caption" color="text.disabled" sx={{ py: 1.5, textAlign: 'center', display: 'block', fontSize: '0.72rem' }}>
             No classes
           </Typography>
         )}
@@ -153,12 +162,6 @@ export default function WeeklyCalendarGrid({
             averageRating={averageRatings?.[cls.id]}
             myAttended={myAttendance?.[cls.id]}
             onClick={onClassClick}
-            onEdit={onClassClick ? undefined : onEdit}
-            onDelete={onClassClick ? undefined : onDelete}
-            onRsvp={onClassClick ? undefined : onRsvp}
-            onRate={onClassClick ? undefined : onRate}
-            onViewAttendance={onClassClick ? undefined : onViewAttendance}
-            onSyncRecording={onClassClick ? undefined : onSyncRecording}
           />
         ))}
       </>
@@ -198,7 +201,7 @@ export default function WeeklyCalendarGrid({
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={80} sx={{ borderRadius: 1 }} />
+            <Skeleton key={i} variant="rectangular" height={56} sx={{ borderRadius: 1 }} />
           ))}
         </Box>
       ) : isMobile ? (
@@ -262,7 +265,6 @@ export default function WeeklyCalendarGrid({
                   <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '1rem' }}>
                     {day.getDate()}
                   </Typography>
-                  {/* Dot indicator for days with classes or holidays */}
                   {(hasClasses || isHoliday) && (
                     <Box
                       sx={{
@@ -294,57 +296,94 @@ export default function WeeklyCalendarGrid({
           </Box>
         </Box>
       ) : (
-        /* ==================== DESKTOP: 7-column weekly grid ==================== */
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(7, 1fr)',
-            gap: 1,
-            minHeight: 300,
-          }}
-        >
-          {week.days.map((day, idx) => {
-            const dateStr = formatDateISO(day);
-            const today = isToday(day);
-            const isHoliday = !!holidays?.[dateStr];
-
-            return (
+        /* ==================== DESKTOP: Adaptive grid - only days with content ==================== */
+        <Box>
+          {activeDays.length === 0 ? (
+            /* Empty week state */
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <EventBusyIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+              <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 500 }}>
+                No classes this week
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                {role === 'teacher' ? 'Tap + to schedule a class' : 'Check back later'}
+              </Typography>
+            </Box>
+          ) : (
+            <>
               <Box
-                key={dateStr}
                 sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: isHoliday ? 'error.main' : today ? 'primary.main' : 'divider',
-                  overflow: 'hidden',
-                  bgcolor: isHoliday ? 'error.50' : today ? 'primary.50' : 'background.default',
+                  display: 'grid',
+                  gridTemplateColumns: activeDays.length <= 2
+                    ? `repeat(${activeDays.length}, minmax(280px, 420px))`
+                    : activeDays.length <= 4
+                      ? `repeat(${activeDays.length}, 1fr)`
+                      : `repeat(auto-fill, minmax(250px, 1fr))`,
+                  gap: 1.5,
+                  minHeight: 200,
                 }}
               >
-                {/* Day header */}
-                <Box
+                {activeDays.map(({ day, idx, dateStr, today, isHoliday }) => (
+                  <Box
+                    key={dateStr}
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: 1.5,
+                      border: '1px solid',
+                      borderColor: isHoliday ? 'error.200' : today ? 'primary.main' : 'divider',
+                      overflow: 'hidden',
+                      bgcolor: 'background.paper',
+                      transition: 'border-color 200ms ease',
+                    }}
+                  >
+                    {/* Day header */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        py: 0.75,
+                        px: 1.25,
+                        bgcolor: isHoliday ? 'error.main' : today ? 'primary.main' : 'grey.50',
+                        color: isHoliday || today ? '#fff' : 'text.primary',
+                        borderBottom: '1px solid',
+                        borderColor: isHoliday ? 'error.main' : today ? 'primary.main' : 'divider',
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.72rem' }}>
+                        {DAY_NAMES_FULL[idx]}
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, ml: 'auto' }}>
+                        {day.getDate()}
+                      </Typography>
+                    </Box>
+
+                    {/* Day's classes */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, p: 0.75, flex: 1 }}>
+                      {renderClassCards(dateStr)}
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+
+              {/* Empty days summary */}
+              {emptyDayNames.length > 0 && (
+                <Typography
+                  variant="caption"
                   sx={{
+                    display: 'block',
                     textAlign: 'center',
-                    py: 0.75,
-                    bgcolor: isHoliday ? 'error.main' : today ? 'primary.main' : 'grey.100',
-                    color: isHoliday || today ? '#fff' : 'text.primary',
+                    mt: 1.5,
+                    color: 'text.disabled',
+                    fontSize: '0.72rem',
                   }}
                 >
-                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.7rem' }}>
-                    {DAY_NAMES[idx]}
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {day.getDate()}
-                  </Typography>
-                </Box>
-
-                {/* Day's classes */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, p: 0.75, flex: 1 }}>
-                  {renderClassCards(dateStr)}
-                </Box>
-              </Box>
-            );
-          })}
+                  No classes on {emptyDayNames.join(', ')}
+                </Typography>
+              )}
+            </>
+          )}
         </Box>
       )}
     </Box>

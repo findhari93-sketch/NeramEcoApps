@@ -35,6 +35,7 @@ export async function listUserJourneys(
   const supabase = client || getSupabaseAdminClient();
   const {
     pipelineStage,
+    excludeStages,
     search,
     status,
     userType,
@@ -59,6 +60,12 @@ export async function listUserJourneys(
   // Apply filters
   if (pipelineStage) {
     query = query.eq('pipeline_stage', pipelineStage);
+  }
+
+  if (excludeStages && excludeStages.length > 0) {
+    for (const stage of excludeStages) {
+      query = query.neq('pipeline_stage', stage);
+    }
   }
 
   if (search) {
@@ -194,6 +201,47 @@ export async function getPipelineStageCounts(
         counts[stage] = Number(row.cnt);
       }
       counts.total += Number(row.cnt);
+    }
+  }
+
+  return counts;
+}
+
+/**
+ * Get pipeline stage counts excluding specific stages (for Leads view)
+ */
+export async function getLeadPipelineStageCounts(
+  excludeStages: PipelineStage[] = ['enrolled', 'payment_complete'],
+  client?: TypedSupabaseClient
+): Promise<PipelineStageCounts> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: rows, error } = await supabase
+    .from('user_journey_view')
+    .select('pipeline_stage');
+
+  if (error) throw error;
+
+  const counts: PipelineStageCounts = {
+    new_lead: 0,
+    demo_requested: 0,
+    demo_attended: 0,
+    phone_verified: 0,
+    application_submitted: 0,
+    admin_approved: 0,
+    payment_complete: 0,
+    enrolled: 0,
+    total: 0,
+  };
+
+  if (rows) {
+    for (const row of rows) {
+      const stage = row.pipeline_stage as PipelineStage;
+      if (excludeStages.includes(stage)) continue;
+      if (stage in counts) {
+        counts[stage]++;
+      }
+      counts.total++;
     }
   }
 

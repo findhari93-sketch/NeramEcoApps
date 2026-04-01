@@ -2449,7 +2449,8 @@ export type NotificationEventType =
   | 'recall_published'
   | 'foundation_issue_awaiting_confirmation'
   | 'foundation_issue_reopened'
-  | 'foundation_issue_closed';
+  | 'foundation_issue_closed'
+  | 'auto_first_touch_sent';
 
 // Classroom access request types
 export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -2968,6 +2969,7 @@ export interface UserJourney {
  */
 export interface UserJourneyListOptions {
   pipelineStage?: PipelineStage;
+  excludeStages?: PipelineStage[];
   search?: string;
   status?: UserStatus;
   userType?: UserType;
@@ -4377,6 +4379,10 @@ export interface NexusScheduledClass extends Timestamps {
   rescheduled_to: string | null;
   notes: string | null;
   teams_meeting_scope: 'link_only' | 'channel_meeting' | 'calendar_event' | null;
+  recurrence_rule: string | null;
+  recurrence_group_id: string | null;
+  lobby_bypass: string | null;
+  allowed_presenters: string | null;
 }
 
 export interface NexusAttendance {
@@ -6610,6 +6616,58 @@ export interface StudentCredential {
   auto_destroy_at: string | null;
   is_active: boolean;
   created_at: string;
+}
+
+// ============================================
+// AUTO MESSAGES (First Touch Automation)
+// ============================================
+
+export type AutoMessageType = 'first_touch' | 'follow_up_3d' | 'follow_up_7d' | 'nurture';
+export type AutoMessageChannel = 'whatsapp' | 'email';
+export type AutoMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export const FIRST_TOUCH_TEMPLATES = [
+  'first_touch_quick_question',
+  'first_touch_results_video',
+  'first_touch_drawing_tip',
+] as const;
+
+export type FirstTouchTemplateName = typeof FIRST_TOUCH_TEMPLATES[number];
+
+export interface AutoMessage {
+  id: string;
+  user_id: string;
+  message_type: AutoMessageType;
+  channel: AutoMessageChannel;
+  template_name: string;
+  delivery_status: AutoMessageStatus;
+  external_message_id: string | null;
+  error_message: string | null;
+  retry_count: number;
+  send_after: string;
+  sent_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutoMessageInsert {
+  user_id: string;
+  message_type?: AutoMessageType;
+  channel: AutoMessageChannel;
+  template_name: string;
+  send_after: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AutoFirstTouchSettings {
+  enabled: boolean;
+  delay_minutes: number;
+  email_enabled: boolean;
+  video_urls: {
+    first_touch_results_video: string;
+    first_touch_drawing_tip: string;
+  };
 }
 
 export * from './expenses';

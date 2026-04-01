@@ -27,6 +27,7 @@ export {
   sendEmail,
   sendTemplateEmail,
   notifyAdmin,
+  sendFirstTouchEmail,
 } from './services/email';
 export type { EmailData, TemplateData } from './services/email';
 
@@ -65,6 +66,9 @@ export {
   sendDemoClassApproved,
   sendDemoClassReminder,
   sendTicketConfirmation as sendWhatsAppTicketConfirmation,
+  sendFirstTouchQuickQuestion,
+  sendFirstTouchResultsVideo,
+  sendFirstTouchDrawingTip,
 } from './services/whatsapp';
 
 // Services - Unified Notifications

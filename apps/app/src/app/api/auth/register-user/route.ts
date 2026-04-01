@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, FIRST_TOUCH_TEMPLATES } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -57,6 +57,33 @@ export async function POST(req: NextRequest) {
     await updateUser(user.id, {
       last_login_at: new Date().toISOString(),
     }, adminClient);
+
+    // Schedule auto first-touch message for new users (30 min delay)
+    if (isNewUser) {
+      try {
+        const phone = decodedToken.phone_number || user.phone;
+        const email = decodedToken.email || user.email;
+        const channel = phone ? 'whatsapp' : 'email';
+        const randomTemplate = FIRST_TOUCH_TEMPLATES[Math.floor(Math.random() * FIRST_TOUCH_TEMPLATES.length)];
+        const delayMs = 30 * 60 * 1000; // 30 minutes
+
+        await createAutoMessage({
+          user_id: user.id,
+          message_type: 'first_touch',
+          channel: channel as 'whatsapp' | 'email',
+          template_name: randomTemplate,
+          send_after: new Date(Date.now() + delayMs).toISOString(),
+          metadata: {
+            user_name: user.name || decodedToken.name || null,
+            phone: phone || null,
+            email: email || null,
+          },
+        }, adminClient);
+      } catch (autoMsgErr) {
+        // Don't fail registration if auto-message scheduling fails
+        console.error('Failed to schedule auto first-touch:', autoMsgErr);
+      }
+    }
 
     // Compute account tier from user_type + classroom link
     const accountTier = computeAccountTier(

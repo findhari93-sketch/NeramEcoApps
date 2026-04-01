@@ -412,6 +412,84 @@ export async function sendDemoClassReminder(
 }
 
 // ============================================
+// FIRST-TOUCH AUTO MESSAGES
+// ============================================
+
+/**
+ * Send first-touch: Template A — Quick Question (text only)
+ *
+ * Meta template: first_touch_quick_question
+ * Body: {{1}} = userName
+ */
+export async function sendFirstTouchQuickQuestion(
+  phone: string,
+  data: { userName: string }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'first_touch_quick_question', 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+      ],
+    },
+  ]);
+}
+
+/**
+ * Send first-touch: Template B — Student Results Video
+ *
+ * Meta template: first_touch_results_video
+ * Header: VIDEO (Mumbai exam center interview)
+ * Body: {{1}} = userName
+ */
+export async function sendFirstTouchResultsVideo(
+  phone: string,
+  data: { userName: string; videoUrl: string }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'first_touch_results_video', 'en', [
+    {
+      type: 'header',
+      parameters: [
+        { type: 'video' as any, video: { link: data.videoUrl } } as any,
+      ],
+    },
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+      ],
+    },
+  ]);
+}
+
+/**
+ * Send first-touch: Template C — Drawing Tip
+ *
+ * Meta template: first_touch_drawing_tip
+ * Header: VIDEO (Anna University student testimonials)
+ * Body: {{1}} = userName
+ */
+export async function sendFirstTouchDrawingTip(
+  phone: string,
+  data: { userName: string; videoUrl: string }
+): Promise<WhatsAppSendResult> {
+  return sendWhatsAppTemplate(phone, 'first_touch_drawing_tip', 'en', [
+    {
+      type: 'header',
+      parameters: [
+        { type: 'video' as any, video: { link: data.videoUrl } } as any,
+      ],
+    },
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: data.userName },
+      ],
+    },
+  ]);
+}
+
+// ============================================
 // HELPERS
 // ============================================
 

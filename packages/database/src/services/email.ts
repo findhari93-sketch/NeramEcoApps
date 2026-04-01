@@ -1078,8 +1078,66 @@ export async function notifyAdmin(
   });
 }
 
+/**
+ * Send first-touch welcome email to users who signed up with Google only (no phone).
+ * Matches Hari's personal tone from the WhatsApp templates.
+ */
+export async function sendFirstTouchEmail(
+  email: string,
+  data: { userName: string }
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const name = data.userName || 'there';
+
+  return sendEmail({
+    to: email,
+    subject: `Hi ${name}, welcome to Neram Classes!`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.7; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 560px; margin: 0 auto; padding: 32px 20px; }
+          .greeting { font-size: 18px; margin-bottom: 16px; }
+          .body-text { font-size: 15px; color: #444; margin-bottom: 14px; }
+          .cta-btn { display: inline-block; background: #1565C0; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; margin: 20px 0; }
+          .signature { margin-top: 28px; font-size: 15px; color: #444; }
+          .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #eee; font-size: 12px; color: #999; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <p class="greeting">Hi ${name} 👋</p>
+
+          <p class="body-text">This is Hari from Neram Classes. Thanks for checking out our NATA/JEE tools — hope they helped!</p>
+
+          <p class="body-text">Quick intro: I'm a B.Arch graduate from NIT Trichy and I personally train every student here. Our student scored AIR 1 in JEE B.Arch, and we consistently hit 99.9 percentile results.</p>
+
+          <p class="body-text">Quick question — are you preparing for NATA 2026, JEE Paper 2, or both? Just reply to this email and I'll point you to the right resources 🙂</p>
+
+          <a href="https://app.neramclasses.com" class="cta-btn" style="color: #ffffff;">Explore Free Tools →</a>
+
+          <div class="signature">
+            <p>Cheers,<br><strong>Hari</strong><br>Founder, Neram Classes<br>NIT Trichy B.Arch</p>
+          </div>
+
+          <div class="footer">
+            <p>Neram Classes — Expert coaching for NATA & JEE Paper 2</p>
+            <p>neramclasses.com</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    replyTo: 'hari@neramclasses.com',
+  });
+}
+
 export default {
   sendEmail,
   sendTemplateEmail,
   notifyAdmin,
+  sendFirstTouchEmail,
 };

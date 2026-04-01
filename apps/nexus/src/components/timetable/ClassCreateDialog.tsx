@@ -18,11 +18,21 @@ import {
   FormHelperText,
   Switch,
   ListSubheader,
+  Chip,
+  Collapse,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormLabel,
 } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import SchoolIcon from '@mui/icons-material/School';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import RepeatIcon from '@mui/icons-material/Repeat';
+import TuneIcon from '@mui/icons-material/Tune';
 import { type ClassCardData } from './ClassCard';
 import { type HolidayInfo } from './WeeklyCalendarGrid';
 
@@ -55,17 +65,63 @@ interface ClassFormData {
   target: string;
   create_meeting: boolean;
   description: string;
+  // Meeting options
+  meeting_scope: 'auto' | 'link_only' | 'channel_meeting' | 'calendar_event';
+  lobby_bypass: string;
+  allowed_presenters: string;
+  // Recurrence
+  recurrence: 'none' | 'daily' | 'weekly';
+  recurrence_days: string[];
+  recurrence_end_date: string;
 }
+
+/** Today as YYYY-MM-DD */
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+}
+
+/** Quick time presets for scheduling */
+const TIME_PRESETS = [
+  { label: 'Morning 10:30', start: '10:30', end: '12:00' },
+  { label: 'Morning 11:00', start: '11:00', end: '12:30' },
+  { label: 'Evening 6:30', start: '18:30', end: '20:00' },
+  { label: 'Evening 7:00', start: '19:00', end: '20:30' },
+] as const;
+
+/** Generate time options in 30-min intervals for dropdown (7 AM to 10 PM) */
+function generateTimeOptions(): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  for (let h = 7; h <= 22; h++) {
+    for (const m of [0, 30]) {
+      if (h === 22 && m === 30) break;
+      const val = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      const hour12 = h % 12 || 12;
+      const ampm = h < 12 ? 'AM' : 'PM';
+      const label = `${hour12}:${m.toString().padStart(2, '0')} ${ampm}`;
+      options.push({ value: val, label });
+    }
+  }
+  return options;
+}
+
+const TIME_OPTIONS = generateTimeOptions();
 
 const emptyForm: ClassFormData = {
   title: '',
-  scheduled_date: '',
+  scheduled_date: todayStr(),
   start_time: '',
   end_time: '',
   topic_id: '',
   target: '',
   create_meeting: false,
   description: '',
+  meeting_scope: 'auto',
+  lobby_bypass: 'organization',
+  allowed_presenters: 'organizer',
+  recurrence: 'none',
+  recurrence_days: [],
+  recurrence_end_date: '',
 };
 
 /** Color map for classroom types */
@@ -76,6 +132,15 @@ const typeColors: Record<string, string> = {
   revit: 'info.main',
   other: 'text.secondary',
 };
+
+const WEEKDAYS = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+];
 
 interface ClassCreateDialogProps {
   open: boolean;
@@ -94,7 +159,7 @@ interface ClassCreateDialogProps {
   onRemoveHoliday?: (date: string) => Promise<void>;
   onMeetingError?: (error: string) => void;
   /** Called with class data when a new class with meeting toggle is created — parent handles background meeting creation */
-  onCreateMeetingInBackground?: (classId: string, classroomId: string) => void;
+  onCreateMeetingInBackground?: (classId: string, classroomId: string, meetingScope?: string) => void;
 
   // Legacy props — kept for backward compatibility
   classroomId?: string;
@@ -161,6 +226,7 @@ export default function ClassCreateDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [holidayConflict, setHolidayConflict] = useState<{ date: string; title: string } | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Populate form when editing or opening
   useEffect(() => {
@@ -181,6 +247,12 @@ export default function ClassCreateDialog({
         target,
         create_meeting: false,
         description: editingClass.description || '',
+        meeting_scope: 'auto',
+        lobby_bypass: 'organization',
+        allowed_presenters: 'organizer',
+        recurrence: 'none',
+        recurrence_days: [],
+        recurrence_end_date: '',
       });
     } else if (prefillDate || prefillTime) {
       setFormData({
@@ -197,6 +269,7 @@ export default function ClassCreateDialog({
       setFormData({ ...emptyForm, target: defaultTarget });
     }
     setError(null);
+    setShowAdvanced(false);
   }, [editingClass, open, defaultTarget]);
 
   const { classroomId: selectedClassroomId, batchId: selectedBatchId, scope } = parseTarget(formData.target);
@@ -212,6 +285,16 @@ export default function ClassCreateDialog({
     }
     if (!formData.target) {
       setError('Please select a classroom');
+      return;
+    }
+
+    // Recurrence validation
+    if (formData.recurrence === 'weekly' && formData.recurrence_days.length === 0) {
+      setError('Please select at least one day for weekly recurrence');
+      return;
+    }
+    if (formData.recurrence !== 'none' && !formData.recurrence_end_date) {
+      setError('Please set an end date for recurring classes');
       return;
     }
 
@@ -249,6 +332,14 @@ export default function ClassCreateDialog({
       const token = await getToken();
       if (!token) return;
 
+      // Build recurrence_rule string
+      let recurrenceRule: string | null = null;
+      if (formData.recurrence === 'daily') {
+        recurrenceRule = 'daily';
+      } else if (formData.recurrence === 'weekly' && formData.recurrence_days.length > 0) {
+        recurrenceRule = `weekly:${formData.recurrence_days.join(',')}`;
+      }
+
       const body: Record<string, unknown> = {
         title: formData.title,
         scheduled_date: formData.scheduled_date,
@@ -259,6 +350,10 @@ export default function ClassCreateDialog({
         batch_id: selectedBatchId || null,
         target_scope: scope === 'batch' ? 'batch' : (isCommon ? 'all' : 'classroom'),
         description: formData.description || null,
+        lobby_bypass: formData.create_meeting ? formData.lobby_bypass : null,
+        allowed_presenters: formData.create_meeting ? formData.allowed_presenters : null,
+        recurrence_rule: recurrenceRule,
+        recurrence_end_date: recurrenceRule ? formData.recurrence_end_date : null,
       };
 
       const method = editingClass ? 'PATCH' : 'POST';
@@ -283,16 +378,22 @@ export default function ClassCreateDialog({
       const data = await res.json();
 
       // Close dialog and refresh list immediately — don't wait for Teams meeting
-      const wantsMeeting = !editingClass && formData.create_meeting && data.class?.id;
-      const createdClassId = data.class?.id;
-      const createdClassroomId = selectedClassroomId;
+      const wantsMeeting = !editingClass && formData.create_meeting;
+      const meetingScope = formData.meeting_scope;
 
       onClose();
       onSaved();
 
       // Tell the parent to create the Teams meeting in the background
       if (wantsMeeting && onCreateMeetingInBackground) {
-        onCreateMeetingInBackground(createdClassId, createdClassroomId);
+        if (data.classes) {
+          // Recurrence: multiple classes created — create meetings for each
+          for (const cls of data.classes) {
+            onCreateMeetingInBackground(cls.id, selectedClassroomId, meetingScope);
+          }
+        } else if (data.class?.id) {
+          onCreateMeetingInBackground(data.class.id, selectedClassroomId, meetingScope);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save class');
@@ -303,6 +404,15 @@ export default function ClassCreateDialog({
 
   // Determine if the selected classroom has a linked Teams team
   const selectedHasTeam = !!selectedClassroom?.ms_team_id;
+
+  const toggleRecurrenceDay = (day: string) => {
+    setFormData((f) => ({
+      ...f,
+      recurrence_days: f.recurrence_days.includes(day)
+        ? f.recurrence_days.filter((d) => d !== day)
+        : [...f.recurrence_days, day],
+    }));
+  };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -422,25 +532,108 @@ export default function ClassCreateDialog({
             value={formData.scheduled_date}
             onChange={(e) => setFormData((f) => ({ ...f, scheduled_date: e.target.value }))}
             InputLabelProps={{ shrink: true }}
+            helperText={formData.scheduled_date === todayStr() ? 'Today' : undefined}
           />
 
+          {/* Quick time presets */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mb: 0.75, display: 'block' }}>
+              Quick Select
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+              {TIME_PRESETS.map((preset) => {
+                const isActive = formData.start_time === preset.start && formData.end_time === preset.end;
+                return (
+                  <Chip
+                    key={preset.label}
+                    label={preset.label}
+                    onClick={() =>
+                      setFormData((f) => ({
+                        ...f,
+                        start_time: preset.start,
+                        end_time: preset.end,
+                      }))
+                    }
+                    color={isActive ? 'primary' : 'default'}
+                    variant={isActive ? 'filled' : 'outlined'}
+                    sx={{
+                      minHeight: 44,
+                      fontWeight: isActive ? 700 : 500,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: isActive ? undefined : 'action.hover' },
+                    }}
+                  />
+                );
+              })}
+            </Box>
+          </Box>
+
+          {/* Start / End time dropdowns */}
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField
-              label="Start Time *"
-              type="time"
-              fullWidth
-              value={formData.start_time}
-              onChange={(e) => setFormData((f) => ({ ...f, start_time: e.target.value }))}
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              label="End Time *"
-              type="time"
-              fullWidth
-              value={formData.end_time}
-              onChange={(e) => setFormData((f) => ({ ...f, end_time: e.target.value }))}
-              InputLabelProps={{ shrink: true }}
-            />
+            <FormControl fullWidth>
+              <InputLabel id="start-time-label" shrink>Start Time *</InputLabel>
+              <Select
+                labelId="start-time-label"
+                label="Start Time *"
+                displayEmpty
+                value={formData.start_time}
+                onChange={(e) => {
+                  const start = e.target.value as string;
+                  setFormData((f) => {
+                    // Auto-set end time to 1.5 hours after start if not already set or if end <= start
+                    let end = f.end_time;
+                    if (!end || end <= start) {
+                      const [h, m] = start.split(':').map(Number);
+                      const endMin = h * 60 + m + 90;
+                      const eh = Math.min(Math.floor(endMin / 60), 22);
+                      const em = endMin % 60;
+                      end = `${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}`;
+                    }
+                    return { ...f, start_time: start, end_time: end };
+                  });
+                }}
+                notched
+                sx={{ minHeight: 48 }}
+                renderValue={(val) => {
+                  if (!val) return <em style={{ color: '#999' }}>Select</em>;
+                  const opt = TIME_OPTIONS.find((o) => o.value === val);
+                  return opt ? opt.label : val;
+                }}
+              >
+                <MenuItem value="" disabled><em>Select time</em></MenuItem>
+                {TIME_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel id="end-time-label" shrink>End Time *</InputLabel>
+              <Select
+                labelId="end-time-label"
+                label="End Time *"
+                displayEmpty
+                value={formData.end_time}
+                onChange={(e) => setFormData((f) => ({ ...f, end_time: e.target.value as string }))}
+                notched
+                sx={{ minHeight: 48 }}
+                renderValue={(val) => {
+                  if (!val) return <em style={{ color: '#999' }}>Select</em>;
+                  const opt = TIME_OPTIONS.find((o) => o.value === val);
+                  return opt ? opt.label : val;
+                }}
+              >
+                <MenuItem value="" disabled><em>Select time</em></MenuItem>
+                {TIME_OPTIONS.filter((opt) => !formData.start_time || opt.value > formData.start_time).map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Box>
 
           <FormControl fullWidth>
@@ -494,7 +687,82 @@ export default function ClassCreateDialog({
             placeholder="Optional notes or agenda for this class"
           />
 
-          {/* Create Teams Meeting toggle */}
+          {/* ─── Recurrence Section ─── */}
+          {!editingClass && (
+            <Box
+              sx={{
+                p: 1.5,
+                border: '1px solid',
+                borderColor: formData.recurrence !== 'none' ? 'primary.main' : 'divider',
+                borderRadius: 1,
+                bgcolor: formData.recurrence !== 'none' ? 'primary.50' : 'transparent',
+                transition: 'all 0.15s',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: formData.recurrence !== 'none' ? 1.5 : 0 }}>
+                <RepeatIcon color={formData.recurrence !== 'none' ? 'primary' : 'disabled'} />
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <Select
+                    value={formData.recurrence}
+                    onChange={(e) => setFormData((f) => ({
+                      ...f,
+                      recurrence: e.target.value as 'none' | 'daily' | 'weekly',
+                      recurrence_days: e.target.value === 'none' ? [] : f.recurrence_days,
+                    }))}
+                    sx={{ minHeight: 44 }}
+                  >
+                    <MenuItem value="none">No Repeat</MenuItem>
+                    <MenuItem value="daily">Daily (Mon-Sat)</MenuItem>
+                    <MenuItem value="weekly">Weekly</MenuItem>
+                  </Select>
+                </FormControl>
+                <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontSize: '0.8rem' }}>
+                  {formData.recurrence === 'none' && 'One-time class'}
+                  {formData.recurrence === 'daily' && 'Repeats every weekday'}
+                  {formData.recurrence === 'weekly' && 'Select days below'}
+                </Typography>
+              </Box>
+
+              {/* Weekly day picker */}
+              {formData.recurrence === 'weekly' && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                  {WEEKDAYS.map((day) => (
+                    <Chip
+                      key={day.key}
+                      label={day.label}
+                      onClick={() => toggleRecurrenceDay(day.key)}
+                      color={formData.recurrence_days.includes(day.key) ? 'primary' : 'default'}
+                      variant={formData.recurrence_days.includes(day.key) ? 'filled' : 'outlined'}
+                      sx={{
+                        minWidth: 48,
+                        minHeight: 44,
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </Box>
+              )}
+
+              {/* End date */}
+              {formData.recurrence !== 'none' && (
+                <TextField
+                  label="Repeat Until *"
+                  type="date"
+                  fullWidth
+                  size="small"
+                  value={formData.recurrence_end_date}
+                  onChange={(e) => setFormData((f) => ({ ...f, recurrence_end_date: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: formData.scheduled_date }}
+                  sx={{ mt: 0.5 }}
+                />
+              )}
+            </Box>
+          )}
+
+          {/* ─── Create Teams Meeting toggle ─── */}
           {!editingClass && (
             <Box
               sx={{
@@ -527,6 +795,120 @@ export default function ClassCreateDialog({
                 onChange={(e) => setFormData((f) => ({ ...f, create_meeting: e.target.checked }))}
                 color="primary"
               />
+            </Box>
+          )}
+
+          {/* ─── Meeting Options (visible when create_meeting is ON) ─── */}
+          {!editingClass && formData.create_meeting && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Meeting Scope Selector */}
+              <FormControl component="fieldset">
+                <FormLabel component="legend" sx={{ fontSize: '0.85rem', fontWeight: 600, mb: 0.5 }}>
+                  Meeting Type
+                </FormLabel>
+                <RadioGroup
+                  value={formData.meeting_scope}
+                  onChange={(e) => setFormData((f) => ({ ...f, meeting_scope: e.target.value as ClassFormData['meeting_scope'] }))}
+                >
+                  <FormControlLabel
+                    value="auto"
+                    control={<Radio size="small" />}
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>Auto (Recommended)</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {selectedHasTeam ? 'Channel meeting with invites' : 'Standalone meeting with invites'}
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
+                  />
+                  {selectedHasTeam && (
+                    <FormControlLabel
+                      value="channel_meeting"
+                      control={<Radio size="small" />}
+                      label={
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>Channel Meeting</Typography>
+                          <Typography variant="caption" color="text.secondary">Shows in Teams channel + calendar invites</Typography>
+                        </Box>
+                      }
+                      sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
+                    />
+                  )}
+                  <FormControlLabel
+                    value="calendar_event"
+                    control={<Radio size="small" />}
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>Calendar Event</Typography>
+                        <Typography variant="caption" color="text.secondary">Meeting link + Outlook invites to students</Typography>
+                      </Box>
+                    }
+                    sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
+                  />
+                  <FormControlLabel
+                    value="link_only"
+                    control={<Radio size="small" />}
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>Link Only</Typography>
+                        <Typography variant="caption" color="text.secondary">Just a join link, no calendar invites</Typography>
+                      </Box>
+                    }
+                    sx={{ minHeight: 48, alignItems: 'flex-start', py: 0.5 }}
+                  />
+                </RadioGroup>
+              </FormControl>
+
+              {/* Advanced Meeting Options (collapsible) */}
+              <Box>
+                <Button
+                  size="small"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  startIcon={<TuneIcon />}
+                  endIcon={showAdvanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                  sx={{ textTransform: 'none', color: 'text.secondary', minHeight: 44 }}
+                >
+                  Meeting Options
+                </Button>
+                <Collapse in={showAdvanced}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1.5, pl: 1 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="lobby-label" shrink>Who can bypass the lobby?</InputLabel>
+                      <Select
+                        labelId="lobby-label"
+                        label="Who can bypass the lobby?"
+                        value={formData.lobby_bypass}
+                        onChange={(e) => setFormData((f) => ({ ...f, lobby_bypass: e.target.value }))}
+                        notched
+                        sx={{ minHeight: 44 }}
+                      >
+                        <MenuItem value="everyone">Everyone</MenuItem>
+                        <MenuItem value="organization">People in my organization</MenuItem>
+                        <MenuItem value="organizer">Only me (organizer)</MenuItem>
+                        <MenuItem value="invitees">Only invited people</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="presenter-label" shrink>Who can present?</InputLabel>
+                      <Select
+                        labelId="presenter-label"
+                        label="Who can present?"
+                        value={formData.allowed_presenters}
+                        onChange={(e) => setFormData((f) => ({ ...f, allowed_presenters: e.target.value }))}
+                        notched
+                        sx={{ minHeight: 44 }}
+                      >
+                        <MenuItem value="everyone">Everyone</MenuItem>
+                        <MenuItem value="organization">People in my organization</MenuItem>
+                        <MenuItem value="organizer">Only me (organizer)</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
+                </Collapse>
+              </Box>
             </Box>
           )}
         </Box>

@@ -57,3 +57,4 @@ export * from './credentials';
 export * from './course-group-links';
 export * from './expenses';
 export * from './expense-assignments';
+export * from './auto-messages';

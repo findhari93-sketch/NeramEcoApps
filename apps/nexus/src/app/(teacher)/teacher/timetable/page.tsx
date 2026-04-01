@@ -79,7 +79,7 @@ export default function TeacherTimetable() {
   const [slotMenuTime, setSlotMenuTime] = useState('');
 
   // Snackbar
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }>({
     open: false,
     message: '',
     severity: 'success',
@@ -256,6 +256,44 @@ export default function TeacherTimetable() {
     fetchMeta();
   }, [activeClassroom, classrooms, getToken]);
 
+  // Auto-sync from Teams when page loads (background, non-blocking, 5-min cooldown)
+  useEffect(() => {
+    if (!activeClassroom?.ms_team_id) return;
+
+    const cacheKey = `nexus_last_teams_sync_${activeClassroom.id}`;
+    const lastSync = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null;
+    const COOLDOWN_MS = 5 * 60 * 1000;
+
+    if (lastSync && Date.now() - parseInt(lastSync) < COOLDOWN_MS) return;
+
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        const res = await fetch('/api/timetable/sync-from-teams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ classroom_id: activeClassroom.id, quick: true }),
+        });
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(cacheKey, Date.now().toString());
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.imported > 0) {
+            setSnackbar({ open: true, message: `Auto-imported ${data.imported} meeting(s) from Teams`, severity: 'info' });
+            fetchClasses();
+          }
+        }
+      } catch {
+        // Silent — background sync should not disrupt the user
+      }
+    })();
+  }, [activeClassroom?.id, activeClassroom?.ms_team_id, getToken]);
+
   const handleClassClick = (cls: ClassCardData) => {
     setSelectedClass(cls);
   };
@@ -290,8 +328,13 @@ export default function TeacherTimetable() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setSelectedClass(null);
-        setSnackbar({ open: true, message: 'Class cancelled', severity: 'success' });
+        if (data.teamsWarning) {
+          setSnackbar({ open: true, message: `Class cancelled, but: ${data.teamsWarning}`, severity: 'warning' });
+        } else {
+          setSnackbar({ open: true, message: 'Class cancelled', severity: 'success' });
+        }
         fetchClasses();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -320,8 +363,13 @@ export default function TeacherTimetable() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setSelectedClass(null);
-        setSnackbar({ open: true, message: 'Class permanently deleted', severity: 'success' });
+        if (data.teamsWarning) {
+          setSnackbar({ open: true, message: `Class deleted, but: ${data.teamsWarning}`, severity: 'warning' });
+        } else {
+          setSnackbar({ open: true, message: 'Class permanently deleted', severity: 'success' });
+        }
         fetchClasses();
       }
     } catch (err) {
@@ -473,7 +521,7 @@ export default function TeacherTimetable() {
   };
 
   /** Background meeting creation — fired after dialog closes */
-  const handleCreateMeetingInBackground = async (classId: string, classroomId: string) => {
+  const handleCreateMeetingInBackground = async (classId: string, classroomId: string, meetingScope?: string) => {
     setSnackbar({ open: true, message: 'Setting up Teams meeting...', severity: 'success' });
     try {
       const token = await getTeacherToken();
@@ -481,13 +529,22 @@ export default function TeacherTimetable() {
         setSnackbar({ open: true, message: 'Please sign in again to create Teams meetings (extended permissions needed)', severity: 'error' });
         return;
       }
+
+      // If scope is 'auto' or not provided, use auto: true; otherwise pass explicit scope
+      const meetingBody: Record<string, unknown> = { class_id: classId, classroom_id: classroomId };
+      if (!meetingScope || meetingScope === 'auto') {
+        meetingBody.auto = true;
+      } else {
+        meetingBody.scope = meetingScope;
+      }
+
       const res = await fetch('/api/timetable/teams-meeting', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ class_id: classId, classroom_id: classroomId, auto: true }),
+        body: JSON.stringify(meetingBody),
       });
       const data = await res.json();
       if (res.ok) {
@@ -666,6 +723,8 @@ export default function TeacherTimetable() {
           holidays={holidays}
           onSlotClick={handleSlotClick}
           onClassClick={handleClassClick}
+          rsvpData={rsvpData}
+          role="teacher"
         />
       ) : (
         <WeeklyCalendarGrid

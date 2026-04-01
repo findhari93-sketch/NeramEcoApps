@@ -1,19 +1,21 @@
 'use client';
 
-import { useMemo, useRef, useEffect, useState } from 'react';
-import { Box, Typography, IconButton, useMediaQuery, useTheme } from '@neram/ui';
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { Box, Typography, IconButton, Button, Popover, useMediaQuery, useTheme } from '@neram/ui';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TodayIcon from '@mui/icons-material/Today';
 import VideocamIcon from '@mui/icons-material/Videocam';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import { type ClassCardData } from './ClassCard';
 import { type HolidayInfo } from './WeeklyCalendarGrid';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DEFAULT_START_HOUR = 8;
 const DEFAULT_END_HOUR = 20;
-const ROW_HEIGHT = 68; // px per day row
-const DATE_COL_WIDTH = 56; // px for the left date column
+const ROW_HEIGHT = 72; // px per day row (slightly taller for 2 lines of text)
+const DATE_COL_WIDTH = 60; // px for the left date column
 
 function getWeekDates(offset: number) {
   const now = new Date();
@@ -60,14 +62,6 @@ function formatTimeShort(time: string) {
   return `${hour % 12 || 12}:${m} ${ampm}`;
 }
 
-const statusColors: Record<string, string> = {
-  scheduled: '#1976d2',
-  live: '#d32f2f',
-  completed: '#2e7d32',
-  cancelled: '#9e9e9e',
-  rescheduled: '#ed6c02',
-};
-
 interface TimeSlotGridProps {
   classes: ClassCardData[];
   weekOffset: number;
@@ -75,6 +69,9 @@ interface TimeSlotGridProps {
   holidays?: Record<string, HolidayInfo>;
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   onClassClick?: (cls: ClassCardData) => void;
+  // Optional: pass RSVP data for hover popover
+  rsvpData?: Record<string, { attending: number; total: number }>;
+  role?: 'teacher' | 'student' | 'parent';
 }
 
 export default function TimeSlotGrid({
@@ -84,14 +81,40 @@ export default function TimeSlotGrid({
   holidays,
   onSlotClick,
   onClassClick,
+  rsvpData,
+  role,
 }: TimeSlotGridProps) {
   const week = useMemo(() => getWeekDates(weekOffset), [weekOffset]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
 
-  // Compute hour range dynamically: expand to fit earliest/latest class times
+  // Hover popover state
+  const [popoverAnchor, setPopoverAnchor] = useState<HTMLElement | null>(null);
+  const [popoverClass, setPopoverClass] = useState<ClassCardData | null>(null);
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBlockMouseEnter = useCallback((event: React.MouseEvent<HTMLElement>, cls: ClassCardData) => {
+    if (!isDesktop) return;
+    const target = event.currentTarget;
+    hoverTimeout.current = setTimeout(() => {
+      setPopoverAnchor(target);
+      setPopoverClass(cls);
+    }, 250);
+  }, [isDesktop]);
+
+  const handleBlockMouseLeave = useCallback(() => {
+    if (hoverTimeout.current) {
+      clearTimeout(hoverTimeout.current);
+      hoverTimeout.current = null;
+    }
+    setPopoverAnchor(null);
+    setPopoverClass(null);
+  }, []);
+
+  // Compute hour range dynamically
   const HOURS = useMemo(() => {
     let startHour = DEFAULT_START_HOUR;
     let endHour = DEFAULT_END_HOUR;
@@ -110,16 +133,15 @@ export default function TimeSlotGrid({
   useEffect(() => {
     const measure = () => {
       if (containerRef.current) {
-        const available = containerRef.current.clientWidth - DATE_COL_WIDTH - 2; // border
+        const available = containerRef.current.clientWidth - DATE_COL_WIDTH - 2;
         const calculated = Math.floor(available / HOURS.length);
-        // Minimum 50px per cell on desktop, 40px on mobile scroll
         setCellWidth(Math.max(calculated, isMobile ? 48 : 50));
       }
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [isMobile]);
+  }, [isMobile, HOURS.length]);
 
   // Auto-scroll to current time on mount
   useEffect(() => {
@@ -127,11 +149,11 @@ export default function TimeSlotGrid({
       const now = new Date();
       const currentHour = now.getHours();
       if (currentHour >= HOURS[0] && currentHour <= HOURS[HOURS.length - 1]) {
-        const scrollTo = (currentHour - HOURS[0]) * cellWidth - cellWidth; // show 1 hour before current
+        const scrollTo = (currentHour - HOURS[0]) * cellWidth - cellWidth;
         scrollRef.current.scrollLeft = Math.max(0, scrollTo);
       }
     }
-  }, [weekOffset, cellWidth]);
+  }, [weekOffset, cellWidth, HOURS]);
 
   // Group classes by date
   const classesByDate = useMemo(() => {
@@ -143,7 +165,6 @@ export default function TimeSlotGrid({
     return map;
   }, [classes]);
 
-  /** Convert a time string to a pixel offset from the left edge of the time grid */
   const timeToX = (time: string): number => {
     const [h, m] = time.split(':').map(Number);
     return ((h - HOURS[0]) + m / 60) * cellWidth;
@@ -158,10 +179,21 @@ export default function TimeSlotGrid({
   };
 
   const totalTimeWidth = HOURS.length * cellWidth;
-  // On desktop, if the grid fits, don't scroll
   const fitsInView = containerRef.current
     ? (totalTimeWidth + DATE_COL_WIDTH) <= containerRef.current.clientWidth
     : false;
+
+  // Status colors using theme tokens
+  const getStatusBg = (status: string): string => {
+    switch (status) {
+      case 'scheduled': return theme.palette.primary.main;
+      case 'live': return theme.palette.error.main;
+      case 'completed': return theme.palette.success.main;
+      case 'cancelled': return theme.palette.grey[400];
+      case 'rescheduled': return theme.palette.warning.main;
+      default: return theme.palette.primary.main;
+    }
+  };
 
   return (
     <Box ref={containerRef}>
@@ -185,12 +217,12 @@ export default function TimeSlotGrid({
         </IconButton>
       </Box>
 
-      {/* Calendar Grid — dates as rows, times as columns */}
+      {/* Calendar Grid */}
       <Box
         sx={{
           border: '1px solid',
           borderColor: 'divider',
-          borderRadius: 1,
+          borderRadius: 1.5,
           overflow: 'hidden',
           bgcolor: 'background.paper',
           display: 'flex',
@@ -236,20 +268,21 @@ export default function TimeSlotGrid({
                   borderColor: 'divider',
                   bgcolor: isHoliday ? 'error.main' : today ? 'primary.main' : 'grey.50',
                   color: isHoliday || today ? '#fff' : 'text.primary',
-                  px: 0.25,
+                  px: 0.5,
+                  transition: 'background-color 200ms ease',
                 }}
               >
-                <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.65rem', lineHeight: 1.2 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.65rem', lineHeight: 1.2 }}>
                   {DAY_NAMES[idx]}
                 </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: '0.9rem' }}>
                   {day.getDate()}
                 </Typography>
                 {isHoliday && (
                   <Typography
                     variant="caption"
                     sx={{
-                      fontSize: '0.5rem',
+                      fontSize: '0.48rem',
                       lineHeight: 1.1,
                       textAlign: 'center',
                       overflow: 'hidden',
@@ -273,7 +306,6 @@ export default function TimeSlotGrid({
             flex: 1,
             overflowX: fitsInView ? 'hidden' : 'auto',
             overflowY: 'hidden',
-            // Smooth scrolling & scroll snap on mobile for better touch UX
             ...(isMobile && {
               WebkitOverflowScrolling: 'touch',
               scrollSnapType: 'x proximity',
@@ -308,6 +340,7 @@ export default function TimeSlotGrid({
           {week.days.map((day, dayIdx) => {
             const dateStr = formatDateISO(day);
             const isHoliday = !!holidays?.[dateStr];
+            const today = isToday(day);
             const dayClasses = classesByDate[dateStr] || [];
 
             return (
@@ -320,6 +353,8 @@ export default function TimeSlotGrid({
                   position: 'relative',
                   borderBottom: dayIdx < 6 ? '1px solid' : 'none',
                   borderColor: 'divider',
+                  // Today row highlight
+                  bgcolor: today ? 'primary.50' : 'transparent',
                 }}
               >
                 {/* Hour cells (clickable background) */}
@@ -332,10 +367,10 @@ export default function TimeSlotGrid({
                       flexShrink: 0,
                       borderLeft: '1px solid',
                       borderColor: 'divider',
-                      cursor: isHoliday ? 'not-allowed' : 'pointer',
+                      cursor: isHoliday ? 'not-allowed' : onSlotClick ? 'pointer' : 'default',
                       bgcolor: isHoliday ? 'rgba(211,47,47,0.04)' : 'transparent',
-                      '&:hover': isHoliday ? {} : { bgcolor: 'rgba(25,118,210,0.04)' },
-                      transition: 'background-color 0.15s',
+                      '&:hover': isHoliday || !onSlotClick ? {} : { bgcolor: 'action.hover' },
+                      transition: 'background-color 150ms ease',
                     }}
                   />
                 ))}
@@ -345,60 +380,113 @@ export default function TimeSlotGrid({
                   const left = timeToX(cls.start_time);
                   const right = timeToX(cls.end_time);
                   const width = Math.max(right - left, cellWidth * 0.5);
+                  const isCancelled = cls.status === 'cancelled';
+                  const isLive = cls.status === 'live';
+                  const bgColor = getStatusBg(cls.status);
 
                   return (
                     <Box
                       key={cls.id}
+                      onMouseEnter={(e) => handleBlockMouseEnter(e, cls)}
+                      onMouseLeave={handleBlockMouseLeave}
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleBlockMouseLeave();
                         onClassClick?.(cls);
                       }}
                       sx={{
                         position: 'absolute',
                         left,
-                        top: 3,
-                        bottom: 3,
+                        top: 4,
+                        bottom: 4,
                         width,
-                        bgcolor: statusColors[cls.status] || statusColors.scheduled,
+                        bgcolor: bgColor,
                         color: '#fff',
                         borderRadius: 1,
                         px: 0.75,
-                        py: 0.25,
+                        py: 0.5,
                         overflow: 'hidden',
                         cursor: 'pointer',
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                        '&:hover': { opacity: 0.9, boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
-                        transition: 'opacity 0.15s',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                        opacity: isCancelled ? 0.45 : 1,
+                        transition: 'all 200ms ease',
+                        '&:hover': {
+                          boxShadow: '0 3px 12px rgba(0,0,0,0.25)',
+                          transform: 'scale(1.02)',
+                        },
                         zIndex: 2,
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'center',
+                        // Cancelled: diagonal stripe pattern
+                        ...(isCancelled && {
+                          backgroundImage: `repeating-linear-gradient(
+                            -45deg,
+                            transparent,
+                            transparent 4px,
+                            rgba(255,255,255,0.15) 4px,
+                            rgba(255,255,255,0.15) 8px
+                          )`,
+                        }),
+                        // Live: subtle pulse
+                        ...(isLive && {
+                          animation: 'livePulse 2s ease-in-out infinite',
+                          '@keyframes livePulse': {
+                            '0%, 100%': { boxShadow: '0 1px 4px rgba(0,0,0,0.15)' },
+                            '50%': { boxShadow: `0 2px 16px ${theme.palette.error.main}40` },
+                          },
+                        }),
                       }}
                     >
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          fontWeight: 700,
-                          fontSize: '0.68rem',
-                          color: 'inherit',
-                          display: 'block',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {cls.title}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        sx={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.3 }}
-                      >
-                        {formatTimeShort(cls.start_time)} – {formatTimeShort(cls.end_time)}
-                      </Typography>
-                      {cls.teams_meeting_id && (
-                        <VideocamIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', mt: 0.15 }} />
-                      )}
+                      {/* Live dot + Title */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {isLive && (
+                          <FiberManualRecordIcon
+                            sx={{
+                              fontSize: 7,
+                              color: '#fff',
+                              flexShrink: 0,
+                              animation: 'blink 1.5s infinite',
+                              '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.3 } },
+                            }}
+                          />
+                        )}
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontWeight: 700,
+                            fontSize: '0.7rem',
+                            color: 'inherit',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            lineHeight: 1.3,
+                            textDecoration: isCancelled ? 'line-through' : 'none',
+                          }}
+                        >
+                          {cls.title}
+                        </Typography>
+                      </Box>
+                      {/* Teacher name + Teams icon */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontSize: '0.58rem',
+                            color: 'rgba(255,255,255,0.8)',
+                            lineHeight: 1.3,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1,
+                          }}
+                        >
+                          {cls.teacher?.name?.split(' ')[0] || ''}
+                        </Typography>
+                        {cls.teams_meeting_id && (
+                          <VideocamIcon sx={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', flexShrink: 0 }} />
+                        )}
+                      </Box>
                     </Box>
                   );
                 })}
@@ -407,6 +495,88 @@ export default function TimeSlotGrid({
           })}
         </Box>
       </Box>
+
+      {/* Hover Popover - desktop only */}
+      <Popover
+        open={!!popoverAnchor && !!popoverClass}
+        anchorEl={popoverAnchor}
+        onClose={handleBlockMouseLeave}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        sx={{ pointerEvents: 'none' }}
+        disableRestoreFocus
+        slotProps={{
+          paper: {
+            sx: {
+              p: 1.5,
+              maxWidth: 300,
+              borderRadius: 1.5,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+              pointerEvents: 'auto',
+            },
+            onMouseLeave: handleBlockMouseLeave,
+          },
+        }}
+      >
+        {popoverClass && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {popoverClass.title}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {formatTimeShort(popoverClass.start_time)} - {formatTimeShort(popoverClass.end_time)}
+            </Typography>
+            {popoverClass.teacher && (
+              <Typography variant="caption" color="text.secondary">
+                {popoverClass.teacher.name}
+              </Typography>
+            )}
+            {popoverClass.topic && (
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>
+                {popoverClass.topic.title}
+              </Typography>
+            )}
+            {popoverClass.batch && (
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>
+                Batch: {popoverClass.batch.name}
+              </Typography>
+            )}
+
+            {/* RSVP count in popover */}
+            {role === 'teacher' && rsvpData?.[popoverClass.id] && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                <PeopleAltIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                  {rsvpData[popoverClass.id].attending}/{rsvpData[popoverClass.id].total} attending
+                </Typography>
+              </Box>
+            )}
+
+            {/* Quick join button */}
+            {(popoverClass.status === 'scheduled' || popoverClass.status === 'live') &&
+              (popoverClass.teams_meeting_join_url || popoverClass.teams_meeting_url) && (
+              <Button
+                variant="contained"
+                size="small"
+                href={popoverClass.teams_meeting_join_url || popoverClass.teams_meeting_url || ''}
+                target="_blank"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                startIcon={<VideocamIcon sx={{ fontSize: '14px !important' }} />}
+                sx={{
+                  mt: 0.5,
+                  textTransform: 'none',
+                  fontSize: '0.72rem',
+                  minHeight: 32,
+                  bgcolor: popoverClass.status === 'live' ? 'success.main' : 'primary.main',
+                  '&:hover': { bgcolor: popoverClass.status === 'live' ? 'success.dark' : 'primary.dark' },
+                }}
+              >
+                {popoverClass.status === 'live' ? 'Join Now' : 'Join Meeting'}
+              </Button>
+            )}
+          </Box>
+        )}
+      </Popover>
     </Box>
   );
 }

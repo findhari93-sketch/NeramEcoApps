@@ -22,6 +22,7 @@ import DocumentsSection from '../../../../components/crm/DocumentsSection';
 import HistoryTimeline from '../../../../components/crm/HistoryTimeline';
 import AdminNotesSection from '../../../../components/crm/AdminNotesSection';
 import CredentialsSection from '../../../../components/crm/CredentialsSection';
+import AutoMessagesSection from '../../../../components/crm/AutoMessagesSection';
 import EditUserDialog from '../../../../components/crm/EditUserDialog';
 import GenerateLinkDialog from '../../../../components/direct-enrollment/GenerateLinkDialog';
 import ShareLinkPanel from '../../../../components/direct-enrollment/ShareLinkPanel';
@@ -153,6 +154,9 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               adminId={adminId}
               onStatusChange={fetchDetail}
             />
+          </Box>
+          <Box id="crm-section-auto-messages" sx={{ borderRadius: 1 }}>
+            <AutoMessagesSection userId={detail.user.id} />
           </Box>
           <Box id="crm-section-demo" sx={{ borderRadius: 1 }}>
             <DemoClassSection detail={detail} />

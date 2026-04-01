@@ -406,6 +406,7 @@ export default function StudentTimetable() {
           onWeekChange={setWeekOffset}
           holidays={holidays}
           onClassClick={setSelectedClass}
+          role="student"
         />
       ) : (
         <WeeklyCalendarGrid

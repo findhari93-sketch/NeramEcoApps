@@ -101,25 +101,22 @@ export async function POST(request: NextRequest) {
     let joinUrl: string;
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
-      // ── CHANNEL MEETING: standalone meeting + channel post + calendar invites ──
-      const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
-      meetingId = meeting.id;
-      joinUrl = meeting.joinWebUrl;
+      // ── CHANNEL MEETING: proper group calendar event (shows in Teams channel + sends invites) ──
+      const result = await createGroupCalendarEvent(
+        supabase, token, classroom.ms_team_id, classroom_id,
+        scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
+      );
+      meetingId = result.meetingId;
+      joinUrl = result.joinUrl;
+      extras.attendeeCount = result.attendeeCount;
 
-      // Post to Teams channel (best-effort)
+      // Post to Teams channel (best-effort, non-blocking)
       try {
-        await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, meeting);
+        await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl });
         extras.channelPosted = true;
       } catch (err) {
         console.error('Channel post failed (non-blocking):', err);
       }
-
-      // Send calendar invites to all enrolled users
-      const invited = await createPersonalCalendarEvent(
-        supabase, token, classroom_id,
-        scheduledClass.batch_id, scheduledClass, meeting, user.email || '', ensureSec
-      );
-      extras.invitedCount = invited;
     } else if (scope === 'calendar_event') {
       // ── STANDALONE MEETING + PERSONAL CALENDAR INVITES ──
       const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
@@ -188,8 +185,10 @@ async function createStandaloneMeeting(
       subject: scheduledClass.title,
       startDateTime,
       endDateTime,
-      lobbyBypassSettings: { scope: 'organization' },
-      allowedPresenters: 'organizer',
+      lobbyBypassSettings: {
+        scope: (scheduledClass.lobby_bypass as string) || 'organization',
+      },
+      allowedPresenters: (scheduledClass.allowed_presenters as string) || 'organizer',
     }),
   });
 

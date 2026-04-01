@@ -33,6 +33,7 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RateReviewIcon from '@mui/icons-material/RateReview';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -80,6 +81,7 @@ const menuGroups: MenuGroup[] = [
     label: 'People & CRM',
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
+      { text: 'Leads', icon: PersonSearchIcon, path: '/leads' },
       { text: 'Students', icon: SchoolIcon, path: '/students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },

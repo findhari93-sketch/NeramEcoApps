@@ -11,7 +11,7 @@ import { getAppOnlyToken } from '@/lib/graph-app-token';
 export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const { classroom_id } = await request.json();
+    const { classroom_id, quick } = await request.json();
 
     if (!classroom_id) {
       return NextResponse.json({ error: 'classroom_id is required' }, { status: 400 });
@@ -53,16 +53,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch online meeting events from the group calendar
+    // In quick mode (background auto-sync), use a smaller window and limit
     const token = await getAppOnlyToken();
     const now = new Date();
-    const pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const futureDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const pastDays = quick ? 1 : 7;
+    const futureDays = quick ? 14 : 30;
+    const maxEvents = quick ? 20 : 100;
+    const pastDate = new Date(now.getTime() - pastDays * 24 * 60 * 60 * 1000).toISOString();
+    const futureDate = new Date(now.getTime() + futureDays * 24 * 60 * 60 * 1000).toISOString();
 
     const events = await fetchGroupCalendarView(
       token,
       classroom.ms_team_id,
       pastDate,
-      futureDate
+      futureDate,
+      maxEvents
     );
 
     // Get existing meetings for dedup
@@ -185,6 +190,7 @@ async function fetchGroupCalendarView(
   groupId: string,
   startDateTime: string,
   endDateTime: string,
+  maxEvents: number = 100,
 ): Promise<any[]> {
   const events: any[] = [];
   let url: string | null =
@@ -195,7 +201,7 @@ async function fetchGroupCalendarView(
     `&$orderby=start/dateTime desc` +
     `&$select=id,subject,start,end,onlineMeeting,organizer,body,isOnlineMeeting`;
 
-  while (url && events.length < 100) {
+  while (url && events.length < maxEvents) {
     const res: Response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
