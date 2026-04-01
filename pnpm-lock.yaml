@@ -93,6 +93,9 @@ importers:
       '@neram/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      firebase-admin:
+        specifier: ^13.6.0
+        version: 13.6.0
       jspdf:
         specifier: ^4.2.0
         version: 4.2.0

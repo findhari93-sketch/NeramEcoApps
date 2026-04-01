@@ -5,9 +5,12 @@ import { getAppOnlyToken } from '@/lib/graph-app-token';
 /**
  * GET /api/cron/sync-teams-meetings
  *
- * Called every 10 minutes by Vercel Cron.
- * Syncs online meetings from Teams group calendars into Nexus timetable
- * for ALL classrooms that have a linked Teams team (ms_team_id).
+ * Called every 10 minutes by Supabase pg_cron.
+ * Full bidirectional sync between Teams group calendars and Nexus timetable:
+ *
+ * 1. IMPORT: New meetings in Teams → create in Nexus
+ * 2. CANCEL DETECT: Meetings deleted/cancelled in Teams → mark cancelled in Nexus
+ * 3. UPDATE: Meeting time/title changed in Teams → update in Nexus
  *
  * Uses app-only token (no user interaction needed).
  */
@@ -29,19 +32,23 @@ export async function GET() {
 
     const token = await getAppOnlyToken();
     const now = new Date();
-    // Look back 1 day and forward 14 days (same as quick mode)
     const pastDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
     const futureDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
     let totalImported = 0;
     let totalSkipped = 0;
+    let totalCancelled = 0;
+    let totalUpdated = 0;
     const errors: string[] = [];
 
     for (const classroom of classrooms) {
+      if (!classroom.ms_team_id) continue;
       try {
-        const result = await syncClassroom(supabase, token, classroom, pastDate, futureDate);
+        const result = await syncClassroom(supabase, token, classroom as { id: string; name: string; ms_team_id: string }, pastDate, futureDate);
         totalImported += result.imported;
         totalSkipped += result.skipped;
+        totalCancelled += result.cancelled;
+        totalUpdated += result.updated;
         if (result.errors.length > 0) {
           errors.push(`${classroom.name}: ${result.errors.join(', ')}`);
         }
@@ -54,6 +61,8 @@ export async function GET() {
       classrooms: classrooms.length,
       imported: totalImported,
       skipped: totalSkipped,
+      cancelled: totalCancelled,
+      updated: totalUpdated,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err) {
@@ -71,29 +80,41 @@ async function syncClassroom(
   classroom: { id: string; name: string; ms_team_id: string },
   pastDate: string,
   futureDate: string,
-): Promise<{ imported: number; skipped: number; errors: string[] }> {
-  // Fetch events from Teams group calendar
-  const events = await fetchGroupCalendarView(token, classroom.ms_team_id, pastDate, futureDate);
+): Promise<{ imported: number; skipped: number; cancelled: number; updated: number; errors: string[] }> {
+  // Fetch current events from Teams group calendar
+  const teamsEvents = await fetchGroupCalendarView(token, classroom.ms_team_id, pastDate, futureDate);
 
-  // Get existing meetings for dedup
-  const { data: existingClasses } = await supabase
+  // Build a map of Teams event IDs for quick lookup
+  const teamsEventMap = new Map<string, any>();
+  for (const event of teamsEvents) {
+    teamsEventMap.set(event.id, event);
+  }
+
+  // Get all Nexus classes with Teams meeting IDs for this classroom (scheduled/live only)
+  const { data: nexusClasses } = await supabase
     .from('nexus_scheduled_classes')
-    .select('teams_meeting_id, teams_meeting_url')
+    .select('id, teams_meeting_id, teams_meeting_url, title, scheduled_date, start_time, end_time, status')
     .eq('classroom_id', classroom.id)
-    .not('teams_meeting_url', 'is', null);
+    .not('teams_meeting_id', 'is', null)
+    .in('status', ['scheduled', 'live'])
+    .gte('scheduled_date', pastDate.substring(0, 10))
+    .lte('scheduled_date', futureDate.substring(0, 10));
 
   const existingMeetingIds = new Set(
-    (existingClasses || []).map((c: any) => c.teams_meeting_id).filter(Boolean)
+    (nexusClasses || []).map((c: any) => c.teams_meeting_id).filter(Boolean)
   );
   const existingJoinUrls = new Set(
-    (existingClasses || []).map((c: any) => c.teams_meeting_url).filter(Boolean)
+    (nexusClasses || []).map((c: any) => c.teams_meeting_url).filter(Boolean)
   );
 
   let imported = 0;
   let skipped = 0;
+  let cancelled = 0;
+  let updated = 0;
   const errors: string[] = [];
 
-  for (const event of events) {
+  // ─── 1. IMPORT new meetings from Teams → Nexus ───
+  for (const event of teamsEvents) {
     const joinUrl = event.onlineMeeting?.joinUrl;
     if (!joinUrl) continue;
 
@@ -109,7 +130,6 @@ async function syncClassroom(
       const startTime = startStr.substring(11, 16);
       const endTime = endStr.substring(11, 16);
 
-      // Resolve organizer -> teacher_id
       let teacherId: string | null = null;
       const organizerName = event.organizer?.emailAddress?.name || null;
 
@@ -119,11 +139,9 @@ async function syncClassroom(
           .select('id')
           .eq('email', event.organizer.emailAddress.address)
           .single();
-
         if (organizer) teacherId = organizer.id;
       }
 
-      // Extract description (strip HTML)
       let description: string | null = null;
       if (event.body?.content) {
         description = event.body.content
@@ -153,23 +171,99 @@ async function syncClassroom(
         });
 
       if (insertError) {
-        errors.push(`${event.subject}: ${insertError.message}`);
+        errors.push(`Import ${event.subject}: ${insertError.message}`);
       } else {
         imported++;
         existingMeetingIds.add(event.id);
         existingJoinUrls.add(joinUrl);
       }
     } catch (err) {
-      errors.push(`${event.subject}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      errors.push(`Import ${event.subject}: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 
-  return { imported, skipped, errors };
+  // ─── 2. CANCEL DETECT: Nexus meetings no longer in Teams → mark cancelled ───
+  // If a Nexus class has a teams_meeting_id but that event no longer exists in Teams,
+  // it was cancelled/deleted in Teams → cancel it in Nexus too.
+  for (const nexusClass of nexusClasses || []) {
+    if (!nexusClass.teams_meeting_id) continue;
+    if (nexusClass.status !== 'scheduled') continue;
+
+    if (!teamsEventMap.has(nexusClass.teams_meeting_id)) {
+      // Meeting was deleted/cancelled in Teams — cancel in Nexus
+      try {
+        const { error: cancelError } = await supabase
+          .from('nexus_scheduled_classes')
+          .update({ status: 'cancelled' })
+          .eq('id', nexusClass.id);
+
+        if (cancelError) {
+          errors.push(`Cancel ${nexusClass.title}: ${cancelError.message}`);
+        } else {
+          cancelled++;
+        }
+      } catch (err) {
+        errors.push(`Cancel ${nexusClass.title}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+  }
+
+  // ─── 3. UPDATE: Detect time/title changes in Teams → update Nexus ───
+  for (const nexusClass of nexusClasses || []) {
+    if (!nexusClass.teams_meeting_id) continue;
+    if (nexusClass.status !== 'scheduled') continue;
+
+    const teamsEvent = teamsEventMap.get(nexusClass.teams_meeting_id);
+    if (!teamsEvent) continue; // Already handled by cancel detect
+
+    try {
+      const startStr = teamsEvent.start.dateTime as string;
+      const endStr = teamsEvent.end.dateTime as string;
+      const teamsDate = startStr.substring(0, 10);
+      const teamsStartTime = startStr.substring(11, 16);
+      const teamsEndTime = endStr.substring(11, 16);
+      const teamsTitle = teamsEvent.subject || 'Teams Meeting';
+
+      // Normalize Nexus times (may have :00 seconds suffix)
+      const nexusStart = nexusClass.start_time.substring(0, 5);
+      const nexusEnd = nexusClass.end_time.substring(0, 5);
+
+      // Check if anything changed
+      const changed =
+        nexusClass.title !== teamsTitle ||
+        nexusClass.scheduled_date !== teamsDate ||
+        nexusStart !== teamsStartTime ||
+        nexusEnd !== teamsEndTime;
+
+      if (changed) {
+        const { error: updateError } = await supabase
+          .from('nexus_scheduled_classes')
+          .update({
+            title: teamsTitle,
+            scheduled_date: teamsDate,
+            start_time: teamsStartTime,
+            end_time: teamsEndTime,
+          })
+          .eq('id', nexusClass.id);
+
+        if (updateError) {
+          errors.push(`Update ${nexusClass.title}: ${updateError.message}`);
+        } else {
+          updated++;
+        }
+      }
+    } catch (err) {
+      errors.push(`Update ${nexusClass.title}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }
+
+  return { imported, skipped, cancelled, updated, errors };
 }
 
 /**
- * Fetch online meeting events from a Teams group calendar.
- * Max 20 events (cron runs frequently, no need for deep history).
+ * Fetch ALL calendar events (not just online meetings) from a Teams group calendar.
+ * Includes cancelled events via isCancelled field.
+ * Max 50 events per classroom.
  */
 async function fetchGroupCalendarView(
   token: string,
@@ -182,9 +276,9 @@ async function fetchGroupCalendarView(
     `https://graph.microsoft.com/v1.0/groups/${groupId}/calendarView` +
     `?startDateTime=${encodeURIComponent(startDateTime)}` +
     `&endDateTime=${encodeURIComponent(endDateTime)}` +
-    `&$top=20` +
+    `&$top=50` +
     `&$orderby=start/dateTime desc` +
-    `&$select=id,subject,start,end,onlineMeeting,organizer,body,isOnlineMeeting`;
+    `&$select=id,subject,start,end,onlineMeeting,organizer,body,isOnlineMeeting,isCancelled`;
 
   const res = await fetch(url, {
     headers: {
@@ -200,7 +294,8 @@ async function fetchGroupCalendarView(
 
   const data = await res.json();
   for (const event of data.value || []) {
-    if (event.isOnlineMeeting && event.onlineMeeting?.joinUrl) {
+    // Only include online meetings that are NOT cancelled
+    if (event.isOnlineMeeting && event.onlineMeeting?.joinUrl && !event.isCancelled) {
       events.push(event);
     }
   }

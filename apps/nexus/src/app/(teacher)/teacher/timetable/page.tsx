@@ -315,7 +315,8 @@ export default function TeacherTimetable() {
     if (!activeClassroom) return;
     const classroomId = getClassroomIdForClass(classId);
     try {
-      const token = await getToken();
+      // Use teacher token (extended scopes) for cancel — needs Calendars.ReadWrite to delete Teams events
+      const token = await getTeacherToken();
       if (!token) return;
 
       const res = await fetch('/api/timetable', {
@@ -350,7 +351,8 @@ export default function TeacherTimetable() {
     if (!activeClassroom) return;
     const classroomId = getClassroomIdForClass(classId);
     try {
-      const token = await getToken();
+      // Use teacher token (extended scopes) for delete — needs Calendars.ReadWrite to delete Teams events
+      const token = await getTeacherToken();
       if (!token) return;
 
       const res = await fetch('/api/timetable', {
