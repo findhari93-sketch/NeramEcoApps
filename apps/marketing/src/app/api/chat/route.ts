@@ -356,7 +356,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    logConversation({
+    await logConversation({
       sessionId: sessionId || 'unknown',
       userMessage: message.trim(),
       aiResponse: result.reply,

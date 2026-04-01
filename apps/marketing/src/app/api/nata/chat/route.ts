@@ -578,8 +578,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log successful conversation (fire-and-forget)
-    logConversation({
+    await logConversation({
       sessionId: sessionId || 'unknown',
       userMessage: message.trim(),
       aiResponse: result.reply,

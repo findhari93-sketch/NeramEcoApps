@@ -32,6 +32,7 @@ import ForumIcon from '@mui/icons-material/Forum';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import PersonIcon from '@mui/icons-material/Person';
 import ClearIcon from '@mui/icons-material/Clear';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DataTable from '@/components/DataTable';
 
 interface Conversation {
@@ -69,6 +70,8 @@ export default function ChatHistoryPage() {
     open: false, message: '', severity: 'success',
   });
 
+  const [staleWarning, setStaleWarning] = useState<string | null>(null);
+
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showSnackbar = (message: string, severity: 'success' | 'error') => {
@@ -88,8 +91,22 @@ export default function ChatHistoryPage() {
       });
       const res = await fetch(`/api/chatbot-logs?${params}`);
       const json = await res.json();
-      setRows(json.conversations || []);
+      const conversations = json.conversations || [];
+      setRows(conversations);
       setTotal(json.total || 0);
+
+      // Check staleness: warn if latest conversation is older than 24 hours
+      if (p === 0 && !q && !src && !df && !dt && conversations.length > 0) {
+        const latestTime = new Date(conversations[0].created_at).getTime();
+        const hoursAgo = (Date.now() - latestTime) / (1000 * 60 * 60);
+        if (hoursAgo > 48) {
+          setStaleWarning(`No new conversations logged in ${Math.floor(hoursAgo / 24)} days. Chat logging may be broken — check Vercel logs for the marketing app.`);
+        } else if (hoursAgo > 24) {
+          setStaleWarning('No new conversations in the last 24 hours. This could indicate a logging issue.');
+        } else {
+          setStaleWarning(null);
+        }
+      }
     } catch {
       showSnackbar('Failed to load chat history', 'error');
     } finally {
@@ -430,6 +447,13 @@ export default function ChatHistoryPage() {
           </Tooltip>
         )}
       </Box>
+
+      {/* Staleness Warning */}
+      {staleWarning && (
+        <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mb: 2 }} onClose={() => setStaleWarning(null)}>
+          {staleWarning}
+        </Alert>
+      )}
 
       {/* Table */}
       <DataTable
