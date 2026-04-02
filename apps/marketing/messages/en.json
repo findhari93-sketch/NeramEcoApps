@@ -327,7 +327,7 @@
     "faqTitle": "Frequently Asked Questions",
     "faqSubtitle": "Common questions from parents and students about our fees and classes.",
     "faq1Question": "Can I get a refund if my child decides not to continue?",
-    "faq1Answer": "Yes, we have a transparent refund policy. If you notify us within 15 days of enrollment, we provide a full refund minus a small processing fee. After 15 days, partial refunds are available based on the duration of classes attended.",
+    "faq1Answer": "Yes, we have a transparent refund policy. Refund requests must be made within 24 hours of payment. You will receive a 70% refund (30% is deducted to cover digital platform subscriptions and learning tool licenses already purchased for the student). After 24 hours, no refund is possible as we immediately invest in setting up your child's digital learning environment including platform subscriptions and tool access.",
     "faq2Question": "Are there any hidden charges beyond the fee shown?",
     "faq2Answer": "No hidden charges whatsoever. The fee you see includes all study materials, live class platform access, student app access, practice tests, mock exams, and software licenses. The only additional cost would be if you opt for the NATA+JEE combo.",
     "faq3Question": "How is this different from cheaper YouTube coaching?",
@@ -464,7 +464,7 @@
       },
       "refundSummary": {
         "title": "6. Refund Policy Summary",
-        "content": "Refund requests must be submitted within 24 hours of payment completion. A processing fee of 30% of the paid amount will be deducted from all approved refunds. All refund decisions are at the sole discretion of Neram Classes administration. For complete details, please refer to our Refund Policy page."
+        "content": "Refund requests must be submitted within 24 hours of payment completion. A fee of 30% of the paid amount will be deducted to cover digital platform subscriptions and learning tool licenses purchased for the student upon enrollment. After 24 hours, no refund is possible as these costs have already been incurred. All refund decisions are at the sole discretion of Neram Classes administration. For complete details, please refer to our Refund Policy page."
       },
       "dataUsage": {
         "title": "7. Data Collection and Usage",
@@ -526,7 +526,7 @@
     "sections": {
       "overview": {
         "title": "1. Overview",
-        "content": "This Refund Policy outlines the terms and conditions under which students of Neram Classes may request a refund of fees paid. By making a payment and enrolling in our courses, you acknowledge that you have read, understood, and agree to the terms of this Refund Policy. All refund decisions are at the sole discretion of Neram Classes administration."
+        "content": "This Refund Policy outlines the terms and conditions under which students of Neram Classes may request a refund of fees paid. Upon enrollment, Neram Classes immediately invests in setting up the student's digital learning environment by purchasing platform subscriptions, learning tool licenses, and service access. This is why refunds are subject to a time limit and a deduction to cover these costs. By making a payment and enrolling in our courses, you acknowledge that you have read, understood, and agree to the terms of this Refund Policy. All refund decisions are at the sole discretion of Neram Classes administration."
       },
       "eligibility": {
         "title": "2. Refund Eligibility",
@@ -534,7 +534,7 @@
       },
       "processingFee": {
         "title": "3. Processing Fee",
-        "content": "A processing fee of 30% of the paid amount will be deducted from all approved refunds. This fee covers administrative costs, payment gateway charges, and processing expenses. For example: if you paid Rs. 25,000, the maximum refund amount would be Rs. 17,500 (after deducting Rs. 7,500 as processing fee). The processing fee is non-negotiable and applies to all refund requests regardless of the reason."
+        "content": "A processing fee of 30% of the paid amount will be deducted from all approved refunds. This fee covers digital platform subscriptions, learning tool licenses, and service setup costs that are purchased for the student immediately upon enrollment. For example: if you paid Rs. 25,000, the maximum refund amount would be Rs. 17,500 (after deducting Rs. 7,500 as the subscription and setup cost). The processing fee is non-negotiable and applies to all refund requests regardless of the reason."
       },
       "adminDiscretion": {
         "title": "4. Administrative Discretion",
@@ -558,11 +558,11 @@
       },
       "installmentPayments": {
         "title": "9. Installment Payments",
-        "content": "For students who opted for installment payment plans: Only the first installment is eligible for a refund request within the 24-hour window. The 30% processing fee applies to the installment amount paid, not the total course fee. If the first installment is refunded, the enrollment will be cancelled and the student will not be obligated to pay the second installment. Second installment payments are NOT eligible for refund under any circumstances."
+        "content": "For students who opted for installment payment plans: Only the first installment is eligible for a refund request within the 24-hour window. The 30% subscription and setup cost deduction applies to the installment amount paid, not the total course fee. If the first installment is refunded, the enrollment will be cancelled and the student will not be obligated to pay the second installment. Second installment payments are NOT eligible for refund under any circumstances."
       },
       "exceptions": {
         "title": "10. Exceptions and Special Cases",
-        "content": "The following are NOT eligible for refund: (a) Payments made more than 24 hours ago; (b) Second installment payments; (c) Payments where the student has already accessed course materials or attended classes; (d) Payments made using promotional offers or 100% scholarship waivers; (e) Cases where the student has violated the Terms and Conditions. In exceptional circumstances (such as medical emergencies or bereavement), the administration may consider requests outside the standard policy at their sole discretion. Such requests must be supported by valid documentation."
+        "content": "The following are NOT eligible for refund: (a) Payments made more than 24 hours ago — after 24 hours, digital platform subscriptions and learning tool licenses have already been purchased and activated for the student, making refunds impossible; (b) Second installment payments; (c) Payments where the student has already accessed course materials or attended classes; (d) Payments made using promotional offers or 100% scholarship waivers; (e) Cases where the student has violated the Terms and Conditions. In exceptional circumstances (such as medical emergencies or bereavement), the administration may consider requests outside the standard policy at their sole discretion. Such requests must be supported by valid documentation."
       },
       "contact": {
         "title": "11. Contact Us",

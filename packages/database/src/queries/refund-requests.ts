@@ -3,7 +3,7 @@
  * Neram Classes - Refund Request Queries
  *
  * Database queries for the refund request system.
- * Rules: 24-hour window, 30% processing fee, admin discretion, one request per payment.
+ * Rules: 24-hour window, 30% deduction (covers digital platform subscriptions/tool licenses), admin discretion, one request per payment.
  */
 
 import { getSupabaseAdminClient } from '../client';
@@ -30,7 +30,7 @@ export function isWithinRefundWindow(paidAt: string): boolean {
 }
 
 /**
- * Calculate the refund amount (70%) and processing fee (30%).
+ * Calculate the refund amount (70%) and subscription/setup cost deduction (30%).
  */
 export function calculateRefundAmount(paymentAmount: number): {
   refundAmount: number;

@@ -112,7 +112,7 @@ export default function RefundRequestDialog({
 
       {/* Policy notice */}
       <Alert severity="warning" sx={{ mb: 2.5, fontSize: 12 }}>
-        Refund approval is at the sole discretion of Neram Classes. A 30% processing fee applies. This decision is final.
+        Refund approval is at the sole discretion of Neram Classes. A 30% deduction applies to cover digital platform subscriptions and learning tool licenses purchased for you. This decision is final.
       </Alert>
 
       {error && (
