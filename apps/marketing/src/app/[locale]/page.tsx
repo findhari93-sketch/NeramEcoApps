@@ -4,7 +4,6 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateSoftwareApplicationSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import HomePageContent from '@/components/HomePageContent';
 
-export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 

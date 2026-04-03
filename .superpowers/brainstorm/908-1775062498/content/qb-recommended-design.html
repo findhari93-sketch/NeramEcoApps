@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QB Redesign — Recommended Approach</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; color: #1a1a2e; }
+
+  .page-title { text-align: center; padding: 24px 16px 8px; font-size: 22px; font-weight: 700; color: #4a148c; }
+  .page-subtitle { text-align: center; color: #666; font-size: 14px; margin-bottom: 24px; }
+
+  .section { max-width: 900px; margin: 0 auto 32px; padding: 0 16px; }
+  .section-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #333; border-left: 4px solid #7c4dff; padding-left: 12px; }
+  .section-desc { color: #666; font-size: 13px; margin-bottom: 16px; }
+
+  /* Mockup frames */
+  .mockup-frame { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); overflow: hidden; margin-bottom: 16px; }
+  .mockup-label { background: #e8eaf6; padding: 8px 16px; font-size: 12px; font-weight: 600; color: #4a148c; text-transform: uppercase; letter-spacing: 0.5px; }
+  .mockup-body { padding: 0; }
+
+  /* App shell */
+  .app-shell { display: flex; min-height: 420px; }
+  .app-nav { width: 56px; background: #4a148c; color: white; padding: 12px 4px; flex-shrink: 0; }
+  .app-nav-item { text-align: center; padding: 8px 2px; font-size: 9px; margin-bottom: 8px; opacity: 0.7; cursor: pointer; border-radius: 6px; }
+  .app-nav-item.active { opacity: 1; background: rgba(255,255,255,0.15); }
+  .app-nav-icon { font-size: 18px; margin-bottom: 2px; }
+  .app-content { flex: 1; background: #fafafa; overflow: hidden; }
+
+  /* Landing page */
+  .qb-header { padding: 16px 20px 12px; background: #fff; border-bottom: 1px solid #eee; }
+  .qb-header h2 { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+  .qb-header .stats { font-size: 12px; color: #888; }
+
+  .paper-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding: 16px 20px; }
+  .paper-card { background: #fff; border: 1px solid #e8e8e8; border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s; }
+  .paper-card:hover { border-color: #7c4dff; box-shadow: 0 2px 8px rgba(124,77,255,0.12); }
+  .paper-card .exam-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 6px; }
+  .paper-card .exam-badge.jee { background: #e3f2fd; color: #1565c0; }
+  .paper-card .exam-badge.nata { background: #f3e5f5; color: #7b1fa2; }
+  .paper-card .paper-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .paper-card .paper-meta { font-size: 11px; color: #999; margin-bottom: 8px; }
+  .paper-card .progress-bar { height: 4px; background: #eee; border-radius: 2px; }
+  .paper-card .progress-fill { height: 4px; border-radius: 2px; }
+
+  .full-bank-btn { margin: 0 20px 16px; padding: 14px 20px; background: linear-gradient(135deg, #7c4dff, #651fff); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: space-between; width: calc(100% - 40px); }
+  .full-bank-btn .count { font-size: 12px; opacity: 0.85; }
+
+  /* Questions view with filters */
+  .filter-bar { display: flex; gap: 6px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #eee; flex-wrap: wrap; align-items: center; }
+  .filter-chip { padding: 5px 12px; background: #f3f0ff; border: 1px solid #e0d6ff; border-radius: 20px; font-size: 12px; color: #5c2daa; cursor: pointer; white-space: nowrap; }
+  .filter-chip.active { background: #7c4dff; color: white; border-color: #7c4dff; }
+  .filter-chip.more { background: #fff; border: 1px dashed #ccc; color: #666; }
+
+  .active-filters { display: flex; gap: 4px; padding: 6px 20px; flex-wrap: wrap; }
+  .active-chip { padding: 3px 8px; background: #fff3e0; border-radius: 12px; font-size: 11px; color: #e65100; display: flex; align-items: center; gap: 4px; }
+  .active-chip .x { cursor: pointer; font-weight: bold; }
+
+  .results-header { padding: 8px 20px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #666; }
+  .create-test-btn { padding: 6px 14px; background: #7c4dff; color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+  /* Question cards - compact */
+  .question-list { padding: 0 20px 16px; }
+  .q-card { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 12px 14px; margin-bottom: 6px; cursor: pointer; transition: all 0.15s; }
+  .q-card:hover { border-color: #c5b3ff; }
+  .q-card .q-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .q-card .q-num { font-weight: 700; font-size: 13px; color: #4a148c; }
+  .q-card .q-tags { display: flex; gap: 4px; }
+  .q-card .q-tag { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500; }
+  .q-card .q-tag.subj { background: #e8eaf6; color: #3949ab; }
+  .q-card .q-tag.diff-m { background: #fff3e0; color: #e65100; }
+  .q-card .q-tag.diff-e { background: #e8f5e9; color: #2e7d32; }
+  .q-card .q-tag.diff-h { background: #fce4ec; color: #c62828; }
+  .q-card .q-tag.src { background: #f5f5f5; color: #666; }
+  .q-card .q-text { font-size: 13px; color: #333; line-height: 1.5; }
+  .q-card .q-status { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11px; }
+  .q-card .q-status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .q-card .q-status .dot.correct { background: #4caf50; }
+  .q-card .q-status .dot.wrong { background: #f44336; }
+  .q-card .q-status .dot.unattempted { background: #e0e0e0; }
+
+  /* Expanded question with options pre-loaded */
+  .q-card.expanded { border-color: #7c4dff; background: #fafbff; }
+  .q-options { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .q-opt { padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s; }
+  .q-opt:hover { border-color: #7c4dff; background: #f8f6ff; }
+  .q-opt .opt-letter { width: 24px; height: 24px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; color: #666; flex-shrink: 0; }
+
+  /* Filter drawer mockup */
+  .drawer-overlay { position: relative; }
+  .filter-drawer { width: 280px; background: #fff; border-left: 1px solid #eee; padding: 16px; height: 100%; overflow-y: auto; position: absolute; right: 0; top: 0; bottom: 0; box-shadow: -4px 0 16px rgba(0,0,0,0.08); }
+  .drawer-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .drawer-section { margin-bottom: 16px; }
+  .drawer-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #888; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .tree-item { padding: 6px 8px; font-size: 13px; cursor: pointer; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .tree-item:hover { background: #f5f3ff; }
+  .tree-item.parent { font-weight: 600; color: #333; }
+  .tree-item.child { padding-left: 24px; color: #666; }
+  .tree-item .count { font-size: 11px; color: #aaa; }
+  .tree-item.selected { background: #ede7f6; color: #4a148c; }
+  .tree-check { width: 16px; height: 16px; border: 2px solid #ccc; border-radius: 3px; margin-right: 8px; flex-shrink: 0; }
+  .tree-check.checked { background: #7c4dff; border-color: #7c4dff; }
+
+  /* Comparison table */
+  .changes-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .changes-table th { text-align: left; padding: 10px 12px; background: #f5f3ff; color: #4a148c; font-weight: 600; }
+  .changes-table td { padding: 10px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .changes-table .old { color: #c62828; text-decoration: line-through; }
+  .changes-table .new { color: #2e7d32; font-weight: 500; }
+
+  .highlight-box { background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px; padding: 14px; margin: 12px 0; font-size: 13px; }
+  .highlight-box strong { color: #2e7d32; }
+
+  .split-mockups { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .split-mockups { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">QB Redesign — Recommended Approach</h1>
+<p class="page-subtitle">Smart Landing + Top Filter Bar + Right Drawer for Power Filtering</p>
+
+<!-- SECTION 1: What changes -->
+<div class="section">
+  <h2 class="section-title">What's Changing</h2>
+  <table class="changes-table">
+    <tr><th>Element</th><th>Current</th><th>New</th></tr>
+    <tr>
+      <td>Question number grid</td>
+      <td class="old">Top bar with 1-40 numbered boxes</td>
+      <td class="new">Removed — not useful</td>
+    </tr>
+    <tr>
+      <td>Minimap (MAP)</td>
+      <td class="old">Right sidebar with colored blocks</td>
+      <td class="new">Removed — wasted space</td>
+    </tr>
+    <tr>
+      <td>Filter sidebar</td>
+      <td class="old">Left sidebar (double-sidebar problem)</td>
+      <td class="new">Top filter chips + right slide-out drawer</td>
+    </tr>
+    <tr>
+      <td>Padding</td>
+      <td class="old">Excessive whitespace around cards</td>
+      <td class="new">Compact cards, 6px gaps, tighter layout</td>
+    </tr>
+    <tr>
+      <td>Options loading</td>
+      <td class="old">Loads on question expand (laggy)</td>
+      <td class="new">Pre-fetched in background, instant expand</td>
+    </tr>
+    <tr>
+      <td>Question scope</td>
+      <td class="old">Shows 74 from one paper only</td>
+      <td class="new">Full bank (624) with power filtering</td>
+    </tr>
+    <tr>
+      <td>Landing page</td>
+      <td class="old">Jumps to a paper directly</td>
+      <td class="new">Shows Year Paper cards + Full Bank entry</td>
+    </tr>
+  </table>
+</div>
+
+<!-- SECTION 2: Landing Page -->
+<div class="section">
+  <h2 class="section-title">Screen 1: QB Landing Page</h2>
+  <p class="section-desc">Primary entry: Year Papers (students solve by year). Secondary: "Browse Full Bank" for power filtering across all years.</p>
+
+  <div class="mockup-frame">
+    <div class="mockup-label">QB Landing — Desktop</div>
+    <div class="mockup-body">
+      <div class="app-shell">
+        <div class="app-nav">
+          <div class="app-nav-item"><div class="app-nav-icon">🏠</div>Home</div>
+          <div class="app-nav-item"><div class="app-nav-icon">📅</div>Time</div>
+          <div class="app-nav-item active"><div class="app-nav-icon">📝</div>QB</div>
+          <div class="app-nav-item"><div class="app-nav-icon">📚</div>Library</div>
+          <div class="app-nav-item"><div class="app-nav-icon">📊</div>Tests</div>
+        </div>
+        <div class="app-content">
+          <div class="qb-header">
+            <h2>Question Bank</h2>
+            <div class="stats">624 questions · 12 papers · JEE Paper 2 & NATA</div>
+          </div>
+
+          <div style="padding: 16px 20px 8px;">
+            <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">📂 Browse Full Question Bank</div>
+          </div>
+          <button class="full-bank-btn">
+            <span>All 624 Questions — Filter by Subject, Chapter, Year, Difficulty</span>
+            <span class="count">→</span>
+          </button>
+
+          <div style="padding: 4px 20px 8px;">
+            <div style="font-size: 14px; font-weight: 600; color: #333;">📄 Practice by Year Paper</div>
+            <div style="font-size: 11px; color: #999; margin-top: 2px;">Solve papers in exam order</div>
+          </div>
+
+          <div class="paper-grid">
+            <div class="paper-card">
+              <span class="exam-badge jee">JEE Paper 2</span>
+              <div class="paper-title">JEE 2026</div>
+              <div class="paper-meta">74 questions · 3h</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:16%; background:#4caf50;"></div></div>
+              <div style="font-size:10px; color:#4caf50; margin-top:4px;">12/74 done</div>
+            </div>
+            <div class="paper-card">
+              <span class="exam-badge nata">NATA</span>
+              <div class="paper-title">NATA 2025 T1</div>
+              <div class="paper-meta">100 questions · 3h</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:5%; background:#ff9800;"></div></div>
+              <div style="font-size:10px; color:#ff9800; margin-top:4px;">5/100 done</div>
+            </div>
+            <div class="paper-card">
+              <span class="exam-badge nata">NATA</span>
+              <div class="paper-title">NATA 2025 T2</div>
+              <div class="paper-meta">100 questions · 3h</div>
+              <div class="progress-bar"></div>
+              <div style="font-size:10px; color:#999; margin-top:4px;">Not started</div>
+            </div>
+            <div class="paper-card">
+              <span class="exam-badge jee">JEE Paper 2</span>
+              <div class="paper-title">JEE 2025</div>
+              <div class="paper-meta">74 questions · 3h</div>
+              <div class="progress-bar"></div>
+              <div style="font-size:10px; color:#999; margin-top:4px;">Not started</div>
+            </div>
+            <div class="paper-card">
+              <span class="exam-badge nata">NATA</span>
+              <div class="paper-title">NATA 2024 T1</div>
+              <div class="paper-meta">100 questions · 3h</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:80%; background:#4caf50;"></div></div>
+              <div style="font-size:10px; color:#4caf50; margin-top:4px;">80/100 done</div>
+            </div>
+            <div class="paper-card">
+              <span class="exam-badge jee">JEE Paper 2</span>
+              <div class="paper-title">JEE 2024</div>
+              <div class="paper-meta">74 questions · 3h</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:100%; background:#4caf50;"></div></div>
+              <div style="font-size:10px; color:#4caf50; margin-top:4px;">✓ Complete</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 3: Full Bank with Filters -->
+<div class="section">
+  <h2 class="section-title">Screen 2: Full Question Bank (Power Filtering)</h2>
+  <p class="section-desc">All 624 questions. Top filter chips for quick filters. "Filters" button opens right drawer with full Subject → Chapter tree. No double sidebar.</p>
+
+  <div class="mockup-frame">
+    <div class="mockup-label">Full Bank — Filter Chips + Question List</div>
+    <div class="mockup-body">
+      <div class="app-shell" style="min-height: 500px;">
+        <div class="app-nav">
+          <div class="app-nav-item"><div class="app-nav-icon">🏠</div>Home</div>
+          <div class="app-nav-item active"><div class="app-nav-icon">📝</div>QB</div>
+          <div class="app-nav-item"><div class="app-nav-icon">📚</div>Library</div>
+        </div>
+        <div class="app-content" style="position: relative;">
+          <div class="qb-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h2 style="font-size: 16px;">← Full Question Bank</h2>
+              <div class="stats">624 questions across all years & exams</div>
+            </div>
+          </div>
+
+          <div class="filter-bar">
+            <span class="filter-chip">Exam: All ▾</span>
+            <span class="filter-chip">Year: All ▾</span>
+            <span class="filter-chip active">Subject ▾</span>
+            <span class="filter-chip">Difficulty ▾</span>
+            <span class="filter-chip">Status ▾</span>
+            <span class="filter-chip more" style="font-weight: 600;">⚙ Filters</span>
+          </div>
+
+          <div class="active-filters">
+            <span class="active-chip">Mathematics <span class="x">×</span></span>
+            <span class="active-chip">Algebra <span class="x">×</span></span>
+            <span class="active-chip">Medium <span class="x">×</span></span>
+          </div>
+
+          <div class="results-header">
+            <span>Showing <strong>45</strong> of 624 questions</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:11px; color:#999;">☐ Select</span>
+              <button class="create-test-btn">+ Create Test</button>
+            </div>
+          </div>
+
+          <div class="question-list" style="max-width: calc(100% - 0px);">
+            <div class="q-card">
+              <div class="q-top">
+                <span class="q-num">Q1</span>
+                <div class="q-tags">
+                  <span class="q-tag subj">Math · Algebra</span>
+                  <span class="q-tag diff-m">Medium</span>
+                  <span class="q-tag src">JEE 2026</span>
+                </div>
+              </div>
+              <div class="q-text">If the function f defined by f(x) = {2^α cos x / (π - 2x), x ≠ π/2; 8, x = π/2} is continuous at x = π/2, then the value of α is...</div>
+              <div class="q-status"><span class="dot wrong"></span> <span style="color:#f44336;">Last: Wrong</span></div>
+            </div>
+
+            <div class="q-card expanded">
+              <div class="q-top">
+                <span class="q-num">Q2</span>
+                <div class="q-tags">
+                  <span class="q-tag subj">Math · Algebra</span>
+                  <span class="q-tag diff-m">Medium</span>
+                  <span class="q-tag src">NATA 2025</span>
+                </div>
+              </div>
+              <div class="q-text">If the lines r⃗ = 3î + 2ĵ - 4k̂ + λ(î + 2ĵ + 2k̂) and r⃗ = (5î - 2ĵ + pk̂) intersect, then p is equal to...</div>
+              <div class="q-options">
+                <div class="q-opt"><span class="opt-letter">A</span> p = 3</div>
+                <div class="q-opt"><span class="opt-letter">B</span> p = -1</div>
+                <div class="q-opt"><span class="opt-letter">C</span> p = 5</div>
+                <div class="q-opt"><span class="opt-letter">D</span> p = 7</div>
+              </div>
+              <div class="q-status"><span class="dot unattempted"></span> <span style="color:#999;">Not attempted</span></div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-top">
+                <span class="q-num">Q3</span>
+                <div class="q-tags">
+                  <span class="q-tag subj">Math · Algebra</span>
+                  <span class="q-tag diff-e">Easy</span>
+                  <span class="q-tag src">JEE 2024</span>
+                </div>
+              </div>
+              <div class="q-text">Let f(x) = 1/(1+e^-x), x ∈ ℝ. If for some α ∈ ℝ, f(α) = 2/3, then f'(α) is equal to...</div>
+              <div class="q-status"><span class="dot correct"></span> <span style="color:#4caf50;">Correct</span></div>
+            </div>
+
+            <div class="q-card">
+              <div class="q-top">
+                <span class="q-num">Q4</span>
+                <div class="q-tags">
+                  <span class="q-tag subj">Math · Trigonometry</span>
+                  <span class="q-tag diff-h">Hard</span>
+                  <span class="q-tag src">NATA 2024</span>
+                </div>
+              </div>
+              <div class="q-text">Given below are two statements: For z ∈ ℂ, if |z - 2i| = √2...</div>
+              <div class="q-status"><span class="dot unattempted"></span> <span style="color:#999;">Not attempted</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 4: Filter Drawer -->
+<div class="section">
+  <h2 class="section-title">Screen 3: Power Filter Drawer (Right Side)</h2>
+  <p class="section-desc">Opens when user clicks "Filters" button. Full hierarchical tree: Exam → Year → Subject → Chapter. Multi-select at any level. No double sidebar — slides over content from the right.</p>
+
+  <div class="mockup-frame">
+    <div class="mockup-label">Filter Drawer — Subject → Chapter Tree</div>
+    <div class="mockup-body">
+      <div style="display: flex; min-height: 480px;">
+        <div style="flex: 1; background: #fafafa; opacity: 0.5; padding: 20px;">
+          <div style="color: #999; font-size: 13px;">[Questions list behind overlay]</div>
+        </div>
+        <div class="filter-drawer" style="position: relative;">
+          <div class="drawer-title">
+            <span>Filters</span>
+            <span style="cursor: pointer; color: #999; font-size: 20px;">✕</span>
+          </div>
+
+          <div class="drawer-section">
+            <div class="drawer-section-title">Exam Type</div>
+            <div class="tree-item parent selected">
+              <span><span class="tree-check checked" style="display:inline-block;"></span> JEE Paper 2</span>
+              <span class="count">348</span>
+            </div>
+            <div class="tree-item parent">
+              <span><span class="tree-check" style="display:inline-block;"></span> NATA</span>
+              <span class="count">276</span>
+            </div>
+          </div>
+
+          <div class="drawer-section">
+            <div class="drawer-section-title">Year</div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <span style="padding: 4px 10px; background: #7c4dff; color: white; border-radius: 16px; font-size: 12px;">2026</span>
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px; color: #666;">2025</span>
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px; color: #666;">2024</span>
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px; color: #666;">2023</span>
+            </div>
+          </div>
+
+          <div class="drawer-section">
+            <div class="drawer-section-title">Subject → Chapter</div>
+            <div class="tree-item parent selected">
+              <span>▾ <span class="tree-check checked" style="display:inline-block;"></span> Mathematics</span>
+              <span class="count">234</span>
+            </div>
+            <div class="tree-item child selected">
+              <span><span class="tree-check checked" style="display:inline-block;"></span> Algebra</span>
+              <span class="count">45</span>
+            </div>
+            <div class="tree-item child">
+              <span><span class="tree-check" style="display:inline-block;"></span> Trigonometry</span>
+              <span class="count">38</span>
+            </div>
+            <div class="tree-item child">
+              <span><span class="tree-check" style="display:inline-block;"></span> Geometry</span>
+              <span class="count">52</span>
+            </div>
+            <div class="tree-item child">
+              <span><span class="tree-check" style="display:inline-block;"></span> Mensuration</span>
+              <span class="count">48</span>
+            </div>
+            <div class="tree-item child">
+              <span><span class="tree-check" style="display:inline-block;"></span> Stats & Probability</span>
+              <span class="count">51</span>
+            </div>
+            <div class="tree-item parent">
+              <span>▸ <span class="tree-check" style="display:inline-block;"></span> Aptitude</span>
+              <span class="count">180</span>
+            </div>
+            <div class="tree-item parent">
+              <span>▸ <span class="tree-check" style="display:inline-block;"></span> Drawing</span>
+              <span class="count">90</span>
+            </div>
+            <div class="tree-item parent">
+              <span>▸ <span class="tree-check" style="display:inline-block;"></span> History of Architecture</span>
+              <span class="count">60</span>
+            </div>
+          </div>
+
+          <div class="drawer-section">
+            <div class="drawer-section-title">Difficulty</div>
+            <div style="display: flex; gap: 6px;">
+              <span style="padding: 4px 12px; background: #e8f5e9; border-radius: 16px; font-size: 12px; color: #2e7d32; border: 1px solid #c8e6c9;">Easy</span>
+              <span style="padding: 4px 12px; background: #7c4dff; color: white; border-radius: 16px; font-size: 12px;">Medium</span>
+              <span style="padding: 4px 12px; background: #fce4ec; border-radius: 16px; font-size: 12px; color: #c62828; border: 1px solid #f8bbd0;">Hard</span>
+            </div>
+          </div>
+
+          <div class="drawer-section">
+            <div class="drawer-section-title">Status</div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px;">All</span>
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px;">Unattempted</span>
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px;">Correct</span>
+              <span style="padding: 4px 10px; background: #f5f3ff; border: 1px solid #e0d6ff; border-radius: 16px; font-size: 12px;">Wrong</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px; display: flex; gap: 8px;">
+            <button style="flex:1; padding: 10px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; cursor: pointer;">Clear All</button>
+            <button style="flex:1; padding: 10px; background: #7c4dff; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;">Apply (45 Qs)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 5: Key behaviors -->
+<div class="section">
+  <h2 class="section-title">Key Behaviors</h2>
+
+  <div class="highlight-box">
+    <strong>Pre-loaded options:</strong> When question list loads, ALL options for visible questions are fetched in background. Expanding a question shows options instantly — zero loading delay.
+  </div>
+
+  <div class="highlight-box">
+    <strong>Virtual scrolling:</strong> All 624 questions render via virtual scroll (only ~20 in DOM at a time). Smooth scroll through the entire bank without performance issues.
+  </div>
+
+  <div class="highlight-box">
+    <strong>Compact cards:</strong> Question cards use 6px gaps, 12px padding. No wasted space. Tags are tiny chips, not full badges. Text preview is 1-2 lines max.
+  </div>
+
+  <div class="highlight-box">
+    <strong>Create Test flow:</strong> Toggle "Select" mode → check questions → "Create Test" → name it → done. Works with any filter combination. Filter first, then select.
+  </div>
+
+  <div class="highlight-box">
+    <strong>Year Paper view:</strong> Clicking a year paper card opens the same question list, but pre-scoped to that paper's questions (e.g., JEE 2026 = 74 Qs). Same filter UI available to narrow further within the paper.
+  </div>
+</div>
+
+</body>
+</html>

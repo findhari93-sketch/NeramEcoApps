@@ -7,7 +7,6 @@ import { buildAlternates } from '@/lib/seo/metadata';
 import { getNeighborhoodBySlug, generateChennaiNeighborhoodSchema } from '@/lib/seo/chennai-neighborhoods';
 import ChennaiNeighborhoodPage from '@/components/seo/ChennaiNeighborhoodPage';
 
-export const revalidate = 86400;
 
 const SLUG = 'adyar';
 const neighborhood = getNeighborhoodBySlug(SLUG)!;

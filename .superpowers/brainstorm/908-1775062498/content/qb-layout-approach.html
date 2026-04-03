@@ -1,0 +1,103 @@
+<h2>QB Page: Core Layout Approach</h2>
+<p class="subtitle">How should the Question Bank be structured when a student opens it?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Filter-First (like Amazon product search)</h3>
+      <p>Left sidebar with powerful hierarchical filters (Subject > Chapter > Topic). All 624 questions load in a scrollable list on the right. Filters narrow down the list in real-time. No exam/year/session navigation needed upfront.</p>
+      <div style="margin-top:12px; padding:12px; background:#f5f5f5; border-radius:8px; font-size:13px; font-family:monospace;">
+        <div style="display:flex; gap:16px;">
+          <div style="width:220px; border-right:1px solid #ddd; padding-right:12px;">
+            <div style="font-weight:bold; margin-bottom:8px;">FILTERS</div>
+            <div style="margin-bottom:6px;">v Mathematics (234)</div>
+            <div style="padding-left:16px; color:#666; margin-bottom:4px;">  Algebra (45)</div>
+            <div style="padding-left:16px; color:#666; margin-bottom:4px;">  Trigonometry (38)</div>
+            <div style="padding-left:16px; color:#666; margin-bottom:4px;">  Geometry (52)</div>
+            <div style="margin-bottom:6px;">v Aptitude (180)</div>
+            <div style="padding-left:16px; color:#666; margin-bottom:4px;">  Puzzles (42)</div>
+            <div style="padding-left:16px; color:#666; margin-bottom:4px;">  Logical (55)</div>
+            <div style="margin-bottom:6px;">> Drawing (90)</div>
+            <div style="margin-bottom:6px;">> Architecture (120)</div>
+            <div style="margin-top:12px; font-weight:bold; margin-bottom:8px;">DIFFICULTY</div>
+            <div style="color:#666;">Easy | Medium | Hard</div>
+            <div style="margin-top:12px; font-weight:bold; margin-bottom:8px;">EXAM SOURCE</div>
+            <div style="color:#666;">JEE | NATA | Both</div>
+            <div style="margin-top:12px; font-weight:bold; margin-bottom:8px;">STATUS</div>
+            <div style="color:#666;">All | Unattempted | Correct | Wrong</div>
+          </div>
+          <div style="flex:1;">
+            <div style="font-weight:bold; margin-bottom:8px;">624 Questions &nbsp; [+ Create Test from Selection]</div>
+            <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">Q1 - Mathematics - Algebra - Medium - JEE 2026</div>
+            <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">Q2 - Mathematics - Trigonometry - Hard - NATA 2025</div>
+            <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">Q3 - Aptitude - Puzzles - Easy - JEE 2024</div>
+            <div style="color:#999; font-size:12px;">...scrolls to show all matching questions</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Top Filter Bar + Full List (like Google Drive / Notion)</h3>
+      <p>Compact filter bar at the top with dropdowns (Subject, Chapter, Difficulty, Exam, Status). Full question list below with no sidebar. Maximizes question viewing area. Filter chips show active filters.</p>
+      <div style="margin-top:12px; padding:12px; background:#f5f5f5; border-radius:8px; font-size:13px; font-family:monospace;">
+        <div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <span style="padding:4px 10px; background:#e8e0f5; border-radius:16px; font-size:12px;">Subject: All v</span>
+            <span style="padding:4px 10px; background:#e8e0f5; border-radius:16px; font-size:12px;">Chapter: All v</span>
+            <span style="padding:4px 10px; background:#e8e0f5; border-radius:16px; font-size:12px;">Difficulty: All v</span>
+            <span style="padding:4px 10px; background:#e8e0f5; border-radius:16px; font-size:12px;">Exam: All v</span>
+            <span style="padding:4px 10px; background:#e8e0f5; border-radius:16px; font-size:12px;">Status: All v</span>
+            <span style="padding:4px 10px; background:#7c4dff; color:white; border-radius:16px; font-size:12px;">+ Create Test</span>
+          </div>
+          <div style="display:flex; gap:6px; margin-bottom:10px;">
+            <span style="padding:2px 8px; background:#fff3e0; border-radius:12px; font-size:11px;">Mathematics x</span>
+            <span style="padding:2px 8px; background:#fff3e0; border-radius:12px; font-size:11px;">Medium x</span>
+          </div>
+          <div style="font-weight:bold; margin-bottom:8px;">Showing 156 of 624 questions</div>
+          <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">Q1 - If the function f defined by... &nbsp; <span style="color:#7c4dff;">Mathematics</span> <span style="color:#ff9800;">Medium</span></div>
+          <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">Q2 - If the lines r = 3i + 2j... &nbsp; <span style="color:#7c4dff;">Mathematics</span> <span style="color:#ff9800;">Medium</span></div>
+          <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">Q3 - Let f(x) = 1/(1+e^-x)... &nbsp; <span style="color:#7c4dff;">Mathematics</span> <span style="color:#4caf50;">Easy</span></div>
+          <div style="color:#999; font-size:12px;">...virtual scroll loads more as you scroll</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid: Collapsible Sidebar + Top Chips (like Figma/VS Code)</h3>
+      <p>Collapsible left sidebar for deep filtering (can be hidden on mobile). Active filters shown as chips above the question list. Best of both worlds - power users get the sidebar, casual users can collapse it.</p>
+      <div style="margin-top:12px; padding:12px; background:#f5f5f5; border-radius:8px; font-size:13px; font-family:monospace;">
+        <div style="display:flex; gap:16px;">
+          <div style="width:200px; border-right:1px solid #ddd; padding-right:12px; position:relative;">
+            <div style="position:absolute; right:-8px; top:0; background:#7c4dff; color:white; width:16px; height:16px; border-radius:50%; text-align:center; font-size:10px; line-height:16px; cursor:pointer;">&lt;</div>
+            <div style="font-weight:bold; margin-bottom:8px;">SUBJECT</div>
+            <div style="margin-bottom:4px; color:#666;">v Mathematics (234)</div>
+            <div style="padding-left:12px; color:#7c4dff; margin-bottom:2px;">* Algebra (45)</div>
+            <div style="padding-left:12px; color:#999; margin-bottom:2px;">  Geometry (52)</div>
+            <div style="margin-bottom:4px; color:#666;">> Aptitude (180)</div>
+            <div style="margin-top:8px; font-weight:bold; margin-bottom:6px;">QUICK FILTERS</div>
+            <div style="color:#666; font-size:12px;">Easy | Medium | Hard</div>
+            <div style="color:#666; font-size:12px;">JEE | NATA</div>
+          </div>
+          <div style="flex:1;">
+            <div style="display:flex; gap:6px; margin-bottom:8px;">
+              <span style="padding:2px 8px; background:#e8eaf6; border-radius:12px; font-size:11px;">Mathematics > Algebra x</span>
+              <span style="padding:2px 8px; background:#e8eaf6; border-radius:12px; font-size:11px;">Medium x</span>
+            </div>
+            <div style="font-weight:bold; margin-bottom:8px;">45 Questions &nbsp; | &nbsp; Select for Test</div>
+            <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">[ ] Q1 - Function continuity... Medium - JEE 2026</div>
+            <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:6px;">[ ] Q2 - Quadratic equation... Easy - NATA 2024</div>
+            <div style="color:#999; font-size:12px;">...virtual scroll</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

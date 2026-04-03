@@ -5,7 +5,6 @@ import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import CoachingPageContent from '@/components/CoachingPageContent';
 
-export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 

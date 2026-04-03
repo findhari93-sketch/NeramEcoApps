@@ -6,7 +6,6 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import Link from 'next/link';
 
-export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 

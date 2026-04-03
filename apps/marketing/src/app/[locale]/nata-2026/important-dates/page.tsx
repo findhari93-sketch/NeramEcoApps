@@ -18,8 +18,6 @@ import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
-// ISR: Revalidate hourly — dates change during exam season
-export const revalidate = 3600;
 
 export async function generateMetadata({
   params: { locale },

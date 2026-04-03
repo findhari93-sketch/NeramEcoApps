@@ -24,7 +24,6 @@ import { APP_URL } from '@/lib/seo/constants';
 import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
-export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

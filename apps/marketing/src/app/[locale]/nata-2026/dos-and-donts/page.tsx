@@ -23,7 +23,6 @@ import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
-export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

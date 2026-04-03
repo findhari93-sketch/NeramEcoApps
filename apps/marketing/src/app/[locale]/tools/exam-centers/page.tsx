@@ -23,7 +23,6 @@ import Link from 'next/link';
 const baseUrl = 'https://neramclasses.com';
 const appUrl = 'https://app.neramclasses.com';
 
-export const revalidate = 86400;
 
 const faqs = [
   {

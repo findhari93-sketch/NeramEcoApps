@@ -1,0 +1,132 @@
+<h2>QB Filter Placement (No Double Sidebar)</h2>
+<p class="subtitle">The app already has a left nav. Where should QB filters live?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Top Bar Filters + Slide-out Drawer (like YouTube / Flipkart)</h3>
+      <p>Primary filters as compact chips/dropdowns at the top. A "More Filters" button opens a right-side drawer for deep filtering (subject > chapter tree). Active filters shown as dismissible chips. Clean, no extra sidebar.</p>
+      <div style="margin-top:12px; padding:12px; background:#f5f5f5; border-radius:8px; font-size:13px; font-family:monospace;">
+        <div style="display:flex;">
+          <div style="width:48px; background:#4a148c; color:white; padding:8px 4px; text-align:center; font-size:10px;">
+            <div style="margin-bottom:12px;">Home</div>
+            <div style="margin-bottom:12px;">QB</div>
+            <div style="margin-bottom:12px;">Tests</div>
+            <div>More</div>
+          </div>
+          <div style="flex:1; padding:8px;">
+            <div style="font-weight:bold; margin-bottom:6px;">JEE Paper 2 - Full Question Bank (624)</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; align-items:center;">
+              <span style="padding:3px 10px; background:#e8e0f5; border-radius:16px; font-size:11px; cursor:pointer;">Year: All v</span>
+              <span style="padding:3px 10px; background:#e8e0f5; border-radius:16px; font-size:11px; cursor:pointer;">Subject: All v</span>
+              <span style="padding:3px 10px; background:#e8e0f5; border-radius:16px; font-size:11px; cursor:pointer;">Difficulty: All v</span>
+              <span style="padding:3px 10px; background:#7c4dff; color:white; border-radius:16px; font-size:11px; cursor:pointer;">Filters</span>
+            </div>
+            <div style="display:flex; gap:4px; margin-bottom:8px;">
+              <span style="padding:2px 6px; background:#fff3e0; border-radius:10px; font-size:10px;">Mathematics x</span>
+              <span style="padding:2px 6px; background:#fff3e0; border-radius:10px; font-size:10px;">2026 x</span>
+            </div>
+            <div style="background:#fff; padding:6px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:4px; font-size:12px;">Q1 - If the function f defined by f(x)... <span style="color:#7c4dff;">Math</span> <span style="color:#ff9800;">Med</span></div>
+            <div style="background:#fff; padding:6px; border:1px solid #e0e0e0; border-radius:4px; margin-bottom:4px; font-size:12px;">Q2 - If the lines r = 3i + 2j... <span style="color:#7c4dff;">Math</span> <span style="color:#ff9800;">Med</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Tab-based: Year Papers + Full QB as Tabs (like Chrome tabs)</h3>
+      <p>Two main tabs at top: "Year Papers" (primary - browse by year) and "Full Bank" (secondary - all questions with power filters). Year Papers tab shows exam cards. Full Bank tab has top filter bar. Clean separation of the two modes.</p>
+      <div style="margin-top:12px; padding:12px; background:#f5f5f5; border-radius:8px; font-size:13px; font-family:monospace;">
+        <div style="display:flex;">
+          <div style="width:48px; background:#4a148c; color:white; padding:8px 4px; text-align:center; font-size:10px;">
+            <div style="margin-bottom:12px;">Home</div>
+            <div style="margin-bottom:12px; font-weight:bold; text-decoration:underline;">QB</div>
+            <div style="margin-bottom:12px;">Tests</div>
+          </div>
+          <div style="flex:1; padding:8px;">
+            <div style="display:flex; border-bottom:2px solid #e0e0e0; margin-bottom:8px;">
+              <div style="padding:6px 16px; border-bottom:2px solid #7c4dff; color:#7c4dff; font-weight:bold; font-size:12px; margin-bottom:-2px;">Year Papers</div>
+              <div style="padding:6px 16px; color:#999; font-size:12px;">Full Bank (624)</div>
+            </div>
+            <div style="font-size:12px; color:#666; margin-bottom:6px;">Select a paper to practice:</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+              <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:12px;">JEE 2026</div>
+                <div style="font-size:10px; color:#666;">74 questions</div>
+                <div style="font-size:10px; color:#4caf50;">12/74 done</div>
+              </div>
+              <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:12px;">NATA 2025 T1</div>
+                <div style="font-size:10px; color:#666;">100 questions</div>
+                <div style="font-size:10px; color:#ff9800;">0/100 done</div>
+              </div>
+              <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:12px;">NATA 2025 T2</div>
+                <div style="font-size:10px; color:#666;">100 questions</div>
+                <div style="font-size:10px; color:#999;">not started</div>
+              </div>
+              <div style="background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:12px;">JEE 2025</div>
+                <div style="font-size:10px; color:#666;">74 questions</div>
+                <div style="font-size:10px; color:#999;">not started</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Smart Landing + Inline Filters (Recommended)</h3>
+      <p>Landing page shows Year Paper cards (primary entry) + a "Browse Full Bank" button. Inside any view, filters are inline at the top with a slide-out drawer for deep filtering. Year Paper view scopes filters to that paper. Full Bank view shows everything. Same filter UI, different scope.</p>
+      <div style="margin-top:12px; padding:12px; background:#f5f5f5; border-radius:8px; font-size:13px; font-family:monospace;">
+        <div style="display:flex;">
+          <div style="width:48px; background:#4a148c; color:white; padding:8px 4px; text-align:center; font-size:10px;">
+            <div style="margin-bottom:12px;">Home</div>
+            <div style="margin-bottom:12px; font-weight:bold;">QB</div>
+            <div>Tests</div>
+          </div>
+          <div style="flex:1; padding:8px;">
+            <div style="font-weight:bold; margin-bottom:4px; font-size:14px;">Question Bank</div>
+            <div style="font-size:11px; color:#666; margin-bottom:8px;">624 questions across JEE & NATA papers</div>
+
+            <div style="background:#e8eaf6; padding:10px; border-radius:8px; margin-bottom:8px; cursor:pointer; border:2px solid #7c4dff;">
+              <div style="font-size:12px; font-weight:bold; color:#4a148c;">Browse Full Question Bank</div>
+              <div style="font-size:10px; color:#666;">All 624 questions with power filters by subject, chapter, difficulty</div>
+            </div>
+
+            <div style="font-size:12px; font-weight:bold; margin-bottom:6px; color:#333;">Or practice by Year Paper:</div>
+            <div style="display:flex; gap:6px; overflow-x:auto;">
+              <div style="min-width:120px; background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:11px;">JEE 2026</div>
+                <div style="font-size:10px; color:#666;">74 Qs</div>
+                <div style="height:3px; background:#e0e0e0; border-radius:2px; margin-top:4px;"><div style="height:3px; background:#4caf50; border-radius:2px; width:16%;"></div></div>
+              </div>
+              <div style="min-width:120px; background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:11px;">NATA 2025</div>
+                <div style="font-size:10px; color:#666;">200 Qs</div>
+                <div style="height:3px; background:#e0e0e0; border-radius:2px; margin-top:4px;"><div style="height:3px; background:#ff9800; border-radius:2px; width:5%;"></div></div>
+              </div>
+              <div style="min-width:120px; background:#fff; padding:8px; border:1px solid #e0e0e0; border-radius:6px;">
+                <div style="font-weight:bold; font-size:11px;">JEE 2025</div>
+                <div style="font-size:10px; color:#666;">74 Qs</div>
+                <div style="height:3px; background:#e0e0e0; border-radius:2px; margin-top:4px;"></div>
+              </div>
+            </div>
+
+            <div style="margin-top:10px; padding-top:8px; border-top:1px solid #eee; font-size:10px; color:#999;">
+              Inside any view: top filter chips + "More Filters" drawer for Subject > Chapter tree
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

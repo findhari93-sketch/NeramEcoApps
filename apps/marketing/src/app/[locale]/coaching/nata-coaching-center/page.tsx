@@ -12,7 +12,6 @@ import {
 import { BASE_URL } from '@/lib/seo/constants';
 import { buildAlternates } from '@/lib/seo/metadata';
 
-export const revalidate = 86400;
 
 export async function generateMetadata({
   params: { locale },

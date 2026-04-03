@@ -38,7 +38,6 @@ import {
 } from '@/lib/seo/schemas';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 
-export const revalidate = 86400;
 
 // ─── All 38 Tamil Nadu Districts ────────────────────────────────────────────
 
