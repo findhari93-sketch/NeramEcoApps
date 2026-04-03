@@ -260,8 +260,8 @@ export default function TopFilterBar({
         bgcolor: 'background.paper',
         borderBottom: '1px solid',
         borderColor: 'divider',
-        px: 1.5,
-        py: 1.5,
+        px: { xs: 0.75, sm: 1.5 },
+        py: { xs: 0.75, sm: 1.5 },
       }}
     >
       {/* ── Row 1: Quick filter chips + Filters button + Language toggle ── */}
@@ -306,10 +306,10 @@ export default function TopFilterBar({
                 onClick={onOpenDrawer}
                 sx={{
                   flexShrink: 0,
-                  height: 30,
-                  fontSize: '0.75rem',
+                  height: { xs: 26, sm: 30 },
+                  fontSize: { xs: '0.675rem', sm: '0.75rem' },
                   fontWeight: 500,
-                  borderRadius: '15px',
+                  borderRadius: '13px',
                   cursor: 'pointer',
                   ...(active
                     ? {
@@ -344,10 +344,10 @@ export default function TopFilterBar({
             variant="outlined"
             onClick={onOpenDrawer}
             sx={{
-              height: 30,
-              fontSize: '0.75rem',
+              height: { xs: 26, sm: 30 },
+              fontSize: { xs: '0.675rem', sm: '0.75rem' },
               fontWeight: 600,
-              borderRadius: '15px',
+              borderRadius: '13px',
               borderColor: activeFilterCount > 0 ? PURPLE_ACCENT : 'grey.400',
               color: activeFilterCount > 0 ? PURPLE_ACCENT : 'text.secondary',
               cursor: 'pointer',
@@ -453,9 +453,8 @@ export default function TopFilterBar({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          mt: 1,
-          gap: 1,
-          flexWrap: 'wrap',
+          mt: { xs: 0.5, sm: 1 },
+          gap: 0.5,
         }}
       >
         {/* Result count */}
@@ -475,20 +474,36 @@ export default function TopFilterBar({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           {!selectionMode ? (
             <>
+              <IconButton
+                size="small"
+                onClick={onToggleSelectionMode}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  border: '1px solid',
+                  borderColor: 'grey.300',
+                  color: 'text.secondary',
+                  '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
+                  display: { xs: 'inline-flex', sm: 'none' },
+                }}
+              >
+                <CheckBoxOutlineBlankIcon sx={{ fontSize: 16 }} />
+              </IconButton>
               <Button
                 size="small"
                 variant="outlined"
                 startIcon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 16 }} />}
                 onClick={onToggleSelectionMode}
                 sx={{
-                  height: 30,
-                  fontSize: '0.75rem',
+                  height: 28,
+                  fontSize: '0.7rem',
                   fontWeight: 500,
                   textTransform: 'none',
-                  borderRadius: '15px',
+                  borderRadius: '14px',
                   borderColor: 'grey.300',
                   color: 'text.secondary',
                   '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
+                  display: { xs: 'none', sm: 'inline-flex' },
                 }}
               >
                 Select
@@ -496,19 +511,22 @@ export default function TopFilterBar({
               <Button
                 size="small"
                 variant="contained"
-                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+                startIcon={<AddIcon sx={{ fontSize: 14, display: { xs: 'none', sm: 'inline-flex' } }} />}
                 onClick={onCreateTest}
                 sx={{
-                  height: 30,
-                  fontSize: '0.75rem',
+                  height: 28,
+                  fontSize: '0.7rem',
                   fontWeight: 600,
                   textTransform: 'none',
-                  borderRadius: '15px',
+                  borderRadius: '14px',
                   bgcolor: PURPLE_ACCENT,
+                  px: { xs: 1.5, sm: 2 },
+                  minWidth: 'auto',
                   '&:hover': { bgcolor: '#651fff' },
                 }}
               >
-                Create Test
+                <AddIcon sx={{ fontSize: 14, mr: 0.25, display: { sm: 'none' } }} />
+                Test
               </Button>
             </>
           ) : (

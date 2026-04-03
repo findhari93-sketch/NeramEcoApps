@@ -22,6 +22,7 @@ interface InlineQuestionCardProps {
   onSubmit: (answer: string) => Promise<void>;
   onStudyToggle: () => void;
   onReport?: (questionId: string, reportType: string, description: string) => Promise<void>;
+  onCategoryClick?: (category: string) => void;
 }
 
 const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(function InlineQuestionCard({
@@ -35,6 +36,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
   onSubmit,
   onStudyToggle,
   onReport,
+  onCategoryClick,
 }, ref) {
   const theme = useTheme();
 
@@ -73,10 +75,10 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
               }
         }
         sx={{
-          p: { xs: 1, md: 1.5 },
+          p: { xs: 0.75, md: 1.5 },
           cursor: expanded ? 'default' : 'pointer',
           display: 'flex',
-          gap: 1,
+          gap: { xs: 0.5, md: 1 },
         }}
       >
         {/* Question number */}
@@ -85,9 +87,9 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
           sx={{
             fontWeight: 700,
             color: expanded ? 'primary.main' : 'text.secondary',
-            minWidth: 28,
+            minWidth: { xs: 22, md: 28 },
             pt: 0.25,
-            fontSize: '0.8rem',
+            fontSize: { xs: '0.7rem', md: '0.8rem' },
           }}
         >
           Q{questionIndex + 1}
@@ -146,6 +148,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
               <CategoryChips
                 categories={(question.categories || []).slice(0, 2)}
                 size="small"
+                onCategoryClick={onCategoryClick}
               />
               <Box sx={{ flexGrow: 1 }} />
               <AttemptIndicator summary={question.attempt_summary} />
@@ -196,7 +199,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
 
       {/* Expanded content */}
       <Collapse in={expanded} timeout={300} unmountOnExit>
-        <Box sx={{ px: { xs: 1.5, md: 2 }, pb: { xs: 1, md: 1.5 }, pt: 0 }}>
+        <Box sx={{ px: { xs: 0.75, md: 2 }, pb: { xs: 0.75, md: 1.5 }, pt: 0 }}>
           {loading && !questionDetail ? (
             <Box>
               <Skeleton variant="text" width="100%" height={24} sx={{ mb: 1 }} />

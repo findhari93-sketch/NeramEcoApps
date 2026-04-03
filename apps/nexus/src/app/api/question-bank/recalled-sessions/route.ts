@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, getQBTopicTree, getQBTopicCounts } from '@neram/database';
+import { getSupabaseAdminClient, getQBRecalledSessionCards } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,15 +18,15 @@ export async function GET(request: NextRequest) {
 
     if (!caller) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const [data, counts] = await Promise.all([
-      getQBTopicTree(supabase),
-      getQBTopicCounts(supabase),
-    ]);
+    const { searchParams } = new URL(request.url);
+    const year = searchParams.get('year') ? Number(searchParams.get('year')) : undefined;
 
-    return NextResponse.json({ data, counts }, { status: 200 });
+    const data = await getQBRecalledSessionCards(year, supabase);
+
+    return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    console.error('[QB API] Error:', message);
+    console.error('[QB API] Error fetching recalled sessions:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

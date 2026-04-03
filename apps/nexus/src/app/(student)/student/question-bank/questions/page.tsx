@@ -105,6 +105,8 @@ export default function QuestionListPage() {
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [topics, setTopics] = useState<NexusQBTopic[]>([]);
+  const [topicCounts, setTopicCounts] = useState<Map<string, number>>(new Map());
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
 
   // Inline expansion state
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
@@ -154,6 +156,12 @@ export default function QuestionListPage() {
     fetchExamTree();
     fetchTopics();
   }, [activeClassroom]);
+
+  // Fetch category counts when exam context changes
+  useEffect(() => {
+    if (!activeClassroom) return;
+    fetchCategoryCounts();
+  }, [activeClassroom, selectedExam, selectedYear, selectedSession]);
 
   // Load preset if specified
   useEffect(() => {
@@ -230,9 +238,34 @@ export default function QuestionListPage() {
       if (res.ok) {
         const json = await res.json();
         setTopics(json.data || json || []);
+        if (json.counts) {
+          setTopicCounts(new Map(Object.entries(json.counts)));
+        }
       }
     } catch (err) {
       console.error('Failed to fetch topics:', err);
+    }
+  }
+
+  async function fetchCategoryCounts() {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const params = new URLSearchParams();
+      params.set('classroom_id', activeClassroom!.id);
+      if (selectedExam) params.set('exam_type', selectedExam);
+      if (selectedYear) params.set('year', String(selectedYear));
+      if (selectedSession) params.set('session', selectedSession);
+      const res = await fetch(
+        `/api/question-bank/category-counts?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const json = await res.json();
+        setCategoryCounts(json.data || {});
+      }
+    } catch (err) {
+      console.error('Failed to fetch category counts:', err);
     }
   }
 
@@ -572,7 +605,7 @@ export default function QuestionListPage() {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Back button */}
-      <Box sx={{ px: 2, pt: 1 }}>
+      <Box sx={{ px: { xs: 0.5, md: 2 }, pt: 0.5 }}>
         <Button
           size="small"
           startIcon={<ArrowBackIcon />}
@@ -614,7 +647,7 @@ export default function QuestionListPage() {
       />
 
       {/* Question list (scrollable) */}
-      <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 1, md: 2 }, pb: 2 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 0.5, md: 2 }, pb: 2 }}>
         {loading ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, pt: 1 }}>
             {[1, 2, 3].map((i) => (
@@ -688,6 +721,13 @@ export default function QuestionListPage() {
                       onSubmit={handleInlineSubmit}
                       onStudyToggle={handleStudyToggle}
                       onReport={handleReport}
+                      onCategoryClick={(cat) => {
+                        setFilters((prev) => {
+                          const current = prev.categories || [];
+                          if (current.includes(cat)) return prev;
+                          return { ...prev, categories: [...current, cat] };
+                        });
+                      }}
                     />
                   </SwipeableQuestionCard>
                 </Box>
@@ -897,6 +937,8 @@ export default function QuestionListPage() {
         filters={filters}
         onApply={handleFilterApply}
         topics={topics}
+        topicCounts={topicCounts}
+        categoryCounts={categoryCounts}
         contextLabel={contextLabel}
       />
 

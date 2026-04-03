@@ -5319,12 +5319,21 @@ export type QBAttemptMode = 'practice' | 'year_paper';
 export type QBQuestionStatus = 'draft' | 'answer_keyed' | 'complete' | 'active';
 export type QBPaperUploadStatus = 'pending' | 'parsed' | 'answer_keyed' | 'complete';
 
+// Recalled papers enums
+export type QBConfidenceTier = 1 | 2 | 3; // 1=Verified, 2=Recalled, 3=Topic Only
+export type QBAnswerSource = 'official' | 'teacher_verified' | 'student_recalled' | 'unverified';
+export type QBFigureType = 'original' | 'recreated' | 'reference' | 'placeholder';
+export type QBPaperSource = 'official' | 'recalled';
+export type QBTopicPriority = 'critical' | 'high' | 'medium' | 'low';
+
 export type QBCategory =
+  // Broad categories
   | 'mathematics'
-  | 'history_of_architecture'
-  | 'general_knowledge'
   | 'aptitude'
   | 'drawing'
+  // NATA categories
+  | 'history_of_architecture'
+  | 'general_knowledge'
   | 'puzzle'
   | 'perspective'
   | 'building_materials'
@@ -5333,7 +5342,46 @@ export type QBCategory =
   | 'sustainability'
   | 'famous_architects'
   | 'current_affairs'
-  | 'visualization_3d';
+  | 'visualization_3d'
+  // JEE Aptitude subcategories
+  | 'spatial_visualization'
+  | 'orthographic_projection'
+  | 'pattern_recognition'
+  | 'analogy'
+  | 'counting_figures'
+  | 'odd_one_out'
+  | 'surface_counting'
+  | 'mirror_image'
+  | 'embedded_figure'
+  | 'architecture_gk'
+  | 'building_science'
+  | 'design_fundamentals'
+  // JEE Mathematics subcategories
+  | 'trigonometry'
+  | 'probability'
+  | 'statistics'
+  | 'matrices'
+  | 'determinants'
+  | 'complex_numbers'
+  | 'vectors'
+  | '3d_geometry'
+  | 'conic_sections'
+  | 'circles'
+  | 'straight_lines'
+  | 'sequences_and_series'
+  | 'binomial_theorem'
+  | 'permutations_combinations'
+  | 'definite_integrals'
+  | 'indefinite_integrals'
+  | 'differential_equations'
+  | 'applications_of_derivatives'
+  | 'differentiability'
+  | 'continuity'
+  | 'mean_value_theorems'
+  | 'quadratic_equations'
+  | 'functions'
+  | 'sets_and_relations'
+  | 'mathematical_logic';
 
 // QB Interfaces
 
@@ -5346,6 +5394,12 @@ export interface NexusQBTopic {
   is_active: boolean;
   created_at: string;
   children?: NexusQBTopic[];
+  // Topic Intelligence fields
+  study_content_md: string | null;
+  study_video_urls: string[];
+  session_appearance_count: number;
+  priority: QBTopicPriority | null;
+  sub_items: Array<{ name: string; description?: string; sessions: string[] }>;
 }
 
 export interface NexusQBQuestionOption {
@@ -5386,6 +5440,16 @@ export interface NexusQBQuestion {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Recalled paper fields (NULL for official papers)
+  confidence_tier: QBConfidenceTier | null;
+  answer_source: QBAnswerSource | null;
+  figure_type: QBFigureType | null;
+  recall_thread_id: string | null;
+  // Drawing-specific fields (for DRAWING_PROMPT format)
+  drawing_marks: number | null;
+  design_principle_tested: string | null;
+  colour_constraint: string | null;
+  objects_to_include: Array<{ name: string; count?: number }> | null;
 }
 
 export interface NexusQBQuestionSource {
@@ -5441,6 +5505,29 @@ export interface NexusQBOriginalPaper {
   questions_answer_keyed: number;
   questions_complete: number;
   created_at: string;
+  // Recalled paper fields
+  paper_source: QBPaperSource;
+  exam_date: string | null;
+  contributor_summary: Array<{
+    user_id: string;
+    name: string;
+    question_count: number;
+    tier: QBConfidenceTier;
+  }>;
+}
+
+export interface NexusQBPaperContributor {
+  id: string;
+  paper_id: string;
+  user_id: string;
+  display_name: string;
+  role: 'student' | 'teacher' | 'admin';
+  question_count: number;
+  tier_1_count: number;
+  tier_2_count: number;
+  tier_3_count: number;
+  notes: string | null;
+  created_at: string;
 }
 
 export interface NexusQBClassroomLink {
@@ -5495,6 +5582,9 @@ export interface QBFilterState {
   source_session?: string;
   // Solution filter
   solution_filter?: 'has_video' | 'has_image' | 'has_explanation' | 'no_solution';
+  // Recalled paper filters
+  confidence_tier?: QBConfidenceTier[];
+  paper_source?: QBPaperSource;
 }
 
 // Exam tree types for sidebar navigation
@@ -5530,6 +5620,20 @@ export interface QBProgressStats {
   by_difficulty: Record<string, { attempted: number; correct: number; total: number }>;
 }
 
+// Recalled Papers View Types
+
+export interface QBRecalledSessionCard {
+  paper: NexusQBOriginalPaper;
+  contributors: NexusQBPaperContributor[];
+  tier_counts: { tier_1: number; tier_2: number; tier_3: number };
+  topic_distribution: Record<string, number>; // topic_slug -> count
+}
+
+export interface QBTopicIntelligenceItem extends NexusQBTopic {
+  question_count: number;
+  session_names: string[];
+}
+
 // QB Input Types
 
 export interface NexusQBQuestionInsert {
@@ -5555,6 +5659,15 @@ export interface NexusQBQuestionInsert {
   status?: QBQuestionStatus;
   nta_question_id?: string | null;
   created_by?: string | null;
+  // Recalled paper fields
+  confidence_tier?: QBConfidenceTier | null;
+  answer_source?: QBAnswerSource | null;
+  figure_type?: QBFigureType | null;
+  recall_thread_id?: string | null;
+  drawing_marks?: number | null;
+  design_principle_tested?: string | null;
+  colour_constraint?: string | null;
+  objects_to_include?: Array<{ name: string; count?: number }> | null;
 }
 
 export interface NexusQBQuestionUpdate {
@@ -5577,6 +5690,15 @@ export interface NexusQBQuestionUpdate {
   status?: QBQuestionStatus;
   nta_question_id?: string | null;
   is_active?: boolean;
+  // Recalled paper fields
+  confidence_tier?: QBConfidenceTier | null;
+  answer_source?: QBAnswerSource | null;
+  figure_type?: QBFigureType | null;
+  recall_thread_id?: string | null;
+  drawing_marks?: number | null;
+  design_principle_tested?: string | null;
+  colour_constraint?: string | null;
+  objects_to_include?: Array<{ name: string; count?: number }> | null;
 }
 
 export interface NexusQBQuestionSourceInsert {
@@ -5590,11 +5712,13 @@ export interface NexusQBQuestionSourceInsert {
 // QB Constants
 
 export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
+  // Broad categories
   mathematics: 'Mathematics',
-  history_of_architecture: 'History of Architecture',
-  general_knowledge: 'General Knowledge',
   aptitude: 'Aptitude',
   drawing: 'Drawing',
+  // NATA categories
+  history_of_architecture: 'History of Architecture',
+  general_knowledge: 'General Knowledge',
   puzzle: 'Puzzles & Logic',
   perspective: 'Perspective',
   building_materials: 'Building Materials',
@@ -5604,6 +5728,45 @@ export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
   famous_architects: 'Famous Architects',
   current_affairs: 'Current Affairs',
   visualization_3d: '3D Visualization',
+  // JEE Aptitude subcategories
+  spatial_visualization: 'Spatial Visualization',
+  orthographic_projection: 'Orthographic Projection',
+  pattern_recognition: 'Pattern Recognition',
+  analogy: 'Analogy',
+  counting_figures: 'Counting Figures',
+  odd_one_out: 'Odd One Out',
+  surface_counting: 'Surface Counting',
+  mirror_image: 'Mirror Image',
+  embedded_figure: 'Embedded Figure',
+  architecture_gk: 'Architecture GK',
+  building_science: 'Building Science',
+  design_fundamentals: 'Design Fundamentals',
+  // JEE Mathematics subcategories
+  trigonometry: 'Trigonometry',
+  probability: 'Probability',
+  statistics: 'Statistics',
+  matrices: 'Matrices',
+  determinants: 'Determinants',
+  complex_numbers: 'Complex Numbers',
+  vectors: 'Vectors',
+  '3d_geometry': '3D Geometry',
+  conic_sections: 'Conic Sections',
+  circles: 'Circles',
+  straight_lines: 'Straight Lines',
+  sequences_and_series: 'Sequences & Series',
+  binomial_theorem: 'Binomial Theorem',
+  permutations_combinations: 'Permutations & Combinations',
+  definite_integrals: 'Definite Integrals',
+  indefinite_integrals: 'Indefinite Integrals',
+  differential_equations: 'Differential Equations',
+  applications_of_derivatives: 'Applications of Derivatives',
+  differentiability: 'Differentiability',
+  continuity: 'Continuity',
+  mean_value_theorems: 'Mean Value Theorems',
+  quadratic_equations: 'Quadratic Equations',
+  functions: 'Functions',
+  sets_and_relations: 'Sets & Relations',
+  mathematical_logic: 'Mathematical Logic',
 };
 
 export const QB_CATEGORIES: QBCategory[] = Object.keys(QB_CATEGORY_LABELS) as QBCategory[];
@@ -5631,6 +5794,27 @@ export const QB_QUESTION_STATUS_COLORS: Record<QBQuestionStatus, string> = {
   answer_keyed: '#F59E0B',
   complete: '#3B82F6',
   active: '#22C55E',
+};
+
+// Recalled Papers Constants
+
+export const QB_CONFIDENCE_TIER_LABELS: Record<QBConfidenceTier, string> = {
+  1: 'Verified',
+  2: 'Recalled',
+  3: 'Topic Signal',
+};
+
+export const QB_CONFIDENCE_TIER_COLORS: Record<QBConfidenceTier, string> = {
+  1: '#22C55E', // green
+  2: '#F59E0B', // amber
+  3: '#9E9E9E', // grey
+};
+
+export const QB_TOPIC_PRIORITY_LABELS: Record<QBTopicPriority, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
 };
 
 // Bulk Upload Types

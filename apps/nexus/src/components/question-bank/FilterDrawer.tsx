@@ -24,8 +24,9 @@ import type {
   QBQuestionFormat,
   QBExamTree,
   QBExamType,
+  QBConfidenceTier,
 } from '@neram/database';
-import { QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS, type QBCategory } from '@neram/database';
+import { QB_CATEGORY_LABELS, QB_EXAM_TYPE_LABELS, QB_CONFIDENCE_TIER_LABELS, type QBCategory } from '@neram/database';
 import SubjectTree from './SubjectTree';
 
 interface FilterDrawerProps {
@@ -38,6 +39,7 @@ interface FilterDrawerProps {
   examTree?: QBExamTree | null;
   matchCount?: number;
   topicCounts?: Map<string, number>;
+  categoryCounts?: Record<string, number>;
 }
 
 const DIFFICULTY_OPTIONS: { value: QBDifficulty; label: string }[] = [
@@ -60,7 +62,32 @@ const STATUS_OPTIONS: { value: NonNullable<QBFilterState['attempt_status']>; lab
   { value: 'incorrect', label: 'Incorrect' },
 ];
 
-const ALL_CATEGORIES = Object.keys(QB_CATEGORY_LABELS) as QBCategory[];
+const CATEGORY_GROUPS: { key: string; label: string; categories: QBCategory[]; exams: (QBExamType | 'ALL')[] }[] = [
+  {
+    key: 'broad',
+    label: 'General',
+    categories: ['mathematics', 'aptitude', 'drawing'],
+    exams: ['ALL', 'JEE_PAPER_2', 'NATA'],
+  },
+  {
+    key: 'nata',
+    label: 'NATA Topics',
+    categories: ['history_of_architecture', 'general_knowledge', 'puzzle', 'perspective', 'building_materials', 'building_services', 'planning', 'sustainability', 'famous_architects', 'current_affairs', 'visualization_3d'],
+    exams: ['NATA'],
+  },
+  {
+    key: 'jee_aptitude',
+    label: 'Aptitude Topics',
+    categories: ['spatial_visualization', 'orthographic_projection', 'pattern_recognition', 'analogy', 'counting_figures', 'odd_one_out', 'surface_counting', 'mirror_image', 'embedded_figure', 'architecture_gk', 'building_science', 'building_materials', 'building_services', 'design_fundamentals'],
+    exams: ['JEE_PAPER_2'],
+  },
+  {
+    key: 'jee_math',
+    label: 'Math Topics',
+    categories: ['trigonometry', 'probability', 'statistics', 'matrices', 'determinants', 'complex_numbers', 'vectors', '3d_geometry', 'conic_sections', 'circles', 'straight_lines', 'sequences_and_series', 'binomial_theorem', 'permutations_combinations', 'definite_integrals', 'indefinite_integrals', 'differential_equations', 'applications_of_derivatives', 'differentiability', 'continuity', 'mean_value_theorems', 'quadratic_equations', 'functions', 'sets_and_relations', 'mathematical_logic'],
+    exams: ['JEE_PAPER_2'],
+  },
+];
 
 const EXAM_TYPE_OPTIONS: { value: QBExamType | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All' },
@@ -78,6 +105,7 @@ export default function FilterDrawer({
   examTree,
   matchCount,
   topicCounts,
+  categoryCounts,
 }: FilterDrawerProps) {
   const [draft, setDraft] = useState<QBFilterState>(filters);
 
@@ -254,8 +282,8 @@ export default function FilterDrawer({
           </Accordion>
         )}
 
-        {/* Subject / Chapter Tree */}
-        {topics.length > 0 && (
+        {/* Subject / Chapter Tree — only show if a meaningful number of topics have questions */}
+        {topics.length > 0 && topicCounts && topicCounts.size >= 5 && (
           <Accordion disableGutters elevation={0}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="subtitle2">Subject &amp; Chapter</Typography>
@@ -271,24 +299,72 @@ export default function FilterDrawer({
           </Accordion>
         )}
 
-        {/* Category */}
-        <Accordion disableGutters elevation={0}>
+        {/* Category — dynamic based on actual questions */}
+        <Accordion disableGutters elevation={0} defaultExpanded>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Category</Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {ALL_CATEGORIES.map((cat) => (
-                <Chip
-                  key={cat}
-                  label={QB_CATEGORY_LABELS[cat]}
-                  onClick={() => toggleArrayValue('categories', cat as string)}
-                  variant={(draft.categories || []).includes(cat) ? 'filled' : 'outlined'}
-                  color={(draft.categories || []).includes(cat) ? 'primary' : 'default'}
-                  size="small"
-                />
-              ))}
-            </Box>
+            {categoryCounts && Object.keys(categoryCounts).length > 0 ? (
+              // Dynamic: show ALL groups that have questions in the current context
+              CATEGORY_GROUPS
+                .map((group) => {
+                  const availableCats = group.categories.filter(
+                    (cat) => categoryCounts[cat] && categoryCounts[cat] > 0,
+                  );
+                  if (availableCats.length === 0) return null;
+                  return (
+                    <Box key={group.key} sx={{ mb: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 600 }}>
+                        {group.label}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {availableCats.map((cat) => {
+                          const isSelected = (draft.categories || []).includes(cat);
+                          const count = categoryCounts[cat] || 0;
+                          return (
+                            <Chip
+                              key={cat}
+                              label={`${QB_CATEGORY_LABELS[cat]} (${count})`}
+                              onClick={() => toggleArrayValue('categories', cat as string)}
+                              variant={isSelected ? 'filled' : 'outlined'}
+                              color={isSelected ? 'primary' : 'default'}
+                              size="small"
+                            />
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  );
+                })
+                .filter(Boolean)
+            ) : (
+              // Fallback: static groups filtered by exam type
+              CATEGORY_GROUPS
+                .filter((group) => {
+                  const selectedExam = draft.exam_type || 'ALL';
+                  return group.exams.includes(selectedExam);
+                })
+                .map((group) => (
+                  <Box key={group.key} sx={{ mb: 1.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 600 }}>
+                      {group.label}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      {group.categories.map((cat) => (
+                        <Chip
+                          key={cat}
+                          label={QB_CATEGORY_LABELS[cat]}
+                          onClick={() => toggleArrayValue('categories', cat as string)}
+                          variant={(draft.categories || []).includes(cat) ? 'filled' : 'outlined'}
+                          color={(draft.categories || []).includes(cat) ? 'primary' : 'default'}
+                          size="small"
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                ))
+            )}
           </AccordionDetails>
         </Accordion>
 
@@ -306,6 +382,27 @@ export default function FilterDrawer({
                   onClick={() => toggleArrayValue('difficulty', opt.value)}
                   variant={(draft.difficulty || []).includes(opt.value) ? 'filled' : 'outlined'}
                   color={(draft.difficulty || []).includes(opt.value) ? 'primary' : 'default'}
+                  size="small"
+                />
+              ))}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Confidence Level (recalled papers) */}
+        <Accordion disableGutters elevation={0}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle2">Confidence Level</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              {([1, 2, 3] as QBConfidenceTier[]).map((tier) => (
+                <Chip
+                  key={tier}
+                  label={QB_CONFIDENCE_TIER_LABELS[tier]}
+                  onClick={() => toggleArrayValue('confidence_tier', tier)}
+                  variant={(draft.confidence_tier || []).includes(tier) ? 'filled' : 'outlined'}
+                  color={(draft.confidence_tier || []).includes(tier) ? 'primary' : 'default'}
                   size="small"
                 />
               ))}

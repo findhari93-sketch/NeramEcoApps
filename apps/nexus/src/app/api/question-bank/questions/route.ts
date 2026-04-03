@@ -40,6 +40,11 @@ export async function GET(request: NextRequest) {
       source_session: params.get('session') || undefined,
       // Solution filter
       solution_filter: solutionFilter as any,
+      // Recalled paper filters
+      confidence_tier: params.get('confidence_tier')
+        ? params.get('confidence_tier')!.split(',').map(Number) as any
+        : undefined,
+      paper_source: (params.get('paper_source') as any) || undefined,
     };
 
     // Teachers see all statuses; students only see active questions

@@ -6,6 +6,7 @@ import type {
   QBExamType,
   QBAttemptMode,
   QBQuestionStatus,
+  QBConfidenceTier,
   QBFilterState,
   QBProgressStats,
   QBAttemptSummary,
@@ -13,6 +14,8 @@ import type {
   QBExamTreeExam,
   QBExamTreeYear,
   QBExamTreeSession,
+  QBRecalledSessionCard,
+  QBTopicIntelligenceItem,
   NexusQBTopic,
   NexusQBQuestion,
   NexusQBQuestionSource,
@@ -21,6 +24,7 @@ import type {
   NexusQBSavedPreset,
   NexusQBClassroomLink,
   NexusQBOriginalPaper,
+  NexusQBPaperContributor,
   NexusQBQuestionListItem,
   NexusQBQuestionDetail,
   NexusQBQuestionInsert,
@@ -176,6 +180,133 @@ export async function getQBTopicTree(
   return roots;
 }
 
+/**
+ * Get count of active questions per topic_id.
+ * Returns a map of topic_id → question count.
+ */
+export async function getQBTopicCounts(
+  client?: TypedSupabaseClient
+): Promise<Record<string, number>> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('topic_id')
+    .eq('is_active', true)
+    .eq('status' as any, 'active')
+    .not('topic_id', 'is', null);
+  if (error) throw error;
+
+  const counts: Record<string, number> = {};
+  for (const row of data || []) {
+    const tid = (row as any).topic_id as string;
+    counts[tid] = (counts[tid] || 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Get count of active questions per category, optionally filtered by exam context.
+ * Unnests the categories array and counts per value.
+ */
+export async function getQBCategoryCounts(
+  filters?: { exam_type?: QBExamType; source_year?: number; source_session?: string },
+  client?: TypedSupabaseClient
+): Promise<Record<string, number>> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let sql: string;
+  if (filters?.exam_type) {
+    // Filter by exam source
+    const conditions: string[] = [
+      `s.exam_type = '${filters.exam_type}'`,
+    ];
+    if (filters.source_year) conditions.push(`s.year = ${filters.source_year}`);
+    if (filters.source_session) conditions.push(`s.session = '${filters.source_session.replace(/'/g, "''")}'`);
+
+    sql = `
+      SELECT cat, COUNT(DISTINCT q.id) as cnt
+      FROM nexus_qb_questions q
+      JOIN nexus_qb_question_sources s ON s.question_id = q.id
+      CROSS JOIN LATERAL unnest(q.categories) AS cat
+      WHERE q.is_active = true AND q.status = 'active'
+        AND ${conditions.join(' AND ')}
+      GROUP BY cat
+      ORDER BY cnt DESC
+    `;
+  } else {
+    // No filter — all active questions
+    sql = `
+      SELECT cat, COUNT(DISTINCT q.id) as cnt
+      FROM nexus_qb_questions q
+      CROSS JOIN LATERAL unnest(q.categories) AS cat
+      WHERE q.is_active = true AND q.status = 'active'
+      GROUP BY cat
+      ORDER BY cnt DESC
+    `;
+  }
+
+  const { data, error } = await supabase.rpc('exec_sql' as any, { query: sql }) as any;
+  // Fallback: if rpc doesn't work, try via .from with raw
+  if (error) {
+    // Use direct fetch to Supabase REST
+    // Fallback: fetch all categories and count client-side
+    return getQBCategoryCountsFallback(filters, supabase);
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data || []) {
+    counts[row.cat] = parseInt(row.cnt, 10);
+  }
+  return counts;
+}
+
+/** Fallback: fetch categories for all matching questions and count client-side. */
+async function getQBCategoryCountsFallback(
+  filters?: { exam_type?: QBExamType; source_year?: number; source_session?: string },
+  client?: TypedSupabaseClient
+): Promise<Record<string, number>> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let questionIds: string[] | null = null;
+
+  if (filters?.exam_type) {
+    let sourceQuery = supabase
+      .from('nexus_qb_question_sources')
+      .select('question_id')
+      .eq('exam_type', filters.exam_type);
+    if (filters.source_year) sourceQuery = sourceQuery.eq('year', filters.source_year);
+    if (filters.source_session) sourceQuery = sourceQuery.eq('session', filters.source_session);
+
+    const { data: sourceData, error: sourceError } = await sourceQuery;
+    if (sourceError) throw sourceError;
+    questionIds = [...new Set((sourceData || []).map((s: any) => s.question_id))];
+    if (questionIds.length === 0) return {};
+  }
+
+  let query = supabase
+    .from('nexus_qb_questions')
+    .select('categories')
+    .eq('is_active', true)
+    .eq('status' as any, 'active');
+
+  if (questionIds) {
+    query = query.in('id', questionIds);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const counts: Record<string, number> = {};
+  for (const row of data || []) {
+    const cats = (row as any).categories as string[] | null;
+    if (!cats) continue;
+    for (const cat of cats) {
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
 // ============================================
 // QUESTION LIST QUERIES
 // ============================================
@@ -220,6 +351,12 @@ export async function getQBQuestions(
   }
   if (filters.search_text) {
     query = query.ilike('question_text', `%${filters.search_text}%`);
+  }
+  if (filters.confidence_tier && filters.confidence_tier.length > 0) {
+    query = query.in('confidence_tier', filters.confidence_tier);
+  }
+  if (filters.paper_source === 'recalled') {
+    query = query.not('confidence_tier', 'is', null);
   }
 
   // Source-based filters from sidebar (exam_type + source_year + source_session)
@@ -1723,4 +1860,336 @@ export async function getQBReportCounts(
     if (r.status in counts) counts[r.status as keyof typeof counts]++;
   });
   return counts;
+}
+
+// ============================================
+// RECALLED PAPERS QUERIES
+// ============================================
+
+/**
+ * Get recalled session cards for the Paper Browser.
+ * Returns papers with paper_source='recalled', enriched with contributors and tier counts.
+ */
+export async function getQBRecalledSessionCards(
+  year?: number,
+  client?: TypedSupabaseClient
+): Promise<QBRecalledSessionCard[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Fetch recalled papers
+  let paperQuery = (supabase as any)
+    .from('nexus_qb_original_papers')
+    .select('*')
+    .eq('paper_source', 'recalled')
+    .order('exam_date', { ascending: false });
+
+  if (year) {
+    paperQuery = paperQuery.eq('year', year);
+  }
+
+  const { data: papers, error: papersError } = await paperQuery;
+  if (papersError) throw papersError;
+  if (!papers || papers.length === 0) return [];
+
+  const paperIds = (papers as any[]).map(p => p.id);
+
+  // Fetch contributors for all papers
+  const { data: contributors, error: contribError } = await (supabase as any)
+    .from('nexus_qb_paper_contributors')
+    .select('*')
+    .in('paper_id', paperIds);
+  if (contribError) throw contribError;
+
+  const contributorsByPaper = new Map<string, NexusQBPaperContributor[]>();
+  for (const c of (contributors || []) as NexusQBPaperContributor[]) {
+    if (!contributorsByPaper.has(c.paper_id)) {
+      contributorsByPaper.set(c.paper_id, []);
+    }
+    contributorsByPaper.get(c.paper_id)!.push(c);
+  }
+
+  // Fetch tier counts per paper (questions grouped by confidence_tier)
+  const { data: questions, error: questionsError } = await supabase
+    .from('nexus_qb_questions')
+    .select('original_paper_id, confidence_tier, topic_id')
+    .in('original_paper_id', paperIds)
+    .not('confidence_tier', 'is', null);
+  if (questionsError) throw questionsError;
+
+  // Fetch topic slugs for distribution
+  const topicIds = [...new Set((questions || []).map((q: any) => q.topic_id).filter(Boolean))];
+  let topicSlugMap = new Map<string, string>();
+  if (topicIds.length > 0) {
+    const { data: topics, error: topicsError } = await supabase
+      .from('nexus_qb_topics')
+      .select('id, slug')
+      .in('id', topicIds);
+    if (!topicsError && topics) {
+      for (const t of topics as any[]) {
+        topicSlugMap.set(t.id, t.slug);
+      }
+    }
+  }
+
+  // Build per-paper aggregates
+  const tierCountsByPaper = new Map<string, { tier_1: number; tier_2: number; tier_3: number }>();
+  const topicDistByPaper = new Map<string, Record<string, number>>();
+
+  for (const q of (questions || []) as any[]) {
+    const paperId = q.original_paper_id;
+    if (!tierCountsByPaper.has(paperId)) {
+      tierCountsByPaper.set(paperId, { tier_1: 0, tier_2: 0, tier_3: 0 });
+    }
+    const counts = tierCountsByPaper.get(paperId)!;
+    if (q.confidence_tier === 1) counts.tier_1++;
+    else if (q.confidence_tier === 2) counts.tier_2++;
+    else if (q.confidence_tier === 3) counts.tier_3++;
+
+    if (q.topic_id) {
+      const slug = topicSlugMap.get(q.topic_id) || q.topic_id;
+      if (!topicDistByPaper.has(paperId)) {
+        topicDistByPaper.set(paperId, {});
+      }
+      const dist = topicDistByPaper.get(paperId)!;
+      dist[slug] = (dist[slug] || 0) + 1;
+    }
+  }
+
+  return (papers as NexusQBOriginalPaper[]).map(paper => ({
+    paper,
+    contributors: contributorsByPaper.get(paper.id) || [],
+    tier_counts: tierCountsByPaper.get(paper.id) || { tier_1: 0, tier_2: 0, tier_3: 0 },
+    topic_distribution: topicDistByPaper.get(paper.id) || {},
+  }));
+}
+
+/**
+ * Get topic intelligence data — topics with cross-session frequency and study material.
+ */
+export async function getTopicIntelligence(
+  client?: TypedSupabaseClient
+): Promise<QBTopicIntelligenceItem[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Fetch topics that have priority set (i.e. part of the intelligence map)
+  const { data: topics, error: topicsError } = await (supabase as any)
+    .from('nexus_qb_topics')
+    .select('*')
+    .not('priority', 'is', null)
+    .eq('is_active', true)
+    .order('session_appearance_count', { ascending: false });
+  if (topicsError) throw topicsError;
+  if (!topics || topics.length === 0) return [];
+
+  const topicIds = (topics as any[]).map(t => t.id);
+
+  // Count questions per topic (across recalled papers only)
+  const { data: questions, error: qError } = await supabase
+    .from('nexus_qb_questions')
+    .select('topic_id, original_paper_id')
+    .in('topic_id', topicIds)
+    .not('confidence_tier', 'is', null);
+  if (qError) throw qError;
+
+  // Get paper sessions for mapping
+  const paperIds = [...new Set((questions || []).map((q: any) => q.original_paper_id).filter(Boolean))];
+  let paperSessionMap = new Map<string, string>();
+  if (paperIds.length > 0) {
+    const { data: papers, error: pError } = await supabase
+      .from('nexus_qb_original_papers')
+      .select('id, session')
+      .in('id', paperIds);
+    if (!pError && papers) {
+      for (const p of papers as any[]) {
+        paperSessionMap.set(p.id, p.session || 'unknown');
+      }
+    }
+  }
+
+  // Compute per-topic stats
+  const topicStats = new Map<string, { count: number; sessions: Set<string> }>();
+  for (const q of (questions || []) as any[]) {
+    if (!q.topic_id) continue;
+    if (!topicStats.has(q.topic_id)) {
+      topicStats.set(q.topic_id, { count: 0, sessions: new Set() });
+    }
+    const stats = topicStats.get(q.topic_id)!;
+    stats.count++;
+    if (q.original_paper_id) {
+      const session = paperSessionMap.get(q.original_paper_id);
+      if (session) stats.sessions.add(session);
+    }
+  }
+
+  return (topics as NexusQBTopic[]).map(topic => ({
+    ...topic,
+    question_count: topicStats.get(topic.id)?.count || 0,
+    session_names: [...(topicStats.get(topic.id)?.sessions || [])],
+  }));
+}
+
+/**
+ * Promote an exam recall thread to a QB question.
+ * Creates the question, source entry, and updates contributor counts.
+ */
+export async function promoteRecallToQB(
+  threadId: string,
+  paperId: string,
+  confidenceTier: QBConfidenceTier,
+  questionData: NexusQBQuestionInsert,
+  contributorUserIds: string[],
+  client?: TypedSupabaseClient
+): Promise<NexusQBQuestion> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get the paper info for source entry
+  const { data: paper, error: paperError } = await supabase
+    .from('nexus_qb_original_papers')
+    .select('*')
+    .eq('id', paperId)
+    .single();
+  if (paperError) throw paperError;
+
+  // Create the QB question (cast to any — new columns not yet in generated types)
+  const { data: question, error: questionError } = await (supabase as any)
+    .from('nexus_qb_questions')
+    .insert({
+      ...questionData,
+      confidence_tier: confidenceTier,
+      recall_thread_id: threadId,
+      answer_source: confidenceTier === 1 ? 'teacher_verified' : 'student_recalled',
+      original_paper_id: paperId,
+      status: confidenceTier === 3 ? 'draft' : 'active',
+      is_active: confidenceTier !== 3,
+    })
+    .select()
+    .single();
+  if (questionError) throw questionError;
+
+  // Create the question source entry
+  const { error: sourceError } = await supabase
+    .from('nexus_qb_question_sources')
+    .insert({
+      question_id: (question as any).id,
+      exam_type: (paper as any).exam_type,
+      year: (paper as any).year,
+      session: (paper as any).session,
+    });
+  if (sourceError) throw sourceError;
+
+  // Update the recall thread's published_question_id
+  const { error: threadError } = await supabase
+    .from('nexus_exam_recall_threads')
+    .update({ published_question_id: (question as any).id, status: 'published' })
+    .eq('id', threadId);
+  if (threadError) throw threadError;
+
+  // Update contributor counts
+  const tierKey = `tier_${confidenceTier}_count` as const;
+  for (const userId of contributorUserIds) {
+    // Use upsert pattern — increment if exists
+    const { data: existing } = await (supabase as any)
+      .from('nexus_qb_paper_contributors')
+      .select('id, question_count, tier_1_count, tier_2_count, tier_3_count')
+      .eq('paper_id', paperId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existing) {
+      const updates: Record<string, number> = {
+        question_count: ((existing as any).question_count || 0) + 1,
+      };
+      if (confidenceTier === 1) updates.tier_1_count = ((existing as any).tier_1_count || 0) + 1;
+      if (confidenceTier === 2) updates.tier_2_count = ((existing as any).tier_2_count || 0) + 1;
+      if (confidenceTier === 3) updates.tier_3_count = ((existing as any).tier_3_count || 0) + 1;
+      await (supabase as any)
+        .from('nexus_qb_paper_contributors')
+        .update(updates)
+        .eq('id', (existing as any).id);
+    }
+  }
+
+  // Refresh paper stats
+  await refreshPaperStats(paperId, supabase);
+
+  return question as NexusQBQuestion;
+}
+
+/**
+ * Refresh the denormalized contributor_summary on a paper.
+ */
+export async function refreshContributorSummary(
+  paperId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: contributors, error } = await (supabase as any)
+    .from('nexus_qb_paper_contributors')
+    .select('user_id, display_name, question_count, role')
+    .eq('paper_id', paperId);
+  if (error) throw error;
+
+  const summary = (contributors || []).map((c: any) => ({
+    user_id: c.user_id,
+    name: c.display_name,
+    question_count: c.question_count,
+    tier: c.role === 'teacher' ? 1 : 2,
+  }));
+
+  await (supabase as any)
+    .from('nexus_qb_original_papers')
+    .update({ contributor_summary: summary })
+    .eq('id', paperId);
+}
+
+/**
+ * Refresh session_appearance_count on all topics.
+ * Counts distinct sessions per topic across recalled paper questions.
+ */
+export async function refreshTopicSessionCounts(
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get all recalled questions with their paper session
+  const { data: questions, error: qError } = await supabase
+    .from('nexus_qb_questions')
+    .select('topic_id, original_paper_id')
+    .not('confidence_tier', 'is', null)
+    .not('topic_id', 'is', null);
+  if (qError) throw qError;
+
+  const paperIds = [...new Set((questions || []).map((q: any) => q.original_paper_id).filter(Boolean))];
+  if (paperIds.length === 0) return;
+
+  const { data: papers, error: pError } = await supabase
+    .from('nexus_qb_original_papers')
+    .select('id, session')
+    .in('id', paperIds);
+  if (pError) throw pError;
+
+  const paperSessionMap = new Map<string, string>();
+  for (const p of (papers || []) as any[]) {
+    paperSessionMap.set(p.id, p.session || 'unknown');
+  }
+
+  // Count distinct sessions per topic
+  const topicSessions = new Map<string, Set<string>>();
+  for (const q of (questions || []) as any[]) {
+    if (!q.topic_id || !q.original_paper_id) continue;
+    if (!topicSessions.has(q.topic_id)) {
+      topicSessions.set(q.topic_id, new Set());
+    }
+    const session = paperSessionMap.get(q.original_paper_id);
+    if (session) topicSessions.get(q.topic_id)!.add(session);
+  }
+
+  // Update each topic
+  for (const [topicId, sessions] of topicSessions) {
+    await (supabase as any)
+      .from('nexus_qb_topics')
+      .update({ session_appearance_count: sessions.size })
+      .eq('id', topicId);
+  }
 }
