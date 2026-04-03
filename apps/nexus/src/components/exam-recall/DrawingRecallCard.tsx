@@ -72,18 +72,6 @@ export default function DrawingRecallCard({ drawing }: DrawingRecallCardProps) {
           </Box>
         )}
 
-        {/* Prompt (Hindi) */}
-        {drawing.prompt_text_hi && (
-          <Box sx={{ mb: 1 }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={600}>
-              Prompt (HI)
-            </Typography>
-            <Typography variant="body2" sx={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-              {drawing.prompt_text_hi}
-            </Typography>
-          </Box>
-        )}
-
         {/* Materials */}
         {drawing.objects_materials && drawing.objects_materials.length > 0 && (
           <Box sx={{ mb: 1 }}>
