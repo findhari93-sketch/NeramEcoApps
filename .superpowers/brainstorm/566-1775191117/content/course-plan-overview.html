@@ -1,0 +1,174 @@
+<h2>Course Plan Module — System Overview</h2>
+<p class="subtitle">Generic course plan system for Nexus, seeded with NATA 2026 as the first plan</p>
+
+<div class="section">
+  <h3>Core Flow</h3>
+  <div class="mockup">
+    <div class="mockup-header">How it works end-to-end</div>
+    <div class="mockup-body" style="padding: 24px; font-family: system-ui;">
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; align-items: center;">
+        <div style="background: #1a1a2e; color: #e0e0ff; padding: 16px 20px; border-radius: 12px; text-align: center; min-width: 140px;">
+          <div style="font-size: 24px; margin-bottom: 6px;">📋</div>
+          <div style="font-weight: 600; font-size: 14px;">Course Plan</div>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">Weeks → Days → Sessions<br>Topics, Homework, Tests</div>
+        </div>
+        <div style="font-size: 24px; color: #666;">→</div>
+        <div style="background: #1a2e1a; color: #e0ffe0; padding: 16px 20px; border-radius: 12px; text-align: center; min-width: 140px;">
+          <div style="font-size: 24px; margin-bottom: 6px;">📅</div>
+          <div style="font-weight: 600; font-size: 14px;">Assign to Day</div>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">Teacher picks date/time<br>Single or bulk by week</div>
+        </div>
+        <div style="font-size: 24px; color: #666;">→</div>
+        <div style="background: #2e1a1a; color: #ffe0e0; padding: 16px 20px; border-radius: 12px; text-align: center; min-width: 140px;">
+          <div style="font-size: 24px; margin-bottom: 6px;">🚀</div>
+          <div style="font-weight: 600; font-size: 14px;">Push to Timetable</div>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">Creates scheduled class<br>+ Teams meeting auto</div>
+        </div>
+        <div style="font-size: 24px; color: #666;">→</div>
+        <div style="background: #2e2e1a; color: #ffffe0; padding: 16px 20px; border-radius: 12px; text-align: center; min-width: 140px;">
+          <div style="font-size: 24px; margin-bottom: 6px;">👨‍🎓</div>
+          <div style="font-weight: 600; font-size: 14px;">Student View</div>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">Schedule, homework,<br>tests, drill, resources</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Data Model</h3>
+  <div class="mockup">
+    <div class="mockup-header">Database Entities & Relationships</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.8;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">── Plan Structure ──</div>
+          <div style="color: #aaa;">
+            <span style="color: #ff9; font-weight: bold;">course_plans</span><br>
+            &nbsp;&nbsp;├── name, description, classroom_id<br>
+            &nbsp;&nbsp;├── duration_weeks, schedule_pattern<br>
+            &nbsp;&nbsp;├── status (draft/active/completed)<br>
+            &nbsp;&nbsp;└── teaching_team (JSON)<br><br>
+            <span style="color: #ff9; font-weight: bold;">course_plan_weeks</span><br>
+            &nbsp;&nbsp;├── week_number, title, goal<br>
+            &nbsp;&nbsp;└── plan_id (FK)<br><br>
+            <span style="color: #ff9; font-weight: bold;">course_plan_sessions</span><br>
+            &nbsp;&nbsp;├── week_id, day_of_week, slot (am/pm)<br>
+            &nbsp;&nbsp;├── topic_id (FK → nexus_topics)<br>
+            &nbsp;&nbsp;├── teacher_id, title, description<br>
+            &nbsp;&nbsp;├── scheduled_class_id (FK, nullable)<br>
+            &nbsp;&nbsp;└── status (planned/scheduled/completed)
+          </div>
+        </div>
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">── Content & Tracking ──</div>
+          <div style="color: #aaa;">
+            <span style="color: #ff9; font-weight: bold;">course_plan_homework</span><br>
+            &nbsp;&nbsp;├── session_id, title, description<br>
+            &nbsp;&nbsp;├── type (drawing/mcq/study/review)<br>
+            &nbsp;&nbsp;└── due_date, estimated_minutes<br><br>
+            <span style="color: #ff9; font-weight: bold;">homework_submissions</span><br>
+            &nbsp;&nbsp;├── homework_id, student_id<br>
+            &nbsp;&nbsp;├── attachments (files/photos)<br>
+            &nbsp;&nbsp;└── status, teacher_feedback<br><br>
+            <span style="color: #ff9; font-weight: bold;">course_plan_tests</span><br>
+            &nbsp;&nbsp;├── plan_id, week_number<br>
+            &nbsp;&nbsp;├── title, question_count, duration_min<br>
+            &nbsp;&nbsp;└── linked to QB test system<br><br>
+            <span style="color: #ff9; font-weight: bold;">course_plan_resources</span><br>
+            &nbsp;&nbsp;├── topic_id OR session_id<br>
+            &nbsp;&nbsp;└── title, url, type
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #333;">
+        <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">── Quick Drill ──</div>
+        <div style="color: #aaa;">
+          <span style="color: #ff9; font-weight: bold;">course_plan_drill_questions</span><br>
+          &nbsp;&nbsp;├── plan_id, question_text, answer<br>
+          &nbsp;&nbsp;├── frequency_note, sort_order<br>
+          &nbsp;&nbsp;└── Standalone widget (not in QB)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Teacher vs Student Views</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">👩‍🏫 Teacher View</div>
+      <div class="mockup-body" style="padding: 16px; font-size: 13px;">
+        <div style="margin-bottom: 12px; padding: 10px; background: #1a2e1a; border-radius: 8px; color: #c0ffc0;">
+          <strong>Course Plan Builder</strong><br>
+          Create/edit weeks, sessions, assign topics & teachers
+        </div>
+        <div style="margin-bottom: 12px; padding: 10px; background: #1a1a2e; border-radius: 8px; color: #c0c0ff;">
+          <strong>Week Scheduler</strong><br>
+          Assign dates, push to timetable (single or bulk), auto-create Teams meetings
+        </div>
+        <div style="margin-bottom: 12px; padding: 10px; background: #2e1a2e; border-radius: 8px; color: #ffc0ff;">
+          <strong>Homework Manager</strong><br>
+          Create assignments per session, review student submissions, give feedback
+        </div>
+        <div style="padding: 10px; background: #2e2e1a; border-radius: 8px; color: #ffffc0;">
+          <strong>Progress Overview</strong><br>
+          Track plan completion %, homework submission rates, test scores
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">👨‍🎓 Student View</div>
+      <div class="mockup-body" style="padding: 16px; font-size: 13px;">
+        <div style="margin-bottom: 12px; padding: 10px; background: #1a2e1a; border-radius: 8px; color: #c0ffc0;">
+          <strong>Today's Plan</strong><br>
+          AM/PM sessions, teacher, topic, what to prepare
+        </div>
+        <div style="margin-bottom: 12px; padding: 10px; background: #1a1a2e; border-radius: 8px; color: #c0c0ff;">
+          <strong>Weekly Overview</strong><br>
+          This week's schedule with completion indicators
+        </div>
+        <div style="margin-bottom: 12px; padding: 10px; background: #2e1a2e; border-radius: 8px; color: #ffc0ff;">
+          <strong>Homework & Submissions</strong><br>
+          Today's homework, submit photos/answers, track status
+        </div>
+        <div style="margin-bottom: 12px; padding: 10px; background: #2e2e1a; border-radius: 8px; color: #ffffc0;">
+          <strong>Quick Drill</strong><br>
+          20 repeat questions — flashcard style, track mastery
+        </div>
+        <div style="padding: 10px; background: #2e1a1a; border-radius: 8px; color: #ffc0c0;">
+          <strong>Resources & Tests</strong><br>
+          Study links per topic, upcoming tests, past scores
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Does this system overview capture what you're envisioning?</h3>
+  <div class="options">
+    <div class="option" data-choice="yes" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Yes, looks right</h3>
+        <p>This captures the scope — let's move to detailed design</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjustments" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Needs adjustments</h3>
+        <p>The direction is right but some things need changing</p>
+      </div>
+    </div>
+    <div class="option" data-choice="too-much" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Too much for V1</h3>
+        <p>Let's cut scope and focus on fewer things done well</p>
+      </div>
+    </div>
+  </div>
+</div>

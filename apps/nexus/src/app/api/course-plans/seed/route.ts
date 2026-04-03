@@ -175,7 +175,6 @@ export async function POST(request: NextRequest) {
           frequency_note: d.f,
           sort_order: i + 1,
           is_active: true,
-          created_by: user.id,
         }))
       );
 
@@ -183,11 +182,11 @@ export async function POST(request: NextRequest) {
 
     // ---- 5. Create 5 Weekly Tests ----
     const testData = [
-      { title: 'Week 1 Mini Test', question_count: 30, duration_minutes: 40, notes: 'Week 1 topics only', week_idx: 0 },
-      { title: 'Week 2 Progress Test', question_count: 40, duration_minutes: 45, notes: 'Weeks 1-2', week_idx: 1 },
-      { title: 'Week 3 Half Mock', question_count: 50, duration_minutes: 50, notes: 'Weeks 1-3, exam-style', week_idx: 2 },
-      { title: 'Week 4 Full Mock', question_count: 75, duration_minutes: 60, notes: 'All topics', week_idx: 3 },
-      { title: 'Final Mock', question_count: 100, duration_minutes: 70, notes: 'Full exam simulation', week_idx: 4 },
+      { title: 'Week 1 Mini Test', question_count: 30, duration_minutes: 40, scope: 'Week 1 topics only', week_idx: 0 },
+      { title: 'Week 2 Progress Test', question_count: 40, duration_minutes: 45, scope: 'Weeks 1-2', week_idx: 1 },
+      { title: 'Week 3 Half Mock', question_count: 50, duration_minutes: 50, scope: 'Weeks 1-3, exam-style', week_idx: 2 },
+      { title: 'Week 4 Full Mock', question_count: 75, duration_minutes: 60, scope: 'All topics', week_idx: 3 },
+      { title: 'Final Mock', question_count: 100, duration_minutes: 70, scope: 'Full exam simulation', week_idx: 4 },
     ];
 
     const { error: testError } = await supabase
@@ -199,7 +198,7 @@ export async function POST(request: NextRequest) {
           title: t.title,
           question_count: t.question_count,
           duration_minutes: t.duration_minutes,
-          notes: t.notes,
+          scope: t.scope,
           sort_order: i,
         }))
       );
@@ -226,7 +225,6 @@ export async function POST(request: NextRequest) {
           type: r.type,
           session_id: firstSessionId, // Attach to first session to satisfy CHECK constraint
           sort_order: i,
-          created_by: user.id,
         }))
       );
 

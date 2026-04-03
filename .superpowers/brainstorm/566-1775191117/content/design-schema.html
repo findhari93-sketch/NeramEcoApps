@@ -1,0 +1,207 @@
+<h2>Design Section 1: Database Schema</h2>
+<p class="subtitle">7 new tables that power the entire Course Plan module</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Entity Relationship — Course Plan Tables</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 12px; line-height: 1.7; overflow-x: auto;">
+
+      <!-- Row 1: Core Plan -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+        <div style="background: #1a1a2e; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">📋 nexus_course_plans</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            classroom_id (FK → nexus_classrooms)<br>
+            name ("NATA 2026 Crash Course")<br>
+            description (TEXT)<br>
+            duration_weeks (INT) → 5<br>
+            days_per_week (TEXT[]) → [tue,wed,thu,fri,sat,sun]<br>
+            sessions_per_day (JSON) → [{slot:'am',start:'11:00',end:'12:00'}, ...]<br>
+            status (draft | active | completed)<br>
+            teaching_team (JSON) → [{user_id, name, subjects}]<br>
+            created_by (FK → users)<br>
+            created_at, updated_at
+          </div>
+        </div>
+
+        <div style="background: #1a2e1a; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">📅 nexus_course_plan_weeks</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            plan_id (FK → course_plans)<br>
+            week_number (INT) → 1-5<br>
+            title ("Foundations")<br>
+            goal (TEXT)<br>
+            start_date (DATE, nullable)<br>
+            end_date (DATE, nullable)<br>
+            sort_order (INT)
+          </div>
+        </div>
+
+        <div style="background: #2e1a1a; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">🎯 nexus_course_plan_sessions</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            week_id (FK → plan_weeks)<br>
+            plan_id (FK → course_plans)<br>
+            day_number (INT) → 1-30<br>
+            day_of_week (TEXT) → 'tue','wed'...<br>
+            slot (TEXT) → 'am' | 'pm'<br>
+            topic_id (FK → nexus_topics, nullable)<br>
+            teacher_id (FK → users, nullable)<br>
+            title (TEXT)<br>
+            description (TEXT)<br>
+            <span style="color: #ff9;">scheduled_class_id</span> (FK → nexus_scheduled_classes, nullable)<br>
+            status (planned | scheduled | completed | skipped)<br>
+            notes (TEXT)
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Homework & Submissions -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+        <div style="background: #2e1a2e; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">📝 nexus_course_plan_homework</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            session_id (FK → plan_sessions)<br>
+            plan_id (FK → course_plans)<br>
+            title ("Draw 2 colour wheels")<br>
+            description (TEXT)<br>
+            type (drawing | mcq | study | review | mixed)<br>
+            max_points (INT, nullable)<br>
+            due_date (DATE, nullable)<br>
+            estimated_minutes (INT)<br>
+            sort_order (INT)<br>
+            created_at
+          </div>
+        </div>
+
+        <div style="background: #2e2e1a; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">✅ nexus_homework_submissions</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            homework_id (FK → plan_homework)<br>
+            student_id (FK → users)<br>
+            status (pending | submitted | reviewed | returned)<br>
+            attachments (JSON[]) → [{url, type, name}]<br>
+            text_response (TEXT, nullable)<br>
+            points_earned (INT, nullable)<br>
+            teacher_feedback (TEXT, nullable)<br>
+            reviewed_by (FK → users, nullable)<br>
+            submitted_at (TIMESTAMPTZ)<br>
+            reviewed_at (TIMESTAMPTZ)
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Tests, Resources, Drill -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+        <div style="background: #1a2e2e; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">🧪 nexus_course_plan_tests</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            plan_id (FK → course_plans)<br>
+            week_id (FK → plan_weeks)<br>
+            title ("Week 1 Mini Test")<br>
+            description (TEXT)<br>
+            question_count (INT)<br>
+            duration_minutes (INT)<br>
+            scope (TEXT) → "Week 1 topics"<br>
+            <span style="color: #ff9;">test_id</span> (FK → QB test system, nullable)<br>
+            scheduled_date (DATE, nullable)<br>
+            sort_order (INT)
+          </div>
+        </div>
+
+        <div style="background: #2e2e1a; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">🔗 nexus_course_plan_resources</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            plan_id (FK → course_plans)<br>
+            topic_id (FK → nexus_topics, nullable)<br>
+            session_id (FK → plan_sessions, nullable)<br>
+            title ("Khan Academy - Geometry")<br>
+            url (TEXT)<br>
+            type (video | practice | reference | tool)<br>
+            sort_order (INT)
+          </div>
+        </div>
+
+        <div style="background: #1a1a2e; padding: 14px; border-radius: 10px; border: 1px solid #333;">
+          <div style="color: #7fb3ff; font-weight: bold; font-size: 13px; margin-bottom: 8px;">⚡ nexus_course_plan_drill</div>
+          <div style="color: #ccc;">
+            id (UUID, PK)<br>
+            plan_id (FK → course_plans)<br>
+            question_text (TEXT)<br>
+            answer_text (TEXT)<br>
+            explanation (TEXT, nullable)<br>
+            frequency_note ("4+ sessions")<br>
+            sort_order (INT)<br>
+            is_active (BOOLEAN)
+          </div>
+        </div>
+      </div>
+
+      <!-- Relationships -->
+      <div style="margin-top: 24px; padding: 16px; background: #111; border-radius: 8px; font-size: 11px; color: #888;">
+        <strong style="color: #aaa;">Key Relationships:</strong><br>
+        course_plans → classroom (1:many plans per classroom)<br>
+        plan_weeks → course_plan (belongs to one plan)<br>
+        plan_sessions → plan_week + topic + teacher + <span style="color: #ff9;">scheduled_class</span> (the bridge to timetable)<br>
+        plan_homework → session (homework belongs to a day's session)<br>
+        homework_submissions → homework + student (one per student per homework)<br>
+        plan_tests → plan + week + <span style="color: #ff9;">QB test</span> (the bridge to question bank)<br>
+        plan_resources → topic OR session (dual attachment point)
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Key Design Decisions</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div class="mockup">
+      <div class="mockup-header">Why this structure?</div>
+      <div class="mockup-body" style="padding: 16px; font-size: 13px; color: #ccc; line-height: 1.7;">
+        <p><strong style="color: #7fb3ff;">Sessions link to scheduled_classes</strong> — When a teacher "pushes" a session to the timetable, we create a nexus_scheduled_class and save its ID. This is the bridge between plan and timetable.</p>
+        <p><strong style="color: #7fb3ff;">Tests link to QB test system</strong> — Weekly tests connect to your existing question bank. Teachers select questions from recalled papers and link them.</p>
+        <p><strong style="color: #7fb3ff;">Homework is per-session, not per-day</strong> — Since AM and PM are different teachers/topics, homework is tied to the specific session. "After Colour Theory (AM), draw 2 colour wheels."</p>
+        <p><strong style="color: #7fb3ff;">Resources have dual attachment</strong> — Topic-level (always visible) vs session-level (today's resources). topic_id XOR session_id.</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">Reuses existing tables</div>
+      <div class="mockup-body" style="padding: 16px; font-size: 13px; color: #ccc; line-height: 1.7;">
+        <p>✅ <strong>nexus_classrooms</strong> — plan belongs to a classroom</p>
+        <p>✅ <strong>nexus_topics</strong> — sessions reference existing topics</p>
+        <p>✅ <strong>nexus_scheduled_classes</strong> — pushed sessions become real classes</p>
+        <p>✅ <strong>nexus_attendance</strong> — attendance tracked on pushed classes</p>
+        <p>✅ <strong>users</strong> — teachers and students</p>
+        <p>✅ <strong>QB test system</strong> — weekly tests link to existing test engine</p>
+        <p style="margin-top: 12px; color: #ff9;">No duplication — course plan is an orchestration layer on top of your existing system.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Does this schema look right?</h3>
+  <div class="options">
+    <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Looks good, move on</h3>
+        <p>Schema captures everything — show me the page/route design next</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjust" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Needs changes</h3>
+        <p>Some tables or fields need adjusting</p>
+      </div>
+    </div>
+  </div>
+</div>

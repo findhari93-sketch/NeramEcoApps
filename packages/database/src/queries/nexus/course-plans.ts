@@ -66,7 +66,7 @@ export async function getCoursePlanById(
     .from('nexus_course_plan_sessions')
     .select(`
       *,
-      topic:nexus_topics(id, name),
+      topic:nexus_topics(id, title),
       teacher:users!nexus_course_plan_sessions_teacher_id_fkey(id, name, avatar_url),
       homework:nexus_course_plan_homework(id)
     `)
@@ -225,10 +225,10 @@ export async function getSessionsByPlan(
     .from('nexus_course_plan_sessions')
     .select(`
       *,
-      topic:nexus_topics(id, name),
+      topic:nexus_topics(id, title),
       teacher:users!nexus_course_plan_sessions_teacher_id_fkey(id, name, avatar_url),
       homework:nexus_course_plan_homework(id, title, type, max_points, due_date),
-      scheduled_class:nexus_scheduled_classes(id, scheduled_date, start_time, end_time, status, meeting_url)
+      scheduled_class:nexus_scheduled_classes(id, scheduled_date, start_time, end_time, status, teams_meeting_url)
     `)
     .eq('plan_id', planId)
     .order('day_number', { ascending: true });

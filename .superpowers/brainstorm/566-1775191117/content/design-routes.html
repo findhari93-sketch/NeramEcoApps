@@ -1,0 +1,216 @@
+<h2>Design Section 2: Routes & Navigation</h2>
+<p class="subtitle">Where the Course Plan lives in Nexus for teachers vs students</p>
+
+<div class="section">
+  <h3>Teacher Routes</h3>
+  <div class="mockup">
+    <div class="mockup-header">📂 apps/nexus/src/app/(teacher)/course-plans/</div>
+    <div class="mockup-body" style="padding: 20px; font-family: monospace; font-size: 13px; line-height: 2; color: #ccc;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">Pages</div>
+          <span style="color: #ff9;">/teacher/course-plans</span><br>
+          &nbsp;&nbsp;→ List all plans for this classroom<br>
+          &nbsp;&nbsp;→ Card per plan: name, status, progress %<br>
+          &nbsp;&nbsp;→ "Create Plan" button<br><br>
+
+          <span style="color: #ff9;">/teacher/course-plans/[planId]</span><br>
+          &nbsp;&nbsp;→ Plan overview dashboard<br>
+          &nbsp;&nbsp;→ Tabs: Overview | Weeks | Homework | Tests | Drill | Resources<br><br>
+
+          <span style="color: #ff9;">/teacher/course-plans/[planId]/weeks/[weekId]</span><br>
+          &nbsp;&nbsp;→ Week detail: all sessions for that week<br>
+          &nbsp;&nbsp;→ Assign dates, push to timetable<br>
+          &nbsp;&nbsp;→ "Push entire week" bulk action<br><br>
+
+          <span style="color: #ff9;">/teacher/course-plans/[planId]/homework</span><br>
+          &nbsp;&nbsp;→ Homework grid (like Teams screenshot)<br>
+          &nbsp;&nbsp;→ Columns: assignments, Rows: students<br>
+          &nbsp;&nbsp;→ Click cell → review submission
+        </div>
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">Key Actions</div>
+          <div style="background: #1a2e1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #8f8; font-weight: bold;">Create Plan</div>
+            <div style="font-size: 11px; color: #aaa;">Dialog: name, classroom, duration, schedule pattern, teaching team</div>
+          </div>
+          <div style="background: #1a2e1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #8f8; font-weight: bold;">Add/Edit Session</div>
+            <div style="font-size: 11px; color: #aaa;">Pick topic, assign teacher, write description, attach homework</div>
+          </div>
+          <div style="background: #1a2e1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #8f8; font-weight: bold;">Push to Timetable</div>
+            <div style="font-size: 11px; color: #aaa;">Pick date/time → creates scheduled_class + Teams meeting → updates session status to "scheduled"</div>
+          </div>
+          <div style="background: #1a2e1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #8f8; font-weight: bold;">Grade Homework</div>
+            <div style="font-size: 11px; color: #aaa;">View submission, see attachments, give points + feedback, mark reviewed/returned</div>
+          </div>
+          <div style="background: #1a2e1a; padding: 12px; border-radius: 8px;">
+            <div style="color: #8f8; font-weight: bold;">Manage Drill Questions</div>
+            <div style="font-size: 11px; color: #aaa;">Add/edit/reorder the repeat questions list</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Student Routes</h3>
+  <div class="mockup">
+    <div class="mockup-header">📂 apps/nexus/src/app/(student)/course-plan/</div>
+    <div class="mockup-body" style="padding: 20px; font-family: monospace; font-size: 13px; line-height: 2; color: #ccc;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">Pages</div>
+          <span style="color: #ff9;">/student/course-plan</span><br>
+          &nbsp;&nbsp;→ Active course plan for their classroom<br>
+          &nbsp;&nbsp;→ "Today's Plan" hero card at top<br>
+          &nbsp;&nbsp;→ Week tabs below (Week 1-5)<br>
+          &nbsp;&nbsp;→ Quick links: Homework | Drill | Tests<br><br>
+
+          <span style="color: #ff9;">/student/course-plan/homework</span><br>
+          &nbsp;&nbsp;→ All homework with submission status<br>
+          &nbsp;&nbsp;→ Filters: pending / submitted / reviewed<br>
+          &nbsp;&nbsp;→ Upload photos, text responses<br><br>
+
+          <span style="color: #ff9;">/student/course-plan/drill</span><br>
+          &nbsp;&nbsp;→ Flashcard-style repeat questions<br>
+          &nbsp;&nbsp;→ Flip to reveal answer<br>
+          &nbsp;&nbsp;→ Self-mark: "Got it" / "Need practice"<br><br>
+
+          <span style="color: #ff9;">/student/course-plan/tests</span><br>
+          &nbsp;&nbsp;→ Upcoming & past weekly tests<br>
+          &nbsp;&nbsp;→ Links to QB test system for taking tests<br>
+          &nbsp;&nbsp;→ Score history per week
+        </div>
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 8px;">Mobile-First Widgets</div>
+          <div style="background: #2e1a1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #ffa; font-weight: bold;">📌 Today's Plan Card</div>
+            <div style="font-size: 11px; color: #aaa;">AM: Colour Theory — Sudarshini (11:00-12:00)<br>PM: Triangle Counting — Sivaram (7:00-8:00)<br>Join Meeting button if pushed to timetable</div>
+          </div>
+          <div style="background: #2e1a1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #ffa; font-weight: bold;">📋 Homework Due</div>
+            <div style="font-size: 11px; color: #aaa;">Shows pending homework with due dates<br>"Draw 2 colour wheels" — Due today<br>Tap to submit (camera/upload)</div>
+          </div>
+          <div style="background: #2e1a1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #ffa; font-weight: bold;">⚡ Quick Drill</div>
+            <div style="font-size: 11px; color: #aaa;">Swipeable flashcards<br>"Nobel Peace Prize 2024?" → flip → "Nihon Hidankyo"<br>Progress: 14/20 mastered</div>
+          </div>
+          <div style="background: #2e1a1a; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="color: #ffa; font-weight: bold;">🧪 Next Test</div>
+            <div style="font-size: 11px; color: #aaa;">Week 2 Progress Test — Sunday<br>40 questions, 45 min<br>Covers: Weeks 1-2 topics</div>
+          </div>
+          <div style="background: #2e1a1a; padding: 12px; border-radius: 8px;">
+            <div style="color: #ffa; font-weight: bold;">📚 Study Resources</div>
+            <div style="font-size: 11px; color: #aaa;">Links organized by today's topics<br>Khan Academy → Geometry<br>IndiaBIX → Blood Relations</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Navigation Placement</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">👩‍🏫 Teacher Sidebar</div>
+      <div class="mockup-body" style="padding: 16px; font-size: 13px;">
+        <div style="color: #888; padding: 8px 12px;">Dashboard</div>
+        <div style="color: #888; padding: 8px 12px;">Timetable</div>
+        <div style="background: #1a2e1a; color: #8f8; padding: 8px 12px; border-radius: 6px; font-weight: bold;">📋 Course Plans ← NEW</div>
+        <div style="color: #888; padding: 8px 12px;">Classrooms</div>
+        <div style="color: #888; padding: 8px 12px;">Students</div>
+        <div style="color: #888; padding: 8px 12px;">Question Bank</div>
+        <div style="color: #888; padding: 8px 12px;">Attendance</div>
+        <div style="color: #888; padding: 8px 12px;">...</div>
+        <div style="margin-top: 12px; padding: 10px; background: #111; border-radius: 6px; font-size: 11px; color: #aaa;">
+          Placed between Timetable and Classrooms — it's the planning layer that feeds the timetable
+        </div>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">👨‍🎓 Student Sidebar & Bottom Nav</div>
+      <div class="mockup-body" style="padding: 16px; font-size: 13px;">
+        <div style="color: #7fb3ff; font-size: 11px; margin-bottom: 6px;">SIDEBAR — Learn Group</div>
+        <div style="color: #888; padding: 8px 12px;">Timetable</div>
+        <div style="color: #888; padding: 8px 12px;">Library</div>
+        <div style="background: #2e1a1a; color: #ffa; padding: 8px 12px; border-radius: 6px; font-weight: bold;">📋 Course Plan ← NEW</div>
+        <div style="color: #888; padding: 8px 12px;">Question Bank</div>
+        <div style="color: #888; padding: 8px 12px;">Checklist</div>
+        <div style="color: #888; padding: 8px 12px;">...</div>
+
+        <div style="margin-top: 16px; color: #7fb3ff; font-size: 11px; margin-bottom: 6px;">MOBILE BOTTOM NAV</div>
+        <div style="display: flex; gap: 4px;">
+          <div style="flex:1; text-align:center; padding: 8px; background: #222; border-radius: 6px; font-size: 11px; color: #888;">Home</div>
+          <div style="flex:1; text-align:center; padding: 8px; background: #222; border-radius: 6px; font-size: 11px; color: #888;">Timetable</div>
+          <div style="flex:1; text-align:center; padding: 8px; background: #2e1a1a; border-radius: 6px; font-size: 11px; color: #ffa; font-weight: bold;">Plan</div>
+          <div style="flex:1; text-align:center; padding: 8px; background: #222; border-radius: 6px; font-size: 11px; color: #888;">QB</div>
+          <div style="flex:1; text-align:center; padding: 8px; background: #222; border-radius: 6px; font-size: 11px; color: #888;">More</div>
+        </div>
+        <div style="margin-top: 8px; padding: 10px; background: #111; border-radius: 6px; font-size: 11px; color: #aaa;">
+          Course Plan replaces Library in bottom nav — during active course, the plan is more important than video library
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>API Routes</h3>
+  <div class="mockup">
+    <div class="mockup-header">apps/nexus/src/app/api/course-plans/</div>
+    <div class="mockup-body" style="padding: 20px; font-family: monospace; font-size: 12px; line-height: 2; color: #ccc;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 4px;">Plan CRUD</div>
+          GET &nbsp;/api/course-plans → list plans<br>
+          POST /api/course-plans → create plan<br>
+          GET &nbsp;/api/course-plans/[id] → get plan detail<br>
+          PUT &nbsp;/api/course-plans/[id] → update plan<br><br>
+
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 4px;">Sessions</div>
+          GET &nbsp;/api/course-plans/[id]/sessions → list sessions<br>
+          POST /api/course-plans/[id]/sessions → create/update session<br>
+          POST /api/course-plans/[id]/sessions/push → push to timetable<br>
+          POST /api/course-plans/[id]/sessions/push-week → bulk push week<br>
+        </div>
+        <div>
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 4px;">Homework</div>
+          GET &nbsp;/api/course-plans/[id]/homework → list homework<br>
+          POST /api/course-plans/[id]/homework → create homework<br>
+          GET &nbsp;/api/course-plans/[id]/homework/grid → grading grid<br>
+          POST /api/course-plans/homework/[hwId]/submit → student submit<br>
+          POST /api/course-plans/homework/[hwId]/review → teacher review<br><br>
+
+          <div style="color: #7fb3ff; font-weight: bold; margin-bottom: 4px;">Drill, Tests, Resources</div>
+          GET/POST /api/course-plans/[id]/drill → manage drill Qs<br>
+          GET/POST /api/course-plans/[id]/tests → manage tests<br>
+          GET/POST /api/course-plans/[id]/resources → manage links
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Routes look good</h3>
+        <p>Move on to the next design section</p>
+      </div>
+    </div>
+    <div class="option" data-choice="adjust" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Needs changes</h3>
+        <p>Adjust routes, navigation placement, or API structure</p>
+      </div>
+    </div>
+  </div>
+</div>
