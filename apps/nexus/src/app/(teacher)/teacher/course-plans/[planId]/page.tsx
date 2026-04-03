@@ -23,6 +23,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import DrillManagerTable from '@/components/course-plan/DrillManagerTable';
+import ResourceList from '@/components/course-plan/ResourceList';
 
 const STATUS_COLORS: Record<string, 'default' | 'success' | 'info' | 'warning'> = {
   draft: 'default',
@@ -344,19 +346,11 @@ export default function CoursePlanDashboard() {
       )}
 
       {activeTab === 3 && (
-        <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            Coming in Task 15
-          </Typography>
-        </Box>
+        <DrillManagerTable planId={planId} />
       )}
 
       {activeTab === 4 && (
-        <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            Coming in Task 15
-          </Typography>
-        </Box>
+        <ResourceList planId={planId} />
       )}
 
       <Snackbar
