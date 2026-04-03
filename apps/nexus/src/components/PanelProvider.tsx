@@ -60,6 +60,7 @@ const PANELS: PanelConfig[] = [
     sidebarItems: [
       { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
+      { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
       { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
@@ -87,6 +88,7 @@ const PANELS: PanelConfig[] = [
     defaultPath: '/teacher/classrooms',
     sidebarItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
+      { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
@@ -159,6 +161,7 @@ function detectPanelFromPath(pathname: string): PanelId | null {
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
   if (pathname.startsWith('/teacher/onboarding-reviews')) return 'teaching';
+  if (pathname.startsWith('/teacher/course-plans')) return 'teaching';
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
   // City-wise student pages
   if (pathname.startsWith('/teacher/students/city-wise')) return 'management';

@@ -17,6 +17,7 @@ import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
+import PlaylistPlayOutlinedIcon from '@mui/icons-material/PlaylistPlayOutlined';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
@@ -41,6 +42,7 @@ const allStudentNavGroups = [
     label: 'Learn',
     items: [
       { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
+      { label: 'Course Plan', path: '/student/course-plan', icon: <PlaylistPlayOutlinedIcon /> },
       { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
       { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
@@ -69,6 +71,7 @@ const allStudentNavGroups = [
 const allBottomNavItems = [
   { label: 'Home', path: '/student/dashboard', icon: <HomeOutlinedIcon /> },
   { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
+  { label: 'Plan', path: '/student/course-plan', icon: <PlaylistPlayOutlinedIcon /> },
   { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
   { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
 ];
