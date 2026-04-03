@@ -23,3 +23,6 @@ export * from './exam-recall';
 export * from './onboarding';
 export * from './onboarding-prefill';
 export * from './gamification';
+export * from './course-plans';
+export * from './course-plan-homework';
+export * from './course-plan-drill';
