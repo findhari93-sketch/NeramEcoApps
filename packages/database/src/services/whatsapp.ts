@@ -149,7 +149,8 @@ export async function sendApplicationConfirmation(
  * Send application approved notification to user
  *
  * Template: application_approved
- * Body parameters: {{1}} = userName, {{2}} = applicationNumber, {{3}} = finalFee, {{4}} = paymentLink
+ * Body parameters: {{1}} = userName, {{2}} = applicationNumber, {{3}} = finalFee
+ * Button parameter: {{1}} = applicationNumber (for dynamic URL: neramclasses.com/pay?app={{1}})
  */
 export async function sendApplicationApproved(
   phone: string,
@@ -161,22 +162,27 @@ export async function sendApplicationApproved(
     paymentLink?: string;
   }
 ): Promise<WhatsAppSendResult> {
-  const parameters: Array<{ type: 'text'; text: string }> = [
+  const bodyParameters: Array<{ type: 'text'; text: string }> = [
     { type: 'text', text: data.userName },
     { type: 'text', text: data.applicationNumber },
   ];
 
   if (data.finalFee) {
-    parameters.push({ type: 'text', text: `Rs. ${data.finalFee.toLocaleString('en-IN')}` });
-  }
-  if (data.paymentLink) {
-    parameters.push({ type: 'text', text: data.paymentLink });
+    bodyParameters.push({ type: 'text', text: `Rs. ${data.finalFee.toLocaleString('en-IN')}` });
   }
 
   return sendWhatsAppTemplate(phone, 'application_approved', 'en', [
     {
       type: 'body',
-      parameters,
+      parameters: bodyParameters,
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [
+        { type: 'text', text: data.applicationNumber },
+      ],
     },
   ]);
 }
