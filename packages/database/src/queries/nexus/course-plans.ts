@@ -358,3 +358,245 @@ export async function createResource(
   if (error) throw error;
   return resource;
 }
+
+// ============================================================
+// Bulk Populate Plan — CSV upload populates sessions, weeks, etc.
+// ============================================================
+
+/**
+ * Bulk-populate a course plan from parsed CSV data.
+ *
+ * Updates existing week and session rows (matched by plan_id + week_number
+ * or plan_id + day_number + slot) and inserts new homework, tests, drills,
+ * and resources.
+ *
+ * Returns a summary of how many rows were affected in each table.
+ */
+export async function bulkPopulatePlan(
+  planId: string,
+  data: {
+    weeks: Array<{ week_number: number; title: string; goal: string }>;
+    sessions: Array<{
+      day_number: number;
+      slot: string;
+      title: string;
+      teacher_id?: string;
+      description?: string;
+    }>;
+    homework: Array<{
+      session_day_number: number;
+      session_slot: string;
+      title: string;
+      type?: string;
+      max_points?: number;
+      estimated_minutes?: number;
+    }>;
+    tests: Array<{
+      week_number: number;
+      title: string;
+      question_count?: number;
+      duration_minutes?: number;
+      scope?: string;
+    }>;
+    drills: Array<{
+      question_text: string;
+      answer_text: string;
+      explanation?: string;
+      frequency_note?: string;
+    }>;
+    resources: Array<{
+      title: string;
+      url: string;
+      type?: string;
+    }>;
+  },
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+
+  const summary = {
+    weeks_updated: 0,
+    sessions_updated: 0,
+    homework_inserted: 0,
+    tests_inserted: 0,
+    drills_inserted: 0,
+    resources_inserted: 0,
+  };
+
+  // ---- Fetch existing weeks and sessions for this plan ----
+
+  const { data: existingWeeks, error: weeksErr } = await supabase
+    .from('nexus_course_plan_weeks')
+    .select('id, week_number')
+    .eq('plan_id', planId);
+  if (weeksErr) throw weeksErr;
+
+  const { data: existingSessions, error: sessionsErr } = await supabase
+    .from('nexus_course_plan_sessions')
+    .select('id, day_number, slot')
+    .eq('plan_id', planId);
+  if (sessionsErr) throw sessionsErr;
+
+  // Build lookup maps
+  const weekMap = new Map<number, string>(); // week_number → id
+  for (const w of existingWeeks || []) {
+    weekMap.set((w as any).week_number, (w as any).id);
+  }
+
+  const sessionMap = new Map<string, string>(); // "day_number:slot" → id
+  for (const s of existingSessions || []) {
+    sessionMap.set(`${(s as any).day_number}:${(s as any).slot}`, (s as any).id);
+  }
+
+  // ---- 1. Update weeks (match by plan_id + week_number) ----
+
+  for (const week of data.weeks) {
+    const weekId = weekMap.get(week.week_number);
+    if (!weekId) continue;
+
+    const updates: Record<string, unknown> = {};
+    if (week.title) updates.title = week.title;
+    if (week.goal) updates.goal = week.goal;
+    if (Object.keys(updates).length === 0) continue;
+
+    const { error } = await supabase
+      .from('nexus_course_plan_weeks')
+      .update(updates as any)
+      .eq('id', weekId);
+    if (error) throw error;
+    summary.weeks_updated++;
+  }
+
+  // ---- 2. Update sessions (match by plan_id + day_number + slot) ----
+
+  for (const session of data.sessions) {
+    const key = `${session.day_number}:${session.slot}`;
+    const sessionId = sessionMap.get(key);
+    if (!sessionId) continue;
+
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (session.title) updates.title = session.title;
+    if (session.teacher_id) updates.teacher_id = session.teacher_id;
+    if (session.description) updates.description = session.description;
+
+    const { error } = await supabase
+      .from('nexus_course_plan_sessions')
+      .update(updates as any)
+      .eq('id', sessionId);
+    if (error) throw error;
+    summary.sessions_updated++;
+  }
+
+  // ---- 3. Insert homework (find session_id by day_number + slot) ----
+
+  const homeworkInserts: any[] = [];
+  for (const hw of data.homework) {
+    const key = `${hw.session_day_number}:${hw.session_slot}`;
+    const sessionId = sessionMap.get(key);
+    if (!sessionId) continue;
+
+    homeworkInserts.push({
+      session_id: sessionId,
+      plan_id: planId,
+      title: hw.title,
+      type: hw.type || 'mixed',
+      max_points: hw.max_points || null,
+      estimated_minutes: hw.estimated_minutes || null,
+      sort_order: homeworkInserts.length,
+    });
+  }
+
+  if (homeworkInserts.length > 0) {
+    const { error } = await supabase
+      .from('nexus_course_plan_homework')
+      .insert(homeworkInserts as any);
+    if (error) throw error;
+    summary.homework_inserted = homeworkInserts.length;
+  }
+
+  // ---- 4. Insert tests (find week_id by week_number) ----
+
+  const testInserts: any[] = [];
+  for (const test of data.tests) {
+    const weekId = weekMap.get(test.week_number);
+    if (!weekId) continue;
+
+    testInserts.push({
+      plan_id: planId,
+      week_id: weekId,
+      title: test.title,
+      question_count: test.question_count || null,
+      duration_minutes: test.duration_minutes || null,
+      scope: test.scope || null,
+      sort_order: testInserts.length,
+    });
+  }
+
+  if (testInserts.length > 0) {
+    const { error } = await supabase
+      .from('nexus_course_plan_tests')
+      .insert(testInserts as any);
+    if (error) throw error;
+    summary.tests_inserted = testInserts.length;
+  }
+
+  // ---- 5. Insert drill questions ----
+
+  const drillInserts: any[] = [];
+  for (const drill of data.drills) {
+    drillInserts.push({
+      plan_id: planId,
+      question_text: drill.question_text,
+      answer_text: drill.answer_text,
+      explanation: drill.explanation || null,
+      frequency_note: drill.frequency_note || null,
+      sort_order: drillInserts.length,
+      is_active: true,
+    });
+  }
+
+  if (drillInserts.length > 0) {
+    const { error } = await supabase
+      .from('nexus_course_plan_drill')
+      .insert(drillInserts as any);
+    if (error) throw error;
+    summary.drills_inserted = drillInserts.length;
+  }
+
+  // ---- 6. Insert resources (attach to first session for CHECK constraint) ----
+
+  if (data.resources.length > 0) {
+    // Find the first session ID for the plan to satisfy
+    // CHECK (topic_id IS NOT NULL OR session_id IS NOT NULL)
+    const firstSessionId = existingSessions && existingSessions.length > 0
+      ? (existingSessions[0] as any).id
+      : null;
+
+    if (!firstSessionId) {
+      // No sessions exist — cannot insert resources without a session_id or topic_id
+      // Skip silently; caller should handle this edge case
+    } else {
+      const resourceInserts: any[] = [];
+      for (const res of data.resources) {
+        resourceInserts.push({
+          plan_id: planId,
+          session_id: firstSessionId,
+          title: res.title,
+          url: res.url,
+          type: res.type || 'reference',
+          sort_order: resourceInserts.length,
+        });
+      }
+
+      const { error } = await supabase
+        .from('nexus_course_plan_resources')
+        .insert(resourceInserts as any);
+      if (error) throw error;
+      summary.resources_inserted = resourceInserts.length;
+    }
+  }
+
+  return summary;
+}
