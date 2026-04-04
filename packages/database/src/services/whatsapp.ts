@@ -124,6 +124,7 @@ export async function sendWhatsAppTemplate(
  *
  * Template: application_submitted
  * Body parameters: {{1}} = userName, {{2}} = applicationNumber, {{3}} = course
+ * Button parameter: {{1}} = applicationNumber (for dynamic URL: neramclasses.com/apply?app={{1}})
  */
 export async function sendApplicationConfirmation(
   phone: string,
@@ -140,6 +141,14 @@ export async function sendApplicationConfirmation(
         { type: 'text', text: data.userName },
         { type: 'text', text: data.applicationNumber },
         { type: 'text', text: data.course },
+      ],
+    },
+    {
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [
+        { type: 'text', text: data.applicationNumber },
       ],
     },
   ]);
