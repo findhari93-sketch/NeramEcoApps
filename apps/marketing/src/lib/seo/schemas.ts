@@ -725,3 +725,115 @@ export function generateTestimonialsPageSchema(stats: {
     },
   };
 }
+
+// ─── State Hub Schema (generic for any state) ─────────────────────────────────
+
+export function generateStateHubSchema(state: { display: string; cities: string[] }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    '@id': `${BASE_URL}/#organization`,
+    name: ORG_NAME,
+    url: BASE_URL,
+    logo: ORG_LOGO,
+    foundingDate: ORG_FOUNDED,
+    address: {
+      '@type': 'PostalAddress',
+      ...ORG_ADDRESS,
+    },
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: ORG_PHONE,
+      email: ORG_EMAIL,
+      contactType: 'customer service',
+    },
+    sameAs: SOCIAL_PROFILES,
+    areaServed: {
+      '@type': 'State',
+      name: state.display,
+    },
+    hasOfferCatalog: {
+      '@type': 'OfferCatalog',
+      name: `NATA Coaching in ${state.display}`,
+      itemListElement: state.cities.map((city, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: city,
+        item: {
+          '@type': 'City',
+          name: city,
+          containedInPlace: {
+            '@type': 'State',
+            name: state.display,
+          },
+        },
+      })),
+    },
+  };
+}
+
+// ─── Aggregate Rating Schema (standalone) ──────────────────────────────────────
+
+export function generateAggregateRatingSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'EducationalOrganization',
+    '@id': `${BASE_URL}/#organization`,
+    name: ORG_NAME,
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.9',
+      reviewCount: '90',
+      bestRating: '5',
+      worstRating: '1',
+    },
+  };
+}
+
+// ─── Online Course Schema (NATA online coaching) ───────────────────────────────
+
+export function generateOnlineCourseSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    name: 'Online NATA Coaching 2026 - Live Classes',
+    description: 'Best online NATA coaching in India with live interactive classes by IIT/NIT alumni faculty. Daily drawing practice, 100+ mock tests, small batches of 25 students.',
+    provider: {
+      '@type': 'EducationalOrganization',
+      name: ORG_NAME,
+      url: BASE_URL,
+    },
+    url: `${BASE_URL}/best-nata-coaching-online`,
+    courseMode: 'online',
+    educationalLevel: 'Undergraduate Entrance',
+    about: ['NATA Exam Preparation', 'Architecture Entrance Exam', 'Drawing Test', 'JEE Paper 2'],
+    teaches: ['Architectural Drawing', 'Design Aptitude', 'Mathematics for Architecture', 'General Aptitude'],
+    totalHistoricalEnrollment: '10000',
+    numberOfCredits: 0,
+    hasCourseInstance: [
+      {
+        '@type': 'CourseInstance',
+        courseMode: 'online',
+        courseWorkload: 'PT6H', // 6 hours per day
+        instructor: {
+          '@type': 'Person',
+          name: 'IIT/NIT Alumni Faculty',
+        },
+      },
+    ],
+    offers: {
+      '@type': 'Offer',
+      price: '15000',
+      priceCurrency: 'INR',
+      availability: 'https://schema.org/InStock',
+      url: `${BASE_URL}/apply`,
+      validFrom: '2026-01-01',
+    },
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.8',
+      reviewCount: '2500',
+      bestRating: '5',
+    },
+  };
+}

@@ -145,10 +145,12 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
   const seoContent = getLocationSeoContent(city);
 
   const faqs = [
-    { question: `What is the fee for NATA coaching in ${location.cityDisplay}?`, answer: 'Our course fees range from ₹15,000 to ₹35,000 depending on the course duration (3, 12, or 24 months) and mode. Contact us for detailed fee structure and scholarship options.' },
-    { question: `Is there an offline center in ${location.cityDisplay}?`, answer: isGulf ? `Currently, we offer online classes for students in ${location.cityDisplay}. Our online program is just as effective with live interactive sessions.` : `Yes, we have a fully-equipped center in ${location.cityDisplay} with drawing studios and classroom facilities. We also offer online classes.` },
-    { question: 'What is the batch timing?', answer: 'We offer multiple batch timings including morning, evening, and weekend batches to accommodate school/college students.' },
-    { question: 'Do you provide study materials?', answer: 'Yes, comprehensive study materials, practice papers, and online resources are included in the course fee.' },
+    { question: `What is the best NATA coaching center in ${location.cityDisplay}?`, answer: `Neram Classes is the top-rated NATA coaching center in ${location.cityDisplay} with a 99.9% success rate, IIT/NIT alumni faculty, and small batches of max 25 students. We offer both online and offline coaching modes with daily drawing practice, 100+ mock tests, and a free AI-powered study app.` },
+    { question: `What is the fee for NATA coaching in ${location.cityDisplay}?`, answer: 'NATA coaching fees at Neram Classes start at ₹15,000 for the 3-month crash course, ₹25,000 for the 1-year program, and ₹30,000 for the 2-year program. Scholarships (up to 100% fee waiver) and EMI options are available. All programs include free access to our AI study app.' },
+    { question: `Is there an offline center in ${location.cityDisplay}?`, answer: isGulf ? `Currently, we offer live online classes for students in ${location.cityDisplay}. Our online program features live interactive sessions with IIT/NIT faculty, daily drawing practice via video, and 24/7 doubt support — achieving the same 99.9% success rate as offline students.` : `Neram Classes offers both online and offline coaching in ${location.cityDisplay}. Our hybrid model lets you attend live classes in person or online — and switch between modes anytime. Both modes cover the same curriculum with daily drawing practice and personal mentoring.` },
+    { question: `Can I join online NATA coaching from ${location.cityDisplay}?`, answer: `Yes, Neram Classes offers live online NATA coaching accessible from ${location.cityDisplay}. Our online program features live interactive classes by IIT/NIT alumni (not pre-recorded videos), daily drawing practice via video, 100+ mock tests, and 24/7 doubt support. Online students achieve the same 99.9% success rate.` },
+    { question: 'What is the batch timing?', answer: 'We offer multiple batch timings including morning (8 AM - 12 PM), evening (4 PM - 8 PM), and weekend batches to accommodate school/college students. You can choose the timing that works best for you.' },
+    { question: 'Do you provide study materials?', answer: 'Yes, comprehensive study materials including practice papers, drawing sheets, previous year papers, and full access to our free AI study app (cutoff calculator, college predictor for 5,000+ colleges, exam center locator) are included in the course fee.' },
   ];
 
   return (
@@ -566,14 +568,14 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
                 ))}
               </Grid>
               <Box sx={{ textAlign: 'center', mt: 4, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-                {location.state === 'tamil-nadu' && (
+                {location.country === 'india' && (
                   <Button
                     component={Link}
-                    href={`/${locale}/coaching/nata-coaching-center-in-tamil-nadu`}
+                    href={`/${locale}/coaching/nata-coaching-in-${location.state}`}
                     variant="outlined"
                     sx={{ textTransform: 'none', fontSize: '1rem' }}
                   >
-                    View all 38 Tamil Nadu districts →
+                    All NATA coaching in {location.stateDisplay} →
                   </Button>
                 )}
                 <Button
@@ -595,10 +597,12 @@ export default function CityNataCoachingPage({ params: { locale, slug } }: PageP
         heading="Prepare for NATA 2026"
         locale={locale}
         links={[
-          { title: 'NATA Syllabus 2026', description: 'Complete section-wise syllabus for NATA exam', href: '/nata-syllabus' },
-          { title: 'NATA Preparation Guide', description: 'Step-by-step study plan for NATA 2026', href: '/nata-preparation-guide' },
-          { title: 'Best Books for NATA', description: 'Recommended books and study materials', href: '/best-books-nata-jee' },
-          { title: 'Previous Year Papers', description: 'Practice with past NATA exam papers', href: '/nata-2026/previous-year-papers' },
+          { title: `NATA Coaching in ${location.stateDisplay}`, description: `All coaching centers and options in ${location.stateDisplay}`, href: `/coaching/nata-coaching-in-${location.state}` },
+          { title: 'Best Online NATA Coaching', description: 'Live classes from anywhere in India - same 99.9% success rate', href: '/best-nata-coaching-online' },
+          { title: 'Best NATA Coaching in India', description: 'India\'s #1 rated NATA coaching since 2009', href: '/coaching/best-nata-coaching-india' },
+          { title: 'NATA 2026 Complete Guide', description: 'Eligibility, syllabus, exam pattern, important dates', href: '/nata-2026' },
+          { title: 'Free Cutoff Calculator', description: 'AI-powered tool to predict your college chances', href: '/tools/cutoff-calculator' },
+          { title: 'Book Free Demo Class', description: 'Experience our teaching before enrolling', href: '/demo-class' },
         ]}
       />
 

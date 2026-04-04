@@ -233,3 +233,40 @@ export function getSitemapLocations(): Location[] {
 export function getHighPriorityLocations(): Location[] {
   return locations.filter((loc) => loc.sitemapPriority === 'high');
 }
+
+/** State metadata for state-level SEO pages */
+export interface StateInfo {
+  slug: string;
+  display: string;
+  country: string;
+  region: Location['region'];
+  cityCount: number;
+}
+
+/** Get unique Indian states (excludes Gulf countries) with metadata */
+export function getIndianStates(): StateInfo[] {
+  const stateMap = new Map<string, StateInfo>();
+  for (const loc of locations) {
+    if (loc.country !== 'india') continue;
+    if (stateMap.has(loc.state)) {
+      stateMap.get(loc.state)!.cityCount++;
+    } else {
+      stateMap.set(loc.state, {
+        slug: loc.state,
+        display: loc.stateDisplay,
+        country: loc.country,
+        region: loc.region,
+        cityCount: 1,
+      });
+    }
+  }
+  return Array.from(stateMap.values());
+}
+
+/** Get states that should appear in sitemap (have high/medium priority cities) */
+export function getSitemapStates(): StateInfo[] {
+  return getIndianStates().filter((state) => {
+    const stateLocs = getLocationsByState(state.slug);
+    return stateLocs.some((l) => l.sitemapPriority !== 'low');
+  });
+}
