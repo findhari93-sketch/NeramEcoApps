@@ -4,20 +4,28 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, Typography, ToggleButton, ToggleButtonGroup, Paper,
-  IconButton, Skeleton, Rating, Chip, Divider,
+  IconButton, Skeleton, Rating, Chip, Drawer, Button,
+  useMediaQuery, useTheme,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import CategoryBadge from '@/components/drawings/CategoryBadge';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'original' | 'feedback'>('original');
+  const [showOriginal, setShowOriginal] = useState(true);
+  const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -38,110 +46,294 @@ export default function SubmissionDetailPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) {
-    return <Box sx={{ p: 2 }}><Skeleton height={400} /></Box>;
+    return (
+      <Box sx={{ display: 'flex', gap: 2, p: 2, height: '80vh' }}>
+        <Skeleton variant="rounded" sx={{ flex: 1 }} height="100%" />
+        {!isMobile && <Skeleton variant="rounded" width={320} height="100%" />}
+      </Box>
+    );
   }
 
   if (!submission) {
-    return <Box sx={{ p: 2, textAlign: 'center' }}><Typography color="text.secondary">Not found</Typography></Box>;
+    return <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">Not found</Typography></Box>;
   }
 
   const hasReview = submission.status === 'reviewed' || submission.status === 'published';
+  const hasSketchOver = !!submission.reviewed_image_url;
+  const displayImageUrl = hasSketchOver && !showOriginal
+    ? submission.reviewed_image_url!
+    : submission.original_image_url;
+  const timeAgo = getTimeAgo(submission.submitted_at);
 
-  return (
-    <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, maxWidth: 800, mx: 'auto' }}>
-      <IconButton onClick={() => router.back()} sx={{ mb: 1 }}><ArrowBackIcon /></IconButton>
+  // Before/After toggle
+  const beforeAfterToggle = hasSketchOver ? (
+    <ToggleButtonGroup
+      value={showOriginal ? 'original' : 'reviewed'}
+      exclusive
+      onChange={(_, v) => { if (v) setShowOriginal(v === 'original'); }}
+      size="small"
+      sx={{
+        position: 'absolute', top: 8, left: 8, zIndex: 2,
+        bgcolor: 'rgba(255,255,255,0.92)', borderRadius: 1,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+        '& .MuiToggleButton-root': { py: 0.4, px: 1.5, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 },
+      }}
+    >
+      <ToggleButton value="original">My Drawing</ToggleButton>
+      <ToggleButton value="reviewed">Reviewed</ToggleButton>
+    </ToggleButtonGroup>
+  ) : null;
 
-      {hasReview && (
-        <ToggleButtonGroup
-          value={view}
-          exclusive
-          onChange={(_, v) => v && setView(v)}
-          size="small"
-          sx={{ mb: 2 }}
-        >
-          <ToggleButton value="original" sx={{ textTransform: 'none', px: 2 }}>
-            My Drawing
-          </ToggleButton>
-          <ToggleButton value="feedback" sx={{ textTransform: 'none', px: 2 }}>
-            Tutor Feedback
-          </ToggleButton>
-        </ToggleButtonGroup>
+  // Feedback content (shared between desktop panel and mobile sheet)
+  const feedbackContent = hasReview ? (
+    <Box sx={{ p: 2 }}>
+      {/* Rating */}
+      {submission.tutor_rating && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            TUTOR RATING
+          </Typography>
+          <Rating value={submission.tutor_rating} readOnly size="large" />
+        </Box>
       )}
 
-      <Box
-        component="img"
-        src={view === 'feedback' && submission.reviewed_image_url
-          ? submission.reviewed_image_url
-          : submission.original_image_url}
-        alt="Drawing"
-        sx={{ width: '100%', borderRadius: 1, bgcolor: 'grey.50', mb: 2 }}
-      />
-
-      {view === 'original' && submission.self_note && (
-        <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-          <Typography variant="caption" fontWeight={600}>My Note</Typography>
-          <Typography variant="body2">{submission.self_note}</Typography>
-        </Paper>
+      {/* Written feedback */}
+      {submission.tutor_feedback && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            FEEDBACK
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#f8f8f8' }}>
+            <Typography variant="body2" sx={{ lineHeight: 1.6 }}>{submission.tutor_feedback}</Typography>
+          </Paper>
+        </Box>
       )}
 
-      {view === 'feedback' && hasReview && (
-        <>
-          {submission.tutor_rating && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-              <Typography variant="subtitle2">Rating:</Typography>
-              <Rating value={submission.tutor_rating} readOnly size="small" />
-            </Box>
-          )}
-
-          {submission.tutor_feedback && (
-            <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
-              <Typography variant="caption" fontWeight={600}>Tutor Feedback</Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>{submission.tutor_feedback}</Typography>
+      {/* Resource links */}
+      {submission.tutor_resources && submission.tutor_resources.length > 0 && (
+        <Box>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            RECOMMENDED RESOURCES
+          </Typography>
+          {submission.tutor_resources.map((r: TutorResource, i: number) => (
+            <Paper
+              key={i}
+              variant="outlined"
+              sx={{ p: 1.25, mb: 0.75, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+              onClick={() => r.type === 'youtube' ? window.open(r.url, '_blank') : router.push(r.url)}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PlayCircleOutlineIcon sx={{ color: r.type === 'youtube' ? '#ff0000' : 'primary.main', fontSize: 20 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" fontWeight={500} noWrap>{r.title}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {r.type === 'youtube' ? 'YouTube' : 'Class Recording'}
+                  </Typography>
+                </Box>
+              </Box>
             </Paper>
-          )}
-
-          {submission.tutor_resources && submission.tutor_resources.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                Recommended Resources
-              </Typography>
-              {submission.tutor_resources.map((r: TutorResource, i: number) => (
-                <Paper
-                  key={i}
-                  variant="outlined"
-                  sx={{ p: 1.5, mb: 1, cursor: 'pointer' }}
-                  onClick={() => {
-                    if (r.type === 'youtube') {
-                      window.open(r.url, '_blank');
-                    } else {
-                      router.push(r.url);
-                    }
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <PlayCircleOutlineIcon sx={{ color: r.type === 'youtube' ? '#ff0000' : 'primary.main' }} />
-                    <Box>
-                      <Typography variant="body2" fontWeight={500}>{r.title}</Typography>
-                      <Chip
-                        label={r.type === 'youtube' ? 'YouTube' : 'Class Recording'}
-                        size="small"
-                        variant="outlined"
-                        sx={{ mt: 0.25 }}
-                      />
-                    </Box>
-                  </Box>
-                </Paper>
-              ))}
-            </Box>
-          )}
-        </>
+          ))}
+        </Box>
       )}
 
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="caption" color="text.secondary">
-        Submitted {new Date(submission.submitted_at).toLocaleDateString()}
-        {submission.reviewed_at && ` · Reviewed ${new Date(submission.reviewed_at).toLocaleDateString()}`}
+      {/* Self note */}
+      {submission.self_note && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            MY NOTE
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#f0f7ff' }}>
+            <Typography variant="body2">{submission.self_note}</Typography>
+          </Paper>
+        </Box>
+      )}
+    </Box>
+  ) : (
+    <Box sx={{ p: 3, textAlign: 'center' }}>
+      <Typography variant="body2" color="text.secondary">
+        {submission.status === 'submitted'
+          ? 'Your drawing is pending review by your tutor.'
+          : 'No feedback yet.'}
       </Typography>
     </Box>
   );
+
+  // ===================== MOBILE =====================
+  if (isMobile) {
+    return (
+      <>
+        <Box sx={{
+          mx: -1, mt: -1, mb: -10,
+          display: 'flex', flexDirection: 'column',
+          height: 'calc(100vh - 56px)',
+          overflow: 'hidden', bgcolor: '#1a1a1a',
+        }}>
+          {/* Header */}
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
+            bgcolor: '#fff', flexShrink: 0,
+          }}>
+            <IconButton onClick={() => router.back()} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={600} noWrap>
+                {submission.question?.question_text || 'Free Practice'}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <AccessTimeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
+                {submission.question && (
+                  <CategoryBadge category={submission.question.category} />
+                )}
+                <Chip
+                  label={submission.status}
+                  size="small"
+                  color={hasReview ? 'success' : 'warning'}
+                  sx={{ height: 20, fontSize: '0.65rem', ml: 0.5 }}
+                />
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Image fills remaining space */}
+          <Box sx={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', position: 'relative', minHeight: 0,
+          }}>
+            {beforeAfterToggle}
+            <Box
+              component="img"
+              src={displayImageUrl}
+              alt="Drawing"
+              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          </Box>
+
+          {/* Bottom bar */}
+          <Box sx={{
+            display: 'flex', gap: 1, px: 1.5, py: 1, bgcolor: '#fff',
+            flexShrink: 0, borderTop: '1px solid', borderColor: 'divider',
+          }}>
+            {hasReview ? (
+              <Button
+                variant="contained" fullWidth
+                startIcon={<ChatBubbleOutlineIcon />}
+                onClick={() => setFeedbackSheetOpen(true)}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                View Feedback
+                {submission.tutor_rating ? ` (${submission.tutor_rating}★)` : ''}
+              </Button>
+            ) : (
+              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Pending review</Typography>
+              </Box>
+            )}
+          </Box>
+        </Box>
+
+        {/* Feedback bottom sheet */}
+        <Drawer
+          anchor="bottom" open={feedbackSheetOpen}
+          onClose={() => setFeedbackSheetOpen(false)}
+          PaperProps={{ sx: { maxHeight: '80vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
+          </Box>
+          {feedbackContent}
+        </Drawer>
+      </>
+    );
+  }
+
+  // ===================== DESKTOP =====================
+  return (
+    <Box sx={{
+      mx: { md: -4, sm: -3, xs: -1 },
+      mt: { md: -3, xs: -1 },
+      mb: { md: -3, xs: -10 },
+      display: 'flex',
+      height: 'calc(100vh - 64px)',
+      overflow: 'hidden',
+    }}>
+      {/* LEFT: Image */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Header */}
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 1.5,
+          px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
+          bgcolor: 'background.paper', flexShrink: 0,
+        }}>
+          <IconButton onClick={() => router.back()} size="small">
+            <ArrowBackIcon />
+          </IconButton>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap>
+              {submission.question?.question_text || 'Free Practice'}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <AccessTimeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+              <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
+            </Box>
+          </Box>
+          {submission.question && <CategoryBadge category={submission.question.category} />}
+          <Chip
+            label={submission.status}
+            size="small"
+            color={hasReview ? 'success' : 'warning'}
+          />
+        </Box>
+
+        {/* Image fills remaining space */}
+        <Box sx={{
+          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          bgcolor: '#e8e8e8', overflow: 'hidden', minHeight: 0, position: 'relative',
+        }}>
+          {beforeAfterToggle}
+          <Box
+            component="img"
+            src={displayImageUrl}
+            alt="Drawing"
+            sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          />
+        </Box>
+      </Box>
+
+      {/* RIGHT: Feedback panel */}
+      <Box sx={{
+        width: 340, flexShrink: 0, borderLeft: '1px solid', borderColor: 'divider',
+        bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+          <Typography variant="subtitle2" fontWeight={700}>Tutor Feedback</Typography>
+        </Box>
+        <Box sx={{ flex: 1, overflow: 'auto' }}>
+          {feedbackContent}
+        </Box>
+        <Box sx={{
+          px: 2, py: 1, borderTop: '1px solid', borderColor: 'divider',
+          flexShrink: 0,
+        }}>
+          <Typography variant="caption" color="text.secondary">
+            Submitted {new Date(submission.submitted_at).toLocaleDateString()}
+            {submission.reviewed_at && ` · Reviewed ${new Date(submission.reviewed_at).toLocaleDateString()}`}
+          </Typography>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function getTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'yesterday';
+  return `${days}d ago`;
 }
