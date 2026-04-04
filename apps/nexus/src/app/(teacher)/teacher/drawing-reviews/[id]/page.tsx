@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
-  Button, TextField, Rating, useMediaQuery, useTheme, Drawer,
+  Button, TextField, Rating, useMediaQuery, useTheme, Drawer, ToggleButtonGroup, ToggleButton,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
@@ -31,6 +31,7 @@ export default function DrawingReviewDetailPage() {
   // Review state
   const [sketchOpen, setSketchOpen] = useState(false);
   const [reviewedImageUrl, setReviewedImageUrl] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [resources, setResources] = useState<TutorResource[]>([]);
@@ -127,6 +128,29 @@ export default function DrawingReviewDetailPage() {
   }
 
   const timeAgo = getTimeAgo(submission.submitted_at);
+  const hasSketchOver = !!reviewedImageUrl;
+  const displayImageUrl = hasSketchOver && !showOriginal
+    ? reviewedImageUrl!
+    : submission.original_image_url;
+
+  // Before/After toggle overlay — reused in both layouts
+  const beforeAfterToggle = hasSketchOver ? (
+    <ToggleButtonGroup
+      value={showOriginal ? 'original' : 'reviewed'}
+      exclusive
+      onChange={(_, v) => { if (v) setShowOriginal(v === 'original'); }}
+      size="small"
+      sx={{
+        position: 'absolute', top: 8, left: 8, zIndex: 2,
+        bgcolor: 'rgba(255,255,255,0.92)', borderRadius: 1,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+        '& .MuiToggleButton-root': { py: 0.4, px: 1.5, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 },
+      }}
+    >
+      <ToggleButton value="original">Original</ToggleButton>
+      <ToggleButton value="reviewed">Reviewed</ToggleButton>
+    </ToggleButtonGroup>
+  ) : null;
 
   // === Review form (shared between desktop right panel and mobile bottom sheet) ===
   const reviewForm = (
@@ -238,9 +262,10 @@ export default function DrawingReviewDetailPage() {
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden', position: 'relative', minHeight: 0,
           }}>
+            {beforeAfterToggle}
             <Box
               component="img"
-              src={reviewedImageUrl || submission.original_image_url}
+              src={displayImageUrl}
               alt="Drawing"
               sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             />
@@ -356,11 +381,12 @@ export default function DrawingReviewDetailPage() {
           {/* Drawing image — fills ALL remaining space */}
           <Box sx={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            bgcolor: '#e8e8e8', overflow: 'hidden', minHeight: 0,
+            bgcolor: '#e8e8e8', overflow: 'hidden', minHeight: 0, position: 'relative',
           }}>
+            {beforeAfterToggle}
             <Box
               component="img"
-              src={reviewedImageUrl || submission.original_image_url}
+              src={displayImageUrl}
               alt="Student drawing"
               sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             />
