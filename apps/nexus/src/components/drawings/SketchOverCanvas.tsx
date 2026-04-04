@@ -14,10 +14,12 @@ import CreateOutlinedIcon from '@mui/icons-material/CreateOutlined';
 import FitScreenOutlinedIcon from '@mui/icons-material/FitScreenOutlined';
 import ZoomInOutlinedIcon from '@mui/icons-material/ZoomInOutlined';
 import ZoomOutOutlinedIcon from '@mui/icons-material/ZoomOutOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
 interface SketchOverCanvasProps {
   imageUrl: string;
-  onSave: (blob: Blob) => void;
+  onSave: (blob: Blob) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -44,6 +46,7 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
   const [isDrawing, setIsDrawing] = useState(false);
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Zoom & pan state
   const [scale, setScale] = useState(1);
@@ -303,10 +306,28 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
     const canvas = canvasRef.current;
     if (!canvas) return;
     setSaving(true);
-    canvas.toBlob((blob) => {
-      if (blob) onSave(blob);
+    setSaveStatus('idle');
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/png');
+    });
+
+    if (!blob) {
       setSaving(false);
-    }, 'image/png');
+      setSaveStatus('error');
+      return;
+    }
+
+    try {
+      await onSave(blob);
+      setSaveStatus('success');
+      // Auto-close after brief success flash
+      setTimeout(() => onClose(), 800);
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const displayW = canvasRes.width * scale;
@@ -336,16 +357,27 @@ export default function SketchOverCanvas({ imageUrl, onSave, onClose }: SketchOv
         <IconButton onClick={handleClear} disabled={paths.length === 0} size="small">
           <DeleteOutlineIcon />
         </IconButton>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<SaveOutlinedIcon />}
-          onClick={handleSave}
-          disabled={saving}
-          sx={{ textTransform: 'none', minHeight: 36, ml: 0.5 }}
-        >
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+        {saveStatus === 'success' ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.main', ml: 0.5 }}>
+            <CheckCircleIcon fontSize="small" />
+            <Typography variant="body2" fontWeight={600}>Saved!</Typography>
+          </Box>
+        ) : saveStatus === 'error' ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 0.5 }}>
+            <ErrorOutlineIcon fontSize="small" color="error" />
+            <Button size="small" variant="contained" color="error" onClick={handleSave} sx={{ textTransform: 'none', minHeight: 36 }}>
+              Retry
+            </Button>
+          </Box>
+        ) : (
+          <Button
+            variant="contained" size="small" startIcon={<SaveOutlinedIcon />}
+            onClick={handleSave} disabled={saving}
+            sx={{ textTransform: 'none', minHeight: 36, ml: 0.5 }}
+          >
+            {saving ? 'Uploading...' : 'Save'}
+          </Button>
+        )}
       </Paper>
 
       {/* Canvas area — no scrollbars, zoom/pan controlled */}

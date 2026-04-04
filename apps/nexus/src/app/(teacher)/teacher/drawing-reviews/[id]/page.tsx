@@ -66,23 +66,19 @@ export default function DrawingReviewDetailPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleSketchSave = async (blob: Blob) => {
-    try {
-      const token = await getToken();
-      const formData = new FormData();
-      formData.append('file', blob, 'review.png');
-      formData.append('bucket', 'drawing-reviewed');
-      const res = await fetch('/api/drawing/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
-      setReviewedImageUrl(url);
-      setSketchOpen(false);
-    } catch {
-      setError('Failed to save sketch');
-    }
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append('file', blob, 'review.png');
+    formData.append('bucket', 'drawing-reviewed');
+    const res = await fetch('/api/drawing/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    const { url } = await res.json();
+    setReviewedImageUrl(url);
+    // Canvas auto-closes after showing "Saved!" for 800ms
   };
 
   const handleSaveReview = async () => {
