@@ -4,14 +4,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
-  Button, TextField, Rating, Divider, useMediaQuery, useTheme,
+  Button, TextField, Rating, useMediaQuery, useTheme, Drawer,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import StarOutlineIcon from '@mui/icons-material/StarOutline';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
-import DifficultyChip from '@/components/drawings/DifficultyChip';
 import SketchOverCanvas from '@/components/drawings/SketchOverCanvas';
 import ResourceLinkSearch from '@/components/drawings/ResourceLinkSearch';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
@@ -34,6 +36,8 @@ export default function DrawingReviewDetailPage() {
   const [resources, setResources] = useState<TutorResource[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Mobile: bottom sheet for review controls
+  const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -66,13 +70,11 @@ export default function DrawingReviewDetailPage() {
       const formData = new FormData();
       formData.append('file', blob, 'review.png');
       formData.append('bucket', 'drawing-reviewed');
-
       const res = await fetch('/api/drawing/upload', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-
       if (!res.ok) throw new Error('Upload failed');
       const { url } = await res.json();
       setReviewedImageUrl(url);
@@ -109,9 +111,9 @@ export default function DrawingReviewDetailPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', gap: 3, p: 3 }}>
-        <Skeleton variant="rounded" width="60%" height={500} />
-        <Skeleton variant="rounded" width="40%" height={500} />
+      <Box sx={{ display: 'flex', gap: 2, p: 2, height: '80vh' }}>
+        <Skeleton variant="rounded" sx={{ flex: 1 }} height="100%" />
+        {!isMobile && <Skeleton variant="rounded" width={340} height="100%" />}
       </Box>
     );
   }
@@ -126,188 +128,262 @@ export default function DrawingReviewDetailPage() {
 
   const timeAgo = getTimeAgo(submission.submitted_at);
 
-  // === LEFT PANEL: Image + Question ===
-  const leftPanel = (
-    <Box sx={{
-      flex: { xs: 'none', md: 1 },
-      display: 'flex', flexDirection: 'column',
-      height: { md: 'calc(100vh - 72px)' },
-      overflow: 'hidden',
-    }}>
-      {/* Student info header */}
-      <Box sx={{ px: 2, pt: 2, pb: 1.5, flexShrink: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-          <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small" sx={{ mr: -0.5 }}>
-            <ArrowBackIcon />
-          </IconButton>
-          <Avatar
-            src={submission.student?.avatar_url || undefined}
-            sx={{ width: 40, height: 40, bgcolor: 'primary.main', fontSize: '1rem' }}
-          >
-            {submission.student?.name?.charAt(0) || '?'}
-          </Avatar>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2}>
-              {submission.student?.name || 'Student'}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-              <AccessTimeIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
-              <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
-            </Box>
-          </Box>
-          {submission.question && (
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <CategoryBadge category={submission.question.category} />
-              <DifficultyChip difficulty={submission.question.difficulty_tag} />
-            </Box>
-          )}
-        </Box>
-
-        {/* Question text */}
-        {submission.question && (
-          <Paper variant="outlined" sx={{ p: 1.5, bgcolor: 'grey.50' }}>
-            <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
-              {submission.question.question_text}
-            </Typography>
-            {submission.question.objects.length > 0 && (
-              <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
-                {submission.question.objects.map((obj) => (
-                  <Chip key={obj} label={obj} size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 22 }} />
-                ))}
-              </Box>
-            )}
-          </Paper>
-        )}
-      </Box>
-
-      {/* Drawing image — fills remaining space, fits vertically */}
-      <Box sx={{
-        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        bgcolor: '#f0f0f0', mx: 2, mb: 2, borderRadius: 1, overflow: 'hidden',
-        position: 'relative', minHeight: { xs: 300, md: 0 },
-      }}>
-        <Box
-          component="img"
-          src={reviewedImageUrl || submission.original_image_url}
-          alt="Student drawing"
-          sx={{
-            maxWidth: '100%', maxHeight: '100%',
-            objectFit: 'contain',
-          }}
-        />
-        {/* Draw over button overlaid on image */}
-        <Button
-          variant="contained"
-          startIcon={<BrushOutlinedIcon />}
-          onClick={() => setSketchOpen(true)}
-          sx={{
-            position: 'absolute', bottom: 12, right: 12,
-            textTransform: 'none', minHeight: 40,
-            bgcolor: 'rgba(0,0,0,0.75)', '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
-          }}
-        >
-          {reviewedImageUrl ? 'Edit Sketch' : 'Draw Over'}
-        </Button>
-      </Box>
-    </Box>
-  );
-
-  // === RIGHT PANEL: Review controls ===
-  const rightPanel = (
-    <Box sx={{
-      width: { xs: '100%', md: 360 },
-      flexShrink: 0,
-      height: { md: 'calc(100vh - 72px)' },
-      overflow: 'auto',
-      borderLeft: { md: '1px solid' },
-      borderColor: { md: 'divider' },
-      display: 'flex', flexDirection: 'column',
-    }}>
-      <Box sx={{ p: 2.5, flex: 1 }}>
+  // === Review form (shared between desktop right panel and mobile bottom sheet) ===
+  const reviewForm = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
         {/* Student note */}
         {submission.self_note && (
-          <Paper variant="outlined" sx={{ p: 1.5, mb: 2.5, bgcolor: 'info.50' }}>
-            <Typography variant="caption" fontWeight={600} color="info.dark">Student&apos;s Note</Typography>
-            <Typography variant="body2" sx={{ mt: 0.5 }}>{submission.self_note}</Typography>
+          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
+            <Typography variant="caption" fontWeight={600} color="primary.dark">
+              Student&apos;s Note
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.25 }}>{submission.self_note}</Typography>
           </Paper>
         )}
 
         {/* Rating */}
-        <Box sx={{ mb: 2.5 }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-            Rating *
-          </Typography>
-          <Rating
-            value={rating}
-            onChange={(_, v) => setRating(v || 0)}
-            size="large"
-            sx={{ fontSize: '2rem' }}
-          />
-        </Box>
+        <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+          RATING *
+        </Typography>
+        <Rating
+          value={rating}
+          onChange={(_, v) => setRating(v || 0)}
+          size="large"
+          sx={{ mb: 2 }}
+        />
 
         {/* Feedback */}
-        <Box sx={{ mb: 2.5 }}>
-          <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-            Feedback
-          </Typography>
-          <TextField
-            placeholder="Share constructive feedback about their drawing..."
-            multiline
-            rows={4}
-            fullWidth
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            size="small"
-          />
-        </Box>
+        <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+          FEEDBACK
+        </Typography>
+        <TextField
+          placeholder="Constructive feedback..."
+          multiline
+          rows={3}
+          fullWidth
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          size="small"
+          sx={{ mb: 2 }}
+        />
 
         {/* Resource links */}
-        <Box sx={{ mb: 2.5 }}>
-          <ResourceLinkSearch
-            resources={resources}
-            onChange={setResources}
-            getToken={getToken}
-          />
-        </Box>
+        <ResourceLinkSearch resources={resources} onChange={setResources} getToken={getToken} />
       </Box>
 
-      {/* Save button — sticky at bottom */}
-      <Box sx={{
-        p: 2, borderTop: '1px solid', borderColor: 'divider',
-        bgcolor: 'background.paper', flexShrink: 0,
-        position: 'sticky', bottom: 0,
-      }}>
-        {error && (
-          <Typography color="error" variant="caption" sx={{ mb: 1, display: 'block' }}>
-            {error}
-          </Typography>
-        )}
+      {/* Save — pinned to bottom */}
+      <Box sx={{ p: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+        {error && <Typography color="error" variant="caption" sx={{ mb: 0.5, display: 'block' }}>{error}</Typography>}
         <Button
-          variant="contained"
-          fullWidth
-          onClick={handleSaveReview}
+          variant="contained" fullWidth onClick={handleSaveReview}
           disabled={saving || rating < 1}
-          sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+          sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
         >
-          {saving ? 'Saving Review...' : 'Save Review'}
+          {saving ? 'Saving...' : 'Save Review'}
         </Button>
       </Box>
     </Box>
   );
 
+  // ===================== MOBILE LAYOUT =====================
+  if (isMobile) {
+    return (
+      <>
+        {/* Full-height mobile layout: image fills screen, FAB for review */}
+        <Box sx={{
+          // Break out of parent padding
+          mx: -2, mt: -2, mb: -10,
+          display: 'flex', flexDirection: 'column',
+          height: 'calc(100vh - 56px)', // subtract top bar height
+          overflow: 'hidden', bgcolor: '#1a1a1a',
+        }}>
+          {/* Compact header */}
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
+            bgcolor: '#fff', flexShrink: 0,
+          }}>
+            <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            <Avatar
+              src={submission.student?.avatar_url || undefined}
+              sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.85rem' }}
+            >
+              {submission.student?.name?.charAt(0) || '?'}
+            </Avatar>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={600} noWrap>
+                {submission.student?.name || 'Student'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
+            </Box>
+            {submission.question && <CategoryBadge category={submission.question.category} />}
+          </Box>
+
+          {/* Question (collapsible — single line with ellipsis) */}
+          {submission.question && (
+            <Box sx={{ px: 1.5, py: 0.75, bgcolor: '#f5f5f5', flexShrink: 0 }}>
+              <Typography variant="caption" sx={{
+                display: '-webkit-box', WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4,
+              }}>
+                {submission.question.question_text}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Image — fills all remaining space */}
+          <Box sx={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', position: 'relative', minHeight: 0,
+          }}>
+            <Box
+              component="img"
+              src={reviewedImageUrl || submission.original_image_url}
+              alt="Drawing"
+              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          </Box>
+
+          {/* Bottom action bar */}
+          <Box sx={{
+            display: 'flex', gap: 1, px: 1.5, py: 1, bgcolor: '#fff',
+            flexShrink: 0, borderTop: '1px solid', borderColor: 'divider',
+          }}>
+            <Button
+              variant="outlined" startIcon={<BrushOutlinedIcon />}
+              onClick={() => setSketchOpen(true)}
+              sx={{ flex: 1, textTransform: 'none', minHeight: 44 }}
+            >
+              Draw Over
+            </Button>
+            <Button
+              variant="contained" onClick={() => setReviewSheetOpen(true)}
+              sx={{ flex: 1, textTransform: 'none', minHeight: 44 }}
+              startIcon={<StarOutlineIcon />}
+            >
+              Review
+            </Button>
+          </Box>
+        </Box>
+
+        {/* Review bottom sheet */}
+        <Drawer
+          anchor="bottom" open={reviewSheetOpen}
+          onClose={() => setReviewSheetOpen(false)}
+          PaperProps={{ sx: { maxHeight: '85vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+        >
+          {/* Drag handle */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
+          </Box>
+          {reviewForm}
+        </Drawer>
+
+        {sketchOpen && (
+          <SketchOverCanvas
+            imageUrl={submission.original_image_url}
+            onSave={handleSketchSave}
+            onClose={() => setSketchOpen(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ===================== DESKTOP LAYOUT =====================
   return (
     <>
       <Box sx={{
+        // Break out of parent padding to fill the main area edge-to-edge
+        mx: { md: -4, sm: -3, xs: -2 },
+        mt: { md: -3, xs: -2 },
+        mb: { md: -3, xs: -10 },
         display: 'flex',
-        flexDirection: { xs: 'column', md: 'row' },
-        height: { md: 'calc(100vh - 72px)' },
-        overflow: { md: 'hidden' },
+        height: 'calc(100vh - 64px)', // TopBar is ~64px
+        overflow: 'hidden',
       }}>
-        {leftPanel}
-        {rightPanel}
+        {/* LEFT: Image canvas area */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          {/* Compact header bar */}
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1.5,
+            px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
+            bgcolor: 'background.paper', flexShrink: 0,
+          }}>
+            <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            <Avatar
+              src={submission.student?.avatar_url || undefined}
+              sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: '0.9rem' }}
+            >
+              {submission.student?.name?.charAt(0) || '?'}
+            </Avatar>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={600} noWrap>
+                {submission.student?.name || 'Student'}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <AccessTimeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
+              </Box>
+            </Box>
+            <Box sx={{ flex: 1 }} />
+            {submission.question && <CategoryBadge category={submission.question.category} />}
+            <Button
+              variant="contained" size="small" startIcon={<BrushOutlinedIcon />}
+              onClick={() => setSketchOpen(true)}
+              sx={{ textTransform: 'none', ml: 1 }}
+            >
+              {reviewedImageUrl ? 'Edit Sketch' : 'Draw Over'}
+            </Button>
+          </Box>
+
+          {/* Question strip */}
+          {submission.question && (
+            <Box sx={{
+              px: 2, py: 0.75, bgcolor: '#f8f8f8', borderBottom: '1px solid',
+              borderColor: 'divider', flexShrink: 0,
+            }}>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+                {submission.question.question_text}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Drawing image — fills ALL remaining space */}
+          <Box sx={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            bgcolor: '#e8e8e8', overflow: 'hidden', minHeight: 0,
+          }}>
+            <Box
+              component="img"
+              src={reviewedImageUrl || submission.original_image_url}
+              alt="Student drawing"
+              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          </Box>
+        </Box>
+
+        {/* RIGHT: Review panel (fixed width, independently scrollable) */}
+        <Box sx={{
+          width: 340, flexShrink: 0, borderLeft: '1px solid', borderColor: 'divider',
+          bgcolor: 'background.paper', display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
+          {/* Panel header */}
+          <Box sx={{
+            px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider',
+            flexShrink: 0,
+          }}>
+            <Typography variant="subtitle2" fontWeight={700}>Review</Typography>
+          </Box>
+          {reviewForm}
+        </Box>
       </Box>
 
-      {/* Sketch overlay */}
       {sketchOpen && (
         <SketchOverCanvas
           imageUrl={submission.original_image_url}
@@ -319,7 +395,6 @@ export default function DrawingReviewDetailPage() {
   );
 }
 
-/** Simple relative time formatter */
 function getTimeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
