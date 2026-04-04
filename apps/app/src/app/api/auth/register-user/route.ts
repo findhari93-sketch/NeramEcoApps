@@ -93,6 +93,23 @@ export async function POST(req: NextRequest) {
       (user as any).linked_classroom_email ?? null
     );
 
+    // Check if user is enrolled (has student_profiles record)
+    // Enrolled students should skip the initial onboarding questionnaire
+    let onboardingCompleted = (user as any).onboarding_completed ?? false;
+    if (!onboardingCompleted) {
+      const { data: studentProfile } = await adminClient
+        .from('student_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      if (studentProfile) {
+        onboardingCompleted = true;
+        // Persist so we don't check every time
+        await updateUser(user.id, { onboarding_completed: true } as any, adminClient).catch(() => {});
+      }
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -104,7 +121,7 @@ export async function POST(req: NextRequest) {
         email_verified: user.email_verified,
         user_type: user.user_type,
         status: user.status,
-        onboarding_completed: (user as any).onboarding_completed ?? false,
+        onboarding_completed: onboardingCompleted,
         account_tier: accountTier,
       },
       isNewUser,

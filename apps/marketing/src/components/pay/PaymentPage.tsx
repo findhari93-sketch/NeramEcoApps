@@ -94,6 +94,20 @@ export default function PaymentPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
+  // Restore receipt from sessionStorage on mount (survives back button / refresh)
+  useEffect(() => {
+    if (!applicationNumber) return;
+    try {
+      const saved = sessionStorage.getItem(`neram_receipt_${applicationNumber}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setReceiptData(parsed.receipt);
+        setPayerRelationship(parsed.payerRelationship || 'self');
+        setPaymentSuccess(true);
+      }
+    } catch { /* ignore */ }
+  }, [applicationNumber]);
+
   // ── Fetch payment details ──
 
   const fetchDetails = useCallback(async () => {
@@ -254,6 +268,13 @@ export default function PaymentPage() {
               const verifyData = await verifyResponse.json();
               setReceiptData(verifyData.receipt || null);
               setPaymentSuccess(true);
+              // Persist receipt so back button / refresh shows success screen
+              try {
+                sessionStorage.setItem(`neram_receipt_${applicationNumber}`, JSON.stringify({
+                  receipt: verifyData.receipt,
+                  payerRelationship,
+                }));
+              } catch { /* ignore */ }
             } else {
               setError('Payment verification failed. Please contact support with your payment reference.');
               setIsProcessing(false);
@@ -412,7 +433,7 @@ export default function PaymentPage() {
             <Button
               variant="contained"
               size="large"
-              href="https://app.neramclasses.com"
+              href={`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}/welcome`}
               sx={{ minHeight: 48, px: 4 }}
             >
               Start Onboarding
@@ -420,7 +441,7 @@ export default function PaymentPage() {
           ) : (
             <Alert severity="info" sx={{ textAlign: 'left' }}>
               Please share this confirmation with the student so they can complete their onboarding at{' '}
-              <strong>app.neramclasses.com</strong>.
+              <strong>{(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011').replace(/^https?:\/\//, '')}</strong>.
             </Alert>
           )}
         </Paper>
