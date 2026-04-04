@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (!user || !['teacher', 'admin'].includes(user.user_type as string)) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
