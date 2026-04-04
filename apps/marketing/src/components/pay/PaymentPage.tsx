@@ -433,7 +433,7 @@ export default function PaymentPage() {
             <Button
               variant="contained"
               size="large"
-              href={`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}/welcome`}
+              href={`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}/onboarding`}
               sx={{ minHeight: 48, px: 4 }}
             >
               Start Onboarding
