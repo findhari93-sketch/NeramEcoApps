@@ -9,12 +9,6 @@ import { verifyFirebaseToken } from '../../_lib/auth';
 export async function POST(request: NextRequest) {
   try {
     const auth = await verifyFirebaseToken(request);
-    if (!auth) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'You must be logged in' },
-        { status: 401 }
-      );
-    }
 
     const supabase = createAdminClient();
 
@@ -23,7 +17,16 @@ export async function POST(request: NextRequest) {
       razorpay_payment_id,
       razorpay_signature,
       paymentId,
+      publicPayment,
     } = await request.json();
+
+    // For non-public payments, auth is required
+    if (!publicPayment && !auth) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'You must be logged in' },
+        { status: 401 }
+      );
+    }
 
     // Verify signature
     const body = razorpay_order_id + '|' + razorpay_payment_id;
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update payment record (status must be 'paid' to trigger receipt_number generation)
-    const { data: payment, error: updateError } = await supabase
+    let updateQuery = supabase
       .from('payments' as any)
       .update({
         razorpay_payment_id,
@@ -49,11 +52,17 @@ export async function POST(request: NextRequest) {
         paid_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', paymentId)
-      .eq('user_id', auth.userId)
+      .eq('id', paymentId);
+
+    // When authenticated, scope to user; for public payments, just query by id
+    if (auth) {
+      updateQuery = updateQuery.eq('user_id', auth.userId);
+    }
+
+    const { data: payment, error: updateError } = await updateQuery
       .select(`
         *,
-        lead_profiles(id, interest_course, payment_scheme, final_fee, full_payment_discount, discount_amount, assigned_fee)
+        lead_profiles(id, user_id, interest_course, payment_scheme, final_fee, full_payment_discount, discount_amount, assigned_fee, selected_course_id)
       `)
       .single();
 
@@ -63,6 +72,33 @@ export async function POST(request: NextRequest) {
         { error: 'Database Error', message: 'Failed to update payment' },
         { status: 500 }
       );
+    }
+
+    // Enrich payment with Razorpay details (non-blocking)
+    try {
+      const Razorpay = (await import('razorpay')).default;
+      const rzp = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID!,
+        key_secret: process.env.RAZORPAY_KEY_SECRET!,
+      });
+      const rzpPayment = await rzp.payments.fetch(razorpay_payment_id);
+
+      const enrichment: Record<string, any> = {
+        razorpay_method: rzpPayment.method || null,
+        razorpay_bank: rzpPayment.bank || null,
+        razorpay_vpa: rzpPayment.vpa || null,
+        razorpay_card_last4: rzpPayment.card?.last4 || null,
+        razorpay_card_network: rzpPayment.card?.network || null,
+        razorpay_fee: rzpPayment.fee ? Number(rzpPayment.fee) / 100 : null, // paise → rupees
+        razorpay_tax: rzpPayment.tax ? Number(rzpPayment.tax) / 100 : null, // paise → rupees
+      };
+
+      await supabase
+        .from('payments' as any)
+        .update(enrichment)
+        .eq('id', paymentId);
+    } catch (enrichError) {
+      console.error('Razorpay enrichment failed (non-blocking):', enrichError);
     }
 
     // Update lead profile status
@@ -100,22 +136,44 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    // If full payment completed, create student profile
-    if (isFullPayment) {
+    // Create or update student profile on full payment OR first installment
+    const shouldCreateStudentProfile = isFullPayment ||
+      (payment.payment_scheme === 'installment' && payment.installment_number === 1);
+
+    if (shouldCreateStudentProfile) {
+      const studentUserId = auth?.userId || payment.lead_profiles?.user_id;
+      const finalFee = leadProfile.final_fee || 0;
+
       const { data: existingStudent } = await supabase
         .from('student_profiles' as any)
-        .select('id')
-        .eq('user_id', auth.userId)
+        .select('id, fee_paid')
+        .eq('user_id', studentUserId)
         .single();
 
       if (!existingStudent) {
         await supabase
           .from('student_profiles' as any)
           .insert({
-            user_id: auth.userId,
-            payment_status: 'paid',
+            user_id: studentUserId,
+            course_id: leadProfile.selected_course_id || null,
+            total_fee: finalFee,
+            fee_paid: payment.amount,
+            fee_due: isFullPayment ? 0 : Math.max(0, finalFee - payment.amount),
+            payment_status: isFullPayment ? 'paid' : 'pending',
             enrollment_date: new Date().toISOString().split('T')[0],
           });
+      } else if (payment.payment_scheme === 'installment') {
+        // Student profile exists — update fee_paid and fee_due
+        const newFeePaid = Number(existingStudent.fee_paid || 0) + Number(payment.amount);
+        await supabase
+          .from('student_profiles' as any)
+          .update({
+            fee_paid: newFeePaid,
+            fee_due: Math.max(0, finalFee - newFeePaid),
+            payment_status: newFeePaid >= finalFee ? 'paid' : 'pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingStudent.id);
       }
     }
 
@@ -127,7 +185,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     const receiptNumber = updatedPayment?.receipt_number || null;
-    const userName = auth.name || 'Student';
+
+    // Resolve user details with fallbacks for public payments
+    const effectiveUserId = auth?.userId || payment.lead_profiles?.user_id;
+    const userName = auth?.name || payment.payer_name || 'Student';
+    const userEmail = auth?.email || '';
+    const userPhone = auth?.phone || '';
 
     const COURSE_LABELS: Record<string, string> = {
       nata: 'NATA Preparation Course',
@@ -143,19 +206,19 @@ export async function POST(request: NextRequest) {
 
       // 1. Multi-channel notification (Telegram, admin bell, user bell, WhatsApp)
       await notifyPaymentReceived({
-        userId: auth.userId,
+        userId: effectiveUserId,
         userName,
         amount: payment.amount,
         method: 'razorpay',
         paymentId: razorpay_payment_id,
-        phone: auth.phone || '',
+        phone: userPhone,
         receiptNumber: receiptNumber || '',
         courseName,
       });
 
       // 2. Student confirmation email with receipt
-      if (auth.email) {
-        await sendTemplateEmail(auth.email, 'payment-confirmation', {
+      if (userEmail) {
+        await sendTemplateEmail(userEmail, 'payment-confirmation', {
           name: userName,
           course: courseName,
           amount: Number(payment.amount).toLocaleString('en-IN'),
@@ -169,8 +232,8 @@ export async function POST(request: NextRequest) {
       // 3. Admin notification email
       await sendTemplateEmail(process.env.ADMIN_EMAIL || 'admin@neramclasses.com', 'admin-payment-received', {
         studentName: userName,
-        studentEmail: auth.email || '',
-        studentPhone: auth.phone || '',
+        studentEmail: userEmail,
+        studentPhone: userPhone,
         amount: Number(payment.amount).toLocaleString('en-IN'),
         razorpayId: razorpay_payment_id,
         receiptNumber: receiptNumber || paymentId,

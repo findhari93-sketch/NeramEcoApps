@@ -24,26 +24,33 @@ function getRazorpayClient(): Razorpay {
 export async function POST(request: NextRequest) {
   try {
     const auth = await verifyFirebaseToken(request);
-    if (!auth) {
+
+    const supabase = createAdminClient();
+    const { leadProfileId, paymentScheme, couponCode, couponDiscount, youtubeDiscount, payerName, payerRelationship, publicPayment } = await request.json();
+
+    // For non-public payments, auth is required
+    if (!publicPayment && !auth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'You must be logged in' },
         { status: 401 }
       );
     }
 
-    const supabase = createAdminClient();
-    const { leadProfileId, paymentScheme, couponCode, couponDiscount, youtubeDiscount } = await request.json();
-
     // Get lead profile with fee details
-    const { data: leadProfile, error: leadError } = await supabase
+    let leadQuery = supabase
       .from('lead_profiles' as any)
       .select(`
         *,
         scholarship_applications(scholarship_percentage, verification_status)
       `)
-      .eq('id', leadProfileId)
-      .eq('user_id', auth.userId)
-      .single();
+      .eq('id', leadProfileId);
+
+    // When authenticated, scope to user; for public payments, just query by id
+    if (auth) {
+      leadQuery = leadQuery.eq('user_id', auth.userId);
+    }
+
+    const { data: leadProfile, error: leadError } = await leadQuery.single();
 
     if (leadError || !leadProfile) {
       return NextResponse.json(
@@ -104,6 +111,8 @@ export async function POST(request: NextRequest) {
 
     const amountInPaise = Math.round(amount * 100);
 
+    const effectiveUserId = auth?.userId || leadProfile.user_id;
+
     // Create Razorpay order (receipt max 40 chars)
     const razorpay = getRazorpayClient();
     const order = await razorpay.orders.create({
@@ -112,7 +121,7 @@ export async function POST(request: NextRequest) {
       receipt: `rcpt_${leadProfileId.substring(0, 8)}_${Date.now()}`,
       notes: {
         lead_profile_id: leadProfileId,
-        user_id: auth.userId,
+        user_id: effectiveUserId,
         payment_scheme: paymentScheme,
         installment_number: String(paymentScheme === 'installment' ? 1 : 0),
         coupon_code: couponCode || '',
@@ -125,7 +134,9 @@ export async function POST(request: NextRequest) {
       .from('payments' as any)
       .insert({
         lead_profile_id: leadProfileId,
-        user_id: auth.userId,
+        user_id: effectiveUserId,
+        payer_name: payerName || null,
+        payer_relationship: payerRelationship || null,
         amount: amount,
         payment_method: 'razorpay',
         razorpay_order_id: order.id,

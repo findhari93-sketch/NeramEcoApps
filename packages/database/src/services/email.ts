@@ -269,7 +269,7 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
               </div>
 
               <div style="text-align: center;">
-                <a href="https://app.neramclasses.com/payment/${data.leadId}" class="button">Pay Now & Confirm Your Seat</a>
+                <a href="${process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com'}/pay?app=${data.applicationNumber}" class="button">Pay Now & Confirm Your Seat</a>
               </div>
 
               <p style="color: #666; font-size: 0.9em; text-align: center; margin-top: 8px;">

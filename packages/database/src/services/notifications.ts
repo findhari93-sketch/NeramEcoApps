@@ -1,12 +1,13 @@
 /**
  * Neram Classes - Unified Notification Dispatcher
  *
- * Dispatches notifications across 5 channels:
+ * Dispatches notifications across 6 channels:
  * 1. Telegram Bot (instant team channel notification)
  * 2. Email to active recipients (via Resend)
  * 3. Admin in-app notification (bell icon)
  * 4. WhatsApp to user (via Meta Cloud API)
  * 5. User in-app notification (student bell icon in apps/app & apps/marketing)
+ * 6. Microsoft Teams (Adaptive Card via Incoming Webhook)
  */
 
 import type { NotificationEvent, NotificationEventType } from '../types';
@@ -38,6 +39,7 @@ import {
   getEmailTemplate,
   renderEmailTemplate,
 } from '../queries/emails';
+import { sendTeamsWebhook } from './teams-webhook';
 import {
   isWhatsAppConfigured,
   sendApplicationConfirmation,
@@ -97,6 +99,7 @@ export async function dispatchNotification(
   admin: { success: boolean; error?: string };
   whatsapp: { success: boolean; error?: string };
   userNotification: { success: boolean; error?: string };
+  teams: { success: boolean; error?: string };
 }> {
   const results = {
     telegram: { success: false, error: undefined as string | undefined },
@@ -104,10 +107,11 @@ export async function dispatchNotification(
     admin: { success: false, error: undefined as string | undefined },
     whatsapp: { success: false, error: undefined as string | undefined },
     userNotification: { success: false, error: undefined as string | undefined },
+    teams: { success: false, error: undefined as string | undefined },
   };
 
   // Run all channels concurrently
-  const [telegramResult, emailResult, adminResult, whatsappResult, userNotifResult] = await Promise.allSettled([
+  const [telegramResult, emailResult, adminResult, whatsappResult, userNotifResult, teamsResult] = await Promise.allSettled([
     // 1. Telegram (instant)
     sendTelegramNotification(event),
     // 2. Email to active recipients
@@ -118,6 +122,8 @@ export async function dispatchNotification(
     sendWhatsAppNotification(event),
     // 5. User in-app notification (student bell icon)
     createUserInAppNotification(event, client),
+    // 6. Teams channel (Adaptive Card via webhook)
+    sendTeamsWebhook(event),
   ]);
 
   // Process Telegram result
@@ -155,6 +161,13 @@ export async function dispatchNotification(
     results.userNotification = { success: false, error: userNotifResult.reason?.message || 'Unknown error' };
   }
 
+  // Process Teams result
+  if (teamsResult.status === 'fulfilled') {
+    results.teams = { success: teamsResult.value.success, error: teamsResult.value.error };
+  } else {
+    results.teams = { success: false, error: teamsResult.reason?.message || 'Unknown error' };
+  }
+
   // Log dispatch results for production debugging
   console.log(`[Notification] Dispatch results for "${event.type}":`, {
     telegram: results.telegram.success ? 'OK' : `FAIL: ${results.telegram.error}`,
@@ -162,6 +175,7 @@ export async function dispatchNotification(
     admin: results.admin.success ? 'OK' : `FAIL: ${results.admin.error}`,
     whatsapp: results.whatsapp.success ? 'OK' : `FAIL: ${results.whatsapp.error}`,
     userNotification: results.userNotification.success ? 'OK' : `FAIL: ${results.userNotification.error}`,
+    teams: results.teams.success ? 'OK' : `FAIL: ${results.teams.error}`,
   });
 
   return results;
@@ -874,8 +888,8 @@ export async function notifyApplicationApproved(
   },
   client?: TypedSupabaseClient
 ): Promise<void> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
-  const paymentLink = `${appUrl}/payment/${data.leadProfileId}`;
+  const marketingUrl = process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com';
+  const paymentLink = `${marketingUrl}/pay?app=${data.applicationNumber}`;
 
   // 1. Dispatch to all channels (Telegram, admin bell, WhatsApp, user in-app)
   await dispatchNotification(
