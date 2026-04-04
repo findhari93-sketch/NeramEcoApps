@@ -22,6 +22,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import DrillManagerTable from '@/components/course-plan/DrillManagerTable';
 import ResourceList from '@/components/course-plan/ResourceList';
@@ -274,9 +275,9 @@ export default function CoursePlanDashboard() {
         </Typography>
       )}
 
-      {/* Activate button for drafts */}
-      {plan.status === 'draft' && (
-        <Box sx={{ ml: 6.5, mb: 2 }}>
+      {/* Action buttons */}
+      <Box sx={{ ml: 6.5, mb: 2, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+        {plan.status === 'draft' && (
           <Button
             variant="contained"
             color="success"
@@ -286,8 +287,16 @@ export default function CoursePlanDashboard() {
           >
             Activate Plan
           </Button>
-        </Box>
-      )}
+        )}
+        <Button
+          variant="outlined"
+          startIcon={<UploadFileOutlinedIcon />}
+          onClick={() => router.push(`/teacher/course-plans/${planId}/csv-upload`)}
+          sx={{ textTransform: 'none', minHeight: 48 }}
+        >
+          Import CSV
+        </Button>
+      </Box>
 
       {/* Tabs */}
       <Tabs
