@@ -90,6 +90,9 @@ export {
   notifyClassroomAccessRequested,
 } from './services/notifications';
 
+// Services - Teams Webhook
+export { sendTeamsWebhook } from './services/teams-webhook';
+
 // Utils
 export { rewriteStorageUrl } from './utils/storage-url';
 
