@@ -1769,6 +1769,10 @@ export interface Payment extends Timestamps {
   failure_reason: string | null;
 
   paid_at: string | null;
+
+  // Payer info (who actually paid — may differ from student)
+  payer_name: string | null;
+  payer_relationship: 'self' | 'parent' | 'guardian' | 'sibling' | 'other' | null;
 }
 
 // ============================================
@@ -6760,7 +6764,7 @@ export * from './expenses';
 
 export type DrawingCategory = '2d_composition' | '3d_composition' | 'kit_sculpture';
 export type DrawingDifficulty = 'easy' | 'medium' | 'hard';
-export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'reviewed' | 'published';
+export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'redo' | 'completed' | 'reviewed' | 'published';
 export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice';
 
 export interface TutorResource {
@@ -6802,6 +6806,8 @@ export interface DrawingSubmission {
   tutor_feedback: string | null;
   tutor_resources: TutorResource[];
   status: DrawingSubmissionStatus;
+  thread_id: string;
+  attempt_number: number;
   is_gallery_published: boolean;
   submitted_at: string;
   reviewed_at: string | null;
@@ -6814,4 +6820,44 @@ export interface DrawingSubmissionWithQuestion extends DrawingSubmission {
 export interface DrawingSubmissionWithDetails extends DrawingSubmission {
   question: DrawingQuestion | null;
   student: { id: string; name: string; email: string; avatar_url: string | null };
+}
+
+// Thread & Comments
+export type DrawingThreadStatus = 'active' | 'redo' | 'completed';
+
+export interface DrawingThreadStatusRecord {
+  id: string;
+  student_id: string;
+  question_id: string;
+  thread_id: string;
+  status: DrawingThreadStatus;
+  total_attempts: number;
+  latest_submission_id: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DrawingSubmissionComment {
+  id: string;
+  submission_id: string;
+  author_id: string;
+  author_role: 'student' | 'teacher';
+  comment_text: string;
+  created_at: string;
+}
+
+export interface DrawingSubmissionCommentWithAuthor extends DrawingSubmissionComment {
+  author: { id: string; name: string; avatar_url: string | null };
+}
+
+export interface DrawingThreadAttempt extends DrawingSubmissionWithDetails {
+  attempt_number: number;
+  comments: DrawingSubmissionCommentWithAuthor[];
+}
+
+export interface DrawingThreadView {
+  thread_status: DrawingThreadStatusRecord;
+  question: DrawingQuestion;
+  attempts: DrawingThreadAttempt[];
 }

@@ -12,6 +12,7 @@ import type { DrawingSubmissionWithDetails } from '@neram/database/types';
 const STATUS_TABS = [
   { value: 'submitted', label: 'Pending' },
   { value: 'reviewed', label: 'Reviewed' },
+  { value: 'completed', label: 'Completed' },
 ];
 
 export default function DrawingReviewsPage() {
@@ -60,7 +61,7 @@ export default function DrawingReviewsPage() {
       ) : submissions.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography color="text.secondary">
-            {status === 'submitted' ? 'No pending reviews' : 'No reviewed submissions'}
+            {status === 'submitted' ? 'No pending reviews' : status === 'completed' ? 'No completed threads' : 'No reviewed submissions'}
           </Typography>
         </Box>
       ) : (
@@ -89,8 +90,16 @@ export default function DrawingReviewsPage() {
                     </Avatar>
                     <Typography variant="body2" fontWeight={600}>{s.student?.name || 'Student'}</Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                  <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5, flexWrap: 'wrap' }}>
                     {s.question && <CategoryBadge category={s.question.category} />}
+                    {(s as any).thread_info?.total_attempts > 1 && (
+                      <Chip
+                        label={`Attempt #${(s as any).attempt_number || (s as any).thread_info?.total_attempts}`}
+                        size="small"
+                        variant="outlined"
+                        sx={{ height: 20, fontSize: '0.65rem' }}
+                      />
+                    )}
                     {s.tutor_rating && (
                       <Chip label={`${'★'.repeat(s.tutor_rating)}`} size="small" color="success" />
                     )}

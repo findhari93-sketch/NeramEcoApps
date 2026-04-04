@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { saveDrawingReview, recordGamificationEvent } from '@neram/database/queries/nexus';
+import { saveDrawingReviewWithAction, recordGamificationEvent } from '@neram/database/queries/nexus';
 
 export async function PATCH(
   request: NextRequest,
@@ -23,44 +23,47 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { tutor_rating, tutor_feedback, reviewed_image_url, tutor_resources } = body;
+    const { tutor_rating, tutor_feedback, reviewed_image_url, tutor_resources, action } = body;
+    const reviewAction = action || 'complete'; // backward compat
 
-    if (!tutor_rating || tutor_rating < 1 || tutor_rating > 5) {
-      return NextResponse.json({ error: 'Rating must be between 1 and 5' }, { status: 400 });
+    if (reviewAction === 'complete' && (!tutor_rating || tutor_rating < 1 || tutor_rating > 5)) {
+      return NextResponse.json({ error: 'Rating required to complete' }, { status: 400 });
     }
 
-    const submission = await saveDrawingReview(id, {
-      tutor_rating,
+    const submission = await saveDrawingReviewWithAction(id, {
+      tutor_rating: tutor_rating || null,
       tutor_feedback,
       reviewed_image_url,
       tutor_resources,
-    });
+    }, reviewAction);
 
-    // Record gamification for student (non-critical)
-    try {
-      const { data: enrollment } = await supabase
-        .from('nexus_enrollments')
-        .select('classroom_id, batch_id')
-        .eq('user_id', submission.student_id)
-        .eq('role', 'student')
-        .limit(1)
-        .single();
+    // Gamification: 10 points for completed (non-critical)
+    if (reviewAction === 'complete') {
+      try {
+        const { data: enrollment } = await supabase
+          .from('nexus_enrollments')
+          .select('classroom_id, batch_id')
+          .eq('user_id', submission.student_id)
+          .eq('role', 'student')
+          .limit(1)
+          .single();
 
-      if (enrollment) {
-        recordGamificationEvent({
-          student_id: submission.student_id,
-          classroom_id: (enrollment as any).classroom_id,
-          batch_id: (enrollment as any).batch_id || null,
-          event_type: 'drawing_reviewed',
-          points: 3,
-          source_id: `review_${submission.id}`,
-          activity_type: 'drawing_reviewed',
-          activity_title: 'Drawing reviewed by tutor',
-          metadata: { submission_id: submission.id, rating: tutor_rating },
-        }).catch(() => {});
+        if (enrollment) {
+          recordGamificationEvent({
+            student_id: submission.student_id,
+            classroom_id: (enrollment as any).classroom_id,
+            batch_id: (enrollment as any).batch_id || null,
+            event_type: 'drawing_completed',
+            points: 10,
+            source_id: `review_${submission.id}`,
+            activity_type: 'drawing_completed',
+            activity_title: 'Drawing reviewed and completed by tutor',
+            metadata: { submission_id: submission.id, rating: tutor_rating },
+          }).catch(() => {});
+        }
+      } catch {
+        // Non-critical
       }
-    } catch {
-      // Non-critical
     }
 
     return NextResponse.json({ submission });

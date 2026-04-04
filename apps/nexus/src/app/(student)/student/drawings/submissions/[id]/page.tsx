@@ -13,6 +13,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
+import CommentSection from '@/components/drawings/CommentSection';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
 
 export default function SubmissionDetailPage() {
@@ -147,14 +148,32 @@ export default function SubmissionDetailPage() {
           </Paper>
         </Box>
       )}
+
+      {/* Comments */}
+      <Box sx={{ mt: 2 }}>
+        <CommentSection
+          submissionId={submission.id}
+          getToken={getToken}
+          canComment={true}
+        />
+      </Box>
     </Box>
   ) : (
-    <Box sx={{ p: 3, textAlign: 'center' }}>
-      <Typography variant="body2" color="text.secondary">
-        {submission.status === 'submitted'
-          ? 'Your drawing is pending review by your tutor.'
-          : 'No feedback yet.'}
-      </Typography>
+    <Box sx={{ p: 2 }}>
+      <Box sx={{ textAlign: 'center', py: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          {submission.status === 'submitted'
+            ? 'Your drawing is pending review by your tutor.'
+            : submission.status === 'redo'
+            ? 'Your teacher requested improvements. Submit a new attempt from the question page.'
+            : 'No feedback yet.'}
+        </Typography>
+      </Box>
+      <CommentSection
+        submissionId={submission.id}
+        getToken={getToken}
+        canComment={true}
+      />
     </Box>
   );
 
@@ -189,7 +208,7 @@ export default function SubmissionDetailPage() {
                 <Chip
                   label={submission.status}
                   size="small"
-                  color={hasReview ? 'success' : 'warning'}
+                  color={hasReview ? 'success' : submission.status === 'redo' ? 'warning' : 'default'}
                   sx={{ height: 20, fontSize: '0.65rem', ml: 0.5 }}
                 />
               </Box>
@@ -226,9 +245,14 @@ export default function SubmissionDetailPage() {
                 {submission.tutor_rating ? ` (${submission.tutor_rating}★)` : ''}
               </Button>
             ) : (
-              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="body2" color="text.secondary">Pending review</Typography>
-              </Box>
+              <Button
+                variant="outlined" fullWidth
+                startIcon={<ChatBubbleOutlineIcon />}
+                onClick={() => setFeedbackSheetOpen(true)}
+                sx={{ textTransform: 'none', minHeight: 44 }}
+              >
+                Comments
+              </Button>
             )}
           </Box>
         </Box>
@@ -282,7 +306,7 @@ export default function SubmissionDetailPage() {
           <Chip
             label={submission.status}
             size="small"
-            color={hasReview ? 'success' : 'warning'}
+            color={hasReview ? 'success' : submission.status === 'redo' ? 'warning' : 'default'}
           />
         </Box>
 

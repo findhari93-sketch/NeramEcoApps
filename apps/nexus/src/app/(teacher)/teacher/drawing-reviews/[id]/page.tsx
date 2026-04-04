@@ -16,6 +16,9 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import SketchOverCanvas from '@/components/drawings/SketchOverCanvas';
 import ResourceLinkSearch from '@/components/drawings/ResourceLinkSearch';
+import CommentSection from '@/components/drawings/CommentSection';
+import ReplayIcon from '@mui/icons-material/Replay';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
 
 export default function DrawingReviewDetailPage() {
@@ -37,6 +40,7 @@ export default function DrawingReviewDetailPage() {
   const [resources, setResources] = useState<TutorResource[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [action, setAction] = useState<'redo' | 'complete'>('complete');
   // Mobile: bottom sheet for review controls
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
 
@@ -81,8 +85,8 @@ export default function DrawingReviewDetailPage() {
     // Canvas auto-closes after showing "Saved!" for 800ms
   };
 
-  const handleSaveReview = async () => {
-    if (rating < 1) { setError('Please provide a rating'); return; }
+  const handleSaveReviewWithAction = async (reviewAction: 'redo' | 'complete') => {
+    if (reviewAction === 'complete' && rating < 1) { setError('Rating required to mark as complete'); return; }
     setSaving(true);
     setError('');
     try {
@@ -91,10 +95,11 @@ export default function DrawingReviewDetailPage() {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tutor_rating: rating,
+          tutor_rating: rating || null,
           tutor_feedback: feedback || null,
           reviewed_image_url: reviewedImageUrl,
           tutor_resources: resources,
+          action: reviewAction,
         }),
       });
       if (!res.ok) throw new Error('Failed to save review');
@@ -190,18 +195,49 @@ export default function DrawingReviewDetailPage() {
 
         {/* Resource links */}
         <ResourceLinkSearch resources={resources} onChange={setResources} getToken={getToken} />
+
+        {/* Comments */}
+        <Box sx={{ mt: 1 }}>
+          <CommentSection
+            submissionId={submission!.id}
+            getToken={getToken}
+            canComment={true}
+          />
+        </Box>
       </Box>
 
-      {/* Save — pinned to bottom */}
+      {/* Action buttons — pinned to bottom */}
       <Box sx={{ p: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
         {error && <Typography color="error" variant="caption" sx={{ mb: 0.5, display: 'block' }}>{error}</Typography>}
-        <Button
-          variant="contained" fullWidth onClick={handleSaveReview}
-          disabled={saving || rating < 1}
-          sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
-        >
-          {saving ? 'Saving...' : 'Save Review'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            color="warning"
+            fullWidth
+            onClick={() => { setAction('redo'); handleSaveReviewWithAction('redo'); }}
+            disabled={saving}
+            startIcon={<ReplayIcon />}
+            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+          >
+            {saving && action === 'redo' ? 'Saving...' : 'Request Redo'}
+          </Button>
+          <Button
+            variant="contained"
+            color="success"
+            fullWidth
+            onClick={() => { setAction('complete'); handleSaveReviewWithAction('complete'); }}
+            disabled={saving || rating < 1}
+            startIcon={<CheckCircleOutlineIcon />}
+            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+          >
+            {saving && action === 'complete' ? 'Saving...' : 'Complete'}
+          </Button>
+        </Box>
+        {rating < 1 && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+            Rating required to mark complete
+          </Typography>
+        )}
       </Box>
     </Box>
   );
