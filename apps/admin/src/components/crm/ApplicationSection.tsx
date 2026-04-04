@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Alert,
   Box,
   Button,
@@ -18,6 +21,7 @@ import {
   LinearProgress,
   MenuItem,
   Paper,
+  Stack,
   Switch,
   TextField,
   Typography,
@@ -25,6 +29,7 @@ import {
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ClassIcon from '@mui/icons-material/Class';
 import SourceIcon from '@mui/icons-material/Source';
@@ -570,6 +575,166 @@ export default function ApplicationSection({
                 </Box>
               )}
             </Box>
+          </>
+        )}
+
+        {/* Payment Details Accordion */}
+        {['enrolled', 'partial_payment'].includes(effectiveStatus) && detail.payments.length > 0 && (
+          <>
+            <Divider sx={{ my: 1.5 }} />
+            <Accordion
+              disableGutters
+              elevation={0}
+              sx={{
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: '6px !important',
+                '&:before': { display: 'none' },
+                bgcolor: 'transparent',
+              }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon sx={{ fontSize: 18 }} />}
+                sx={{
+                  minHeight: 40,
+                  px: 1.5,
+                  '& .MuiAccordionSummary-content': { my: 0.75, alignItems: 'center', gap: 1 },
+                }}
+              >
+                <ReceiptLongIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 12.5 }}>
+                  Payment Details
+                </Typography>
+                <Chip
+                  label={`${detail.payments.filter(p => p.status === 'paid').length} of ${detail.payments.length} paid`}
+                  size="small"
+                  sx={{ height: 20, fontSize: 10, fontWeight: 600, borderRadius: 1, ml: 'auto', mr: 1, bgcolor: '#E8F5E9', color: '#2E7D32' }}
+                />
+              </AccordionSummary>
+              <AccordionDetails sx={{ px: 1.5, pt: 0, pb: 1.5 }}>
+                <Stack spacing={1.5}>
+                  {detail.payments.map((payment, idx) => (
+                    <Paper
+                      key={payment.id}
+                      variant="outlined"
+                      sx={{ p: 1.5, borderRadius: 1, bgcolor: payment.status === 'paid' ? '#FAFFFE' : '#FFFAF5' }}
+                    >
+                      {/* Row 1: Receipt + Amount + Status */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>
+                          {payment.receipt_number || `#${idx + 1}`}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13 }}>
+                            {formatCurrency(Number(payment.amount))}
+                          </Typography>
+                          <Chip
+                            label={payment.status === 'paid' ? 'Paid' : payment.status.replace(/_/g, ' ')}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              borderRadius: 1,
+                              textTransform: 'capitalize',
+                              bgcolor: payment.status === 'paid' ? '#E8F5E9' : '#FFF3E0',
+                              color: payment.status === 'paid' ? '#2E7D32' : '#E65100',
+                              border: '1px solid',
+                              borderColor: payment.status === 'paid' ? '#C8E6C9' : '#FFE0B2',
+                            }}
+                          />
+                        </Box>
+                      </Box>
+
+                      {/* Razorpay Payment ID */}
+                      {payment.razorpay_payment_id && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Razorpay ID</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 10.5, color: 'text.secondary' }}>
+                            {payment.razorpay_payment_id}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Payment Method */}
+                      {payment.razorpay_method && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Method</Typography>
+                          <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>
+                            {payment.razorpay_method}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* UPI ID */}
+                      {payment.razorpay_vpa && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>UPI ID</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11 }}>
+                            {payment.razorpay_vpa}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Card Info */}
+                      {payment.razorpay_card_last4 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Card</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11 }}>
+                            ****{payment.razorpay_card_last4}
+                            {payment.razorpay_card_network ? ` (${payment.razorpay_card_network})` : ''}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Payer Info */}
+                      {payment.payer_name && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Payer</Typography>
+                          <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 600 }}>
+                            {payment.payer_name}
+                            {payment.payer_relationship ? ` (${payment.payer_relationship})` : ''}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Razorpay Fee + Tax */}
+                      {(payment.razorpay_fee != null && payment.razorpay_fee > 0) && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                            Razorpay Fee{payment.razorpay_tax ? ' + Tax' : ''}
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
+                            {formatCurrency(payment.razorpay_fee / 100)}
+                            {payment.razorpay_tax ? ` + ${formatCurrency(payment.razorpay_tax / 100)}` : ''}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Paid At */}
+                      {payment.paid_at && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Paid At</Typography>
+                          <Typography variant="caption" sx={{ fontSize: 11 }}>
+                            {formatTimestamp(payment.paid_at)}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Payment Scheme */}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Scheme</Typography>
+                        <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 600 }}>
+                          {payment.installment_number
+                            ? `Installment #${payment.installment_number}`
+                            : 'Full Payment'}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  ))}
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
           </>
         )}
 
