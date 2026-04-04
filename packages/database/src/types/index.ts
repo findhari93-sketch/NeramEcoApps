@@ -4869,105 +4869,6 @@ export interface NexusChecklistForStudent extends NexusChecklist {
 }
 
 // ============================================
-// NEXUS DRAWING LEARNING PATH TYPES
-// ============================================
-
-export type NexusDrawingSubmissionStatus = 'pending' | 'approved' | 'redo' | 'graded';
-export type NexusDrawingAssignmentSubmissionStatus = 'pending' | 'submitted' | 'not_submitted' | 'excused';
-
-export interface NexusDrawingLevel {
-  id: string;
-  classroom_id: string;
-  title: string;
-  description: string | null;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface NexusDrawingCategory {
-  id: string;
-  level_id: string;
-  title: string;
-  description: string | null;
-  sort_order: number;
-  created_at: string;
-}
-
-export interface NexusDrawingExercise {
-  id: string;
-  category_id: string;
-  title: string;
-  description: string | null;
-  instructions: string | null;
-  dos_and_donts: string | null;
-  reference_images: Array<{ url: string; caption?: string }>;
-  demo_video_url: string | null;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface NexusDrawingSubmission {
-  id: string;
-  exercise_id: string;
-  student_id: string;
-  submission_url: string;
-  correction_url: string | null;
-  status: NexusDrawingSubmissionStatus;
-  grade: string | null;
-  teacher_notes: string | null;
-  evaluated_by: string | null;
-  evaluated_at: string | null;
-  attempt_number: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface NexusDrawingAssignment {
-  id: string;
-  scheduled_class_id: string | null;
-  classroom_id: string;
-  exercise_id: string;
-  assigned_by: string | null;
-  assigned_at: string;
-  due_date: string | null;
-}
-
-export interface NexusDrawingAssignmentSubmission {
-  id: string;
-  assignment_id: string;
-  student_id: string;
-  submission_id: string | null;
-  status: NexusDrawingAssignmentSubmissionStatus;
-  submitted_at: string | null;
-  non_submission_reason: string | null;
-}
-
-// Drawing joined types
-export interface NexusDrawingCategoryWithExercises extends NexusDrawingCategory {
-  exercises: NexusDrawingExercise[];
-}
-
-export interface NexusDrawingLevelWithCategories extends NexusDrawingLevel {
-  categories: NexusDrawingCategoryWithExercises[];
-}
-
-export interface NexusDrawingExerciseWithSubmission extends NexusDrawingExercise {
-  submissions: NexusDrawingSubmission[];
-  latest_submission: NexusDrawingSubmission | null;
-}
-
-export interface NexusDrawingSubmissionWithDetails extends NexusDrawingSubmission {
-  exercise: NexusDrawingExercise;
-  student: Pick<User, 'id' | 'name' | 'email' | 'avatar_url'>;
-}
-
-export interface NexusDrawingAssignmentWithExercise extends NexusDrawingAssignment {
-  exercise: NexusDrawingExercise;
-}
-
-// ============================================
 // NEXUS FOUNDATION MODULE TYPES
 // ============================================
 
@@ -6852,3 +6753,65 @@ export interface AutoFirstTouchSettings {
 }
 
 export * from './expenses';
+
+// ============================================================
+// Drawing Module V2
+// ============================================================
+
+export type DrawingCategory = '2d_composition' | '3d_composition' | 'kit_sculpture';
+export type DrawingDifficulty = 'easy' | 'medium' | 'hard';
+export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'reviewed' | 'published';
+export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice';
+
+export interface TutorResource {
+  type: 'nexus_video' | 'youtube';
+  url: string;
+  title: string;
+}
+
+export interface DrawingQuestion {
+  id: string;
+  year: number;
+  session_date: string | null;
+  source_student: string | null;
+  category: DrawingCategory;
+  sub_type: string;
+  question_text: string;
+  objects: string[];
+  color_constraint: string | null;
+  design_principle: string | null;
+  difficulty_tag: DrawingDifficulty;
+  reference_images: Array<{ level: number; url: string; alt_text?: string }>;
+  solution_images: Array<{ url: string; caption?: string }> | null;
+  tags: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DrawingSubmission {
+  id: string;
+  student_id: string;
+  question_id: string | null;
+  source_type: DrawingSubmissionSource;
+  original_image_url: string;
+  reviewed_image_url: string | null;
+  self_note: string | null;
+  ai_feedback: { score: string; feedback: string[] } | null;
+  tutor_rating: number | null;
+  tutor_feedback: string | null;
+  tutor_resources: TutorResource[];
+  status: DrawingSubmissionStatus;
+  is_gallery_published: boolean;
+  submitted_at: string;
+  reviewed_at: string | null;
+}
+
+export interface DrawingSubmissionWithQuestion extends DrawingSubmission {
+  question: DrawingQuestion | null;
+}
+
+export interface DrawingSubmissionWithDetails extends DrawingSubmission {
+  question: DrawingQuestion | null;
+  student: { id: string; name: string; email: string; avatar_url: string | null };
+}

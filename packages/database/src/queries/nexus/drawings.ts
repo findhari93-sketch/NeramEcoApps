@@ -1,456 +1,253 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import type {
+  DrawingQuestion,
+  DrawingSubmission,
+  DrawingSubmissionWithQuestion,
+  DrawingSubmissionWithDetails,
+} from '../../types';
 
-// ============================================
-// DRAWING LEVELS
-// ============================================
+// ============================================================
+// Drawing Questions
+// ============================================================
 
-export async function getDrawingLevels(
-  classroomId: string,
+export async function getDrawingQuestions(
+  filters?: {
+    category?: string;
+    sub_type?: string;
+    difficulty_tag?: string;
+    year?: number;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  },
   client?: TypedSupabaseClient
-) {
+): Promise<{ data: DrawingQuestion[]; count: number }> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_levels')
-    .select('*')
-    .eq('classroom_id', classroomId)
+
+  let query = supabase
+    .from('drawing_questions')
+    .select('*', { count: 'exact' })
     .eq('is_active', true)
-    .order('sort_order', { ascending: true });
+    .order('year', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (filters?.category) query = query.eq('category', filters.category);
+  if (filters?.sub_type) query = query.eq('sub_type', filters.sub_type);
+  if (filters?.difficulty_tag) query = query.eq('difficulty_tag', filters.difficulty_tag);
+  if (filters?.year) query = query.eq('year', filters.year);
+  if (filters?.search) query = query.ilike('question_text', `%${filters.search}%`);
+
+  const limit = filters?.limit || 20;
+  const offset = filters?.offset || 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
   if (error) throw error;
-  return data || [];
+  return { data: (data as DrawingQuestion[]) || [], count: count || 0 };
 }
 
-export async function createDrawingLevel(
-  data: { classroom_id: string; title: string; description?: string; sort_order?: number },
+export async function getDrawingQuestionById(
+  id: string,
   client?: TypedSupabaseClient
-) {
+): Promise<DrawingQuestion | null> {
   const supabase = client || getSupabaseAdminClient();
-  const { data: level, error } = await supabase
-    .from('nexus_drawing_levels')
-    .insert(data)
-    .select()
-    .single();
-  if (error) throw error;
-  return level;
-}
 
-export async function updateDrawingLevel(
-  levelId: string,
-  updates: { title?: string; description?: string; sort_order?: number; is_active?: boolean },
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
-    .from('nexus_drawing_levels')
-    .update(updates)
-    .eq('id', levelId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-// ============================================
-// DRAWING CATEGORIES
-// ============================================
-
-export async function getDrawingCategories(
-  levelId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_categories')
+    .from('drawing_questions')
     .select('*')
-    .eq('level_id', levelId)
-    .order('sort_order', { ascending: true });
-  if (error) throw error;
-  return data || [];
-}
-
-export async function createDrawingCategory(
-  data: { level_id: string; title: string; description?: string; sort_order?: number },
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data: category, error } = await supabase
-    .from('nexus_drawing_categories')
-    .insert(data)
-    .select()
+    .eq('id', id)
     .single();
-  if (error) throw error;
-  return category;
-}
 
-// ============================================
-// DRAWING EXERCISES
-// ============================================
-
-export async function getDrawingExercises(
-  categoryId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_exercises')
-    .select('*')
-    .eq('category_id', categoryId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
-  if (error) throw error;
-  return data || [];
-}
-
-export async function getDrawingExerciseById(
-  exerciseId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_exercises')
-    .select('*, category:nexus_drawing_categories(*, level:nexus_drawing_levels(*))')
-    .eq('id', exerciseId)
-    .single();
   if (error) {
     if (error.code === 'PGRST116') return null;
     throw error;
   }
-  return data;
+  return data as DrawingQuestion;
 }
 
-export async function createDrawingExercise(
-  data: {
-    category_id: string;
-    title: string;
-    description?: string;
-    instructions?: string;
-    dos_and_donts?: string;
-    reference_images?: any[];
-    demo_video_url?: string;
-    sort_order?: number;
-  },
+export async function seedDrawingQuestions(
+  questions: Omit<DrawingQuestion, 'id' | 'created_at' | 'updated_at' | 'is_active' | 'reference_images' | 'solution_images'>[],
   client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data: exercise, error } = await supabase
-    .from('nexus_drawing_exercises')
-    .insert({
-      ...data,
-      reference_images: data.reference_images || [],
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return exercise;
-}
-
-export async function updateDrawingExercise(
-  exerciseId: string,
-  updates: {
-    title?: string;
-    description?: string;
-    instructions?: string;
-    dos_and_donts?: string;
-    reference_images?: any[];
-    demo_video_url?: string;
-    sort_order?: number;
-    is_active?: boolean;
-  },
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_exercises')
-    .update(updates)
-    .eq('id', exerciseId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-// ============================================
-// FULL DRAWING LEARNING PATH (nested)
-// ============================================
-
-export async function getDrawingLearningPath(
-  classroomId: string,
-  studentId?: string,
-  client?: TypedSupabaseClient
-) {
+): Promise<number> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Get levels → categories → exercises in one query
-  const { data: levels, error } = await supabase
-    .from('nexus_drawing_levels')
-    .select(`
-      *,
-      categories:nexus_drawing_categories(
-        *,
-        exercises:nexus_drawing_exercises(*)
-      )
-    `)
-    .eq('classroom_id', classroomId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
-
-  if (error) throw error;
-
-  // Sort nested arrays
-  const sortedLevels = (levels || []).map((level: any) => ({
-    ...level,
-    categories: (level.categories || [])
-      .sort((a: any, b: any) => a.sort_order - b.sort_order)
-      .map((cat: any) => ({
-        ...cat,
-        exercises: (cat.exercises || [])
-          .filter((ex: any) => ex.is_active)
-          .sort((a: any, b: any) => a.sort_order - b.sort_order),
-      })),
+  const rows = questions.map((q) => ({
+    year: q.year,
+    session_date: q.session_date || null,
+    source_student: q.source_student || null,
+    category: q.category,
+    sub_type: q.sub_type,
+    question_text: q.question_text,
+    objects: q.objects || [],
+    color_constraint: q.color_constraint || null,
+    design_principle: q.design_principle || null,
+    difficulty_tag: q.difficulty_tag || 'medium',
+    tags: q.tags || [],
+    reference_images: [],
+    solution_images: null,
+    is_active: true,
   }));
 
-  // If student, fetch their submissions to determine progress
-  if (studentId) {
-    const exerciseIds = sortedLevels.flatMap((l: any) =>
-      l.categories.flatMap((c: any) => c.exercises.map((e: any) => e.id))
-    );
+  const { data, error } = await supabase
+    .from('drawing_questions')
+    .insert(rows)
+    .select('id');
 
-    if (exerciseIds.length > 0) {
-      const { data: submissions } = await supabase
-        .from('nexus_drawing_submissions')
-        .select('*')
-        .eq('student_id', studentId)
-        .in('exercise_id', exerciseIds)
-        .order('attempt_number', { ascending: false });
-
-      // Group submissions by exercise_id
-      const submissionMap = new Map<string, any[]>();
-      for (const sub of submissions || []) {
-        const list = submissionMap.get(sub.exercise_id) || [];
-        list.push(sub);
-        submissionMap.set(sub.exercise_id, list);
-      }
-
-      // Attach submissions to exercises and compute unlock status
-      let previousCategoryApproved = true; // first category is always unlocked
-      for (const level of sortedLevels) {
-        for (const cat of level.categories) {
-          let allApproved = true;
-          for (const exercise of cat.exercises) {
-            const subs = submissionMap.get(exercise.id) || [];
-            exercise.submissions = subs;
-            exercise.latest_submission = subs[0] || null;
-            exercise.is_unlocked = previousCategoryApproved;
-            if (!subs.some((s: any) => s.status === 'approved')) {
-              allApproved = false;
-            }
-          }
-          cat.is_unlocked = previousCategoryApproved;
-          previousCategoryApproved = allApproved && cat.exercises.length > 0;
-        }
-      }
-    }
-  }
-
-  return sortedLevels;
+  if (error) throw error;
+  return data?.length || 0;
 }
 
-// ============================================
-// DRAWING SUBMISSIONS
-// ============================================
+// ============================================================
+// Drawing Submissions — Student
+// ============================================================
 
 export async function createDrawingSubmission(
   data: {
-    exercise_id: string;
     student_id: string;
-    submission_url: string;
-    attempt_number?: number;
+    question_id?: string | null;
+    source_type: string;
+    original_image_url: string;
+    self_note?: string | null;
   },
   client?: TypedSupabaseClient
-) {
+): Promise<DrawingSubmission> {
   const supabase = client || getSupabaseAdminClient();
-
-  // Get the latest attempt number
-  if (!data.attempt_number) {
-    const { data: existing } = await supabase
-      .from('nexus_drawing_submissions')
-      .select('attempt_number')
-      .eq('exercise_id', data.exercise_id)
-      .eq('student_id', data.student_id)
-      .order('attempt_number', { ascending: false })
-      .limit(1);
-    data.attempt_number = ((existing?.[0]?.attempt_number) || 0) + 1;
-  }
 
   const { data: submission, error } = await supabase
-    .from('nexus_drawing_submissions')
+    .from('drawing_submissions')
     .insert({
-      exercise_id: data.exercise_id,
       student_id: data.student_id,
-      submission_url: data.submission_url,
-      attempt_number: data.attempt_number,
-      status: 'pending',
+      question_id: data.question_id || null,
+      source_type: data.source_type,
+      original_image_url: data.original_image_url,
+      self_note: data.self_note || null,
+      status: 'submitted',
     })
-    .select()
-    .single();
-  if (error) throw error;
-  return submission;
-}
-
-export async function getStudentSubmissions(
-  studentId: string,
-  exerciseId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_submissions')
     .select('*')
-    .eq('student_id', studentId)
-    .eq('exercise_id', exerciseId)
-    .order('attempt_number', { ascending: false });
-  if (error) throw error;
-  return data || [];
-}
-
-export async function getPendingSubmissions(
-  classroomId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_submissions')
-    .select(`
-      *,
-      exercise:nexus_drawing_exercises(
-        id, title,
-        category:nexus_drawing_categories(
-          id, title,
-          level:nexus_drawing_levels(id, title, classroom_id)
-        )
-      ),
-      student:users(id, name, email, avatar_url)
-    `)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
-
-  if (error) throw error;
-
-  // Filter by classroom
-  return (data || []).filter(
-    (s: any) => s.exercise?.category?.level?.classroom_id === classroomId
-  );
-}
-
-export async function evaluateSubmission(
-  submissionId: string,
-  evaluation: {
-    status: 'approved' | 'redo' | 'graded';
-    grade?: string;
-    teacher_notes?: string;
-    correction_url?: string;
-    evaluated_by: string;
-  },
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_submissions')
-    .update({
-      status: evaluation.status,
-      grade: evaluation.grade || null,
-      teacher_notes: evaluation.teacher_notes || null,
-      correction_url: evaluation.correction_url || null,
-      evaluated_by: evaluation.evaluated_by,
-      evaluated_at: new Date().toISOString(),
-    })
-    .eq('id', submissionId)
-    .select()
     .single();
+
   if (error) throw error;
-  return data;
+  return submission as DrawingSubmission;
 }
 
-// ============================================
-// DRAWING ASSIGNMENTS
-// ============================================
-
-export async function createDrawingAssignment(
-  data: {
-    classroom_id: string;
-    exercise_id: string;
-    assigned_by: string;
-    scheduled_class_id?: string;
-    due_date?: string;
-  },
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data: assignment, error } = await supabase
-    .from('nexus_drawing_assignments')
-    .insert(data)
-    .select('*, exercise:nexus_drawing_exercises(id, title)')
-    .single();
-  if (error) throw error;
-  return assignment;
-}
-
-export async function getDrawingAssignments(
-  classroomId: string,
-  client?: TypedSupabaseClient
-) {
-  const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('nexus_drawing_assignments')
-    .select('*, exercise:nexus_drawing_exercises(id, title, description)')
-    .eq('classroom_id', classroomId)
-    .order('assigned_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
-}
-
-// ============================================
-// DRAWING PROGRESS SUMMARY
-// ============================================
-
-export async function getDrawingProgressSummary(
+export async function getStudentDrawingSubmissions(
   studentId: string,
-  classroomId: string,
+  filters?: {
+    status?: string;
+    question_id?: string;
+    limit?: number;
+    offset?: number;
+  },
   client?: TypedSupabaseClient
-) {
+): Promise<DrawingSubmissionWithQuestion[]> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Get total exercises for classroom
-  const { data: exercises } = await supabase
-    .from('nexus_drawing_exercises')
-    .select('id, category:nexus_drawing_categories(level:nexus_drawing_levels(classroom_id))')
-    .eq('is_active', true);
+  let query = supabase
+    .from('drawing_submissions')
+    .select('*, question:drawing_questions(*)')
+    .eq('student_id', studentId)
+    .order('submitted_at', { ascending: false });
 
-  const classroomExercises = (exercises || []).filter(
-    (e: any) => e.category?.level?.classroom_id === classroomId
-  );
+  if (filters?.status) query = query.eq('status', filters.status);
+  if (filters?.question_id) query = query.eq('question_id', filters.question_id);
 
-  // Get student's approved submissions
-  const exerciseIds = classroomExercises.map((e) => e.id);
-  let approvedCount = 0;
+  const limit = filters?.limit || 50;
+  const offset = filters?.offset || 0;
+  query = query.range(offset, offset + limit - 1);
 
-  if (exerciseIds.length > 0) {
-    const { data: submissions } = await supabase
-      .from('nexus_drawing_submissions')
-      .select('exercise_id, status')
-      .eq('student_id', studentId)
-      .eq('status', 'approved')
-      .in('exercise_id', exerciseIds);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data as DrawingSubmissionWithQuestion[]) || [];
+}
 
-    // Count unique approved exercises
-    const approvedExerciseIds = new Set((submissions || []).map((s) => s.exercise_id));
-    approvedCount = approvedExerciseIds.size;
+export async function getDrawingSubmissionById(
+  id: string,
+  client?: TypedSupabaseClient
+): Promise<DrawingSubmissionWithDetails | null> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('drawing_submissions')
+    .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  return data as unknown as DrawingSubmissionWithDetails;
+}
+
+// ============================================================
+// Drawing Submissions — Teacher
+// ============================================================
+
+export async function getDrawingReviewQueue(
+  filters?: {
+    status?: string;
+    category?: string;
+    student_id?: string;
+    limit?: number;
+    offset?: number;
+  },
+  client?: TypedSupabaseClient
+): Promise<DrawingSubmissionWithDetails[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  let query = supabase
+    .from('drawing_submissions')
+    .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
+    .order('submitted_at', { ascending: true });
+
+  const status = filters?.status || 'submitted';
+  query = query.eq('status', status);
+
+  if (filters?.student_id) query = query.eq('student_id', filters.student_id);
+
+  const limit = filters?.limit || 50;
+  const offset = filters?.offset || 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  let results = (data as unknown as DrawingSubmissionWithDetails[]) || [];
+
+  // Filter by category if specified (requires joining through question)
+  if (filters?.category) {
+    results = results.filter((s) => s.question?.category === filters.category);
   }
 
-  return {
-    total: classroomExercises.length,
-    approved: approvedCount,
-    percentage: classroomExercises.length > 0
-      ? Math.round((approvedCount / classroomExercises.length) * 100)
-      : 0,
-  };
+  return results;
+}
+
+export async function saveDrawingReview(
+  submissionId: string,
+  review: {
+    tutor_rating: number;
+    tutor_feedback?: string | null;
+    reviewed_image_url?: string | null;
+    tutor_resources?: Array<{ type: string; url: string; title: string }>;
+  },
+  client?: TypedSupabaseClient
+): Promise<DrawingSubmission> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('drawing_submissions')
+    .update({
+      tutor_rating: review.tutor_rating,
+      tutor_feedback: review.tutor_feedback || null,
+      reviewed_image_url: review.reviewed_image_url || null,
+      tutor_resources: review.tutor_resources || [],
+      status: 'reviewed',
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', submissionId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as DrawingSubmission;
 }

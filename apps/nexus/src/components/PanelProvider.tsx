@@ -27,6 +27,7 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -61,7 +62,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
       { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
-      { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
+      { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
       { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
@@ -70,7 +71,7 @@ const PANELS: PanelConfig[] = [
     bottomNavItems: [
       { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
-      { label: 'Evaluate', path: '/teacher/evaluate', icon: <RateReviewOutlinedIcon /> },
+      { label: 'Drawings', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
     ],
     overflowItems: [
@@ -161,6 +162,7 @@ function detectPanelFromPath(pathname: string): PanelId | null {
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
   if (pathname.startsWith('/teacher/onboarding-reviews')) return 'teaching';
+  if (pathname.startsWith('/teacher/drawing-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/course-plans')) return 'teaching';
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
   // City-wise student pages
