@@ -42,6 +42,14 @@ export async function GET(request: NextRequest) {
         .eq('status', 'submitted');
 
       badges.onboarding = onboardingCount ?? 0;
+
+      // Count pending drawing reviews (submitted, not yet reviewed)
+      const { count: drawingCount } = await supabase
+        .from('drawing_submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'submitted');
+
+      badges.drawing_reviews = drawingCount ?? 0;
     } else {
       // Student: count their own open + in_progress issues
       const { count } = await supabase

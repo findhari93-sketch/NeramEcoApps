@@ -24,6 +24,7 @@ const PATH_TO_BADGE_KEY: Record<string, string> = {
   '/student/issues': 'issues',
   '/teacher/issues': 'issues',
   '/teacher/onboarding-reviews': 'onboarding',
+  '/teacher/drawing-reviews': 'drawing_reviews',
 };
 
 const POLL_INTERVAL = 60_000; // 60 seconds

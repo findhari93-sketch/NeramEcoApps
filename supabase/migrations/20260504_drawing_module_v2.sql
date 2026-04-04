@@ -104,8 +104,8 @@ CREATE POLICY "Service role full access submissions" ON drawing_submissions
 -- ============================================================
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES
-  ('drawing-uploads', 'drawing-uploads', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
-  ('drawing-reviewed', 'drawing-reviewed', false, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp']),
+  ('drawing-uploads', 'drawing-uploads', true, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/heic']),
+  ('drawing-reviewed', 'drawing-reviewed', true, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp']),
   ('drawing-references', 'drawing-references', true, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'])
 ON CONFLICT (id) DO NOTHING;
 
