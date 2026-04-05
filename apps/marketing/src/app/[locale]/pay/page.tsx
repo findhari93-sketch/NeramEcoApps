@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
@@ -37,7 +38,9 @@ export default function PayPage({
           { name: 'Pay', url: `${baseUrl}/pay` },
         ])}
       />
-      <PaymentPage />
+      <Suspense>
+        <PaymentPage />
+      </Suspense>
     </>
   );
 }

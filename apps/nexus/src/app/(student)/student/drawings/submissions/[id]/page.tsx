@@ -29,6 +29,23 @@ export default function SubmissionDetailPage() {
   const [showOriginal, setShowOriginal] = useState(true);
   const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/submissions/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setSubmission(data.submission || null);
+    } catch {
+      setSubmission(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [getToken, id]);
+
   const replaceFileRef = useCallback((node: HTMLInputElement | null) => {
     if (node) node.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
@@ -54,22 +71,6 @@ export default function SubmissionDetailPage() {
       } catch { /* silent */ } finally { setReplacing(false); }
     };
   }, [submission, getToken, fetchData]);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/drawing/submissions/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setSubmission(data.submission || null);
-    } catch {
-      setSubmission(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken, id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

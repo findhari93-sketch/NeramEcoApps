@@ -8,10 +8,10 @@ import { getSupabaseAdminClient } from '@neram/database';
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string; entryId: string }> }
+  { params }: { params: { id: string; entryId: string } }
 ) {
   try {
-    const { id, entryId } = await params;
+    const { id, entryId } = params;
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient() as any;
 

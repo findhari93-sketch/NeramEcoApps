@@ -94,7 +94,8 @@ const coursePlans = [
 
 // ─── Helper: Title Case State Name ──────────────────────────────────────────
 
-function toTitleCase(slug: string): string {
+function toTitleCase(slug: string | undefined): string {
+  if (!slug) return '';
   return slug
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
