@@ -540,7 +540,7 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
     },
 
     'admin-new-application': {
-      subject: 'New Application Received - ${data.name}',
+      subject: `New Application Received - ${data.name}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -579,7 +579,7 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
     },
 
     'application-confirmation': {
-      subject: 'Application Received - ${data.applicationNumber}',
+      subject: `Application Received - ${data.applicationNumber}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -692,7 +692,7 @@ function getEmailTemplate(name: string, data: TemplateData): { subject: string; 
     },
 
     'admin-application-notification': {
-      subject: '[New Application] ${data.applicationNumber} - ${data.name}',
+      subject: `[New Application] ${data.applicationNumber} - ${data.name}`,
       html: `
         <!DOCTYPE html>
         <html>
