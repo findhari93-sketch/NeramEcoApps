@@ -1,3 +1,4 @@
+// Redeploy 2026-04-06
 const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
