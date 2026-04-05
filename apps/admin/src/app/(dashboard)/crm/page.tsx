@@ -174,6 +174,36 @@ export default function CRMPage() {
     setSearchDebounce(timeout);
   };
 
+  const handleMarkDeadLead = async (user: UserJourney) => {
+    if (!supabaseUserId) return;
+    try {
+      const res = await fetch(`/api/crm/users/${user.id}/dead-lead`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Marked from CRM table', adminId: supabaseUserId }),
+      });
+      if (!res.ok) throw new Error('Failed to mark as dead lead');
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleMarkIrrelevant = async (user: UserJourney) => {
+    if (!supabaseUserId) return;
+    try {
+      const res = await fetch(`/api/crm/users/${user.id}/irrelevant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Marked from CRM table', adminId: supabaseUserId }),
+      });
+      if (!res.ok) throw new Error('Failed to mark as irrelevant');
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const handleBulkDeleteRequest = (selectedUsers: UserJourney[]) => {
     setUsersToDelete(selectedUsers);
     setDeleteDialogOpen(true);
@@ -387,6 +417,8 @@ export default function CRMPage() {
           onGlobalFilterChange={handleGlobalFilterChange}
           onRowClick={handleRowClick}
           onBulkDeleteRequest={handleBulkDeleteRequest}
+          onMarkDeadLead={handleMarkDeadLead}
+          onMarkIrrelevant={handleMarkIrrelevant}
           isFullscreen={isFullscreen}
         />
       </Paper>

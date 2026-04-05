@@ -14,6 +14,13 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Tooltip,
   Typography,
   TextField,
   InputAdornment,
@@ -26,6 +33,10 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import SearchIcon from '@mui/icons-material/Search';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import BlockIcon from '@mui/icons-material/Block';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 
@@ -41,6 +52,8 @@ interface UsersTableProps {
   onGlobalFilterChange: (filter: string) => void;
   onRowClick: (userId: string) => void;
   onBulkDeleteRequest?: (users: UserJourney[]) => void;
+  onMarkDeadLead?: (user: UserJourney) => void;
+  onMarkIrrelevant?: (user: UserJourney) => void;
   isFullscreen?: boolean;
 }
 
@@ -438,6 +451,8 @@ export default function UsersTable(props: UsersTableProps) {
     onGlobalFilterChange,
     onRowClick,
     onBulkDeleteRequest,
+    onMarkDeadLead,
+    onMarkIrrelevant,
     isFullscreen,
   } = props;
 
@@ -445,6 +460,8 @@ export default function UsersTable(props: UsersTableProps) {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
+  const [actionMenuAnchor, setActionMenuAnchor] = useState<null | HTMLElement>(null);
+  const [actionMenuUser, setActionMenuUser] = useState<UserJourney | null>(null);
 
   const columns = useMemo<MRT_ColumnDef<UserJourney>[]>(
     () => [
@@ -847,6 +864,30 @@ export default function UsersTable(props: UsersTableProps) {
     enableColumnActions: true,
     enableTopToolbar: true,
     enableBottomToolbar: true,
+    enableRowActions: true,
+    positionActionsColumn: 'last',
+    renderRowActions: ({ row }) => (
+      <Tooltip title="Actions">
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActionMenuAnchor(e.currentTarget);
+            setActionMenuUser(row.original);
+          }}
+          sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}
+        >
+          <MoreVertIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    ),
+    displayColumnDefOptions: {
+      'mrt-row-actions': {
+        header: '',
+        size: 50,
+        muiTableHeadCellProps: { sx: { bgcolor: 'grey.50' } },
+      },
+    },
     layoutMode: 'grid',
 
     // Bulk actions banner
@@ -1071,5 +1112,83 @@ export default function UsersTable(props: UsersTableProps) {
     return <MobileCardList {...props} />;
   }
 
-  return <MaterialReactTable table={table} />;
+  return (
+    <>
+      <MaterialReactTable table={table} />
+      <Menu
+        anchorEl={actionMenuAnchor}
+        open={Boolean(actionMenuAnchor)}
+        onClose={() => {
+          setActionMenuAnchor(null);
+          setActionMenuUser(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          paper: {
+            sx: { minWidth: 180, borderRadius: 1.5, boxShadow: 3 },
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => {
+            if (actionMenuUser) onRowClick(actionMenuUser.id);
+            setActionMenuAnchor(null);
+            setActionMenuUser(null);
+          }}
+          sx={{ fontSize: 14, py: 1 }}
+        >
+          <ListItemIcon>
+            <OpenInNewIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View profile</ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem
+          onClick={() => {
+            if (actionMenuUser && onMarkDeadLead) onMarkDeadLead(actionMenuUser);
+            setActionMenuAnchor(null);
+            setActionMenuUser(null);
+          }}
+          disabled={actionMenuUser?.contacted_status === 'dead_lead'}
+          sx={{ fontSize: 14, py: 1 }}
+        >
+          <ListItemIcon>
+            <BlockIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Mark as dead lead</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (actionMenuUser && onMarkIrrelevant) onMarkIrrelevant(actionMenuUser);
+            setActionMenuAnchor(null);
+            setActionMenuUser(null);
+          }}
+          disabled={actionMenuUser?.contacted_status === 'irrelevant'}
+          sx={{ fontSize: 14, py: 1 }}
+        >
+          <ListItemIcon>
+            <RemoveCircleOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Mark as irrelevant</ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem
+          onClick={() => {
+            if (actionMenuUser && onBulkDeleteRequest) {
+              onBulkDeleteRequest([actionMenuUser]);
+            }
+            setActionMenuAnchor(null);
+            setActionMenuUser(null);
+          }}
+          sx={{ color: 'error.main', fontSize: 14, py: 1 }}
+        >
+          <ListItemIcon>
+            <DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} />
+          </ListItemIcon>
+          <ListItemText>Delete account</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
 }
