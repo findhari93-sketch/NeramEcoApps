@@ -11,6 +11,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import CommentSection from '@/components/drawings/CommentSection';
@@ -27,6 +28,32 @@ export default function SubmissionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showOriginal, setShowOriginal] = useState(true);
   const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false);
+  const [replacing, setReplacing] = useState(false);
+  const replaceFileRef = useCallback((node: HTMLInputElement | null) => {
+    if (node) node.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file || !submission || submission.status !== 'submitted') return;
+      setReplacing(true);
+      try {
+        const token = await getToken();
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('bucket', 'drawing-uploads');
+        const uploadRes = await fetch('/api/drawing/upload', {
+          method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
+        });
+        if (!uploadRes.ok) throw new Error('Upload failed');
+        const { url } = await uploadRes.json();
+        const replaceRes = await fetch('/api/drawing/submissions/thread/manage', {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submission_id: submission.id, new_image_url: url }),
+        });
+        if (!replaceRes.ok) throw new Error('Replace failed');
+        fetchData(); // refresh
+      } catch { /* silent */ } finally { setReplacing(false); }
+    };
+  }, [submission, getToken, fetchData]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -229,11 +256,25 @@ export default function SubmissionDetailPage() {
             />
           </Box>
 
+          {/* Hidden file input for replace */}
+          <input ref={replaceFileRef} type="file" accept="image/*" style={{ display: 'none' }} id="replace-file-mobile" />
+
           {/* Bottom bar */}
           <Box sx={{
             display: 'flex', gap: 1, px: 1.5, py: 1, bgcolor: '#fff',
             flexShrink: 0, borderTop: '1px solid', borderColor: 'divider',
           }}>
+            {submission.status === 'submitted' && (
+              <Button
+                variant="outlined" size="small"
+                startIcon={<SwapHorizIcon />}
+                onClick={() => document.getElementById('replace-file-mobile')?.click()}
+                disabled={replacing}
+                sx={{ textTransform: 'none', minHeight: 44, minWidth: 'auto', px: 1.5 }}
+              >
+                {replacing ? '...' : 'Replace'}
+              </Button>
+            )}
             {hasReview ? (
               <Button
                 variant="contained" fullWidth
@@ -308,6 +349,20 @@ export default function SubmissionDetailPage() {
             size="small"
             color={hasReview ? 'success' : submission.status === 'redo' ? 'warning' : 'default'}
           />
+          {submission.status === 'submitted' && (
+            <>
+              <input ref={replaceFileRef} type="file" accept="image/*" style={{ display: 'none' }} id="replace-file-desktop" />
+              <Button
+                variant="outlined" size="small"
+                startIcon={<SwapHorizIcon />}
+                onClick={() => document.getElementById('replace-file-desktop')?.click()}
+                disabled={replacing}
+                sx={{ textTransform: 'none', ml: 'auto' }}
+              >
+                {replacing ? 'Replacing...' : 'Replace Image'}
+              </Button>
+            </>
+          )}
         </Box>
 
         {/* Image fills remaining space */}

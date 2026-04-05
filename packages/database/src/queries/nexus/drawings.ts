@@ -546,3 +546,71 @@ export async function addDrawingSubmissionComment(
   if (error) throw error;
   return comment as DrawingSubmissionComment;
 }
+
+// ============================================================
+// Delete / Reset Thread
+// ============================================================
+
+/**
+ * Delete an entire thread (all attempts, comments, thread status).
+ * Student can only delete non-completed threads. Teacher can delete any.
+ */
+export async function deleteDrawingThread(
+  studentId: string,
+  questionId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get thread
+  const { data: thread } = await supabase
+    .from('drawing_thread_status')
+    .select('thread_id')
+    .eq('student_id', studentId)
+    .eq('question_id', questionId)
+    .single();
+
+  if (!thread) return;
+
+  // Delete comments for all submissions in the thread
+  const { data: subs } = await supabase
+    .from('drawing_submissions')
+    .select('id')
+    .eq('thread_id', thread.thread_id);
+
+  if (subs && subs.length > 0) {
+    const subIds = subs.map((s: any) => s.id);
+    await supabase.from('drawing_submission_comments').delete().in('submission_id', subIds);
+  }
+
+  // Delete thread status first (has FK to submissions)
+  await supabase.from('drawing_thread_status').delete()
+    .eq('student_id', studentId)
+    .eq('question_id', questionId);
+
+  // Delete all submissions in the thread
+  await supabase.from('drawing_submissions').delete()
+    .eq('thread_id', thread.thread_id);
+}
+
+/**
+ * Replace the image on the latest pending submission (before teacher reviews it).
+ */
+export async function replaceSubmissionImage(
+  submissionId: string,
+  newImageUrl: string,
+  client?: TypedSupabaseClient
+): Promise<DrawingSubmission> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('drawing_submissions')
+    .update({ original_image_url: newImageUrl })
+    .eq('id', submissionId)
+    .eq('status', 'submitted') // only if still pending
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as DrawingSubmission;
+}

@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, Typography, Paper, Fab, Skeleton, Chip, IconButton, Divider,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import DifficultyChip from '@/components/drawings/DifficultyChip';
@@ -24,6 +26,8 @@ export default function QuestionDetailPage() {
   const [thread, setThread] = useState<DrawingThreadView | null>(null);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -49,6 +53,24 @@ export default function QuestionDetailPage() {
   }, [getToken, questionId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleDeleteThread = async () => {
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/submissions/thread/manage?question_id=${questionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+      setThread(null);
+      setDeleteDialogOpen(false);
+    } catch {
+      // silent
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -159,6 +181,35 @@ export default function QuestionDetailPage() {
           You haven&apos;t practiced this question yet. Tap the button below to submit your drawing!
         </Typography>
       )}
+
+      {/* Start Fresh — delete thread (only for non-completed) */}
+      {thread && thread.thread_status.status !== 'completed' && (
+        <Button
+          variant="text"
+          color="error"
+          size="small"
+          startIcon={<DeleteOutlineIcon />}
+          onClick={() => setDeleteDialogOpen(true)}
+          sx={{ mt: 1, textTransform: 'none' }}
+        >
+          Start Fresh (delete all attempts)
+        </Button>
+      )}
+
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Start Fresh?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will delete all your attempts and feedback for this question. You&apos;ll be able to start over from scratch. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Cancel</Button>
+          <Button onClick={handleDeleteThread} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete All & Start Fresh'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dynamic FAB based on thread status */}
       {!thread && (
