@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -15,6 +16,7 @@ import PublishIcon from '@mui/icons-material/Publish';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
 
 export interface SessionData {
   id: string;
@@ -49,6 +51,7 @@ interface SessionCardProps {
   session: SessionData;
   onEdit: (session: SessionData) => void;
   onPush: (session: SessionData) => void;
+  onComplete?: (session: SessionData) => void;
 }
 
 const STATUS_CONFIG: Record<string, { color: 'default' | 'info' | 'success' | 'error'; icon: React.ReactNode }> = {
@@ -58,10 +61,97 @@ const STATUS_CONFIG: Record<string, { color: 'default' | 'info' | 'success' | 'e
   skipped: { color: 'error', icon: <SkipNextIcon sx={{ fontSize: 14 }} /> },
 };
 
-export default function SessionCard({ session, onEdit, onPush }: SessionCardProps) {
+/**
+ * Extract teacher name from session.teacher or from session.notes.
+ * Notes format: "Sudarshini | Apr 3 | Day 7" — first segment before `|`.
+ */
+function getTeacherDisplay(session: SessionData): { name: string; avatar?: string | null } | null {
+  if (session.teacher?.name) {
+    return { name: session.teacher.name, avatar: session.teacher.avatar_url };
+  }
+  if (session.notes) {
+    const parts = session.notes.split('|');
+    if (parts.length >= 2) {
+      const name = parts[0].trim();
+      if (name && name.length > 0 && name.length < 40) {
+        return { name, avatar: null };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse date from notes (e.g., "Sudarshini | Apr 3 | Day 7") and determine
+ * whether the session end time has passed.
+ * AM sessions end at 12:00, PM sessions end at 20:00.
+ * Returns: { canComplete, hasEnded, reason }
+ */
+function getCompletionState(session: SessionData): { canComplete: boolean; hasEnded: boolean; reason: string } {
+  // Only planned/scheduled sessions can be marked complete
+  if (session.status !== 'planned' && session.status !== 'scheduled') {
+    return { canComplete: false, hasEnded: false, reason: '' };
+  }
+
+  const now = new Date();
+  const notes = session.notes || '';
+  const slot = (session.slot || '').toLowerCase();
+
+  // Extract date from notes: "... | Apr 3 | ..." or "... | Apr 03 | ..."
+  const MONTHS: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+
+  let sessionDate: Date | null = null;
+
+  // Try notes parsing first
+  const dateMatch = notes.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\b/);
+  if (dateMatch) {
+    const month = MONTHS[dateMatch[1]];
+    const day = parseInt(dateMatch[2], 10);
+    // Assume current year, but handle year boundary
+    const year = now.getFullYear();
+    sessionDate = new Date(year, month, day);
+  }
+
+  // Fallback: try scheduled_class date
+  if (!sessionDate && session.scheduled_class?.scheduled_date) {
+    sessionDate = new Date(session.scheduled_class.scheduled_date);
+  }
+
+  if (!sessionDate) {
+    // No date info — allow completion (teacher knows best)
+    return { canComplete: true, hasEnded: true, reason: '' };
+  }
+
+  // Set the end time based on slot
+  const endHour = slot === 'am' ? 12 : 20;
+  const endDate = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate(), endHour, 0, 0);
+
+  if (now >= endDate) {
+    return { canComplete: true, hasEnded: true, reason: '' };
+  }
+
+  // Session is in the future or hasn't ended yet
+  return { canComplete: true, hasEnded: false, reason: "Class hasn't ended yet" };
+}
+
+export default function SessionCard({ session, onEdit, onPush, onComplete }: SessionCardProps) {
   const statusCfg = STATUS_CONFIG[session.status] || STATUS_CONFIG.planned;
   const slotLabel = session.slot?.toUpperCase() || '?';
   const canPush = session.status === 'planned' && !session.scheduled_class_id;
+
+  const teacherDisplay = useMemo(() => getTeacherDisplay(session), [session]);
+  const completionState = useMemo(() => getCompletionState(session), [session]);
+
+  // Left border color based on status
+  const leftBorderColor =
+    session.status === 'completed'
+      ? 'success.main'
+      : session.status === 'skipped'
+        ? 'error.main'
+        : undefined;
 
   return (
     <Card
@@ -70,6 +160,8 @@ export default function SessionCard({ session, onEdit, onPush }: SessionCardProp
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 2,
+        borderLeft: leftBorderColor ? '4px solid' : '1px solid',
+        borderLeftColor: leftBorderColor || 'divider',
         transition: 'box-shadow 200ms ease',
         '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
       }}
@@ -122,6 +214,10 @@ export default function SessionCard({ session, onEdit, onPush }: SessionCardProp
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                ...(session.status === 'skipped' && {
+                  textDecoration: 'line-through',
+                  color: 'text.disabled',
+                }),
               }}
             >
               {session.title}
@@ -133,16 +229,17 @@ export default function SessionCard({ session, onEdit, onPush }: SessionCardProp
               </Typography>
             )}
 
-            {session.teacher && (
+            {/* Teacher display — from session.teacher or extracted from notes */}
+            {teacherDisplay && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
                 <Avatar
-                  src={session.teacher.avatar_url || undefined}
-                  sx={{ width: 20, height: 20, fontSize: '0.65rem' }}
+                  src={teacherDisplay.avatar || undefined}
+                  sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
                 >
-                  {session.teacher.name?.[0]}
+                  {teacherDisplay.name[0]}
                 </Avatar>
                 <Typography variant="caption" color="text.secondary">
-                  {session.teacher.name}
+                  {teacherDisplay.name}
                 </Typography>
               </Box>
             )}
@@ -175,6 +272,22 @@ export default function SessionCard({ session, onEdit, onPush }: SessionCardProp
                 >
                   <PublishIcon fontSize="small" />
                 </IconButton>
+              </Tooltip>
+            )}
+            {/* Mark Complete button */}
+            {completionState.canComplete && onComplete && (
+              <Tooltip title={completionState.hasEnded ? 'Mark complete' : completionState.reason}>
+                <span>
+                  <IconButton
+                    size="small"
+                    color="success"
+                    disabled={!completionState.hasEnded}
+                    onClick={() => onComplete(session)}
+                    sx={{ width: 36, height: 36 }}
+                  >
+                    <TaskAltIcon fontSize="small" />
+                  </IconButton>
+                </span>
               </Tooltip>
             )}
           </Box>

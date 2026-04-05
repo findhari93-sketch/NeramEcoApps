@@ -19,6 +19,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import SessionCard, { type SessionData } from '@/components/course-plan/SessionCard';
 import SessionEditDialog from '@/components/course-plan/SessionEditDialog';
+import ClassCompletionDialog from '@/components/course-plan/ClassCompletionDialog';
 import PushToTimetableDialog from '@/components/course-plan/PushToTimetableDialog';
 import PushWeekDialog from '@/components/course-plan/PushWeekDialog';
 
@@ -50,6 +51,7 @@ export default function WeekDetailPage() {
   // Dialog states
   const [editSession, setEditSession] = useState<SessionData | null>(null);
   const [pushSession, setPushSession] = useState<SessionData | null>(null);
+  const [completeSession, setCompleteSession] = useState<SessionData | null>(null);
   const [pushWeekOpen, setPushWeekOpen] = useState(false);
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -146,6 +148,11 @@ export default function WeekDetailPage() {
 
   const handleSessionSaved = () => {
     setSnackbar({ open: true, message: 'Session updated', severity: 'success' });
+    fetchSessions();
+  };
+
+  const handleSessionCompleted = () => {
+    setSnackbar({ open: true, message: 'Class status updated', severity: 'success' });
     fetchSessions();
   };
 
@@ -251,6 +258,7 @@ export default function WeekDetailPage() {
                     session={session}
                     onEdit={setEditSession}
                     onPush={setPushSession}
+                    onComplete={setCompleteSession}
                   />
                 </Grid>
               ))}
@@ -267,6 +275,16 @@ export default function WeekDetailPage() {
         planId={planId}
         classroomId={activeClassroom?.id || ''}
         onSaved={handleSessionSaved}
+        getToken={getToken}
+      />
+
+      {/* Class Completion Dialog */}
+      <ClassCompletionDialog
+        open={!!completeSession}
+        onClose={() => setCompleteSession(null)}
+        session={completeSession}
+        planId={planId}
+        onSaved={handleSessionCompleted}
         getToken={getToken}
       />
 
