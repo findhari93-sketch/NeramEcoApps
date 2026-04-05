@@ -376,7 +376,7 @@ export async function createDrawingSubmissionWithThread(
     .single();
 
   if (!existingThread) {
-    // First attempt — create submission + thread
+    // First attempt — insert without thread_id (nullable), then set to self
     const { data: submission, error } = await supabase
       .from('drawing_submissions')
       .insert({
@@ -387,14 +387,13 @@ export async function createDrawingSubmissionWithThread(
         self_note: data.self_note || null,
         status: 'submitted',
         attempt_number: 1,
-        thread_id: '00000000-0000-0000-0000-000000000000', // placeholder
       })
       .select('*')
       .single();
 
     if (error) throw error;
 
-    // Set thread_id to self
+    // Set thread_id to self (self-referencing)
     await supabase.from('drawing_submissions').update({ thread_id: submission.id }).eq('id', submission.id);
 
     // Create thread status

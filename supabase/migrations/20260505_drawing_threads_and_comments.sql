@@ -104,5 +104,4 @@ FROM drawing_submissions ds
 WHERE ds.question_id IS NOT NULL
 ON CONFLICT (student_id, question_id) DO NOTHING;
 
--- Make thread_id NOT NULL after backfill
-ALTER TABLE drawing_submissions ALTER COLUMN thread_id SET NOT NULL;
+-- thread_id stays nullable — first insert sets it to self after creation

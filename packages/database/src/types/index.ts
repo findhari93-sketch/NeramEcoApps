@@ -6806,7 +6806,7 @@ export interface DrawingSubmission {
   tutor_feedback: string | null;
   tutor_resources: TutorResource[];
   status: DrawingSubmissionStatus;
-  thread_id: string;
+  thread_id: string | null;
   attempt_number: number;
   is_gallery_published: boolean;
   submitted_at: string;
