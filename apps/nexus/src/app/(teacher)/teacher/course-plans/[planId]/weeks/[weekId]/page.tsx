@@ -139,7 +139,12 @@ export default function WeekDetailPage() {
         dayNumber: parseInt(dayNum),
         dayOfWeek: daySessions[0]?.day_of_week || null,
         date: getSessionDate(daySessions[0]),
-        sessions: daySessions,
+        // Sort AM before PM within each day
+        sessions: daySessions.sort((a, b) => {
+          if (a.slot === 'am' && b.slot === 'pm') return -1;
+          if (a.slot === 'pm' && b.slot === 'am') return 1;
+          return 0;
+        }),
       }))
       .sort((a, b) => a.dayNumber - b.dayNumber);
   }, [sessions, getSessionDate]);

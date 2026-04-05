@@ -140,6 +140,7 @@ function getCompletionState(session: SessionData): { canComplete: boolean; hasEn
 export default function SessionCard({ session, onEdit, onPush, onComplete }: SessionCardProps) {
   const statusCfg = STATUS_CONFIG[session.status] || STATUS_CONFIG.planned;
   const slotLabel = session.slot?.toUpperCase() || '?';
+  const slotTime = session.slot === 'am' ? '11:00 - 12:00' : session.slot === 'pm' ? '7:00 - 8:00 PM' : '';
   const canPush = session.status === 'planned' && !session.scheduled_class_id;
 
   const teacherDisplay = useMemo(() => getTeacherDisplay(session), [session]);
@@ -204,6 +205,11 @@ export default function SessionCard({ session, onEdit, onPush, onComplete }: Ses
                 variant="outlined"
                 sx={{ textTransform: 'capitalize', fontSize: '0.65rem', height: 22 }}
               />
+              {slotTime && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                  {slotTime}
+                </Typography>
+              )}
             </Box>
 
             <Typography
