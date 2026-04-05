@@ -104,6 +104,26 @@ export default function WeekDetailPage() {
     fetchWeekInfo();
   }, [fetchSessions, fetchWeekInfo]);
 
+  // Calculate actual date for a session from its notes field (contains "Mar 27" etc.)
+  // or from week start_date + day offset
+  const getSessionDate = useCallback((session: SessionData): string | null => {
+    // Try to extract date from notes (e.g., "Sudarshini | Mar 27 | Day 1")
+    const notes = session.notes || '';
+    const dateMatch = notes.match(/(\w{3})\s+(\d{1,2})(?:\s|$|\|)/);
+    if (dateMatch) {
+      const months: Record<string, string> = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+      const mon = months[dateMatch[1]];
+      if (mon) return `${dateMatch[2].padStart(2, '0')} ${dateMatch[1]} 26`;
+    }
+    // Fallback: try scheduled_class date
+    if (session.scheduled_class?.scheduled_date) {
+      const d = new Date(session.scheduled_class.scheduled_date);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
+    }
+    return null;
+  }, []);
+
   // Group sessions by day_number
   const sessionsByDay = useMemo(() => {
     const groups: Record<number, SessionData[]> = {};
@@ -113,13 +133,14 @@ export default function WeekDetailPage() {
       groups[day].push(session);
     }
     return Object.entries(groups)
-      .map(([dayNum, sessions]) => ({
+      .map(([dayNum, daySessions]) => ({
         dayNumber: parseInt(dayNum),
-        dayOfWeek: sessions[0]?.day_of_week || null,
-        sessions,
+        dayOfWeek: daySessions[0]?.day_of_week || null,
+        date: getSessionDate(daySessions[0]),
+        sessions: daySessions,
       }))
       .sort((a, b) => a.dayNumber - b.dayNumber);
-  }, [sessions]);
+  }, [sessions, getSessionDate]);
 
   const unpushedCount = sessions.filter((s) => s.status === 'planned' && !s.scheduled_class_id).length;
 
@@ -219,7 +240,7 @@ export default function WeekDetailPage() {
               Day {group.dayNumber}
               {group.dayOfWeek && (
                 <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                  ({DAY_LABELS[group.dayOfWeek] || group.dayOfWeek})
+                  ({DAY_LABELS[group.dayOfWeek] || group.dayOfWeek}{group.date ? `, ${group.date}` : ''})
                 </Typography>
               )}
             </Typography>
