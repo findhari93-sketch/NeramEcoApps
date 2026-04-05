@@ -110,6 +110,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Also skip wizard for applicants (leads who filled the application form)
+    if (!onboardingCompleted) {
+      const { data: leadProfile } = await adminClient
+        .from('lead_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .in('status', ['submitted', 'approved', 'under_review', 'enrolled', 'partial_payment'])
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle();
+      if (leadProfile) {
+        onboardingCompleted = true;
+        await updateUser(user.id, { onboarding_completed: true } as any, adminClient).catch(() => {});
+      }
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,

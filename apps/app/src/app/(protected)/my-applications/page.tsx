@@ -728,8 +728,8 @@ export default function MyApplicationsPage() {
               variant="contained"
               color="success"
               size="large"
-              component={Link}
-              href={`/payment/${app.id}`}
+              href={`${process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com'}/pay?app=${app.application_number}`}
+              target="_blank"
               startIcon={<PaymentOutlined />}
               sx={{ fontWeight: 700, borderRadius: 1, py: 1.5, mb: 1 }}
             >

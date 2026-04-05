@@ -360,25 +360,39 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
     if (isSubmitting && application) {
       const userName = body.first_name || auth.name || 'Student';
 
+      // Re-fetch to get DB-trigger-generated application_number
+      let applicationNumber = application.application_number;
+      if (!applicationNumber) {
+        const { data: refetched } = await supabase
+          .from('lead_profiles' as any)
+          .select('application_number')
+          .eq('id', application.id)
+          .single();
+        applicationNumber = refetched?.application_number || null;
+      }
+
+      // Use actual phone from form data, not 'N/A' fallback
+      const studentPhone = auth.phone || body.phone || body.parent_phone || '';
+
       // Send confirmation emails (non-blocking)
       if (auth.email) {
         sendSubmissionEmails(
-          { ...application, phone: auth.phone || body.phone },
+          { ...application, application_number: applicationNumber, phone: studentPhone },
           auth.email,
           userName
         ).catch((err) => console.error('Email sending failed:', err));
       }
 
-      // Dispatch notifications to Telegram + team emails + admin bell
+      // Dispatch notifications to Telegram + team emails + admin bell + WhatsApp
       try {
         await notifyNewApplication({
           userName,
-          phone: auth.phone || body.phone || 'N/A',
+          phone: studentPhone,
           course: application.interest_course || body.interest_course || '',
           schoolName: body.academic_data?.school_name || body.academic_data?.college_name,
           city: body.city,
           state: body.state,
-          applicationNumber: application.application_number || undefined,
+          applicationNumber: applicationNumber || undefined,
         });
       } catch (err) {
         console.error('Notification dispatch failed:', err);
