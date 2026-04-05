@@ -20,13 +20,14 @@ import {
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
+  generateOrganizationSchema,
   generateCourseSchema,
   generateBreadcrumbSchema,
   generateFAQSchema,
   generateSoftwareApplicationSchema,
 } from '@/lib/seo/schemas';
-import { buildAlternates } from '@/lib/seo/metadata';
-import { APP_URL } from '@/lib/seo/constants';
+import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
+import { APP_URL, BASE_URL } from '@/lib/seo/constants';
 
 
 export async function generateMetadata({
@@ -34,13 +35,34 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
+  const title = 'Best Online NATA Coaching in India 2026 - Live Classes by IIT/NIT Faculty | Neram Classes';
+  const description = 'India\'s #1 online NATA coaching with 99.9% success rate. Live interactive classes by IIT/NIT alumni, daily drawing practice, small batches of 25, 100+ mock tests, free AI study app. Join 10,000+ students from 150+ cities.';
+
   return {
-    title: 'Best Online NATA Coaching 2026 - Live Classes by IIT/NIT Faculty',
-    description:
-      'Join the best online NATA coaching in India. Live interactive classes by IIT/NIT alumni, daily drawing practice, small batches of 25, 100+ mock tests, and 99.9% success rate. Enroll now.',
+    title,
+    description,
     keywords:
-      'best online NATA coaching, NATA coaching online, online NATA classes, best online coaching for NATA exam, online NATA preparation, NATA live classes online, NATA drawing classes online',
+      'best online NATA coaching, best NATA online coaching in India, NATA coaching online, online NATA classes, best online coaching for NATA exam, online NATA preparation, NATA live classes online, NATA drawing classes online, NATA online class, NATA coaching from home, NATA coaching app, online architecture coaching India, best NATA coaching center online',
     alternates: buildAlternates(locale, '/best-nata-coaching-online'),
+    openGraph: {
+      title: 'Best Online NATA Coaching in India 2026 | Neram Classes',
+      description,
+      type: 'website',
+      url: `${BASE_URL}/best-nata-coaching-online`,
+      images: [
+        {
+          url: buildOgImage('Best Online NATA Coaching', '99.9% Success Rate | 150+ Cities', 'coaching'),
+          width: 1200,
+          height: 630,
+          alt: 'Best Online NATA Coaching in India - Neram Classes',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'Best Online NATA Coaching in India 2026 | Neram Classes',
+      description,
+    },
   };
 }
 
@@ -244,31 +266,62 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
       answer:
         'Yes, Neram Classes offers free demo classes for prospective students. You can experience our teaching methodology, interact with faculty, and understand the course structure before enrolling. Visit our demo class page or call us to schedule your free demo session.',
     },
+    {
+      question: 'Can I join online NATA coaching from any city in India?',
+      answer:
+        'Yes, Neram Classes online NATA coaching is available to students from any city in India and abroad. We have students from 150+ cities across all Indian states, and from 6 Gulf countries (UAE, Qatar, Oman, Saudi Arabia, Kuwait, Bahrain). All you need is a stable internet connection and a device to attend live classes.',
+    },
+    {
+      question: 'What digital tools does Neram provide for online students?',
+      answer:
+        'Neram Classes is the only NATA coaching institute with a free AI-powered study app (aiArchitek). The app includes a NATA cutoff calculator, college predictor for 5,000+ colleges across India, exam center finder, question bank, and mock tests. These digital tools give our online students a significant advantage in their preparation.',
+    },
+    {
+      question: 'How is the drawing test taught online?',
+      answer:
+        'Drawing is taught through live video sessions where faculty demonstrate techniques in real-time. Students draw along and show their work via camera for instant feedback. Each drawing submission is reviewed with detailed annotations. We also provide 500+ practice sheets and conduct daily 2-hour supervised drawing sessions. Our online drawing methodology has been refined over 10+ years.',
+    },
+    {
+      question: 'What makes Neram the best online NATA coaching in India?',
+      answer:
+        'Neram Classes stands out as the best online NATA coaching due to: (1) 17+ years of NATA coaching experience since 2009, (2) 99.9% success rate with 10,000+ students, (3) IIT/NIT/SPA alumni faculty only, (4) smallest batch sizes in the industry (max 25), (5) the only institute with a free AI-powered study app, (6) 5-language support (English, Tamil, Hindi, Kannada, Malayalam), and (7) hybrid online-offline model where students can switch anytime.',
+    },
   ];
 
   return (
     <>
+      <JsonLd data={generateOrganizationSchema()} />
       <JsonLd
         data={generateCourseSchema({
-          name: 'Online NATA Coaching',
+          name: 'Online NATA Coaching 2026 - Live Classes by IIT/NIT Faculty',
           description:
-            'Best online NATA coaching by IIT/NIT alumni faculty. Live interactive classes, daily drawing practice, small batches of 25, 100+ mock tests, and 99.9% success rate.',
+            'Best online NATA coaching in India by IIT/NIT alumni faculty. Live interactive classes, daily drawing practice, small batches of 25, 100+ mock tests, and 99.9% success rate. Available from 150+ cities.',
           url: `${baseUrl}/best-nata-coaching-online`,
           modes: ['online'],
           price: 15000,
         })}
       />
-      <JsonLd
-        data={generateFAQSchema(faqs)}
-      />
+      <JsonLd data={generateFAQSchema(faqs)} />
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },
           { name: 'Coaching', url: `${baseUrl}/coaching` },
-          { name: 'Online NATA Coaching' },
+          { name: 'Best Online NATA Coaching' },
         ])}
       />
       <JsonLd data={generateSoftwareApplicationSchema()} />
+      <JsonLd data={{
+        '@context': 'https://schema.org',
+        '@type': 'EducationalOrganization',
+        name: 'Neram Classes',
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: '4.9',
+          reviewCount: '90',
+          bestRating: '5',
+          worstRating: '1',
+        },
+      }} />
 
       <Box>
         {/* Hero Section */}
@@ -786,6 +839,38 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
                 </AccordionDetails>
               </Accordion>
             ))}
+          </Container>
+        </Box>
+
+        {/* Related Pages - Internal Linking */}
+        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'background.default' }}>
+          <Container maxWidth="lg">
+            <Typography variant="h3" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
+              Explore More
+            </Typography>
+            <Grid container spacing={3}>
+              {[
+                { title: 'Best NATA Coaching in India', href: '/coaching/best-nata-coaching-india', desc: 'Complete guide to the #1 rated NATA coaching institute in India' },
+                { title: 'NATA 2026 Complete Guide', href: '/nata-2026', desc: 'Everything about NATA 2026 - eligibility, syllabus, exam pattern, dates' },
+                { title: 'Free NATA Cutoff Calculator', href: '/tools/cutoff-calculator', desc: 'Predict your chances at top architecture colleges with AI-powered tool' },
+                { title: 'Free College Predictor', href: '/tools/college-predictor', desc: 'Find the best architecture college for your NATA score from 5,000+ colleges' },
+                { title: 'NATA Coaching in Tamil Nadu', href: '/coaching/nata-coaching-center-in-tamil-nadu', desc: 'Online & offline coaching across all 38 Tamil Nadu districts' },
+                { title: 'Book Free Demo Class', href: '/demo-class', desc: 'Experience our teaching methodology before enrolling' },
+              ].map((link, idx) => (
+                <Grid item xs={12} sm={6} md={4} key={idx}>
+                  <Card component={Link} href={link.href} sx={{ textDecoration: 'none', height: '100%', transition: 'all 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 } }}>
+                    <CardContent>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main', mb: 0.5 }}>
+                        {link.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {link.desc}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
           </Container>
         </Box>
 

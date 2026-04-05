@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
 import { getAllCenterSeoSlugs } from '@neram/database/queries';
-import { getSitemapLocations } from '@neram/database';
+import { getSitemapLocations, getIndianStates } from '@neram/database';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -39,7 +39,7 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/tools/exam-centers', lastModified: '2026-03-13' },
   { path: '/tools/question-bank', lastModified: '2026-03-13' },
   { path: '/nata-app', lastModified: '2026-02-28' },
-  { path: '/best-nata-coaching-online', lastModified: '2026-02-20' },
+  { path: '/best-nata-coaching-online', lastModified: '2026-04-04' },
   { path: '/blog', lastModified: '2026-03-10' },
   { path: '/coaching/nata-coaching', lastModified: '2026-02-25' },
   { path: '/coaching/nata-coaching-center', lastModified: '2026-03-30', i18n: true },
@@ -105,6 +105,12 @@ const blogSlugs = [
   { slug: 'best-nata-coaching-muscat', date: '2026-02-08', isCityGuide: true },
   { slug: 'best-nata-coaching-riyadh', date: '2026-02-10', isCityGuide: true },
   { slug: 'best-nata-coaching-kuwait-city', date: '2026-02-12', isCityGuide: true },
+  { slug: 'online-vs-offline-nata-coaching', date: '2026-03-20', isCityGuide: false },
+  { slug: 'how-to-choose-best-nata-coaching', date: '2026-03-25', isCityGuide: false },
+  { slug: 'why-online-nata-coaching-future', date: '2026-04-01', isCityGuide: false },
+  { slug: 'best-nata-coaching-hyderabad', date: '2026-03-15', isCityGuide: true },
+  { slug: 'best-nata-coaching-delhi', date: '2026-03-18', isCityGuide: true },
+  { slug: 'best-nata-coaching-mumbai', date: '2026-03-22', isCityGuide: true },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -169,6 +175,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(post.date),
       changeFrequency: 'monthly',
       priority: post.isCityGuide ? 0.85 : 0.7,
+    });
+  }
+
+  // ─── State pages: ENGLISH ONLY ───
+  // State hub pages aggregate city pages within each state.
+  const indianStates = getIndianStates();
+  for (const state of indianStates) {
+    entries.push({
+      url: `${baseUrl}/coaching/nata-coaching-in-${state.slug}`,
+      lastModified: new Date('2026-04-04'),
+      changeFrequency: 'weekly',
+      priority: 0.85,
     });
   }
 

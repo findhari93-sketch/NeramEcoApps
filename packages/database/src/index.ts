@@ -105,7 +105,11 @@ export {
   getAllCities,
   getSitemapLocations,
   getHighPriorityLocations,
+  getIndianStates,
+  getSitemapStates,
 } from './data/locations';
-export type { Location } from './data/locations';
+export type { Location, StateInfo } from './data/locations';
 export { locationSeoContent, getLocationSeoContent } from './data/location-seo-content';
 export type { LocationSeoContent } from './data/location-seo-content';
+export { stateSeoContent, getStateSeoContent } from './data/state-seo-content';
+export type { StateSeoContent } from './data/state-seo-content';

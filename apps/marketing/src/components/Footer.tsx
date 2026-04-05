@@ -52,6 +52,19 @@ const footerLinks = {
     { label: 'Mumbai', href: '/coaching/nata-coaching/nata-coaching-centers-in-mumbai' },
     { label: 'Delhi', href: '/coaching/nata-coaching/nata-coaching-centers-in-delhi' },
   ],
+  topStates: [
+    { label: 'Tamil Nadu', href: '/coaching/nata-coaching-in-tamil-nadu' },
+    { label: 'Karnataka', href: '/coaching/nata-coaching-in-karnataka' },
+    { label: 'Kerala', href: '/coaching/nata-coaching-in-kerala' },
+    { label: 'Maharashtra', href: '/coaching/nata-coaching-in-maharashtra' },
+    { label: 'Delhi', href: '/coaching/nata-coaching-in-delhi' },
+    { label: 'Andhra Pradesh', href: '/coaching/nata-coaching-in-andhra-pradesh' },
+    { label: 'Telangana', href: '/coaching/nata-coaching-in-telangana' },
+    { label: 'Gujarat', href: '/coaching/nata-coaching-in-gujarat' },
+    { label: 'Rajasthan', href: '/coaching/nata-coaching-in-rajasthan' },
+    { label: 'West Bengal', href: '/coaching/nata-coaching-in-west-bengal' },
+    { label: 'Uttar Pradesh', href: '/coaching/nata-coaching-in-uttar-pradesh' },
+  ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },
     { label: 'Terms & Conditions', href: '/terms' },
@@ -206,8 +219,29 @@ export default function Footer() {
             </Box>
           </Grid>
 
+          {/* Top States */}
+          <Grid item xs={6} sm={3} md={2}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
+              Top States
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {footerLinks.topStates.map((link) => (
+                <MuiLink
+                  key={link.href}
+                  component={Link}
+                  href={getLocalizedPath(link.href)}
+                  color="inherit"
+                  underline="hover"
+                  sx={linkStyle}
+                >
+                  {link.label}
+                </MuiLink>
+              ))}
+            </Box>
+          </Grid>
+
           {/* Social + Contact */}
-          <Grid item xs={6} sm={3} md={3}>
+          <Grid item xs={6} sm={3} md={2}>
             <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
               Follow Us
             </Typography>
