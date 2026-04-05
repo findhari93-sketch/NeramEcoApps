@@ -31,7 +31,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Syllabus — Simplified Topics with Sample Questions',
+    title: 'NATA 2026 Syllabus: Simplified Topics with Sample Questions',
     description:
       'Complete NATA 2026 syllabus for Part A (Drawing Test) and Part B (MCQ/NCQ). Topic-wise breakdown with simplified explanations. Includes important topics and preparation tips.',
     keywords:
@@ -46,15 +46,15 @@ interface PageProps {
 
 const partATopics = [
   {
-    title: 'A1 — Composition and Color (25 marks)',
+    title: 'A1: Composition and Color (25 marks)',
     desc: 'Creating suitable compositions for various situations and coloring them appropriately. Re-arranging various shapes in a visually appealing manner and coloring it suitably. Tests your sense of color harmony and composition skills.',
   },
   {
-    title: 'A2 — Sketching & Composition, Black and White (25 marks)',
+    title: 'A2: Sketching & Composition, Black and White (25 marks)',
     desc: 'Ability to draw, visualize, and depict a situation involving buildings/its components, people, environment, and products with an understanding of scale, proportions, textures, shades, and shadow.',
   },
   {
-    title: 'A3 — 3D Composition (30 marks)',
+    title: 'A3: 3D Composition (30 marks)',
     desc: 'Creating interesting 3D compositions for a given situation using a kit provided at the test center. This is a new format that tests your spatial thinking and ability to work with physical materials in three dimensions.',
   },
 ];
@@ -66,7 +66,7 @@ const partBTopics = [
       'Understanding and reconstructing 2D and 3D compositions',
       'Knowledge about composition and technical concepts',
       'Mirror images, paper folding, figure completion',
-      'Spatial visualization — 2D to 3D and vice versa',
+      'Spatial visualization: 2D to 3D and vice versa',
     ],
   },
   {
@@ -120,7 +120,7 @@ const faqs = [
   {
     question: 'Is NATA syllabus same as JEE Maths?',
     answer:
-      'NATA 2026 Part B includes Numerical Ability which overlaps with basic Maths (algebra, trigonometry, geometry). However, NATA focuses more on visual reasoning, design sensitivity, language interpretation, and architecture awareness — areas JEE does not cover. Part A is entirely drawing-based.',
+      'NATA 2026 Part B includes Numerical Ability which overlaps with basic Maths (algebra, trigonometry, geometry). However, NATA focuses more on visual reasoning, design sensitivity, language interpretation, and architecture awareness, areas JEE does not cover. Part A is entirely drawing-based.',
   },
   {
     question: 'How do I prepare for the 3D Composition question (A3)?',
@@ -130,7 +130,7 @@ const faqs = [
   {
     question: 'What is the difference between MCQ and NCQ in Part B?',
     answer:
-      'MCQ (Multiple Choice Questions) have 4 options to choose from — there are 42 of these. NCQ (No Choice Questions) require you to type a numerical answer without any options — there are 8 of these. Both types have no negative marking.',
+      'MCQ (Multiple Choice Questions) have 4 options to choose from, and there are 42 of these. NCQ (No Choice Questions) require you to type a numerical answer without any options, and there are 8 of these. Both types have no negative marking.',
   },
   {
     question: 'Are there negative marks in NATA?',
@@ -173,7 +173,7 @@ export default function SyllabusPage({ params: { locale } }: PageProps) {
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Part A — Drawing Test (80 Marks)
+              Part A: Drawing Test (80 Marks)
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
               Part A is conducted offline on paper. You get 90 minutes to complete 3 questions. The test center provides paper/base material. You must bring: pencils, erasers, dry colors, and scale (up to 15 cm). No geometry box or other instruments allowed.
@@ -198,10 +198,10 @@ export default function SyllabusPage({ params: { locale } }: PageProps) {
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Part B — MCQ/NCQ (120 Marks)
+              Part B: MCQ/NCQ (120 Marks)
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Part B is conducted online in a computer-based adaptive test format. You get 90 minutes (108 seconds per question) to answer 50 questions — 42 MCQs (Multiple Choice) and 8 NCQs (No Choice / Numerical). No negative marking. Medium: English and Hindi.
+              Part B is conducted online in a computer-based adaptive test format. You get 90 minutes (108 seconds per question) to answer 50 questions: 42 MCQs (Multiple Choice) and 8 NCQs (No Choice / Numerical). No negative marking. Medium: English and Hindi.
             </Typography>
 
             {partBTopics.map((section, idx) => (
@@ -261,7 +261,7 @@ export default function SyllabusPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Syllabus</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Syllabus</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

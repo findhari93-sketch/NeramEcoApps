@@ -72,7 +72,7 @@ export default function RootError({
             color: 'rgba(255, 255, 255, 0.7)',
           }}
         >
-          We&apos;re sorry — an unexpected error occurred. Please try again or
+          We&apos;re sorry. An unexpected error occurred. Please try again or
           return to the homepage.
         </p>
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>

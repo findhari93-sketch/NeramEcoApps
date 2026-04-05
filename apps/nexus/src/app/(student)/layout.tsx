@@ -16,6 +16,7 @@ import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import PlaylistPlayOutlinedIcon from '@mui/icons-material/PlaylistPlayOutlined';
 import RoleGuard from '@/components/RoleGuard';
@@ -62,6 +63,7 @@ const allStudentNavGroups = [
       { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
       { label: 'Exams', path: '/student/exams', icon: <EventNoteOutlinedIcon /> },
+      { label: 'Exam Schedule', path: '/student/exam-schedule', icon: <DateRangeOutlinedIcon /> },
       { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
     ],
   },
@@ -86,6 +88,7 @@ const allOverflowItems = [
   { label: 'Documents', path: '/student/documents', icon: <DescriptionOutlinedIcon /> },
   { label: 'Reviews', path: '/student/reviews', icon: <RateReviewOutlinedIcon /> },
   { label: 'Exams', path: '/student/exams', icon: <EventNoteOutlinedIcon /> },
+  { label: 'Exam Schedule', path: '/student/exam-schedule', icon: <DateRangeOutlinedIcon /> },
   { label: 'My Issues', path: '/student/issues', icon: <BugReportOutlinedIcon /> },
   { label: 'Guide', path: '/student/guide', icon: <HelpOutlineIcon /> },
   { label: 'Profile', path: '/student/profile', icon: <PersonOutlinedIcon /> },

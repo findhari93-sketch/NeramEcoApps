@@ -63,7 +63,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Exam Centers 2026 — Find Test Centers Near You in 96 Cities',
+    title: 'NATA Exam Centers 2026: Find Test Centers Near You in 96 Cities',
     description:
       'Find NATA 2026 exam centers near you. Search 96 cities across 26 states with TCS iON verified centers, distance calculator, and confidence ratings. Plan your NATA test day.',
     keywords:
@@ -71,7 +71,7 @@ export async function generateMetadata({
     alternates: buildAlternates(locale, '/tools/exam-centers'),
     openGraph: {
       title:
-        'NATA Exam Centers 2026 — Find Test Centers Near You in 96 Cities',
+        'NATA Exam Centers 2026: Find Test Centers Near You in 96 Cities',
       description:
         'Search NATA 2026 exam centers in 96 cities across 26 states. TCS iON verified, distance calculator, confidence ratings.',
       url:
@@ -297,7 +297,7 @@ export default function ExamCentersPage({
               },
               {
                 title: 'Exam Day Checklist',
-                desc: 'Each center page includes an exam day checklist — documents to carry, reporting time, prohibited items, and tips for the drawing test setup.',
+                desc: 'Each center page includes an exam day checklist: documents to carry, reporting time, prohibited items, and tips for the drawing test setup.',
               },
             ].map((feature) => (
               <Grid item xs={12} sm={6} key={feature.title}>
@@ -344,7 +344,7 @@ export default function ExamCentersPage({
             mb: 3,
           }}
         >
-          NATA 2026 Exam Centers — What You Need to Know
+          NATA 2026 Exam Centers: What You Need to Know
         </Typography>
         <Typography sx={{ mb: 2, lineHeight: 1.8, color: 'text.secondary' }}>
           The Council of Architecture (CoA) conducts NATA through TCS iON

@@ -416,7 +416,7 @@ export default function DemoClassPageContent() {
                 You have an active demo class booking
               </Typography>
               <Typography variant="body2">
-                {activeRegistration.slotTitle} — {activeRegistration.slotDate && new Date(activeRegistration.slotDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
+                {activeRegistration.slotTitle},{' '}{activeRegistration.slotDate && new Date(activeRegistration.slotDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
               </Typography>
               <Chip
                 label={activeRegistration.status === 'pending' ? 'Awaiting Approval' : 'Approved'}

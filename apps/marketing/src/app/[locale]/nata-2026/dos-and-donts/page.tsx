@@ -50,8 +50,8 @@ const dos = [
   'Report at the exam center by 9:00 AM (Session 1) or 12:30 PM (Session 2). Late entry cutoff is 10:15 AM / 1:45 PM.',
   'Wear comfortable clothes (avoid clothing with large logos or text).',
   'Carry a transparent water bottle.',
-  'Read all Part A drawing questions carefully — you have 90 minutes for 3 questions.',
-  'For Part B (online), attempt all 50 questions — no negative marking for MCQ or NCQ.',
+  'Read all Part A drawing questions carefully. You have 90 minutes for 3 questions.',
+  'For Part B (online), attempt all 50 questions. No negative marking for MCQ or NCQ.',
   'Keep your drawing sheets and 3D composition materials clean.',
   'Follow all instructions from the invigilator regarding the 3D composition kit provided at the center.',
 ];
@@ -65,7 +65,7 @@ const donts = [
   'Do NOT use erasing fluid (correction fluid/whitener) on drawing sheets.',
   'Do NOT communicate with other candidates during the exam.',
   'Do NOT leave the exam hall without permission from the invigilator.',
-  'Do NOT attempt to copy or use unfair means — leads to disqualification.',
+  'Do NOT attempt to copy or use unfair means. This leads to disqualification.',
   'Do NOT bring bags, wallets, or purses inside the exam hall.',
   'Do NOT write your name on the drawing sheet (use only the roll number).',
 ];
@@ -193,7 +193,7 @@ export default function DosAndDontsPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — Exam Day Rules</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: Exam Day Rules</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

@@ -110,7 +110,7 @@ const displayMappings: Record<string, Record<string, string>> = {
   },
   scholarshipStatus: {
     not_eligible: 'Not Eligible',
-    eligible_pending: 'Eligible — Pending',
+    eligible_pending: 'Eligible, Pending',
     documents_submitted: 'Documents Submitted',
     under_review: 'Under Review',
     approved: 'Approved',

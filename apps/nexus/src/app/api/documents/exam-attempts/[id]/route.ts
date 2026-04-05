@@ -26,7 +26,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    const allowedFields = ['state', 'exam_date_id', 'exam_completed_at', 'application_date', 'notes'];
+    const allowedFields = ['state', 'exam_date_id', 'exam_completed_at', 'application_date', 'notes', 'exam_city', 'exam_session'];
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
     for (const field of allowedFields) {

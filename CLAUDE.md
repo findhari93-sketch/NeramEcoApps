@@ -1,8 +1,17 @@
 # Neram Classes Ecosystem - Project Architect (Orchestrator)
 
+## Content Writing Rules (ALL AGENTS MUST FOLLOW)
+
+> **NEVER use em dashes (`—`), double dashes (`--`), or `&mdash;` in any user-visible content, text, labels, descriptions, FAQ answers, or headings.** These look AI-generated. Instead use natural punctuation:
+> - Use commas (`,`) for appositions and clarifications
+> - Use colons (`:`) for titles/subtitles or introducing lists
+> - Use periods (`.`) for sentence breaks
+> - Use parentheses `()` for supplementary info
+> - Rephrase the sentence if no punctuation fits naturally
+
 ## Agent Team Structure
 
-You are the **Project Architect** — the orchestrator of an 8-agent team. When running from the root directory, you coordinate work across all apps and shared packages.
+You are the **Project Architect**, the orchestrator of an 8-agent team. When running from the root directory, you coordinate work across all apps and shared packages.
 
 ```
                           ┌──────────────────────┐
@@ -288,9 +297,9 @@ pnpm test:e2e --project=integration  # Run SSO/cross-app tests only
 ## Post-Implementation E2E Verification (REQUIRED)
 
 > **After implementing ANY feature, run relevant Playwright E2E tests to verify the implementation works end-to-end.**
-> **All frontend UI/UX work MUST use the `/ui-ux-pro-max` skill for design quality — aim for Amazon-level polished interfaces.**
+> **All frontend UI/UX work MUST use the `/ui-ux-pro-max` skill for design quality, aim for Amazon-level polished interfaces.**
 
-### E2E Test Credentials (IMPORTANT — Read Before Writing Tests)
+### E2E Test Credentials (IMPORTANT, Read Before Writing Tests)
 
 Test accounts are **Microsoft Entra ID** users with **MFA disabled** for Playwright automation:
 
@@ -300,13 +309,13 @@ Test accounts are **Microsoft Entra ID** users with **MFA disabled** for Playwri
 | Teacher/Admin | `e2etestingteacher@neramclasses.com` | See `.env.test` | Nexus teacher, Admin dashboard |
 
 **How credentials work:**
-- **`.env.test`** (gitignored) — contains real passwords. Loaded automatically by `playwright.config.ts`
-- **`tests/utils/credentials.ts`** — centralized credential module. **Always import from here, never hardcode credentials:**
+- **`.env.test`** (gitignored), contains real passwords. Loaded automatically by `playwright.config.ts`
+- **`tests/utils/credentials.ts`**, centralized credential module. **Always import from here, never hardcode credentials:**
   ```typescript
   import { STUDENT_ACCOUNT, TEACHER_ACCOUNT, ADMIN_ACCOUNT, APP_URLS, getTestAuthToken, injectAuthForPage } from '../utils/credentials';
   ```
-- **`tests/e2e/auth.setup.ts`** — runs ONCE before all tests, saves auth state to `tests/.auth/`. Subsequent tests reuse saved state — **no repeated logins**.
-- **`tests/.auth/teacher.json`** / **`tests/.auth/user.json`** — saved auth state, reused by all test projects
+- **`tests/e2e/auth.setup.ts`**, runs ONCE before all tests, saves auth state to `tests/.auth/`. Subsequent tests reuse saved state, **no repeated logins**.
+- **`tests/.auth/teacher.json`** / **`tests/.auth/user.json`**, saved auth state, reused by all test projects
 
 **Auth flow for tests:**
 - **Nexus/Admin API tests**: Use `getTestAuthToken(request, 'teacher')` to get a test token
@@ -343,7 +352,7 @@ Test accounts are **Microsoft Entra ID** users with **MFA disabled** for Playwri
 
 | Environment | Branch | URLs | Supabase Ref | Deploy Trigger |
 |-------------|--------|------|-------------|----------------|
-| **Preview** | PR branches | `*.vercel.app` | — | Auto on PR |
+| **Preview** | PR branches | `*.vercel.app` |, | Auto on PR |
 | **Staging** | `staging` | `staging.neramclasses.com` | `hgxjavrsrvpihqrpezdh` | Auto on merge to staging |
 | **Production** | `main` | `neramclasses.com` | `zdnypksjqnhtiblwdaic` | Auto on merge to main |
 
@@ -364,19 +373,19 @@ Test accounts are **Microsoft Entra ID** users with **MFA disabled** for Playwri
 | App | `prj_n1hKWpSZezUx3m3ui0i2eLKq13OR` | neram-tools-app |
 | Nexus | `prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX` | neram-nexus-new |
 | Admin | `prj_QoCOUGXPvDYAfOXHYFpF62f57hWV` | neram-admin-new |
-| Org ID | `team_pINk5YGOGsajESQgHpsgyoEU` | — |
+| Org ID | `team_pINk5YGOGsajESQgHpsgyoEU` |, |
 
 ---
 
 ### Deployment Rule (CRITICAL - HIGHEST PRIORITY)
 
-> **NEVER deploy automatically after making changes. Claude must NEVER run deploy commands, push to git, or trigger deployments on its own — not even after completing a feature, fixing a bug, or finishing a task. Deployment happens ONLY when the user explicitly says "deploy", "push", "deploy to staging", "deploy to prod", or similar deploy commands. Until then, just make the code changes and stop. The user will test locally first and decide when to deploy.**
+> **NEVER deploy automatically after making changes. Claude must NEVER run deploy commands, push to git, or trigger deployments on its own, not even after completing a feature, fixing a bug, or finishing a task. Deployment happens ONLY when the user explicitly says "deploy", "push", "deploy to staging", "deploy to prod", or similar deploy commands. Until then, just make the code changes and stop. The user will test locally first and decide when to deploy.**
 >
 > **Reason:** Vercel has limited deployments per day. Deploying after every small change exhausts the quota. The user needs to batch changes and deploy on their own schedule.
 
 ### One-Command Deploy (CRITICAL - READ THIS)
 
-> **When the user says "deploy to staging", "deploy to production", "deploy all", "push to staging", "push to prod", or similar — follow this playbook.**
+> **When the user says "deploy to staging", "deploy to production", "deploy all", "push to staging", "push to prod", or similar, follow this playbook.**
 
 #### How It Works
 
@@ -396,7 +405,7 @@ pnpm deploy:staging --skip-checks  # Skip type-check/lint/test/build (faster)
 pnpm deploy:staging --skip-db      # Skip Supabase migrations
 pnpm deploy:staging --skip-commit  # Skip auto-commit (must commit manually first)
 
-# Git-based promote (via GitHub PR — recommended with users)
+# Git-based promote (via GitHub PR, recommended with users)
 pnpm promote:prod                # Create PR: staging → main (review first)
 pnpm promote:prod:auto           # Create PR + auto-merge (CI runs, then deploys)
 ```
@@ -408,7 +417,7 @@ pnpm promote:prod:auto           # Create PR + auto-merge (CI runs, then deploys
 The deploy script (`scripts/deploy.sh`) handles: Auto-commit + quality checks + DB migrations + git push.
 The promote script (`scripts/promote.sh`) handles: PR creation staging → main via `gh` CLI, with optional auto-merge.
 
-#### Before Running Deploy — Checklist
+#### Before Running Deploy, Checklist
 
 When asked to deploy, **check these BEFORE running the deploy command**:
 
@@ -426,18 +435,18 @@ When asked to deploy, **check these BEFORE running the deploy command**:
    - If migration requires manual steps (e.g., backfill data), warn the user
 
 3. **Firebase changes?** (auth domains, providers, etc.)
-   - Firebase Console changes CANNOT be automated — tell the user:
+   - Firebase Console changes CANNOT be automated, tell the user:
      > "Firebase change needed: Go to Firebase Console → [specific path] and [action]"
    - For Firebase Admin SDK key rotation, update in Vercel env vars
 
 4. **GitHub secrets?** If new secrets are needed for CI:
-   - Cannot be set via CLI — tell the user:
+   - Cannot be set via CLI, tell the user:
      > "GitHub secret needed: Go to repo Settings → Secrets → Actions → New: `SECRET_NAME`"
 
 5. **Supabase dashboard changes?** (RLS policies via dashboard, extensions, etc.)
    - Use Supabase MCP tools if available, otherwise tell the user
 
-#### After Deploy — Verify
+#### After Deploy, Verify
 
 - Check the deployed URLs load correctly
 - If the feature has a specific page, verify it works on the deployed URL
@@ -446,10 +455,10 @@ When asked to deploy, **check these BEFORE running the deploy command**:
 #### Promoting staging → production (with users)
 
 When you have real users, always go staging-first:
-1. `pnpm deploy:staging` — commit, check, push to staging branch
+1. `pnpm deploy:staging`, commit, check, push to staging branch
 2. Verify on staging URLs
-3. `pnpm promote:prod` — creates PR staging → main for review
-4. Or `pnpm promote:prod:auto` — creates PR + auto-merges after CI passes
+3. `pnpm promote:prod`, creates PR staging → main for review
+4. Or `pnpm promote:prod:auto`, creates PR + auto-merges after CI passes
 
 The promote script uses `gh` CLI. It will:
 - Fetch latest, show commits to promote
@@ -459,7 +468,7 @@ The promote script uses `gh` CLI. It will:
 
 #### Platform-specific notes
 
-- **Firebase**: Only used for phone/Google auth. Config is env vars in Vercel — separate values for Production vs Preview. Rarely changes. If a Firebase Console change is needed, tell the user manually.
+- **Firebase**: Only used for phone/Google auth. Config is env vars in Vercel, separate values for Production vs Preview. Rarely changes. If a Firebase Console change is needed, tell the user manually.
 - **Supabase**: Migrations auto-pushed by both `deploy.sh` and GitHub Actions `deploy.yml`. Dashboard-only changes (extensions, RLS via UI) must be applied separately per environment.
 - **Vercel env vars**: Scoped per environment (Production vs Preview). When adding new vars, always add to BOTH via CLI: `vercel env add <KEY> production` AND `vercel env add <KEY> preview`.
 
@@ -569,7 +578,7 @@ RESEND_API_KEY=
 ### 4 Mandatory Rules
 
 **Rule 1: Every feature ships with tests.**
-Claude writes unit tests for logic, integration tests for APIs, and E2E tests for user flows — all in the same PR as the feature.
+Claude writes unit tests for logic, integration tests for APIs, and E2E tests for user flows, all in the same PR as the feature.
 
 **Rule 2: Mobile-first testing.**
 All E2E tests run on mobile viewport (375x812) as primary. Desktop is secondary. Use existing Playwright projects: `mobile-chrome`, `nexus-mobile`.
@@ -585,12 +594,12 @@ If a role should NOT have access, write an `assertAccessDenied` test.
 - Test data: `tests/fixtures/`
 
 ### Test Utilities Available
-- `tests/utils/credentials.ts` — `STUDENT_ACCOUNT`, `TEACHER_ACCOUNT`, `ADMIN_ACCOUNT`, `PARENT_ACCOUNT`, `TEST_USERS`, `APP_URLS`, `getTestAuthToken()`, `injectAuthForPage()`
-- `tests/utils/auth-helpers.ts` — `loginAsRole()`, `loginWithPhoneOTP()`, `loginWithGoogle()`, `assertAccessDenied()`
-- `tests/utils/mobile-helpers.ts` — `assertNoHorizontalOverflow()`, `assertTouchTargetSize()`, `goOffline()`, `goOnline()`, `simulateSlow3G()`, `checkAccessibility()`
-- `tests/utils/test-data-factory.ts` — `seedClassroom()`, `seedQuestionBank()`, `seedTNEAData()`, `cleanupAllTestData()`
-- `tests/utils/supabase.ts` — `createTestClient()`, `createTestAdminClient()`, `createMockSupabaseClient()`, `seedTestData()`, `cleanupTestData()`
-- `tests/utils/auth.ts` — Vitest mocks: `mockFirebaseAuth()`, `mockMicrosoftAuth()`
+- `tests/utils/credentials.ts`, `STUDENT_ACCOUNT`, `TEACHER_ACCOUNT`, `ADMIN_ACCOUNT`, `PARENT_ACCOUNT`, `TEST_USERS`, `APP_URLS`, `getTestAuthToken()`, `injectAuthForPage()`
+- `tests/utils/auth-helpers.ts`, `loginAsRole()`, `loginWithPhoneOTP()`, `loginWithGoogle()`, `assertAccessDenied()`
+- `tests/utils/mobile-helpers.ts`, `assertNoHorizontalOverflow()`, `assertTouchTargetSize()`, `goOffline()`, `goOnline()`, `simulateSlow3G()`, `checkAccessibility()`
+- `tests/utils/test-data-factory.ts`, `seedClassroom()`, `seedQuestionBank()`, `seedTNEAData()`, `cleanupAllTestData()`
+- `tests/utils/supabase.ts`, `createTestClient()`, `createTestAdminClient()`, `createMockSupabaseClient()`, `seedTestData()`, `cleanupTestData()`
+- `tests/utils/auth.ts`, Vitest mocks: `mockFirebaseAuth()`, `mockMicrosoftAuth()`
 
 ### E2E Test Template
 Every Playwright test file MUST follow this structure:

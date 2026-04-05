@@ -214,7 +214,7 @@ export default function HeroSection({ locale }: HeroSectionProps) {
                   letterSpacing: '-0.02em',
                 }}
               >
-                NATA 2026 — Complete{' '}
+                NATA 2026: Complete{' '}
                 <Box
                   component="span"
                   sx={{

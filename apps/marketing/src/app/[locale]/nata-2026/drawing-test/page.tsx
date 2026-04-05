@@ -31,7 +31,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Drawing Test — Complete Guide to Scoring 80/80',
+    title: 'NATA 2026 Drawing Test: Complete Guide to Scoring 80/80',
     description:
       'Complete guide to NATA 2026 Drawing Test (Part A). Covers all 3 sections: 2D Composition & Color (25 marks), 3D Composition (25 marks), and Visualization through Sketching (30 marks). Tips, marking scheme, and practice strategy.',
     keywords:
@@ -139,7 +139,7 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
             />
             <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
             <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Drawing Test — Complete Guide
+              NATA 2026 Drawing Test: Complete Guide
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
               The NATA 2026 Drawing Test (Part A) is worth 80 out of 200 marks and is conducted offline on A4 drawing sheets. It consists of 3 sections: 2D Composition & Colour (25 marks), 3D Composition (25 marks), and Visualization through Sketching (30 marks), with a total duration of 135 minutes.
@@ -152,7 +152,7 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              Drawing Test Overview — Part A (80 Marks)
+              Drawing Test Overview: Part A (80 Marks)
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
               The Drawing Test is the offline portion of NATA, conducted on physical A4 drawing sheets at the exam center. Unlike Part B (the online MCQ section), Part A tests your hands-on drawing, composition, and spatial visualization skills. It carries 80 out of 200 total marks and is divided into 3 distinct sections.
@@ -162,7 +162,7 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
               <Card sx={{ height: '100%' }}>
                 <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                   <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    Section A1 — 2D Composition & Colour
+                    Section A1: 2D Composition & Colour
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                     <Chip label="25 Marks" size="small" color="primary" variant="outlined" />
@@ -194,7 +194,7 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
                 />
                 <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                   <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    Section A2 — 3D Composition
+                    Section A2: 3D Composition
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                     <Chip label="25 Marks" size="small" color="primary" variant="outlined" />
@@ -213,7 +213,7 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
               <Card sx={{ height: '100%' }}>
                 <CardContent sx={{ p: { xs: 3, md: 4 } }}>
                   <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    Section A3 — Visualization through Sketching
+                    Section A3: Visualization through Sketching
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                     <Chip label="30 Marks" size="small" color="primary" variant="outlined" />
@@ -311,12 +311,12 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>Key Evaluation Factors</Typography>
                 <List>
                   {[
-                    'Composition — Layout, balance, and visual hierarchy of the design',
-                    'Creativity — Originality and imaginative use of given elements',
-                    'Proportion — Accuracy of scale and relative sizes of objects',
-                    'Perspective Accuracy — Correct representation of depth and 3D space',
-                    'Use of Color — Effective application of color theory and harmony',
-                    'Neatness — Clean execution, tidy lines, and overall presentation',
+                    'Composition: Layout, balance, and visual hierarchy of the design',
+                    'Creativity: Originality and imaginative use of given elements',
+                    'Proportion: Accuracy of scale and relative sizes of objects',
+                    'Perspective Accuracy: Correct representation of depth and 3D space',
+                    'Use of Color: Effective application of color theory and harmony',
+                    'Neatness: Clean execution, tidy lines, and overall presentation',
                   ].map((item, idx) => (
                     <ListItem key={idx} sx={{ px: 0 }}>
                       <ListItemIcon sx={{ minWidth: 32 }}>
@@ -402,7 +402,7 @@ export default function DrawingTestPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Drawing Test</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Drawing Test</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

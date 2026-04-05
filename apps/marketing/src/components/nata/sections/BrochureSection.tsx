@@ -105,7 +105,7 @@ function BrochureCard({ brochure }: { brochure: Brochure }) {
             variant="subtitle1"
             sx={{ fontWeight: 600, lineHeight: 1.3 }}
           >
-            NATA {brochure.year} — v{brochure.version}
+            NATA {brochure.year}, v{brochure.version}
           </Typography>
           {isCurrent && (
             <Chip
@@ -203,7 +203,7 @@ function ComingSoonCard() {
         variant="h6"
         sx={{ fontWeight: 600, mb: 1 }}
       >
-        NATA 2026 Brochure — Coming Soon
+        NATA 2026 Brochure: Coming Soon
       </Typography>
 
       <Typography variant="body2" color="text.secondary">

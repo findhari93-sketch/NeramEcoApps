@@ -15,9 +15,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'B.Arch Counseling Guide 2026 — TNEA, KEAM, JoSAA & More',
+    title: 'B.Arch Counseling Guide 2026: TNEA, KEAM, JoSAA & More',
     description:
-      'Complete guide to B.Arch admission counseling across India. TNEA, KEAM, JoSAA — eligibility, cutoffs, seat matrix, college predictions, and free tools.',
+      'Complete guide to B.Arch admission counseling across India. TNEA, KEAM, JoSAA: eligibility, cutoffs, seat matrix, college predictions, and free tools.',
     keywords:
       'B.Arch counseling 2026, TNEA B.Arch, architecture admission, B.Arch cutoff, college predictor, rank predictor, NATA counseling',
     alternates: buildAlternates(locale, '/counseling'),
@@ -91,7 +91,7 @@ export default function CounselingHubPage({ params: { locale } }: PageProps) {
           color="text.secondary"
           sx={{ fontSize: { xs: '1rem', md: '1.15rem' }, maxWidth: 700, mx: 'auto' }}
         >
-          Everything you need to know about architecture counseling — eligibility, cutoffs,
+          Everything you need to know about architecture counseling: eligibility, cutoffs,
           seat matrix, and free prediction tools.
         </Typography>
       </Box>

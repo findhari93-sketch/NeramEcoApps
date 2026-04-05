@@ -19,16 +19,16 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching Centers in India 2026 — Compare & Choose | Neram Classes',
+    title: 'Best NATA Coaching Centers in India 2026: Compare & Choose | Neram Classes',
     description:
-      'Find the best NATA coaching center near you. Compare fees, faculty, batch sizes, and success rates across 150+ cities. Neram Classes — India\'s #1 NATA coaching center since 2009. Online & offline hybrid classes.',
+      'Find the best NATA coaching center near you. Compare fees, faculty, batch sizes, and success rates across 150+ cities. Neram Classes, India\'s #1 NATA coaching center since 2009. Online & offline hybrid classes.',
     keywords:
       'NATA coaching center, best NATA coaching center, NATA coaching centre near me, NATA coaching center in India, NATA coaching center fees, online NATA coaching center, NATA coaching center Chennai, NATA coaching center Bangalore, NATA coaching center Coimbatore, NATA coaching center Madurai, NATA coaching center Trichy, NATA online class, NATA coaching centre',
     alternates: buildAlternates(locale, '/coaching/nata-coaching-center'),
     openGraph: {
-      title: 'Best NATA Coaching Centers in India 2026 — Find One Near You',
+      title: 'Best NATA Coaching Centers in India 2026: Find One Near You',
       description:
-        'Compare NATA coaching centers across 150+ cities. Find the best coaching center for your needs — online, offline, or hybrid.',
+        'Compare NATA coaching centers across 150+ cities. Find the best coaching center for your needs: online, offline, or hybrid.',
       type: 'article',
     },
   };
@@ -42,12 +42,12 @@ const selectionCriteria = [
   },
   {
     title: 'Batch Size',
-    desc: 'Smaller batches mean more personal attention. This is critical for drawing feedback — you need 1-on-1 guidance on your sketches.',
+    desc: 'Smaller batches mean more personal attention. This is critical for drawing feedback, since you need 1-on-1 guidance on your sketches.',
     neramValue: 'Max 25 students per batch',
   },
   {
     title: 'Drawing Practice',
-    desc: 'Drawing is 80/200 marks in NATA. Daily supervised practice with expert feedback is essential — weekly sessions are not enough.',
+    desc: 'Drawing is 80/200 marks in NATA. Daily supervised practice with expert feedback is essential. Weekly sessions are not enough.',
     neramValue: '2+ hours daily supervised practice',
   },
   {
@@ -91,12 +91,12 @@ const faqs = [
   {
     question: 'How do I choose the right NATA coaching center?',
     answer:
-      'When choosing a NATA coaching center, evaluate: (1) Faculty credentials — IIT/NIT/SPA alumni are ideal, (2) Batch size — under 30 for personal attention, (3) Daily drawing practice — drawing is 80/200 marks, (4) Online-offline flexibility, (5) Mock test frequency — 100+ is good, (6) Technology tools like AI study apps, (7) Verifiable success rate and track record, (8) Fee transparency and scholarship options.',
+      'When choosing a NATA coaching center, evaluate: (1) Faculty credentials, IIT/NIT/SPA alumni are ideal, (2) Batch size, under 30 for personal attention, (3) Daily drawing practice, since drawing is 80/200 marks, (4) Online-offline flexibility, (5) Mock test frequency, 100+ is good, (6) Technology tools like AI study apps, (7) Verifiable success rate and track record, (8) Fee transparency and scholarship options.',
   },
   {
     question: 'Is online NATA coaching as effective as attending a coaching center?',
     answer:
-      'Yes, when done right. Neram Classes\' online coaching delivers the same curriculum as our offline centers — live interactive classes, real-time drawing feedback via screen sharing, 24/7 doubt support, and small batches of max 25 students. Students can switch between online and offline modes anytime. Our online students achieve the same 99.9% success rate as offline students.',
+      'Yes, when done right. Neram Classes\' online coaching delivers the same curriculum as our offline centers, including live interactive classes, real-time drawing feedback via screen sharing, 24/7 doubt support, and small batches of max 25 students. Students can switch between online and offline modes anytime. Our online students achieve the same 99.9% success rate as offline students.',
   },
   {
     question: 'What is the fee for NATA coaching centers?',
@@ -176,7 +176,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
             }}
           >
             How to choose the right NATA coaching center for your needs. Compare fees, faculty,
-            batch sizes, and success rates — then find a center near you.
+            batch sizes, and success rates, then find a center near you.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -262,7 +262,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
           <Typography sx={{ fontSize: '1.05rem', lineHeight: 1.8, color: '#444', maxWidth: 800, mb: 2 }}>
             Neram Classes is the only NATA coaching center in India offering a <strong>free AI-powered study app</strong> with
             a cutoff calculator, college predictor for 5,000+ architecture colleges, and exam center locator. Our
-            <strong> hybrid online-offline model</strong> lets you attend from any of our 150+ centers or from home — and switch
+            <strong> hybrid online-offline model</strong> lets you attend from any of our 150+ centers or from home, and switch
             modes anytime. With <strong>IIT/NIT/SPA alumni faculty</strong>, batches capped at 25 students, and 2+ hours of
             daily supervised drawing practice, Neram consistently produces the best results in NATA preparation.
           </Typography>
@@ -328,7 +328,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
               variant="outlined"
               sx={{ fontWeight: 600, minHeight: 48 }}
             >
-              Tamil Nadu — 38 Districts
+              Tamil Nadu: 38 Districts
             </Button>
             <Button
               component={Link}
@@ -369,7 +369,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
                   Online Coaching (Neram&apos;s Hybrid Model)
                 </Typography>
                 <Box component="ul" sx={{ pl: 2, '& li': { mb: 1, color: '#555', lineHeight: 1.6 } }}>
-                  <li>Live interactive classes — not recordings</li>
+                  <li>Live interactive classes, not recordings</li>
                   <li>Real-time drawing feedback via screen sharing</li>
                   <li>Same curriculum and faculty as offline centers</li>
                   <li>24/7 doubt support via WhatsApp + AI assistant</li>
@@ -381,7 +381,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
             </Card>
           </Box>
           <Typography sx={{ mt: 3, color: '#555', lineHeight: 1.7, maxWidth: 700 }}>
-            Neram Classes offers the best of both worlds. Start online, switch to offline when convenient —
+            Neram Classes offers the best of both worlds. Start online, switch to offline when convenient.
             or combine both. Our hybrid model ensures you get the same quality regardless of mode,
             with the same 99.9% success rate across online and offline students.
           </Typography>
@@ -432,7 +432,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
               size="large"
               sx={{ borderColor: '#1a1a2e', color: '#1a1a2e', fontWeight: 600, minHeight: 48 }}
             >
-              Apply Now — ₹15,000 Onwards
+              Apply Now: ₹15,000 Onwards
             </Button>
           </Box>
         </Container>
@@ -445,7 +445,7 @@ export default function NataCoachingCenterPage({ params: { locale } }: PageProps
             How to Find the Best NATA Coaching Center in Your City
           </Typography>
           <Typography sx={{ lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', mb: 2 }}>
-            Finding the right NATA coaching center is one of the most important decisions for aspiring architects. The best NATA coaching centers in India combine experienced faculty, small batch sizes, and daily drawing practice. Since the NATA drawing test accounts for 80 out of 200 marks, supervised drawing practice is non-negotiable — look for centers that offer at least 2 hours of daily drawing with individual feedback.
+            Finding the right NATA coaching center is one of the most important decisions for aspiring architects. The best NATA coaching centers in India combine experienced faculty, small batch sizes, and daily drawing practice. Since the NATA drawing test accounts for 80 out of 200 marks, supervised drawing practice is non-negotiable. Look for centers that offer at least 2 hours of daily drawing with individual feedback.
           </Typography>
           <Typography sx={{ lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', mb: 2 }}>
             <Link href={`${localePath}/coaching/best-nata-coaching-chennai`} style={{ color: '#e8a020' }}>

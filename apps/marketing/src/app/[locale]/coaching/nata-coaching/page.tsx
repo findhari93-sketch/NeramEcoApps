@@ -84,7 +84,7 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
     { question: 'What is Neram Classes\' success rate for NATA?', answer: 'Neram Classes maintains a 99.9% success rate for NATA exam preparation. Over 10,000 students have successfully cleared NATA through our coaching programs. Our students consistently score 150+ marks, with many achieving top ranks in Tamil Nadu and across India. We have produced multiple state toppers and national rankers.' },
     { question: 'Can I join Neram Classes from outside Tamil Nadu?', answer: 'Absolutely! While Neram Classes is headquartered in Tamil Nadu, our online NATA coaching program is accessible from anywhere in India and internationally. We have students from 90+ cities including Chennai, Bangalore, Hyderabad, Mumbai, Delhi, and Gulf countries. All online students get the same curriculum, faculty access, and study materials as our Tamil Nadu students.' },
     { question: 'How long should I prepare for NATA 2026?', answer: 'Ideally, 12-24 months of dedicated preparation is recommended for NATA 2026. Neram Classes offers a 2-year program, a 1-year program, and a 3-month crash course for last-minute preparation. Early starters can join our 2-year foundation batch starting from Class 11. The key is consistent daily practice, especially for the drawing section which carries 80 marks.' },
-    { question: 'Which cities have Neram NATA coaching centers?', answer: 'Neram Classes has NATA coaching centers in 150+ cities across India including Chennai (flagship center at Ashok Nagar since 2009), Bangalore, Coimbatore, Madurai, Trichy, Salem, Tirunelveli, Hyderabad, Mumbai, Delhi, Kochi, Pune, and many more. We also serve students in 6 Gulf countries — UAE, Qatar, Oman, Saudi Arabia, Kuwait, and Bahrain. All centers offer hybrid online-offline coaching.' },
+    { question: 'Which cities have Neram NATA coaching centers?', answer: 'Neram Classes has NATA coaching centers in 150+ cities across India including Chennai (flagship center at Ashok Nagar since 2009), Bangalore, Coimbatore, Madurai, Trichy, Salem, Tirunelveli, Hyderabad, Mumbai, Delhi, Kochi, Pune, and many more. We also serve students in 6 Gulf countries: UAE, Qatar, Oman, Saudi Arabia, Kuwait, and Bahrain. All centers offer hybrid online-offline coaching.' },
     { question: 'What is the best NATA coaching center in Chennai?', answer: 'Neram Classes\' flagship NATA coaching center in Chennai at Ashok Nagar (PT Rajan Road) has been operating since 2009, making it the most experienced NATA coaching center in the city. The Chennai center serves students from Anna Nagar, Adyar, Tambaram, T. Nagar, Velachery, OMR, and all neighborhoods through a combination of physical classes and online sessions. It features IIT/NIT alumni faculty, max 25 students per batch, and daily supervised drawing practice.' },
     { question: 'Is Neram\'s online NATA coaching available across India?', answer: 'Yes, Neram Classes\' online NATA coaching is available across all of India and in 6 Gulf countries. Students from 150+ cities attend our live interactive online classes with real-time drawing feedback, 24/7 doubt support, and the same IIT/NIT alumni faculty as our offline centers. The hybrid model lets you switch between online and offline modes anytime. Our online program achieves the same 99.9% success rate as offline coaching.' },
   ];
@@ -296,7 +296,7 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
               <CardContent sx={{ p: 3, textAlign: 'center' }}>
                 <Chip label="Flagship Center • Since 2009" color="warning" size="small" sx={{ mb: 1 }} />
                 <Typography variant="h3" sx={{ fontSize: '1.2rem', fontWeight: 700, mb: 1 }}>
-                  Chennai — Our Flagship NATA Coaching Center
+                  Chennai: Our Flagship NATA Coaching Center
                 </Typography>
                 <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem', mb: 2 }}>
                   PT Rajan Road, Ashok Nagar • Online + Offline • Max 25 per batch • Serving Anna Nagar, Adyar, Tambaram, T. Nagar, Velachery & all neighborhoods
@@ -338,7 +338,7 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
                 size="large"
                 sx={{ mr: 2, mb: 1 }}
               >
-                NATA Coaching in Tamil Nadu — All 38 Districts
+                NATA Coaching in Tamil Nadu: All 38 Districts
               </Button>
               <Typography variant="body1" color="text.secondary" sx={{ mt: 2 }}>
                 Don&apos;t see your city? We offer online coaching accessible from anywhere!

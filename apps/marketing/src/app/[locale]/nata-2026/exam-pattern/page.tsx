@@ -26,7 +26,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Exam Pattern — Part A & Part B Detailed Breakdown',
+    title: 'NATA 2026 Exam Pattern: Part A & Part B Detailed Breakdown',
     description:
       'Complete NATA 2026 exam pattern with Part A (Drawing, 80 marks, offline) and Part B (MCQ/NCQ, 120 marks, online adaptive). Duration, marking scheme, and question types explained.',
     keywords:
@@ -43,12 +43,12 @@ const faqs = [
   {
     question: 'How many questions are there in NATA 2026?',
     answer:
-      'NATA 2026 has 3 questions in Part A (offline, 80 marks) and 50 questions in Part B (online, 120 marks) — 42 MCQs and 8 NCQs. The total is 200 marks. Part A tests drawing and composition skills while Part B is a computer-based adaptive test.',
+      'NATA 2026 has 3 questions in Part A (offline, 80 marks) and 50 questions in Part B (online, 120 marks): 42 MCQs and 8 NCQs. The total is 200 marks. Part A tests drawing and composition skills while Part B is a computer-based adaptive test.',
   },
   {
     question: 'Is NATA 2026 Part B adaptive?',
     answer:
-      'Yes, Part B of NATA 2026 uses Computer Adaptive Testing (CAT). You get 108 seconds per question. The difficulty adjusts based on your performance — correct answers lead to harder questions and incorrect ones lead to easier questions.',
+      'Yes, Part B of NATA 2026 uses Computer Adaptive Testing (CAT). You get 108 seconds per question. The difficulty adjusts based on your performance. Correct answers lead to harder questions and incorrect ones lead to easier questions.',
   },
   {
     question: 'Can I use a calculator in NATA?',
@@ -91,7 +91,7 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
               NATA 2026 Exam Pattern
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 is a 200-mark exam in two parts: Part A — Drawing & Composition (80 marks, offline, 90 minutes) and Part B — MCQ/NCQ (120 marks, online adaptive, 90 minutes). The medium is English and Hindi.
+              NATA 2026 is a 200-mark exam in two parts: Part A, Drawing & Composition (80 marks, offline, 90 minutes) and Part B, MCQ/NCQ (120 marks, online adaptive, 90 minutes). The medium is English and Hindi.
             </Typography>
             <LastUpdatedBadge date="March 13, 2026" />
           </Container>
@@ -123,9 +123,9 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                     <Box sx={{ mt: 2 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Question Breakdown:</Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                        A1 — Composition & Color (25 marks): Create compositions and color them appropriately.{'\n'}
-                        A2 — Sketching & Composition B&W (25 marks): Draw buildings, people, environment with scale, proportion, shading.{'\n'}
-                        A3 — 3D Composition (30 marks): Create a 3D composition using a kit provided at the center.
+                        A1: Composition & Color (25 marks): Create compositions and color them appropriately.{'\n'}
+                        A2: Sketching & Composition B&W (25 marks): Draw buildings, people, environment with scale, proportion, shading.{'\n'}
+                        A3: 3D Composition (30 marks): Create a 3D composition using a kit provided at the center.
                       </Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontStyle: 'italic' }}>
@@ -157,12 +157,12 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                     <Box sx={{ mt: 2 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Topics Covered:</Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                        {'\u2022'} Visual Reasoning — 2D/3D composition understanding{'\n'}
-                        {'\u2022'} Logical Derivation — Decoding situations and drawing conclusions{'\n'}
-                        {'\u2022'} GK, Architecture & Design — Buildings, history, materials{'\n'}
-                        {'\u2022'} Language Interpretation — Grammar, word meanings{'\n'}
-                        {'\u2022'} Design Sensitivity & Thinking — Observation, critical thinking{'\n'}
-                        {'\u2022'} Numerical Ability — Math with creative/geometric applications
+                        {'\u2022'} Visual Reasoning: 2D/3D composition understanding{'\n'}
+                        {'\u2022'} Logical Derivation: Decoding situations and drawing conclusions{'\n'}
+                        {'\u2022'} GK, Architecture & Design: Buildings, history, materials{'\n'}
+                        {'\u2022'} Language Interpretation: Grammar, word meanings{'\n'}
+                        {'\u2022'} Design Sensitivity & Thinking: Observation, critical thinking{'\n'}
+                        {'\u2022'} Numerical Ability: Math with creative/geometric applications
                       </Typography>
                     </Box>
                   </CardContent>
@@ -188,7 +188,7 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                   { time: '09:15 AM', event: 'Gate opens to examination hall' },
                   { time: '09:45 AM', event: 'Registration must be completed' },
                   { time: '10:00 AM', event: 'Gate closes, examination begins (Part A + Part B)' },
-                  { time: '10:15 AM', event: 'Late entry cutoff — no entry after this' },
+                  { time: '10:15 AM', event: 'Late entry cutoff. No entry after this.' },
                   { time: '01:00 PM', event: 'Examination ends, exit allowed' },
                 ].map((row, idx) => (
                   <Box key={idx} sx={{ display: 'flex', gap: 3, py: 1.5, borderBottom: idx < 5 ? '1px solid' : 'none', borderColor: 'divider' }}>
@@ -208,7 +208,7 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
                   { time: '12:45 PM', event: 'Gate opens to examination hall' },
                   { time: '01:15 PM', event: 'Registration must be completed' },
                   { time: '01:30 PM', event: 'Gate closes, examination begins (Part A + Part B)' },
-                  { time: '01:45 PM', event: 'Late entry cutoff — no entry after this' },
+                  { time: '01:45 PM', event: 'Late entry cutoff. No entry after this.' },
                   { time: '04:30 PM', event: 'Examination ends, exit allowed' },
                 ].map((row, idx) => (
                   <Box key={idx} sx={{ display: 'flex', gap: 3, py: 1.5, borderBottom: idx < 5 ? '1px solid' : 'none', borderColor: 'divider' }}>
@@ -251,7 +251,7 @@ export default function ExamPatternPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Exam Pattern</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Exam Pattern</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

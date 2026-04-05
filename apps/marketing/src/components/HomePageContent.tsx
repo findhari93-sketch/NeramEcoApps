@@ -107,7 +107,7 @@ const fallbackTestimonials: Testimonial[] = [
     role: 'NATA 2026 - AIR 42',
   },
   {
-    text: 'From zero knowledge to AIR under 500 — all thanks to the systematic approach and mentorship at Neram. The crash course is worth every rupee.',
+    text: 'From zero knowledge to AIR under 500, all thanks to the systematic approach and mentorship at Neram. The crash course is worth every rupee.',
     image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=face',
     name: 'Priya Venkat',
     role: 'JEE Paper 2 2026 - IIT Kharagpur',

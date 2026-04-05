@@ -328,7 +328,7 @@ function ApplicationCard({ application, onEdit, onDelete, onPayClick, onViewClic
               '&:hover': { bgcolor: '#1B5E20' },
             }}
           >
-            Complete Fee Payment — Final Step
+            Complete Fee Payment: Final Step
           </Button>
         </Box>
       )}

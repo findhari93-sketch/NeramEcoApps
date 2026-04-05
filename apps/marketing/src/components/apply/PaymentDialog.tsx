@@ -770,7 +770,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
             {details.courseName}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Secure your seat — complete payment below
+            Secure your seat. Complete payment below
           </Typography>
         </Box>
 
@@ -824,7 +824,7 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
               </Typography>
             )}
             <Typography variant="caption" color="text.secondary">
-              One-time payment — Instant enrollment
+              One-time payment. Instant enrollment
             </Typography>
           </Paper>
 

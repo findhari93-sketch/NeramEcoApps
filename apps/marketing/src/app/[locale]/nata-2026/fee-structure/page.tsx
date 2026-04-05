@@ -26,7 +26,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Application Fee — Category-Wise Fee Details',
+    title: 'NATA 2026 Application Fee: Category-Wise Fee Details',
     description:
       'Complete NATA 2026 fee structure for all categories. General: Rs 1,750, SC/ST: Rs 1,250, Transgender: Rs 1,000, Outside India: Rs 15,000. Payment modes and multiple attempt fees explained.',
     keywords:
@@ -123,7 +123,7 @@ export default function FeeStructurePage({ params: { locale } }: PageProps) {
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
                 {'\u2022'} Fee is per test. Maximum 2 tests in Phase 1 or 1 test in Phase 2.{'\n'}
                 {'\u2022'} Fee is non-refundable in all cases.{'\n'}
-                {'\u2022'} Payment: Electronic Payment Gateway (EPG) — Debit Card, Credit Card, Net Banking.{'\n'}
+                {'\u2022'} Payment: Electronic Payment Gateway (EPG): Debit Card, Credit Card, Net Banking.{'\n'}
                 {'\u2022'} Candidates initially opting for a single test may later opt for an additional test (not exceeding 2).{'\n'}
                 {'\u2022'} Multiple applications by the same candidate with changed credentials will be rejected without refund.
               </Typography>
@@ -136,7 +136,7 @@ export default function FeeStructurePage({ params: { locale } }: PageProps) {
           <Container maxWidth="md">
             <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>Calculate Your Total NATA Cost</Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Plan your budget with our free Cost Calculator — includes application fee, coaching, and college admission costs.
+              Plan your budget with our free Cost Calculator. It covers application fee, coaching, and college admission costs.
             </Typography>
             <Button variant="contained" size="large" component="a" href={`${APP_URL}/tools/nata/cost-calculator`} target="_blank" rel="noopener noreferrer">
               Open Cost Calculator (Free)
@@ -168,7 +168,7 @@ export default function FeeStructurePage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Fee</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Fee</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

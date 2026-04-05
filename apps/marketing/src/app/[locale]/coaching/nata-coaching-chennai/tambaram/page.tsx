@@ -40,7 +40,7 @@ const faqs = [
   },
   {
     question: 'What is the best NATA coaching in Tambaram, Chennai?',
-    answer: "Neram Classes operates both a Tambaram sub-center and the main Ashok Nagar center — giving Tambaram students the best access to NATA coaching. IIT/NIT alumni faculty, max 25 per batch, 99.9% success rate, free AI study app.",
+    answer: "Neram Classes operates both a Tambaram sub-center and the main Ashok Nagar center, giving Tambaram students the best access to NATA coaching. IIT/NIT alumni faculty, max 25 per batch, 99.9% success rate, free AI study app.",
   },
 ];
 

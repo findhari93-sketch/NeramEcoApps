@@ -37,9 +37,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   return {
     title:
-      'NATA 2026 — Complete Exam Guide, Dates, Syllabus, Eligibility & Free Tools',
+      'NATA 2026: Complete Exam Guide, Dates, Syllabus, Eligibility & Free Tools',
     description:
-      'Everything about NATA 2026 exam — eligibility, syllabus, exam pattern, fee structure, exam centers, how to apply, cutoff calculator & free preparation tools.',
+      'Everything about NATA 2026 exam: eligibility, syllabus, exam pattern, fee structure, exam centers, how to apply, cutoff calculator & free preparation tools.',
     keywords:
       'NATA 2026, NATA exam 2026, NATA eligibility, NATA syllabus, NATA exam pattern, NATA exam centers, NATA fee, NATA cutoff, NATA preparation, NATA guide',
     alternates: buildAlternates(locale, '/nata-2026'),

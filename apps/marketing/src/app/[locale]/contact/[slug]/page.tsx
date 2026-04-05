@@ -110,7 +110,7 @@ function buildCenterFAQs(center: OfflineCenter) {
     },
     {
       question: `What are the batch timings at Neram Classes ${city}?`,
-      answer: `We offer flexible batch timings at our ${city} center — morning (9 AM - 12 PM), evening (4 PM - 7 PM), and weekend batches (Saturday 9 AM - 2 PM). This allows school and college students to attend without missing their regular classes.`,
+      answer: `We offer flexible batch timings at our ${city} center: morning (9 AM - 12 PM), evening (4 PM - 7 PM), and weekend batches (Saturday 9 AM - 2 PM). This allows school and college students to attend without missing their regular classes.`,
     },
     {
       question: `Do you provide study materials for NATA preparation?`,
@@ -258,8 +258,8 @@ export default async function CenterDetailPage({
                 backgrounds, we have consistently produced top rankers in NATA and JEE Paper 2 every year.
               </Typography>
               <Typography variant="body1" paragraph>
-                Whether you are a 12th-pass student or a repeater, our structured curriculum covers all three NATA sections —
-                Mathematics, General Aptitude, and Drawing — with equal emphasis. We offer flexible batch timings and
+                Whether you are a 12th-pass student or a repeater, our structured curriculum covers all three NATA sections:
+                Mathematics, General Aptitude, and Drawing, with equal emphasis. We offer flexible batch timings and
                 both online and offline modes to suit every student&apos;s needs.
               </Typography>
             </Grid>
@@ -357,7 +357,7 @@ export default async function CenterDetailPage({
       <Box sx={{ py: { xs: 5, md: 8 }, bgcolor: 'grey.50' }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', md: '2rem' }, mb: 4 }}>
-            Frequently Asked Questions — NATA Coaching in {cityDisplay}
+            Frequently Asked Questions: NATA Coaching in {cityDisplay}
           </Typography>
           <Grid container spacing={3}>
             {faqs.map((faq, index) => (

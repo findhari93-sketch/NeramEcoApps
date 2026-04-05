@@ -36,6 +36,7 @@ const footerLinks = {
     { label: 'Previous Year Papers', href: '/previous-year-papers' },
     { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
     { label: 'Free NATA App', href: '/nata-app' },
+    { label: 'Nexus LMS (Students)', href: 'https://nexus.neramclasses.com' },
     { label: 'Online Coaching', href: '/best-nata-coaching-online' },
     { label: 'Blog', href: '/blog' },
   ],
@@ -292,6 +293,113 @@ export default function Footer() {
             </MuiLink>
           </Grid>
         </Grid>
+
+        {/* Nexus LMS Promotion */}
+        <Box
+          sx={{
+            mt: 5,
+            mb: 4,
+            p: { xs: 3, md: 4 },
+            borderRadius: 3,
+            border: '1px solid rgba(232,160,32,0.2)',
+            background: 'linear-gradient(135deg, rgba(232,160,32,0.05) 0%, rgba(232,160,32,0.02) 100%)',
+          }}
+        >
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} md={7}>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: '#e8a020', mb: 1 }}>
+                Nexus by Neram Classes
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9, mb: 1.5, lineHeight: 1.7 }}>
+                India&apos;s first NATA-exclusive learning platform, designed by architects. A complete self-learning assistant with live and recorded classes, AI-powered study tools, and parent monitoring.
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 2 }}>
+                {[
+                  'Question Bank (2005-2026)',
+                  'Drawing Evaluation',
+                  'Video Library',
+                  'Live Classes',
+                  'Leaderboard',
+                  'Parent Dashboard',
+                  'AI Assistant',
+                  'Multi-language',
+                ].map((feature) => (
+                  <Chip
+                    key={feature}
+                    label={feature}
+                    size="small"
+                    sx={{
+                      height: 24,
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      bgcolor: 'rgba(232,160,32,0.08)',
+                      color: '#e8a020',
+                      border: '1px solid rgba(232,160,32,0.2)',
+                      '& .MuiChip-label': { px: 1 },
+                    }}
+                  />
+                ))}
+              </Box>
+              <Chip
+                label="Supported by Microsoft"
+                size="small"
+                sx={{
+                  height: 22,
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  bgcolor: 'rgba(255,255,255,0.05)',
+                  color: 'rgba(255,255,255,0.6)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  '& .MuiChip-label': { px: 1.5 },
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+                <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.7rem' }}>
+                  Free tools available to everyone. Nexus premium features exclusive to enrolled students.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                  <MuiLink
+                    component={Link}
+                    href={getLocalizedPath('/nata-app')}
+                    underline="none"
+                    sx={{
+                      px: 2.5,
+                      py: 1,
+                      borderRadius: 2,
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: '1px solid rgba(232,160,32,0.4)',
+                      color: '#e8a020',
+                      transition: 'all 0.2s',
+                      '&:hover': { bgcolor: 'rgba(232,160,32,0.1)', borderColor: '#e8a020' },
+                    }}
+                  >
+                    Try Free Tools
+                  </MuiLink>
+                  <MuiLink
+                    href="https://nexus.neramclasses.com"
+                    underline="none"
+                    sx={{
+                      px: 2.5,
+                      py: 1,
+                      borderRadius: 2,
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      bgcolor: '#e8a020',
+                      color: '#030812',
+                      transition: 'all 0.2s',
+                      '&:hover': { bgcolor: '#f0b040' },
+                    }}
+                  >
+                    Explore Nexus
+                  </MuiLink>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
 
         <Divider sx={{ my: 4, bgcolor: 'rgba(232,160,32,0.15)' }} />
 

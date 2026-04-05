@@ -33,12 +33,12 @@ const faqs = [
   {
     question: 'How many questions are available in the NATA Question Bank?',
     answer:
-      'The question bank currently contains 1000+ questions across all three NATA sections — Mathematics, General Aptitude, and Drawing. New questions are added weekly by our community and faculty. You can filter by section, topic, and difficulty to focus your practice.',
+      'The question bank currently contains 1000+ questions across all three NATA sections: Mathematics, General Aptitude, and Drawing. New questions are added weekly by our community and faculty. You can filter by section, topic, and difficulty to focus your practice.',
   },
   {
     question: 'Does the Question Bank cover all NATA 2026 sections?',
     answer:
-      'Yes. The Question Bank covers all three sections of NATA 2026: Mathematics (PCM topics — algebra, trigonometry, calculus, coordinate geometry, 3D geometry), General Aptitude (visual perception, spatial reasoning, colour theory, architecture awareness, logical reasoning), and Drawing (2D composition, 3D visualisation, perspective drawing, design sense).',
+      'Yes. The Question Bank covers all three sections of NATA 2026: Mathematics (PCM topics: algebra, trigonometry, calculus, coordinate geometry, 3D geometry), General Aptitude (visual perception, spatial reasoning, colour theory, architecture awareness, logical reasoning), and Drawing (2D composition, 3D visualisation, perspective drawing, design sense).',
   },
   {
     question: 'Are the questions based on the latest NATA 2026 syllabus?',
@@ -53,7 +53,7 @@ const faqs = [
   {
     question: 'Is the NATA Question Bank free?',
     answer:
-      'Yes, the core question bank is completely free. You can practice unlimited questions, view answers with explanations, and track basic progress — all without payment. Premium features like timed mock tests, detailed analytics, and AI-powered weak topic analysis are available with a Neram Classes subscription.',
+      'Yes, the core question bank is completely free. You can practice unlimited questions, view answers with explanations, and track basic progress, all without payment. Premium features like timed mock tests, detailed analytics, and AI-powered weak topic analysis are available with a Neram Classes subscription.',
   },
 ];
 
@@ -64,7 +64,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   return {
     title:
-      'NATA Question Bank 2026 — Free Practice Questions for Architecture Entrance',
+      'NATA Question Bank 2026: Free Practice Questions for Architecture Entrance',
     description:
       'Free NATA 2026 question bank with 1000+ practice questions. Section-wise practice for Mathematics, General Aptitude, and Drawing. Difficulty ratings, topic filters, and detailed solutions.',
     keywords:
@@ -72,7 +72,7 @@ export async function generateMetadata({
     alternates: buildAlternates(locale, '/tools/question-bank'),
     openGraph: {
       title:
-        'NATA Question Bank 2026 — Free Practice Questions for Architecture Entrance',
+        'NATA Question Bank 2026: Free Practice Questions for Architecture Entrance',
       description:
         'Free NATA question bank with 1000+ practice questions across Mathematics, General Aptitude, and Drawing sections.',
       url:
@@ -155,7 +155,7 @@ export default function QuestionBankPage({
             Practice for NATA 2026 with our free question bank containing 1000+
             questions across all three exam sections. The NATA Question Bank
             gives you section-wise practice for Mathematics, General Aptitude,
-            and Drawing — the three pillars of the architecture entrance exam.
+            and Drawing, the three pillars of the architecture entrance exam.
             Every question is tagged by topic, difficulty level (Easy, Medium,
             Hard), and section, so you can focus your preparation exactly where
             you need it. Community-contributed questions add real variety, while
@@ -291,7 +291,7 @@ export default function QuestionBankPage({
               },
               {
                 title: 'Topic-wise Filters',
-                desc: 'Filter questions by specific topics — coordinate geometry, logarithms, architectural awareness, texture recognition, 3D visualisation, and more.',
+                desc: 'Filter questions by specific topics: coordinate geometry, logarithms, architectural awareness, texture recognition, 3D visualisation, and more.',
               },
               {
                 title: 'Detailed Solutions',
@@ -353,7 +353,7 @@ export default function QuestionBankPage({
           Understanding the question types in each section is essential for
           effective preparation. The Mathematics section (Part A) has 20
           multiple-choice questions worth 40 marks, covering topics from 10+2
-          level PCM — algebra, matrices, trigonometry, calculus, coordinate
+          level PCM: algebra, matrices, trigonometry, calculus, coordinate
           geometry, and 3D geometry. Questions are straightforward but require
           quick calculation.
         </Typography>

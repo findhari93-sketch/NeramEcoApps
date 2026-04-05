@@ -103,7 +103,7 @@ export default function WhatIsNataSection() {
                 mandatory for admission to B.Arch programs
               </Highlight>{' '}
               across India. The exam tests a candidate&apos;s aptitude in drawing,
-              observation skills, critical thinking, and aesthetic sensitivity —
+              observation skills, critical thinking, and aesthetic sensitivity,
               the core skills required for a career in architecture. NATA scores
               are accepted by{' '}
               <Highlight>

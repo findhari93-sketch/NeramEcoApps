@@ -32,11 +32,11 @@ export async function generateMetadata({
 const faqs = [
   {
     question: 'Is there NATA coaching in Anna Nagar, Chennai?',
-    answer: 'Yes, Neram Classes serves Anna Nagar students through our Ashok Nagar center (just 1 metro stop away — Anna Nagar East Metro to Ashok Nagar Metro) and live online classes. Our hybrid model means you can attend offline at the center or study from home in Anna Nagar with the same IIT/NIT alumni faculty. Max 25 per batch, 99.9% success rate.',
+    answer: 'Yes, Neram Classes serves Anna Nagar students through our Ashok Nagar center (just 1 metro stop away, Anna Nagar East Metro to Ashok Nagar Metro) and live online classes. Our hybrid model means you can attend offline at the center or study from home in Anna Nagar with the same IIT/NIT alumni faculty. Max 25 per batch, 99.9% success rate.',
   },
   {
     question: 'How far is Neram Classes from Anna Nagar?',
-    answer: "Neram Classes' Ashok Nagar center is 7 km from Anna Nagar — approximately 20 minutes by auto or just 1 stop on the Chennai Metro (Anna Nagar East to Ashok Nagar). Many Anna Nagar students also join our live online classes on weekdays.",
+    answer: "Neram Classes' Ashok Nagar center is 7 km from Anna Nagar, approximately 20 minutes by auto or just 1 stop on the Chennai Metro (Anna Nagar East to Ashok Nagar). Many Anna Nagar students also join our live online classes on weekdays.",
   },
   {
     question: 'What is the fee for NATA coaching near Anna Nagar?',

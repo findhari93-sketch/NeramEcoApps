@@ -32,7 +32,7 @@ export async function generateMetadata({
 const faqs = [
   {
     question: 'Is there NATA coaching near T. Nagar, Chennai?',
-    answer: "Yes, Neram Classes' Ashok Nagar center is just 3 km from T. Nagar — a 10-minute auto ride or 15-minute walk. Many T. Nagar students walk to our center after school for daily NATA classes. Online classes also available.",
+    answer: "Yes, Neram Classes' Ashok Nagar center is just 3 km from T. Nagar, a 10-minute auto ride or 15-minute walk. Many T. Nagar students walk to our center after school for daily NATA classes. Online classes also available.",
   },
   {
     question: 'Which is the closest NATA coaching to T. Nagar?',

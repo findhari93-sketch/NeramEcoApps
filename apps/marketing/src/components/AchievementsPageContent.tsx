@@ -153,7 +153,7 @@ export default function AchievementsPageContent({ locale = 'en' }: { locale?: st
                         No achievements recorded for {selectedYear} yet
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Check back soon — we update this page as results are announced
+                        Check back soon. We update this page as results are announced
                       </Typography>
                     </Box>
                   </Grid>

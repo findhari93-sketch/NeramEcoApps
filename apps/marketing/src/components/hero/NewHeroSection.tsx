@@ -129,7 +129,7 @@ export default function NewHeroSection() {
               >
                 Live classes. Intelligent tools. Real results.
                 <br />
-                <strong>Nexus</strong> — an AI-powered NATA prep companion trusted by
+                <strong>Nexus</strong>, an AI-powered NATA prep companion trusted by
                 AIR toppers across JEE Paper 2 &amp; NATA nationwide in India.
               </Typography>
 

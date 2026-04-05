@@ -117,7 +117,7 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
               { title: 'Hybrid: Online + Offline', desc: `Study online from ${neighborhood.name} or attend at our Ashok Nagar center. Switch anytime.` },
               { title: 'Max 25 Per Batch', desc: 'Individual drawing feedback and personal mentoring. Not 50-100+ students like other institutes.' },
               { title: '99.9% Success Rate', desc: 'Highest success rate. Students scoring 130+ and admitted to SPA Delhi, NIT Trichy, CEPT Ahmedabad.' },
-              { title: 'IIT/NIT/SPA Faculty', desc: 'Every instructor is an IIT, NIT, or SPA alumnus — practising architects, not freelancers.' },
+              { title: 'IIT/NIT/SPA Faculty', desc: 'Every instructor is an IIT, NIT, or SPA alumnus: practising architects, not freelancers.' },
               { title: 'Daily Drawing (2+ hrs)', desc: 'Drawing is 80/200 marks in NATA. We provide 2+ hours of supervised drawing practice daily.' },
             ].map((item, i) => (
               <Card key={i} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
@@ -220,14 +220,14 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
             Ready to Start NATA Preparation?
           </Typography>
           <Typography sx={{ color: '#333', mb: 3 }}>
-            Book a free demo class — attend online from {neighborhood.name} or visit our Ashok Nagar center.
+            Book a free demo class, attend online from {neighborhood.name} or visit our Ashok Nagar center.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Button component={Link} href="/demo-class" variant="contained" size="large" sx={{ bgcolor: '#1a1a2e', color: '#fff', '&:hover': { bgcolor: '#0a0a1e' }, fontWeight: 700, px: 4 }}>
               Free Demo Class
             </Button>
             <Button component={Link} href="/apply" variant="outlined" size="large" sx={{ borderColor: '#1a1a2e', color: '#1a1a2e', fontWeight: 600 }}>
-              Apply Now — ₹15,000 Onwards
+              Apply Now, ₹15,000 Onwards
             </Button>
           </Box>
         </Container>

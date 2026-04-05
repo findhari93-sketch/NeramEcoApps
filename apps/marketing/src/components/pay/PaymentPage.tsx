@@ -565,7 +565,7 @@ export default function PaymentPage() {
                       <Box>
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <Typography fontWeight={600}>
-                            Pay in Full &mdash; {formatCurrency(details.fullPaymentAmount)}
+                            Pay in Full: {formatCurrency(details.fullPaymentAmount)}
                           </Typography>
                           {details.fullPaymentDiscount > 0 && (
                             <Chip

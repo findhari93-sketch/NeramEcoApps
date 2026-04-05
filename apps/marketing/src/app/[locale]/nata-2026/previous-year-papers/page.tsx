@@ -31,7 +31,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Previous Year Question Papers (2020-2025) — Download & Analysis',
+    title: 'NATA Previous Year Question Papers (2020-2025): Download & Analysis',
     description:
       'Download NATA previous year question papers from 2020 to 2025. Year-wise analysis of question patterns, difficulty trends, and topic-wise weightage. Free practice resources for NATA 2026.',
     keywords:
@@ -91,12 +91,12 @@ const topicWeightage = [
 
 const pyqTips = [
   'Start with the most recent papers (2024-2025) to understand the current format and difficulty.',
-  'Time yourself strictly — 90 minutes for Part A and 90 minutes for Part B.',
+  'Time yourself strictly: 90 minutes for Part A and 90 minutes for Part B.',
   'Analyze your mistakes after each paper. Note which topics need more practice.',
-  'Focus on understanding the marking scheme — no negative marking means attempt every question.',
+  'Focus on understanding the marking scheme. No negative marking means attempt every question.',
   'Practice the 3D Composition questions separately since this is a newer format.',
   'Compare question patterns across years to identify frequently tested topics.',
-  'Use PYQs to build speed in drawing — aim to complete each drawing question in 30 minutes.',
+  'Use PYQs to build speed in drawing. Aim to complete each drawing question in 30 minutes.',
   'Recreate drawing questions from memory to improve visualization skills.',
 ];
 
@@ -281,7 +281,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA Previous Year Papers</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA Previous Year Papers</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

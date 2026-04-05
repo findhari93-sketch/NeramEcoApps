@@ -436,7 +436,7 @@ export default function NataChatbot() {
                 NATA Assistant
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2 }}>
-                Hey there! I&apos;m here to help you with everything about NATA — eligibility, exam pattern, fees, important dates, and more. Ask me anything!
+                Hey there! I&apos;m here to help you with everything about NATA: eligibility, exam pattern, fees, important dates, and more. Ask me anything!
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, justifyContent: 'center' }}>
                 {SUGGESTED_QUESTIONS.map((q) => (

@@ -15,12 +15,12 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Coaching in Chennai — All Neighborhoods | Neram Classes',
+    title: 'NATA Coaching in Chennai, All Neighborhoods | Neram Classes',
     description: 'Find NATA coaching in your Chennai neighborhood. Neram Classes serves Anna Nagar, Adyar, Tambaram, Ashok Nagar, T. Nagar, Velachery & more. Flagship center at Ashok Nagar + online classes. Since 2009.',
     keywords: 'NATA coaching Chennai, NATA coaching Anna Nagar, NATA coaching Adyar, NATA coaching Tambaram, NATA coaching Ashok Nagar, NATA coaching T Nagar, NATA coaching Velachery, NATA classes Chennai neighborhoods',
     alternates: buildAlternates(locale, '/coaching/nata-coaching-chennai'),
     openGraph: {
-      title: 'NATA Coaching Across Chennai — All Neighborhoods | Neram Classes',
+      title: 'NATA Coaching Across Chennai, All Neighborhoods | Neram Classes',
       description: 'Find NATA coaching near you in Chennai. Serving Anna Nagar, Adyar, Tambaram, Ashok Nagar, T. Nagar, Velachery & 10+ neighborhoods.',
       type: 'article',
     },
@@ -34,7 +34,7 @@ const faqs = [
   },
   {
     question: 'Does Neram have multiple centers in Chennai?',
-    answer: 'Neram has two locations in Chennai: (1) Flagship center at Ashok Nagar — PT Rajan Road, Sector 13, near Ashok Nagar Metro. (2) Sub-center at Tambaram — Thiruneermalai, Jain Alpine Meadows. All students also have full access to live online classes.',
+    answer: 'Neram has two locations in Chennai: (1) Flagship center at Ashok Nagar, PT Rajan Road, Sector 13, near Ashok Nagar Metro. (2) Sub-center at Tambaram, Thiruneermalai, Jain Alpine Meadows. All students also have full access to live online classes.',
   },
   {
     question: 'Can I attend NATA coaching online from any Chennai neighborhood?',
@@ -113,16 +113,16 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
             <Card elevation={0} sx={{ border: '2px solid #e8a020' }}>
               <CardContent sx={{ p: 3 }}>
                 <Chip label="Flagship Center" color="warning" size="small" sx={{ mb: 1 }} />
-                <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>Neram Classes — Ashok Nagar</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>Neram Classes, Ashok Nagar</Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>PT Rajan Road, Sector 13, Ashok Nagar, Chennai 600083</Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>Near Ashok Nagar Metro Station (5 min walk)</Typography>
-                <Typography sx={{ color: '#555', fontSize: '0.9rem' }}>Mon-Fri: 9 AM — 6 PM | Sat: 9 AM — 2 PM</Typography>
+                <Typography sx={{ color: '#555', fontSize: '0.9rem' }}>Mon-Fri: 9 AM to 6 PM | Sat: 9 AM to 2 PM</Typography>
               </CardContent>
             </Card>
             <Card elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
               <CardContent sx={{ p: 3 }}>
                 <Chip label="Sub-Center" size="small" sx={{ mb: 1 }} />
-                <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>Neram Classes — Tambaram</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>Neram Classes, Tambaram</Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>Thiruneermalai, Jain Alpine Meadows, Tambaram, Chennai</Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.9rem' }}>Serving Tambaram, Chengalpattu, Kanchipuram, ECR students</Typography>
               </CardContent>

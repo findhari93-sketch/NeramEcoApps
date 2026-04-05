@@ -73,7 +73,7 @@ interface PageProps {
 const features = [
   {
     title: 'Live Interactive Classes',
-    desc: 'Real-time sessions with faculty -- not pre-recorded videos. Ask questions, get instant feedback, and learn at your pace.',
+    desc: 'Real-time sessions with faculty, not pre-recorded videos. Ask questions, get instant feedback, and learn at your pace.',
   },
   {
     title: 'Daily Drawing Practice',
@@ -160,7 +160,7 @@ const courses = [
 const comparisonPoints = [
   {
     feature: 'Success Rate',
-    neram: '99.9% -- same as our offline batches',
+    neram: '99.9%, same as our offline batches',
     traditional: 'Varies widely by location',
   },
   {
@@ -170,7 +170,7 @@ const comparisonPoints = [
   },
   {
     feature: 'Class Timing',
-    neram: 'Flexible -- morning, evening, and weekend batches',
+    neram: 'Flexible: morning, evening, and weekend batches',
     traditional: 'Fixed schedule, limited options',
   },
   {
@@ -336,7 +336,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
             <Grid container spacing={4} alignItems="center">
               <Grid item xs={12} md={7}>
                 <Chip
-                  label="NATA 2026 -- Online Coaching"
+                  label="NATA 2026: Online Coaching"
                   sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }}
                 />
                 <Typography
@@ -578,7 +578,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
               color="text.secondary"
               sx={{ mb: 6, maxWidth: 700, mx: 'auto' }}
             >
-              Neram online NATA coaching delivers the same results as traditional classroom coaching -- and then some
+              Neram online NATA coaching delivers the same results as traditional classroom coaching, and then some
             </Typography>
 
             {/* Desktop Table */}
@@ -757,7 +757,7 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
                 <Typography variant="body1" color="text.secondary" sx={{ mb: 3, lineHeight: 1.8 }}>
                   Supplement your online coaching with our free NATA app at app.neramclasses.com.
                   Access mock tests, drawing practice sheets, aptitude quizzes, and study materials
-                  -- all completely free, no enrollment required.
+                  all completely free, no enrollment required.
                 </Typography>
                 <Button
                   variant="contained"

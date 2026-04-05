@@ -25,9 +25,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Important Dates — Registration, Exam & Result Schedule',
+    title: 'NATA 2026 Important Dates: Registration, Exam & Result Schedule',
     description:
-      'NATA 2026 important dates for all 3 attempts — registration start/end, exam dates, result dates, and counselling schedule. Updated as announced by CoA.',
+      'NATA 2026 important dates for all 3 attempts: registration start/end, exam dates, result dates, and counselling schedule. Updated as announced by CoA.',
     keywords:
       'NATA 2026 dates, NATA exam date 2026, NATA 2026 registration date, NATA result date, NATA 2026 schedule, NATA important dates',
     alternates: buildAlternates(locale, '/nata-2026/important-dates'),
@@ -41,13 +41,13 @@ interface PageProps {
 const dateEvents = [
   { event: 'NATA 2026 Brochure Released (V1.0)', date: 'March 8, 2026', status: 'completed' },
   { event: 'Online Registration Opens (www.nata.in)', date: 'March 9, 2026', status: 'active' },
-  { event: 'Phase 1 — Exam Period Begins', date: 'April 4, 2026', status: 'confirmed' },
-  { event: 'Phase 1 — Exams on Fridays (1 session) & Saturdays (2 sessions)', date: 'April 4 – June 13, 2026', status: 'confirmed' },
-  { event: 'Phase 1 — Exam Period Ends', date: 'June 13, 2026', status: 'confirmed' },
-  { event: 'Phase 1 — Percentile Score Card Issued', date: 'After June 13, 2026', status: 'confirmed' },
-  { event: 'Centralized Admission Counselling (CAP) — Various States', date: 'June–August 2026 (varies by state)', status: 'upcoming' },
-  { event: 'Phase 2 — Exam Dates (for vacant seats)', date: 'August 7 & 8, 2026', status: 'confirmed' },
-  { event: 'Phase 2 — Raw Score Card Issued', date: 'After August 8, 2026', status: 'confirmed' },
+  { event: 'Phase 1: Exam Period Begins', date: 'April 4, 2026', status: 'confirmed' },
+  { event: 'Phase 1: Exams on Fridays (1 session) & Saturdays (2 sessions)', date: 'April 4 – June 13, 2026', status: 'confirmed' },
+  { event: 'Phase 1: Exam Period Ends', date: 'June 13, 2026', status: 'confirmed' },
+  { event: 'Phase 1: Percentile Score Card Issued', date: 'After June 13, 2026', status: 'confirmed' },
+  { event: 'Centralized Admission Counselling (CAP), Various States', date: 'June–August 2026 (varies by state)', status: 'upcoming' },
+  { event: 'Phase 2: Exam Dates (for vacant seats)', date: 'August 7 & 8, 2026', status: 'confirmed' },
+  { event: 'Phase 2: Raw Score Card Issued', date: 'After August 8, 2026', status: 'confirmed' },
   { event: 'Admission Against Vacant Seats', date: 'August–September 2026', status: 'upcoming' },
 ];
 
@@ -151,7 +151,7 @@ export default function ImportantDatesPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Dates</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Dates</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

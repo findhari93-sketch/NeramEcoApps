@@ -30,7 +30,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Eligibility Criteria — Who Can Apply?',
+    title: 'NATA 2026 Eligibility Criteria: Who Can Apply?',
     description:
       'Complete NATA 2026 eligibility criteria for appearing in the exam and for B.Arch admission. Age limit, academic requirements, subject combinations, and category-wise details.',
     keywords:
@@ -115,7 +115,7 @@ export default function EligibilityPage({ params: { locale } }: PageProps) {
                     'No minimum percentage required to appear for the NATA exam.',
                     'No upper age limit to appear for NATA.',
                     'Indian nationals, OCI, PIO holders, and foreign nationals are eligible.',
-                    'Qualifying in NATA does not guarantee admission — all eligibility criteria by respective authorities must be met.',
+                    'Qualifying in NATA does not guarantee admission. All eligibility criteria by respective authorities must be met.',
                   ].map((item, idx) => (
                     <ListItem key={idx} sx={{ px: 0 }}>
                       <ListItemIcon sx={{ minWidth: 32 }}>
@@ -202,7 +202,7 @@ export default function EligibilityPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Eligibility</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Eligibility</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

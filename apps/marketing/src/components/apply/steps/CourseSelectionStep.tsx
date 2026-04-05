@@ -483,7 +483,7 @@ export default function CourseSelectionStep() {
           <Alert severity="success" sx={{ mt: 2 }}>
             <Typography variant="body2">
               You&apos;ve selected 100% online learning. You&apos;ll get access to live interactive
-              sessions, recorded lectures, AI-powered doubt solving, and practice tests — all from
+              sessions, recorded lectures, AI-powered doubt solving, and practice tests, all from
               the comfort of your home.
             </Typography>
           </Alert>

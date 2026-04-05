@@ -15,7 +15,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'TNEA B.Arch Counseling 2026 — Complete Guide, Cutoffs, Colleges & Free Tools',
+    title: 'TNEA B.Arch Counseling 2026: Complete Guide, Cutoffs, Colleges & Free Tools',
     description:
       'Complete guide to TNEA B.Arch counseling 2026. Merit formula, eligibility, 32 participating colleges, category-wise cutoffs, rank predictor, and college predictor tools.',
     keywords:
@@ -52,7 +52,7 @@ const FAQS = [
 ];
 
 const CATEGORIES = [
-  { code: 'OC', name: 'Open Category', description: 'No reservation — general merit' },
+  { code: 'OC', name: 'Open Category', description: 'No reservation, general merit' },
   { code: 'BC', name: 'Backward Class', description: '30% reservation' },
   { code: 'BCM', name: 'Backward Class Muslim', description: '3.5% reservation' },
   { code: 'MBC', name: 'Most Backward Class', description: '20% reservation' },
@@ -236,7 +236,7 @@ export default function TneaBarchPage({ params: { locale } }: PageProps) {
         {CATEGORIES.map((cat) => (
           <Paper key={cat.code} elevation={0} sx={{ p: 1.5, borderRadius: 1, border: '1px solid', borderColor: 'grey.200', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
-              <Typography variant="body2" fontWeight={600}>{cat.code} — {cat.name}</Typography>
+              <Typography variant="body2" fontWeight={600}>{cat.code}: {cat.name}</Typography>
               <Typography variant="caption" color="text.secondary">{cat.description}</Typography>
             </Box>
           </Paper>
@@ -253,7 +253,7 @@ export default function TneaBarchPage({ params: { locale } }: PageProps) {
           ['May', 'NATA results released (all attempts)'],
           ['June', 'TNEA registration opens online'],
           ['July', 'Rank list published'],
-          ['July-August', 'Round 1 counseling — choice filling + seat allotment'],
+          ['July-August', 'Round 1 counseling: choice filling + seat allotment'],
           ['August', 'Round 2 counseling'],
           ['August-September', 'Mop-up / Special rounds'],
           ['September', 'Classes begin'],

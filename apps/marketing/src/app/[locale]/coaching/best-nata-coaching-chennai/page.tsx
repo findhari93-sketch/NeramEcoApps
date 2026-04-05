@@ -17,14 +17,14 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching in Chennai 2026 — #1 Rated | Neram Classes',
+    title: 'Best NATA Coaching in Chennai 2026: #1 Rated | Neram Classes',
     description:
       "Chennai's #1 NATA coaching institute since 2009. IIT/NIT/SPA alumni faculty, 99.9% success rate, free AI study app with college predictor. Online + offline classes. Small batches (max 25). Book free demo class today.",
     keywords:
       'best NATA coaching in Chennai, NATA coaching Chennai, top NATA coaching Chennai 2026, NATA classes Chennai, architecture coaching Chennai, NATA preparation Chennai, NATA coaching Ashok Nagar, best NATA institute Chennai, online NATA coaching Chennai, NATA drawing classes Chennai',
     alternates: buildAlternates(locale, '/coaching/best-nata-coaching-chennai'),
     openGraph: {
-      title: "Best NATA Coaching in Chennai 2026 — #1 Rated Institute",
+      title: "Best NATA Coaching in Chennai 2026: #1 Rated Institute",
       description:
         "Chennai's top NATA coaching since 2009. 99.9% success rate, free AI study app, IIT/NIT alumni faculty, small batches.",
       type: 'article',
@@ -36,7 +36,7 @@ const chennaiSchema = {
   '@context': 'https://schema.org',
   '@type': 'EducationalOrganization',
   '@id': `${BASE_URL}/coaching/best-nata-coaching-chennai`,
-  name: `${ORG_NAME} Chennai — Best NATA Coaching in Chennai`,
+  name: `${ORG_NAME} Chennai: Best NATA Coaching in Chennai`,
   alternateName: ['Neram NATA Coaching Chennai', 'Neram Classes Ashok Nagar'],
   url: `${BASE_URL}/coaching/best-nata-coaching-chennai`,
   logo: ORG_LOGO,
@@ -123,15 +123,15 @@ const chennaiSchema = {
 const whyNeramChennai = [
   {
     title: 'Only Chennai Institute with Free AI Study App',
-    desc: 'No other NATA coaching in Chennai offers a free AI-powered study app. Our app includes a NATA cutoff calculator, college predictor for 5,000+ architecture colleges across India, and exam center locator — all free, no login needed. This gives Neram students a significant preparation advantage.',
+    desc: 'No other NATA coaching in Chennai offers a free AI-powered study app. Our app includes a NATA cutoff calculator, college predictor for 5,000+ architecture colleges across India, and exam center locator, all free with no login needed. This gives Neram students a significant preparation advantage.',
   },
   {
     title: 'Hybrid Online + Offline Classes',
-    desc: 'Attend in-person at our Chennai centre or join live online classes from home — switch anytime. Other Chennai institutes offer either online or offline, not both. Our hybrid model means Chennai students traveling or studying from home never miss a class.',
+    desc: 'Attend in-person at our Chennai centre or join live online classes from home. Switch anytime. Other Chennai institutes offer either online or offline, not both. Our hybrid model means Chennai students traveling or studying from home never miss a class.',
   },
   {
     title: '150+ City Network (Not Just Chennai)',
-    desc: 'While other coaching institutes are limited to Chennai, Neram operates across 150+ cities in India and 6 Gulf countries. This means a wider community of peers, more diverse mock test benchmarks, and national-level competition exposure — not just local.',
+    desc: 'While other coaching institutes are limited to Chennai, Neram operates across 150+ cities in India and 6 Gulf countries. This means a wider community of peers, more diverse mock test benchmarks, and national-level competition exposure, not just local.',
   },
   {
     title: '17+ Years in Chennai (Since 2009)',
@@ -142,8 +142,8 @@ const whyNeramChennai = [
     desc: 'Most Chennai coaching centres have 40–60+ students per batch. Neram limits each batch to 25, ensuring every student gets individual drawing feedback, personal mentoring, and faculty attention. This is why our success rate is 99.9%.',
   },
   {
-    title: 'IIT/NIT/SPA Faculty — Not Just Freelancers',
-    desc: 'Every Neram faculty in Chennai is an IIT, NIT, or SPA alumnus — practising architects with years of real-world experience. We do not use freelance tutors or unqualified instructors. Our students learn from the architects who evaluate NATA-level drawings.',
+    title: 'IIT/NIT/SPA Faculty, Not Freelancers',
+    desc: 'Every Neram faculty in Chennai is an IIT, NIT, or SPA alumnus, a practising architect with years of real-world experience. We do not use freelance tutors or unqualified instructors. Our students learn from the architects who evaluate NATA-level drawings.',
   },
 ];
 
@@ -166,7 +166,7 @@ const faqs = [
   {
     question: 'Does Neram Chennai offer online NATA coaching?',
     answer:
-      'Yes, Neram Chennai offers a fully hybrid model. Students can attend in-person at the Chennai centre or join live interactive online classes — and switch between modes at any time. Online students get the same curriculum, faculty, mock tests, and app access as offline students.',
+      'Yes, Neram Chennai offers a fully hybrid model. Students can attend in-person at the Chennai centre or join live interactive online classes, and switch between modes at any time. Online students get the same curriculum, faculty, mock tests, and app access as offline students.',
   },
   {
     question: 'What results has Neram Chennai achieved in NATA?',
@@ -176,7 +176,7 @@ const faqs = [
   {
     question: 'Where is Neram Classes located in Chennai?',
     answer:
-      'Neram Classes flagship Chennai center is at PT Rajan Road, Sector 13, Ashok Nagar, Chennai 600083 — a 5-minute walk from Ashok Nagar Metro Station (Blue Line). We also have a sub-center at Tambaram (Thiruneermalai, Jain Alpine Meadows). We serve students from Anna Nagar (7 km), T. Nagar (3 km), Adyar (8 km), Velachery (12 km), Tambaram (22 km), and all Chennai neighborhoods through our hybrid online-offline model. Students from Kanchipuram, Chengalpattu, Tiruvallur, Vellore, and Pondicherry also attend.',
+      'Neram Classes flagship Chennai center is at PT Rajan Road, Sector 13, Ashok Nagar, Chennai 600083, a 5-minute walk from Ashok Nagar Metro Station (Blue Line). We also have a sub-center at Tambaram (Thiruneermalai, Jain Alpine Meadows). We serve students from Anna Nagar (7 km), T. Nagar (3 km), Adyar (8 km), Velachery (12 km), Tambaram (22 km), and all Chennai neighborhoods through our hybrid online-offline model. Students from Kanchipuram, Chengalpattu, Tiruvallur, Vellore, and Pondicherry also attend.',
   },
 ];
 
@@ -246,7 +246,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
               size="large"
               sx={{ borderColor: '#fff', color: '#fff', fontWeight: 600 }}
             >
-              Apply Now — ₹15,000 Onwards
+              Apply Now: ₹15,000 Onwards
             </Button>
           </Box>
 
@@ -402,7 +402,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
               <CardContent sx={{ p: 3 }}>
                 <Chip label="Flagship Center" color="warning" size="small" sx={{ mb: 1.5 }} />
                 <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>
-                  Neram Classes — Ashok Nagar, Chennai
+                  Neram Classes: Ashok Nagar, Chennai
                 </Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.95rem', mb: 1 }}>
                   PT Rajan Road, Sector 13, Ashok Nagar, Chennai 600083
@@ -411,7 +411,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
                   5 min walk from Ashok Nagar Metro Station (Blue Line)
                 </Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 0.5 }}>
-                  Mon-Fri: 9 AM — 6 PM | Sat: 9 AM — 2 PM
+                  Mon-Fri: 9 AM to 6 PM | Sat: 9 AM to 2 PM
                 </Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.9rem', mb: 1.5 }}>
                   Phone: +91-9176137043
@@ -425,7 +425,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
               <CardContent sx={{ p: 3 }}>
                 <Chip label="Sub-Center" size="small" sx={{ mb: 1.5 }} />
                 <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 1, color: '#1a1a2e' }}>
-                  Neram Classes — Tambaram
+                  Neram Classes: Tambaram
                 </Typography>
                 <Typography sx={{ color: '#555', fontSize: '0.95rem', mb: 1 }}>
                   Thiruneermalai, Jain Alpine Meadows, Tambaram, Chennai
@@ -461,7 +461,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
       <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: '#f8f9fa' }}>
         <Container maxWidth="md">
           <Typography variant="h2" sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, fontWeight: 700, mb: 4, color: '#1a1a2e', textAlign: 'center' }}>
-            NATA Coaching Chennai — FAQ
+            NATA Coaching Chennai: FAQ
           </Typography>
           {faqs.map((faq, i) => (
             <Box key={i} sx={{ mb: 3, pb: 3, borderBottom: i < faqs.length - 1 ? '1px solid #e0e0e0' : 'none' }}>
@@ -516,7 +516,7 @@ export default function BestNataCoachingChennaiPage({ params: { locale } }: Page
             Chennai is one of India&apos;s top cities for architecture education, home to Anna University&apos;s School of Architecture, SRM, VIT, and several other reputed B.Arch colleges. For students in Chennai preparing for NATA 2026, choosing the right coaching is critical. The best NATA coaching in Chennai should offer: experienced architect faculty (IIT/NIT/SPA alumni), daily drawing practice (drawing is 80/200 marks), small batch sizes for individual attention, both online and offline options, and access to modern preparation tools.
           </Typography>
           <Typography sx={{ lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', mb: 2 }}>
-            Neram Classes has been the top choice for Chennai NATA aspirants since 2009. Our Chennai centre provides in-person coaching with max 25 students per batch — significantly smaller than the 40–60+ batch sizes common at other Chennai coaching centres. We are the only NATA coaching in Chennai offering a free AI-powered study app with a cutoff calculator, college predictor for 5,000+ colleges, and exam center locator. Our hybrid model means Chennai students can attend offline at our centre or join live online classes — and switch anytime.
+            Neram Classes has been the top choice for Chennai NATA aspirants since 2009. Our Chennai centre provides in-person coaching with max 25 students per batch, significantly smaller than the 40-60+ batch sizes common at other Chennai coaching centres. We are the only NATA coaching in Chennai offering a free AI-powered study app with a cutoff calculator, college predictor for 5,000+ colleges, and exam center locator. Our hybrid model means Chennai students can attend offline at our centre or join live online classes, and switch anytime.
           </Typography>
           <Typography sx={{ lineHeight: 1.8, color: 'rgba(255,255,255,0.85)' }}>
             Our Chennai students have consistently achieved excellent NATA results: 99.9% clear the qualifying cutoff, 70%+ score above 120, and multiple students score 150+ every year. Chennai alumni from Neram are now studying at SPA Delhi, CEPT Ahmedabad, NIT Trichy, Anna University, BMS College, and 50+ other top architecture colleges. With fees starting at ₹15,000, scholarships up to 100%, and EMI options, Neram Classes is the most accessible and effective NATA coaching available in Chennai. Students from Kanchipuram, Chengalpattu, Tiruvallur, Vellore, and Pondicherry also attend our Chennai centre or join our online program.

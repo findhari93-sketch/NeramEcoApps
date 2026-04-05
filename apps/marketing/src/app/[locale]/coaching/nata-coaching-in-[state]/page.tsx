@@ -272,7 +272,7 @@ export default function NataCoachingStatePage({ params: { locale, state } }: Pag
                 lineHeight: 1.6,
               }}
             >
-              Join Neram Classes &mdash; India&apos;s top-rated NATA coaching institute with{' '}
+              Join Neram Classes, India&apos;s top-rated NATA coaching institute, with{' '}
               <strong>IIT/NIT alumni faculty</strong>, <strong>99.9% success rate</strong>, and{' '}
               <strong>online + offline classes</strong> for students across {stateDisplay}.
               {stateSeo && ` ${stateSeo.keyHighlights[0]}.`}

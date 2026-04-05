@@ -1,0 +1,137 @@
+<h2>NATA Exam Schedule Dashboard - Layout Approaches</h2>
+<p class="subtitle">Which layout structure feels right for organizing upcoming exams, student status, and follow-ups?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Timeline View (Recommended)</h3>
+      <p>Vertical timeline of upcoming exam dates (nearest first). Each date card expands to show grouped students by city. Top banner shows "Not Submitted" count with expandable list. Bottom section for "Recently Completed" with recall nudge.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Timeline Layout</div>
+        <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; background: #1a1a2e; color: #e0e0e0; padding: 16px;">
+<pre style="margin:0; white-space: pre-wrap;">
+┌─────────────────────────────────────────────┐
+│ 🔔 8 students haven't submitted dates yet   │
+│    [View & Remind]                           │
+└─────────────────────────────────────────────┘
+
+📅 UPCOMING EXAMS
+─────────────────
+
+● Fri, Apr 11  ─── Phase 1, Attempt 1 ───────
+  │  Chennai (3)    │ Bangalore (1) │ Hyderabad (2)
+  │  ├ Ravi K.      │ ├ Priya M.    │ ├ Arun S.
+  │  ├ Sneha R.     │               │ └ Deepa V.
+  │  └ Kumar P.     │               │
+  │
+● Sat, Apr 12  ─── Phase 1, Attempt 1 ───────
+  │  Chennai (2)    │ Mumbai (1)
+  │  ├ Lakshmi N.   │ ├ Rahul T.
+  │  └ Vikram J.    │
+
+● Fri, Apr 18  ─── Phase 1, Attempt 2 ───────
+  │  No students registered yet
+  │  [Add my exam date]
+
+─────────────────
+✅ RECENTLY COMPLETED
+  Yesterday (Apr 10): Meena K., Suresh P.
+  → Contact them for exam recall! [Go to Recall]
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Calendar Grid View</h3>
+      <p>Weekly calendar showing Fri/Sat columns with student avatars/chips stacked on each date. Sidebar shows "Not Submitted" and "Recently Completed" lists. More visual but may get crowded with many students.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Calendar Grid Layout</div>
+        <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; background: #1a1a2e; color: #e0e0e0; padding: 16px;">
+<pre style="margin:0; white-space: pre-wrap;">
+┌──────────────────────────┬──────────────┐
+│     APRIL 2026           │  ⚠ NOT       │
+│  Mon Tue Wed Thu Fri Sat │  SUBMITTED   │
+│                  11  12  │  ──────────  │
+│                  ┌──┐┌──┐│  Anitha R.   │
+│                  │6 ││3 ││  Karthik M.  │
+│                  └──┘└──┘│  ...+6 more  │
+│              18  19      │              │
+│              ┌──┐┌──┐    │  ✅ COMPLETED │
+│              │0 ││0 │    │  ──────────  │
+│              └──┘└──┘    │  Meena K.    │
+│              25  26      │  Suresh P.   │
+│              ┌──┐┌──┐    │  [→ Recall]  │
+│              │0 ││0 │    │              │
+│              └──┘└──┘    │              │
+└──────────────────────────┴──────────────┘
+   Click a date to see students & cities
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Tab-Based Sections</h3>
+      <p>Three tabs: "Upcoming" (list of dates with students), "Not Submitted" (students without dates), "Completed" (post-exam follow-up). Clean separation but requires tab switching to see the full picture.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-header">Tab-Based Layout</div>
+        <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; background: #1a1a2e; color: #e0e0e0; padding: 16px;">
+<pre style="margin:0; white-space: pre-wrap;">
+┌─────────────────────────────────────────┐
+│ [Upcoming (6)] [Not Submitted (8)] [Done (2)] │
+├─────────────────────────────────────────┤
+│                                         │
+│  📅 Fri, Apr 11 — Phase 1             │
+│  ┌─────────────────────────────────┐   │
+│  │ Chennai: Ravi, Sneha, Kumar     │   │
+│  │ Bangalore: Priya                │   │
+│  │ Hyderabad: Arun, Deepa          │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  📅 Sat, Apr 12 — Phase 1             │
+│  ┌─────────────────────────────────┐   │
+│  │ Chennai: Lakshmi, Vikram        │   │
+│  │ Mumbai: Rahul                   │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+└─────────────────────────────────────────┘
+</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+  <h3>Trade-offs</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+      <th style="text-align: left; padding: 8px;">Approach</th>
+      <th style="text-align: left; padding: 8px;">Best for</th>
+      <th style="text-align: left; padding: 8px;">Weakness</th>
+    </tr>
+    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+      <td style="padding: 8px;"><strong>A. Timeline</strong></td>
+      <td style="padding: 8px;">Quick scanning, mobile-friendly, shows everything on one scroll</td>
+      <td style="padding: 8px;">Less visual than calendar</td>
+    </tr>
+    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+      <td style="padding: 8px;"><strong>B. Calendar</strong></td>
+      <td style="padding: 8px;">Visual date awareness, familiar pattern</td>
+      <td style="padding: 8px;">Harder on mobile, wasted space on non-exam days</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px;"><strong>C. Tabs</strong></td>
+      <td style="padding: 8px;">Clean separation, good for large lists</td>
+      <td style="padding: 8px;">Can't see upcoming + not submitted at same time</td>
+    </tr>
+  </table>
+</div>

@@ -253,7 +253,7 @@ export default function PaymentDetailsStep({
           onChange={(e) => updatePayment({ transactionReference: e.target.value })}
           fullWidth
           placeholder="Enter UTR or transaction ID"
-          helperText="Optional — helps us verify your payment faster"
+          helperText="Optional. Helps us verify your payment faster"
           sx={{ mb: 3, '& .MuiInputBase-root': { minHeight: 48 } }}
         />
       )}

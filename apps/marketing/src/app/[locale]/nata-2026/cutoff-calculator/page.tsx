@@ -27,7 +27,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Cutoff Calculator — Check Your College Eligibility',
+    title: 'NATA 2026 Cutoff Calculator: Check Your College Eligibility',
     description:
       'Use the free NATA 2026 cutoff calculator to check which architecture colleges you can get into based on your expected score, category, and state. Database covers 5000+ colleges.',
     keywords:
@@ -194,7 +194,7 @@ export default function CutoffCalculatorPage({ params: { locale } }: PageProps) 
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Cutoffs</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Cutoffs</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

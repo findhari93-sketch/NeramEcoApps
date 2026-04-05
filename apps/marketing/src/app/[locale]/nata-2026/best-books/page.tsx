@@ -31,7 +31,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best Books for NATA 2026 Preparation — Section-wise Recommendations',
+    title: 'Best Books for NATA 2026 Preparation: Section-wise Recommendations',
     description:
       'Expert-recommended books for NATA 2026 preparation. Section-wise book list for Drawing, Mathematics, and General Aptitude. Includes free resources and study materials.',
     keywords:
@@ -60,7 +60,7 @@ const drawingBooks = [
   {
     title: 'Design Drawing',
     author: 'Francis D.K. Ching',
-    why: 'Bridges the gap between design thinking and drawing skills. Teaches how to translate ideas into visual representations — a core NATA skill.',
+    why: 'Bridges the gap between design thinking and drawing skills. Teaches how to translate ideas into visual representations, a core NATA skill.',
     price: 'Rs. 700–1,000',
   },
   {
@@ -102,7 +102,7 @@ const aptitudeBooks = [
   {
     title: 'Verbal & Non-Verbal Reasoning',
     author: 'R.S. Aggarwal',
-    why: 'The go-to book for visual reasoning, mirror images, paper folding, figure completion, and pattern recognition — all tested in NATA Part B.',
+    why: 'The go-to book for visual reasoning, mirror images, paper folding, figure completion, and pattern recognition. All tested in NATA Part B.',
     price: 'Rs. 400–600',
   },
   {
@@ -114,7 +114,7 @@ const aptitudeBooks = [
   {
     title: 'General Knowledge',
     author: 'Lucent\'s Publications',
-    why: 'Covers architecture awareness, famous buildings, historical progressions, and current affairs — all tested in NATA\'s General Knowledge section.',
+    why: 'Covers architecture awareness, famous buildings, historical progressions, and current affairs. All tested in NATA\'s General Knowledge section.',
     price: 'Rs. 200–300',
   },
 ];
@@ -138,7 +138,7 @@ const faqs = [
   {
     question: 'Which single book is best for NATA preparation?',
     answer:
-      'If you can only buy one book, go with "A Complete Self Study Guide for B.Arch" by P.K. Mishra. It covers all three sections — drawing, mathematics, and general aptitude — with practice questions. However, for best results, supplement it with Francis Ching\'s books for drawing and RS Aggarwal for reasoning.',
+      'If you can only buy one book, go with "A Complete Self Study Guide for B.Arch" by P.K. Mishra. It covers all three sections: drawing, mathematics, and general aptitude, with practice questions. However, for best results, supplement it with Francis Ching\'s books for drawing and RS Aggarwal for reasoning.',
   },
   {
     question: 'Are NCERT books enough for NATA mathematics?',
@@ -148,7 +148,7 @@ const faqs = [
   {
     question: 'Do I need to buy all the books listed here?',
     answer:
-      'No. Pick 1-2 books per section based on your weak areas. If you are strong in math, skip the advanced books. If drawing is your weakness, invest in Francis Ching\'s books. The complete guides (PK Mishra or Arihant) are good starting points for most students.',
+      'No. Pick 1-2 books per section based on your weak areas. If you are strong in math, skip the advanced books. If drawing is your weakness, invest in Francis Ching\'s books. The complete guides by PK Mishra or Arihant are good starting points for most students.',
   },
   {
     question: 'Are there free study materials for NATA preparation?',
@@ -305,7 +305,7 @@ export default function BestBooksPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — Best Books for NATA</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: Best Books for NATA</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

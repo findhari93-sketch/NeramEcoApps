@@ -126,7 +126,7 @@ export default function ScoringResultsPage({ params: { locale } }: PageProps) {
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>How Percentile Scoring Works</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
                 {'\u2022'} Phase 1 (April–June): Percentile score computed after all test sessions end, based on your best raw score relative to the entire population.{'\n'}
-                {'\u2022'} Phase 2 (August): Only Raw Scores issued — no percentile calculation.{'\n'}
+                {'\u2022'} Phase 2 (August): Only Raw Scores issued, no percentile calculation.{'\n'}
                 {'\u2022'} Phase 1 scores (with Percentile) are used for Centralized Admission Counselling (CAP).{'\n'}
                 {'\u2022'} Phase 2 scores (Raw only) are used for admission against vacant seats after CAP.{'\n'}
                 {'\u2022'} Admission authorities may use either best Raw Score or Percentile Score per their rules.
@@ -146,10 +146,10 @@ export default function ScoringResultsPage({ params: { locale } }: PageProps) {
                 {[
                   'Phase 1 (April 4 – June 13, 2026): Up to 2 attempts for Centralized Admission Counselling (CAP).',
                   'Phase 2 (August 7 & 8, 2026): 1 attempt only, for vacant seats after CAP.',
-                  'You can appear in only ONE phase — either Phase 1 or Phase 2, not both.',
+                  'You can appear in only ONE phase: either Phase 1 or Phase 2, not both.',
                   'Each attempt generates a raw score. A Statement of Marks is issued after each attempt.',
                   'In Phase 1, your BEST raw score is used for final percentile computation.',
-                  'In Phase 2, only raw scores are issued — no percentile score.',
+                  'In Phase 2, only raw scores are issued. No percentile score.',
                   'Each attempt requires separate fee payment.',
                 ].map((rule, idx) => (
                   <Box key={idx} sx={{ display: 'flex', gap: 2, py: 1.5, borderBottom: idx < 6 ? '1px solid' : 'none', borderColor: 'divider' }}>
@@ -219,7 +219,7 @@ export default function ScoringResultsPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Scoring & Results</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Scoring & Results</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

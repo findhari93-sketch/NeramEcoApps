@@ -31,7 +31,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA 2026 Admit Card — Download Steps, Details & Important Instructions',
+    title: 'NATA 2026 Admit Card: Download Steps, Details & Important Instructions',
     description:
       'How to download NATA 2026 admit card from nata.in. Step-by-step guide, important details on the admit card, documents to carry on exam day, and what to do if there are errors.',
     keywords:
@@ -104,7 +104,7 @@ const importantDates = [
 
 const correctionSteps = [
   'Log in to your NATA candidate portal at nata.in with your application number.',
-  'Check if a correction window is open — CoA usually allows corrections for a limited period after admit card release.',
+  'Check if a correction window is open. CoA usually allows corrections for a limited period after admit card release.',
   'If the correction window is active, update the incorrect details and submit.',
   'If no correction window is available, immediately contact CoA at the helpline number or email provided on nata.in.',
   'Carry a letter explaining the discrepancy along with supporting documents (ID proof, application form copy) to the exam center.',
@@ -125,7 +125,7 @@ const faqs = [
   {
     question: 'Can I enter the exam hall without the printed admit card?',
     answer:
-      'No. The printed admit card is mandatory for entry into the exam hall. No candidate will be allowed to take the NATA exam without a valid, printed admit card. Digital copies on phones are NOT accepted. Always carry 2 printed copies — one will be collected by the invigilator.',
+      'No. The printed admit card is mandatory for entry into the exam hall. No candidate will be allowed to take the NATA exam without a valid, printed admit card. Digital copies on phones are NOT accepted. Always carry 2 printed copies, as one will be collected by the invigilator.',
   },
   {
     question: 'What if I lose my admit card before the exam?',
@@ -166,7 +166,7 @@ export default function AdmitCardPage({ params: { locale } }: PageProps) {
               NATA 2026 Admit Card
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 admit cards will be available for download from nata.in approximately 15 days before each exam date. You need your NATA application number and date of birth to download. The admit card is mandatory for entry to the exam center — no candidate will be allowed without it.
+              NATA 2026 admit cards will be available for download from nata.in approximately 15 days before each exam date. You need your NATA application number and date of birth to download. The admit card is mandatory for entry to the exam center. No candidate will be allowed without it.
             </Typography>
             <LastUpdatedBadge date="March 13, 2026" />
           </Container>
@@ -324,7 +324,7 @@ export default function AdmitCardPage({ params: { locale } }: PageProps) {
         {/* FAQ */}
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
           <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs — NATA 2026 Admit Card</Typography>
+            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Admit Card</Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
                 <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>

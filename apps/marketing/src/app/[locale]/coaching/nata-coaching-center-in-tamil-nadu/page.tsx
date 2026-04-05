@@ -132,7 +132,7 @@ const faqs = [
   },
   {
     question: 'Does Neram Classes have centers in all Tamil Nadu districts?',
-    answer: 'Neram Classes offers online NATA coaching accessible from all 38 Tamil Nadu districts and has physical coaching centers in major cities including Coimbatore. Our online program includes live classes, drawing practice, mock tests, and personal mentoring — the same comprehensive preparation regardless of location.',
+    answer: 'Neram Classes offers online NATA coaching accessible from all 38 Tamil Nadu districts and has physical coaching centers in major cities including Coimbatore. Our online program includes live classes, drawing practice, mock tests, and personal mentoring, the same comprehensive preparation regardless of location.',
   },
   {
     question: 'What is the success rate of Neram Classes in Tamil Nadu?',
@@ -161,7 +161,7 @@ const comparisonData = [
   { feature: 'Batch Size', neram: '20-25 students (personalized attention)', others: '50+ students per batch' },
   { feature: 'Mode', neram: 'Online + Offline (both available)', others: 'Offline only in most cases' },
   { feature: 'Success Rate', neram: '99.9% (verified results)', others: 'Unverified claims' },
-  { feature: 'Free Study App', neram: 'Yes — Cutoff Calculator, College Predictor, Mock Tests', others: 'No digital tools' },
+  { feature: 'Free Study App', neram: 'Yes: Cutoff Calculator, College Predictor, Mock Tests', others: 'No digital tools' },
   { feature: 'Personal Mentoring', neram: '1-on-1 mentoring with toppers', others: 'Group classes only' },
   { feature: 'Drawing Practice', neram: '2+ hours daily supervised practice', others: 'Limited drawing sessions' },
   { feature: 'Google Rating', neram: '4.9 stars (90+ reviews)', others: 'Varies' },
@@ -202,7 +202,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = 'Best NATA Coaching Center in Tamil Nadu 2026 — Online & Offline Classes in All 38 Districts';
+  const title = 'Best NATA Coaching Center in Tamil Nadu 2026: Online & Offline Classes in All 38 Districts';
   const description = 'Join the #1 rated NATA coaching center in Tamil Nadu. Expert IIT/NIT faculty, online & offline classes across Chennai, Coimbatore, Madurai, Trichy & all 38 districts. 4.9★ Google rating, 99.9% success rate.';
 
   return {
@@ -231,7 +231,7 @@ export async function generateMetadata({
       url: `${BASE_URL}${PAGE_PATH}`,
       images: [
         {
-          url: buildOgImage('Best NATA Coaching in Tamil Nadu', 'All 38 Districts — Online & Offline', 'coaching'),
+          url: buildOgImage('Best NATA Coaching in Tamil Nadu', 'All 38 Districts, Online & Offline', 'coaching'),
           width: 1200,
           height: 630,
           alt: 'NATA Coaching Center in Tamil Nadu - Neram Classes',
@@ -348,7 +348,7 @@ export default function NataCoachingTamilNaduPage({ params: { locale } }: PagePr
                 lineHeight: 1.6,
               }}
             >
-              Join Neram Classes — the #1 rated NATA coaching institute in Tamil Nadu with{' '}
+              Join Neram Classes, the #1 rated NATA coaching institute in Tamil Nadu with{' '}
               <strong>4.9 Google rating</strong>, <strong>90+ reviews</strong>, and{' '}
               <strong>99.9% success rate</strong>. Online & offline classes across Chennai, Coimbatore,
               Madurai, Trichy, and all 38 districts.

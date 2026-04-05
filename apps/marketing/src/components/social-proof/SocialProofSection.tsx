@@ -97,7 +97,7 @@ export default function SocialProofSection() {
           color="text.secondary"
           sx={{ mb: 6, maxWidth: 520, mx: 'auto' }}
         >
-          Authentic video testimonials, audio stories, and screenshots from our community — no actors, no scripts
+          Authentic video testimonials, audio stories, and screenshots from our community. No actors, no scripts
         </Typography>
 
         {/* Tabs */}

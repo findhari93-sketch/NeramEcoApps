@@ -27,6 +27,7 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
+import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
@@ -66,6 +67,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
       { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
+      { label: 'Exam Schedule', path: '/teacher/exam-schedule', icon: <DateRangeOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
     bottomNavItems: [
@@ -77,6 +79,7 @@ const PANELS: PanelConfig[] = [
     overflowItems: [
       { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
+      { label: 'Exam Schedule', path: '/teacher/exam-schedule', icon: <DateRangeOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
     ],
   },
@@ -164,6 +167,7 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (pathname.startsWith('/teacher/onboarding-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/drawing-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/course-plans')) return 'teaching';
+  if (pathname.startsWith('/teacher/exam-schedule')) return 'teaching';
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
   // City-wise student pages
   if (pathname.startsWith('/teacher/students/city-wise')) return 'management';

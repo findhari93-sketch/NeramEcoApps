@@ -89,7 +89,7 @@ export default function LocaleError({
           color="text.secondary"
           sx={{ mb: 4, maxWidth: 400 }}
         >
-          We&apos;re sorry — an unexpected error occurred while loading this
+          We&apos;re sorry. An unexpected error occurred while loading this
           page. Please try again or return to the homepage.
         </Typography>
 

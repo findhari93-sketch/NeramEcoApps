@@ -527,12 +527,17 @@ function FormWizardInner() {
         open={showPhoneVerification}
         onClose={() => setShowPhoneVerification(false)}
         allowClose={false}
-        onAuthenticated={async () => {
+        initialPhone={formData.personal.phone}
+        onAuthenticated={async (verifiedPhone) => {
           setShowPhoneVerification(false);
-          // Get verified phone from Firebase after OTP verification
-          const { getFirebaseAuth } = await import('@neram/auth');
-          const currentUser = getFirebaseAuth().currentUser;
-          const phone = currentUser?.phoneNumber || user?.phone || formData.personal.phone || '';
+          // verifiedPhone is the local number (e.g., "9876543210") from LoginModal
+          // Fall back to Firebase currentUser or form data if not provided
+          let phone = verifiedPhone || '';
+          if (!phone) {
+            const { getFirebaseAuth } = await import('@neram/auth');
+            const currentUser = getFirebaseAuth().currentUser;
+            phone = currentUser?.phoneNumber || user?.phone || formData.personal.phone || '';
+          }
           onPhoneVerified(phone);
         }}
         apiBaseUrl={process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}

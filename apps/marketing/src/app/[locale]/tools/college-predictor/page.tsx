@@ -28,7 +28,7 @@ const faqs = [
   {
     question: 'How does the NATA College Predictor work?',
     answer:
-      'The NATA College Predictor uses historical cutoff data, seat availability, and counselling trends from 500+ architecture colleges across India. Enter your NATA score, preferred state, and category — the tool matches you with colleges where your score meets or exceeds previous year cutoffs, ranked by admission probability.',
+      'The NATA College Predictor uses historical cutoff data, seat availability, and counselling trends from 500+ architecture colleges across India. Enter your NATA score, preferred state, and category. The tool matches you with colleges where your score meets or exceeds previous year cutoffs, ranked by admission probability.',
   },
   {
     question: 'How many colleges are in the NATA College Predictor database?',
@@ -43,7 +43,7 @@ const faqs = [
   {
     question: 'Is the NATA College Predictor free to use?',
     answer:
-      'Yes, the NATA College Predictor is completely free. You can check unlimited colleges, apply multiple filters, and save your shortlist — all without any registration or payment. Premium features like detailed placement data and seat matrix are available in the Neram Classes app.',
+      'Yes, the NATA College Predictor is completely free. You can check unlimited colleges, apply multiple filters, and save your shortlist, all without any registration or payment. Premium features like detailed placement data and seat matrix are available in the Neram Classes app.',
   },
   {
     question: 'What is the counselling process for NATA 2026 admissions?',
@@ -64,7 +64,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   return {
     title:
-      'NATA College Predictor 2026 — Find Architecture Colleges for Your Score',
+      'NATA College Predictor 2026: Find Architecture Colleges for Your Score',
     description:
       'Free NATA college predictor tool. Enter your NATA 2026 score to find matching B.Arch colleges from 500+ institutions. Filter by state, fees, college type, and admission probability.',
     keywords:
@@ -72,7 +72,7 @@ export async function generateMetadata({
     alternates: buildAlternates(locale, '/tools/college-predictor'),
     openGraph: {
       title:
-        'NATA College Predictor 2026 — Find Architecture Colleges for Your Score',
+        'NATA College Predictor 2026: Find Architecture Colleges for Your Score',
       description:
         'Free NATA college predictor. Enter your score to find matching architecture colleges from 500+ institutions across India.',
       url:
@@ -287,7 +287,7 @@ export default function CollegePredictorPage({
               },
               {
                 title: 'Category-based Predictions',
-                desc: 'Get accurate cutoff predictions for your specific category — General, OBC, SC, ST, EWS — based on actual previous year data.',
+                desc: 'Get accurate cutoff predictions for your specific category (General, OBC, SC, ST, EWS) based on actual previous year data.',
               },
               {
                 title: 'Fee & Placement Data',
@@ -347,14 +347,14 @@ export default function CollegePredictorPage({
         <Typography sx={{ mb: 2, lineHeight: 1.8, color: 'text.secondary' }}>
           The National Aptitude Test in Architecture (NATA) 2026 is conducted by
           the Council of Architecture (CoA) for admission to B.Arch programmes
-          across India. NATA is held in two sessions — the better score of the
+          across India. NATA is held in two sessions, and the better score of the
           two attempts is considered for admissions. The exam is scored out of
           200 marks, with sections covering Mathematics (20 MCQs, 40 marks),
           General Aptitude (40 MCQs, 80 marks), and Drawing (2 questions, 80
           marks).
         </Typography>
         <Typography sx={{ mb: 2, lineHeight: 1.8, color: 'text.secondary' }}>
-          After the NATA results are declared, the real challenge begins —
+          After the NATA results are declared, the real challenge begins:
           choosing the right college. With over 500 architecture colleges across
           India, each with different cutoffs, fee structures, and counselling
           processes, the decision can be overwhelming. Government colleges like

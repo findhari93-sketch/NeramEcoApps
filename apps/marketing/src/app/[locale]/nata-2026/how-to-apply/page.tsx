@@ -26,7 +26,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'How to Apply for NATA 2026 — Step by Step Application Guide',
+    title: 'How to Apply for NATA 2026: Step by Step Application Guide',
     description:
       'Complete step-by-step guide to apply for NATA 2026. Create account, fill details, upload documents, pay fee, and download appointment card. Free image crop tool included.',
     keywords:
@@ -58,12 +58,12 @@ const steps = [
   {
     number: '04',
     title: 'Pay Application Fee',
-    desc: 'Pay the application fee online via Electronic Payment Gateway (EPG) — debit card, credit card, or net banking. General/OBC (NCL): Rs 1,750 | SC/ST/EWS/PwD: Rs 1,250 | Transgender: Rs 1,000 | Outside India: Rs 15,000. Fee is per test and non-refundable.',
+    desc: 'Pay the application fee online via Electronic Payment Gateway (EPG): debit card, credit card, or net banking. General/OBC (NCL): Rs 1,750 | SC/ST/EWS/PwD: Rs 1,250 | Transgender: Rs 1,000 | Outside India: Rs 15,000. Fee is per test and non-refundable.',
   },
   {
     number: '05',
     title: 'Print Application Confirmation',
-    desc: 'After successful payment, download and print the application confirmation page. Keep it safe — you will need it for verification later. You can initially register for one test and later opt for an additional test (max 2 in Phase 1).',
+    desc: 'After successful payment, download and print the application confirmation page. Keep it safe, as you will need it for verification later. You can initially register for one test and later opt for an additional test (max 2 in Phase 1).',
   },
   {
     number: '06',
@@ -251,7 +251,7 @@ export default function HowToApplyPage({ params: { locale } }: PageProps) {
         <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              FAQs — NATA 2026 Application
+              FAQs: NATA 2026 Application
             </Typography>
             {faqs.map((faq, index) => (
               <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
