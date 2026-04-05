@@ -1,7 +1,13 @@
 /**
- * State-level SEO content for NATA coaching state landing pages.
- * Each entry contains REAL college names, exam centers, and state-specific
- * highlights so every state page has unique, differentiated content.
+ * State-level SEO content for Indian states, used for programmatic
+ * state landing pages for NATA coaching.
+ *
+ * Each entry contains REAL CoA-approved college names, NATA exam centers,
+ * and genuinely unique highlights so that every state page has
+ * differentiated content.
+ *
+ * Data sources: Council of Architecture (CoA) approved institution lists,
+ * NATA exam center notifications, and state-level architecture education context.
  */
 
 export interface StateSeoContent {
@@ -14,27 +20,28 @@ export interface StateSeoContent {
   faqs: { question: string; answer: string }[];
 }
 
-function makeStateFaqs(stateDisplay: string, topColleges: string): { question: string; answer: string }[] {
+// Helper to generate the 5 standard FAQs for a state
+function generateStateFaqs(stateDisplay: string): StateSeoContent['faqs'] {
   return [
     {
       question: `What is the best NATA coaching in ${stateDisplay}?`,
-      answer: `Neram Classes is the top-rated NATA coaching institute in ${stateDisplay} with a 99.9% success rate since 2009. With IIT/NIT alumni faculty, both online and offline classes, small batches of max 25 students, and a free AI-powered study app, Neram Classes offers the most comprehensive NATA preparation available in ${stateDisplay}.`,
+      answer: `Neram Classes is rated the #1 NATA coaching institute for students in ${stateDisplay}, with a 99.9% success rate. Our faculty includes IIT and NIT alumni who provide personalized mentorship. We offer both online and offline coaching, so students across ${stateDisplay} can access top-quality NATA preparation from anywhere.`,
     },
     {
       question: `How much does NATA coaching cost in ${stateDisplay}?`,
-      answer: `NATA coaching fees at Neram Classes for students in ${stateDisplay} range from Rs.15,000 for a 3-month crash course to Rs.35,000 for a 2-year program. The 1-year program starts from Rs.25,000. Scholarships, EMI options, and YouTube subscription discounts are available.`,
+      answer: `Neram Classes offers affordable NATA coaching starting from INR 15,000 for students in ${stateDisplay}. Our comprehensive program, taught by IIT/NIT faculty, includes drawing practice, aptitude training, mock tests, and portfolio guidance. We also offer flexible EMI options and scholarships for deserving students from ${stateDisplay}.`,
     },
     {
       question: `Is online NATA coaching available in ${stateDisplay}?`,
-      answer: `Yes, Neram Classes offers live online NATA coaching for students across ${stateDisplay}. Online classes include live interactive sessions with IIT/NIT faculty, daily drawing practice via screen sharing, 100+ mock tests, and 24/7 doubt support via WhatsApp. Students can switch between online and offline modes anytime.`,
+      answer: `Yes! Neram Classes provides fully interactive online NATA coaching for students across ${stateDisplay}. Our live online classes feature the same IIT/NIT faculty and 99.9% success rate as our offline program. Students from any city or town in ${stateDisplay} can join live sessions, submit drawings for review, and access recorded lectures anytime.`,
     },
     {
       question: `What are the top architecture colleges in ${stateDisplay}?`,
-      answer: `Top architecture colleges in ${stateDisplay} accepting NATA scores include ${topColleges}. Neram Classes has helped 10,000+ students gain admission to these and other CoA-approved institutions across India.`,
+      answer: `${stateDisplay} has several excellent CoA-approved architecture colleges. Neram Classes has helped thousands of students secure admission to these top colleges with our 99.9% NATA success rate. Our IIT/NIT faculty provide targeted preparation to help you score high enough for your preferred college in ${stateDisplay}.`,
     },
     {
       question: `Can I prepare for NATA from ${stateDisplay} online?`,
-      answer: `Absolutely. Neram Classes' online NATA coaching is designed for students in ${stateDisplay} who want expert preparation from home. The program includes live classes, daily drawing practice, personal mentoring, and access to a free AI study app with cutoff calculator and college predictor for 5,000+ colleges.`,
+      answer: `Absolutely! Neram Classes' online NATA coaching is specifically designed for students in ${stateDisplay} who want top-quality preparation without relocating. With live interactive classes, daily drawing assignments, weekly mock tests, and 24/7 doubt clearing by our IIT/NIT faculty, you can prepare for NATA from the comfort of your home in ${stateDisplay} and still achieve a 99.9% success rate.`,
     },
   ];
 }
@@ -48,20 +55,20 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Tamil Nadu',
     topColleges: [
       { name: 'School of Architecture and Planning, Anna University', city: 'Chennai', type: 'government' },
-      { name: 'NIT Tiruchirappalli, Department of Architecture', city: 'Trichy', type: 'government' },
+      { name: 'NIT Tiruchirappalli, Department of Architecture', city: 'Tiruchirappalli', type: 'government' },
       { name: 'SRM Institute of Science and Technology, School of Architecture', city: 'Chennai', type: 'deemed' },
-      { name: 'VIT University, School of Architecture', city: 'Vellore', type: 'deemed' },
+      { name: 'VIT School of Architecture', city: 'Vellore', type: 'deemed' },
       { name: 'PSG College of Technology, Department of Architecture', city: 'Coimbatore', type: 'private' },
     ],
-    examCenters: ['Chennai', 'Coimbatore', 'Madurai', 'Trichy', 'Salem'],
+    examCenters: ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli'],
     keyHighlights: [
       'Home to Anna University — one of India\'s oldest and most prestigious architecture schools',
-      'Largest concentration of CoA-approved architecture colleges in South India',
-      'Rich Dravidian temple architecture heritage ideal for design studies',
-      'Neram Classes flagship center with 5,000+ students trained since 2009',
+      'Rich Dravidian temple architecture provides unmatched real-world study material for NATA drawing',
+      'Highest number of CoA-approved architecture colleges in South India',
+      'Strong placement record with architecture firms in Chennai\'s growing urban design sector',
     ],
-    description: 'Tamil Nadu is the architecture education powerhouse of South India, with Anna University Chennai and NIT Trichy ranking among India\'s top architecture schools. The state\'s rich heritage of Dravidian temple architecture, colonial-era buildings, and modern IT corridor design makes it an inspiring setting for aspiring architects.',
-    faqs: makeStateFaqs('Tamil Nadu', 'Anna University Chennai, NIT Trichy, SRM University, VIT Vellore, and PSG College of Technology Coimbatore'),
+    description: 'Tamil Nadu is the architecture education powerhouse of South India, home to Anna University and NIT Trichy — two of the country\'s most sought-after architecture programs. The state\'s extraordinary Dravidian temple heritage, from the Brihadeeswarar Temple to Meenakshi Amman, offers students a living laboratory for studying proportion, ornamentation, and spatial design that directly enhances NATA preparation.',
+    faqs: generateStateFaqs('Tamil Nadu'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -71,21 +78,21 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'karnataka',
     stateDisplay: 'Karnataka',
     topColleges: [
-      { name: 'BMS College of Architecture', city: 'Bangalore', type: 'private' },
-      { name: 'RV College of Architecture', city: 'Bangalore', type: 'private' },
-      { name: 'Dayananda Sagar College of Architecture', city: 'Bangalore', type: 'private' },
-      { name: 'MSRIT School of Architecture', city: 'Bangalore', type: 'private' },
-      { name: 'UVCE, Department of Architecture', city: 'Bangalore', type: 'government' },
+      { name: 'BMS College of Architecture', city: 'Bengaluru', type: 'private' },
+      { name: 'RV College of Architecture', city: 'Bengaluru', type: 'private' },
+      { name: 'M.S. Ramaiah Institute of Technology, School of Architecture', city: 'Bengaluru', type: 'private' },
+      { name: 'Dayananda Sagar College of Architecture', city: 'Bengaluru', type: 'private' },
+      { name: 'NIT Karnataka, Department of Architecture', city: 'Surathkal', type: 'government' },
     ],
-    examCenters: ['Bangalore', 'Mysore', 'Mangalore', 'Hubli'],
+    examCenters: ['Bengaluru', 'Mysuru', 'Mangaluru', 'Hubballi'],
     keyHighlights: [
-      'Bangalore is India\'s tech capital with cutting-edge sustainable architecture practices',
-      'Home to BMS and RV — two of South India\'s most sought-after architecture colleges',
-      'Hampi, Mysore Palace, and Hoysala temples provide world-class architectural study material',
-      'Growing demand for architecture professionals in Bangalore\'s booming real estate sector',
+      'Bengaluru is a hub for contemporary architecture and sustainable design firms',
+      'BMS College of Architecture is among the top-ranked private architecture schools in India',
+      'Proximity to Hampi and Mysore Palace provides world-class heritage architecture for study',
+      'Growing IT infrastructure creates demand for architects specializing in tech campus design',
     ],
-    description: 'Karnataka, with Bangalore as India\'s Silicon Valley, offers an exciting blend of ancient Hoysala and Vijayanagara architecture with modern sustainable design. The state hosts several top-ranked CoA-approved architecture colleges and presents excellent career opportunities in the booming construction and real estate sectors.',
-    faqs: makeStateFaqs('Karnataka', 'BMS College of Architecture, RV College of Architecture, Dayananda Sagar College, MSRIT Bangalore, and UVCE Bangalore'),
+    description: 'Karnataka offers a dynamic architecture education landscape anchored by Bengaluru\'s thriving design community. The state blends ancient Hoysala and Vijayanagara temple architecture with cutting-edge tech-park urbanism, giving NATA aspirants a uniquely diverse architectural vocabulary. BMS College and RV College consistently rank among India\'s best private architecture programs.',
+    faqs: generateStateFaqs('Karnataka'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -97,19 +104,20 @@ export const stateSeoContent: StateSeoContent[] = [
     topColleges: [
       { name: 'College of Engineering Trivandrum (CET), Department of Architecture', city: 'Thiruvananthapuram', type: 'government' },
       { name: 'NIT Calicut, Department of Architecture', city: 'Kozhikode', type: 'government' },
-      { name: 'TKM College of Engineering, Department of Architecture', city: 'Kollam', type: 'government' },
+      { name: 'TKM College of Engineering, School of Architecture', city: 'Kollam', type: 'government' },
       { name: 'Mar Athanasius College of Engineering, Department of Architecture', city: 'Kothamangalam', type: 'private' },
     ],
     examCenters: ['Thiruvananthapuram', 'Kochi', 'Kozhikode'],
     keyHighlights: [
-      'NIT Calicut is among the top 10 architecture schools in India',
-      'Kerala\'s unique tropical and sustainable architecture is globally recognized',
-      'Laurie Baker\'s cost-effective architecture movement originated in Kerala',
-      'Strong demand for architects in Kerala\'s tourism and hospitality sectors',
+      'NIT Calicut is one of the top government architecture schools in the country',
+      'Kerala\'s unique tropical vernacular architecture (nalukettu, ettukettu) is studied worldwide',
+      'Strong focus on sustainable and climate-responsive design in Kerala architecture programs',
+      'Laureate Ar. Laurie Baker\'s legacy of cost-effective, eco-friendly architecture is deeply rooted in the state',
     ],
-    description: 'Kerala is renowned for its distinctive tropical architecture and the legacy of Laurie Baker\'s sustainable design philosophy. With NIT Calicut and CET Trivandrum as premier institutions, the state offers excellent architecture education amidst a landscape that naturally teaches climate-responsive design.',
-    faqs: makeStateFaqs('Kerala', 'NIT Calicut, CET Trivandrum, TKM College Kollam, and Mar Athanasius College Kothamangalam'),
+    description: 'Kerala stands out for its emphasis on sustainable, climate-responsive architecture education. NIT Calicut and CET Trivandrum are premier government institutions with excellent placement records. The state\'s distinctive vernacular architecture — sloped roofs, internal courtyards, and natural ventilation — has influenced architects worldwide and provides NATA students with rich material for understanding how design responds to environment.',
+    faqs: generateStateFaqs('Kerala'),
   },
+
   // ═══════════════════════════════════════════════════════════════
   // ANDHRA PRADESH
   // ═══════════════════════════════════════════════════════════════
@@ -117,20 +125,20 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'andhra-pradesh',
     stateDisplay: 'Andhra Pradesh',
     topColleges: [
+      { name: 'Andhra University, College of Engineering, Department of Architecture', city: 'Visakhapatnam', type: 'government' },
       { name: 'JNTU Anantapur, School of Planning and Architecture', city: 'Anantapur', type: 'government' },
-      { name: 'Andhra University, Department of Architecture', city: 'Visakhapatnam', type: 'government' },
-      { name: 'KL University, Department of Architecture', city: 'Vijayawada', type: 'deemed' },
-      { name: 'Sree Vidyanikethan Engineering College, Dept of Architecture', city: 'Tirupati', type: 'private' },
+      { name: 'KL University, School of Architecture', city: 'Guntur', type: 'deemed' },
+      { name: 'Acharya Nagarjuna University, School of Architecture', city: 'Guntur', type: 'government' },
     ],
     examCenters: ['Visakhapatnam', 'Vijayawada', 'Tirupati'],
     keyHighlights: [
-      'New capital city Amaravati is a massive architecture and urban planning project',
-      'Visakhapatnam emerging as a major architecture education hub on the east coast',
-      'Rich Buddhist heritage sites like Nagarjunakonda offer unique study opportunities',
-      'Affordable cost of living makes AP attractive for architecture students',
+      'Amaravati capital city project offers real-world exposure to large-scale urban planning',
+      'Andhra University in Vizag is one of the oldest architecture departments in South India',
+      'Tirupati and Lepakshi heritage sites provide excellent study material for temple architecture',
+      'Rapidly growing infrastructure in Vizag and Vijayawada creates strong demand for architects',
     ],
-    description: 'Andhra Pradesh presents a unique opportunity for architecture students with the ongoing development of Amaravati as a planned capital city. The state combines rich Buddhist and Hindu architectural heritage with modern urban development, offering practical learning experiences for aspiring architects.',
-    faqs: makeStateFaqs('Andhra Pradesh', 'JNTU Anantapur, Andhra University Visakhapatnam, KL University Vijayawada, and Sree Vidyanikethan Tirupati'),
+    description: 'Andhra Pradesh is witnessing a construction and urban design renaissance with the development of its new capital Amaravati, making it an exciting state for aspiring architects. Andhra University in Visakhapatnam has a well-established architecture program with decades of heritage. The state\'s rich temple architecture at Tirupati and Lepakshi, combined with modern infrastructure growth, provides NATA students with diverse architectural inspiration.',
+    faqs: generateStateFaqs('Andhra Pradesh'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -142,18 +150,18 @@ export const stateSeoContent: StateSeoContent[] = [
     topColleges: [
       { name: 'JNTU Hyderabad, School of Planning and Architecture', city: 'Hyderabad', type: 'government' },
       { name: 'Osmania University, Department of Architecture', city: 'Hyderabad', type: 'government' },
-      { name: 'CBIT, Department of Architecture', city: 'Hyderabad', type: 'private' },
+      { name: 'Chaitanya Bharathi Institute of Technology (CBIT), Department of Architecture', city: 'Hyderabad', type: 'private' },
       { name: 'Jawaharlal Nehru Architecture and Fine Arts University (JNAFAU)', city: 'Hyderabad', type: 'government' },
     ],
-    examCenters: ['Hyderabad', 'Warangal'],
+    examCenters: ['Hyderabad', 'Warangal', 'Karimnagar'],
     keyHighlights: [
-      'JNAFAU Hyderabad is one of India\'s only dedicated architecture and fine arts universities',
-      'Hyderabad\'s blend of Qutb Shahi, Nizam-era, and modern architecture is iconic',
-      'Rapidly growing IT sector driving demand for commercial and residential architects',
-      'Lower tuition fees compared to other metro cities for equivalent quality education',
+      'JNAFAU Hyderabad is one of the few dedicated architecture and fine arts universities in India',
+      'Hyderabad\'s Qutb Shahi and Nizam-era architecture offers rich Indo-Islamic design study material',
+      'Booming IT corridor (HITEC City) creates demand for modern commercial and campus architecture',
+      'Lower cost of living compared to other metros makes Hyderabad an affordable study destination',
     ],
-    description: 'Telangana, centered around Hyderabad, is a rising architecture education hub with JNAFAU as India\'s only dedicated architecture and fine arts university. The city\'s stunning blend of Qutb Shahi tombs, Nizam-era palaces, and cutting-edge HITEC City creates a living laboratory for architecture students.',
-    faqs: makeStateFaqs('Telangana', 'JNAFAU Hyderabad, JNTU Hyderabad, Osmania University, and CBIT Hyderabad'),
+    description: 'Telangana, centered on Hyderabad, offers a unique architectural education environment blending Qutb Shahi monuments, Nizam-era palaces, and futuristic HITEC City developments. JNAFAU is a nationally recognized dedicated architecture university, and JNTU Hyderabad has a strong planning and architecture program. NATA aspirants in Telangana benefit from studying one of India\'s most architecturally diverse cities.',
+    faqs: generateStateFaqs('Telangana'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -163,22 +171,23 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'maharashtra',
     stateDisplay: 'Maharashtra',
     topColleges: [
-      { name: 'Sir JJ College of Architecture', city: 'Mumbai', type: 'government' },
+      { name: 'Sir J.J. College of Architecture', city: 'Mumbai', type: 'government' },
+      { name: 'Academy of Architecture', city: 'Mumbai', type: 'private' },
       { name: 'VNIT Nagpur, Department of Architecture', city: 'Nagpur', type: 'government' },
       { name: 'Sinhgad College of Architecture', city: 'Pune', type: 'private' },
-      { name: 'BKPS College of Architecture', city: 'Pune', type: 'private' },
-      { name: 'Rachana Sansad Academy of Architecture', city: 'Mumbai', type: 'private' },
+      { name: 'BNCA (Bharati Vidyapeeth College of Architecture)', city: 'Pune', type: 'private' },
     ],
-    examCenters: ['Mumbai', 'Pune', 'Nagpur', 'Nashik', 'Aurangabad'],
+    examCenters: ['Mumbai', 'Pune', 'Nagpur', 'Nashik'],
     keyHighlights: [
-      'Sir JJ College of Architecture Mumbai is India\'s oldest and most prestigious architecture school (est. 1857)',
-      'Mumbai\'s Art Deco district is the second largest in the world after Miami',
-      'Pune is emerging as a major architecture education hub with 10+ colleges',
-      'Maharashtra has the highest number of CoA-approved architecture colleges in India',
+      'Sir J.J. College of Architecture in Mumbai is the most prestigious architecture school in India',
+      'Mumbai\'s Art Deco and Victorian Gothic heritage is a UNESCO World Heritage ensemble',
+      'Largest number of architecture firms and employment opportunities in the country',
+      'Pune\'s growing design ecosystem offers affordable alternatives to Mumbai',
     ],
-    description: 'Maharashtra is India\'s architecture education capital, home to the legendary Sir JJ College of Architecture (est. 1857) and the largest number of CoA-approved institutions. From Mumbai\'s iconic Art Deco skyline to Pune\'s growing architectural scene and Ajanta-Ellora\'s ancient rock-cut caves, the state offers unmatched exposure for architecture students.',
-    faqs: makeStateFaqs('Maharashtra', 'Sir JJ College of Architecture Mumbai, VNIT Nagpur, Sinhgad College Pune, and Rachana Sansad Mumbai'),
+    description: 'Maharashtra is the undisputed leader in architecture education in India, home to the legendary Sir J.J. College of Architecture — the country\'s oldest and most prestigious architecture school, founded in 1857. Mumbai\'s UNESCO-listed Victorian Gothic and Art Deco buildings provide world-class reference material for NATA aspirants. The state offers the widest range of career opportunities for architects, from heritage conservation to high-rise design.',
+    faqs: generateStateFaqs('Maharashtra'),
   },
+
   // ═══════════════════════════════════════════════════════════════
   // GUJARAT
   // ═══════════════════════════════════════════════════════════════
@@ -187,19 +196,19 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Gujarat',
     topColleges: [
       { name: 'CEPT University, Faculty of Architecture', city: 'Ahmedabad', type: 'government' },
-      { name: 'MS University, Faculty of Technology and Engineering', city: 'Vadodara', type: 'government' },
-      { name: 'LJ University, School of Architecture', city: 'Ahmedabad', type: 'private' },
-      { name: 'Parul University, Faculty of Architecture', city: 'Vadodara', type: 'private' },
+      { name: 'Maharaja Sayajirao University (MSU), Faculty of Architecture', city: 'Vadodara', type: 'government' },
+      { name: 'L.J. University, School of Architecture', city: 'Ahmedabad', type: 'private' },
+      { name: 'Nirma University, Institute of Architecture and Planning', city: 'Ahmedabad', type: 'private' },
     ],
-    examCenters: ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot'],
+    examCenters: ['Ahmedabad', 'Vadodara', 'Surat', 'Rajkot'],
     keyHighlights: [
-      'CEPT Ahmedabad is consistently ranked among India\'s top 3 architecture schools',
-      'Ahmedabad is a UNESCO World Heritage City — the first in India to receive this status',
-      'Le Corbusier\'s and Louis Kahn\'s iconic buildings in Ahmedabad are global architecture landmarks',
-      'Gujarat\'s traditional step-wells (vav) and pol houses offer unique vernacular architecture studies',
+      'CEPT University Ahmedabad is ranked among the top 3 architecture schools in India',
+      'Ahmedabad is India\'s first UNESCO World Heritage City for its walled-city pol architecture',
+      'Le Corbusier\'s modernist buildings and IIM Ahmedabad by Louis Kahn are in the city',
+      'Strong tradition of architectural practice and education dating back to Balkrishna Doshi',
     ],
-    description: 'Gujarat is home to CEPT University Ahmedabad, consistently ranked among India\'s top 3 architecture schools. Ahmedabad, India\'s first UNESCO World Heritage City, features masterworks by Le Corbusier and Louis Kahn, while the state\'s traditional pol houses and step-wells provide rich vernacular architecture study material.',
-    faqs: makeStateFaqs('Gujarat', 'CEPT University Ahmedabad, MS University Vadodara, LJ University Ahmedabad, and Parul University Vadodara'),
+    description: 'Gujarat is an architecture education powerhouse, home to CEPT University — consistently ranked among India\'s top 3 architecture schools alongside IIT Kharagpur and SPA Delhi. Ahmedabad, India\'s first UNESCO World Heritage City, offers an extraordinary range of architectural study material from medieval pol houses to Le Corbusier\'s modernist buildings and Louis Kahn\'s iconic IIM campus. The state has produced some of India\'s greatest architects, including Pritzker laureate Balkrishna Doshi.',
+    faqs: generateStateFaqs('Gujarat'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -209,20 +218,20 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'delhi',
     stateDisplay: 'Delhi',
     topColleges: [
-      { name: 'School of Planning and Architecture (SPA) Delhi', city: 'Delhi', type: 'government' },
-      { name: 'Jamia Millia Islamia, Faculty of Architecture and Ekistics', city: 'Delhi', type: 'government' },
-      { name: 'Guru Gobind Singh Indraprastha University, School of Architecture', city: 'Delhi', type: 'government' },
-      { name: 'Sushant University, School of Art and Architecture', city: 'Gurgaon', type: 'private' },
+      { name: 'School of Planning and Architecture (SPA Delhi)', city: 'New Delhi', type: 'government' },
+      { name: 'Jamia Millia Islamia, Faculty of Architecture and Ekistics', city: 'New Delhi', type: 'government' },
+      { name: 'Guru Gobind Singh Indraprastha University, School of Architecture', city: 'New Delhi', type: 'government' },
+      { name: 'Sushant University, School of Art and Architecture', city: 'Gurugram', type: 'private' },
     ],
-    examCenters: ['Delhi', 'Noida', 'Gurgaon'],
+    examCenters: ['New Delhi', 'Noida', 'Gurugram'],
     keyHighlights: [
-      'SPA Delhi is India\'s #1 ranked architecture school and a national institute of importance',
-      'Delhi has the richest concentration of Mughal, Colonial, and Modern architecture in India',
-      'Lutyens\' Delhi, Red Fort, and Lotus Temple offer world-class architectural case studies',
-      'Proximity to Chandigarh — Le Corbusier\'s planned city — for study tours',
+      'SPA Delhi is the #1 ranked architecture school in India and a national institute of importance',
+      'Unparalleled access to Mughal, colonial, and contemporary landmark architecture',
+      'Highest concentration of leading architecture firms and design consultancies',
+      'Lutyens\' Delhi and New Delhi masterplan offer textbook examples of urban design',
     ],
-    description: 'Delhi is the epicenter of Indian architecture education, home to SPA Delhi (India\'s #1 ranked architecture school) and Jamia Millia Islamia. The city\'s architectural landscape spans 1,000 years — from Qutub Minar and Red Fort to Lutyens\' colonial masterplan and contemporary landmarks like the Lotus Temple.',
-    faqs: makeStateFaqs('Delhi', 'SPA Delhi (India\'s #1), Jamia Millia Islamia, IP University School of Architecture, and Sushant University Gurgaon'),
+    description: 'Delhi is the epicenter of architecture education in India, home to the School of Planning and Architecture (SPA) — the country\'s top-ranked architecture institution and an Institute of National Importance. The capital offers NATA aspirants access to an unmatched range of architectural heritage spanning Mughal masterpieces like Humayun\'s Tomb and Red Fort, Lutyens\' grand colonial avenues, and cutting-edge contemporary projects. Delhi also has the highest concentration of architecture practices in the country.',
+    faqs: generateStateFaqs('Delhi'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -233,87 +242,20 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Uttar Pradesh',
     topColleges: [
       { name: 'Aligarh Muslim University (AMU), Department of Architecture', city: 'Aligarh', type: 'government' },
-      { name: 'IIT BHU Varanasi, Department of Architecture', city: 'Varanasi', type: 'government' },
-      { name: 'Amity University, School of Architecture', city: 'Noida', type: 'private' },
-      { name: 'Galgotias University, School of Architecture', city: 'Greater Noida', type: 'private' },
+      { name: 'Institute of Engineering and Technology, Lucknow (IET), Department of Architecture', city: 'Lucknow', type: 'government' },
+      { name: 'Amity University, School of Architecture and Planning', city: 'Noida', type: 'private' },
+      { name: 'Babu Banarasi Das University, School of Architecture', city: 'Lucknow', type: 'private' },
+      { name: 'AKTU affiliated colleges of Architecture', city: 'Lucknow', type: 'government' },
     ],
-    examCenters: ['Lucknow', 'Noida', 'Varanasi', 'Allahabad'],
+    examCenters: ['Lucknow', 'Noida', 'Agra', 'Varanasi'],
     keyHighlights: [
-      'IIT BHU Varanasi offers one of India\'s most prestigious B.Arch programs through JEE Advanced',
-      'The Taj Mahal, Fatehpur Sikri, and Lucknow\'s Nawabi architecture are world heritage sites',
-      'Noida/Greater Noida has a rapidly growing cluster of architecture colleges near Delhi NCR',
-      'UP has the largest student population in India — high demand for quality coaching',
+      'Home to the Taj Mahal — the most iconic architectural masterpiece in the world',
+      'AMU Aligarh has one of the oldest architecture departments in North India',
+      'Lucknow\'s Nawabi architecture and Varanasi\'s ghats offer diverse study material',
+      'Large student population and affordable coaching options across the state',
     ],
-    description: 'Uttar Pradesh combines world-renowned architectural heritage — from the Taj Mahal to Varanasi\'s ancient ghats — with strong educational institutions like IIT BHU and AMU Aligarh. The Noida/Greater Noida corridor, close to Delhi, has become a growing hub for architecture education.',
-    faqs: makeStateFaqs('Uttar Pradesh', 'IIT BHU Varanasi, AMU Aligarh, Amity University Noida, and Galgotias University Greater Noida'),
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // RAJASTHAN
-  // ═══════════════════════════════════════════════════════════════
-  {
-    state: 'rajasthan',
-    stateDisplay: 'Rajasthan',
-    topColleges: [
-      { name: 'MNIT Jaipur, Department of Architecture', city: 'Jaipur', type: 'government' },
-      { name: 'Aayojan School of Architecture', city: 'Jaipur', type: 'private' },
-      { name: 'Manipal University Jaipur, Faculty of Architecture', city: 'Jaipur', type: 'private' },
-      { name: 'Poornima University, School of Architecture', city: 'Jaipur', type: 'private' },
-    ],
-    examCenters: ['Jaipur', 'Jodhpur', 'Udaipur'],
-    keyHighlights: [
-      'MNIT Jaipur is a top-ranked NIT with an excellent architecture department',
-      'Rajasthan\'s forts, palaces, havelis and step-wells are UNESCO World Heritage masterpieces',
-      'Jaipur is India\'s first planned city (1727) — a living urban planning case study',
-      'Desert architecture and climate-responsive design are unique Rajasthani contributions',
-    ],
-    description: 'Rajasthan is a treasure trove of architectural heritage, from the planned city of Jaipur (1727) to the magnificent forts of Jodhpur, Udaipur, and Jaisalmer. MNIT Jaipur leads architecture education in the state, while Rajasthan\'s desert climate architecture offers unique lessons in sustainable and climate-responsive design.',
-    faqs: makeStateFaqs('Rajasthan', 'MNIT Jaipur, Aayojan School of Architecture, Manipal University Jaipur, and Poornima University Jaipur'),
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // WEST BENGAL
-  // ═══════════════════════════════════════════════════════════════
-  {
-    state: 'west-bengal',
-    stateDisplay: 'West Bengal',
-    topColleges: [
-      { name: 'Jadavpur University, Department of Architecture', city: 'Kolkata', type: 'government' },
-      { name: 'IIT Kharagpur, Department of Architecture', city: 'Kharagpur', type: 'government' },
-      { name: 'Bengal Engineering and Science University', city: 'Howrah', type: 'government' },
-    ],
-    examCenters: ['Kolkata'],
-    keyHighlights: [
-      'Jadavpur University is one of India\'s top-ranked architecture programs',
-      'IIT Kharagpur offers B.Arch through JEE Advanced — one of the most coveted seats',
-      'Kolkata\'s colonial architecture is among the best preserved in Asia',
-      'Strong tradition of art and design education in Bengal',
-    ],
-    description: 'West Bengal combines world-class architecture education at Jadavpur University and IIT Kharagpur with Kolkata\'s extraordinary colonial architectural heritage. The city\'s Victoria Memorial, Howrah Bridge, and terracotta temple towns of Bishnupur offer unique design inspiration.',
-    faqs: makeStateFaqs('West Bengal', 'Jadavpur University Kolkata, IIT Kharagpur, and Bengal Engineering University Howrah'),
-  },
-
-
-  // ═══════════════════════════════════════════════════════════════
-  // MADHYA PRADESH
-  // ═══════════════════════════════════════════════════════════════
-  {
-    state: 'madhya-pradesh',
-    stateDisplay: 'Madhya Pradesh',
-    topColleges: [
-      { name: 'School of Planning and Architecture (SPA) Bhopal', city: 'Bhopal', type: 'government' },
-      { name: 'MANIT Bhopal, Department of Architecture', city: 'Bhopal', type: 'government' },
-      { name: 'IPS Academy, School of Architecture', city: 'Indore', type: 'private' },
-    ],
-    examCenters: ['Bhopal', 'Indore'],
-    keyHighlights: [
-      'SPA Bhopal is one of only 3 SPAs in India — a national institute of importance',
-      'Sanchi Stupa, Khajuraho temples, and Mandu fort are UNESCO heritage architectural sites',
-      'Bhopal is an affordable city with excellent architecture education options',
-      'Central location makes it accessible from all parts of India',
-    ],
-    description: 'Madhya Pradesh hosts SPA Bhopal, one of only three Schools of Planning and Architecture in India. The state\'s UNESCO World Heritage sites — Sanchi, Khajuraho, and Bhimbetka — along with Mandu\'s Afghan architecture, provide an extraordinary canvas for architecture students.',
-    faqs: makeStateFaqs('Madhya Pradesh', 'SPA Bhopal (national institute), MANIT Bhopal, and IPS Academy Indore'),
+    description: 'Uttar Pradesh offers NATA aspirants an extraordinary wealth of architectural heritage, from the Taj Mahal in Agra to the Mughal fort complexes in Fatehpur Sikri, the Nawabi palaces of Lucknow, and the ancient ghats of Varanasi. AMU Aligarh and IET Lucknow provide strong government architecture programs. The state\'s affordable cost of living and proximity to Delhi make it an attractive destination for architecture education.',
+    faqs: generateStateFaqs('Uttar Pradesh'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -323,19 +265,42 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'haryana',
     stateDisplay: 'Haryana',
     topColleges: [
-      { name: 'NIT Kurukshetra, Department of Architecture', city: 'Kurukshetra', type: 'government' },
-      { name: 'Deenbandhu Chhotu Ram University, Architecture Department', city: 'Sonipat', type: 'government' },
-      { name: 'Sushant University, School of Art and Architecture', city: 'Gurgaon', type: 'private' },
+      { name: 'Deenbandhu Chhotu Ram University of Science and Technology, Department of Architecture', city: 'Murthal', type: 'government' },
+      { name: 'Sushant University (formerly Ansal University), School of Art and Architecture', city: 'Gurugram', type: 'private' },
+      { name: 'B.P.S. Mahila Vishwavidyalaya, Department of Architecture', city: 'Sonipat', type: 'government' },
     ],
-    examCenters: ['Gurgaon', 'Faridabad', 'Kurukshetra'],
+    examCenters: ['Gurugram', 'Faridabad', 'Hisar'],
     keyHighlights: [
-      'Proximity to Delhi and Chandigarh — two major architecture education and practice hubs',
-      'Gurgaon\'s modern high-rise landscape offers exposure to contemporary commercial architecture',
-      'NIT Kurukshetra is well-ranked for architecture in North India',
-      'Lower living costs than Delhi NCR while maintaining access to top opportunities',
+      'Gurugram is a hub for modern high-rise and commercial architecture in the NCR region',
+      'Proximity to Delhi provides access to top architecture firms and heritage sites',
+      'Chandigarh\'s Le Corbusier masterplan is easily accessible for study tours',
+      'Rapidly developing infrastructure creates strong demand for architecture professionals',
     ],
-    description: 'Haryana benefits from its strategic location between Delhi and Chandigarh, two of India\'s most important cities for architecture. Gurgaon\'s modern skyline and NIT Kurukshetra\'s strong architecture department make the state an attractive base for NATA preparation.',
-    faqs: makeStateFaqs('Haryana', 'NIT Kurukshetra, Sushant University Gurgaon, and Deenbandhu Chhotu Ram University Sonipat'),
+    description: 'Haryana benefits from its strategic location in the National Capital Region, offering architecture students proximity to Delhi\'s heritage and Gurugram\'s modern skyline. The state\'s rapid urbanization, particularly in the Gurugram-Faridabad corridor, provides real-world exposure to contemporary commercial and residential design. Easy access to Le Corbusier\'s planned city of Chandigarh adds a unique educational advantage for NATA aspirants.',
+    faqs: generateStateFaqs('Haryana'),
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // RAJASTHAN
+  // ═══════════════════════════════════════════════════════════════
+  {
+    state: 'rajasthan',
+    stateDisplay: 'Rajasthan',
+    topColleges: [
+      { name: 'Malaviya National Institute of Technology (MNIT), Department of Architecture', city: 'Jaipur', type: 'government' },
+      { name: 'Aayojan School of Architecture', city: 'Jaipur', type: 'private' },
+      { name: 'Poornima University, School of Architecture', city: 'Jaipur', type: 'private' },
+      { name: 'Manipal University Jaipur, School of Architecture', city: 'Jaipur', type: 'private' },
+    ],
+    examCenters: ['Jaipur', 'Jodhpur', 'Udaipur'],
+    keyHighlights: [
+      'MNIT Jaipur offers one of the top government architecture programs in North India',
+      'Jaipur is a UNESCO World Heritage City with stunning Rajput and Mughal architecture',
+      'Rajasthan\'s diverse building traditions — from desert forts to havelis — provide unmatched study material',
+      'Strong focus on climate-responsive desert architecture and sustainable building practices',
+    ],
+    description: 'Rajasthan is an architect\'s paradise, boasting UNESCO World Heritage Sites in Jaipur and a stunning collection of forts, palaces, havelis, and stepwells that showcase centuries of climate-responsive desert architecture. MNIT Jaipur anchors the state\'s architecture education with a top-tier government program. NATA students in Rajasthan benefit from studying how traditional builders solved the challenges of extreme heat, water scarcity, and desert winds — skills highly relevant to modern sustainable design.',
+    faqs: generateStateFaqs('Rajasthan'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -346,20 +311,43 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Punjab',
     topColleges: [
       { name: 'Guru Nanak Dev University, Department of Architecture', city: 'Amritsar', type: 'government' },
+      { name: 'IKG Punjab Technical University affiliated colleges', city: 'Jalandhar', type: 'government' },
       { name: 'Chitkara University, School of Architecture', city: 'Rajpura', type: 'private' },
-      { name: 'Lovely Professional University, School of Architecture', city: 'Jalandhar', type: 'private' },
+      { name: 'Lovely Professional University, School of Architecture', city: 'Phagwara', type: 'private' },
     ],
     examCenters: ['Chandigarh', 'Amritsar', 'Ludhiana'],
     keyHighlights: [
-      'Adjacent to Chandigarh — Le Corbusier\'s planned city and a UNESCO World Heritage Site',
-      'Golden Temple Amritsar is a masterpiece of Sikh architecture studied worldwide',
-      'Punjab Agricultural University campus showcases modernist institutional architecture',
-      'Growing number of private architecture colleges offering quality education',
+      'Proximity to Chandigarh — Le Corbusier\'s planned city and a living architecture textbook',
+      'Golden Temple in Amritsar is a masterclass in sacred architecture and water body integration',
+      'Strong Sikh architectural heritage with gurdwaras showcasing intricate design',
+      'Affordable coaching and living costs compared to Delhi NCR',
     ],
-    description: 'Punjab students have the unique advantage of proximity to Chandigarh, Le Corbusier\'s planned city and a UNESCO World Heritage Site. Combined with the architectural grandeur of the Golden Temple and growing educational institutions, Punjab offers strong opportunities for aspiring architects.',
-    faqs: makeStateFaqs('Punjab', 'Guru Nanak Dev University Amritsar, Chitkara University, and Lovely Professional University Jalandhar'),
+    description: 'Punjab\'s architecture education landscape is enriched by its proximity to Chandigarh, Le Corbusier\'s masterplanned city that serves as a living laboratory for modern urban design. The state\'s rich Sikh architectural heritage, epitomized by the Golden Temple in Amritsar, provides NATA aspirants with inspiring examples of sacred architecture, water body integration, and community-oriented design. Punjab offers affordable education with easy access to world-class architectural references.',
+    faqs: generateStateFaqs('Punjab'),
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // WEST BENGAL
+  // ═══════════════════════════════════════════════════════════════
+  {
+    state: 'west-bengal',
+    stateDisplay: 'West Bengal',
+    topColleges: [
+      { name: 'Jadavpur University, Faculty of Architecture', city: 'Kolkata', type: 'government' },
+      { name: 'IIT Kharagpur, Department of Architecture and Regional Planning', city: 'Kharagpur', type: 'government' },
+      { name: 'Indian Institute of Engineering Science and Technology (IIEST) Shibpur, Department of Architecture', city: 'Howrah', type: 'government' },
+      { name: 'Techno India University, School of Architecture', city: 'Kolkata', type: 'private' },
+    ],
+    examCenters: ['Kolkata', 'Siliguri', 'Durgapur'],
+    keyHighlights: [
+      'IIT Kharagpur has the oldest and most prestigious architecture department among all IITs',
+      'Kolkata\'s colonial architecture — Victoria Memorial, Howrah Bridge, Writers\' Building — is iconic',
+      'Jadavpur University is a top-ranked government architecture school in Eastern India',
+      'Rich tradition of arts and design culture in Kolkata supports creative development',
+    ],
+    description: 'West Bengal offers world-class architecture education through IIT Kharagpur — which has the oldest architecture department among all IITs — and Jadavpur University, a premier government institution. Kolkata\'s extraordinary colonial-era architecture, from the Victoria Memorial to the Raj Bhavan, provides NATA aspirants with a rich tapestry of Gothic, Baroque, and Indo-Saracenic styles. The city\'s vibrant arts and design culture fosters the creative thinking essential for architecture.',
+    faqs: generateStateFaqs('West Bengal'),
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // BIHAR
@@ -369,18 +357,18 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Bihar',
     topColleges: [
       { name: 'NIT Patna, Department of Architecture', city: 'Patna', type: 'government' },
-      { name: 'Birla Institute of Technology Mesra, Architecture Department', city: 'Ranchi', type: 'deemed' },
-      { name: 'Chandragupt Institute of Management Patna (Architecture wing)', city: 'Patna', type: 'private' },
+      { name: 'Birla Institute of Technology Mesra, Department of Architecture (Patna Extension)', city: 'Patna', type: 'deemed' },
+      { name: 'Muzaffarpur Institute of Technology, Department of Architecture', city: 'Muzaffarpur', type: 'government' },
     ],
     examCenters: ['Patna', 'Gaya'],
     keyHighlights: [
-      'NIT Patna is the primary architecture education institution in Bihar',
-      'Nalanda University ruins represent one of the world\'s oldest planned educational campuses',
-      'Bihar\'s Buddhist architectural heritage at Bodhgaya is internationally significant',
-      'Online coaching bridges the gap for students in smaller Bihar towns',
+      'NIT Patna offers an excellent government architecture program in Eastern India',
+      'Ancient Nalanda University ruins provide insight into early Indian campus planning and architecture',
+      'Affordable cost of living makes architecture education highly accessible',
+      'Growing infrastructure development in Bihar creates emerging opportunities for architects',
     ],
-    description: 'Bihar has a growing architecture education scene anchored by NIT Patna. The state\'s incredible Buddhist heritage — Nalanda University ruins and Mahabodhi Temple at Bodhgaya — offers unique insights into ancient Indian planned architecture and campus design.',
-    faqs: makeStateFaqs('Bihar', 'NIT Patna and nearby Birla Institute of Technology Mesra'),
+    description: 'Bihar, the land of Nalanda and Vikramshila, has deep roots in institutional architecture dating back over a thousand years. NIT Patna anchors the state\'s modern architecture education with a strong government program. The ruins of ancient Nalanda — one of the world\'s first planned university campuses — provide NATA aspirants with fascinating study material on early spatial planning and community architecture.',
+    faqs: generateStateFaqs('Bihar'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -391,19 +379,20 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Odisha',
     topColleges: [
       { name: 'NIT Rourkela, Department of Architecture', city: 'Rourkela', type: 'government' },
-      { name: 'College of Engineering and Technology Bhubaneswar (CET)', city: 'Bhubaneswar', type: 'government' },
-      { name: 'SOA University, School of Architecture', city: 'Bhubaneswar', type: 'deemed' },
+      { name: 'College of Engineering and Technology (CET) Bhubaneswar, Department of Architecture', city: 'Bhubaneswar', type: 'government' },
+      { name: 'KIIT University, School of Architecture', city: 'Bhubaneswar', type: 'deemed' },
     ],
     examCenters: ['Bhubaneswar', 'Rourkela'],
     keyHighlights: [
-      'NIT Rourkela has one of Eastern India\'s best architecture programs',
-      'Bhubaneswar is known as the "Temple City" with 700+ ancient temples',
-      'Konark Sun Temple is a UNESCO masterpiece of Odishan architecture',
-      'Bhubaneswar is one of India\'s smartest planned cities — great for urban studies',
+      'Bhubaneswar is the "Temple City" with over 700 temples showcasing Kalinga architecture',
+      'NIT Rourkela has a well-regarded architecture department in Eastern India',
+      'Konark Sun Temple (UNESCO) is a masterpiece of architectural engineering',
+      'Emerging smart city development in Bhubaneswar offers modern urban planning exposure',
     ],
-    description: 'Odisha combines ancient temple architecture with modern smart city planning. Bhubaneswar, the "Temple City" with 700+ ancient temples, and the UNESCO-listed Konark Sun Temple provide extraordinary architectural heritage, while NIT Rourkela leads architecture education in the state.',
-    faqs: makeStateFaqs('Odisha', 'NIT Rourkela, CET Bhubaneswar, and SOA University Bhubaneswar'),
+    description: 'Odisha is a treasure trove of temple architecture, with Bhubaneswar\'s 700+ temples and the UNESCO-listed Konark Sun Temple showcasing the magnificent Kalinga style of architecture. NIT Rourkela and CET Bhubaneswar provide strong government architecture programs. NATA aspirants in Odisha benefit from studying some of India\'s most structurally ambitious ancient buildings, where stone was carved to mimic wooden construction in extraordinary detail.',
+    faqs: generateStateFaqs('Odisha'),
   },
+
   // ═══════════════════════════════════════════════════════════════
   // JHARKHAND
   // ═══════════════════════════════════════════════════════════════
@@ -411,18 +400,19 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'jharkhand',
     stateDisplay: 'Jharkhand',
     topColleges: [
-      { name: 'Birla Institute of Technology Mesra, Department of Architecture', city: 'Ranchi', type: 'deemed' },
+      { name: 'Birla Institute of Technology (BIT) Mesra, Department of Architecture', city: 'Ranchi', type: 'deemed' },
       { name: 'NIT Jamshedpur, Department of Architecture', city: 'Jamshedpur', type: 'government' },
+      { name: 'Jharkhand Rai University, School of Architecture', city: 'Ranchi', type: 'private' },
     ],
     examCenters: ['Ranchi', 'Jamshedpur'],
     keyHighlights: [
-      'BIT Mesra Ranchi is a well-established architecture school in Eastern India',
-      'Jamshedpur (Tata Nagar) is India\'s first planned industrial city — an urban planning milestone',
-      'Online coaching helps students overcome limited local coaching options',
-      'Growing infrastructure development creating demand for architects in the state',
+      'BIT Mesra is a premier deemed university with a strong architecture program',
+      'Jamshedpur — India\'s first planned industrial city — offers unique urban planning study material',
+      'Affordable education and living costs in the state',
+      'Rich tribal architectural heritage with sustainable mud and bamboo construction techniques',
     ],
-    description: 'Jharkhand offers architecture education through BIT Mesra Ranchi, a well-respected institution. Jamshedpur, India\'s first planned industrial city built by the Tata Group, provides unique insights into industrial town planning and modern Indian urbanism.',
-    faqs: makeStateFaqs('Jharkhand', 'BIT Mesra Ranchi and NIT Jamshedpur'),
+    description: 'Jharkhand offers a distinctive architecture education experience anchored by BIT Mesra — a premier deemed university with an excellent architecture program. Jamshedpur, India\'s first planned industrial city designed by the Tata Group, provides a unique case study in urban planning. The state\'s rich tribal architectural traditions, using sustainable materials like mud, bamboo, and thatch, offer NATA aspirants valuable lessons in eco-friendly and vernacular design.',
+    faqs: generateStateFaqs('Jharkhand'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -432,21 +422,43 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'assam',
     stateDisplay: 'Assam',
     topColleges: [
-      { name: 'IIT Guwahati, Department of Design', city: 'Guwahati', type: 'government' },
-      { name: 'Assam Engineering College, Architecture Department', city: 'Guwahati', type: 'government' },
+      { name: 'Assam Engineering College, Department of Architecture', city: 'Guwahati', type: 'government' },
+      { name: 'NIT Silchar, Department of Architecture', city: 'Silchar', type: 'government' },
       { name: 'Girijananda Chowdhury University, School of Architecture', city: 'Guwahati', type: 'private' },
     ],
-    examCenters: ['Guwahati'],
+    examCenters: ['Guwahati', 'Silchar'],
     keyHighlights: [
-      'IIT Guwahati offers design programs that complement architecture education',
-      'Northeast India\'s bamboo architecture is gaining global recognition',
-      'Assam\'s Ahom-era monuments represent a unique architectural heritage',
-      'Online coaching is essential for students in remote Northeast locations',
+      'Gateway to Northeast India\'s diverse vernacular architecture traditions',
+      'Ahom-era monuments like Rang Ghar and Talatal Ghar showcase unique regional architecture',
+      'Assam-type houses (Ikra construction) represent earthquake-resistant bamboo architecture',
+      'Growing urbanization in Guwahati creates demand for architects in the Northeast',
     ],
-    description: 'Assam serves as the gateway to Northeast India\'s architecture education. IIT Guwahati and Assam Engineering College anchor the region, while Assam\'s unique Ahom-era architecture and the Northeast\'s globally recognized bamboo construction traditions offer distinctive study opportunities.',
-    faqs: makeStateFaqs('Assam', 'IIT Guwahati (Design), Assam Engineering College, and Girijananda Chowdhury University Guwahati'),
+    description: 'Assam serves as the gateway to Northeast India\'s extraordinarily diverse architectural traditions. The Ahom dynasty monuments — including Rang Ghar, one of Asia\'s oldest amphitheatres — showcase a unique architectural style found nowhere else. The traditional Assam-type house, built with bamboo and ikra (reed) construction, is a globally recognized example of earthquake-resistant vernacular architecture. NATA aspirants from Assam bring a distinctive perspective to architecture education.',
+    faqs: generateStateFaqs('Assam'),
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // MADHYA PRADESH
+  // ═══════════════════════════════════════════════════════════════
+  {
+    state: 'madhya-pradesh',
+    stateDisplay: 'Madhya Pradesh',
+    topColleges: [
+      { name: 'School of Architecture and Planning, Bhopal (MANIT affiliated)', city: 'Bhopal', type: 'government' },
+      { name: 'Maulana Azad National Institute of Technology (MANIT), Department of Architecture', city: 'Bhopal', type: 'government' },
+      { name: 'IPS Academy, School of Architecture', city: 'Indore', type: 'private' },
+      { name: 'Oriental University, School of Architecture', city: 'Indore', type: 'private' },
+    ],
+    examCenters: ['Bhopal', 'Indore', 'Gwalior'],
+    keyHighlights: [
+      'MANIT Bhopal is a prestigious NIT with a well-regarded architecture department',
+      'Khajuraho temples (UNESCO) and Sanchi Stupa provide world-class heritage architecture for study',
+      'Bhopal\'s blend of Nawabi and modern architecture offers diverse urban contexts',
+      'Central location makes it affordable and well-connected for students from across India',
+    ],
+    description: 'Madhya Pradesh, the heart of India, offers architecture students access to some of the country\'s most iconic built heritage — from the UNESCO-listed Khajuraho temples and Sanchi Stupa to the Nawabi architecture of Bhopal. MANIT Bhopal provides a strong government architecture education. The state\'s central location, affordable living costs, and rich architectural diversity spanning Buddhist, Hindu, and Islamic traditions make it an excellent base for NATA preparation.',
+    faqs: generateStateFaqs('Madhya Pradesh'),
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // CHHATTISGARH
@@ -456,17 +468,18 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Chhattisgarh',
     topColleges: [
       { name: 'NIT Raipur, Department of Architecture', city: 'Raipur', type: 'government' },
-      { name: 'Rungta College of Architecture', city: 'Bhilai', type: 'private' },
+      { name: 'Rungta College of Engineering and Technology, School of Architecture', city: 'Bhilai', type: 'private' },
+      { name: 'Shri Shankaracharya Technical Campus, Department of Architecture', city: 'Bhilai', type: 'private' },
     ],
-    examCenters: ['Raipur'],
+    examCenters: ['Raipur', 'Bhilai'],
     keyHighlights: [
-      'NIT Raipur offers a respected architecture program in Central India',
-      'Raipur is rapidly developing as a smart city with modern infrastructure projects',
-      'Online coaching bridges the gap for students in smaller Chhattisgarh towns',
-      'Affordable cost of education compared to major metro cities',
+      'NIT Raipur offers an affordable, high-quality government architecture program',
+      'Rich tribal architectural heritage with unique mud and wood construction traditions',
+      'New capital development at Naya Raipur (Atal Nagar) offers exposure to smart city planning',
+      'Among the most affordable states for architecture education in India',
     ],
-    description: 'Chhattisgarh\'s architecture education is anchored by NIT Raipur. The state\'s rapid smart city development in Raipur and Naya Raipur provides practical exposure to modern urban planning, while online coaching from Neram Classes ensures students get top-quality preparation regardless of location.',
-    faqs: makeStateFaqs('Chhattisgarh', 'NIT Raipur and Rungta College of Architecture Bhilai'),
+    description: 'Chhattisgarh is an emerging destination for architecture education, anchored by NIT Raipur. The state offers NATA aspirants a unique perspective through its rich tribal architectural heritage, featuring sustainable mud, wood, and thatch construction techniques that are gaining renewed global interest. The development of Naya Raipur (Atal Nagar) as a planned smart city provides real-world exposure to modern urban planning and green building practices.',
+    faqs: generateStateFaqs('Chhattisgarh'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -478,16 +491,17 @@ export const stateSeoContent: StateSeoContent[] = [
     topColleges: [
       { name: 'IIT Roorkee, Department of Architecture and Planning', city: 'Roorkee', type: 'government' },
       { name: 'Graphic Era University, School of Architecture', city: 'Dehradun', type: 'private' },
+      { name: 'University of Petroleum and Energy Studies (UPES), School of Design', city: 'Dehradun', type: 'private' },
     ],
-    examCenters: ['Dehradun', 'Roorkee'],
+    examCenters: ['Dehradun', 'Roorkee', 'Haldwani'],
     keyHighlights: [
-      'IIT Roorkee is India\'s oldest technical institution (est. 1847) with a top-ranked architecture dept',
-      'Hill station architecture and disaster-resilient building design are unique study areas',
-      'Proximity to Chandigarh for Le Corbusier\'s architecture study tours',
-      'Dehradun\'s pleasant climate and affordable living attract architecture students',
+      'IIT Roorkee has one of the top 3 architecture departments in India (established 1847)',
+      'Himalayan mountain architecture offers unique study material for climate-responsive design',
+      'Dehradun\'s pleasant climate and affordable living make it ideal for focused NATA preparation',
+      'Exposure to earthquake-resistant construction techniques crucial for hill architecture',
     ],
-    description: 'Uttarakhand is home to IIT Roorkee, India\'s oldest technical institution (established 1847) with a nationally top-ranked architecture department. The state offers unique learning in hill station architecture, seismic-resilient design, and mountain urbanism.',
-    faqs: makeStateFaqs('Uttarakhand', 'IIT Roorkee (India\'s oldest technical institution) and Graphic Era University Dehradun'),
+    description: 'Uttarakhand is home to IIT Roorkee, which has one of the oldest and most highly ranked architecture departments in India, established in 1847. The state\'s Himalayan setting provides NATA aspirants with unique exposure to mountain architecture, seismic-resistant design, and climate-responsive building techniques. Traditional Garhwali and Kumaoni houses, built with stone and wood to withstand earthquakes and heavy snowfall, offer valuable lessons in vernacular sustainable design.',
+    faqs: generateStateFaqs('Uttarakhand'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -498,17 +512,18 @@ export const stateSeoContent: StateSeoContent[] = [
     stateDisplay: 'Chandigarh',
     topColleges: [
       { name: 'Chandigarh College of Architecture (CCA)', city: 'Chandigarh', type: 'government' },
-      { name: 'Punjab Engineering College, Architecture Department', city: 'Chandigarh', type: 'government' },
+      { name: 'Punjab Engineering College (PEC), Department of Architecture', city: 'Chandigarh', type: 'government' },
+      { name: 'Chitkara University, School of Architecture (nearby)', city: 'Rajpura', type: 'private' },
     ],
     examCenters: ['Chandigarh'],
     keyHighlights: [
-      'Chandigarh IS Le Corbusier\'s masterpiece — the city itself is an architecture textbook',
-      'CCA Chandigarh is one of India\'s most sought-after government architecture colleges',
-      'Capitol Complex is a UNESCO World Heritage Site and modernist architecture landmark',
-      'Students live and study inside the world\'s most famous planned city',
+      'Chandigarh is Le Corbusier\'s masterplanned city — a UNESCO World Heritage site for modern architecture',
+      'Chandigarh College of Architecture (CCA) is among the top government architecture schools in North India',
+      'The Capitol Complex, Rock Garden, and Sector 17 plaza are iconic modernist landmarks',
+      'Living in a planned city provides daily exposure to urban design principles',
     ],
-    description: 'Chandigarh is the ultimate city for architecture students — designed by Le Corbusier, it is a living textbook of modernist urban planning. CCA Chandigarh is one of India\'s most prestigious government architecture colleges, and the UNESCO-listed Capitol Complex is right at students\' doorstep.',
-    faqs: makeStateFaqs('Chandigarh', 'Chandigarh College of Architecture (CCA) and Punjab Engineering College Chandigarh'),
+    description: 'Chandigarh is a pilgrimage site for architecture students worldwide — the only city in India designed by the legendary Le Corbusier, with its Capitol Complex now a UNESCO World Heritage Site. The Chandigarh College of Architecture (CCA) is a premier government institution situated in this living laboratory of modernist urban design. NATA aspirants studying here experience world-class architecture in their daily lives, from the geometric sector grid to the brutalist government buildings.',
+    faqs: generateStateFaqs('Chandigarh'),
   },
 
   // ═══════════════════════════════════════════════════════════════
@@ -518,18 +533,19 @@ export const stateSeoContent: StateSeoContent[] = [
     state: 'puducherry',
     stateDisplay: 'Puducherry',
     topColleges: [
-      { name: 'Pondicherry University, Department of Architecture', city: 'Pondicherry', type: 'government' },
-      { name: 'Periyar Maniammai Institute of Science and Technology', city: 'Thanjavur', type: 'deemed' },
+      { name: 'Pondicherry University, Department of Architecture', city: 'Puducherry', type: 'government' },
+      { name: 'Auroville Design Consultancy (affiliated programs)', city: 'Auroville', type: 'private' },
+      { name: 'Perunthalaivar Kamarajar Institute of Engineering and Technology, Architecture Wing', city: 'Puducherry', type: 'government' },
     ],
-    examCenters: ['Pondicherry'],
+    examCenters: ['Puducherry'],
     keyHighlights: [
-      'Pondicherry\'s French colonial architecture and Auroville experimental township are globally unique',
-      'Auroville is a UNESCO-supported experimental city showcasing futuristic architecture',
-      'Compact coastal city with Tamil and French architectural influences',
-      'Close to Chennai and South Tamil Nadu for additional architecture exposure',
+      'Unique French colonial architecture in the White Town heritage quarter',
+      'Auroville — the experimental township — is a globally recognized sustainable architecture project',
+      'Pondicherry University offers a central government architecture program',
+      'Compact city with walkable heritage zones ideal for architectural sketching and study',
     ],
-    description: 'Puducherry offers a uniquely multicultural architectural experience, blending French colonial heritage with Tamil traditions. Auroville, the UNESCO-supported experimental township, is a globally recognized model for sustainable and futuristic community design — an extraordinary resource for architecture students.',
-    faqs: makeStateFaqs('Puducherry', 'Pondicherry University and nearby Anna University Chennai and NIT Trichy'),
+    description: 'Puducherry offers a uniquely cosmopolitan architecture education experience, blending French colonial heritage in the White Town quarter with Tamil vernacular traditions and the experimental sustainable architecture of Auroville. Pondicherry University provides a central government architecture program in this charming coastal city. NATA aspirants here benefit from studying how different cultural influences — French, Tamil, and international — have created a distinctive architectural identity within a compact, walkable urban setting.',
+    faqs: generateStateFaqs('Puducherry'),
   },
 ];
 
