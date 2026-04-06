@@ -6862,3 +6862,95 @@ export interface DrawingThreadView {
   question: DrawingQuestion;
   attempts: DrawingThreadAttempt[];
 }
+
+// Foundation Checklist
+export interface DrawingChecklistItem {
+  id: string;
+  category: string;
+  skill_name: string;
+  sort_order: number;
+  description: string | null;
+  created_at: string;
+}
+
+export type DrawingChecklistStatus = 'not_started' | 'in_progress' | 'completed';
+
+export interface DrawingChecklistProgress {
+  id: string;
+  student_id: string;
+  checklist_item_id: string;
+  status: DrawingChecklistStatus;
+  student_marked_at: string | null;
+  tutor_verified: boolean;
+  tutor_verified_at: string | null;
+  updated_at: string;
+}
+
+export interface DrawingChecklistItemWithProgress extends DrawingChecklistItem {
+  progress: DrawingChecklistProgress | null;
+}
+
+// Object Library
+export interface DrawingObject {
+  id: string;
+  object_name: string;
+  family: string;
+  reference_images: Array<{ level: number; url: string }>;
+  basic_form: string | null;
+  difficulty: string;
+  tips: string | null;
+  video_url: string | null;
+  tags: string[];
+  is_active: boolean;
+  created_at: string;
+}
+
+// ============================================
+// STUDENT RESULTS (Marketing Showcase)
+// ============================================
+
+export type StudentResultExamType = 'nata' | 'jee_paper2' | 'tnea' | 'other';
+
+export interface StudentResult extends Timestamps {
+  id: string;
+  student_name: string;
+  slug: string;
+  photo_url: string | null;
+  scorecard_url: string | null;
+  scorecard_watermarked_url: string | null;
+  exam_type: StudentResultExamType;
+  exam_year: number;
+  score: number | null;
+  max_score: number | null;
+  rank: number | null;
+  percentile: number | null;
+  college_name: string | null;
+  college_city: string | null;
+  course_name: string | null;
+  student_quote: string | null;
+  is_featured: boolean;
+  is_published: boolean;
+  display_order: number;
+}
+
+export interface StudentResultFilters {
+  search?: string;
+  exam_type?: StudentResultExamType;
+  year?: number;
+  college?: string;
+  score_min?: number;
+  score_max?: number;
+  featured_only?: boolean;
+  is_published?: boolean;
+  limit?: number;
+  offset?: number;
+  sort?: 'score_desc' | 'rank_asc' | 'name_asc' | 'newest';
+}
+
+export interface StudentResultStats {
+  total: number;
+  avg_nata_score: number | null;
+  top_rank: number | null;
+  colleges_count: number;
+  by_exam_type: Record<string, number>;
+}
