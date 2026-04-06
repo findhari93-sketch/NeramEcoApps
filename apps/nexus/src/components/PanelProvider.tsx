@@ -92,7 +92,6 @@ const PANELS: PanelConfig[] = [
     defaultPath: '/teacher/classrooms',
     sidebarItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
-      { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
