@@ -9,10 +9,13 @@ type BadgeCounts = Record<string, number>;
 interface NavBadgeContextValue {
   /** Get the badge count for a navigation path (e.g. '/student/issues' or '/teacher/issues') */
   getBadgeCount: (path: string) => number;
+  /** Force refresh badge counts immediately (call after actions that change counts) */
+  refreshBadges: () => void;
 }
 
 const NavBadgeContext = createContext<NavBadgeContextValue>({
   getBadgeCount: () => 0,
+  refreshBadges: () => {},
 });
 
 export function useNavBadges() {
@@ -73,7 +76,7 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
     [counts],
   );
 
-  const value = useMemo(() => ({ getBadgeCount }), [getBadgeCount]);
+  const value = useMemo(() => ({ getBadgeCount, refreshBadges: fetchBadges }), [getBadgeCount, fetchBadges]);
 
   return (
     <NavBadgeContext.Provider value={value}>

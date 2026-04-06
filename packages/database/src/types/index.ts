@@ -6768,9 +6768,10 @@ export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'redo' | 'c
 export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice';
 
 export interface TutorResource {
-  type: 'nexus_video' | 'youtube';
+  type: 'nexus_video' | 'youtube' | 'image';
   url: string;
   title: string;
+  thumbnail_url?: string;
 }
 
 export interface DrawingQuestion {

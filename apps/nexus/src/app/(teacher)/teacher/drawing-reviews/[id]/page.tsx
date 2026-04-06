@@ -17,6 +17,7 @@ import CategoryBadge from '@/components/drawings/CategoryBadge';
 import SketchOverCanvas from '@/components/drawings/SketchOverCanvas';
 import ResourceLinkSearch from '@/components/drawings/ResourceLinkSearch';
 import CommentSection from '@/components/drawings/CommentSection';
+import { useNavBadges } from '@/components/NavBadgeProvider';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
@@ -25,6 +26,7 @@ export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
+  const { refreshBadges } = useNavBadges();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -103,6 +105,7 @@ export default function DrawingReviewDetailPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to save review');
+      refreshBadges();
       router.push('/teacher/drawing-reviews');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');

@@ -149,14 +149,22 @@ export default function SubmissionDetailPage() {
               key={i}
               variant="outlined"
               sx={{ p: 1.25, mb: 0.75, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-              onClick={() => r.type === 'youtube' ? window.open(r.url, '_blank') : router.push(r.url)}
+              onClick={() => {
+                if (r.type === 'image') window.open(r.url, '_blank');
+                else if (r.type === 'youtube') window.open(r.url, '_blank');
+                else router.push(r.url);
+              }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PlayCircleOutlineIcon sx={{ color: r.type === 'youtube' ? '#ff0000' : 'primary.main', fontSize: 20 }} />
+                {r.type === 'image' && r.thumbnail_url ? (
+                  <Box component="img" src={r.thumbnail_url} alt="" sx={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 0.5, flexShrink: 0 }} />
+                ) : (
+                  <PlayCircleOutlineIcon sx={{ color: r.type === 'youtube' ? '#ff0000' : 'primary.main', fontSize: 20 }} />
+                )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={500} noWrap>{r.title}</Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {r.type === 'youtube' ? 'YouTube' : 'Class Recording'}
+                    {r.type === 'youtube' ? 'YouTube' : r.type === 'image' ? 'Reference Image' : 'Class Recording'}
                   </Typography>
                 </Box>
               </Box>
