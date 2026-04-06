@@ -32,9 +32,9 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
 function getNavigationUrl(notification: { event_type: string; metadata: Record<string, unknown> | null }): string | null {
   switch (notification.event_type) {
     case 'application_approved': {
-      const leadProfileId = notification.metadata?.lead_profile_id as string | undefined;
-      if (leadProfileId) {
-        return `/payment/${leadProfileId}`;
+      const applicationNumber = notification.metadata?.application_number as string | undefined;
+      if (applicationNumber) {
+        return `${process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com'}/pay?app=${applicationNumber}`;
       }
       return '/my-applications';
     }

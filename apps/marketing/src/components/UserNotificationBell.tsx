@@ -95,9 +95,9 @@ export default function UserNotificationBell() {
     handleClose();
 
     if (notification.event_type === 'application_approved') {
-      const leadProfileId = notification.metadata?.lead_profile_id as string | undefined;
-      if (leadProfileId) {
-        window.location.href = `${APP_URL}/payment/${leadProfileId}`;
+      const applicationNumber = notification.metadata?.application_number as string | undefined;
+      if (applicationNumber) {
+        window.location.href = `/pay?app=${applicationNumber}`;
         return;
       }
     }
