@@ -140,11 +140,6 @@ export function generateOrganizationSchema() {
       applicationCategory: 'EducationalApplication',
       operatingSystem: 'Web (PWA) - Android, iOS, Windows, macOS',
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' },
-      aggregateRating: {
-        '@type': 'AggregateRating',
-        ratingValue: '4.8',
-        ratingCount: '2500',
-      },
     },
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
