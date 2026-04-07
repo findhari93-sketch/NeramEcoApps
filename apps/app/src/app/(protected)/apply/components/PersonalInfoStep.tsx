@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useFormContext } from '../hooks/useApplicationForm';
 import { GENDER_OPTIONS } from '../types';
+import { trackFunnelEvent } from '@/lib/funnel-tracker';
 
 export default function PersonalInfoStep() {
   const {
@@ -160,6 +161,8 @@ export default function PersonalInfoStep() {
 
   const handleVerifyPhone = () => {
     if (formData.personal.phone.length === 10) {
+      trackFunnelEvent({ funnel: 'auth', event: 'phone_number_entered', status: 'started' });
+      trackFunnelEvent({ funnel: 'auth', event: 'phone_screen_shown', status: 'started' });
       setShowPhoneVerification(true);
     }
   };

@@ -1,21 +1,25 @@
 'use client';
 
-import { Box, Typography } from '@neram/ui';
-import ExamSelectionPanel from '@/components/documents/ExamSelectionPanel';
-import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { Suspense } from 'react';
+import { Box, Skeleton } from '@neram/ui';
+import UnifiedExamsContainer from '@/components/exams/UnifiedExamsContainer';
+
+function ExamsContent() {
+  return <UnifiedExamsContainer />;
+}
 
 export default function ExamsPage() {
-  const { activeClassroom, getToken } = useNexusAuthContext();
-
   return (
     <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
-        Exam Tracker
-      </Typography>
-      <ExamSelectionPanel
-        classroomId={activeClassroom?.id || ''}
-        getToken={getToken}
-      />
+      <Suspense fallback={
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Skeleton variant="rounded" height={70} />
+          <Skeleton variant="rounded" height={48} />
+          <Skeleton variant="rounded" height={200} />
+        </Box>
+      }>
+        <ExamsContent />
+      </Suspense>
     </Box>
   );
 }

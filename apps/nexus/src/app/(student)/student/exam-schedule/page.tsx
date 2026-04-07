@@ -1,12 +1,12 @@
 'use client';
 
-import { Box } from '@neram/ui';
-import ExamScheduleDashboard from '@/components/exam-schedule/ExamScheduleDashboard';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function StudentExamSchedulePage() {
-  return (
-    <Box>
-      <ExamScheduleDashboard />
-    </Box>
-  );
+export default function ExamScheduleRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/student/exams?tab=schedule');
+  }, [router]);
+  return null;
 }

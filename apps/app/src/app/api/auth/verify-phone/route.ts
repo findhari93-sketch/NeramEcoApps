@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient, insertFunnelEvent } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -69,6 +69,24 @@ export async function POST(req: NextRequest) {
     // Check if this phone number is already used by a DIFFERENT user
     const existingPhoneUser = await checkPhoneExists(phoneNumber, user.id, adminClient);
     if (existingPhoneUser) {
+      await insertFunnelEvent(adminClient, {
+        user_id: user.id,
+        anonymous_id: null,
+        funnel: 'auth',
+        event: 'phone_already_exists',
+        status: 'failed',
+        error_message: 'Phone number already registered with another account',
+        error_code: 'PHONE_ALREADY_EXISTS',
+        metadata: {},
+        device_session_id: null,
+        device_type: null,
+        browser: null,
+        os: null,
+        ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        source_app: 'app',
+        page_url: null,
+      }).catch(() => {});
+
       return NextResponse.json(
         {
           error: 'PHONE_ALREADY_EXISTS',
@@ -83,6 +101,25 @@ export async function POST(req: NextRequest) {
       phone: phoneNumber,
       phone_verified: true,
     }, adminClient);
+
+    // Track successful phone verification
+    await insertFunnelEvent(adminClient, {
+      user_id: user.id,
+      anonymous_id: null,
+      funnel: 'auth',
+      event: 'otp_verified',
+      status: 'completed',
+      error_message: null,
+      error_code: null,
+      metadata: {},
+      device_session_id: null,
+      device_type: null,
+      browser: null,
+      os: null,
+      ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      source_app: 'app',
+      page_url: null,
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

@@ -26,7 +26,10 @@ import {
   Autocomplete,
   ToggleButton,
   ToggleButtonGroup,
+  Switch,
+  FormControlLabel,
 } from '@neram/ui';
+import type { QBShift } from '@neram/database';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
@@ -76,6 +79,8 @@ export default function BulkUploadPage() {
   const [examType, setExamType] = useState<QBExamType>('JEE_PAPER_2');
   const [year, setYear] = useState<number>(2026);
   const [session, setSession] = useState('');
+  const [hasShifts, setHasShifts] = useState(false);
+  const [shift, setShift] = useState<QBShift | null>(null);
 
   // Step 2: Upload method
   const [uploadMethod, setUploadMethod] = useState<UploadMethod>('json');
@@ -190,6 +195,7 @@ export default function BulkUploadPage() {
           exam_type: examType,
           year,
           session: session || null,
+          shift: shift || null,
           parsed_questions,
         }),
       });
@@ -261,6 +267,8 @@ export default function BulkUploadPage() {
                 onChange={(e) => {
                   setExamType(e.target.value as QBExamType);
                   setSession('');
+                  setHasShifts(false);
+                  setShift(null);
                 }}
                 label="Exam Type"
               >
@@ -299,7 +307,11 @@ export default function BulkUploadPage() {
                 <ToggleButtonGroup
                   value={session}
                   exclusive
-                  onChange={(_, v) => setSession(v || '')}
+                  onChange={(_, v) => {
+                    setSession(v || '');
+                    setHasShifts(false);
+                    setShift(null);
+                  }}
                   size="small"
                   sx={{
                     display: 'flex',
@@ -346,7 +358,66 @@ export default function BulkUploadPage() {
               </Box>
             </Box>
 
-            <Button variant="contained" onClick={() => setActiveStep(1)}>
+            {/* Shift toggle (Forenoon/Afternoon) */}
+            {session && (
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={hasShifts}
+                      onChange={(e) => {
+                        setHasShifts(e.target.checked);
+                        if (!e.target.checked) setShift(null);
+                      }}
+                      size="small"
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" color="text.secondary">
+                      This session has separate Forenoon and Afternoon papers
+                    </Typography>
+                  }
+                />
+
+                {hasShifts && (
+                  <ToggleButtonGroup
+                    value={shift}
+                    exclusive
+                    onChange={(_, v) => setShift(v)}
+                    size="small"
+                    sx={{
+                      mt: 1,
+                      display: 'flex',
+                      gap: 0.75,
+                      '& .MuiToggleButton-root': {
+                        flex: '1 1 auto',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: '8px !important',
+                        textTransform: 'none',
+                        px: 2,
+                        py: 0.75,
+                        '&.Mui-selected': {
+                          bgcolor: 'secondary.main',
+                          color: 'secondary.contrastText',
+                          borderColor: 'secondary.main',
+                          '&:hover': { bgcolor: 'secondary.dark' },
+                        },
+                      },
+                    }}
+                  >
+                    <ToggleButton value="forenoon">Forenoon (FN)</ToggleButton>
+                    <ToggleButton value="afternoon">Afternoon (AN)</ToggleButton>
+                  </ToggleButtonGroup>
+                )}
+              </Box>
+            )}
+
+            <Button
+              variant="contained"
+              onClick={() => setActiveStep(1)}
+              disabled={!session || (hasShifts && !shift)}
+            >
               Next
             </Button>
           </Box>
@@ -365,6 +436,14 @@ export default function BulkUploadPage() {
             />
             <Chip label={`${year}`} size="small" variant="outlined" />
             {session && <Chip label={session} size="small" variant="outlined" />}
+            {shift && (
+              <Chip
+                label={shift === 'forenoon' ? 'Forenoon' : 'Afternoon'}
+                size="small"
+                variant="outlined"
+                color="secondary"
+              />
+            )}
             <Button
               size="small"
               variant="text"

@@ -57,6 +57,8 @@ export type {
 // Services - WhatsApp
 export {
   sendWhatsAppTemplate,
+  sendWhatsAppTextMessage,
+  isWhatsAppRepliesEnabled,
   sendApplicationConfirmation as sendWhatsAppApplicationConfirmation,
   sendApplicationApproved as sendWhatsAppApplicationApproved,
   sendScholarshipAvailableNotification as sendWhatsAppScholarshipAvailable,

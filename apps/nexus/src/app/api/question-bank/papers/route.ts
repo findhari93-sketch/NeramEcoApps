@@ -6,7 +6,7 @@ import {
   getOrCreateOriginalPaper,
   bulkCreateDraftQuestions,
 } from '@neram/database';
-import type { QBExamType, NTAParsedQuestion } from '@neram/database';
+import type { QBExamType, QBShift, NTAParsedQuestion } from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,10 +56,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { exam_type, year, session, parsed_questions } = body as {
+    const { exam_type, year, session, shift, parsed_questions } = body as {
       exam_type: QBExamType;
       year: number;
       session: string | null;
+      shift?: QBShift | null;
       parsed_questions: NTAParsedQuestion[];
     };
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Get or create paper (handles duplicate detection)
     const { paper, isNew } = await getOrCreateOriginalPaper(
-      exam_type, year, session, caller.id
+      exam_type, year, session, caller.id, shift || null
     );
 
     if (!isNew) {
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     // Bulk create draft questions
     const { created } = await bulkCreateDraftQuestions(
-      paper.id, exam_type, year, session, parsed_questions, caller.id
+      paper.id, exam_type, year, session, parsed_questions, caller.id, shift || null
     );
 
     return NextResponse.json({

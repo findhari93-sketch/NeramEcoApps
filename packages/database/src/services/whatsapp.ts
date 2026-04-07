@@ -115,6 +115,64 @@ export async function sendWhatsAppTemplate(
   }
 }
 
+/**
+ * Send a free-form text message via WhatsApp Cloud API
+ * Used for replying to contact messages (not a template).
+ * Note: Business-initiated conversations require the user to have
+ * messaged within the last 24 hours, or this will open a new conversation.
+ */
+export async function sendWhatsAppTextMessage(
+  to: string,
+  text: string
+): Promise<WhatsAppSendResult> {
+  try {
+    const phoneNumberId = getPhoneNumberId();
+    const accessToken = getAccessToken();
+
+    const body = {
+      messaging_product: 'whatsapp',
+      to: normalizePhone(to),
+      type: 'text',
+      text: { body: text },
+    };
+
+    const response = await fetch(
+      `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      const errorMsg = result?.error?.message || `WhatsApp API error (${response.status})`;
+      console.error('WhatsApp text send error:', result);
+      return { success: false, error: errorMsg };
+    }
+
+    return {
+      success: true,
+      messageId: result?.messages?.[0]?.id,
+    };
+  } catch (err: any) {
+    console.error('WhatsApp text send exception:', err);
+    return { success: false, error: err.message || 'Failed to send WhatsApp message' };
+  }
+}
+
+/**
+ * Check if WhatsApp replies are enabled
+ */
+export function isWhatsAppRepliesEnabled(): boolean {
+  return process.env.WHATSAPP_REPLIES_ENABLED === 'true' && isWhatsAppConfigured();
+}
+
 // ============================================
 // CONVENIENCE FUNCTIONS
 // ============================================

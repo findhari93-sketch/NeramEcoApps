@@ -249,7 +249,8 @@ export default function PapersListPage() {
             const activeCount = paper.active_count || 0;
             // Activatable = answer_keyed + complete, minus already active
             const activatable = keyed - activeCount;
-            const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
+            const shiftSuffix = paper.shift ? ` (${paper.shift === 'forenoon' ? 'Forenoon' : 'Afternoon'})` : '';
+            const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}${shiftSuffix}`;
             const isDeleting = actionLoading === paper.id + '-delete';
 
             return (
@@ -275,7 +276,13 @@ export default function PapersListPage() {
                     {paper.year}
                   </Typography>
                   {paper.session && (
-                    <Chip label={paper.session} size="small" variant="outlined" />
+                    <Chip
+                      label={paper.shift
+                        ? `${paper.session} (${paper.shift === 'forenoon' ? 'FN' : 'AN'})`
+                        : paper.session}
+                      size="small"
+                      variant="outlined"
+                    />
                   )}
                   {(paper.hindi_count ?? 0) > 0 && (
                     <Chip

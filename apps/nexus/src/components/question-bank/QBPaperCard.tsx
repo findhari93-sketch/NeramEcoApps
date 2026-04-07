@@ -43,7 +43,16 @@ export default function QBPaperCard({ paper, onClick }: QBPaperCardProps) {
           {paper.year}
         </Typography>
         {paper.session && (
-          <Chip label={paper.session} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.75rem' }} />
+          <Chip
+            label={
+              paper.shift
+                ? `${paper.session} (${paper.shift === 'forenoon' ? 'FN' : 'AN'})`
+                : paper.session
+            }
+            size="small"
+            variant="outlined"
+            sx={{ height: 22, fontSize: '0.75rem' }}
+          />
         )}
         <Box sx={{ flex: 1 }} />
         <Chip

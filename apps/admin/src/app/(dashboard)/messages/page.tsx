@@ -36,6 +36,11 @@ import InboxIcon from '@mui/icons-material/Inbox';
 import DraftsIcon from '@mui/icons-material/Drafts';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import CloseIcon from '@mui/icons-material/Close';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import EmailIcon from '@mui/icons-material/Email';
+import SendIcon from '@mui/icons-material/Send';
+import TextField from '@mui/material/TextField';
+import Snackbar from '@mui/material/Snackbar';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 
 interface ContactMessage {
@@ -52,6 +57,20 @@ interface ContactMessage {
   replied_at: string | null;
   ip_address: string | null;
   user_agent: string | null;
+  created_at: string;
+}
+
+interface MessageReply {
+  id: string;
+  message_id: string;
+  channel: 'email' | 'whatsapp';
+  reply_body: string;
+  sent_to: string;
+  sent_from: string;
+  sent_by: string;
+  sent_by_name: string;
+  status: 'sent' | 'failed';
+  error_message: string | null;
   created_at: string;
 }
 
@@ -161,7 +180,7 @@ function StatCard({
 }
 
 export default function MessagesPage() {
-  const { supabaseUserId } = useAdminProfile();
+  const { supabaseUserId, supabaseName } = useAdminProfile();
 
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -180,6 +199,19 @@ export default function MessagesPage() {
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Reply
+  const [replyText, setReplyText] = useState('');
+  const [replySending, setReplySending] = useState<'email' | 'whatsapp' | null>(null);
+  const [replies, setReplies] = useState<MessageReply[]>([]);
+  const [repliesLoading, setRepliesLoading] = useState(false);
+
+  // Snackbar
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const fetchMessages = useCallback(async () => {
     setLoading(true);
@@ -247,6 +279,9 @@ export default function MessagesPage() {
   const handleRowClick = (message: ContactMessage) => {
     setSelectedMessage(message);
     setDialogOpen(true);
+    setReplyText('');
+    setReplies([]);
+    fetchReplies(message.id);
 
     // Auto-mark as read if currently unread
     if (message.status === 'unread' && supabaseUserId) {
@@ -257,6 +292,78 @@ export default function MessagesPage() {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setSelectedMessage(null);
+  };
+
+  const fetchReplies = useCallback(async (messageId: string) => {
+    setRepliesLoading(true);
+    try {
+      const res = await fetch(`/api/messages/${messageId}/reply`);
+      if (res.ok) {
+        const data = await res.json();
+        setReplies(data.data || []);
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setRepliesLoading(false);
+    }
+  }, []);
+
+  const handleSendReply = async (channel: 'email' | 'whatsapp') => {
+    if (!selectedMessage || !replyText.trim() || !supabaseUserId) return;
+
+    setReplySending(channel);
+    try {
+      const res = await fetch(`/api/messages/${selectedMessage.id}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel,
+          body: replyText.trim(),
+          adminId: supabaseUserId,
+          adminName: supabaseName || 'Admin',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setSnackbar({
+          open: true,
+          message: data.error || 'Failed to send reply',
+          severity: 'error',
+        });
+        return;
+      }
+
+      // Success
+      setSnackbar({
+        open: true,
+        message: `Reply sent via ${channel === 'email' ? 'Email' : 'WhatsApp'}`,
+        severity: 'success',
+      });
+      setReplyText('');
+
+      // Refresh replies list
+      fetchReplies(selectedMessage.id);
+
+      // Update message status locally
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === selectedMessage.id ? { ...msg, status: 'replied' as const } : msg
+        )
+      );
+      setSelectedMessage((prev) => (prev ? { ...prev, status: 'replied' as const } : null));
+      fetchUnreadCount();
+    } catch (err: any) {
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to send reply',
+        severity: 'error',
+      });
+    } finally {
+      setReplySending(null);
+    }
   };
 
   const handleUpdateStatus = async (
@@ -670,48 +777,113 @@ export default function MessagesPage() {
 
             <Divider />
 
+            <DialogContent sx={{ pt: 2, pb: 0 }}>
+              {/* Reply History */}
+              {repliesLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : replies.length > 0 ? (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                    Reply History
+                  </Typography>
+                  {replies.map((reply) => (
+                    <Paper
+                      key={reply.id}
+                      elevation={0}
+                      sx={{
+                        p: 1.5,
+                        mb: 1,
+                        borderRadius: 1,
+                        bgcolor: reply.status === 'sent' ? '#E8F5E9' : '#FFEBEE',
+                        border: '1px solid',
+                        borderColor: reply.status === 'sent' ? '#C8E6C9' : '#FFCDD2',
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {reply.channel === 'email' ? (
+                          <EmailIcon sx={{ fontSize: 16, color: '#1565C0' }} />
+                        ) : (
+                          <WhatsAppIcon sx={{ fontSize: 16, color: '#25D366' }} />
+                        )}
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDateTime(reply.created_at)} via {reply.channel === 'email' ? 'Email' : 'WhatsApp'} by {reply.sent_by_name}
+                        </Typography>
+                        {reply.status === 'failed' && (
+                          <Chip label="Failed" size="small" color="error" sx={{ height: 18, fontSize: '0.7rem' }} />
+                        )}
+                      </Box>
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {reply.reply_body}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Box>
+              ) : null}
+
+              {/* Reply Input */}
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Reply
+              </Typography>
+              <TextField
+                multiline
+                minRows={3}
+                maxRows={8}
+                fullWidth
+                placeholder="Type your reply here..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                disabled={!!replySending}
+                sx={{ mb: 1.5 }}
+              />
+            </DialogContent>
+
             <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-              {selectedMessage.status === 'unread' && (
-                <Button
-                  variant="outlined"
-                  startIcon={<MarkEmailReadIcon />}
-                  onClick={() => handleUpdateStatus(selectedMessage.id, 'read')}
-                  disabled={actionLoading}
-                >
-                  Mark as Read
-                </Button>
-              )}
-              {selectedMessage.status !== 'replied' && (
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={<ReplyIcon />}
-                  onClick={() => handleUpdateStatus(selectedMessage.id, 'replied')}
-                  disabled={actionLoading}
-                >
-                  Mark as Replied
-                </Button>
-              )}
-              {selectedMessage.status === 'replied' && (
-                <Typography variant="body2" color="success.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <DoneAllIcon fontSize="small" />
-                  Already replied
-                </Typography>
-              )}
-              <Box sx={{ flexGrow: 1 }} />
               <Button
-                variant="outlined"
-                color="primary"
-                href={`mailto:${selectedMessage.email}?subject=Re: ${encodeURIComponent(selectedMessage.subject)}`}
-                component="a"
-                startIcon={<ReplyIcon />}
+                variant="contained"
+                startIcon={replySending === 'email' ? <CircularProgress size={16} color="inherit" /> : <EmailIcon />}
+                onClick={() => handleSendReply('email')}
+                disabled={!replyText.trim() || !!replySending}
               >
-                Reply via Email
+                Send via Email
+              </Button>
+              <Tooltip
+                title={
+                  !selectedMessage?.phone
+                    ? 'No phone number available'
+                    : 'WhatsApp (coming soon, pending Meta approval)'
+                }
+              >
+                <span>
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={replySending === 'whatsapp' ? <CircularProgress size={16} color="inherit" /> : <WhatsAppIcon />}
+                    onClick={() => handleSendReply('whatsapp')}
+                    disabled={!replyText.trim() || !!replySending || !selectedMessage?.phone}
+                  >
+                    Send via WhatsApp
+                  </Button>
+                </span>
+              </Tooltip>
+              <Box sx={{ flexGrow: 1 }} />
+              <Button onClick={handleCloseDialog} color="inherit">
+                Close
               </Button>
             </DialogActions>
           </>
         )}
       </Dialog>
+
+      {/* Snackbar for reply feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        message={snackbar.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

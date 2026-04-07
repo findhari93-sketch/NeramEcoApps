@@ -31,6 +31,8 @@ import PipelineFunnel from '../../../components/crm/PipelineFunnel';
 import UsersTable from '../../../components/crm/UsersTable';
 import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import AuthFunnelChart from '../../../components/leads/AuthFunnelChart';
+import LeadDiagnosticsDrawer from '../../../components/leads/LeadDiagnosticsDrawer';
 
 // Lead-only stages (no enrolled / payment_complete)
 const LEAD_STAGES: PipelineStage[] = [
@@ -84,6 +86,10 @@ export default function LeadsPage() {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [usersToDelete, setUsersToDelete] = useState<UserJourney[]>([]);
+
+  // Diagnostics drawer
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserJourney | null>(null);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -188,6 +194,11 @@ export default function LeadsPage() {
 
   const handleRowClick = (userId: string) => {
     router.push(`/crm/${userId}`);
+  };
+
+  const handleDiagnosticsClick = (user: UserJourney) => {
+    setSelectedUser(user);
+    setDiagnosticsOpen(true);
   };
 
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -391,6 +402,9 @@ export default function LeadsPage() {
         </Alert>
       )}
 
+      {/* Auth Funnel Chart */}
+      {!isFullscreen && <AuthFunnelChart />}
+
       {/* Pipeline funnel — only lead stages */}
       {!isFullscreen && (
         <Box sx={{ mb: { xs: 1.5, md: 2 } }}>
@@ -458,6 +472,7 @@ export default function LeadsPage() {
           onGlobalFilterChange={handleGlobalFilterChange}
           onRowClick={handleRowClick}
           onBulkDeleteRequest={handleBulkDeleteRequest}
+          onDiagnosticsClick={handleDiagnosticsClick}
           isFullscreen={isFullscreen}
         />
       </Paper>
@@ -470,6 +485,18 @@ export default function LeadsPage() {
         }}
         users={usersToDelete}
         onConfirm={handleBulkDelete}
+      />
+
+      {/* Lead Diagnostics Drawer */}
+      <LeadDiagnosticsDrawer
+        open={diagnosticsOpen}
+        onClose={() => setDiagnosticsOpen(false)}
+        userId={selectedUser?.id || null}
+        userName={selectedUser?.name || 'Unknown'}
+        userEmail={selectedUser?.email || null}
+        userPhone={selectedUser?.phone || null}
+        phoneVerified={selectedUser?.phone_verified || false}
+        createdAt={selectedUser?.created_at || new Date().toISOString()}
       />
 
       <Snackbar

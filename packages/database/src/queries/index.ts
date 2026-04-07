@@ -60,3 +60,5 @@ export * from './expenses';
 export * from './expense-assignments';
 export * from './auto-messages';
 export * from './student-results';
+export * from './funnel-events';
+export * from './message-replies';

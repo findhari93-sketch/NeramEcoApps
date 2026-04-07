@@ -37,6 +37,16 @@ export async function PATCH(
 
     const db = supabase as any;
 
+    // Auto-resolve exam_date from exam_date_id if being updated
+    if (body.exam_date_id) {
+      const { data: dateRow } = await db
+        .from('nexus_exam_dates')
+        .select('exam_date')
+        .eq('id', body.exam_date_id)
+        .single();
+      if (dateRow) updates.exam_date = dateRow.exam_date;
+    }
+
     // Verify ownership
     const { data: existing } = await db
       .from('nexus_student_exam_attempts')

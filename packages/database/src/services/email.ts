@@ -17,6 +17,7 @@ const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || 'Neram Classes <noreply@ner
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@neramclasses.com';
 
 export interface EmailData {
+  from?: string;
   to: string;
   subject: string;
   html: string;
@@ -34,7 +35,7 @@ export async function sendEmail(data: EmailData): Promise<{ success: boolean; er
   try {
     const resend = getResendClient();
     const { error } = await resend.emails.send({
-      from: FROM_EMAIL,
+      from: data.from || FROM_EMAIL,
       to: data.to,
       subject: data.subject,
       html: data.html,

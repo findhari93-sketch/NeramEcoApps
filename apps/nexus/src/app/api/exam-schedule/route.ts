@@ -181,15 +181,33 @@ export async function GET(request: NextRequest) {
     const requestedIdx = Math.max(0, Math.min(weeks.length - 1, currentWeekIdx + weekOffsetParam));
     const week = weeks[requestedIdx];
 
-    // Get ALL attempts for this classroom + exam type with a non-null exam_date
+    // Get ALL attempts for this classroom + exam type that have a date (new or old FK)
     const { data: allAttempts } = await db
       .from('nexus_student_exam_attempts')
-      .select('student_id, exam_date, exam_city, exam_session, attempt_number, state, exam_completed_at')
+      .select('student_id, exam_date, exam_date_id, exam_city, exam_session, attempt_number, state, exam_completed_at')
       .eq('classroom_id', classroomId)
-      .eq('exam_type', examType)
-      .not('exam_date', 'is', null);
+      .eq('exam_type', examType);
 
-    const attempts = allAttempts || [];
+    // Filter to only those with a date, and resolve exam_date_id fallback
+    let attempts = (allAttempts || []).filter((a: any) => a.exam_date || a.exam_date_id);
+
+    // For attempts with exam_date_id but no exam_date, resolve from nexus_exam_dates
+    const needsResolution = attempts.filter((a: any) => !a.exam_date && a.exam_date_id);
+    if (needsResolution.length > 0) {
+      const dateIds = [...new Set(needsResolution.map((a: any) => a.exam_date_id))] as string[];
+      const { data: resolvedDates } = await db
+        .from('nexus_exam_dates')
+        .select('id, exam_date')
+        .in('id', dateIds);
+
+      const dateMap: Record<string, string> = {};
+      for (const d of (resolvedDates || [])) dateMap[d.id] = d.exam_date;
+
+      attempts = attempts.map((a: any) => ({
+        ...a,
+        exam_date: a.exam_date || dateMap[a.exam_date_id] || null,
+      })).filter((a: any) => a.exam_date);
+    }
 
     // Get student names for all relevant students
     const attemptStudentIds = [...new Set(attempts.map((a: any) => a.student_id))] as string[];

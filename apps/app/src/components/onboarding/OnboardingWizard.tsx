@@ -26,6 +26,7 @@ import type {
 } from '@neram/database';
 import { ScaleQuestion } from './ScaleQuestion';
 import { SelectQuestion } from './SelectQuestion';
+import { trackFunnelEvent, trackFunnelEventImmediate } from '@/lib/funnel-tracker';
 
 interface OnboardingWizardProps {
   userToken: string;
@@ -109,14 +110,16 @@ export function OnboardingWizard({
       next.set(questionId, value);
       return next;
     });
+    trackFunnelEvent({ funnel: 'onboarding', event: 'onboarding_question_answered', status: 'completed', metadata: { question_id: questionId, step: currentIndex + 1 } });
     // Auto-advance after a short delay for single_select
     const question = questions.find(q => q.id === questionId);
     if (question?.question_type === 'single_select') {
       setTimeout(() => handleNext(), 400);
     }
-  }, [questions, handleNext]);
+  }, [questions, handleNext, currentIndex]);
 
   const handleStartOnboarding = useCallback(() => {
+    trackFunnelEvent({ funnel: 'onboarding', event: 'onboarding_started', status: 'started' });
     animateTransition('left', () => setCurrentIndex(0));
   }, [animateTransition]);
 
@@ -141,6 +144,7 @@ export function OnboardingWizard({
       });
 
       if (res.ok) {
+        trackFunnelEventImmediate({ funnel: 'onboarding', event: 'onboarding_completed', status: 'completed', metadata: { questions_answered: responses.size } });
         setCompleted(true);
         setTimeout(onComplete, 2000);
       } else {
@@ -156,6 +160,7 @@ export function OnboardingWizard({
   };
 
   const handleSkip = async () => {
+    trackFunnelEventImmediate({ funnel: 'onboarding', event: 'onboarding_skipped', status: 'skipped', metadata: { questions_answered: responses.size } });
     setSubmitting(true);
     try {
       await fetch('/api/onboarding/skip', {

@@ -233,7 +233,8 @@ export default function PaperDetailPage() {
   const answerKeyedOnly = keyed - complete;
   const completeCount = questions.filter((q) => q.status === 'complete' || q.status === 'answer_keyed').length;
   const activeCount = questions.filter((q) => q.status === 'active' && q.is_active).length;
-  const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}`;
+  const shiftSuffix = paper.shift ? ` (${paper.shift === 'forenoon' ? 'Forenoon' : 'Afternoon'})` : '';
+  const paperLabel = `${QB_EXAM_TYPE_LABELS[paper.exam_type] || paper.exam_type} ${paper.year}${paper.session ? ` ${paper.session}` : ''}${shiftSuffix}`;
   const needsImageCount = questions.filter(questionNeedsImage).length;
   // Count questions that need images AND are still missing some
   const missingAnyImageCount = questions.filter(questionMissingImages).length;
@@ -270,7 +271,13 @@ export default function PaperDetailPage() {
               {paper.year}
             </Typography>
             {paper.session && (
-              <Chip label={paper.session} size="small" variant="outlined" />
+              <Chip
+                label={paper.shift
+                  ? `${paper.session} (${paper.shift === 'forenoon' ? 'FN' : 'AN'})`
+                  : paper.session}
+                size="small"
+                variant="outlined"
+              />
             )}
           </Box>
           <Typography variant="caption" color="text.secondary">

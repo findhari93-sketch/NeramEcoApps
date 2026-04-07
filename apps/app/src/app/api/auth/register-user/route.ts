@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, insertFunnelEvent, linkAnonymousEvents } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -44,6 +44,25 @@ export async function POST(req: NextRequest) {
 
     const adminClient = getSupabaseAdminClient();
 
+    // Track registration start
+    await insertFunnelEvent(adminClient, {
+      user_id: null,
+      anonymous_id: null,
+      funnel: 'auth',
+      event: 'register_user_started',
+      status: 'started',
+      error_message: null,
+      error_code: null,
+      metadata: { firebase_uid: decodedToken.uid },
+      device_session_id: null,
+      device_type: null,
+      browser: null,
+      os: null,
+      ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      source_app: 'app',
+      page_url: null,
+    }).catch(() => {});
+
     // Get or create user in Supabase
     const { user, isNewUser } = await getOrCreateUserFromFirebase({
       uid: decodedToken.uid,
@@ -52,6 +71,25 @@ export async function POST(req: NextRequest) {
       displayName: decodedToken.name || null,
       photoURL: decodedToken.picture || null,
     });
+
+    // Track registration completion
+    await insertFunnelEvent(adminClient, {
+      user_id: user.id,
+      anonymous_id: null,
+      funnel: 'auth',
+      event: 'register_user_completed',
+      status: 'completed',
+      error_message: null,
+      error_code: null,
+      metadata: { is_new_user: isNewUser },
+      device_session_id: null,
+      device_type: null,
+      browser: null,
+      os: null,
+      ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      source_app: 'app',
+      page_url: null,
+    }).catch(() => {});
 
     // Update last login time (use admin client to bypass RLS)
     await updateUser(user.id, {
@@ -145,6 +183,27 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('Error registering user:', error);
+    // Track registration failure
+    try {
+      const adminClient = getSupabaseAdminClient();
+      await insertFunnelEvent(adminClient, {
+        user_id: null,
+        anonymous_id: null,
+        funnel: 'auth',
+        event: 'register_user_failed',
+        status: 'failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        error_code: null,
+        metadata: {},
+        device_session_id: null,
+        device_type: null,
+        browser: null,
+        os: null,
+        ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        source_app: 'app',
+        page_url: null,
+      });
+    } catch { /* don't fail on tracking failure */ }
     return NextResponse.json(
       { error: 'Failed to register user' },
       { status: 500, headers: corsHeaders }

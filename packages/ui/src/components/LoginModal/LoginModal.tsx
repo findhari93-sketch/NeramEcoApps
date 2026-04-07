@@ -25,6 +25,15 @@ import type { TransitionProps } from '@mui/material/transitions';
 // TYPES
 // ============================================
 
+export interface FunnelEventData {
+  funnel: 'auth' | 'onboarding' | 'application';
+  event: string;
+  status: 'started' | 'completed' | 'failed' | 'skipped';
+  error_message?: string;
+  error_code?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface LoginModalProps {
   open: boolean;
   onClose?: () => void;
@@ -40,6 +49,8 @@ export interface LoginModalProps {
   phoneOnly?: boolean;
   /** Pre-fill the phone number input */
   initialPhone?: string;
+  /** Optional callback for funnel event tracking */
+  onFunnelEvent?: (event: FunnelEventData) => void;
 }
 
 type ModalStep = 'login' | 'phone' | 'otp';
@@ -106,6 +117,7 @@ export default function LoginModal({
   skipPhoneVerification = false,
   phoneOnly = false,
   initialPhone = '',
+  onFunnelEvent,
 }: LoginModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -287,6 +299,7 @@ export default function LoginModal({
       return;
     }
 
+    onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'started' });
     setPhoneError('');
     setPhoneLoading(true);
     try {
@@ -302,10 +315,12 @@ export default function LoginModal({
       }
 
       await sendPhoneOTP(phoneNumber);
+      onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed' });
       setStep('otp');
       setResendTimer(60);
     } catch (err: any) {
       const errMsg = getFirebaseErrorMessage(err);
+      onFunnelEvent?.({ funnel: 'auth', event: 'otp_request_failed', status: 'failed', error_message: errMsg, error_code: err?.code });
       // If reCAPTCHA error, try reinitializing and retry once
       if (err?.message?.includes('reCAPTCHA') || err?.code === 'auth/captcha-check-failed') {
         try {
@@ -316,6 +331,7 @@ export default function LoginModal({
           initRecaptcha('recaptcha-container-login-modal');
           recaptchaInitialized.current = true;
           await sendPhoneOTP(phoneNumber);
+          onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed', metadata: { retry: true } });
           setStep('otp');
           setResendTimer(60);
           return;
@@ -336,6 +352,7 @@ export default function LoginModal({
       return;
     }
 
+    onFunnelEvent?.({ funnel: 'auth', event: 'otp_entered', status: 'started' });
     setPhoneError('');
     setPhoneLoading(true);
     try {
@@ -363,6 +380,7 @@ export default function LoginModal({
       // Check if this is a duplicate phone error from our API
       const errMsg = err?.message || '';
       if (errMsg.includes('already registered')) {
+        onFunnelEvent?.({ funnel: 'auth', event: 'phone_already_exists', status: 'failed', error_message: errMsg, error_code: 'PHONE_ALREADY_EXISTS' });
         setPhoneError(errMsg);
         // Go back to phone step so user can enter a different number
         setStep('phone');
@@ -381,6 +399,7 @@ export default function LoginModal({
           console.error('Failed to reinitialize reCAPTCHA:', recaptchaErr);
         }
       } else {
+        onFunnelEvent?.({ funnel: 'auth', event: 'otp_failed', status: 'failed', error_message: getFirebaseErrorMessage(err), error_code: err?.code });
         setPhoneError(getFirebaseErrorMessage(err));
       }
     } finally {

@@ -12,6 +12,7 @@ import {
   CircularProgress,
 } from '@neram/ui';
 import { useFirebaseAuth, getAuthRedirectUrl, clearAuthRedirectUrl, getFirebaseAuth, signInWithGoogleYouTube } from '@neram/auth';
+import { trackFunnelEvent, trackFunnelEventImmediate } from '@/lib/funnel-tracker';
 
 // Storage key for YouTube subscribe intent
 const YOUTUBE_SUBSCRIBE_KEY = 'neram_youtube_subscribe_intent';
@@ -152,17 +153,28 @@ export default function AuthButtons({ isYouTubeSubscribe = false }: AuthButtonsP
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+    trackFunnelEvent({ funnel: 'auth', event: 'google_auth_started', status: 'started' });
     try {
       if (isYouTubeSubscribe) {
         // Use YouTube-enabled Google sign-in
         const { accessToken } = await signInWithGoogleYouTube();
+        trackFunnelEvent({ funnel: 'auth', event: 'google_auth_completed', status: 'completed', metadata: { method: 'youtube' } });
         await handleYouTubeSubscribeRedirect(accessToken);
       } else {
         // Regular Google sign-in
         await signInWithGoogle();
+        await trackFunnelEventImmediate({ funnel: 'auth', event: 'google_auth_completed', status: 'completed', metadata: { method: 'google' } });
         await handlePostAuthRedirect(router);
       }
     } catch (err: any) {
+      const errorCode = err.code || '';
+      trackFunnelEventImmediate({
+        funnel: 'auth',
+        event: 'google_auth_failed',
+        status: 'failed',
+        error_message: err.message || 'Unknown error',
+        error_code: errorCode,
+      });
       setError(err.message || 'Failed to sign in with Google');
     } finally {
       setLoading(false);
@@ -173,6 +185,8 @@ export default function AuthButtons({ isYouTubeSubscribe = false }: AuthButtonsP
     e.preventDefault();
     setLoading(true);
     setError('');
+    const authMethod = isSignUp ? 'email_signup' : 'email_signin';
+    trackFunnelEvent({ funnel: 'auth', event: 'email_auth_started', status: 'started', metadata: { method: authMethod } });
 
     try {
       if (isSignUp) {
@@ -180,8 +194,16 @@ export default function AuthButtons({ isYouTubeSubscribe = false }: AuthButtonsP
       } else {
         await signInWithEmail(email, password);
       }
+      await trackFunnelEventImmediate({ funnel: 'auth', event: 'email_auth_completed', status: 'completed', metadata: { method: authMethod } });
       await handlePostAuthRedirect(router);
     } catch (err: any) {
+      trackFunnelEventImmediate({
+        funnel: 'auth',
+        event: 'email_auth_failed',
+        status: 'failed',
+        error_message: err.message,
+        error_code: err.code || '',
+      });
       setError(err.message || `Failed to ${isSignUp ? 'sign up' : 'sign in'}`);
     } finally {
       setLoading(false);

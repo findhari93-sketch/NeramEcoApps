@@ -37,8 +37,10 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BlockIcon from '@mui/icons-material/Block';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
+import AuthStatusBadge from '../leads/AuthStatusBadge';
 
 interface UsersTableProps {
   data: UserJourney[];
@@ -54,6 +56,7 @@ interface UsersTableProps {
   onBulkDeleteRequest?: (users: UserJourney[]) => void;
   onMarkDeadLead?: (user: UserJourney) => void;
   onMarkIrrelevant?: (user: UserJourney) => void;
+  onDiagnosticsClick?: (user: UserJourney) => void;
   isFullscreen?: boolean;
 }
 
@@ -453,6 +456,7 @@ export default function UsersTable(props: UsersTableProps) {
     onBulkDeleteRequest,
     onMarkDeadLead,
     onMarkIrrelevant,
+    onDiagnosticsClick,
     isFullscreen,
   } = props;
 
@@ -627,6 +631,27 @@ export default function UsersTable(props: UsersTableProps) {
             />
           );
         },
+      },
+      {
+        id: 'auth_status',
+        header: 'Auth',
+        size: 130,
+        enableSorting: false,
+        enableColumnFilter: false,
+        Cell: ({ row }) => (
+          <Box
+            sx={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDiagnosticsClick?.(row.original);
+            }}
+          >
+            <AuthStatusBadge
+              phoneVerified={row.original.phone_verified}
+              emailVerified={row.original.email_verified}
+            />
+          </Box>
+        ),
       },
       {
         accessorKey: 'application_status',

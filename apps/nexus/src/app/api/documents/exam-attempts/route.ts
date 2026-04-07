@@ -68,6 +68,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: classroom_id, exam_type, phase, attempt_number' }, { status: 400 });
     }
 
+    // Auto-resolve exam_date from exam_date_id if provided
+    let resolvedExamDate: string | null = null;
+    if (exam_date_id) {
+      const { data: dateRow } = await (supabase as any)
+        .from('nexus_exam_dates')
+        .select('exam_date')
+        .eq('id', exam_date_id)
+        .single();
+      if (dateRow) resolvedExamDate = dateRow.exam_date;
+    }
+
     const { data, error } = await (supabase as any)
       .from('nexus_student_exam_attempts')
       .upsert(
@@ -78,6 +89,7 @@ export async function POST(request: NextRequest) {
           phase,
           attempt_number,
           exam_date_id: exam_date_id || null,
+          exam_date: resolvedExamDate,
           state: state || 'planning',
           application_date: application_date || null,
           notes: notes || null,

@@ -13,6 +13,7 @@ import InstallPromptBanner from '@/components/InstallPromptBanner';
 import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
 import { useDeviceRegistration } from '@/hooks/useDeviceRegistration';
 import { useActiveTimeTracker } from '@/hooks/useActiveTimeTracker';
+import { trackFunnelEvent, trackFunnelEventImmediate, setFunnelTrackerToken } from '@/lib/funnel-tracker';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
@@ -95,6 +96,12 @@ function ProtectedLayoutInner({
           setPhoneVerified(dbUser.phone_verified);
           setOnboardingCompleted(dbUser.onboarding_completed ?? false);
           setIdToken(idToken);
+          setFunnelTrackerToken(idToken);
+
+          // Track phone screen shown if phone not yet verified
+          if (!dbUser.phone_verified) {
+            trackFunnelEvent({ funnel: 'auth', event: 'phone_screen_shown', status: 'started' });
+          }
 
           // Fire Google Ads conversion for new registrations
           if (isNewUser && (window as any).gtag) {
@@ -374,6 +381,12 @@ function ProtectedLayoutInner({
           onAuthenticated={handlePhoneVerified}
           apiBaseUrl=""
           phoneOnly={true}
+          onFunnelEvent={(evt) => {
+            trackFunnelEvent(evt);
+            if (evt.status === 'failed' || evt.status === 'completed') {
+              trackFunnelEventImmediate(evt);
+            }
+          }}
         />
       )}
 

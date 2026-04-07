@@ -4,6 +4,7 @@ import type {
   QBDifficulty,
   QBExamRelevance,
   QBExamType,
+  QBShift,
   QBAttemptMode,
   QBQuestionStatus,
   QBConfidenceTier,
@@ -46,6 +47,18 @@ const QB_EXAM_LABELS: Record<string, string> = {
 };
 
 /**
+ * Parse a composite session key (e.g., "Session 1 (Forenoon)") into session + shift.
+ * Used by sidebar/filter components to extract shift from display keys.
+ */
+export function parseSessionKey(key: string): { session: string; shift: QBShift | null } {
+  const match = key.match(/^(.+?)\s*\((Forenoon|Afternoon)\)$/);
+  if (match) {
+    return { session: match[1].trim(), shift: match[2].toLowerCase() as QBShift };
+  }
+  return { session: key, shift: null };
+}
+
+/**
  * Get the exam tree for sidebar navigation: exam_type → year → session with counts.
  */
 export async function getQBExamTree(
@@ -56,7 +69,7 @@ export async function getQBExamTree(
   // Get all sources for active questions, grouped by exam_type/year/session
   const { data, error } = await supabase
     .from('nexus_qb_question_sources')
-    .select('exam_type, year, session, question_id');
+    .select('exam_type, year, session, shift, question_id');
 
   if (error) throw error;
 
@@ -80,7 +93,11 @@ export async function getQBExamTree(
 
     const examType = row.exam_type as string;
     const year = row.year as number;
-    const session = (row.session as string) || '';
+    const rawSession = (row.session as string) || '';
+    const shift = row.shift as string | null;
+    const session = shift
+      ? `${rawSession} (${shift === 'forenoon' ? 'Forenoon' : 'Afternoon'})`
+      : rawSession;
 
     if (!examMap.has(examType)) examMap.set(examType, new Map());
     const yearMap = examMap.get(examType)!;
@@ -221,7 +238,13 @@ export async function getQBCategoryCounts(
       `s.exam_type = '${filters.exam_type}'`,
     ];
     if (filters.source_year) conditions.push(`s.year = ${filters.source_year}`);
-    if (filters.source_session) conditions.push(`s.session = '${filters.source_session.replace(/'/g, "''")}'`);
+    if (filters.source_session) {
+      const parsed = parseSessionKey(filters.source_session);
+      conditions.push(`s.session = '${parsed.session.replace(/'/g, "''")}'`);
+      if (parsed.shift) {
+        conditions.push(`s.shift = '${parsed.shift}'`);
+      }
+    }
 
     sql = `
       SELECT cat, COUNT(DISTINCT q.id) as cnt
@@ -275,7 +298,13 @@ async function getQBCategoryCountsFallback(
       .select('question_id')
       .eq('exam_type', filters.exam_type);
     if (filters.source_year) sourceQuery = sourceQuery.eq('year', filters.source_year);
-    if (filters.source_session) sourceQuery = sourceQuery.eq('session', filters.source_session);
+    if (filters.source_session) {
+      const parsed = parseSessionKey(filters.source_session);
+      sourceQuery = sourceQuery.eq('session', parsed.session);
+      if (parsed.shift) {
+        sourceQuery = sourceQuery.eq('shift', parsed.shift);
+      }
+    }
 
     const { data: sourceData, error: sourceError } = await sourceQuery;
     if (sourceError) throw sourceError;
@@ -371,7 +400,14 @@ export async function getQBQuestions(
       sourceQuery = sourceQuery.eq('year', filters.source_year);
     }
     if (filters.source_session) {
-      sourceQuery = sourceQuery.eq('session', filters.source_session);
+      const parsed = parseSessionKey(filters.source_session);
+      sourceQuery = sourceQuery.eq('session', parsed.session);
+      if (parsed.shift) {
+        sourceQuery = sourceQuery.eq('shift', parsed.shift);
+      }
+    }
+    if (filters.source_shift) {
+      sourceQuery = sourceQuery.eq('shift', filters.source_shift);
     }
 
     const { data: sourceData, error: sourceError } = await sourceQuery;
@@ -1127,6 +1163,7 @@ export async function getOrCreateOriginalPaper(
   year: number,
   session: string | null,
   uploadedBy: string,
+  shift?: QBShift | null,
   client?: TypedSupabaseClient
 ): Promise<{ paper: NexusQBOriginalPaper; isNew: boolean }> {
   const supabase = client || getSupabaseAdminClient();
@@ -1144,6 +1181,12 @@ export async function getOrCreateOriginalPaper(
     query = query.is('session', null);
   }
 
+  if (shift) {
+    query = query.eq('shift', shift);
+  } else {
+    query = query.is('shift', null);
+  }
+
   const { data: existing, error: findError } = await query.maybeSingle();
   if (findError) throw findError;
 
@@ -1158,6 +1201,7 @@ export async function getOrCreateOriginalPaper(
       exam_type: examType,
       year,
       session,
+      shift: shift || null,
       uploaded_by: uploadedBy,
       upload_status: 'pending',
       questions_parsed: 0,
@@ -1181,6 +1225,7 @@ export async function bulkCreateDraftQuestions(
   session: string | null,
   questions: NTAParsedQuestion[],
   createdBy: string,
+  shift?: QBShift | null,
   client?: TypedSupabaseClient
 ): Promise<{ created: number }> {
   const supabase = client || getSupabaseAdminClient();
@@ -1228,6 +1273,7 @@ export async function bulkCreateDraftQuestions(
     exam_type: examType,
     year,
     session,
+    shift: shift || null,
     question_number: cq.display_order,
   }));
 
