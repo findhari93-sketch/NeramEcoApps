@@ -12,11 +12,15 @@ import {
   IconButton,
   Snackbar,
   Tooltip,
+  Tabs,
+  Tab,
   useTheme,
   useMediaQuery,
   alpha,
 } from '@neram/ui';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import GraphAvatar from '@/components/GraphAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
@@ -100,9 +104,27 @@ export default function TeacherStudents() {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 2 }}>
+      <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
         Students
       </Typography>
+
+      {/* Tab navigation */}
+      <Tabs
+        value={0}
+        sx={{
+          mb: 2,
+          minHeight: 40,
+          '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontWeight: 600 },
+        }}
+      >
+        <Tab icon={<PeopleOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="All Students" />
+        <Tab
+          icon={<MapOutlinedIcon sx={{ fontSize: 18 }} />}
+          iconPosition="start"
+          label="City-Wise"
+          onClick={() => router.push('/teacher/students/city-wise')}
+        />
+      </Tabs>
 
       {/* Search */}
       <TextField

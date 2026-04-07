@@ -6493,6 +6493,58 @@ export interface CityStudent {
 }
 
 // ============================================
+// GEOGRAPHIC STUDENT HIERARCHY
+// ============================================
+
+// Flat row from DB RPC
+export interface GeographicHierarchyRow {
+  country: string;
+  state: string | null;
+  district: string | null;
+  city: string;
+  student_count: number;
+}
+
+// Extended student with full location
+export interface GeographicStudent {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  user_type: UserType;
+  city: string | null;
+  state: string | null;
+  district: string | null;
+  country: string;
+  course_name: string | null;
+  enrolled_at: string | null;
+}
+
+// Assembled tree nodes for API response
+export interface GeographicCityNode {
+  city: string;
+  student_count: number;
+  district: string | null;
+}
+
+export interface GeographicStateNode {
+  state: string;
+  student_count: number;
+  city_count: number;
+  cities: GeographicCityNode[];
+}
+
+export interface GeographicCountryNode {
+  country: string;
+  country_display: string;
+  student_count: number;
+  state_count: number;
+  city_count: number;
+  states: GeographicStateNode[];
+}
+
+// ============================================
 // WHATSAPP TEMPLATES
 // ============================================
 

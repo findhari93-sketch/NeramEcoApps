@@ -26,6 +26,10 @@ const TestimonialsColumn = dynamic(
   () => import('@/components/ui/testimonials-columns').then((mod) => ({ default: mod.TestimonialsColumn })),
   { ssr: false }
 );
+const StudentResultsTeaser = dynamic(
+  () => import('@/components/achievements/StudentResultsTeaser'),
+  { ssr: false }
+);
 
 // Featured courses offered by Neram Classes
 const featuredCourses = [
@@ -430,6 +434,11 @@ export default function HomePageContent() {
             </div>
           </Container>
         </Box>
+
+        <SectionDivider />
+
+        {/* ─── Student Results Showcase ─── */}
+        <StudentResultsTeaser />
 
         <SectionDivider />
 

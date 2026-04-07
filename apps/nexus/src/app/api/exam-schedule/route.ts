@@ -2,18 +2,146 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
-/**
- * GET /api/exam-schedule?classroom={id}&exam_type=nata&year=2026&phase=phase_1
- * Returns aggregated exam schedule: upcoming dates with students grouped by city,
- * students who haven't submitted dates, and recently completed students.
- */
+// ============================================
+// NATA Exam Date Generation
+// ============================================
+
+interface PhaseConfig {
+  phase: 'phase_1' | 'phase_2';
+  label: string;
+  start: string;
+  end: string;
+  max_attempts: number;
+  dates: string[];
+}
+
+function formatISO(d: Date): string {
+  // Use local time values (not UTC) to avoid timezone shift
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function generatePhase1Dates(year: number): string[] {
+  const start = new Date(year, 3, 4);  // April 4
+  const end = new Date(year, 5, 13);   // June 13
+  const dates: string[] = [];
+  const d = new Date(start);
+  while (d <= end) {
+    if (d.getDay() === 5 || d.getDay() === 6) { // Fri=5, Sat=6
+      dates.push(formatISO(d));
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+function getPhaseConfig(phase: string, year: number): PhaseConfig {
+  if (phase === 'phase_2') {
+    return {
+      phase: 'phase_2',
+      label: 'Phase 2',
+      start: `${year}-08-07`,
+      end: `${year}-08-08`,
+      max_attempts: 1,
+      dates: [`${year}-08-07`, `${year}-08-08`],
+    };
+  }
+  const dates = generatePhase1Dates(year);
+  return {
+    phase: 'phase_1',
+    label: 'Phase 1',
+    start: `${year}-04-04`,
+    end: `${year}-06-13`,
+    max_attempts: 2,
+    dates,
+  };
+}
+
+// ============================================
+// Week Grouping
+// ============================================
+
+interface WeekGroup {
+  weekNumber: number;
+  friday: string | null;
+  saturday: string | null;
+  weekStart: Date; // Monday of the week
+}
+
+function groupDatesByWeek(dates: string[]): WeekGroup[] {
+  const weekMap = new Map<string, { friday: string | null; saturday: string | null }>();
+  const weekStarts: string[] = [];
+
+  for (const dateStr of dates) {
+    const d = new Date(dateStr + 'T00:00:00');
+    // Find Monday of this week
+    const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon...
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+    const key = formatISO(monday);
+
+    if (!weekMap.has(key)) {
+      weekMap.set(key, { friday: null, saturday: null });
+      weekStarts.push(key);
+    }
+    const week = weekMap.get(key)!;
+    if (d.getDay() === 5) week.friday = dateStr;
+    if (d.getDay() === 6) week.saturday = dateStr;
+  }
+
+  weekStarts.sort();
+  return weekStarts.map((key, i) => ({
+    weekNumber: i + 1,
+    ...weekMap.get(key)!,
+    weekStart: new Date(key + 'T00:00:00'),
+  }));
+}
+
+function getWeekOffset(weeks: WeekGroup[]): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < weeks.length; i++) {
+    const weekEnd = new Date(weeks[i].weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    if (today <= weekEnd) return i;
+  }
+  return weeks.length - 1; // past all weeks, show last
+}
+
+function formatWeekLabel(week: WeekGroup): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const parts: string[] = [];
+  if (week.friday) {
+    const d = new Date(week.friday + 'T00:00:00');
+    parts.push(`${months[d.getMonth()]} ${d.getDate()}`);
+  }
+  if (week.saturday) {
+    const d = new Date(week.saturday + 'T00:00:00');
+    parts.push(`${d.getDate()}`);
+  }
+  return parts.join(' - ');
+}
+
+function getUserName(u: any): string {
+  if (u.first_name && u.last_name) return `${u.first_name} ${u.last_name}`;
+  return u.name || 'Unknown';
+}
+
+// ============================================
+// GET /api/exam-schedule
+// ============================================
+
 export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const classroomId = request.nextUrl.searchParams.get('classroom');
     const examType = request.nextUrl.searchParams.get('exam_type') || 'nata';
     const year = parseInt(request.nextUrl.searchParams.get('year') || String(new Date().getFullYear()));
-    const phase = request.nextUrl.searchParams.get('phase');
+    const phase = request.nextUrl.searchParams.get('phase') || 'phase_1';
+    const weekOffsetParam = parseInt(request.nextUrl.searchParams.get('week_offset') || '0');
 
     if (!classroomId) {
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
@@ -30,7 +158,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Verify enrollment in classroom
+    // Verify enrollment
     const { data: enrollment } = await db
       .from('nexus_enrollments')
       .select('role')
@@ -43,86 +171,82 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not enrolled in this classroom' }, { status: 403 });
     }
 
-    // 1. Upcoming exam dates with students
-    let datesQuery = db
-      .from('nexus_exam_dates')
-      .select('id, exam_date, phase, attempt_number, label')
+    // Generate phase dates
+    const config = getPhaseConfig(phase, year);
+    const weeks = groupDatesByWeek(config.dates);
+    const totalWeeks = weeks.length;
+
+    // Determine current week index
+    const currentWeekIdx = getWeekOffset(weeks);
+    const requestedIdx = Math.max(0, Math.min(weeks.length - 1, currentWeekIdx + weekOffsetParam));
+    const week = weeks[requestedIdx];
+
+    // Get ALL attempts for this classroom + exam type with a non-null exam_date
+    const { data: allAttempts } = await db
+      .from('nexus_student_exam_attempts')
+      .select('student_id, exam_date, exam_city, exam_session, attempt_number, state, exam_completed_at')
+      .eq('classroom_id', classroomId)
       .eq('exam_type', examType)
-      .eq('year', year)
-      .eq('is_active', true)
-      .gte('exam_date', new Date().toISOString().split('T')[0])
-      .order('exam_date', { ascending: true });
+      .not('exam_date', 'is', null);
 
-    if (phase) datesQuery = datesQuery.eq('phase', phase);
+    const attempts = allAttempts || [];
 
-    const { data: examDates, error: datesError } = await datesQuery;
-    if (datesError) throw datesError;
+    // Get student names for all relevant students
+    const attemptStudentIds = [...new Set(attempts.map((a: any) => a.student_id))] as string[];
+    const studentNameMap: Record<string, string> = {};
 
-    // Get all attempts for these dates
-    const dateIds = (examDates || []).map((d: any) => d.id);
-    let attemptsForDates: any[] = [];
-
-    if (dateIds.length > 0) {
-      const { data, error } = await db
-        .from('nexus_student_exam_attempts')
-        .select('student_id, exam_date_id, exam_city, exam_session, state')
-        .eq('classroom_id', classroomId)
-        .eq('exam_type', examType)
-        .in('exam_date_id', dateIds);
-
-      if (error) throw error;
-      attemptsForDates = data || [];
-    }
-
-    // Get student names for all attempts
-    const studentIds = [...new Set(attemptsForDates.map((a: any) => a.student_id))];
-    let studentNames: Record<string, string> = {};
-
-    if (studentIds.length > 0) {
+    if (attemptStudentIds.length > 0) {
       const { data: users } = await supabase
         .from('users')
         .select('id, first_name, last_name, name')
-        .in('id', studentIds);
-
-      if (users) {
-        for (const u of users) {
-          studentNames[u.id] = u.first_name && u.last_name
-            ? `${u.first_name} ${u.last_name}`
-            : u.name || 'Unknown';
-        }
+        .in('id', attemptStudentIds);
+      for (const u of (users || [])) {
+        studentNameMap[u.id] = getUserName(u);
       }
     }
 
-    // Build upcoming response
-    const upcoming = (examDates || []).map((ed: any) => {
-      const dateAttempts = attemptsForDates.filter((a: any) => a.exam_date_id === ed.id);
+    // Build day data for the requested week
+    const today = formatISO(new Date());
+
+    function buildDayData(dateStr: string | null) {
+      if (!dateStr) return null;
+      const dayAttempts = attempts.filter((a: any) => a.exam_date === dateStr);
       const studentsByCity: Record<string, any[]> = {};
 
-      for (const attempt of dateAttempts) {
-        const city = attempt.exam_city || 'Unspecified';
+      for (const a of dayAttempts) {
+        const city = a.exam_city || 'Unspecified';
         if (!studentsByCity[city]) studentsByCity[city] = [];
         studentsByCity[city].push({
-          student_id: attempt.student_id,
-          name: studentNames[attempt.student_id] || 'Unknown',
-          session: attempt.exam_session,
-          state: attempt.state,
+          student_id: a.student_id,
+          name: studentNameMap[a.student_id] || 'Unknown',
+          session: a.exam_session,
+          attempt_number: a.attempt_number || 1,
+          state: a.state,
         });
       }
 
-      return {
-        exam_date: {
-          id: ed.id,
-          exam_date: ed.exam_date,
-          phase: ed.phase,
-          attempt_number: ed.attempt_number,
-          label: ed.label,
-        },
-        students_by_city: studentsByCity,
-        total_students: dateAttempts.length,
-      };
-    });
+      const d = new Date(dateStr + 'T00:00:00');
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    // 2. Students who haven't submitted any exam date
+      return {
+        date: dateStr,
+        day_name: days[d.getDay()],
+        is_past: dateStr < today,
+        students_by_city: studentsByCity,
+        total_students: dayAttempts.length,
+      };
+    }
+
+    const currentWeek = {
+      week_number: week.weekNumber,
+      week_label: formatWeekLabel(week),
+      friday: buildDayData(week.friday),
+      saturday: buildDayData(week.saturday),
+      is_current_week: weekOffsetParam === 0,
+      is_past: (week.friday || week.saturday || '') < today,
+    };
+
+    // Stats: across the entire phase
     const { data: allStudents } = await db
       .from('nexus_enrollments')
       .select('user_id')
@@ -130,100 +254,90 @@ export async function GET(request: NextRequest) {
       .eq('role', 'student')
       .eq('is_active', true);
 
-    const allStudentIds = (allStudents || []).map((s: any) => s.user_id);
+    const allStudentIds = (allStudents || []).map((s: any) => s.user_id) as string[];
+    const submittedStudentIds = new Set(attempts.map((a: any) => a.student_id));
+    const notSubmittedIds = allStudentIds.filter(id => !submittedStudentIds.has(id));
 
-    // Get students who have at least one attempt with a non-null exam_date_id
-    let submittedStudentIds: string[] = [];
-    if (allStudentIds.length > 0) {
-      const { data: submitted } = await db
-        .from('nexus_student_exam_attempts')
-        .select('student_id')
-        .eq('classroom_id', classroomId)
-        .eq('exam_type', examType)
-        .not('exam_date_id', 'is', null)
-        .in('student_id', allStudentIds);
+    // This week's exam count
+    const thisWeekDates = [week.friday, week.saturday].filter(Boolean);
+    const thisWeekCount = attempts.filter((a: any) => thisWeekDates.includes(a.exam_date)).length;
 
-      submittedStudentIds = [...new Set((submitted || []).map((s: any) => s.student_id))] as string[];
-    }
+    // Completed count
+    const completedCount = attempts.filter((a: any) =>
+      a.state === 'completed' || a.state === 'scorecard_uploaded'
+    ).length;
 
-    const notSubmittedIds = allStudentIds.filter((id: string) => !submittedStudentIds.includes(id));
+    const stats = {
+      total_students: allStudentIds.length,
+      submitted_count: submittedStudentIds.size,
+      not_submitted_count: notSubmittedIds.length,
+      this_week_exam_count: thisWeekCount,
+      completed_count: completedCount,
+    };
+
+    // Not submitted students with names
     let notSubmitted: any[] = [];
-
     if (notSubmittedIds.length > 0) {
       const { data: nsUsers } = await supabase
         .from('users')
         .select('id, first_name, last_name, name')
         .in('id', notSubmittedIds);
-
       notSubmitted = (nsUsers || []).map((u: any) => ({
         id: u.id,
-        name: u.first_name && u.last_name
-          ? `${u.first_name} ${u.last_name}`
-          : u.name || 'Unknown',
+        name: getUserName(u),
       }));
     }
 
-    // 3. Recently completed (last 7 days)
+    // Recently completed (last 7 days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentlyCompleted = attempts
+      .filter((a: any) =>
+        (a.state === 'completed' || a.state === 'scorecard_uploaded') &&
+        a.exam_completed_at &&
+        new Date(a.exam_completed_at) >= sevenDaysAgo
+      )
+      .map((a: any) => ({
+        student_id: a.student_id,
+        name: studentNameMap[a.student_id] || 'Unknown',
+        exam_date: a.exam_date,
+        completed_at: a.exam_completed_at,
+        city: a.exam_city,
+      }));
 
-    const { data: recentlyCompletedRaw } = await db
-      .from('nexus_student_exam_attempts')
-      .select('student_id, exam_city, exam_completed_at, exam_date_id')
-      .eq('classroom_id', classroomId)
-      .eq('exam_type', examType)
-      .in('state', ['completed', 'scorecard_uploaded'])
-      .gte('exam_completed_at', sevenDaysAgo.toISOString())
-      .order('exam_completed_at', { ascending: false });
+    // My attempts (current user's submissions)
+    const myAttempts = attempts
+      .filter((a: any) => a.student_id === user.id)
+      .map((a: any) => ({
+        attempt_number: a.attempt_number || 1,
+        exam_date: a.exam_date,
+        exam_city: a.exam_city,
+        exam_session: a.exam_session,
+        state: a.state,
+      }));
 
-    // Get names for recently completed
-    const rcStudentIds = [...new Set((recentlyCompletedRaw || []).map((r: any) => r.student_id))] as string[];
-    let rcNames: Record<string, string> = {};
-
-    if (rcStudentIds.length > 0) {
-      const { data: rcUsers } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, name')
-        .in('id', rcStudentIds);
-
-      if (rcUsers) {
-        for (const u of rcUsers) {
-          rcNames[u.id] = u.first_name && u.last_name
-            ? `${u.first_name} ${u.last_name}`
-            : u.name || 'Unknown';
-        }
-      }
-    }
-
-    // Get exam dates for recently completed
-    const rcDateIds = [...new Set((recentlyCompletedRaw || []).map((r: any) => r.exam_date_id).filter(Boolean))];
-    let rcExamDates: Record<string, string> = {};
-
-    if (rcDateIds.length > 0) {
-      const { data: rcDates } = await db
-        .from('nexus_exam_dates')
-        .select('id, exam_date')
-        .in('id', rcDateIds);
-
-      if (rcDates) {
-        for (const d of rcDates) {
-          rcExamDates[d.id] = d.exam_date;
-        }
-      }
-    }
-
-    const recentlyCompleted = (recentlyCompletedRaw || []).map((r: any) => ({
-      student_id: r.student_id,
-      name: rcNames[r.student_id] || 'Unknown',
-      exam_date: r.exam_date_id ? rcExamDates[r.exam_date_id] || '' : '',
-      completed_at: r.exam_completed_at,
-      city: r.exam_city,
-    }));
+    // Navigation bounds
+    const navigation = {
+      min_week_offset: -currentWeekIdx,
+      max_week_offset: weeks.length - 1 - currentWeekIdx,
+      current_week_offset: 0,
+    };
 
     return NextResponse.json({
-      upcoming,
+      phase_info: {
+        phase: config.phase,
+        label: config.label,
+        start_date: config.start,
+        end_date: config.end,
+        total_weeks: totalWeeks,
+        max_attempts: config.max_attempts,
+      },
+      current_week: currentWeek,
+      stats,
       not_submitted: notSubmitted,
       recently_completed: recentlyCompleted,
+      navigation,
+      my_attempts: myAttempts,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load exam schedule';

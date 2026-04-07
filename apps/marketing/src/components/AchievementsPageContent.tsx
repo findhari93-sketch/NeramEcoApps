@@ -79,21 +79,8 @@ export default function AchievementsPageContent({ locale = 'en' }: { locale?: st
   const tabIndex = years.indexOf(selectedYear);
 
   return (
-    <Box sx={{ py: { xs: 4, md: 8 } }}>
+    <Box sx={{ py: { xs: 2, md: 4 } }}>
       <Container maxWidth="lg">
-        {/* Header */}
-        <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1.5, mb: 1 }}>
-            <EmojiEventsIcon sx={{ color: 'warning.main', fontSize: 40 }} />
-            <Typography variant="h3" component="h1" fontWeight={800}>
-              Our Achievers
-            </Typography>
-          </Box>
-          <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
-            Congratulations to our students who excelled in NATA and JEE Paper 2 exams
-          </Typography>
-        </Box>
-
         {/* Academic Year Tabs */}
         {!yearsLoading && years.length > 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>

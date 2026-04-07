@@ -5,7 +5,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 /**
  * POST /api/exam-schedule/my-date
  * Student submits their exam date, city, and session.
- * Body: { exam_date_id, exam_city, exam_session, classroom_id }
+ * Body: { exam_date, exam_city, exam_session, classroom_id, attempt_number, phase }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -22,17 +22,23 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const body = await request.json();
-    const { exam_date_id, exam_city, exam_session, classroom_id } = body;
+    const { exam_date, exam_city, exam_session, classroom_id, attempt_number, phase } = body;
 
-    if (!exam_date_id || !classroom_id) {
+    if (!exam_date || !classroom_id) {
       return NextResponse.json(
-        { error: 'Missing required fields: exam_date_id, classroom_id' },
+        { error: 'Missing required fields: exam_date, classroom_id' },
         { status: 400 }
       );
     }
 
     if (exam_session && !['morning', 'afternoon'].includes(exam_session)) {
       return NextResponse.json({ error: 'exam_session must be morning or afternoon' }, { status: 400 });
+    }
+
+    // Validate exam_date is a Friday or Saturday
+    const d = new Date(exam_date + 'T00:00:00');
+    if (d.getDay() !== 5 && d.getDay() !== 6) {
+      return NextResponse.json({ error: 'Exam date must be a Friday or Saturday' }, { status: 400 });
     }
 
     // Verify student enrollment
@@ -49,16 +55,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not enrolled as student in this classroom' }, { status: 403 });
     }
 
-    // Look up the exam date to get phase and attempt_number
-    const { data: examDate, error: dateError } = await db
-      .from('nexus_exam_dates')
-      .select('exam_type, phase, attempt_number')
-      .eq('id', exam_date_id)
-      .single();
-
-    if (dateError || !examDate) {
-      return NextResponse.json({ error: 'Exam date not found' }, { status: 404 });
-    }
+    const attemptNum = attempt_number || 1;
+    const examPhase = phase || 'phase_1';
 
     // Upsert the attempt
     const { data, error } = await db
@@ -67,10 +65,10 @@ export async function POST(request: NextRequest) {
         {
           student_id: user.id,
           classroom_id,
-          exam_type: examDate.exam_type,
-          phase: examDate.phase,
-          attempt_number: examDate.attempt_number,
-          exam_date_id,
+          exam_type: 'nata',
+          phase: examPhase,
+          attempt_number: attemptNum,
+          exam_date,
           exam_city: exam_city || null,
           exam_session: exam_session || null,
           state: 'applied',

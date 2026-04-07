@@ -22,7 +22,6 @@ import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
-import LocationCityOutlinedIcon from '@mui/icons-material/LocationCityOutlined';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
@@ -93,7 +92,6 @@ const PANELS: PanelConfig[] = [
     sidebarItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
-      { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
@@ -116,7 +114,6 @@ const PANELS: PanelConfig[] = [
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
     ],
     overflowItems: [
-      { label: 'City Students', path: '/teacher/students/city-wise', icon: <LocationCityOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },

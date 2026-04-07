@@ -125,7 +125,8 @@ export default function CityStudentsPage() {
             {cityName}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {total} {total === 1 ? 'student' : 'students'} in this city
+            {total} {total === 1 ? 'student' : 'students'}
+            {students.length > 0 && students[0].state ? ` in ${students[0].state}` : ' in this city'}
           </Typography>
         </Box>
       </Box>
