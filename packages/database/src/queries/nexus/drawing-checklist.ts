@@ -13,7 +13,7 @@ export async function getDrawingChecklistWithProgress(
 
   // Get all items
   const { data: items, error: itemsErr } = await supabase
-    .from('drawing_checklist_items')
+    .from('drawing_checklist_items' as any)
     .select('*')
     .order('sort_order', { ascending: true });
 
@@ -21,7 +21,7 @@ export async function getDrawingChecklistWithProgress(
 
   // Get student progress
   const { data: progress } = await supabase
-    .from('drawing_checklist_progress')
+    .from('drawing_checklist_progress' as any)
     .select('*')
     .eq('student_id', studentId);
 
@@ -42,7 +42,7 @@ export async function updateDrawingChecklistProgress(
   const supabase = client || getSupabaseAdminClient();
 
   const { error } = await supabase
-    .from('drawing_checklist_progress')
+    .from('drawing_checklist_progress' as any)
     .upsert({
       student_id: studentId,
       checklist_item_id: itemId,
@@ -61,11 +61,11 @@ export async function getDrawingChecklistHeatmap(
   const supabase = client || getSupabaseAdminClient();
 
   const { data: items } = await supabase
-    .from('drawing_checklist_items')
+    .from('drawing_checklist_items' as any)
     .select('id, category');
 
   const { data: progress } = await supabase
-    .from('drawing_checklist_progress')
+    .from('drawing_checklist_progress' as any)
     .select('checklist_item_id, status')
     .eq('status', 'completed');
 
@@ -101,7 +101,7 @@ export async function verifyDrawingChecklistItem(
   const supabase = client || getSupabaseAdminClient();
 
   const { error } = await supabase
-    .from('drawing_checklist_progress')
+    .from('drawing_checklist_progress' as any)
     .upsert({
       student_id: studentId,
       checklist_item_id: itemId,
@@ -132,7 +132,7 @@ export async function getDrawingObjects(
   const supabase = client || getSupabaseAdminClient();
 
   let query = supabase
-    .from('drawing_objects')
+    .from('drawing_objects' as any)
     .select('*', { count: 'exact' })
     .eq('is_active', true)
     .order('family', { ascending: true })
@@ -159,7 +159,7 @@ export async function getDrawingObjectById(
   const supabase = client || getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from('drawing_objects')
+    .from('drawing_objects' as any)
     .select('*')
     .eq('id', id)
     .single();

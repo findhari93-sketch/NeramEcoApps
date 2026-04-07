@@ -30,7 +30,7 @@ export async function getDrawingQuestions(
   const supabase = client || getSupabaseAdminClient();
 
   let query = supabase
-    .from('drawing_questions')
+    .from('drawing_questions' as any)
     .select('*', { count: 'exact' })
     .eq('is_active', true)
     .order('year', { ascending: false })
@@ -58,7 +58,7 @@ export async function getDrawingQuestionById(
   const supabase = client || getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from('drawing_questions')
+    .from('drawing_questions' as any)
     .select('*')
     .eq('id', id)
     .single();
@@ -94,7 +94,7 @@ export async function seedDrawingQuestions(
   }));
 
   const { data, error } = await supabase
-    .from('drawing_questions')
+    .from('drawing_questions' as any)
     .insert(rows)
     .select('id');
 
@@ -119,7 +119,7 @@ export async function createDrawingSubmission(
   const supabase = client || getSupabaseAdminClient();
 
   const { data: submission, error } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .insert({
       student_id: data.student_id,
       question_id: data.question_id || null,
@@ -148,7 +148,7 @@ export async function getStudentDrawingSubmissions(
   const supabase = client || getSupabaseAdminClient();
 
   let query = supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('*, question:drawing_questions(*)')
     .eq('student_id', studentId)
     .order('submitted_at', { ascending: false });
@@ -172,7 +172,7 @@ export async function getDrawingSubmissionById(
   const supabase = client || getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
     .eq('id', id)
     .single();
@@ -201,7 +201,7 @@ export async function getDrawingReviewQueue(
   const supabase = client || getSupabaseAdminClient();
 
   let query = supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
     .order('submitted_at', { ascending: true });
 
@@ -229,7 +229,7 @@ export async function getDrawingReviewQueue(
     const questionIds = results.filter(s => s.question?.id).map(s => s.question!.id);
     if (questionIds.length > 0) {
       const { data: threads } = await supabase
-        .from('drawing_thread_status')
+        .from('drawing_thread_status' as any)
         .select('*')
         .in('question_id', questionIds);
 
@@ -257,7 +257,7 @@ export async function saveDrawingReview(
   const supabase = client || getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .update({
       tutor_rating: review.tutor_rating,
       tutor_feedback: review.tutor_feedback || null,
@@ -287,7 +287,7 @@ export async function getDrawingThread(
 
   // Get thread status
   const { data: threadStatus, error: tsError } = await supabase
-    .from('drawing_thread_status')
+    .from('drawing_thread_status' as any)
     .select('*')
     .eq('student_id', studentId)
     .eq('question_id', questionId)
@@ -300,7 +300,7 @@ export async function getDrawingThread(
 
   // Get question
   const { data: question } = await supabase
-    .from('drawing_questions')
+    .from('drawing_questions' as any)
     .select('*')
     .eq('id', questionId)
     .single();
@@ -309,7 +309,7 @@ export async function getDrawingThread(
 
   // Get all attempts in this thread
   const { data: submissions, error: subError } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
     .eq('thread_id', threadStatus.thread_id)
     .order('attempt_number', { ascending: true });
@@ -321,7 +321,7 @@ export async function getDrawingThread(
   let allComments: any[] = [];
   if (submissionIds.length > 0) {
     const { data: comments } = await supabase
-      .from('drawing_submission_comments')
+      .from('drawing_submission_comments' as any)
       .select('*, author:users!drawing_submission_comments_author_id_fkey(id, name, avatar_url)')
       .in('submission_id', submissionIds)
       .order('created_at', { ascending: true });
@@ -363,13 +363,13 @@ export async function createDrawingSubmissionWithThread(
   if (!data.question_id) {
     const submission = await createDrawingSubmission(data, supabase);
     // Update thread_id to self
-    await supabase.from('drawing_submissions').update({ thread_id: submission.id, attempt_number: 1 }).eq('id', submission.id);
+    await supabase.from('drawing_submissions' as any).update({ thread_id: submission.id, attempt_number: 1 }).eq('id', submission.id);
     return { submission: { ...submission, thread_id: submission.id, attempt_number: 1 }, isRedo: false, attemptNumber: 1 };
   }
 
   // Check if a thread exists for this student+question
   const { data: existingThread } = await supabase
-    .from('drawing_thread_status')
+    .from('drawing_thread_status' as any)
     .select('*')
     .eq('student_id', data.student_id)
     .eq('question_id', data.question_id)
@@ -378,7 +378,7 @@ export async function createDrawingSubmissionWithThread(
   if (!existingThread) {
     // First attempt — insert without thread_id (nullable), then set to self
     const { data: submission, error } = await supabase
-      .from('drawing_submissions')
+      .from('drawing_submissions' as any)
       .insert({
         student_id: data.student_id,
         question_id: data.question_id,
@@ -394,10 +394,10 @@ export async function createDrawingSubmissionWithThread(
     if (error) throw error;
 
     // Set thread_id to self (self-referencing)
-    await supabase.from('drawing_submissions').update({ thread_id: submission.id }).eq('id', submission.id);
+    await supabase.from('drawing_submissions' as any).update({ thread_id: submission.id }).eq('id', submission.id);
 
     // Create thread status
-    await supabase.from('drawing_thread_status').insert({
+    await supabase.from('drawing_thread_status' as any).insert({
       student_id: data.student_id,
       question_id: data.question_id,
       thread_id: submission.id,
@@ -422,7 +422,7 @@ export async function createDrawingSubmissionWithThread(
   const nextAttempt = (existingThread.total_attempts || 1) + 1;
 
   const { data: submission, error } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .insert({
       student_id: data.student_id,
       question_id: data.question_id,
@@ -440,7 +440,7 @@ export async function createDrawingSubmissionWithThread(
 
   // Update thread status
   await supabase
-    .from('drawing_thread_status')
+    .from('drawing_thread_status' as any)
     .update({
       status: 'active',
       total_attempts: nextAttempt,
@@ -471,7 +471,7 @@ export async function saveDrawingReviewWithAction(
   const submissionStatus = action === 'redo' ? 'redo' : 'completed';
 
   const { data: submission, error } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .update({
       tutor_rating: review.tutor_rating || null,
       tutor_feedback: review.tutor_feedback || null,
@@ -496,7 +496,7 @@ export async function saveDrawingReviewWithAction(
     }
 
     await supabase
-      .from('drawing_thread_status')
+      .from('drawing_thread_status' as any)
       .update(threadUpdate)
       .eq('student_id', submission.student_id)
       .eq('question_id', submission.question_id);
@@ -516,7 +516,7 @@ export async function getDrawingSubmissionComments(
   const supabase = client || getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from('drawing_submission_comments')
+    .from('drawing_submission_comments' as any)
     .select('*, author:users!drawing_submission_comments_author_id_fkey(id, name, avatar_url)')
     .eq('submission_id', submissionId)
     .order('created_at', { ascending: true });
@@ -537,7 +537,7 @@ export async function addDrawingSubmissionComment(
   const supabase = client || getSupabaseAdminClient();
 
   const { data: comment, error } = await supabase
-    .from('drawing_submission_comments')
+    .from('drawing_submission_comments' as any)
     .insert(data)
     .select('*')
     .single();
@@ -563,7 +563,7 @@ export async function deleteDrawingThread(
 
   // Get thread
   const { data: thread } = await supabase
-    .from('drawing_thread_status')
+    .from('drawing_thread_status' as any)
     .select('thread_id')
     .eq('student_id', studentId)
     .eq('question_id', questionId)
@@ -573,22 +573,22 @@ export async function deleteDrawingThread(
 
   // Delete comments for all submissions in the thread
   const { data: subs } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('id')
     .eq('thread_id', thread.thread_id);
 
   if (subs && subs.length > 0) {
     const subIds = subs.map((s: any) => s.id);
-    await supabase.from('drawing_submission_comments').delete().in('submission_id', subIds);
+    await supabase.from('drawing_submission_comments' as any).delete().in('submission_id', subIds);
   }
 
   // Delete thread status first (has FK to submissions)
-  await supabase.from('drawing_thread_status').delete()
+  await supabase.from('drawing_thread_status' as any).delete()
     .eq('student_id', studentId)
     .eq('question_id', questionId);
 
   // Delete all submissions in the thread
-  await supabase.from('drawing_submissions').delete()
+  await supabase.from('drawing_submissions' as any).delete()
     .eq('thread_id', thread.thread_id);
 }
 
@@ -603,7 +603,7 @@ export async function replaceSubmissionImage(
   const supabase = client || getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .update({ original_image_url: newImageUrl })
     .eq('id', submissionId)
     .eq('status', 'submitted') // only if still pending

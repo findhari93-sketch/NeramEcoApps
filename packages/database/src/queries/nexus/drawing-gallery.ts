@@ -13,7 +13,7 @@ export async function getGalleryFeed(
   const supabase = client || getSupabaseAdminClient();
 
   let query = supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
     .eq('is_gallery_published', true)
     .order('reviewed_at', { ascending: false });
@@ -31,20 +31,20 @@ export async function getGalleryFeed(
 
   // Get reaction counts
   const { data: reactions } = await supabase
-    .from('drawing_gallery_reactions')
+    .from('drawing_gallery_reactions' as any)
     .select('submission_id, reaction_type')
     .in('submission_id', subIds);
 
   // Get user's own reactions
   const { data: userReactions } = await supabase
-    .from('drawing_gallery_reactions')
+    .from('drawing_gallery_reactions' as any)
     .select('submission_id, reaction_type')
     .eq('user_id', userId)
     .in('submission_id', subIds);
 
   // Get comment counts
   const { data: comments } = await supabase
-    .from('drawing_submission_comments')
+    .from('drawing_submission_comments' as any)
     .select('submission_id')
     .in('submission_id', subIds);
 
@@ -99,7 +99,7 @@ export async function toggleGalleryReaction(
 
   // Check if exists
   const { data: existing } = await supabase
-    .from('drawing_gallery_reactions')
+    .from('drawing_gallery_reactions' as any)
     .select('id')
     .eq('submission_id', submissionId)
     .eq('user_id', userId)
@@ -107,11 +107,11 @@ export async function toggleGalleryReaction(
     .single();
 
   if (existing) {
-    await supabase.from('drawing_gallery_reactions').delete().eq('id', existing.id);
+    await supabase.from('drawing_gallery_reactions' as any).delete().eq('id', existing.id);
     return { added: false };
   }
 
-  await supabase.from('drawing_gallery_reactions').insert({
+  await supabase.from('drawing_gallery_reactions' as any).insert({
     submission_id: submissionId,
     user_id: userId,
     reaction_type: reactionType,
@@ -126,7 +126,7 @@ export async function publishToGallery(
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
   await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .update({ is_gallery_published: publish, status: publish ? 'published' : 'completed' })
     .eq('id', submissionId);
 }
@@ -141,7 +141,7 @@ export async function createDrawingHomework(
 ): Promise<DrawingHomework> {
   const supabase = client || getSupabaseAdminClient();
   const { data: hw, error } = await supabase
-    .from('drawing_homework')
+    .from('drawing_homework' as any)
     .insert(data)
     .select('*')
     .single();
@@ -157,7 +157,7 @@ export async function getDrawingHomeworkList(
   const supabase = client || getSupabaseAdminClient();
 
   const query = supabase
-    .from('drawing_homework')
+    .from('drawing_homework' as any)
     .select('*')
     .order('due_date', { ascending: true });
 
@@ -175,7 +175,7 @@ export async function getDrawingHomeworkList(
   // Get submission counts per homework
   const hwIds = filtered.map((hw: any) => hw.id);
   const { data: submissions } = await supabase
-    .from('drawing_submissions')
+    .from('drawing_submissions' as any)
     .select('homework_id, student_id')
     .in('homework_id', hwIds.length > 0 ? hwIds : ['none']);
 
@@ -200,7 +200,7 @@ export async function getDrawingHomeworkById(
 ): Promise<DrawingHomework | null> {
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
-    .from('drawing_homework')
+    .from('drawing_homework' as any)
     .select('*')
     .eq('id', id)
     .single();
