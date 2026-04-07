@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { getSupabaseAdminClient, insertFunnelEventsBatch, linkAnonymousEvents } from '@neram/database';
-import type { FunnelEventStatus } from '@neram/database';
+import type { UserFunnelEventInsert } from '@neram/database';
 
 async function getUserIdFromToken(idToken: string): Promise<string | null> {
   try {
@@ -54,12 +54,12 @@ export async function POST(req: NextRequest) {
       || null;
 
     // Map events to insert format
-    const insertEvents = events.map((evt: Record<string, unknown>) => ({
+    const insertEvents: UserFunnelEventInsert[] = events.map((evt: Record<string, unknown>) => ({
       user_id: userId,
       anonymous_id: (evt.anonymous_id as string) || null,
-      funnel: evt.funnel as string,
-      event: evt.event as string,
-      status: ((evt.status as string) || 'started') as FunnelEventStatus,
+      funnel: evt.funnel,
+      event: evt.event,
+      status: (evt.status as string) || 'started',
       error_message: (evt.error_message as string) || null,
       error_code: (evt.error_code as string) || null,
       metadata: (evt.metadata as Record<string, unknown>) || {},
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       source_app: (evt.source_app as string) || 'app',
       page_url: (evt.page_url as string) || null,
       device_session_id: null,
-    }));
+    } as UserFunnelEventInsert));
 
     const inserted = await insertFunnelEventsBatch(supabase, insertEvents);
 
