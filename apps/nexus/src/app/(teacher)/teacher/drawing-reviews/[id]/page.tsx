@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
   Button, TextField, Rating, useMediaQuery, useTheme, Drawer, ToggleButtonGroup, ToggleButton,
+  FormControlLabel, Checkbox,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
@@ -43,6 +44,7 @@ export default function DrawingReviewDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
+  const [publishToGallery, setPublishToGallery] = useState(false);
   // Mobile: bottom sheet for review controls
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
 
@@ -105,6 +107,16 @@ export default function DrawingReviewDetailPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to save review');
+
+      // Publish to gallery if toggled on and action is complete
+      if (publishToGallery && reviewAction === 'complete') {
+        await fetch('/api/drawing/gallery/publish', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ submission_id: submission!.id, publish: true }),
+        }).catch(() => {}); // non-critical
+      }
+
       refreshBadges();
       router.push('/teacher/drawing-reviews');
     } catch (err) {
@@ -236,6 +248,11 @@ export default function DrawingReviewDetailPage() {
             {saving && action === 'complete' ? 'Saving...' : 'Complete'}
           </Button>
         </Box>
+        <FormControlLabel
+          control={<Checkbox checked={publishToGallery} onChange={(e) => setPublishToGallery(e.target.checked)} size="small" />}
+          label={<Typography variant="caption">Publish to Art Gallery</Typography>}
+          sx={{ mt: 0.5, ml: 0 }}
+        />
         {rating < 1 && (
           <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
             Rating required to mark complete

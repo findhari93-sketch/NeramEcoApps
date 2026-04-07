@@ -14,6 +14,10 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import DrawingQuestionCard from '@/components/drawings/DrawingQuestionCard';
 import FoundationChecklist from '@/components/drawings/FoundationChecklist';
 import ObjectLibrary from '@/components/drawings/ObjectLibrary';
+import GalleryFeed from '@/components/drawings/GalleryFeed';
+import HomeworkList from '@/components/drawings/HomeworkList';
+import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import type { DrawingQuestion } from '@neram/database/types';
 
 const CATEGORIES = [
@@ -29,7 +33,7 @@ export default function StudentDrawingsPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
   // Top-level section: questions | foundation | objects
-  const [section, setSection] = useState<'questions' | 'foundation' | 'objects'>('questions');
+  const [section, setSection] = useState<'questions' | 'foundation' | 'objects' | 'gallery' | 'homework'>('questions');
 
   // Question bank state
   const [questions, setQuestions] = useState<DrawingQuestion[]>([]);
@@ -92,6 +96,8 @@ export default function StudentDrawingsPage() {
         <Tab value="questions" icon={<QuizOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Questions" />
         <Tab value="foundation" icon={<ChecklistOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Foundation" />
         <Tab value="objects" icon={<CategoryOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Objects" />
+        <Tab value="gallery" icon={<CollectionsOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Gallery" />
+        <Tab value="homework" icon={<AssignmentOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Homework" />
       </Tabs>
 
       {/* === Questions Tab === */}
@@ -198,6 +204,16 @@ export default function StudentDrawingsPage() {
       {/* === Objects Tab === */}
       {section === 'objects' && (
         <ObjectLibrary getToken={getToken} />
+      )}
+
+      {/* === Gallery Tab === */}
+      {section === 'gallery' && (
+        <GalleryFeed getToken={getToken} />
+      )}
+
+      {/* === Homework Tab === */}
+      {section === 'homework' && (
+        <HomeworkList getToken={getToken} />
       )}
     </Box>
   );

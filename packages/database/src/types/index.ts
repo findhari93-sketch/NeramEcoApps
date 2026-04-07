@@ -5229,6 +5229,7 @@ export type QBConfidenceTier = 1 | 2 | 3; // 1=Verified, 2=Recalled, 3=Topic Onl
 export type QBAnswerSource = 'official' | 'teacher_verified' | 'student_recalled' | 'unverified';
 export type QBFigureType = 'original' | 'recreated' | 'reference' | 'placeholder';
 export type QBPaperSource = 'official' | 'recalled';
+export type QBShift = 'forenoon' | 'afternoon';
 export type QBTopicPriority = 'critical' | 'high' | 'medium' | 'low';
 
 export type QBCategory =
@@ -5363,6 +5364,7 @@ export interface NexusQBQuestionSource {
   exam_type: QBExamType;
   year: number;
   session: string | null;
+  shift: QBShift | null;
   question_number: number | null;
   created_at: string;
 }
@@ -5400,6 +5402,7 @@ export interface NexusQBOriginalPaper {
   exam_type: QBExamType;
   year: number;
   session: string | null;
+  shift: QBShift | null;
   pdf_url: string | null;
   total_questions: number | null;
   total_marks: number | null;
@@ -5485,6 +5488,7 @@ export interface QBFilterState {
   exam_type?: QBExamType;
   source_year?: number;
   source_session?: string;
+  source_shift?: QBShift;
   // Solution filter
   solution_filter?: 'has_video' | 'has_image' | 'has_explanation' | 'no_solution';
   // Recalled paper filters
@@ -5611,6 +5615,7 @@ export interface NexusQBQuestionSourceInsert {
   exam_type: QBExamType;
   year: number;
   session?: string | null;
+  shift?: QBShift | null;
   question_number?: number | null;
 }
 
@@ -6850,6 +6855,7 @@ export interface DrawingSubmission {
   id: string;
   student_id: string;
   question_id: string | null;
+  homework_id: string | null;
   source_type: DrawingSubmissionSource;
   original_image_url: string;
   reviewed_image_url: string | null;
@@ -6957,6 +6963,44 @@ export interface DrawingObject {
   created_at: string;
 }
 
+// Gallery Reactions
+export type GalleryReactionType = 'heart' | 'clap' | 'fire' | 'star' | 'wow';
+
+export interface DrawingGalleryReaction {
+  id: string;
+  submission_id: string;
+  user_id: string;
+  reaction_type: GalleryReactionType;
+  created_at: string;
+}
+
+export interface GalleryPost extends DrawingSubmissionWithDetails {
+  reactions: Record<GalleryReactionType, number>;
+  user_reactions: GalleryReactionType[];
+  comment_count: number;
+}
+
+// Drawing Homework
+export interface DrawingHomework {
+  id: string;
+  title: string;
+  description: string | null;
+  question_ids: string[];
+  reference_images: Array<{ url: string; caption?: string }>;
+  assigned_to: 'all_students' | 'specific_students';
+  student_ids: string[];
+  due_date: string;
+  is_mandatory: boolean;
+  created_by: string;
+  classroom_id: string | null;
+  created_at: string;
+}
+
+export interface DrawingHomeworkWithStatus extends DrawingHomework {
+  submission_count: number;
+  my_submission_id: string | null;
+}
+
 // ============================================
 // STUDENT RESULTS (Marketing Showcase)
 // ============================================
@@ -7005,4 +7049,58 @@ export interface StudentResultStats {
   top_rank: number | null;
   colleges_count: number;
   by_exam_type: Record<string, number>;
+}
+
+// ============================================
+// User Funnel Events
+// ============================================
+
+export type FunnelType = 'auth' | 'onboarding' | 'application';
+export type FunnelEventStatus = 'started' | 'completed' | 'failed' | 'skipped';
+
+export interface UserFunnelEvent {
+  id: string;
+  user_id: string | null;
+  anonymous_id: string | null;
+  funnel: FunnelType;
+  event: string;
+  status: FunnelEventStatus;
+  error_message: string | null;
+  error_code: string | null;
+  metadata: Record<string, unknown>;
+  device_session_id: string | null;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+  ip_address: string | null;
+  source_app: string;
+  page_url: string | null;
+  created_at: string;
+}
+
+export type UserFunnelEventInsert = Omit<UserFunnelEvent, 'id' | 'created_at'>;
+
+export interface AuthFunnelSummary {
+  week: string;
+  source_app: string;
+  auth_started: number;
+  auth_completed: number;
+  user_registered: number;
+  phone_shown: number;
+  phone_entered: number;
+  otp_requested: number;
+  otp_verified: number;
+}
+
+export interface UserAuthDiagnostics {
+  last_event: string;
+  last_status: FunnelEventStatus;
+  last_error_message: string | null;
+  last_error_code: string | null;
+  event_at: string;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+  events: UserFunnelEvent[];
+  drop_off_reason: string | null;
 }
