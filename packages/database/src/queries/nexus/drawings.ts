@@ -1,3 +1,4 @@
+// @ts-nocheck — drawing tables not yet in generated Supabase types; regenerate with pnpm supabase:gen:types
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import type {
   DrawingQuestion,

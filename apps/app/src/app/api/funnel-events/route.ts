@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { getSupabaseAdminClient, insertFunnelEventsBatch, linkAnonymousEvents } from '@neram/database';
+import type { FunnelEventStatus } from '@neram/database';
 
 async function getUserIdFromToken(idToken: string): Promise<string | null> {
   try {
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       anonymous_id: (evt.anonymous_id as string) || null,
       funnel: evt.funnel as string,
       event: evt.event as string,
-      status: (evt.status as string) || 'started',
+      status: ((evt.status as string) || 'started') as FunnelEventStatus,
       error_message: (evt.error_message as string) || null,
       error_code: (evt.error_code as string) || null,
       metadata: (evt.metadata as Record<string, unknown>) || {},

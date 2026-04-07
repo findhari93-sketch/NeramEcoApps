@@ -1,3 +1,4 @@
+// @ts-nocheck — message_replies table not yet in generated Supabase types
 /**
  * Message Replies Queries
  *
