@@ -368,7 +368,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
           .select('application_number')
           .eq('id', application.id)
           .single();
-        applicationNumber = refetched?.application_number || null;
+        applicationNumber = (refetched as any)?.application_number || null;
       }
 
       // Use actual phone from form data, not 'N/A' fallback

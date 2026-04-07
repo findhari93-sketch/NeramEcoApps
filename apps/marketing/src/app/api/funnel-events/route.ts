@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, insertFunnelEventsBatch } from '@neram/database';
+import type { UserFunnelEventInsert } from '@neram/database';
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,11 +30,11 @@ export async function POST(req: NextRequest) {
       || req.headers.get('x-real-ip')
       || null;
 
-    const insertEvents = events.map((evt: Record<string, unknown>) => ({
+    const insertEvents: UserFunnelEventInsert[] = events.map((evt: Record<string, unknown>) => ({
       user_id: null,
       anonymous_id: (evt.anonymous_id as string) || null,
-      funnel: evt.funnel as string,
-      event: evt.event as string,
+      funnel: evt.funnel,
+      event: evt.event,
       status: (evt.status as string) || 'started',
       error_message: (evt.error_message as string) || null,
       error_code: (evt.error_code as string) || null,
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
       source_app: 'marketing',
       page_url: (evt.page_url as string) || null,
       device_session_id: null,
-    }));
+    } as UserFunnelEventInsert));
 
     const inserted = await insertFunnelEventsBatch(supabase, insertEvents);
     return NextResponse.json({ inserted });

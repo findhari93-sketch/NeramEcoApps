@@ -21,15 +21,15 @@ const EXAM_TYPE_LABELS: Record<StudentResultExamType, string> = {
 
 async function getStudentResult(slug: string): Promise<StudentResult | null> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from('student_results')
+  const { data, error } = await (supabase
+    .from('student_results' as any) as any)
     .select('*')
     .eq('slug', slug)
     .eq('is_published', true)
     .single();
 
   if (error || !data) return null;
-  return data as StudentResult;
+  return data as unknown as StudentResult;
 }
 
 export async function generateMetadata({ params: { locale, slug } }: PageProps): Promise<Metadata> {
