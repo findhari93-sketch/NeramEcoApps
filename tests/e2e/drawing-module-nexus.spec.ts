@@ -3,21 +3,25 @@ import { test, expect } from '@playwright/test';
 /**
  * Drawing Module API Integration Tests
  * Tests: Questions, Submissions, Threads, Reviews, Checklist, Objects
+ *
+ * Run with: npx playwright test tests/e2e/drawing-module-nexus.spec.ts --reporter=line
+ * Requires: Nexus dev server running on port 3012
  */
+
+const BASE = process.env.NEXUS_URL || 'http://localhost:3012';
 
 let teacherToken: string;
 let studentToken: string;
 
 test.describe('Drawing Module API', () => {
   test.describe.configure({ mode: 'serial' });
-  test.use({ baseURL: 'http://localhost:3012' });
 
   // ============================================================
   // Setup: get auth tokens
   // ============================================================
   test('setup: authenticate as teacher and student', async ({ request }) => {
     // Teacher token
-    const teacherRes = await request.post('/api/auth/test-login', {
+    const teacherRes = await request.post(`${BASE}/api/auth/test-login`, {
       data: { email: 'e2etestingteacher@neramclasses.com', role: 'teacher' },
     });
     expect(teacherRes.ok()).toBeTruthy();
@@ -26,7 +30,7 @@ test.describe('Drawing Module API', () => {
     expect(teacherToken).toBeTruthy();
 
     // Student token
-    const studentRes = await request.post('/api/auth/test-login', {
+    const studentRes = await request.post(`${BASE}/api/auth/test-login`, {
       data: { email: 'e2etestingstudent@neramclasses.com', role: 'student' },
     });
     expect(studentRes.ok()).toBeTruthy();
@@ -40,7 +44,7 @@ test.describe('Drawing Module API', () => {
   // ============================================================
   test.describe('Question Bank', () => {
     test('GET /api/drawing/questions returns questions', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions', {
+      const res = await request.get(`${BASE}/api/drawing/questions`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -51,7 +55,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/questions filters by category', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions?category=2d_composition', {
+      const res = await request.get(`${BASE}/api/drawing/questions?category=2d_composition`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -63,7 +67,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/questions filters by difficulty', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions?difficulty_tag=easy', {
+      const res = await request.get(`${BASE}/api/drawing/questions?difficulty_tag=easy`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -74,7 +78,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/questions supports search', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions?search=parallelogram', {
+      const res = await request.get(`${BASE}/api/drawing/questions?search=parallelogram`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -83,7 +87,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/questions supports pagination', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions?limit=5&offset=0', {
+      const res = await request.get(`${BASE}/api/drawing/questions?limit=5&offset=0`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -94,13 +98,13 @@ test.describe('Drawing Module API', () => {
 
     test('GET /api/drawing/questions/[id] returns single question', async ({ request }) => {
       // First get a question ID
-      const listRes = await request.get('/api/drawing/questions?limit=1', {
+      const listRes = await request.get(`${BASE}/api/drawing/questions?limit=1`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       const listBody = await listRes.json();
       const questionId = listBody.questions[0].id;
 
-      const res = await request.get(`/api/drawing/questions/${questionId}`, {
+      const res = await request.get(`${BASE}/api/drawing/questions/${questionId}`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -111,7 +115,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/questions/[id] returns 404 for invalid ID', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions/00000000-0000-0000-0000-000000000000', {
+      const res = await request.get(`${BASE}/api/drawing/questions/00000000-0000-0000-0000-000000000000`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
         failOnStatusCode: false,
       });
@@ -119,7 +123,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/questions requires auth', async ({ request }) => {
-      const res = await request.get('/api/drawing/questions', {
+      const res = await request.get(`${BASE}/api/drawing/questions`, {
         failOnStatusCode: false,
       });
       expect(res.status()).toBe(401);
@@ -131,7 +135,7 @@ test.describe('Drawing Module API', () => {
   // ============================================================
   test.describe('Foundation Checklist', () => {
     test('GET /api/drawing/checklist returns items with progress', async ({ request }) => {
-      const res = await request.get('/api/drawing/checklist', {
+      const res = await request.get(`${BASE}/api/drawing/checklist`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -148,21 +152,21 @@ test.describe('Drawing Module API', () => {
 
     test('PATCH /api/drawing/checklist toggles item status', async ({ request }) => {
       // Get an item ID
-      const listRes = await request.get('/api/drawing/checklist', {
+      const listRes = await request.get(`${BASE}/api/drawing/checklist`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       const items = (await listRes.json()).items;
       const itemId = items[0].id;
 
       // Toggle to in_progress
-      const res = await request.patch('/api/drawing/checklist', {
+      const res = await request.patch(`${BASE}/api/drawing/checklist`, {
         headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
         data: { item_id: itemId, status: 'in_progress' },
       });
       expect(res.status()).toBe(200);
 
       // Verify it stuck
-      const verifyRes = await request.get('/api/drawing/checklist', {
+      const verifyRes = await request.get(`${BASE}/api/drawing/checklist`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       const verifyItems = (await verifyRes.json()).items;
@@ -170,7 +174,7 @@ test.describe('Drawing Module API', () => {
       expect(updated.progress?.status).toBe('in_progress');
 
       // Toggle back to not_started (cleanup)
-      await request.patch('/api/drawing/checklist', {
+      await request.patch(`${BASE}/api/drawing/checklist`, {
         headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
         data: { item_id: itemId, status: 'not_started' },
       });
@@ -178,14 +182,14 @@ test.describe('Drawing Module API', () => {
 
     test('GET /api/drawing/checklist/heatmap requires teacher role', async ({ request }) => {
       // Student should be denied
-      const studentRes = await request.get('/api/drawing/checklist/heatmap', {
+      const studentRes = await request.get(`${BASE}/api/drawing/checklist/heatmap`, {
         headers: { Authorization: `Bearer ${studentToken}` },
         failOnStatusCode: false,
       });
       expect(studentRes.status()).toBe(403);
 
       // Teacher should succeed
-      const teacherRes = await request.get('/api/drawing/checklist/heatmap', {
+      const teacherRes = await request.get(`${BASE}/api/drawing/checklist/heatmap`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(teacherRes.status()).toBe(200);
@@ -199,7 +203,7 @@ test.describe('Drawing Module API', () => {
   // ============================================================
   test.describe('Object Library', () => {
     test('GET /api/drawing/objects returns objects', async ({ request }) => {
-      const res = await request.get('/api/drawing/objects', {
+      const res = await request.get(`${BASE}/api/drawing/objects`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -209,7 +213,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/objects filters by family', async ({ request }) => {
-      const res = await request.get('/api/drawing/objects?family=fruits', {
+      const res = await request.get(`${BASE}/api/drawing/objects?family=fruits`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -221,7 +225,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/objects filters by difficulty', async ({ request }) => {
-      const res = await request.get('/api/drawing/objects?difficulty=easy', {
+      const res = await request.get(`${BASE}/api/drawing/objects?difficulty=easy`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -232,7 +236,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/objects supports search', async ({ request }) => {
-      const res = await request.get('/api/drawing/objects?search=Orange', {
+      const res = await request.get(`${BASE}/api/drawing/objects?search=Orange`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -242,12 +246,12 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/objects/[id] returns single object', async ({ request }) => {
-      const listRes = await request.get('/api/drawing/objects?limit=1', {
+      const listRes = await request.get(`${BASE}/api/drawing/objects?limit=1`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       const objectId = (await listRes.json()).objects[0].id;
 
-      const res = await request.get(`/api/drawing/objects/${objectId}`, {
+      const res = await request.get(`${BASE}/api/drawing/objects/${objectId}`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -264,13 +268,13 @@ test.describe('Drawing Module API', () => {
   // ============================================================
   test.describe('Review Queue', () => {
     test('GET /api/drawing/submissions/review-queue requires teacher role', async ({ request }) => {
-      const studentRes = await request.get('/api/drawing/submissions/review-queue', {
+      const studentRes = await request.get(`${BASE}/api/drawing/submissions/review-queue`, {
         headers: { Authorization: `Bearer ${studentToken}` },
         failOnStatusCode: false,
       });
       expect(studentRes.status()).toBe(403);
 
-      const teacherRes = await request.get('/api/drawing/submissions/review-queue', {
+      const teacherRes = await request.get(`${BASE}/api/drawing/submissions/review-queue`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(teacherRes.status()).toBe(200);
@@ -279,7 +283,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/submissions/review-queue filters by status', async ({ request }) => {
-      const res = await request.get('/api/drawing/submissions/review-queue?status=completed', {
+      const res = await request.get(`${BASE}/api/drawing/submissions/review-queue?status=completed`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
@@ -292,7 +296,7 @@ test.describe('Drawing Module API', () => {
   test.describe('Comments', () => {
     test('GET /api/drawing/submissions/[id]/comments returns 500 for invalid ID', async ({ request }) => {
       // Invalid UUID should fail gracefully
-      const res = await request.get('/api/drawing/submissions/00000000-0000-0000-0000-000000000000/comments', {
+      const res = await request.get(`${BASE}/api/drawing/submissions/00000000-0000-0000-0000-000000000000/comments`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       // Should return empty or error, not crash
@@ -300,7 +304,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('POST /api/drawing/submissions/[id]/comments requires comment_text', async ({ request }) => {
-      const res = await request.post('/api/drawing/submissions/00000000-0000-0000-0000-000000000000/comments', {
+      const res = await request.post(`${BASE}/api/drawing/submissions/00000000-0000-0000-0000-000000000000/comments`, {
         headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
         data: { comment_text: '' },
         failOnStatusCode: false,
@@ -314,7 +318,7 @@ test.describe('Drawing Module API', () => {
   // ============================================================
   test.describe('Thread Management', () => {
     test('GET /api/drawing/submissions/thread requires question_id', async ({ request }) => {
-      const res = await request.get('/api/drawing/submissions/thread', {
+      const res = await request.get(`${BASE}/api/drawing/submissions/thread`, {
         headers: { Authorization: `Bearer ${studentToken}` },
         failOnStatusCode: false,
       });
@@ -322,7 +326,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('GET /api/drawing/submissions/thread returns null for unstarted question', async ({ request }) => {
-      const res = await request.get('/api/drawing/submissions/thread?question_id=00000000-0000-0000-0000-000000000000', {
+      const res = await request.get(`${BASE}/api/drawing/submissions/thread?question_id=00000000-0000-0000-0000-000000000000`, {
         headers: { Authorization: `Bearer ${studentToken}` },
       });
       expect(res.status()).toBe(200);
@@ -331,7 +335,7 @@ test.describe('Drawing Module API', () => {
     });
 
     test('DELETE /api/drawing/submissions/thread/manage requires question_id', async ({ request }) => {
-      const res = await request.delete('/api/drawing/submissions/thread/manage', {
+      const res = await request.delete(`${BASE}/api/drawing/submissions/thread/manage`, {
         headers: { Authorization: `Bearer ${studentToken}` },
         failOnStatusCode: false,
       });
@@ -344,7 +348,7 @@ test.describe('Drawing Module API', () => {
   // ============================================================
   test.describe('Nav Badges', () => {
     test('GET /api/nav-badges includes drawing_reviews count for teacher', async ({ request }) => {
-      const res = await request.get('/api/nav-badges', {
+      const res = await request.get(`${BASE}/api/nav-badges`, {
         headers: { Authorization: `Bearer ${teacherToken}` },
       });
       expect(res.status()).toBe(200);
