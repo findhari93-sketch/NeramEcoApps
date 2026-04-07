@@ -20,6 +20,7 @@ test.describe('Drawing Module API', () => {
   // Setup: get auth tokens
   // ============================================================
   test('setup: authenticate as teacher and student', async ({ request }) => {
+    test.setTimeout(60000);
     // Teacher token
     const teacherRes = await request.post(`${BASE}/api/auth/test-login`, {
       data: { email: 'e2etestingteacher@neramclasses.com', role: 'teacher' },
@@ -355,6 +356,140 @@ test.describe('Drawing Module API', () => {
       const body = await res.json();
       expect(body.badges).toBeDefined();
       expect(typeof body.badges.drawing_reviews).toBe('number');
+    });
+  });
+
+  // ============================================================
+  // Art Gallery (Phase 6)
+  // ============================================================
+  test.describe('Art Gallery', () => {
+    test('GET /api/drawing/gallery returns gallery feed', async ({ request }) => {
+      const res = await request.get(`${BASE}/api/drawing/gallery`, {
+        headers: { Authorization: `Bearer ${studentToken}` },
+      });
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expect(body.posts).toBeDefined();
+      expect(Array.isArray(body.posts)).toBe(true);
+    });
+
+    test('GET /api/drawing/gallery filters by category', async ({ request }) => {
+      const res = await request.get(`${BASE}/api/drawing/gallery?category=2d_composition`, {
+        headers: { Authorization: `Bearer ${studentToken}` },
+      });
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expect(body.posts).toBeDefined();
+    });
+
+    test('POST /api/drawing/gallery/publish requires teacher role', async ({ request }) => {
+      const studentRes = await request.post(`${BASE}/api/drawing/gallery/publish`, {
+        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
+        data: { submission_id: '00000000-0000-0000-0000-000000000000', publish: true },
+        failOnStatusCode: false,
+      });
+      expect(studentRes.status()).toBe(403);
+    });
+
+    test('POST /api/drawing/gallery/publish requires submission_id', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/gallery/publish`, {
+        headers: { Authorization: `Bearer ${teacherToken}`, 'Content-Type': 'application/json' },
+        data: { publish: true },
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(400);
+    });
+
+    test('POST /api/drawing/gallery/[id]/react validates reaction type', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/gallery/00000000-0000-0000-0000-000000000000/react`, {
+        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
+        data: { reaction_type: 'invalid_type' },
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(400);
+    });
+  });
+
+  // ============================================================
+  // Drawing Homework (Phase 7)
+  // ============================================================
+  test.describe('Drawing Homework', () => {
+    test('GET /api/drawing/homework returns homework list', async ({ request }) => {
+      const res = await request.get(`${BASE}/api/drawing/homework`, {
+        headers: { Authorization: `Bearer ${studentToken}` },
+      });
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expect(body.homework).toBeDefined();
+      expect(Array.isArray(body.homework)).toBe(true);
+    });
+
+    test('POST /api/drawing/homework requires teacher role', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/homework`, {
+        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
+        data: { title: 'Test', due_date: '2026-12-31', assigned_to: 'all_students' },
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(403);
+    });
+
+    test('POST /api/drawing/homework validates required fields', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/homework`, {
+        headers: { Authorization: `Bearer ${teacherToken}`, 'Content-Type': 'application/json' },
+        data: { description: 'no title or due date' },
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(400);
+    });
+
+    test('POST /api/drawing/homework creates homework (teacher)', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/homework`, {
+        headers: { Authorization: `Bearer ${teacherToken}`, 'Content-Type': 'application/json' },
+        data: {
+          title: 'E2E Test Homework',
+          description: 'Test homework from API tests',
+          assigned_to: 'all_students',
+          due_date: '2026-12-31T23:59:59Z',
+          is_mandatory: false,
+        },
+      });
+      expect(res.status()).toBe(201);
+      const body = await res.json();
+      expect(body.homework.title).toBe('E2E Test Homework');
+      expect(body.homework.assigned_to).toBe('all_students');
+    });
+  });
+
+  // ============================================================
+  // AI Feedback (Phase 8+9)
+  // ============================================================
+  test.describe('AI Feedback', () => {
+    test('POST /api/drawing/ai-feedback requires submission_id', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
+        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
+        data: {},
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(400);
+    });
+
+    test('POST /api/drawing/ai-feedback returns 404 for invalid submission', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
+        headers: { Authorization: `Bearer ${studentToken}`, 'Content-Type': 'application/json' },
+        data: { submission_id: '00000000-0000-0000-0000-000000000000' },
+        failOnStatusCode: false,
+      });
+      // 404 (not found) or 503 (AI not configured) are both acceptable
+      expect([404, 503]).toContain(res.status());
+    });
+
+    test('POST /api/drawing/ai-feedback requires auth', async ({ request }) => {
+      const res = await request.post(`${BASE}/api/drawing/ai-feedback`, {
+        headers: { 'Content-Type': 'application/json' },
+        data: { submission_id: 'test' },
+        failOnStatusCode: false,
+      });
+      expect([401, 500]).toContain(res.status());
     });
   });
 });

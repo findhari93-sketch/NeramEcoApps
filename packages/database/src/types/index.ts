@@ -829,6 +829,23 @@ export interface ContactMessage {
   created_at: string;
 }
 
+export type ReplyChannel = 'email' | 'whatsapp';
+export type ReplyStatus = 'sent' | 'failed';
+
+export interface MessageReply {
+  id: string;
+  message_id: string;
+  channel: ReplyChannel;
+  reply_body: string;
+  sent_to: string;
+  sent_from: string;
+  sent_by: string;
+  sent_by_name: string;
+  status: ReplyStatus;
+  error_message: string | null;
+  created_at: string;
+}
+
 /**
  * Center visit bookings for prospective students
  */
@@ -3810,6 +3827,11 @@ interface _LegacyDatabase {
         Row: ContactMessage;
         Insert: Omit<ContactMessage, 'id' | 'created_at'> & { id?: string };
         Update: Partial<Omit<ContactMessage, 'id' | 'created_at'>>;
+      };
+      message_replies: {
+        Row: MessageReply;
+        Insert: Omit<MessageReply, 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Omit<MessageReply, 'id' | 'created_at'>>;
       };
       // Marketing content (dynamic CMS)
       marketing_content: {
@@ -6860,7 +6882,17 @@ export interface DrawingSubmission {
   original_image_url: string;
   reviewed_image_url: string | null;
   self_note: string | null;
-  ai_feedback: { score: string; feedback: string[] } | null;
+  ai_feedback: {
+    grade: string;
+    feedback: string[];
+    composition?: string;
+    proportion?: string;
+    shading?: string;
+    completeness?: string;
+    technique?: string;
+    improvement_tip?: string;
+    progress_note?: string | null;
+  } | null;
   tutor_rating: number | null;
   tutor_feedback: string | null;
   tutor_resources: TutorResource[];

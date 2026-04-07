@@ -15,6 +15,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import CommentSection from '@/components/drawings/CommentSection';
+import AIFeedbackPanel from '@/components/drawings/AIFeedbackPanel';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
 
 export default function SubmissionDetailPage() {
@@ -173,6 +174,15 @@ export default function SubmissionDetailPage() {
         </Box>
       )}
 
+      {/* AI Feedback */}
+      <Box sx={{ mt: 2 }}>
+        <AIFeedbackPanel
+          submissionId={submission.id}
+          existingFeedback={submission.ai_feedback}
+          getToken={getToken}
+        />
+      </Box>
+
       {/* Self note */}
       {submission.self_note && (
         <Box sx={{ mt: 2 }}>
@@ -205,6 +215,16 @@ export default function SubmissionDetailPage() {
             : 'No feedback yet.'}
         </Typography>
       </Box>
+
+      {/* AI Feedback available even before tutor review */}
+      <Box sx={{ mt: 2 }}>
+        <AIFeedbackPanel
+          submissionId={submission.id}
+          existingFeedback={submission.ai_feedback}
+          getToken={getToken}
+        />
+      </Box>
+
       <CommentSection
         submissionId={submission.id}
         getToken={getToken}
