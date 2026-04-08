@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import type { AutoMessageType } from '../types';
 
 // Lazy initialization to avoid build-time errors when API key is not set
 let resendClient: Resend | null = null;
@@ -1143,7 +1144,7 @@ export async function sendFirstTouchEmail(
  */
 export async function sendPhoneDripEmail(
   email: string,
-  messageType: string,
+  messageType: AutoMessageType,
   data: { userName: string; unsubscribeUrl: string }
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const name = data.userName || 'there';
