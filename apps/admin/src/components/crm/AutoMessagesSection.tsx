@@ -27,6 +27,24 @@ import ReplayIcon from '@mui/icons-material/Replay';
 
 import type { AutoMessage } from '@neram/database';
 
+function getPhoneDripStatus(messages: AutoMessage[]): string {
+  const dripMessages = messages.filter(m => m.message_type.startsWith('phone_drip_'));
+  if (dripMessages.length === 0) return 'not_enrolled';
+
+  const unsubscribed = dripMessages.some(m => m.error_message === 'unsubscribed');
+  if (unsubscribed) return 'unsubscribed';
+
+  const verified = dripMessages.some(m =>
+    m.error_message?.includes('phone_verified')
+  );
+  if (verified) return 'completed_verified';
+
+  const sentCount = dripMessages.filter(m => m.delivery_status === 'sent').length;
+  const pendingCount = dripMessages.filter(m => m.delivery_status === 'pending').length;
+  if (pendingCount === 0 && sentCount > 0) return 'completed';
+  return `active_${sentCount}_of_5`;
+}
+
 interface AutoMessagesSectionProps {
   userId: string;
 }
@@ -116,6 +134,24 @@ export default function AutoMessagesSection({ userId }: AutoMessagesSectionProps
     );
   }
 
+  const dripStatus = getPhoneDripStatus(messages);
+
+  const dripLabel: Record<string, string> = {
+    not_enrolled: 'No drip',
+    unsubscribed: 'Unsubscribed',
+    completed_verified: 'Verified (drip stopped)',
+    completed: 'Drip complete',
+  };
+
+  const dripChipLabel = dripStatus.startsWith('active_')
+    ? `Phone drip: ${dripStatus.replace('active_', '').replace('_of_5', '')} / 5 sent`
+    : `Phone drip: ${dripLabel[dripStatus] ?? dripStatus}`;
+
+  const dripChipColor: 'default' | 'success' | 'primary' =
+    dripStatus === 'unsubscribed' ? 'default' :
+    dripStatus === 'completed_verified' ? 'success' :
+    'primary';
+
   return (
     <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'grey.200', mb: 2 }}>
       <Box display="flex" alignItems="center" justifyContent="space-between" px={1.5} py={1} borderBottom="1px solid" borderColor="grey.100">
@@ -125,6 +161,7 @@ export default function AutoMessagesSection({ userId }: AutoMessagesSectionProps
           {messages.length > 0 && (
             <Chip label={messages.length} size="small" color="primary" variant="outlined" />
           )}
+          <Chip label={dripChipLabel} size="small" color={dripChipColor} sx={{ ml: 1 }} />
         </Box>
       </Box>
 
