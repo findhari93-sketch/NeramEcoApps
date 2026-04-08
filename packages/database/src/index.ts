@@ -98,6 +98,7 @@ export { sendTeamsWebhook } from './services/teams-webhook';
 
 // Utils
 export { rewriteStorageUrl } from './utils/storage-url';
+export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
 
 // Data
 export {
