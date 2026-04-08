@@ -14,6 +14,7 @@ import {
   confirmFoundationIssue,
   reopenFoundationIssue,
   cleanupIssueScreenshots,
+  deleteFoundationIssue,
 } from '@neram/database/queries/nexus';
 import { createUserNotification } from '@neram/database/queries';
 import type { FoundationIssueStatus } from '@neram/database/types';
@@ -333,6 +334,25 @@ export async function PATCH(
     return NextResponse.json({ issue });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update issue';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/foundation/issues/[id]
+ * Permanently deletes an issue and its screenshots. Teacher/admin only.
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await verifyTeacherOrAdmin(request);
+    const { id } = await params;
+    await deleteFoundationIssue(id);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to delete issue';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

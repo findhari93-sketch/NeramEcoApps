@@ -49,6 +49,9 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import RemoveIcon from '@mui/icons-material/Remove';
 import TimelineIcon from '@mui/icons-material/Timeline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type {
   NexusFoundationIssueWithDetails,
@@ -117,6 +120,44 @@ export default function TeacherIssuesPage() {
 
   // Success feedback
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string }>({ open: false, message: '' });
+
+  // Screenshot lightbox
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // Delete confirm
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Description copy
+  const [descCopied, setDescCopied] = useState(false);
+
+  function handleCopyDescription(text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setDescCopied(true);
+      setTimeout(() => setDescCopied(false), 2000);
+    });
+  }
+
+  async function handleDeleteIssue() {
+    if (!selectedIssue) return;
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/foundation/issues/${selectedIssue.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+      setIssues((prev) => prev.filter((i) => i.id !== selectedIssue.id));
+      setSelectedIssue(null);
+      setDeleteDialogOpen(false);
+      setSnackbar({ open: true, message: 'Issue deleted' });
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to delete issue' });
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     fetchIssues();
@@ -295,10 +336,10 @@ export default function TeacherIssuesPage() {
   }
 
   const filteredIssues = issues.filter((issue) => {
-    if (tab === 1) return issue.status === 'open';
-    if (tab === 2) return issue.status === 'in_progress';
-    if (tab === 3) return issue.status === 'resolved' || issue.status === 'awaiting_confirmation' || issue.status === 'closed';
-    return true;
+    if (tab === 0) return issue.status === 'open';
+    if (tab === 1) return issue.status === 'in_progress';
+    if (tab === 2) return issue.status === 'resolved' || issue.status === 'awaiting_confirmation' || issue.status === 'closed';
+    return true; // tab === 3: All
   });
 
   const statusColor = (status: string) => {
@@ -624,9 +665,22 @@ export default function TeacherIssuesPage() {
       {/* Description */}
       {selectedIssue.description && (
         <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.5 }}>
-            DESCRIPTION
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+              DESCRIPTION
+            </Typography>
+            <Tooltip title={descCopied ? 'Copied!' : 'Copy'}>
+              <IconButton
+                size="small"
+                onClick={() => handleCopyDescription(selectedIssue.description!)}
+                sx={{ p: 0.25 }}
+              >
+                {descCopied
+                  ? <CheckIcon sx={{ fontSize: 14, color: 'success.main' }} />
+                  : <ContentCopyIcon sx={{ fontSize: 14, color: 'text.disabled' }} />}
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
             {selectedIssue.description}
           </Typography>
@@ -646,7 +700,7 @@ export default function TeacherIssuesPage() {
                 component="img"
                 src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/issue-screenshots/${path}`}
                 alt={`Screenshot ${idx + 1}`}
-                onClick={() => window.open(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/issue-screenshots/${path}`, '_blank')}
+                onClick={() => setLightboxUrl(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/issue-screenshots/${path}`)}
                 sx={{
                   width: 100,
                   height: 100,
@@ -806,6 +860,19 @@ export default function TeacherIssuesPage() {
           <ListItemText>{priorityLabel(p)}</ListItemText>
         </MenuItem>
       ))}
+      <Divider />
+      <MenuItem
+        onClick={() => {
+          setMenuAnchor(null);
+          setDeleteDialogOpen(true);
+        }}
+        sx={{ fontSize: '0.85rem', color: 'error.main' }}
+      >
+        <ListItemIcon sx={{ minWidth: 28 }}>
+          <DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} />
+        </ListItemIcon>
+        <ListItemText>Delete Issue</ListItemText>
+      </MenuItem>
     </Menu>
   );
 
@@ -897,10 +964,10 @@ export default function TeacherIssuesPage() {
           '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontSize: '0.85rem', py: 0.5 },
         }}
       >
-        <Tab label={`All (${issues.length})`} />
         <Tab label={`Open (${openCount})`} />
         <Tab label={`In Progress (${inProgressCount})`} />
         <Tab label={`Resolved (${resolvedCount})`} />
+        <Tab label={`All (${issues.length})`} />
       </Tabs>
 
       {/* Issues List */}
@@ -914,9 +981,9 @@ export default function TeacherIssuesPage() {
         <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
           <ReportProblemOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">
-            {tab === 0
+            {tab === 3
               ? 'No issues reported by students yet.'
-              : `No ${tab === 1 ? 'open' : tab === 2 ? 'in-progress' : 'resolved'} issues.`}
+              : `No ${tab === 0 ? 'open' : tab === 1 ? 'in-progress' : 'resolved'} issues.`}
           </Typography>
         </Paper>
       ) : (
@@ -1157,6 +1224,89 @@ export default function TeacherIssuesPage() {
 
       {/* More actions menu */}
       {moreMenu}
+
+      {/* Delete Confirm Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deleting && setDeleteDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>Delete Issue?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            This will permanently delete{' '}
+            <strong>{selectedIssue?.ticket_number}</strong> and all its screenshots and activity history. This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={deleting}
+            size="small"
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteIssue}
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : <DeleteOutlineIcon />}
+            size="small"
+          >
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Screenshot Lightbox */}
+      <Dialog
+        open={!!lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            bgcolor: 'transparent',
+            boxShadow: 'none',
+            overflow: 'visible',
+            m: 1,
+          },
+        }}
+      >
+        <Box sx={{ position: 'relative' }}>
+          <IconButton
+            onClick={() => setLightboxUrl(null)}
+            sx={{
+              position: 'absolute',
+              top: -16,
+              right: -16,
+              bgcolor: 'background.paper',
+              boxShadow: 2,
+              zIndex: 1,
+              '&:hover': { bgcolor: 'grey.100' },
+            }}
+            size="small"
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+          {lightboxUrl && (
+            <Box
+              component="img"
+              src={lightboxUrl}
+              alt="Screenshot"
+              sx={{
+                maxWidth: '90vw',
+                maxHeight: '85vh',
+                borderRadius: 2,
+                display: 'block',
+                objectFit: 'contain',
+              }}
+            />
+          )}
+        </Box>
+      </Dialog>
 
       {/* Success Snackbar */}
       <Snackbar

@@ -1124,6 +1124,23 @@ export async function addIssueComment(
   return data as unknown as NexusFoundationIssueActivity;
 }
 
+export async function deleteFoundationIssue(
+  issueId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Clean up screenshots from storage first
+  await cleanupIssueScreenshots(issueId, supabase);
+
+  // Delete activity log entries
+  await supabase.from('nexus_foundation_issue_activity').delete().eq('issue_id', issueId);
+
+  // Delete the issue
+  const { error } = await supabase.from('nexus_foundation_issues').delete().eq('id', issueId);
+  if (error) throw error;
+}
+
 // ============================================
 // TRANSCRIPTS
 // ============================================
