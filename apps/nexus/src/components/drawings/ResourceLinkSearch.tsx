@@ -15,6 +15,7 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import type { TutorResource } from '@neram/database/types';
 import ClipboardPasteZone from './ClipboardPasteZone';
 
@@ -52,6 +53,7 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
   const [imageUrl, setImageUrl] = useState('');
   const [imageTitle, setImageTitle] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [lastUploadedUrl, setLastUploadedUrl] = useState<string | null>(null);
 
   const removeResource = (index: number) => {
     onChange(resources.filter((_, i) => i !== index));
@@ -134,6 +136,7 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
         thumbnail_url: url,
       });
       setImageTitle('');
+      setLastUploadedUrl(url);
     } catch {
       // silent
     } finally {
@@ -210,7 +213,7 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
 
         <Tabs
           value={tab}
-          onChange={(_, v) => setTab(v)}
+          onChange={(_, v) => { setTab(v); setLastUploadedUrl(null); }}
           sx={{ px: 3, '& .MuiTab-root': { textTransform: 'none', minHeight: 40, py: 0.5 } }}
         >
           <Tab icon={<VideoLibraryOutlinedIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Library" />
@@ -384,6 +387,26 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
               />
 
               {uploading && <LinearProgress sx={{ mt: 1.5, mb: 1 }} />}
+
+              {lastUploadedUrl && !uploading && (
+                <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'success.50', border: '1px solid', borderColor: 'success.200', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box
+                    component="img"
+                    src={lastUploadedUrl}
+                    alt="Uploaded"
+                    sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 0.5, flexShrink: 0 }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'success.main' }} />
+                      <Typography variant="caption" fontWeight={600} color="success.main">Added to resources</Typography>
+                    </Box>
+                    <Button size="small" sx={{ textTransform: 'none', p: 0, minWidth: 0, mt: 0.25, color: 'text.secondary', fontSize: 11 }} onClick={() => setLastUploadedUrl(null)}>
+                      Add another
+                    </Button>
+                  </Box>
+                </Box>
+              )}
 
               {/* Or paste URL */}
               <Box sx={{ pt: 2, mt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
