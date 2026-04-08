@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { Box, Typography, CircularProgress } from '@neram/ui';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 
 interface ClipboardPasteZoneProps {
+  /** Called with the pasted image File. Pass a stable reference (useCallback) to avoid re-registering the paste listener on every render. */
   onFile: (file: File) => Promise<void> | void;
   isUploading: boolean;
   disabled?: boolean;
@@ -32,11 +32,11 @@ export default function ClipboardPasteZone({
       if (!file) return;
 
       if (file.size > maxSizeMB * 1024 * 1024) {
-        flushSync(() => setError(`Image must be under ${maxSizeMB}MB`));
+        setError(`Image must be under ${maxSizeMB}MB`);
         return;
       }
 
-      flushSync(() => setError(''));
+      setError('');
       onFile(file);
     };
 

@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { vi, describe, it, expect } from 'vitest';
 import ClipboardPasteZone from './ClipboardPasteZone';
 
 function dispatchPaste(type: string, sizebytes = 1024) {
@@ -34,14 +34,16 @@ describe('ClipboardPasteZone', () => {
     expect(onFile).not.toHaveBeenCalled();
   });
 
-  it('shows error and does not call onFile when pasted image exceeds maxSizeMB', () => {
+  it('shows error and does not call onFile when pasted image exceeds maxSizeMB', async () => {
     const onFile = vi.fn();
     render(
       <ClipboardPasteZone onFile={onFile} isUploading={false} maxSizeMB={0.000001} />
     );
     dispatchPaste('image/png', 2000);
     expect(onFile).not.toHaveBeenCalled();
-    expect(screen.getByText(/under/i)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText(/under/i)).toBeDefined();
+    });
   });
 
   it('shows uploading state when isUploading is true', () => {
