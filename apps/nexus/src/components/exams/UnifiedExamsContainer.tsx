@@ -9,6 +9,7 @@ import {
   Fab,
   Snackbar,
   Alert,
+  Divider,
   useTheme,
   useMediaQuery,
 } from '@neram/ui';
@@ -120,9 +121,23 @@ export default function UnifiedExamsContainer() {
   };
 
   const handleEnterScores = (attemptId: string) => {
-    // For now, navigate to the documents page where ScorecardEntrySheet exists
-    // TODO: integrate ScorecardEntrySheet directly
     router.push(`/student/documents`);
+  };
+
+  const handleDeleteDate = async (attemptId: string, reason: string) => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/documents/exam-attempts/${attemptId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'delete', deletion_reason: reason }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setSnackbar({ open: true, message: 'Exam date removed', severity: 'success' });
+      fetchData();
+    } catch {
+      setSnackbar({ open: true, message: 'Failed to remove date', severity: 'error' });
+    }
   };
 
   const handleDateSubmitted = () => {
@@ -137,6 +152,29 @@ export default function UnifiedExamsContainer() {
       </Paper>
     );
   }
+
+  const journeyView = data ? (
+    <MyJourneyView
+      attempts={data.my_attempts}
+      onPickDate={() => setDialogOpen(true)}
+      onMarkCompleted={handleMarkCompleted}
+      onEnterScores={handleEnterScores}
+      onDeleteDate={handleDeleteDate}
+    />
+  ) : null;
+
+  const classroomView = data?.schedule ? (
+    <ClassroomView
+      schedule={data.schedule}
+      weekOffset={weekOffset}
+      onWeekChange={setWeekOffset}
+      currentUserId={user?.id || ''}
+      isTeacher={isTeacher}
+      onAddMyDate={() => setDialogOpen(true)}
+      onRemind={handleRemind}
+      reminding={reminding}
+    />
+  ) : null;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pb: { xs: 8, md: 0 } }}>
@@ -157,76 +195,115 @@ export default function UnifiedExamsContainer() {
         </Box>
       ) : data ? (
         <>
-          {/* Personal hero card (students only) */}
-          {!isTeacher && (
-            <PersonalHeroCard
-              nextExam={data.next_exam}
-              progress={data.overall_progress}
-              attempts={data.my_attempts}
-              onPickDate={() => setDialogOpen(true)}
-              onSwitchToSchedule={() => handleTabChange('schedule')}
-            />
-          )}
-
-          {/* Desktop: side-by-side, Mobile: segmented control */}
-          {isDesktop && !isTeacher ? (
-            // Desktop split view
-            <Box sx={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 3, alignItems: 'start' }}>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', fontSize: '0.7rem' }}>
-                  My Journey
-                </Typography>
-                <MyJourneyView
-                  attempts={data.my_attempts}
-                  onPickDate={() => setDialogOpen(true)}
-                  onMarkCompleted={handleMarkCompleted}
-                  onEnterScores={handleEnterScores}
-                />
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5, textTransform: 'uppercase', letterSpacing: 0.5, color: 'text.secondary', fontSize: '0.7rem' }}>
-                  Classroom
-                </Typography>
-                {data.schedule && (
-                  <ClassroomView
-                    schedule={data.schedule}
-                    weekOffset={weekOffset}
-                    onWeekChange={setWeekOffset}
-                    currentUserId={user?.id || ''}
-                    isTeacher={false}
-                    onAddMyDate={() => setDialogOpen(true)}
-                    onRemind={handleRemind}
-                    reminding={reminding}
+          {/* Desktop: professional side-by-side layout */}
+          {isDesktop ? (
+            <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 3, alignItems: 'start' }}>
+              {/* Left: My Journey */}
+              {!isTeacher && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <PersonalHeroCard
+                    nextExam={data.next_exam}
+                    progress={data.overall_progress}
+                    attempts={data.my_attempts}
+                    onPickDate={() => setDialogOpen(true)}
+                    onSwitchToSchedule={() => {}}
                   />
-                )}
+                  <Paper
+                    variant="outlined"
+                    sx={{ borderRadius: 3, p: 2.5, bgcolor: 'background.paper' }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <Typography
+                        variant="caption"
+                        fontWeight={700}
+                        sx={{
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.8,
+                          color: 'text.secondary',
+                          fontSize: '0.68rem',
+                        }}
+                      >
+                        My Journey
+                      </Typography>
+                      <Divider sx={{ flex: 1 }} />
+                    </Box>
+                    {journeyView}
+                  </Paper>
+                </Box>
+              )}
+
+              {/* Right: Classroom */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                <Paper
+                  variant="outlined"
+                  sx={{ borderRadius: 3, p: 2.5, bgcolor: 'background.paper' }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <Typography
+                      variant="caption"
+                      fontWeight={700}
+                      sx={{
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.8,
+                        color: 'text.secondary',
+                        fontSize: '0.68rem',
+                      }}
+                    >
+                      Classroom
+                    </Typography>
+                    <Divider sx={{ flex: 1 }} />
+                  </Box>
+                  {classroomView}
+                </Paper>
               </Box>
+
+              {/* Full-width classroom for teacher (no journey panel) */}
+              {isTeacher && (
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <Paper
+                    variant="outlined"
+                    sx={{ borderRadius: 3, p: 2.5, bgcolor: 'background.paper' }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <Typography
+                        variant="caption"
+                        fontWeight={700}
+                        sx={{
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.8,
+                          color: 'text.secondary',
+                          fontSize: '0.68rem',
+                        }}
+                      >
+                        Classroom Schedule
+                      </Typography>
+                      <Divider sx={{ flex: 1 }} />
+                    </Box>
+                    {classroomView}
+                  </Paper>
+                </Box>
+              )}
             </Box>
           ) : (
-            // Mobile/tablet: segmented control
+            /* Mobile/tablet: stacked with segmented control */
             <>
+              {!isTeacher && (
+                <PersonalHeroCard
+                  nextExam={data.next_exam}
+                  progress={data.overall_progress}
+                  attempts={data.my_attempts}
+                  onPickDate={() => setDialogOpen(true)}
+                  onSwitchToSchedule={() => handleTabChange('schedule')}
+                />
+              )}
+
               {!isTeacher && (
                 <ViewSegmentControl value={activeTab} onChange={handleTabChange} />
               )}
 
               {(activeTab === 'journey' && !isTeacher) ? (
-                <MyJourneyView
-                  attempts={data.my_attempts}
-                  onPickDate={() => setDialogOpen(true)}
-                  onMarkCompleted={handleMarkCompleted}
-                  onEnterScores={handleEnterScores}
-                />
-              ) : data.schedule ? (
-                <ClassroomView
-                  schedule={data.schedule}
-                  weekOffset={weekOffset}
-                  onWeekChange={setWeekOffset}
-                  currentUserId={user?.id || ''}
-                  isTeacher={isTeacher}
-                  onAddMyDate={() => setDialogOpen(true)}
-                  onRemind={handleRemind}
-                  reminding={reminding}
-                />
-              ) : null}
+                journeyView
+              ) : classroomView}
             </>
           )}
         </>
@@ -265,7 +342,6 @@ export default function UnifiedExamsContainer() {
         />
       )}
 
-      {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}

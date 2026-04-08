@@ -94,6 +94,20 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Returns the IST timestamp after which a session can be marked completed.
+// Morning sessions end at 1:00 PM IST, afternoon/evening at 5:00 PM IST.
+function getSessionEndTime(examDate: string, sessionLabel: string | null): Date {
+  const label = (sessionLabel || '').toLowerCase();
+  if (label.includes('morning')) {
+    return new Date(examDate + 'T13:00:00+05:30'); // 1:00 PM IST
+  }
+  if (label.includes('afternoon') || label.includes('evening')) {
+    return new Date(examDate + 'T17:00:00+05:30'); // 5:00 PM IST
+  }
+  // Default: end of day IST
+  return new Date(examDate + 'T23:59:59+05:30');
+}
+
 // PATCH /api/exam-details — update attempt status
 export async function PATCH(request: NextRequest) {
   try {
@@ -116,7 +130,51 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (!['registered', 'completed', 'skipped'].includes(body.status)) {
+      return NextResponse.json(
+        { error: 'Invalid status value' },
+        { status: 400 }
+      );
+    }
+
     const supabase = getSupabaseAdminClient();
+
+    // When marking as completed, validate that the exam session has ended.
+    if (body.status === 'completed') {
+      const { data: attempt } = await supabase
+        .from('user_exam_attempts')
+        .select('exam_date, session_label')
+        .eq('id', body.attempt_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!attempt) {
+        return NextResponse.json({ error: 'Attempt not found' }, { status: 404 });
+      }
+
+      if (!attempt.exam_date) {
+        return NextResponse.json(
+          { error: 'Exam date is not set for this attempt' },
+          { status: 400 }
+        );
+      }
+
+      const sessionEnd = getSessionEndTime(attempt.exam_date, attempt.session_label);
+      if (new Date() < sessionEnd) {
+        const timeLabel = attempt.session_label?.toLowerCase().includes('morning')
+          ? '1:00 PM'
+          : attempt.session_label?.toLowerCase().includes('afternoon') || attempt.session_label?.toLowerCase().includes('evening')
+          ? '5:00 PM'
+          : 'end of day';
+        return NextResponse.json(
+          {
+            error: `Cannot mark as completed before the session ends. Please try again after ${timeLabel} IST on your exam date.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     await updateAttemptStatus(body.attempt_id, userId, body.status, supabase);
 
     return NextResponse.json({ success: true });

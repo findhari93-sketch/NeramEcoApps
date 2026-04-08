@@ -74,10 +74,11 @@ export async function GET(request: NextRequest) {
         .select('id, exam_date')
         .in('id', dateIds);
       const dateMap: Record<string, string> = {};
-      for (const d of (resolved || [])) dateMap[d.id] = d.exam_date;
+      // Normalize timestamp to YYYY-MM-DD
+      for (const d of (resolved || [])) dateMap[d.id] = d.exam_date?.split('T')[0] || d.exam_date;
       myAttempts = myAttempts.map((a: any) => ({
         ...a,
-        exam_date: a.exam_date || dateMap[a.exam_date_id] || null,
+        exam_date: a.exam_date?.split('T')[0] || dateMap[a.exam_date_id] || null,
       }));
     }
 

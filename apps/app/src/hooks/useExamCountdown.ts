@@ -31,30 +31,33 @@ export interface ExamCountdownData {
   refetch: () => void;
 }
 
+// Returns true only after the session day has fully ended in IST (11:59 PM IST)
+// This prevents exams from appearing "past" before they've actually happened.
+function isExamDatePast(dateStr: string): boolean {
+  return new Date(dateStr + 'T23:59:59+05:30') < new Date();
+}
+
 function getDaysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00');
+  // Count from IST start of exam day
+  const target = new Date(dateStr + 'T00:00:00+05:30');
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function getNextFutureSession(sessions: ExamScheduleSession[]): ExamScheduleSession | null {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
   return (
     sessions
-      .filter((s) => new Date(s.date + 'T00:00:00') >= now)
+      .filter((s) => !isExamDatePast(s.date))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0] || null
   );
 }
 
 function getNextFutureAttempt(attempts: UserExamAttempt[]): UserExamAttempt | null {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
   return (
     attempts
       .filter(
-        (a) => a.status === 'registered' && a.exam_date && new Date(a.exam_date + 'T00:00:00') >= now
+        (a) => a.status === 'registered' && a.exam_date && !isExamDatePast(a.exam_date)
       )
       .sort(
         (a, b) => new Date(a.exam_date!).getTime() - new Date(b.exam_date!).getTime()
@@ -146,7 +149,7 @@ export function useExamCountdown(): ExamCountdownData {
     // Check if all attempts are past
     const hasUpcomingAttempt = nextAttempt !== null;
     const hasPastAttempts = attempts.some(
-      (a) => a.exam_date && new Date(a.exam_date + 'T00:00:00') < new Date()
+      (a) => a.exam_date && isExamDatePast(a.exam_date)
     );
 
     if (hasUpcomingAttempt) {

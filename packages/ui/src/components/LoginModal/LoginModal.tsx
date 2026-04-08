@@ -303,7 +303,24 @@ export default function LoginModal({
     setPhoneError('');
     setPhoneLoading(true);
     try {
-      const { sendPhoneOTP, initRecaptcha, clearRecaptcha } = await import('@neram/auth');
+      const { sendPhoneOTP, initRecaptcha, clearRecaptcha, getFirebaseAuth } = await import('@neram/auth');
+
+      // Capture phone number as lead BEFORE sending OTP so it's never lost
+      // even if OTP fails or user drops off
+      try {
+        const auth = getFirebaseAuth();
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const idToken = await currentUser.getIdToken();
+          await fetch(`${apiBaseUrl}/api/auth/capture-phone`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, phoneNumber: `+91${phoneNumber}` }),
+          });
+        }
+      } catch {
+        // Non-critical: don't block OTP send if capture fails
+      }
 
       // Ensure reCAPTCHA is initialized before sending OTP
       // It may have been consumed by a previous attempt

@@ -458,7 +458,8 @@ function PostExamCard({
         {attempts.some((a) => a.status === 'registered') ? 'Exam update' : 'All sessions done!'}
       </Typography>
       {attempts.map((a, i) => {
-        const isPast = a.exam_date && new Date(a.exam_date + 'T00:00:00') < new Date();
+        // Only mark as past after the full exam day has ended in IST (11:59 PM IST)
+        const isPast = a.exam_date && new Date(a.exam_date + 'T23:59:59+05:30') < new Date();
         return (
           <Typography key={i} variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
             {a.session_label} · {a.exam_date ? new Date(a.exam_date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : ''}

@@ -64,8 +64,7 @@ export default function StudentChip({ student, isMe }: StudentChipProps) {
         variant="body2"
         fontWeight={isMe ? 600 : 400}
         color={isMe ? 'primary.main' : 'text.primary'}
-        noWrap
-        sx={{ flex: 1, minWidth: 0, fontSize: '0.85rem' }}
+        sx={{ flex: 1, minWidth: 0, fontSize: '0.85rem', wordBreak: 'break-word' }}
       >
         {student.name}{isMe ? ' (You)' : ''}
       </Typography>

@@ -181,17 +181,25 @@ export async function GET(request: NextRequest) {
     const requestedIdx = Math.max(0, Math.min(weeks.length - 1, currentWeekIdx + weekOffsetParam));
     const week = weeks[requestedIdx];
 
-    // Get ALL attempts for this classroom + exam type that have a date (new or old FK)
-    const { data: allAttempts } = await db
+    // Get ALL attempts for this classroom + exam type (including soft-deleted for teacher view)
+    const includeDeleted = request.nextUrl.searchParams.get('include_deleted') === 'true';
+    let attemptsQuery = db
       .from('nexus_student_exam_attempts')
-      .select('student_id, exam_date, exam_date_id, exam_city, exam_session, attempt_number, state, exam_completed_at')
+      .select('id, student_id, exam_date, exam_date_id, exam_city, exam_session, attempt_number, state, exam_completed_at, deleted_at, deletion_reason')
       .eq('classroom_id', classroomId)
       .eq('exam_type', examType);
+
+    if (!includeDeleted) {
+      attemptsQuery = attemptsQuery.is('deleted_at', null);
+    }
+
+    const { data: allAttempts } = await attemptsQuery;
 
     // Filter to only those with a date, and resolve exam_date_id fallback
     let attempts = (allAttempts || []).filter((a: any) => a.exam_date || a.exam_date_id);
 
     // For attempts with exam_date_id but no exam_date, resolve from nexus_exam_dates
+    // Note: nexus_exam_dates.exam_date may be a timestamptz - normalize to YYYY-MM-DD
     const needsResolution = attempts.filter((a: any) => !a.exam_date && a.exam_date_id);
     if (needsResolution.length > 0) {
       const dateIds = [...new Set(needsResolution.map((a: any) => a.exam_date_id))] as string[];
@@ -201,24 +209,63 @@ export async function GET(request: NextRequest) {
         .in('id', dateIds);
 
       const dateMap: Record<string, string> = {};
-      for (const d of (resolvedDates || [])) dateMap[d.id] = d.exam_date;
+      // Normalize timestamp to YYYY-MM-DD to match phase date strings
+      for (const d of (resolvedDates || [])) dateMap[d.id] = d.exam_date?.split('T')[0] || d.exam_date;
 
       attempts = attempts.map((a: any) => ({
         ...a,
-        exam_date: a.exam_date || dateMap[a.exam_date_id] || null,
+        exam_date: a.exam_date?.split('T')[0] || dateMap[a.exam_date_id] || null,
+      })).filter((a: any) => a.exam_date);
+    } else {
+      // Also normalize exam_date in case it's a timestamp
+      attempts = attempts.map((a: any) => ({
+        ...a,
+        exam_date: a.exam_date?.split('T')[0] || null,
       })).filter((a: any) => a.exam_date);
     }
 
-    // Get student names for all relevant students
-    const attemptStudentIds = [...new Set(attempts.map((a: any) => a.student_id))] as string[];
-    const studentNameMap: Record<string, string> = {};
+    // Get all enrolled students
+    const { data: allStudents } = await db
+      .from('nexus_enrollments')
+      .select('user_id')
+      .eq('classroom_id', classroomId)
+      .eq('role', 'student')
+      .eq('is_active', true);
 
-    if (attemptStudentIds.length > 0) {
+    const allStudentIds = (allStudents || []).map((s: any) => s.user_id) as string[];
+
+    // Get student names + academic year for ALL enrolled students
+    const studentNameMap: Record<string, string> = {};
+    const academicYearMap: Record<string, string | null> = {};
+
+    if (allStudentIds.length > 0) {
       const { data: users } = await supabase
         .from('users')
         .select('id, first_name, last_name, name')
-        .in('id', attemptStudentIds);
+        .in('id', allStudentIds);
       for (const u of (users || [])) {
+        studentNameMap[u.id] = getUserName(u);
+      }
+
+      const { data: onboarding } = await db
+        .from('nexus_student_onboarding')
+        .select('student_id, academic_year')
+        .eq('classroom_id', classroomId)
+        .in('student_id', allStudentIds);
+      for (const o of (onboarding || [])) {
+        academicYearMap[o.student_id] = o.academic_year;
+      }
+    }
+
+    // Also get names for attempt students not in enrollment list
+    const attemptStudentIds = [...new Set(attempts.map((a: any) => a.student_id))] as string[];
+    const extraIds = attemptStudentIds.filter(id => !studentNameMap[id]);
+    if (extraIds.length > 0) {
+      const { data: extraUsers } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, name')
+        .in('id', extraIds);
+      for (const u of (extraUsers || [])) {
         studentNameMap[u.id] = getUserName(u);
       }
     }
@@ -234,12 +281,15 @@ export async function GET(request: NextRequest) {
       for (const a of dayAttempts) {
         const city = a.exam_city || 'Unspecified';
         if (!studentsByCity[city]) studentsByCity[city] = [];
+        const academicYear = academicYearMap[a.student_id] ?? null;
         studentsByCity[city].push({
           student_id: a.student_id,
           name: studentNameMap[a.student_id] || 'Unknown',
           session: a.exam_session,
           attempt_number: a.attempt_number || 1,
           state: a.state,
+          academic_year: academicYear,
+          not_this_year: academicYear ? academicYear > '2025-26' : false,
         });
       }
 
@@ -264,15 +314,7 @@ export async function GET(request: NextRequest) {
       is_past: (week.friday || week.saturday || '') < today,
     };
 
-    // Stats: across the entire phase
-    const { data: allStudents } = await db
-      .from('nexus_enrollments')
-      .select('user_id')
-      .eq('classroom_id', classroomId)
-      .eq('role', 'student')
-      .eq('is_active', true);
-
-    const allStudentIds = (allStudents || []).map((s: any) => s.user_id) as string[];
+    // Stats: across the entire phase (use allStudentIds already fetched above)
     const submittedStudentIds = new Set(attempts.map((a: any) => a.student_id));
     const notSubmittedIds = allStudentIds.filter(id => !submittedStudentIds.has(id));
 
@@ -285,26 +327,72 @@ export async function GET(request: NextRequest) {
       a.state === 'completed' || a.state === 'scorecard_uploaded'
     ).length;
 
+    // Build full student summary list for popup (all enrolled students)
+    function buildStudentSummary(studentId: string) {
+      const academicYear = academicYearMap[studentId] ?? null;
+      const studentAttempts = attempts.filter((a: any) => a.student_id === studentId);
+      // Pick the most recent/upcoming attempt for summary
+      const primaryAttempt = studentAttempts.sort((a: any, b: any) =>
+        (b.exam_date || '').localeCompare(a.exam_date || '')
+      )[0];
+      return {
+        student_id: studentId,
+        name: studentNameMap[studentId] || 'Unknown',
+        academic_year: academicYear,
+        not_this_year: academicYear ? academicYear > '2025-26' : false,
+        has_date: studentAttempts.length > 0,
+        exam_date: primaryAttempt?.exam_date ?? null,
+        exam_city: primaryAttempt?.exam_city ?? null,
+        exam_session: primaryAttempt?.exam_session ?? null,
+        state: primaryAttempt?.state ?? null,
+        exam_completed_at: primaryAttempt?.exam_completed_at ?? null,
+        attempt_id: primaryAttempt?.id ?? null,
+      };
+    }
+
+    const allStudentSummaries = allStudentIds.map(buildStudentSummary);
+
+    // Submitted students (sorted by exam_completed_at desc for popup)
+    const submittedSummaries = allStudentSummaries
+      .filter(s => s.has_date)
+      .sort((a, b) => (b.exam_completed_at || '').localeCompare(a.exam_completed_at || ''));
+
+    // Soft-deleted attempts (for teacher view)
+    const deletedAttempts = includeDeleted
+      ? (allAttempts || []).filter((a: any) => a.deleted_at)
+      : [];
+    const removedSummaries = deletedAttempts.map((a: any) => ({
+      student_id: a.student_id,
+      name: studentNameMap[a.student_id] || 'Unknown',
+      academic_year: academicYearMap[a.student_id] ?? null,
+      not_this_year: false,
+      has_date: false,
+      exam_date: a.exam_date,
+      exam_city: a.exam_city,
+      exam_session: a.exam_session,
+      state: 'deleted',
+      exam_completed_at: null,
+      attempt_id: a.id,
+      deleted_at: a.deleted_at,
+      deletion_reason: a.deletion_reason,
+    }));
+
     const stats = {
       total_students: allStudentIds.length,
       submitted_count: submittedStudentIds.size,
       not_submitted_count: notSubmittedIds.length,
       this_week_exam_count: thisWeekCount,
       completed_count: completedCount,
+      students: allStudentSummaries,
+      submitted_students: submittedSummaries,
+      removed_students: removedSummaries,
     };
 
     // Not submitted students with names
-    let notSubmitted: any[] = [];
-    if (notSubmittedIds.length > 0) {
-      const { data: nsUsers } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, name')
-        .in('id', notSubmittedIds);
-      notSubmitted = (nsUsers || []).map((u: any) => ({
-        id: u.id,
-        name: getUserName(u),
-      }));
-    }
+    const notSubmitted = notSubmittedIds.map(id => ({
+      id,
+      name: studentNameMap[id] || 'Unknown',
+    }));
 
     // Recently completed (last 7 days)
     const sevenDaysAgo = new Date();

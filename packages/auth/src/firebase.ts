@@ -197,17 +197,29 @@ export function initRecaptcha(
   }
 ): RecaptchaVerifier {
   const auth = getFirebaseAuth();
-  
+
   if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
+    try {
+      recaptchaVerifier.clear();
+    } catch {
+      // ignore
+    }
+    recaptchaVerifier = null;
   }
-  
+
+  // Also wipe any leftover reCAPTCHA iframes injected by Google SDK
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('iframe[src*="recaptcha"]').forEach((el) => el.remove());
+    const container = document.getElementById(containerId);
+    if (container) container.innerHTML = '';
+  }
+
   recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
     size: options?.size || 'invisible',
     callback: options?.callback,
     'expired-callback': options?.['expired-callback'],
   });
-  
+
   return recaptchaVerifier;
 }
 

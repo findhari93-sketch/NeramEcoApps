@@ -8,13 +8,33 @@ export interface PhaseInfo {
   max_attempts: number;
 }
 
-// A single student on a specific exam date
+// A single student on a specific exam date (in week view)
 export interface StudentOnDate {
   student_id: string;
   name: string;
   session: 'morning' | 'afternoon' | null;
   attempt_number: number;
   state: string;
+  academic_year: string | null;
+  not_this_year: boolean;
+}
+
+// Summary of a student for popup views
+export interface StudentSummary {
+  student_id: string;
+  name: string;
+  academic_year: string | null;
+  not_this_year: boolean;
+  has_date: boolean;
+  exam_date: string | null;
+  exam_city: string | null;
+  exam_session: 'morning' | 'afternoon' | null;
+  state: string | null;
+  exam_completed_at: string | null;
+  attempt_id: string | null;
+  // Only present on removed_students
+  deleted_at?: string | null;
+  deletion_reason?: string | null;
 }
 
 // Data for one day (Friday or Saturday)
@@ -36,13 +56,16 @@ export interface WeekData {
   is_past: boolean;
 }
 
-// Summary stats
+// Summary stats (now includes full student lists for popups)
 export interface ExamScheduleStats {
   total_students: number;
   submitted_count: number;
   not_submitted_count: number;
   this_week_exam_count: number;
   completed_count: number;
+  students: StudentSummary[];
+  submitted_students: StudentSummary[];
+  removed_students: StudentSummary[];
 }
 
 // Navigation bounds
@@ -85,4 +108,12 @@ export interface ExamScheduleData {
   recently_completed: RecentlyCompletedStudent[];
   navigation: WeekNavigation;
   my_attempts: MyAttempt[];
+}
+
+// Date rail item (all phase exam dates with student counts)
+export interface DateRailItem {
+  date: string;      // YYYY-MM-DD
+  day: 'Fri' | 'Sat';
+  studentCount: number;
+  isPast: boolean;
 }

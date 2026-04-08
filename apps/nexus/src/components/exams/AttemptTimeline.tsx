@@ -10,9 +10,11 @@ interface AttemptTimelineProps {
   onPickDate: () => void;
   onMarkCompleted: (id: string) => void;
   onEnterScores: (id: string) => void;
+  onDeleteDate?: (id: string, reason: string) => void;
+  onEditDate?: (id: string) => void;
 }
 
-export default function AttemptTimeline({ attempts, onPickDate, onMarkCompleted, onEnterScores }: AttemptTimelineProps) {
+export default function AttemptTimeline({ attempts, onPickDate, onMarkCompleted, onEnterScores, onDeleteDate, onEditDate }: AttemptTimelineProps) {
   const theme = useTheme();
 
   const phase1 = attempts.filter(a => a.phase === 'phase_1');
@@ -35,6 +37,8 @@ export default function AttemptTimeline({ attempts, onPickDate, onMarkCompleted,
             onPickDate={onPickDate}
             onMarkCompleted={onMarkCompleted}
             onEnterScores={onEnterScores}
+            onDeleteDate={onDeleteDate}
+            onEditDate={onEditDate}
           />
         ))
       ) : (
