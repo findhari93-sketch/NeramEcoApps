@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.4"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -3075,8 +3075,12 @@ export type Database = {
       }
       drawing_submissions: {
         Row: {
+          ai_corrected_image_prompt: string | null
+          ai_draft_status: string | null
           ai_feedback: Json | null
+          ai_overlay_annotations: Json | null
           attempt_number: number | null
+          corrected_image_url: string | null
           homework_id: string | null
           id: string
           is_gallery_published: boolean | null
@@ -3095,8 +3099,12 @@ export type Database = {
           tutor_resources: Json | null
         }
         Insert: {
+          ai_corrected_image_prompt?: string | null
+          ai_draft_status?: string | null
           ai_feedback?: Json | null
+          ai_overlay_annotations?: Json | null
           attempt_number?: number | null
+          corrected_image_url?: string | null
           homework_id?: string | null
           id?: string
           is_gallery_published?: boolean | null
@@ -3115,8 +3123,12 @@ export type Database = {
           tutor_resources?: Json | null
         }
         Update: {
+          ai_corrected_image_prompt?: string | null
+          ai_draft_status?: string | null
           ai_feedback?: Json | null
+          ai_overlay_annotations?: Json | null
           attempt_number?: number | null
+          corrected_image_url?: string | null
           homework_id?: string | null
           id?: string
           is_gallery_published?: boolean | null
@@ -9632,6 +9644,7 @@ export type Database = {
           questions_complete: number | null
           questions_parsed: number | null
           session: string | null
+          shift: string | null
           total_marks: number | null
           total_questions: number | null
           upload_status: string
@@ -9651,6 +9664,7 @@ export type Database = {
           questions_complete?: number | null
           questions_parsed?: number | null
           session?: string | null
+          shift?: string | null
           total_marks?: number | null
           total_questions?: number | null
           upload_status?: string
@@ -9670,6 +9684,7 @@ export type Database = {
           questions_complete?: number | null
           questions_parsed?: number | null
           session?: string | null
+          shift?: string | null
           total_marks?: number | null
           total_questions?: number | null
           upload_status?: string
@@ -9843,6 +9858,7 @@ export type Database = {
           question_id: string
           question_number: number | null
           session: string | null
+          shift: string | null
           year: number
         }
         Insert: {
@@ -9852,6 +9868,7 @@ export type Database = {
           question_id: string
           question_number?: number | null
           session?: string | null
+          shift?: string | null
           year: number
         }
         Update: {
@@ -9861,6 +9878,7 @@ export type Database = {
           question_id?: string
           question_number?: number | null
           session?: string | null
+          shift?: string | null
           year?: number
         }
         Relationships: [
@@ -11804,6 +11822,7 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           name: string
+          nearby_cities: Json | null
           operating_hours: Json | null
           photos: Json | null
           pincode: string | null
@@ -11837,6 +11856,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name: string
+          nearby_cities?: Json | null
           operating_hours?: Json | null
           photos?: Json | null
           pincode?: string | null
@@ -11870,6 +11890,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name?: string
+          nearby_cities?: Json | null
           operating_hours?: Json | null
           photos?: Json | null
           pincode?: string | null
@@ -15275,6 +15296,8 @@ export type Database = {
           date_of_birth: string | null
           description: string | null
           email: string | null
+          email_opt_out: boolean
+          email_opt_out_at: string | null
           email_verified: boolean | null
           firebase_uid: string | null
           first_name: string | null
@@ -15309,6 +15332,8 @@ export type Database = {
           date_of_birth?: string | null
           description?: string | null
           email?: string | null
+          email_opt_out?: boolean
+          email_opt_out_at?: string | null
           email_verified?: boolean | null
           firebase_uid?: string | null
           first_name?: string | null
@@ -15343,6 +15368,8 @@ export type Database = {
           date_of_birth?: string | null
           description?: string | null
           email?: string | null
+          email_opt_out?: boolean
+          email_opt_out_at?: string | null
           email_verified?: boolean | null
           firebase_uid?: string | null
           first_name?: string | null
@@ -15819,41 +15846,12 @@ export type Database = {
         Args: { p_exclude_user_id?: string; p_username: string }
         Returns: boolean
       }
-      cleanup_old_sessions: {
-        Args: { p_days_to_keep?: number }
-        Returns: number
-      }
       clone_centers_to_new_year: {
         Args: { source_year: number; target_year: number }
         Returns: number
       }
       create_lead_profile: { Args: { payload: Json }; Returns: Json }
-      create_notification: {
-        Args: {
-          p_data?: Json
-          p_message: string
-          p_priority?: string
-          p_title: string
-          p_type: string
-          p_user_id: string
-        }
-        Returns: string
-      }
-      end_user_session: {
-        Args: { p_metadata?: Json; p_session_id: string }
-        Returns: undefined
-      }
       ensure_qb_stats: { Args: { p_user_id: string }; Returns: undefined }
-      get_active_sessions: {
-        Args: { p_user_id: string }
-        Returns: {
-          app_section: string
-          device_info: Json
-          duration_so_far: string
-          session_id: string
-          session_start: string
-        }[]
-      }
       get_allotment_college_stats: {
         Args: { p_system_id: string; p_year: number }
         Returns: {
@@ -15977,17 +15975,6 @@ export type Database = {
           os: string
         }[]
       }
-      get_user_session_stats: {
-        Args: { p_days_back?: number; p_user_id: string }
-        Returns: {
-          active_sessions: number
-          avg_session_duration: string
-          last_session_start: string
-          most_used_sections: Json
-          total_sessions: number
-          total_time: string
-        }[]
-      }
       initialize_student_onboarding: {
         Args: {
           p_enrollment_type?: string
@@ -15995,14 +15982,6 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
-      }
-      log_session_event: {
-        Args: {
-          p_event_data?: Json
-          p_event_type: string
-          p_session_id: string
-        }
-        Returns: string
       }
       normalize_state_name: { Args: { raw_state: string }; Returns: string }
       record_profile_change: {
@@ -16063,26 +16042,17 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      start_user_session: {
-        Args: { p_device_info?: Json; p_section?: string; p_user_id: string }
-        Returns: string
-      }
       suggest_usernames: {
         Args: { p_base_username: string; p_count?: number }
         Returns: string[]
       }
       update_library_streaks: { Args: never; Returns: undefined }
-      update_session_section: {
-        Args: { p_metadata?: Json; p_new_section: string; p_session_id: string }
-        Returns: undefined
-      }
       update_student_library_streak: {
         Args: { p_student_id: string }
         Returns: undefined
       }
     }
     Enums: {
-      account_type_t: "Free" | "Paid" | "Admin"
       app_feedback_category:
         | "bug_report"
         | "feature_request"
@@ -16154,7 +16124,6 @@ export type Database = {
       direct_enrollment_link_status: "active" | "used" | "expired" | "cancelled"
       enrollment_interest: "yes" | "maybe" | "no"
       exam_type: "NATA" | "JEE_PAPER_2" | "BOTH"
-      gender_t: "male" | "female" | "nonbinary" | "prefer_not_to_say"
       learning_mode: "hybrid" | "online_only"
       location_source: "geolocation" | "pincode" | "manual"
       marketing_content_status: "draft" | "published" | "archived"
@@ -16193,12 +16162,12 @@ export type Database = {
         | "refund_requested"
         | "refund_approved"
         | "refund_rejected"
+        | "contact_message_received"
         | "direct_enrollment_completed"
         | "question_submitted"
         | "question_edit_requested"
         | "question_delete_requested"
         | "callback_reminder"
-        | "contact_message_received"
         | "ticket_created"
         | "ticket_resolved"
         | "link_regeneration_requested"
@@ -16393,7 +16362,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      account_type_t: ["Free", "Paid", "Admin"],
       app_feedback_category: [
         "bug_report",
         "feature_request",
@@ -16475,7 +16443,6 @@ export const Constants = {
       direct_enrollment_link_status: ["active", "used", "expired", "cancelled"],
       enrollment_interest: ["yes", "maybe", "no"],
       exam_type: ["NATA", "JEE_PAPER_2", "BOTH"],
-      gender_t: ["male", "female", "nonbinary", "prefer_not_to_say"],
       learning_mode: ["hybrid", "online_only"],
       location_source: ["geolocation", "pincode", "manual"],
       marketing_content_status: ["draft", "published", "archived"],
@@ -16517,12 +16484,12 @@ export const Constants = {
         "refund_requested",
         "refund_approved",
         "refund_rejected",
+        "contact_message_received",
         "direct_enrollment_completed",
         "question_submitted",
         "question_edit_requested",
         "question_delete_requested",
         "callback_reminder",
-        "contact_message_received",
         "ticket_created",
         "ticket_resolved",
         "link_regeneration_requested",
