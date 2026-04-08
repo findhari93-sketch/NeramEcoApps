@@ -21,6 +21,8 @@ import {
   sendFirstTouchResultsVideo,
   sendFirstTouchEnglishIntro,
   sendFirstTouchEmail,
+  sendPhoneDripEmail,
+  createUnsubscribeToken,
   isWhatsAppConfigured,
   dispatchNotification,
 } from '@neram/database';
@@ -130,7 +132,61 @@ export async function GET(request: Request) {
             continue;
           }
 
-          result = await sendFirstTouchEmail(email, { userName });
+          if (msg.message_type.startsWith('phone_drip_')) {
+            // Check stop conditions before sending drip email
+            const { data: userRow } = await (supabase as any)
+              .from('users')
+              .select('phone_verified, email_opt_out')
+              .eq('id', msg.user_id)
+              .single();
+
+            if (userRow?.phone_verified) {
+              await updateAutoMessageResult(msg.id, {
+                success: false,
+                error: 'phone_verified: drip cancelled',
+              }, supabase);
+              // Cancel all remaining pending drip rows for this user
+              await (supabase as any)
+                .from('auto_messages')
+                .update({ delivery_status: 'failed', error_message: 'phone_verified' })
+                .eq('user_id', msg.user_id)
+                .eq('delivery_status', 'pending')
+                .like('message_type', 'phone_drip_%');
+              continue;
+            }
+
+            if (userRow?.email_opt_out) {
+              await updateAutoMessageResult(msg.id, {
+                success: false,
+                error: 'email_opt_out: drip cancelled',
+              }, supabase);
+              continue;
+            }
+
+            // Check CRM contacted_status
+            const { data: leadRow } = await (supabase as any)
+              .from('lead_profiles')
+              .select('contacted_status')
+              .eq('user_id', msg.user_id)
+              .maybeSingle();
+
+            const STOP_STATUSES = ['talked', 'dead_lead', 'irrelevant'];
+            if (leadRow && STOP_STATUSES.includes(leadRow.contacted_status)) {
+              await updateAutoMessageResult(msg.id, {
+                success: false,
+                error: `contacted_status=${leadRow.contacted_status}: drip cancelled`,
+              }, supabase);
+              continue;
+            }
+
+            const unsubscribeUrl = `https://app.neramclasses.com/unsubscribe?token=${createUnsubscribeToken(msg.user_id)}`;
+            result = await sendPhoneDripEmail(email, msg.message_type as any, {
+              userName,
+              unsubscribeUrl,
+            });
+          } else {
+            result = await sendFirstTouchEmail(email, { userName });
+          }
         }
 
         // Update the record
