@@ -16,6 +16,7 @@ import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import type { TutorResource } from '@neram/database/types';
+import ClipboardPasteZone from './ClipboardPasteZone';
 
 interface ResourceLinkSearchProps {
   resources: TutorResource[];
@@ -364,7 +365,7 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
                 sx={{ mb: 2 }}
               />
 
-              <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
                 <Button
                   variant="outlined"
                   startIcon={<CloudUploadOutlinedIcon />}
@@ -376,10 +377,16 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
                 </Button>
               </Box>
 
-              {uploading && <LinearProgress sx={{ mb: 2 }} />}
+              <ClipboardPasteZone
+                onFile={handleImageUpload}
+                isUploading={uploading}
+                maxSizeMB={10}
+              />
+
+              {uploading && <LinearProgress sx={{ mt: 1.5, mb: 1 }} />}
 
               {/* Or paste URL */}
-              <Box sx={{ pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+              <Box sx={{ pt: 2, mt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
                   Or paste an image URL
                 </Typography>
