@@ -65,7 +65,10 @@ async function callGemini(base64: string, mimeType: string, prompt: string): Pro
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     console.error('Gemini API error:', JSON.stringify(err));
-    throw new Error(`Gemini API error: ${res.status}`);
+    if (res.status === 429) {
+      throw new Error('Gemini API 429: rate limit reached');
+    }
+    throw new Error(`Gemini API error: ${res.status} ${JSON.stringify(err)}`);
   }
 
   const data = await res.json();
