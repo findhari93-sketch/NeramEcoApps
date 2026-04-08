@@ -176,6 +176,13 @@ export async function GET(request: Request) {
                 success: false,
                 error: `contacted_status=${leadRow.contacted_status}: drip cancelled`,
               }, supabase);
+              // Cancel remaining sibling drip rows for this user
+              await (supabase as any)
+                .from('auto_messages')
+                .update({ delivery_status: 'failed', error_message: `contacted_status=${leadRow.contacted_status}` })
+                .eq('user_id', msg.user_id)
+                .eq('delivery_status', 'pending')
+                .like('message_type', 'phone_drip_%');
               continue;
             }
 

@@ -1113,11 +1113,11 @@ export async function sendFirstTouchEmail(
         <div class="container">
           <p class="greeting">Hi ${name} 👋</p>
 
-          <p class="body-text">This is Hari from Neram Classes. Thanks for checking out our NATA/JEE tools — hope they helped!</p>
+          <p class="body-text">This is Hari from Neram Classes. Thanks for checking out our NATA/JEE tools. Hope they helped!</p>
 
           <p class="body-text">Quick intro: I'm a B.Arch graduate from NIT Trichy and I personally train every student here. Our student scored AIR 1 in JEE B.Arch, and we consistently hit 99.9 percentile results.</p>
 
-          <p class="body-text">Quick question — are you preparing for NATA 2026, JEE Paper 2, or both? Just reply to this email and I'll point you to the right resources 🙂</p>
+          <p class="body-text">Quick question: are you preparing for NATA 2026, JEE Paper 2, or both? Just reply to this email and I'll point you to the right resources 🙂</p>
 
           <a href="https://app.neramclasses.com" class="cta-btn" style="color: #ffffff;">Explore Free Tools →</a>
 
@@ -1126,7 +1126,7 @@ export async function sendFirstTouchEmail(
           </div>
 
           <div class="footer">
-            <p>Neram Classes — Expert coaching for NATA & JEE Paper 2</p>
+            <p>Neram Classes: Expert coaching for NATA and JEE Paper 2</p>
             <p>neramclasses.com</p>
           </div>
         </div>

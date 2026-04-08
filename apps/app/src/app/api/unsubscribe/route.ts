@@ -20,13 +20,18 @@ export async function GET(req: NextRequest) {
   try {
     const supabase = getSupabaseAdminClient();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from('users') as any)
+    const { error: updateError } = await (supabase as any)
+      .from('users')
       .update({
         email_opt_out: true,
         email_opt_out_at: new Date().toISOString(),
       })
       .eq('id', payload.userId);
+
+    if (updateError) {
+      console.error('Unsubscribe DB update error:', updateError);
+      return NextResponse.redirect(new URL('/unsubscribed?error=server_error', req.url));
+    }
 
     await cancelPendingPhoneDrip(payload.userId, supabase);
 
