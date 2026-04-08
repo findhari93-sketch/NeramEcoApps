@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, insertFunnelEvent, linkAnonymousEvents } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, schedulePhoneDrip, insertFunnelEvent, linkAnonymousEvents } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -122,6 +122,16 @@ export async function POST(req: NextRequest) {
       } catch (autoMsgErr) {
         // Don't fail registration if auto-message scheduling fails
         console.error('Failed to schedule auto first-touch:', autoMsgErr);
+      }
+
+      // Schedule phone verification drip emails (fire and forget — must not fail registration)
+      if (user.user_type === 'lead' && !user.phone_verified && user.email) {
+        schedulePhoneDrip(user.id, {
+          userName: user.name,
+          email: user.email,
+        }, adminClient).catch((err) => {
+          console.error('schedulePhoneDrip failed (non-blocking):', err);
+        });
       }
     }
 
