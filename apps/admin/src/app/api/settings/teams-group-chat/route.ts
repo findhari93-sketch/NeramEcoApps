@@ -16,7 +16,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: data?.setting_value || { chat_id: '', chat_name: '', auto_add_enabled: false },
+      data: data?.setting_value || { chat_id: '', chat_name: '', invite_link: '', auto_add_enabled: false },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -27,13 +27,14 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatId, chatName, autoAddEnabled } = body;
+    const { chatId, chatName, autoAddEnabled, inviteLink } = body;
 
     const supabase = getSupabaseAdminClient() as any;
 
     const settingValue = {
       chat_id: chatId || '',
       chat_name: chatName || '',
+      invite_link: inviteLink || '',
       auto_add_enabled: autoAddEnabled !== false,
     };
 

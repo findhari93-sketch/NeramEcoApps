@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
-import { addMemberToTeam, addMemberToGroupChat } from '@neram/auth';
+import { addMemberToTeam } from '@neram/auth';
 
 /**
  * POST /api/students/[id]/nexus-enroll — Enroll student in a Nexus classroom + optional batch
@@ -170,8 +170,11 @@ export async function POST(
       }
     }
 
-    // Also auto-add to the configured Teams group chat (if enabled)
-    let groupChatResult: { success: boolean; reason?: string } | null = null;
+    // Fetch the group chat invite link (if configured) to return to the caller.
+    // Note: Microsoft Graph API does not support application permissions for
+    // POST /chats/{chatId}/members, so we cannot auto-add members programmatically.
+    // Instead, we return the invite link so the admin can share it with the student.
+    let groupChatInviteLink: string | null = null;
     try {
       const { data: chatSetting } = await supabase
         .from('app_settings')
@@ -180,30 +183,18 @@ export async function POST(
         .maybeSingle();
 
       const chatConfig = chatSetting?.setting_value;
-      if (chatConfig?.chat_id && chatConfig?.auto_add_enabled) {
-        // Get student's ms_teams_email (may already be fetched above)
-        const { data: sp } = await supabase
-          .from('student_profiles')
-          .select('ms_teams_email')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (sp?.ms_teams_email) {
-          groupChatResult = await addMemberToGroupChat(chatConfig.chat_id, sp.ms_teams_email);
-        } else {
-          groupChatResult = { success: false, reason: 'no_ms_teams_email' };
-        }
+      if (chatConfig?.invite_link) {
+        groupChatInviteLink = chatConfig.invite_link;
       }
-    } catch (chatErr: any) {
-      console.warn('[nexus-enroll] Group chat auto-add failed:', chatErr?.message);
-      groupChatResult = { success: false, reason: chatErr?.message || 'unknown_error' };
+    } catch {
+      // Non-blocking — enrollment still succeeds without the invite link
     }
 
     return NextResponse.json({
       success: true,
       enrollment,
       teamsAutoAdd: teamsResult,
-      groupChatAutoAdd: groupChatResult,
+      groupChatInviteLink,
     });
   } catch (error: any) {
     console.error('Error enrolling student:', error);

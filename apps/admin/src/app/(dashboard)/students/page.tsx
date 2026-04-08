@@ -43,6 +43,8 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import SaveIcon from '@mui/icons-material/Save';
 import SyncIcon from '@mui/icons-material/Sync';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DataTable from '@/components/DataTable';
 import { useRouter } from 'next/navigation';
 
@@ -250,11 +252,13 @@ export default function StudentsPage() {
   const [entraSelected, setEntraSelected] = useState<Set<string>>(new Set());
 
   // Group chat config
-  const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', auto_add_enabled: false });
+  const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; invite_link: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', invite_link: '', auto_add_enabled: false });
   const [editingGroupChat, setEditingGroupChat] = useState(false);
   const [groupChatInput, setGroupChatInput] = useState('');
   const [groupChatNameInput, setGroupChatNameInput] = useState('');
+  const [groupChatInviteLinkInput, setGroupChatInviteLinkInput] = useState('');
   const [savingGroupChat, setSavingGroupChat] = useState(false);
+  const [groupChatInfo, setGroupChatInfo] = useState<string | null>(null);
 
   // Debounce
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -318,6 +322,7 @@ export default function StudentsPage() {
         body: JSON.stringify({
           chatId: groupChatInput,
           chatName: groupChatNameInput,
+          inviteLink: groupChatInviteLinkInput,
           autoAddEnabled: true,
         }),
       });
@@ -486,11 +491,14 @@ export default function StudentsPage() {
       });
       fetchNexusBatches(classroomId);
 
-      // Show Teams auto-add result
-      if (data.teamsAutoAdd?.success) {
-        setError(''); // Clear any previous error
-      } else if (data.teamsAutoAdd?.reason === 'no_ms_teams_email') {
+      // Show Teams auto-add result and group chat invite link
+      if (data.teamsAutoAdd?.reason === 'no_ms_teams_email') {
         setError('Classroom assigned but Teams auto-add skipped — share credentials first so the student gets a Teams email.');
+      } else {
+        setError('');
+      }
+      if (data.groupChatInviteLink) {
+        setGroupChatInfo(data.groupChatInviteLink);
       }
     } catch (err: any) {
       setError(err.message);
@@ -947,6 +955,29 @@ export default function StudentsPage() {
           {error}
         </Alert>
       )}
+      {groupChatInfo && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2, borderRadius: 1 }}
+          onClose={() => setGroupChatInfo(null)}
+          action={
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Tooltip title="Copy invite link">
+                <IconButton size="small" color="inherit" onClick={() => navigator.clipboard.writeText(groupChatInfo)}>
+                  <ContentCopyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Open in Teams">
+                <IconButton size="small" color="inherit" component="a" href={groupChatInfo} target="_blank" rel="noopener noreferrer">
+                  <OpenInNewIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          }
+        >
+          Classroom assigned. Share this group chat invite link with the student so they can join the chat.
+        </Alert>
+      )}
       {credSuccess && (
         <Alert severity="success" sx={{ mb: 2, borderRadius: 1 }} onClose={() => setCredSuccess(false)}>
           Credentials shared successfully! The student can view them in their onboarding page.
@@ -1029,9 +1060,18 @@ export default function StudentsPage() {
               label="Teams Chat ID"
               value={groupChatInput}
               onChange={(e) => setGroupChatInput(e.target.value)}
-              sx={{ flex: 1, minWidth: 300 }}
+              sx={{ width: 280 }}
               placeholder="19:xxx@thread.v2"
               helperText="From the Teams chat URL"
+            />
+            <TextField
+              size="small"
+              label="Group Chat Invite Link"
+              value={groupChatInviteLinkInput}
+              onChange={(e) => setGroupChatInviteLinkInput(e.target.value)}
+              sx={{ flex: 1, minWidth: 300 }}
+              placeholder="https://teams.microsoft.com/l/chat/..."
+              helperText="Right-click the chat in Teams and click Get link to chat"
             />
             <Button
               size="small"
@@ -1058,6 +1098,21 @@ export default function StudentsPage() {
                 <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
                   {groupChatConfig.chat_id.slice(0, 30)}...
                 </Typography>
+                {groupChatConfig.invite_link ? (
+                  <Tooltip title="Copy group chat invite link">
+                    <Chip
+                      label="Invite Link"
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                      icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+                      onClick={() => navigator.clipboard.writeText(groupChatConfig.invite_link)}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  </Tooltip>
+                ) : (
+                  <Chip label="No invite link" size="small" color="warning" variant="outlined" />
+                )}
               </>
             ) : (
               <Typography variant="body2" color="text.secondary">Not configured</Typography>
@@ -1068,6 +1123,7 @@ export default function StudentsPage() {
                 onClick={() => {
                   setGroupChatInput(groupChatConfig.chat_id);
                   setGroupChatNameInput(groupChatConfig.chat_name);
+                  setGroupChatInviteLinkInput(groupChatConfig.invite_link || '');
                   setEditingGroupChat(true);
                 }}
               >
