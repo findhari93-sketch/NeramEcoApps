@@ -15,7 +15,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Coaching in Chennai, All Neighborhoods | Neram Classes',
+    title: 'NATA Coaching in Chennai | Ashok Nagar, Tambaram, Anna Nagar, Adyar | Neram',
     description: 'Find NATA coaching in your Chennai neighborhood. Neram Classes serves Anna Nagar, Adyar, Tambaram, Ashok Nagar, T. Nagar, Velachery & more. Flagship center at Ashok Nagar + online classes. Since 2009.',
     keywords: 'NATA coaching Chennai, NATA coaching Anna Nagar, NATA coaching Adyar, NATA coaching Tambaram, NATA coaching Ashok Nagar, NATA coaching T Nagar, NATA coaching Velachery, NATA classes Chennai neighborhoods',
     alternates: buildAlternates(locale, '/coaching/nata-coaching-chennai'),
@@ -70,6 +70,15 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
           <Button component={Link} href="/demo-class" variant="outlined" size="large" sx={{ borderColor: '#fff', color: '#fff', fontWeight: 600 }}>
             Free Demo Class
           </Button>
+
+          {/* Trust bar */}
+          <Box sx={{ display: 'flex', gap: { xs: 2, md: 4 }, flexWrap: 'wrap', mt: 4, pt: 4, borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+            {['Since 2009', '99.9% Pass Rate', 'IIT/NIT Alumni Faculty', '150+ Cities', 'Max 25 per Batch'].map((item) => (
+              <Typography key={item} sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>
+                {item}
+              </Typography>
+            ))}
+          </Box>
         </Container>
       </Box>
 
@@ -79,8 +88,15 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
           <Typography variant="h2" sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, fontWeight: 700, mb: 1, color: '#1a1a2e' }}>
             NATA Coaching by Chennai Neighborhood
           </Typography>
-          <Typography sx={{ color: '#666', mb: 4 }}>
+          <Typography sx={{ color: '#666', mb: 2 }}>
             Click on your neighborhood to see how to reach our center, transport info, and local details.
+          </Typography>
+          <Typography sx={{ color: '#666', mb: 4, fontSize: '0.9rem' }}>
+            Looking for a comparison?{' '}
+            <Link href="/nata-coaching-centers-in-chennai" style={{ color: '#e8a020', fontWeight: 600 }}>
+              See our top 10 NATA coaching centers in Chennai
+            </Link>
+            {' '}ranked by neighborhood.
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
@@ -95,6 +111,47 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
                   </Typography>
                   <Typography sx={{ color: '#555', fontSize: '0.9rem', lineHeight: 1.5 }}>
                     {n.description.slice(0, 150)}...
+                  </Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+
+          {/* Stub neighborhoods — served via online + offline hybrid */}
+          <Typography variant="h3" sx={{ fontSize: '1rem', fontWeight: 700, mt: 4, mb: 2, color: '#1a1a2e' }}>
+            Also Serving via Online and Weekend Offline
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+            {[
+              {
+                id: 'omr',
+                title: 'NATA Coaching OMR / Sholinganallur',
+                sub: 'Online weekday, Ashok Nagar weekend',
+                desc: 'Students from Sholinganallur, Perungudi, and Thoraipakkam attend online on weekdays and our Ashok Nagar flagship on weekends.',
+              },
+              {
+                id: 'porur',
+                title: 'NATA Coaching Porur / Koyambedu',
+                sub: 'Online weekday, Ashok Nagar weekend',
+                desc: 'Koyambedu bus terminus connects directly to Ashok Nagar. Porur, Maduravoyal, and Poonamallee students use the hybrid model.',
+              },
+              {
+                id: 'guindy',
+                title: 'NATA Coaching Guindy / Chromepet',
+                sub: '2 Metro stops from Ashok Nagar',
+                desc: 'Guindy Metro to Ashok Nagar Metro: 2 stops on the Blue Line. Chromepet and Pallavaram students also use this route.',
+              },
+            ].map((stub) => (
+              <Card key={stub.id} id={stub.id} elevation={0} sx={{ border: '1px solid #e0e0e0', bgcolor: '#fafafa' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h3" sx={{ fontSize: '1rem', fontWeight: 700, mb: 0.5, color: '#1a1a2e' }}>
+                    {stub.title}
+                  </Typography>
+                  <Typography sx={{ color: '#e8a020', fontSize: '0.8rem', fontWeight: 600, mb: 1 }}>
+                    {stub.sub}
+                  </Typography>
+                  <Typography sx={{ color: '#666', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                    {stub.desc}
                   </Typography>
                 </CardContent>
               </Card>
