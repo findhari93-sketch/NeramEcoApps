@@ -8,6 +8,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import PhotoLibraryOutlinedIcon from '@mui/icons-material/PhotoLibraryOutlined';
+import ClipboardPasteZone from './ClipboardPasteZone';
 
 interface DrawingSubmissionSheetProps {
   open: boolean;
@@ -29,20 +30,23 @@ export default function DrawingSubmissionSheet({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-    if (!selected.type.startsWith('image/')) {
+  const handleFile = (f: File) => {
+    if (!f.type.startsWith('image/')) {
       setError('Please select an image file');
       return;
     }
-    if (selected.size > 10 * 1024 * 1024) {
+    if (f.size > 10 * 1024 * 1024) {
       setError('Image must be under 10MB');
       return;
     }
-    setFile(selected);
-    setPreview(URL.createObjectURL(selected));
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
     setError('');
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) handleFile(selected);
   };
 
   const handleSubmit = async () => {
@@ -118,23 +122,30 @@ export default function DrawingSubmissionSheet({
         />
 
         {!preview ? (
-          <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<CameraAltOutlinedIcon />}
-              onClick={() => { if (fileRef.current) { fileRef.current.capture = 'environment'; fileRef.current.click(); } }}
-              sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
-            >
-              Camera
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<PhotoLibraryOutlinedIcon />}
-              onClick={() => { if (fileRef.current) { fileRef.current.removeAttribute('capture'); fileRef.current.click(); } }}
-              sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
-            >
-              Gallery
-            </Button>
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
+              <Button
+                variant="outlined"
+                startIcon={<CameraAltOutlinedIcon />}
+                onClick={() => { if (fileRef.current) { fileRef.current.capture = 'environment'; fileRef.current.click(); } }}
+                sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
+              >
+                Camera
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<PhotoLibraryOutlinedIcon />}
+                onClick={() => { if (fileRef.current) { fileRef.current.removeAttribute('capture'); fileRef.current.click(); } }}
+                sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
+              >
+                Gallery
+              </Button>
+            </Box>
+            <ClipboardPasteZone
+              onFile={handleFile}
+              isUploading={uploading}
+              maxSizeMB={10}
+            />
           </Box>
         ) : (
           <Box sx={{ mb: 2 }}>
