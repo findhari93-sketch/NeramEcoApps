@@ -19,8 +19,15 @@ export async function GET(request: NextRequest) {
     }
 
     const params = request.nextUrl.searchParams;
+    const rawStatus = params.get('status') || 'submitted';
+    // The 'reviewed' tab covers both 'reviewed' (feedback sent) and 'redo' (sent back for improvement)
+    // 'reviewed_only' is a sub-filter for just the 'reviewed' status (excludes redo)
+    let status: string | string[];
+    if (rawStatus === 'reviewed') status = ['reviewed', 'redo'];
+    else if (rawStatus === 'reviewed_only') status = 'reviewed';
+    else status = rawStatus;
     const filters = {
-      status: params.get('status') || 'submitted',
+      status,
       category: params.get('category') || undefined,
       student_id: params.get('student_id') || undefined,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 50,

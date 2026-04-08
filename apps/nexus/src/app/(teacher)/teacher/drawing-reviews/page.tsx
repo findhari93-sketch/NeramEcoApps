@@ -15,18 +15,31 @@ const STATUS_TABS = [
   { value: 'completed', label: 'Completed' },
 ];
 
+// Sub-filters shown under the Reviewed tab
+const REVIEWED_SUB_FILTERS = [
+  { value: 'all', label: 'All Reviewed', apiStatus: 'reviewed' },
+  { value: 'redo', label: 'Needs Redo', apiStatus: 'redo' },
+  { value: 'reviewed', label: 'Feedback Sent', apiStatus: 'reviewed_only' },
+];
+
 export default function DrawingReviewsPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
   const [submissions, setSubmissions] = useState<DrawingSubmissionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('submitted');
+  const [reviewedSubFilter, setReviewedSubFilter] = useState('all');
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/drawing/submissions/review-queue?status=${status}`, {
+      // For reviewed tab, apply sub-filter if not 'all'
+      let fetchStatus = status;
+      if (status === 'reviewed' && reviewedSubFilter === 'redo') fetchStatus = 'redo';
+      else if (status === 'reviewed' && reviewedSubFilter === 'reviewed') fetchStatus = 'reviewed_only';
+
+      const res = await fetch(`/api/drawing/submissions/review-queue?status=${fetchStatus}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -36,7 +49,7 @@ export default function DrawingReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, status]);
+  }, [getToken, status, reviewedSubFilter]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -48,7 +61,7 @@ export default function DrawingReviewsPage() {
 
       <Tabs
         value={status}
-        onChange={(_, v) => setStatus(v)}
+        onChange={(_, v) => { setStatus(v); setReviewedSubFilter('all'); }}
         sx={{ mb: 2, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none' } }}
       >
         {STATUS_TABS.map((t) => (
@@ -56,12 +69,29 @@ export default function DrawingReviewsPage() {
         ))}
       </Tabs>
 
+      {/* Sub-filter chips for Reviewed tab */}
+      {status === 'reviewed' && (
+        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          {REVIEWED_SUB_FILTERS.map((f) => (
+            <Chip
+              key={f.value}
+              label={f.label}
+              onClick={() => setReviewedSubFilter(f.value)}
+              color={reviewedSubFilter === f.value ? 'primary' : 'default'}
+              variant={reviewedSubFilter === f.value ? 'filled' : 'outlined'}
+              size="small"
+              sx={{ cursor: 'pointer' }}
+            />
+          ))}
+        </Box>
+      )}
+
       {loading ? (
         Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={80} sx={{ mb: 1 }} />)
       ) : submissions.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography color="text.secondary">
-            {status === 'submitted' ? 'No pending reviews' : status === 'completed' ? 'No completed threads' : 'No reviewed submissions'}
+            {status === 'submitted' ? 'No pending reviews' : status === 'completed' ? 'No completed threads' : reviewedSubFilter === 'redo' ? 'No submissions needing redo' : 'No reviewed submissions'}
           </Typography>
         </Box>
       ) : (

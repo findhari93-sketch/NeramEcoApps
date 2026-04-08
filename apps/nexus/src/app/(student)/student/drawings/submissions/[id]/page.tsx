@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Box, Typography, ToggleButton, ToggleButtonGroup, Paper,
+  Box, Typography, Paper,
   IconButton, Skeleton, Rating, Chip, Drawer, Button,
   useMediaQuery, useTheme,
 } from '@neram/ui';
@@ -16,6 +16,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import CommentSection from '@/components/drawings/CommentSection';
 import AIFeedbackPanel from '@/components/drawings/AIFeedbackPanel';
+import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
 
 export default function SubmissionDetailPage() {
@@ -27,7 +28,6 @@ export default function SubmissionDetailPage() {
 
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showOriginal, setShowOriginal] = useState(true);
   const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
 
@@ -88,31 +88,9 @@ export default function SubmissionDetailPage() {
     return <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">Not found</Typography></Box>;
   }
 
-  const hasReview = submission.status === 'reviewed' || submission.status === 'published';
-  const hasSketchOver = !!submission.reviewed_image_url;
-  const displayImageUrl = hasSketchOver && !showOriginal
-    ? submission.reviewed_image_url!
-    : submission.original_image_url;
+  const hasReview = ['reviewed', 'published', 'redo', 'completed'].includes(submission.status);
+  const sub = submission as any;
   const timeAgo = getTimeAgo(submission.submitted_at);
-
-  // Before/After toggle
-  const beforeAfterToggle = hasSketchOver ? (
-    <ToggleButtonGroup
-      value={showOriginal ? 'original' : 'reviewed'}
-      exclusive
-      onChange={(_, v) => { if (v) setShowOriginal(v === 'original'); }}
-      size="small"
-      sx={{
-        position: 'absolute', top: 8, left: 8, zIndex: 2,
-        bgcolor: 'rgba(255,255,255,0.92)', borderRadius: 1,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-        '& .MuiToggleButton-root': { py: 0.4, px: 1.5, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 },
-      }}
-    >
-      <ToggleButton value="original">My Drawing</ToggleButton>
-      <ToggleButton value="reviewed">Reviewed</ToggleButton>
-    </ToggleButtonGroup>
-  ) : null;
 
   // Feedback content (shared between desktop panel and mobile sheet)
   const feedbackContent = hasReview ? (
@@ -203,16 +181,29 @@ export default function SubmissionDetailPage() {
           canComment={true}
         />
       </Box>
+
+      {/* Redo CTA */}
+      {submission.status === 'redo' && submission.question_id && (
+        <Box sx={{ mx: 2, mb: 2, p: 2, bgcolor: '#fff8e1', borderRadius: 2, border: '1px solid #ffe082' }}>
+          <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+            Teacher requested improvements.
+          </Typography>
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={() => router.push(`/student/drawings/${submission.question_id}`)}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Submit New Attempt
+          </Button>
+        </Box>
+      )}
     </Box>
   ) : (
     <Box sx={{ p: 2 }}>
       <Box sx={{ textAlign: 'center', py: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          {submission.status === 'submitted'
-            ? 'Your drawing is pending review by your tutor.'
-            : submission.status === 'redo'
-            ? 'Your teacher requested improvements. Submit a new attempt from the question page.'
-            : 'No feedback yet.'}
+          Your drawing is pending review by your tutor.
         </Typography>
       </Box>
 
@@ -271,17 +262,13 @@ export default function SubmissionDetailPage() {
             </Box>
           </Box>
 
-          {/* Image fills remaining space */}
-          <Box sx={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden', position: 'relative', minHeight: 0,
-          }}>
-            {beforeAfterToggle}
-            <Box
-              component="img"
-              src={displayImageUrl}
-              alt="Drawing"
-              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          {/* Image with toggle tabs */}
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 0.5, overflow: 'hidden' }}>
+            <ImageToggleTabs
+              originalImageUrl={submission.original_image_url}
+              overlayAnnotations={sub.ai_overlay_annotations}
+              overlayImageUrl={submission.reviewed_image_url}
+              correctedImageUrl={sub.corrected_image_url}
             />
           </Box>
 
@@ -395,16 +382,12 @@ export default function SubmissionDetailPage() {
         </Box>
 
         {/* Image fills remaining space */}
-        <Box sx={{
-          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          bgcolor: '#e8e8e8', overflow: 'hidden', minHeight: 0, position: 'relative',
-        }}>
-          {beforeAfterToggle}
-          <Box
-            component="img"
-            src={displayImageUrl}
-            alt="Drawing"
-            sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5, bgcolor: '#e8e8e8' }}>
+          <ImageToggleTabs
+            originalImageUrl={submission.original_image_url}
+            overlayAnnotations={sub.ai_overlay_annotations}
+            overlayImageUrl={submission.reviewed_image_url}
+            correctedImageUrl={sub.corrected_image_url}
           />
         </Box>
       </Box>

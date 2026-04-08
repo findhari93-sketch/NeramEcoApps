@@ -1,27 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
-  Button, TextField, Rating, useMediaQuery, useTheme, Drawer, ToggleButtonGroup, ToggleButton,
-  FormControlLabel, Checkbox,
+  Button, useMediaQuery, useTheme, Drawer, FormControlLabel, Checkbox,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
-import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
-import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import CategoryBadge from '@/components/drawings/CategoryBadge';
-import SketchOverCanvas from '@/components/drawings/SketchOverCanvas';
-import ResourceLinkSearch from '@/components/drawings/ResourceLinkSearch';
-import CommentSection from '@/components/drawings/CommentSection';
-import { useNavBadges } from '@/components/NavBadgeProvider';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import CategoryBadge from '@/components/drawings/CategoryBadge';
+import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
+import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
+import CommentSection from '@/components/drawings/CommentSection';
+import { useNavBadges } from '@/components/NavBadgeProvider';
+import type { DrawingSubmissionWithDetails } from '@neram/database/types';
 
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,18 +30,21 @@ export default function DrawingReviewDetailPage() {
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Review state
-  const [sketchOpen, setSketchOpen] = useState(false);
-  const [reviewedImageUrl, setReviewedImageUrl] = useState<string | null>(null);
-  const [showOriginal, setShowOriginal] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [feedback, setFeedback] = useState('');
-  const [resources, setResources] = useState<TutorResource[]>([]);
+  // Workspace data managed by AIFeedbackWorkspace, mirrored here for submission
+  const workspaceRef = useRef<WorkspaceData>({
+    overlayAnnotations: null,
+    overlayImageUrl: null,
+    correctedImageUrl: null,
+    tutorFeedback: '',
+    resources: [],
+    rating: 0,
+  });
+  const [workspaceData, setWorkspaceData] = useState<WorkspaceData>(workspaceRef.current);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
   const [publishToGallery, setPublishToGallery] = useState(false);
-  // Mobile: bottom sheet for review controls
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -56,14 +55,7 @@ export default function DrawingReviewDetailPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      const s = data.submission || null;
-      setSubmission(s);
-      if (s) {
-        setReviewedImageUrl(s.reviewed_image_url);
-        setRating(s.tutor_rating || 0);
-        setFeedback(s.tutor_feedback || '');
-        setResources(s.tutor_resources || []);
-      }
+      setSubmission(data.submission || null);
     } catch {
       setSubmission(null);
     } finally {
@@ -73,48 +65,38 @@ export default function DrawingReviewDetailPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleSketchSave = async (blob: Blob) => {
-    const token = await getToken();
-    const formData = new FormData();
-    formData.append('file', blob, 'review.png');
-    formData.append('bucket', 'drawing-reviewed');
-    const res = await fetch('/api/drawing/upload', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) throw new Error('Upload failed');
-    const { url } = await res.json();
-    setReviewedImageUrl(url);
-    // Canvas auto-closes after showing "Saved!" for 800ms
-  };
+  const handleWorkspaceChange = useCallback((data: WorkspaceData) => {
+    workspaceRef.current = data;
+    setWorkspaceData(data);
+  }, []);
 
-  const handleSaveReviewWithAction = async (reviewAction: 'redo' | 'complete') => {
-    if (reviewAction === 'complete' && rating < 1) { setError('Rating required to mark as complete'); return; }
+  const handleSaveReview = async (reviewAction: 'redo' | 'complete') => {
     setSaving(true);
     setError('');
     try {
       const token = await getToken();
+      const ws = workspaceRef.current;
       const res = await fetch(`/api/drawing/submissions/${submission!.id}/review`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tutor_rating: rating || null,
-          tutor_feedback: feedback || null,
-          reviewed_image_url: reviewedImageUrl,
-          tutor_resources: resources,
+          tutor_rating: ws.rating || null,
+          tutor_feedback: ws.tutorFeedback || null,
+          reviewed_image_url: ws.overlayImageUrl,
+          corrected_image_url: ws.correctedImageUrl,
+          ai_overlay_annotations: ws.overlayAnnotations,
+          tutor_resources: ws.resources,
           action: reviewAction,
         }),
       });
       if (!res.ok) throw new Error('Failed to save review');
 
-      // Publish to gallery if toggled on and action is complete
       if (publishToGallery && reviewAction === 'complete') {
         await fetch('/api/drawing/gallery/publish', {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ submission_id: submission!.id, publish: true }),
-        }).catch(() => {}); // non-critical
+        }).catch(() => {});
       }
 
       refreshBadges();
@@ -130,135 +112,77 @@ export default function DrawingReviewDetailPage() {
     return (
       <Box sx={{ display: 'flex', gap: 2, p: 2, height: '80vh' }}>
         <Skeleton variant="rounded" sx={{ flex: 1 }} height="100%" />
-        {!isMobile && <Skeleton variant="rounded" width={340} height="100%" />}
+        {!isMobile && <Skeleton variant="rounded" width={400} height="100%" />}
       </Box>
     );
   }
 
   if (!submission) {
-    return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary">Submission not found</Typography>
-      </Box>
-    );
+    return <Box sx={{ p: 4, textAlign: 'center' }}><Typography color="text.secondary">Submission not found</Typography></Box>;
   }
 
   const timeAgo = getTimeAgo(submission.submitted_at);
-  const hasSketchOver = !!reviewedImageUrl;
-  const displayImageUrl = hasSketchOver && !showOriginal
-    ? reviewedImageUrl!
-    : submission.original_image_url;
+  const sub = submission as any;
 
-  // Before/After toggle overlay — reused in both layouts
-  const beforeAfterToggle = hasSketchOver ? (
-    <ToggleButtonGroup
-      value={showOriginal ? 'original' : 'reviewed'}
-      exclusive
-      onChange={(_, v) => { if (v) setShowOriginal(v === 'original'); }}
-      size="small"
-      sx={{
-        position: 'absolute', top: 8, left: 8, zIndex: 2,
-        bgcolor: 'rgba(255,255,255,0.92)', borderRadius: 1,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-        '& .MuiToggleButton-root': { py: 0.4, px: 1.5, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 },
-      }}
-    >
-      <ToggleButton value="original">Original</ToggleButton>
-      <ToggleButton value="reviewed">Reviewed</ToggleButton>
-    </ToggleButtonGroup>
-  ) : null;
+  // Action button bar (used in both desktop and mobile)
+  const actionBar = (
+    <Box sx={{ p: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+      {error && <Typography color="error" variant="caption" sx={{ mb: 0.5, display: 'block' }}>{error}</Typography>}
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button
+          variant="outlined"
+          color="warning"
+          fullWidth
+          onClick={() => { setAction('redo'); handleSaveReview('redo'); }}
+          disabled={saving}
+          startIcon={<ReplayIcon />}
+          sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+        >
+          {saving && action === 'redo' ? 'Saving...' : 'Request Redo'}
+        </Button>
+        <Button
+          variant="contained"
+          color="success"
+          fullWidth
+          onClick={() => { setAction('complete'); handleSaveReview('complete'); }}
+          disabled={saving}
+          startIcon={<CheckCircleOutlineIcon />}
+          sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+        >
+          {saving && action === 'complete' ? 'Saving...' : 'Mark Complete'}
+        </Button>
+      </Box>
+      <FormControlLabel
+        control={<Checkbox checked={publishToGallery} onChange={(e) => setPublishToGallery(e.target.checked)} size="small" />}
+        label={<Typography variant="caption">Publish to Art Gallery on complete</Typography>}
+        sx={{ mt: 0.5, ml: 0 }}
+      />
+    </Box>
+  );
 
-  // === Review form (shared between desktop right panel and mobile bottom sheet) ===
-  const reviewForm = (
+  // Workspace + comments panel content (shared between desktop right panel and mobile sheet)
+  const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-        {/* Student note */}
+        {/* Student note if provided */}
         {submission.self_note && (
           <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
-            <Typography variant="caption" fontWeight={600} color="primary.dark">
-              Student&apos;s Note
-            </Typography>
+            <Typography variant="caption" fontWeight={600} color="primary.dark">Student&apos;s Note</Typography>
             <Typography variant="body2" sx={{ mt: 0.25 }}>{submission.self_note}</Typography>
           </Paper>
         )}
 
-        {/* Rating */}
-        <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-          RATING *
-        </Typography>
-        <Rating
-          value={rating}
-          onChange={(_, v) => setRating(v || 0)}
-          size="large"
-          sx={{ mb: 2 }}
+        <AIFeedbackWorkspace
+          submission={sub}
+          getToken={getToken}
+          onChange={handleWorkspaceChange}
         />
 
-        {/* Feedback */}
-        <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-          FEEDBACK
-        </Typography>
-        <TextField
-          placeholder="Constructive feedback..."
-          multiline
-          rows={3}
-          fullWidth
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          size="small"
-          sx={{ mb: 2 }}
-        />
-
-        {/* Resource links */}
-        <ResourceLinkSearch resources={resources} onChange={setResources} getToken={getToken} />
-
-        {/* Comments */}
-        <Box sx={{ mt: 1 }}>
-          <CommentSection
-            submissionId={submission!.id}
-            getToken={getToken}
-            canComment={true}
-          />
+        <Box sx={{ mt: 2 }}>
+          <CommentSection submissionId={submission.id} getToken={getToken} canComment={true} />
         </Box>
       </Box>
-
-      {/* Action buttons — pinned to bottom */}
-      <Box sx={{ p: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-        {error && <Typography color="error" variant="caption" sx={{ mb: 0.5, display: 'block' }}>{error}</Typography>}
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="outlined"
-            color="warning"
-            fullWidth
-            onClick={() => { setAction('redo'); handleSaveReviewWithAction('redo'); }}
-            disabled={saving}
-            startIcon={<ReplayIcon />}
-            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
-          >
-            {saving && action === 'redo' ? 'Saving...' : 'Request Redo'}
-          </Button>
-          <Button
-            variant="contained"
-            color="success"
-            fullWidth
-            onClick={() => { setAction('complete'); handleSaveReviewWithAction('complete'); }}
-            disabled={saving || rating < 1}
-            startIcon={<CheckCircleOutlineIcon />}
-            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
-          >
-            {saving && action === 'complete' ? 'Saving...' : 'Complete'}
-          </Button>
-        </Box>
-        <FormControlLabel
-          control={<Checkbox checked={publishToGallery} onChange={(e) => setPublishToGallery(e.target.checked)} size="small" />}
-          label={<Typography variant="caption">Publish to Art Gallery</Typography>}
-          sx={{ mt: 0.5, ml: 0 }}
-        />
-        {rating < 1 && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-            Rating required to mark complete
-          </Typography>
-        )}
-      </Box>
+      {actionBar}
     </Box>
   );
 
@@ -266,15 +190,13 @@ export default function DrawingReviewDetailPage() {
   if (isMobile) {
     return (
       <>
-        {/* Full-height mobile layout: image fills screen, FAB for review */}
         <Box sx={{
-          // Break out of parent padding
           mx: -2, mt: -2, mb: -10,
           display: 'flex', flexDirection: 'column',
-          height: 'calc(100vh - 56px)', // subtract top bar height
+          height: 'calc(100vh - 56px)',
           overflow: 'hidden', bgcolor: '#1a1a1a',
         }}>
-          {/* Compact header */}
+          {/* Header */}
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
             bgcolor: '#fff', flexShrink: 0,
@@ -283,21 +205,18 @@ export default function DrawingReviewDetailPage() {
               <ArrowBackIcon />
             </IconButton>
             <Avatar
-              src={submission.student?.avatar_url || undefined}
+              src={sub.student?.avatar_url || undefined}
               sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.85rem' }}
             >
-              {submission.student?.name?.charAt(0) || '?'}
+              {sub.student?.name?.charAt(0) || '?'}
             </Avatar>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" fontWeight={600} noWrap>
-                {submission.student?.name || 'Student'}
-              </Typography>
+              <Typography variant="body2" fontWeight={600} noWrap>{sub.student?.name || 'Student'}</Typography>
               <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
             </Box>
             {submission.question && <CategoryBadge category={submission.question.category} />}
           </Box>
 
-          {/* Question (collapsible — single line with ellipsis) */}
           {submission.question && (
             <Box sx={{ px: 1.5, py: 0.75, bgcolor: '#f5f5f5', flexShrink: 0 }}>
               <Typography variant="caption" sx={{
@@ -309,167 +228,116 @@ export default function DrawingReviewDetailPage() {
             </Box>
           )}
 
-          {/* Image — fills all remaining space */}
-          <Box sx={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden', position: 'relative', minHeight: 0,
-          }}>
-            {beforeAfterToggle}
-            <Box
-              component="img"
-              src={displayImageUrl}
-              alt="Drawing"
-              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          {/* Image with toggle tabs */}
+          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1 }}>
+            <ImageToggleTabs
+              originalImageUrl={submission.original_image_url}
+              overlayAnnotations={workspaceData.overlayAnnotations || sub.ai_overlay_annotations}
+              overlayImageUrl={workspaceData.overlayImageUrl}
+              correctedImageUrl={workspaceData.correctedImageUrl}
             />
           </Box>
 
-          {/* Bottom action bar */}
+          {/* Bottom bar */}
           <Box sx={{
             display: 'flex', gap: 1, px: 1.5, py: 1, bgcolor: '#fff',
             flexShrink: 0, borderTop: '1px solid', borderColor: 'divider',
           }}>
             <Button
-              variant="outlined" startIcon={<BrushOutlinedIcon />}
-              onClick={() => setSketchOpen(true)}
-              sx={{ flex: 1, textTransform: 'none', minHeight: 44 }}
-            >
-              Draw Over
-            </Button>
-            <Button
-              variant="contained" onClick={() => setReviewSheetOpen(true)}
-              sx={{ flex: 1, textTransform: 'none', minHeight: 44 }}
+              variant="contained" fullWidth
+              onClick={() => setReviewSheetOpen(true)}
               startIcon={<StarOutlineIcon />}
+              sx={{ textTransform: 'none', minHeight: 44 }}
             >
-              Review
+              Give Feedback
             </Button>
           </Box>
         </Box>
 
-        {/* Review bottom sheet */}
         <Drawer
           anchor="bottom" open={reviewSheetOpen}
           onClose={() => setReviewSheetOpen(false)}
-          PaperProps={{ sx: { maxHeight: '85vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+          PaperProps={{ sx: { maxHeight: '88vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
         >
-          {/* Drag handle */}
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
             <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
           </Box>
-          {reviewForm}
+          {reviewPanel}
         </Drawer>
-
-        {sketchOpen && (
-          <SketchOverCanvas
-            imageUrl={submission.original_image_url}
-            onSave={handleSketchSave}
-            onClose={() => setSketchOpen(false)}
-          />
-        )}
       </>
     );
   }
 
   // ===================== DESKTOP LAYOUT =====================
   return (
-    <>
-      <Box sx={{
-        // Break out of parent padding to fill the main area edge-to-edge
-        mx: { md: -4, sm: -3, xs: -2 },
-        mt: { md: -3, xs: -2 },
-        mb: { md: -3, xs: -10 },
-        display: 'flex',
-        height: 'calc(100vh - 64px)', // TopBar is ~64px
-        overflow: 'hidden',
-      }}>
-        {/* LEFT: Image canvas area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          {/* Compact header bar */}
-          <Box sx={{
-            display: 'flex', alignItems: 'center', gap: 1.5,
-            px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
-            bgcolor: 'background.paper', flexShrink: 0,
-          }}>
-            <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
-              <ArrowBackIcon />
-            </IconButton>
-            <Avatar
-              src={submission.student?.avatar_url || undefined}
-              sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: '0.9rem' }}
-            >
-              {submission.student?.name?.charAt(0) || '?'}
-            </Avatar>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="body2" fontWeight={600} noWrap>
-                {submission.student?.name || 'Student'}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <AccessTimeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
-                <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
-              </Box>
+    <Box sx={{
+      mx: { md: -4, sm: -3, xs: -2 },
+      mt: { md: -3, xs: -2 },
+      mb: { md: -3, xs: -10 },
+      display: 'flex',
+      height: 'calc(100vh - 64px)',
+      overflow: 'hidden',
+    }}>
+      {/* LEFT: image with toggle tabs */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Header */}
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 1.5,
+          px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
+          bgcolor: 'background.paper', flexShrink: 0,
+        }}>
+          <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
+            <ArrowBackIcon />
+          </IconButton>
+          <Avatar
+            src={sub.student?.avatar_url || undefined}
+            sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: '0.9rem' }}
+          >
+            {sub.student?.name?.charAt(0) || '?'}
+          </Avatar>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap>{sub.student?.name || 'Student'}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <AccessTimeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
+              <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
             </Box>
-            <Box sx={{ flex: 1 }} />
-            {submission.question && <CategoryBadge category={submission.question.category} />}
-            <Button
-              variant="contained" size="small" startIcon={<BrushOutlinedIcon />}
-              onClick={() => setSketchOpen(true)}
-              sx={{ textTransform: 'none', ml: 1 }}
-            >
-              {reviewedImageUrl ? 'Edit Sketch' : 'Draw Over'}
-            </Button>
           </Box>
-
-          {/* Question strip */}
-          {submission.question && (
-            <Box sx={{
-              px: 2, py: 0.75, bgcolor: '#f8f8f8', borderBottom: '1px solid',
-              borderColor: 'divider', flexShrink: 0,
-            }}>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>
-                {submission.question.question_text}
-              </Typography>
-            </Box>
+          <Box sx={{ flex: 1 }} />
+          {submission.question && <CategoryBadge category={submission.question.category} />}
+          {submission.attempt_number > 1 && (
+            <Chip label={`Attempt #${submission.attempt_number}`} size="small" variant="outlined" />
           )}
-
-          {/* Drawing image — fills ALL remaining space */}
-          <Box sx={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            bgcolor: '#e8e8e8', overflow: 'hidden', minHeight: 0, position: 'relative',
-          }}>
-            {beforeAfterToggle}
-            <Box
-              component="img"
-              src={displayImageUrl}
-              alt="Student drawing"
-              sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-            />
-          </Box>
         </Box>
 
-        {/* RIGHT: Review panel (fixed width, independently scrollable) */}
-        <Box sx={{
-          width: 340, flexShrink: 0, borderLeft: '1px solid', borderColor: 'divider',
-          bgcolor: 'background.paper', display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
-          {/* Panel header */}
-          <Box sx={{
-            px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider',
-            flexShrink: 0,
-          }}>
-            <Typography variant="subtitle2" fontWeight={700}>Review</Typography>
+        {/* Question strip */}
+        {submission.question && (
+          <Box sx={{ px: 2, py: 0.75, bgcolor: '#f8f8f8', borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+            <Typography variant="body2" color="text.secondary">{submission.question.question_text}</Typography>
           </Box>
-          {reviewForm}
+        )}
+
+        {/* Image with toggle */}
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5, bgcolor: '#e8e8e8' }}>
+          <ImageToggleTabs
+            originalImageUrl={submission.original_image_url}
+            overlayAnnotations={workspaceData.overlayAnnotations || sub.ai_overlay_annotations}
+            overlayImageUrl={workspaceData.overlayImageUrl}
+            correctedImageUrl={workspaceData.correctedImageUrl}
+          />
         </Box>
       </Box>
 
-      {sketchOpen && (
-        <SketchOverCanvas
-          imageUrl={submission.original_image_url}
-          onSave={handleSketchSave}
-          onClose={() => setSketchOpen(false)}
-        />
-      )}
-    </>
+      {/* RIGHT: AI Feedback Workspace */}
+      <Box sx={{
+        width: 400, flexShrink: 0, borderLeft: '1px solid', borderColor: 'divider',
+        bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+          <Typography variant="subtitle2" fontWeight={700}>Feedback Workspace</Typography>
+        </Box>
+        {reviewPanel}
+      </Box>
+    </Box>
   );
 }
 

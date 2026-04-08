@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { createDrawingSubmissionWithThread, recordGamificationEvent } from '@neram/database/queries/nexus';
+import { generateDrawingAIFeedback } from '@/lib/drawing-ai';
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,6 +60,11 @@ export async function POST(request: NextRequest) {
         }).catch(() => {});
       }
     } catch { /* Non-critical */ }
+
+    // Fire-and-forget background AI draft generation (does not block student)
+    generateDrawingAIFeedback(submission.id).catch((err) => {
+      console.error('Background AI draft generation failed for submission', submission.id, err);
+    });
 
     return NextResponse.json({ submission, attemptNumber }, { status: 201 });
   } catch (err) {

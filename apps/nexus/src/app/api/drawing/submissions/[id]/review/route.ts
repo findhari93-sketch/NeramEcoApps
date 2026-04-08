@@ -23,18 +23,16 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { tutor_rating, tutor_feedback, reviewed_image_url, tutor_resources, action } = body;
+    const { tutor_rating, tutor_feedback, reviewed_image_url, corrected_image_url, ai_overlay_annotations, tutor_resources, action } = body;
     const reviewAction = action || 'complete'; // backward compat
-
-    if (reviewAction === 'complete' && (!tutor_rating || tutor_rating < 1 || tutor_rating > 5)) {
-      return NextResponse.json({ error: 'Rating required to complete' }, { status: 400 });
-    }
 
     const submission = await saveDrawingReviewWithAction(id, {
       tutor_rating: tutor_rating || null,
-      tutor_feedback,
-      reviewed_image_url,
-      tutor_resources,
+      tutor_feedback: tutor_feedback || null,
+      reviewed_image_url: reviewed_image_url || null,
+      corrected_image_url: corrected_image_url || null,
+      ai_overlay_annotations: ai_overlay_annotations || null,
+      tutor_resources: tutor_resources || [],
     }, reviewAction);
 
     // Gamification: 10 points for completed (non-critical)

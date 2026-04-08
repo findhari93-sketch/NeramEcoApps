@@ -191,7 +191,7 @@ export async function getDrawingSubmissionById(
 
 export async function getDrawingReviewQueue(
   filters?: {
-    status?: string;
+    status?: string | string[];
     category?: string;
     student_id?: string;
     limit?: number;
@@ -207,7 +207,11 @@ export async function getDrawingReviewQueue(
     .order('submitted_at', { ascending: true });
 
   const status = filters?.status || 'submitted';
-  query = query.eq('status', status);
+  if (Array.isArray(status)) {
+    query = (query as any).in('status', status);
+  } else {
+    query = query.eq('status', status);
+  }
 
   if (filters?.student_id) query = query.eq('student_id', filters.student_id);
 
@@ -462,6 +466,8 @@ export async function saveDrawingReviewWithAction(
     tutor_rating?: number | null;
     tutor_feedback?: string | null;
     reviewed_image_url?: string | null;
+    corrected_image_url?: string | null;
+    ai_overlay_annotations?: Array<{ area: string; label: string; severity: string }> | null;
     tutor_resources?: Array<{ type: string; url: string; title: string }>;
   },
   action: 'redo' | 'complete',
@@ -477,6 +483,8 @@ export async function saveDrawingReviewWithAction(
       tutor_rating: review.tutor_rating || null,
       tutor_feedback: review.tutor_feedback || null,
       reviewed_image_url: review.reviewed_image_url || null,
+      corrected_image_url: review.corrected_image_url || null,
+      ai_overlay_annotations: review.ai_overlay_annotations || null,
       tutor_resources: review.tutor_resources || [],
       status: submissionStatus,
       reviewed_at: new Date().toISOString(),
