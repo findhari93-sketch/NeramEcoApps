@@ -1136,9 +1136,131 @@ export async function sendFirstTouchEmail(
   });
 }
 
+/**
+ * Send a phone-verification drip email.
+ * 5 templates: phone_drip_1 (30min) through phone_drip_5 (Day 14).
+ * Sent from info@neramclasses.com with an unsubscribe link.
+ */
+export async function sendPhoneDripEmail(
+  email: string,
+  messageType: string,
+  data: { userName: string; unsubscribeUrl: string }
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const name = data.userName || 'there';
+  const unsubUrl = data.unsubscribeUrl;
+  const appUrl = 'https://app.neramclasses.com';
+
+  const unsubscribeFooter = `
+    <div style="text-align:center; padding: 20px; color: #999; font-size: 12px; border-top: 1px solid #eee; margin-top: 30px;">
+      <p>Neram Classes, Chennai, Tamil Nadu</p>
+      <p>neramclasses.com</p>
+      <p><a href="${unsubUrl}" style="color: #999;">Unsubscribe from these emails</a></p>
+    </div>
+  `;
+
+  const wrapHtml = (content: string) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; }
+        .header { background: #1565C0; color: white; padding: 24px 30px; }
+        .header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+        .content { padding: 30px; }
+        .button { display: inline-block; background: #1565C0; color: white !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 20px 0; }
+        p { margin: 0 0 16px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header"><h1>Neram Classes</h1></div>
+        <div class="content">${content}</div>
+        ${unsubscribeFooter}
+      </div>
+    </body>
+    </html>
+  `;
+
+  const templates: Record<string, { subject: string; html: string }> = {
+    phone_drip_1: {
+      subject: `Hi ${name}, your Neram Classes registration is not complete`,
+      html: wrapHtml(`
+        <p>Hi ${name},</p>
+        <p>This is a quick note from the Neram Classes team.</p>
+        <p>We noticed your account registration was not fully completed, specifically the phone verification step. This is usually a quick process, and we can help if you faced any difficulty.</p>
+        <p>If you are still interested in NATA 2026 or JEE Paper 2 B.Arch preparation, feel free to reach out and we will get you sorted.</p>
+        <a href="${appUrl}" class="button">Complete Registration</a>
+        <p>You can also reach us directly:<br>
+        +91-91761-37043 (Call or WhatsApp)</p>
+        <p>No action needed if you have already moved on. We just wanted to make sure you did not face any barriers on our end.</p>
+        <p>Regards,<br>Neram Classes Team</p>
+      `),
+    },
+    phone_drip_2: {
+      subject: `${name}, quick question`,
+      html: wrapHtml(`
+        <p>Hi ${name},</p>
+        <p>Just checking in. Phone verification on Neram Classes takes about 30 seconds. Once done, you can explore our NATA and JEE B.Arch prep tools.</p>
+        <p>If you hit any trouble yesterday, reply to this email and we will help you through it.</p>
+        <a href="${appUrl}" class="button">Verify Phone Now</a>
+        <p>Regards,<br>Neram Classes Team</p>
+      `),
+    },
+    phone_drip_3: {
+      subject: `NATA 2026 students are already preparing`,
+      html: wrapHtml(`
+        <p>Hi ${name},</p>
+        <p>Students who started their NATA preparation early consistently score higher. Our 2025 batch had students crack NATA with scores above 120 within 3 months of joining.</p>
+        <p>Your account is set up. The only thing left is phone verification, which takes under a minute.</p>
+        <a href="${appUrl}" class="button">Complete Setup</a>
+        <p>Regards,<br>Neram Classes Team</p>
+      `),
+    },
+    phone_drip_4: {
+      subject: `New batch is filling up, ${name}`,
+      html: wrapHtml(`
+        <p>Hi ${name},</p>
+        <p>Our upcoming NATA 2026 and JEE Paper 2 B.Arch batch is accepting registrations now. Seats are limited.</p>
+        <p>To check eligibility and apply, you need to first complete phone verification on your account.</p>
+        <a href="${appUrl}" class="button">Secure Your Spot</a>
+        <p>Call or WhatsApp: +91-91761-37043</p>
+        <p>Regards,<br>Neram Classes Team</p>
+      `),
+    },
+    phone_drip_5: {
+      subject: `Last message from us, ${name}`,
+      html: wrapHtml(`
+        <p>Hi ${name},</p>
+        <p>We will not keep following up after this. If NATA or JEE B.Arch preparation is not on your radar right now, that is completely fine.</p>
+        <p>When you are ready, we are at neramclasses.com or +91-91761-37043.</p>
+        <p>Wishing you all the best,<br>Neram Classes Team</p>
+      `),
+    },
+  };
+
+  const template = templates[messageType];
+  if (!template) {
+    return { success: false, error: `Unknown phone drip template: ${messageType}` };
+  }
+
+  const result = await sendEmail({
+    from: 'Neram Classes <info@neramclasses.com>',
+    to: email,
+    subject: template.subject,
+    html: template.html,
+    replyTo: 'info@neramclasses.com',
+  });
+
+  return { ...result, messageId: undefined };
+}
+
 export default {
   sendEmail,
   sendTemplateEmail,
   notifyAdmin,
   sendFirstTouchEmail,
+  sendPhoneDripEmail,
 };

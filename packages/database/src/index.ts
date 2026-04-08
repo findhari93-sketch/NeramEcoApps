@@ -28,6 +28,7 @@ export {
   sendTemplateEmail,
   notifyAdmin,
   sendFirstTouchEmail,
+  sendPhoneDripEmail,
 } from './services/email';
 export type { EmailData, TemplateData } from './services/email';
 
