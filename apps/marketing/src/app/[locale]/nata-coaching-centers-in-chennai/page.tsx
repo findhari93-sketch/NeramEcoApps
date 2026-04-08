@@ -7,7 +7,6 @@ import {
   generateBreadcrumbSchema,
   generateFAQSchema,
   generateItemListSchema,
-  generateLocalBusinessSchema,
 } from '@/lib/seo/schemas';
 import { BASE_URL, ORG_NAME } from '@/lib/seo/constants';
 import { buildAlternates } from '@/lib/seo/metadata';
@@ -237,13 +236,33 @@ export default function NataCoachingCentersChennai({
         )}
       />
       <JsonLd
-        data={generateLocalBusinessSchema({
-          city: 'chennai',
-          cityDisplay: 'Chennai',
-          state: 'tn',
-          stateDisplay: 'Tamil Nadu',
-          slug: 'chennai',
-        })}
+        data={{
+          '@context': 'https://schema.org',
+          '@type': 'LocalBusiness',
+          '@id': `${BASE_URL}/nata-coaching-centers-in-chennai`,
+          name: `${ORG_NAME} Chennai — NATA Coaching Network`,
+          url: `${BASE_URL}/nata-coaching-centers-in-chennai`,
+          image: `${BASE_URL}/logo.png`,
+          telephone: '+91-9176137043',
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: 'PT Rajan Road, Sector 13, Ashok Nagar',
+            addressLocality: 'Chennai',
+            addressRegion: 'Tamil Nadu',
+            postalCode: '600083',
+            addressCountry: 'IN',
+          },
+          openingHoursSpecification: {
+            '@type': 'OpeningHoursSpecification',
+            dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+            opens: '09:00',
+            closes: '18:00',
+          },
+          priceRange: '₹₹',
+          parentOrganization: {
+            '@id': `${BASE_URL}/#organization`,
+          },
+        }}
       />
 
       {/* Hero */}
