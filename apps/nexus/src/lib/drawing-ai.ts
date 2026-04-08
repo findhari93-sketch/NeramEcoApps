@@ -42,37 +42,53 @@ Respond ONLY in valid JSON format (no markdown, no code blocks, no backticks):
   "corrected_image_prompt": "Draw a 2D composition using... [full prompt here]"
 }`;
 
-async function callGemini(base64: string, mimeType: string, prompt: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+async function callGemini(base64: string, mimeType: string, prompt: string, retries = 2): Promise<string> {
+  // Try flash first, fall back to flash-lite on rate limit (higher RPM quota)
+  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mimeType, data: base64 } },
-          { text: prompt },
-        ],
-      }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 1200,
-      },
-    }),
-  });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    // Alternate models: flash on even attempts, flash-lite on odd attempts after first failure
+    const model = attempt === 0 ? models[0] : models[1];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
-  if (!res.ok) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64 } },
+            { text: prompt },
+          ],
+        }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1200,
+        },
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    }
+
     const err = await res.json().catch(() => ({}));
-    console.error('Gemini API error:', JSON.stringify(err));
+
     if (res.status === 429) {
+      if (attempt < retries) {
+        // Flash is rate-limited — retry immediately with flash-lite
+        console.warn(`Gemini ${model} rate limited (429), retrying with flash-lite...`);
+        continue;
+      }
       throw new Error('Gemini API 429: rate limit reached');
     }
-    throw new Error(`Gemini API error: ${res.status} ${JSON.stringify(err)}`);
+
+    console.error('Gemini API error:', JSON.stringify(err));
+    throw new Error(`Gemini API error: ${res.status}`);
   }
 
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  throw new Error('Gemini API: all retries exhausted');
 }
 
 async function callAnthropic(base64: string, mediaType: string, prompt: string): Promise<string> {
