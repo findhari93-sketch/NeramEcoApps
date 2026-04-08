@@ -27,7 +27,6 @@ import {
 } from '@neram/ui';
 import Link from 'next/link';
 import { getLocationsByState, getIndianStates, getStateSeoContent } from '@neram/database';
-import { locales } from '@/i18n';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
   generateStateHubSchema,
@@ -35,7 +34,7 @@ import {
   generateBreadcrumbSchema,
   generateCourseSchema,
 } from '@/lib/seo/schemas';
-import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
+import { buildOgImage } from '@/lib/seo/metadata';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -104,11 +103,11 @@ function toTitleCase(slug: string | undefined): string {
 
 // ─── Static Params & Metadata ────────────────────────────────────────────────
 
+// English only — state pages have no translations; generating locale variants
+// creates duplicate content and wastes crawl budget.
 export function generateStaticParams() {
   const states = getIndianStates();
-  return states.flatMap((state) =>
-    locales.map((locale) => ({ locale, state: state.slug }))
-  );
+  return states.map((state) => ({ locale: 'en', state: state.slug }));
 }
 
 export async function generateMetadata({
@@ -137,7 +136,7 @@ export async function generateMetadata({
       `architecture entrance coaching ${stateDisplay}`,
       `B.Arch coaching ${stateDisplay}`,
     ].join(', '),
-    alternates: buildAlternates(locale, pagePath),
+    alternates: { canonical: `${BASE_URL}${pagePath}` },
     openGraph: {
       title: `Best NATA Coaching in ${stateDisplay} 2026`,
       description,

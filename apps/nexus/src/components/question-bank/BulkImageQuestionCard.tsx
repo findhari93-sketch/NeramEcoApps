@@ -17,6 +17,7 @@ import ImageUploadZone from './ImageUploadZone';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import type { SlotType, PendingImages } from '@/hooks/useBulkImageFlow';
 import { getEffectiveImage } from '@/hooks/useBulkImageFlow';
+import MathText from '@/components/common/MathText';
 
 interface BulkImageQuestionCardProps {
   question: NexusQBQuestion;
@@ -142,7 +143,8 @@ export default function BulkImageQuestionCard({
 
       {/* Question text preview */}
       {question.question_text && (
-        <Typography
+        <MathText
+          text={question.question_text}
           variant="caption"
           color="text.secondary"
           sx={{
@@ -153,9 +155,7 @@ export default function BulkImageQuestionCard({
             whiteSpace: 'nowrap',
             maxWidth: '100%',
           }}
-        >
-          {question.question_text}
-        </Typography>
+        />
       )}
 
       {/* Slot selector chips — click to select, NO file picker */}

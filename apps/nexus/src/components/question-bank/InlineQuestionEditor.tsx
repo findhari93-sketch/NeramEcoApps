@@ -48,6 +48,7 @@ import {
 import type { QBCategory } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from './ImageUploadZone';
+import MathText from '@/components/common/MathText';
 
 interface InlineQuestionEditorProps {
   question: NexusQBQuestion;
@@ -336,10 +337,10 @@ export default function InlineQuestionEditor({
               height: 20,
             }}
           />
-          <Typography
+          <MathText
+            text={question.question_text || 'No content'}
             variant="caption"
             color="text.secondary"
-            title={question.question_text || undefined}
             sx={{
               flex: 1,
               overflow: 'hidden',
@@ -348,9 +349,7 @@ export default function InlineQuestionEditor({
               ml: 0.5,
               fontSize: '0.75rem',
             }}
-          >
-            {question.question_text || 'No content'}
-          </Typography>
+          />
           {question.question_image_url && (
             <Box
               component="img"

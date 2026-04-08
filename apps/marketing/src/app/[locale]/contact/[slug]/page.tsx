@@ -25,7 +25,6 @@ import {
   generateCourseSchema,
 } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
-import { locales } from '@/i18n';
 import CenterDetailPageContent from '@/components/CenterDetailPageContent';
 import { getCenterBySeoSlug, getAllCenterSeoSlugs } from '@neram/database/queries';
 import type { OfflineCenter } from '@neram/database';
@@ -36,16 +35,12 @@ const baseUrl = 'https://neramclasses.com';
 
 // ─── Static Params ──────────────────────────────────────────────────────────
 
+// English only — center pages have no translations; generating locale variants
+// creates duplicate content and wastes crawl budget.
 export async function generateStaticParams() {
   try {
     const slugs = await getAllCenterSeoSlugs();
-    const params: Array<{ locale: string; slug: string }> = [];
-    for (const locale of locales) {
-      for (const slug of slugs) {
-        params.push({ locale, slug });
-      }
-    }
-    return params;
+    return slugs.map((slug) => ({ locale: 'en', slug }));
   } catch {
     return [];
   }
@@ -80,7 +75,7 @@ export async function generateMetadata({
     title,
     description,
     keywords: `NATA coaching ${cityName}, NATA classes ${cityName}, best NATA coaching in ${cityName}, JEE Paper 2 coaching ${cityName}, architecture coaching ${cityName}, NATA coaching near me ${cityName}${nearbyKeywords ? `, ${nearbyKeywords}` : ''}`,
-    alternates: buildAlternates(locale, `/contact/${slug}`),
+    alternates: { canonical: `${baseUrl}/contact/${slug}` },
     openGraph: {
       title,
       description,

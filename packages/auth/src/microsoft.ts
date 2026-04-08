@@ -321,6 +321,12 @@ export async function signInSilent(
     if (error instanceof InteractionRequiredAuthError) {
       return null;
     }
+    if (
+      error instanceof BrowserAuthError &&
+      error.errorCode === BrowserAuthErrorCodes.monitorWindowTimeout
+    ) {
+      return null;
+    }
     throw error;
   }
 }
@@ -348,6 +354,17 @@ export async function getAccessToken(
       // with the redirect-based login flow, causing BrowserAuthError.
       await msal.acquireTokenRedirect({ scopes, account });
       // acquireTokenRedirect navigates away — this line won't execute
+      return null;
+    }
+    if (
+      error instanceof BrowserAuthError &&
+      error.errorCode === BrowserAuthErrorCodes.monitorWindowTimeout
+    ) {
+      // Silent iframe timed out — MS session needs interactive refresh.
+      // Redirect cleanly to Microsoft login instead of throwing, which would
+      // cause an infinite /login → / → /login flicker loop.
+      console.warn('[MSAL] Silent token iframe timed out, redirecting for interactive auth...');
+      await msal.acquireTokenRedirect({ scopes, account });
       return null;
     }
     throw error;

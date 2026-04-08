@@ -47,15 +47,13 @@ function getCityFromSlug(slug: string): string | null {
   return slug.slice(SLUG_PREFIX.length);
 }
 
-// Generate static params for all cities
+// Generate static params: English only, high/medium priority cities only.
+// Non-English variants have no translations (same English text = duplicate content).
+// Low-priority cities have thin template content not worth indexing.
 export function generateStaticParams() {
-  const params: { locale: string; slug: string }[] = [];
-  for (const locale of locales) {
-    for (const location of locations) {
-      params.push({ locale, slug: `${SLUG_PREFIX}${location.city}` });
-    }
-  }
-  return params;
+  return locations
+    .filter((location) => location.sitemapPriority !== 'low')
+    .map((location) => ({ locale: 'en', slug: `${SLUG_PREFIX}${location.city}` }));
 }
 
 // Generate metadata dynamically
