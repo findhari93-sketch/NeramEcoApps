@@ -254,3 +254,74 @@ export async function getLeadsWithoutFirstTouch(
 
   return data ?? [];
 }
+
+/**
+ * Schedule the 5-email phone verification drip sequence for a new lead.
+ * Called after user registration when phone_verified = false.
+ * Uses ON CONFLICT DO NOTHING — safe to call multiple times.
+ *
+ * @param anchorMs - Optional epoch ms to use as the scheduling anchor.
+ *   Default: Date.now(). For backfill, pass Date.now() - 25*60*1000 so
+ *   Email 1 goes out in ~5 minutes instead of 30.
+ */
+export async function schedulePhoneDrip(
+  userId: string,
+  meta: { userName: string | null; email: string | null },
+  client?: TypedSupabaseClient,
+  anchorMs?: number
+): Promise<void> {
+  const supabase = client ?? getSupabaseAdminClient();
+
+  const drip: Array<{ type: string; delayMinutes: number }> = [
+    { type: 'phone_drip_1', delayMinutes: 30 },
+    { type: 'phone_drip_2', delayMinutes: 60 * 24 * 2 },
+    { type: 'phone_drip_3', delayMinutes: 60 * 24 * 4 },
+    { type: 'phone_drip_4', delayMinutes: 60 * 24 * 7 },
+    { type: 'phone_drip_5', delayMinutes: 60 * 24 * 14 },
+  ];
+
+  const now = anchorMs ?? Date.now();
+
+  for (const step of drip) {
+    const sendAfter = new Date(now + step.delayMinutes * 60 * 1000).toISOString();
+    try {
+      await createAutoMessage({
+        user_id: userId,
+        message_type: step.type as any,
+        channel: 'email',
+        template_name: step.type,
+        send_after: sendAfter,
+        metadata: {
+          user_name: meta.userName,
+          email: meta.email,
+          source: 'registration',
+        },
+      }, supabase);
+    } catch (err: any) {
+      // Skip duplicate (unique constraint on user_id, message_type, channel)
+      if (err?.code !== '23505') {
+        console.error(`Failed to schedule ${step.type} for user ${userId}:`, err);
+      }
+    }
+  }
+}
+
+/**
+ * Cancel all pending phone_drip_* messages for a user.
+ * Called when user unsubscribes via the unsubscribe link.
+ */
+export async function cancelPendingPhoneDrip(
+  userId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client ?? getSupabaseAdminClient();
+
+  const { error } = await supabase
+    .from('auto_messages')
+    .update({ delivery_status: 'failed', error_message: 'unsubscribed' })
+    .eq('user_id', userId)
+    .eq('delivery_status', 'pending')
+    .like('message_type', 'phone_drip_%');
+
+  if (error) throw error;
+}
