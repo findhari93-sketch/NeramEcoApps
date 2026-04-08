@@ -82,7 +82,7 @@ export default function ClassroomView({
   }, [schedule.phase_info.start_date, schedule.phase_info.end_date, schedule.stats.students, today]);
 
   // Determine active friday for date rail highlighting
-  const activeFriday = schedule.current_week.friday ?? schedule.current_week.saturday;
+  const activeFriday = (schedule.current_week.friday ?? schedule.current_week.saturday)?.date ?? null;
 
   // Handle date rail selection: calculate week offset for clicked date
   const handleRailSelect = (date: string) => {
