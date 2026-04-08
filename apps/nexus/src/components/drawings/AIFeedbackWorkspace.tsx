@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box, Typography, Button, TextField, Rating, Paper, Chip, IconButton,
-  CircularProgress, Divider, Collapse, Dialog,
+  CircularProgress, Collapse, Dialog,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -15,6 +15,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource } from '@neram/database/types';
@@ -48,14 +49,16 @@ export default function AIFeedbackWorkspace({
   submission, getToken, onChange,
 }: AIFeedbackWorkspaceProps) {
   const aiDraftStatus = (submission as any).ai_draft_status || 'pending';
-  const aiAnnotations = (submission as any).ai_overlay_annotations as OverlayAnnotation[] | null;
-  const aiPrompt = (submission as any).ai_corrected_image_prompt as string | null;
+  const initialAnnotations = (submission as any).ai_overlay_annotations as OverlayAnnotation[] | null;
+  const initialPrompt = (submission as any).ai_corrected_image_prompt as string | null;
 
   // Workspace state
-  const [annotations, setAnnotations] = useState<OverlayAnnotation[]>(aiAnnotations || []);
+  const [annotations, setAnnotations] = useState<OverlayAnnotation[]>(initialAnnotations || []);
   const [editingAnnotations, setEditingAnnotations] = useState(false);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
   const [correctedImageUrl, setCorrectedImageUrl] = useState<string | null>((submission as any).corrected_image_url || null);
+  // aiPrompt is local state so it updates after re-generation
+  const [aiPrompt, setAiPrompt] = useState<string | null>(initialPrompt);
   const [tutorFeedback, setTutorFeedback] = useState(
     submission.tutor_feedback ||
     (submission.ai_feedback ? buildAIFeedbackText(submission.ai_feedback) : '')
@@ -68,9 +71,13 @@ export default function AIFeedbackWorkspace({
   const [promptCopied, setPromptCopied] = useState(false);
   const [uploadingCorrected, setUploadingCorrected] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState('');
   const [overlayExpanded, setOverlayExpanded] = useState(true);
   const [correctedExpanded, setCorrectedExpanded] = useState(true);
   const [feedbackExpanded, setFeedbackExpanded] = useState(true);
+  const [pasteError, setPasteError] = useState('');
+
+  const pasteZoneRef = useRef<HTMLDivElement>(null);
 
   const notify = useCallback((overrides?: Partial<WorkspaceData>) => {
     onChange({
@@ -110,8 +117,9 @@ export default function AIFeedbackWorkspace({
     setTimeout(() => setPromptCopied(false), 2500);
   };
 
-  const handleCorrectedUpload = async (file: File) => {
+  const handleCorrectedUpload = useCallback(async (file: File) => {
     setUploadingCorrected(true);
+    setPasteError('');
     try {
       const token = await getToken();
       const formData = new FormData();
@@ -129,10 +137,52 @@ export default function AIFeedbackWorkspace({
     } catch { /* silent */ } finally {
       setUploadingCorrected(false);
     }
-  };
+  }, [getToken, notify]);
 
+  const handlePasteImage = useCallback(async () => {
+    setPasteError('');
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const file = new File([blob], 'pasted-image.png', { type });
+            handleCorrectedUpload(file);
+            return;
+          }
+        }
+      }
+      setPasteError('No image found in clipboard. Copy an image first, then paste.');
+    } catch {
+      setPasteError('Clipboard access denied. Use the upload button instead.');
+    }
+  }, [handleCorrectedUpload]);
+
+  // Listen for Ctrl+V paste when corrected section is expanded
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      if (!correctedExpanded || correctedImageUrl) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            handleCorrectedUpload(file);
+            break;
+          }
+        }
+      }
+    };
+    document.addEventListener('paste', handleGlobalPaste);
+    return () => document.removeEventListener('paste', handleGlobalPaste);
+  }, [correctedExpanded, correctedImageUrl, handleCorrectedUpload]);
+
+  // Re-generate: calls AI, updates ALL 3 sections at once
   const handleRegenerate = async () => {
     setRegenerating(true);
+    setRegenError('');
     try {
       const token = await getToken();
       const res = await fetch('/api/drawing/ai-feedback', {
@@ -140,13 +190,34 @@ export default function AIFeedbackWorkspace({
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ submission_id: submission.id }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `AI generation failed (${res.status})`);
+      }
       const { feedback } = await res.json();
-      if (feedback?.overlay_annotations) {
+
+      // Update overlay annotations
+      if (Array.isArray(feedback?.overlay_annotations)) {
         setAnnotations(feedback.overlay_annotations);
         notify({ overlayAnnotations: feedback.overlay_annotations });
       }
-    } catch { /* silent */ } finally {
+
+      // Update corrected image prompt
+      if (feedback?.corrected_image_prompt) {
+        setAiPrompt(feedback.corrected_image_prompt);
+      }
+
+      // Pre-fill written feedback if currently empty
+      if (!tutorFeedback) {
+        const text = buildAIFeedbackText(feedback);
+        if (text) {
+          setTutorFeedback(text);
+          notify({ tutorFeedback: text, overlayAnnotations: feedback?.overlay_annotations || annotations });
+        }
+      }
+    } catch (err) {
+      setRegenError(err instanceof Error ? err.message : 'Re-generation failed. Try again.');
+    } finally {
       setRegenerating(false);
     }
   };
@@ -177,15 +248,22 @@ export default function AIFeedbackWorkspace({
         <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#e3f2fd' }}>
           <CircularProgress size={16} />
           <Typography variant="body2" color="primary.main" fontWeight={600}>
-            Analyzing your drawing...
+            AI is analyzing the drawing...
           </Typography>
         </Paper>
       )}
-      {aiDraftStatus === 'failed' && (
-        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#fff3e0' }}>
-          <Typography variant="body2" color="warning.main" fontWeight={600}>
-            AI draft generation failed. You can fill in feedback manually or re-generate.
+      {(aiDraftStatus === 'failed' || aiDraftStatus === 'pending') && !initialAnnotations && !initialPrompt && (
+        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#fff8e1' }}>
+          <Typography variant="body2" color="warning.dark" fontWeight={600}>
+            AI draft not available. Click Re-generate below to get AI annotations, prompt, and feedback.
           </Typography>
+        </Paper>
+      )}
+
+      {/* Re-generate error */}
+      {regenError && (
+        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#fce4ec' }}>
+          <Typography variant="body2" color="error.main" sx={{ fontSize: '0.8rem' }}>{regenError}</Typography>
         </Paper>
       )}
 
@@ -206,13 +284,13 @@ export default function AIFeedbackWorkspace({
         <Collapse in={overlayExpanded}>
           <Box sx={{ p: 2 }}>
             {aiDraftStatus === 'generating' ? (
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.5 }}>
                 <CircularProgress size={14} />
                 <Typography variant="body2" color="text.secondary">Generating annotations...</Typography>
               </Box>
             ) : annotations.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                No annotations yet. Draw manually or re-generate.
+                No annotations yet. Draw manually or use Re-generate in Section 2.
               </Typography>
             ) : (
               <Box sx={{ mb: 1.5 }}>
@@ -281,16 +359,6 @@ export default function AIFeedbackWorkspace({
                   {editingAnnotations ? 'Done Editing' : 'Edit Notes'}
                 </Button>
               )}
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={regenerating ? <CircularProgress size={14} /> : <RefreshIcon />}
-                onClick={handleRegenerate}
-                disabled={regenerating}
-                sx={{ textTransform: 'none', minHeight: 36 }}
-              >
-                Re-generate
-              </Button>
             </Box>
 
             {overlayImageUrl && (
@@ -323,6 +391,8 @@ export default function AIFeedbackWorkspace({
         </Box>
         <Collapse in={correctedExpanded}>
           <Box sx={{ p: 2 }}>
+
+            {/* AI ChatGPT Prompt area */}
             {aiPrompt ? (
               <Box sx={{ mb: 2 }}>
                 <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
@@ -336,16 +406,28 @@ export default function AIFeedbackWorkspace({
                     {aiPrompt}
                   </Typography>
                 </Paper>
-                <Button
-                  size="small"
-                  variant={promptCopied ? 'contained' : 'outlined'}
-                  startIcon={promptCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
-                  onClick={handleCopyPrompt}
-                  color={promptCopied ? 'success' : 'primary'}
-                  sx={{ textTransform: 'none', minHeight: 36 }}
-                >
-                  {promptCopied ? 'Copied!' : 'Copy Prompt'}
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    size="small"
+                    variant={promptCopied ? 'contained' : 'outlined'}
+                    startIcon={promptCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
+                    onClick={handleCopyPrompt}
+                    color={promptCopied ? 'success' : 'primary'}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    {promptCopied ? 'Copied!' : 'Copy Prompt'}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={regenerating ? <CircularProgress size={14} /> : <RefreshIcon />}
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    {regenerating ? 'Re-generating...' : 'Re-generate'}
+                  </Button>
+                </Box>
               </Box>
             ) : aiDraftStatus === 'generating' ? (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
@@ -353,13 +435,24 @@ export default function AIFeedbackWorkspace({
                 <Typography variant="body2" color="text.secondary">Generating ChatGPT prompt...</Typography>
               </Box>
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                No AI prompt generated yet. Re-generate to get a ChatGPT prompt.
-              </Typography>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  No AI prompt yet. Click Re-generate to get a ChatGPT prompt you can use to generate a reference image.
+                </Typography>
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={regenerating ? <CircularProgress size={14} /> : <RefreshIcon />}
+                  onClick={handleRegenerate}
+                  disabled={regenerating}
+                  sx={{ textTransform: 'none', minHeight: 36 }}
+                >
+                  {regenerating ? 'Re-generating...' : 'Re-generate AI Draft'}
+                </Button>
+              </Box>
             )}
 
-            <Divider sx={{ mb: 2 }} />
-
+            {/* Upload / Paste area */}
             {correctedImageUrl ? (
               <Box>
                 <Box
@@ -380,7 +473,7 @@ export default function AIFeedbackWorkspace({
                 </Button>
               </Box>
             ) : (
-              <Box>
+              <Box ref={pasteZoneRef}>
                 <input
                   type="file"
                   accept="image/*"
@@ -392,19 +485,32 @@ export default function AIFeedbackWorkspace({
                     e.target.value = '';
                   }}
                 />
-                <Button
-                  variant="outlined"
-                  startIcon={uploadingCorrected ? <CircularProgress size={16} /> : <CloudUploadOutlinedIcon />}
-                  fullWidth
-                  disabled={uploadingCorrected}
-                  onClick={() => document.getElementById('upload-corrected')?.click()}
-                  sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed' }}
-                >
-                  {uploadingCorrected ? 'Uploading...' : 'Upload Corrected Image'}
-                </Button>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
-                  Generate in ChatGPT using the prompt above, then upload here
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={uploadingCorrected ? <CircularProgress size={16} /> : <CloudUploadOutlinedIcon />}
+                    disabled={uploadingCorrected}
+                    onClick={() => document.getElementById('upload-corrected')?.click()}
+                    sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
+                  >
+                    {uploadingCorrected ? 'Uploading...' : 'Upload Image'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={uploadingCorrected ? <CircularProgress size={16} /> : <ContentPasteIcon />}
+                    disabled={uploadingCorrected}
+                    onClick={handlePasteImage}
+                    sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
+                  >
+                    Paste Image
+                  </Button>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                  Generate in ChatGPT using the prompt above, then upload or paste (Ctrl+V) here
                 </Typography>
+                {pasteError && (
+                  <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{pasteError}</Typography>
+                )}
               </Box>
             )}
           </Box>
@@ -435,7 +541,13 @@ export default function AIFeedbackWorkspace({
                 notify({ tutorFeedback: e.target.value });
               }}
               sx={{ mb: 2 }}
-              helperText={submission.ai_feedback ? 'Pre-filled from AI analysis. Edit as needed.' : undefined}
+              helperText={
+                tutorFeedback && submission.ai_feedback
+                  ? 'Pre-filled from AI analysis. Edit as needed.'
+                  : !tutorFeedback
+                  ? 'Re-generate in Section 2 to get AI-drafted feedback here.'
+                  : undefined
+              }
             />
 
             <ResourceLinkSearch
@@ -470,14 +582,15 @@ export default function AIFeedbackWorkspace({
   );
 }
 
-function buildAIFeedbackText(aiFeedback: { feedback?: string[]; improvement_tip?: string } | null): string {
+function buildAIFeedbackText(aiFeedback: { feedback?: string[]; improvement_tip?: string } | null | Record<string, unknown>): string {
   if (!aiFeedback) return '';
   const lines: string[] = [];
-  if (Array.isArray(aiFeedback.feedback)) {
-    lines.push(...aiFeedback.feedback);
+  const f = aiFeedback as { feedback?: string[]; improvement_tip?: string };
+  if (Array.isArray(f.feedback)) {
+    lines.push(...f.feedback);
   }
-  if (aiFeedback.improvement_tip) {
-    lines.push(`Tip: ${aiFeedback.improvement_tip}`);
+  if (f.improvement_tip) {
+    lines.push(`Tip: ${f.improvement_tip}`);
   }
   return lines.join('\n');
 }
