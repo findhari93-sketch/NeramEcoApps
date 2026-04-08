@@ -117,7 +117,7 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
             ))}
           </Box>
 
-          {/* Stub neighborhoods — served via online + offline hybrid */}
+          {/* Stub neighborhoods: served via online and offline hybrid */}
           <Typography variant="h3" sx={{ fontSize: '1rem', fontWeight: 700, mt: 4, mb: 2, color: '#1a1a2e' }}>
             Also Serving via Online and Weekend Offline
           </Typography>
@@ -142,7 +142,7 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
                 desc: 'Guindy Metro to Ashok Nagar Metro: 2 stops on the Blue Line. Chromepet and Pallavaram students also use this route.',
               },
             ].map((stub) => (
-              <Card key={stub.id} id={stub.id} elevation={0} sx={{ border: '1px solid #e0e0e0', bgcolor: '#fafafa' }}>
+              <Card key={stub.id} id={stub.id} component="div" elevation={0} sx={{ border: '1px solid #e0e0e0', bgcolor: '#fafafa' }}>
                 <CardContent sx={{ p: 3 }}>
                   <Typography variant="h3" sx={{ fontSize: '1rem', fontWeight: 700, mb: 0.5, color: '#1a1a2e' }}>
                     {stub.title}
