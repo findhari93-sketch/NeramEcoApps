@@ -357,6 +357,81 @@ export default function NataCoachingCentersChennai({
         </Container>
       </Box>
 
+      {/* Results proof + reasoning */}
+      <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: '#fff' }}>
+        <Container maxWidth="lg">
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.4rem', md: '1.9rem' }, fontWeight: 800, mb: 1, color: '#1a1a2e' }}>
+            Why Chennai Students Reach India&apos;s Top Ranks
+          </Typography>
+          <Typography sx={{ color: '#666', mb: 4, fontSize: '0.95rem', maxWidth: 620 }}>
+            Two students. Two years. India&apos;s top two ranks in JEE B.Arch. Both trained at Neram Classes, Chennai.
+          </Typography>
+
+          {/* Achievement cards */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, mb: 6 }}>
+            {[
+              { rank: 'AIR 1', exam: 'JEE B.Arch 2024', percentile: '100 Percentile', label: 'All India Rank 1' },
+              { rank: 'AIR 2', exam: 'JEE B.Arch 2026', percentile: '99.98 Percentile', label: 'All India Rank 2' },
+            ].map((a) => (
+              <Box
+                key={a.exam}
+                sx={{
+                  border: '2px solid #e8a020',
+                  borderRadius: 2,
+                  p: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2.5,
+                  bgcolor: '#fffbf2',
+                }}
+              >
+                <Box sx={{ textAlign: 'center', minWidth: 64 }}>
+                  <Typography sx={{ fontSize: '2rem', fontWeight: 900, color: '#e8a020', lineHeight: 1 }}>{a.rank}</Typography>
+                  <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.label}</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#1a1a2e' }}>{a.exam}</Typography>
+                  <Typography sx={{ fontSize: '0.9rem', color: '#e8a020', fontWeight: 600 }}>{a.percentile}</Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: '#666', mt: 0.5 }}>Neram Classes, Chennai</Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          {/* Reasoning */}
+          <Typography variant="h3" sx={{ fontSize: { xs: '1.1rem', md: '1.3rem' }, fontWeight: 700, mb: 3, color: '#1a1a2e' }}>
+            What makes the difference
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5 }}>
+            {[
+              {
+                title: 'Max 25 students per batch',
+                body: 'Factory-style coaching centers run 60-100 students per batch. At 25, every student gets individual drawing feedback every session. That gap in attention is where ranks are won or lost.',
+              },
+              {
+                title: 'Faculty who cleared these exams',
+                body: 'Our faculty are IIT/NIT/SPA alumni who cleared NATA and JEE B.Arch at the highest levels. They know exactly what evaluators look for because they have been evaluated by those same criteria.',
+              },
+              {
+                title: '15 years of exam-specific curriculum',
+                body: 'Neram has been preparing students for architecture entrance exams since 2009. The curriculum is built around how these exams actually work, not a general art program with exam prep added on.',
+              },
+              {
+                title: 'No student falls behind due to commute',
+                body: 'The hybrid model means a student in Velachery or OMR attends the same class quality as someone who walks to Ashok Nagar. Missed sessions from commute fatigue are a hidden rank killer that the hybrid model eliminates.',
+              },
+            ].map((r) => (
+              <Card key={r.title} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h4" sx={{ fontSize: '0.95rem', fontWeight: 700, mb: 1, color: '#1a1a2e' }}>{r.title}</Typography>
+                  <Typography sx={{ fontSize: '0.88rem', color: '#555', lineHeight: 1.6 }}>{r.body}</Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Container>
+      </Box>
+
       {/* Top 10 List */}
       <Box sx={{ py: { xs: 6, md: 8 } }}>
         <Container maxWidth="lg">

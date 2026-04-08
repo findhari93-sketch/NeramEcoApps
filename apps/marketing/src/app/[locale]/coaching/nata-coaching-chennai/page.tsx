@@ -82,6 +82,58 @@ export default function NataCoachingChennaiHub({ params: { locale } }: { params:
         </Container>
       </Box>
 
+      {/* Results proof + reasoning */}
+      <Box sx={{ py: { xs: 5, md: 7 }, bgcolor: '#fff' }}>
+        <Container maxWidth="lg">
+          <Typography variant="h2" sx={{ fontSize: { xs: '1.3rem', md: '1.75rem' }, fontWeight: 800, mb: 1, color: '#1a1a2e' }}>
+            Why Chennai Students Reach India&apos;s Top Ranks
+          </Typography>
+          <Typography sx={{ color: '#666', mb: 4, fontSize: '0.9rem', maxWidth: 600 }}>
+            Two students. Two years. India&apos;s top two ranks in JEE B.Arch. Both trained at Neram Classes, Chennai.
+          </Typography>
+
+          {/* Achievement cards */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 5 }}>
+            {[
+              { rank: 'AIR 1', exam: 'JEE B.Arch 2024', percentile: '100 Percentile', label: 'All India Rank 1' },
+              { rank: 'AIR 2', exam: 'JEE B.Arch 2026', percentile: '99.98 Percentile', label: 'All India Rank 2' },
+            ].map((a) => (
+              <Box
+                key={a.exam}
+                sx={{ border: '2px solid #e8a020', borderRadius: 2, p: 3, display: 'flex', alignItems: 'center', gap: 2.5, bgcolor: '#fffbf2' }}
+              >
+                <Box sx={{ textAlign: 'center', minWidth: 56 }}>
+                  <Typography sx={{ fontSize: '1.75rem', fontWeight: 900, color: '#e8a020', lineHeight: 1 }}>{a.rank}</Typography>
+                  <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.label}</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a2e' }}>{a.exam}</Typography>
+                  <Typography sx={{ fontSize: '0.85rem', color: '#e8a020', fontWeight: 600 }}>{a.percentile}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#666', mt: 0.5 }}>Neram Classes, Chennai</Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          {/* Reasoning */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2 }}>
+            {[
+              { title: 'Max 25 per batch', body: 'Every student gets individual drawing feedback every session. Most centers run 60+ per batch.' },
+              { title: 'Faculty who cleared these exams', body: 'IIT/NIT/SPA alumni who scored at the top in the same exams your child is preparing for.' },
+              { title: '15 years of exam-specific curriculum', body: 'Built entirely around NATA and JEE B.Arch since 2009. Not general art coaching with exam prep added.' },
+              { title: 'Hybrid model eliminates gaps', body: 'Students from Velachery, OMR, and Tambaram get the same class quality as those who walk to Ashok Nagar.' },
+            ].map((r) => (
+              <Card key={r.title} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
+                <CardContent sx={{ p: 2.5 }}>
+                  <Typography variant="h4" sx={{ fontSize: '0.88rem', fontWeight: 700, mb: 1, color: '#1a1a2e' }}>{r.title}</Typography>
+                  <Typography sx={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.55 }}>{r.body}</Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Container>
+      </Box>
+
       {/* Neighborhood Grid */}
       <Box sx={{ py: { xs: 6, md: 8 } }}>
         <Container maxWidth="lg">
