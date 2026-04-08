@@ -63,6 +63,7 @@ export default function ImageUploadZone({
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState('');
+  const lastFileRef = useRef<File | null>(null);
   const blobUrlRef = useRef<string | null>(null);
 
   // Convert base64 data URLs to blob URLs for safe rendering
@@ -86,6 +87,7 @@ export default function ImageUploadZone({
   const uploadFile = useCallback(async (file: File) => {
     setError('');
     setUploading(true);
+    lastFileRef.current = file;
 
     // Show local preview immediately
     const previewUrl = URL.createObjectURL(file);
@@ -94,7 +96,8 @@ export default function ImageUploadZone({
     try {
       const token = await getToken();
       if (!token) {
-        setError('Auth failed');
+        setError('Auth expired. Please refresh the page and try again.');
+        onChange(undefined);
         return;
       }
 
@@ -108,9 +111,19 @@ export default function ImageUploadZone({
         body: formData,
       });
 
-      const json = await res.json();
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        console.error('[ImageUpload] Failed to parse response, status:', res.status);
+        setError(`Server error (${res.status}). Try again.`);
+        onChange(undefined);
+        return;
+      }
+
       if (!res.ok) {
-        setError(json.error || 'Upload failed');
+        console.error('[ImageUpload] Server error:', res.status, json.error);
+        setError(json.error || `Upload failed (${res.status})`);
         onChange(undefined);
         return;
       }
@@ -118,13 +131,25 @@ export default function ImageUploadZone({
       // Replace blob URL with remote URL
       URL.revokeObjectURL(previewUrl);
       onChange({ url: json.url, uploaded: true, storagePath: json.path });
-    } catch {
-      setError('Upload failed');
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[ImageUpload] Network/fetch error:', detail);
+      setError(
+        detail.includes('Failed to fetch') || detail.includes('NetworkError')
+          ? 'Network error. Check your connection and try again.'
+          : `Upload failed: ${detail}`,
+      );
       onChange(undefined);
     } finally {
       setUploading(false);
     }
   }, [getToken, onChange, subfolder]);
+
+  const handleRetry = useCallback(() => {
+    if (lastFileRef.current) {
+      uploadFile(lastFileRef.current);
+    }
+  }, [uploadFile]);
 
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -294,9 +319,21 @@ export default function ImageUploadZone({
         )}
       </Box>
       {error && (
-        <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
-          {error}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+          <Typography variant="caption" color="error" sx={{ flex: 1 }}>
+            {error}
+          </Typography>
+          {lastFileRef.current && (
+            <Typography
+              variant="caption"
+              color="primary"
+              sx={{ cursor: 'pointer', textDecoration: 'underline', flexShrink: 0 }}
+              onClick={(e) => { e.stopPropagation(); handleRetry(); }}
+            >
+              Retry
+            </Typography>
+          )}
+        </Box>
       )}
       <input
         ref={fileInputRef}

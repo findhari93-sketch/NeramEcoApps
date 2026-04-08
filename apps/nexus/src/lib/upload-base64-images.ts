@@ -53,11 +53,21 @@ async function uploadSingleImage(
       body: formData,
     });
 
-    if (!res.ok) return undefined;
+    if (!res.ok) {
+      let errorDetail = `status ${res.status}`;
+      try {
+        const errJson = await res.json();
+        errorDetail = errJson.error || errorDetail;
+      } catch { /* ignore parse failure */ }
+      console.error(`[BulkUpload] Failed to upload ${filename}:`, errorDetail);
+      return undefined;
+    }
 
     const json = await res.json();
     return { url: json.url, uploaded: true, storagePath: json.path };
-  } catch {
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`[BulkUpload] Error uploading ${filename}:`, detail);
     return undefined;
   }
 }
@@ -125,6 +135,8 @@ export async function uploadBase64Images(
 
   // Upload in parallel batches of 3 to avoid overwhelming the server
   const BATCH_SIZE = 3;
+  let firstBatchAllFailed = false;
+
   for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
     const batch = tasks.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(
@@ -145,6 +157,22 @@ export async function uploadBase64Images(
       }
       onProgress?.({ ...progress });
     });
+
+    // If first batch ALL failed, likely a systematic issue (auth, config)
+    if (i === 0 && results.every((r) => !r)) {
+      firstBatchAllFailed = true;
+      console.error(
+        '[BulkUpload] First batch all failed. Likely auth or storage config issue.',
+        'Check server logs for details.',
+      );
+    }
+  }
+
+  if (firstBatchAllFailed && progress.completed === 0) {
+    console.error(
+      `[BulkUpload] All ${progress.failed} image(s) failed.`,
+      'This usually means auth token is invalid or storage is misconfigured.',
+    );
   }
 
   return updated;
