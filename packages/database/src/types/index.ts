@@ -121,6 +121,8 @@ export interface User extends Timestamps {
   status: UserStatus;
   email_verified: boolean;
   phone_verified: boolean;
+  email_opt_out: boolean;
+  email_opt_out_at: string | null;
 
   // Preferences
   preferred_language: string;       // 'en' | 'ta' | 'hi' | 'kn' | 'ml'
@@ -6791,7 +6793,16 @@ export interface StudentCredential {
 // AUTO MESSAGES (First Touch Automation)
 // ============================================
 
-export type AutoMessageType = 'first_touch' | 'follow_up_3d' | 'follow_up_7d' | 'nurture';
+export type AutoMessageType =
+  | 'first_touch'
+  | 'follow_up_3d'
+  | 'follow_up_7d'
+  | 'nurture'
+  | 'phone_drip_1'
+  | 'phone_drip_2'
+  | 'phone_drip_3'
+  | 'phone_drip_4'
+  | 'phone_drip_5';
 export type AutoMessageChannel = 'whatsapp' | 'email';
 export type AutoMessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
@@ -6902,6 +6913,14 @@ export interface DrawingSubmission {
   is_gallery_published: boolean;
   submitted_at: string;
   reviewed_at: string | null;
+  ai_overlay_annotations: Array<{
+    area: string;
+    label: string;
+    severity: 'high' | 'medium' | 'low';
+  }> | null;
+  ai_corrected_image_prompt: string | null;
+  corrected_image_url: string | null;
+  ai_draft_status: 'pending' | 'generating' | 'ready' | 'failed';
 }
 
 export interface DrawingSubmissionWithQuestion extends DrawingSubmission {
