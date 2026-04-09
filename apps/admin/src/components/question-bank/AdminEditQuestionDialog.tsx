@@ -8,7 +8,6 @@ import {
   DialogActions,
   TextField,
   Button,
-  Typography,
   Alert,
   Stack,
   Select,
@@ -17,7 +16,6 @@ import {
   InputLabel,
   CircularProgress,
   Chip,
-  Box,
 } from '@neram/ui';
 import type { QuestionPostDisplay, NataQuestionCategory } from '@neram/database';
 
