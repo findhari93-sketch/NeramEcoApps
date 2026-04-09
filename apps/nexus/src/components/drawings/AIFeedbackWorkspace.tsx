@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box, Typography, Button, TextField, Rating, Paper, Chip, IconButton,
-  CircularProgress, Collapse, Dialog, useTheme, useMediaQuery,
+  CircularProgress, Collapse, Dialog, useTheme, useMediaQuery, Select, MenuItem,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -351,93 +351,196 @@ export default function AIFeedbackWorkspace({
           {overlayExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </Box>
         <Collapse in={overlayExpanded}>
-          <Box sx={{ p: 2 }}>
-            {aiDraftStatus === 'generating' ? (
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1.5 }}>
-                <CircularProgress size={14} />
-                <Typography variant="body2" color="text.secondary">Generating annotations...</Typography>
+          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
+            {/* Path A: Manual Drawing */}
+            <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+              DRAW MANUALLY
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<BrushOutlinedIcon />}
+              onClick={() => setSketchOpen(true)}
+              sx={{ textTransform: 'none', minHeight: 40, mb: 2 }}
+              size="small"
+              fullWidth
+            >
+              Open Drawing Canvas
+            </Button>
+
+            {/* Path B: AI Annotation Prompt */}
+            <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+              AI ANNOTATION PROMPT FOR CHATGPT
+            </Typography>
+            {annotationPrompt ? (
+              <Box>
+                <Paper
+                  variant="outlined"
+                  sx={{ p: 1.5, bgcolor: '#f9f9f9', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5, mb: 1 }}
+                >
+                  <Typography variant="body2" sx={{ fontSize: '0.78rem', fontFamily: 'inherit' }}>
+                    {annotationPrompt}
+                  </Typography>
+                </Paper>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                  <Button
+                    size="small"
+                    variant={annotationPromptCopied ? 'contained' : 'outlined'}
+                    startIcon={annotationPromptCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
+                    onClick={handleCopyAnnotationPrompt}
+                    color={annotationPromptCopied ? 'success' : 'primary'}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    {annotationPromptCopied ? 'Copied!' : 'Copy Prompt'}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<OpenInNewIcon />}
+                    onClick={() => window.open(submission.original_image_url, '_blank')}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    View Student Image
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<OpenInNewIcon />}
+                    onClick={() => window.open('https://chat.openai.com', '_blank')}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    Open ChatGPT
+                  </Button>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                  Copy prompt, open student image (long-press on mobile or right-click on desktop to copy), then paste both into ChatGPT.
+                </Typography>
+
+                {/* Paste annotated image back */}
+                {overlayImageUrl ? (
+                  <Box>
+                    <Box
+                      component="img"
+                      src={overlayImageUrl}
+                      alt="Annotated overlay"
+                      sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 1 }}
+                    />
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteOutlineIcon />}
+                      onClick={() => { setOverlayImageUrl(null); notify({ overlayImageUrl: null }); }}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Remove Annotated Image
+                    </Button>
+                  </Box>
+                ) : (
+                  <Box>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      id="upload-annotation-overlay"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAnnotationOverlayUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      <Button
+                        variant="outlined"
+                        startIcon={uploadingAnnotation ? <CircularProgress size={16} /> : <CloudUploadOutlinedIcon />}
+                        disabled={uploadingAnnotation}
+                        onClick={() => document.getElementById('upload-annotation-overlay')?.click()}
+                        sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
+                        size="small"
+                      >
+                        {uploadingAnnotation ? 'Uploading...' : 'Upload Annotated Image'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<ContentPasteIcon />}
+                        disabled={uploadingAnnotation}
+                        onClick={async () => {
+                          try {
+                            const items = await navigator.clipboard.read();
+                            for (const item of items) {
+                              for (const type of item.types) {
+                                if (type.startsWith('image/')) {
+                                  const blob = await item.getType(type);
+                                  handleAnnotationOverlayUpload(new File([blob], 'annotated.png', { type }));
+                                  return;
+                                }
+                              }
+                            }
+                          } catch { /* silent */ }
+                        }}
+                        sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
+                        size="small"
+                      >
+                        Paste Image
+                      </Button>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                      Paste the annotated drawing from ChatGPT here (Ctrl+V also works)
+                    </Typography>
+                  </Box>
+                )}
               </Box>
-            ) : annotations.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                No annotations yet. Draw manually or use Re-generate in Section 2.
-              </Typography>
             ) : (
-              <Box sx={{ mb: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                No AI annotation prompt yet. Re-generate in Section 2 to get one.
+              </Typography>
+            )}
+
+            {/* Zone-based annotation chips */}
+            {annotations.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                  ZONE ANNOTATIONS
+                </Typography>
                 {annotations.map((ann, i) => (
                   <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                     {editingAnnotations ? (
                       <>
-                        <TextField
-                          size="small"
-                          value={ann.label}
-                          onChange={(e) => handleAnnotationChange(i, 'label', e.target.value)}
-                          sx={{ flex: 1, '& .MuiInputBase-input': { py: 0.5, fontSize: '0.8rem' } }}
-                        />
-                        <TextField
-                          select
-                          size="small"
-                          value={ann.severity}
-                          onChange={(e) => handleAnnotationChange(i, 'severity', e.target.value)}
-                          SelectProps={{ native: true }}
-                          sx={{ width: 90, '& .MuiInputBase-input': { py: 0.5, fontSize: '0.8rem' } }}
-                        >
-                          <option value="high">High</option>
-                          <option value="medium">Medium</option>
-                          <option value="low">Low</option>
-                        </TextField>
-                        <IconButton size="small" onClick={() => handleAnnotationDelete(i)} color="error">
+                        <TextField size="small" value={ann.label} sx={{ flex: 1 }}
+                          onChange={(e) => handleAnnotationChange(i, 'label', e.target.value)} />
+                        <Select size="small" value={ann.severity}
+                          onChange={(e) => handleAnnotationChange(i, 'severity', e.target.value as string)}>
+                          <MenuItem value="high">High</MenuItem>
+                          <MenuItem value="medium">Medium</MenuItem>
+                          <MenuItem value="low">Low</MenuItem>
+                        </Select>
+                        <IconButton size="small" color="error" onClick={() => handleAnnotationDelete(i)}>
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>
                       </>
                     ) : (
                       <Chip
-                        label={ann.label}
+                        label={`${ann.area}: ${ann.label}`}
                         size="small"
-                        color={SEVERITY_COLORS[ann.severity] || 'warning'}
-                        sx={{ fontWeight: 600 }}
+                        color={SEVERITY_COLORS[ann.severity]}
+                        variant="outlined"
                       />
                     )}
                   </Box>
                 ))}
-                {editingAnnotations && (
-                  <Button size="small" startIcon={<AddIcon />} onClick={handleAddAnnotation} sx={{ mt: 0.5, textTransform: 'none' }}>
-                    Add note
+                <Box sx={{ display: 'flex', gap: 1, mt: 0.75 }}>
+                  <Button size="small" startIcon={<EditOutlinedIcon />}
+                    onClick={() => setEditingAnnotations(!editingAnnotations)}
+                    sx={{ textTransform: 'none' }}>
+                    {editingAnnotations ? 'Done' : 'Edit'}
                   </Button>
-                )}
-              </Box>
-            )}
-
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<BrushOutlinedIcon />}
-                onClick={() => setSketchOpen(true)}
-                sx={{ textTransform: 'none', minHeight: 36 }}
-              >
-                {overlayImageUrl ? 'Edit Drawing' : 'Draw Manually'}
-              </Button>
-              {annotations.length > 0 && (
-                <Button
-                  size="small"
-                  variant={editingAnnotations ? 'contained' : 'outlined'}
-                  startIcon={editingAnnotations ? <CheckCircleOutlineIcon /> : <EditOutlinedIcon />}
-                  onClick={() => setEditingAnnotations(!editingAnnotations)}
-                  sx={{ textTransform: 'none', minHeight: 36 }}
-                >
-                  {editingAnnotations ? 'Done Editing' : 'Edit Notes'}
-                </Button>
-              )}
-            </Box>
-
-            {overlayImageUrl && (
-              <Box sx={{ mt: 1.5 }}>
-                <Box
-                  component="img"
-                  src={overlayImageUrl}
-                  alt="Teacher overlay"
-                  sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-                />
+                  {editingAnnotations && (
+                    <Button size="small" startIcon={<AddIcon />}
+                      onClick={handleAddAnnotation} sx={{ textTransform: 'none' }}>
+                      Add
+                    </Button>
+                  )}
+                </Box>
               </Box>
             )}
           </Box>
