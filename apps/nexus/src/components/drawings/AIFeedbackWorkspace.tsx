@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box, Typography, Button, TextField, Rating, Paper, Chip, IconButton,
   CircularProgress, Collapse, Dialog, useTheme, useMediaQuery, Select, MenuItem,
+  Tabs, Tab,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -562,32 +563,39 @@ export default function AIFeedbackWorkspace({
           {correctedExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </Box>
         <Collapse in={correctedExpanded}>
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
+            {/* Level tabs */}
+            <Tabs
+              value={activeLevel}
+              onChange={(_, v) => setActiveLevel(v)}
+              sx={{ mb: 1.5, minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.25, textTransform: 'none', fontSize: '0.8rem' } }}
+            >
+              <Tab value="beginner" label="Beginner" />
+              <Tab value="medium" label="Medium" />
+              <Tab value="expert" label="Expert" />
+            </Tabs>
 
-            {/* AI ChatGPT Prompt area */}
-            {aiPrompt ? (
+            {/* Prompt for selected level */}
+            {referencePrompts ? (
               <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-                  AI-GENERATED CHATGPT PROMPT
-                </Typography>
                 <Paper
                   variant="outlined"
                   sx={{ p: 1.5, bgcolor: '#f9f9f9', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5, mb: 1 }}
                 >
                   <Typography variant="body2" sx={{ fontSize: '0.78rem', fontFamily: 'inherit' }}>
-                    {aiPrompt}
+                    {referencePrompts[activeLevel]}
                   </Typography>
                 </Paper>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
                   <Button
                     size="small"
-                    variant={promptCopied ? 'contained' : 'outlined'}
-                    startIcon={promptCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
-                    onClick={handleCopyPrompt}
-                    color={promptCopied ? 'success' : 'primary'}
+                    variant={referenceCopied ? 'contained' : 'outlined'}
+                    startIcon={referenceCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
+                    onClick={handleCopyReferencePrompt}
+                    color={referenceCopied ? 'success' : 'primary'}
                     sx={{ textTransform: 'none', minHeight: 36 }}
                   >
-                    {promptCopied ? 'Copied!' : 'Copy Prompt'}
+                    {referenceCopied ? 'Copied!' : 'Copy Prompt'}
                   </Button>
                   <Button
                     size="small"
@@ -619,19 +627,19 @@ export default function AIFeedbackWorkspace({
                     {regenerating ? 'Re-generating...' : 'Re-generate'}
                   </Button>
                 </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                  Copy the prompt, view and long-press (mobile) or right-click (desktop) the student image to copy it, then paste both into ChatGPT.
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Copy the {activeLevel} prompt, paste into ChatGPT (with student image for context), then paste the result below.
                 </Typography>
               </Box>
             ) : aiDraftStatus === 'generating' ? (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
                 <CircularProgress size={14} />
-                <Typography variant="body2" color="text.secondary">Generating ChatGPT prompt...</Typography>
+                <Typography variant="body2" color="text.secondary">Generating prompts...</Typography>
               </Box>
             ) : (
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  No AI prompt yet. Click Re-generate to get a ChatGPT prompt you can use to generate a reference image.
+                  No reference prompts yet. Click Re-generate to get prompts for all three levels.
                 </Typography>
                 <Button
                   size="small"
@@ -646,13 +654,13 @@ export default function AIFeedbackWorkspace({
               </Box>
             )}
 
-            {/* Upload / Paste area */}
+            {/* Upload / Paste corrected image */}
             {correctedImageUrl ? (
               <Box>
                 <Box
                   component="img"
                   src={correctedImageUrl}
-                  alt="Corrected reference"
+                  alt="Reference image"
                   sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 1 }}
                 />
                 <Button
@@ -686,8 +694,9 @@ export default function AIFeedbackWorkspace({
                     disabled={uploadingCorrected}
                     onClick={() => document.getElementById('upload-corrected')?.click()}
                     sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
+                    size="small"
                   >
-                    {uploadingCorrected ? 'Uploading...' : 'Upload Image'}
+                    {uploadingCorrected ? 'Uploading...' : 'Upload Reference Image'}
                   </Button>
                   <Button
                     variant="outlined"
@@ -695,12 +704,13 @@ export default function AIFeedbackWorkspace({
                     disabled={uploadingCorrected}
                     onClick={handlePasteImage}
                     sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
+                    size="small"
                   >
                     Paste Image
                   </Button>
                 </Box>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                  Generate in ChatGPT using the prompt above, then upload or paste (Ctrl+V) here
+                  Paste the reference image from ChatGPT here (Ctrl+V also works)
                 </Typography>
                 {pasteError && (
                   <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{pasteError}</Typography>
