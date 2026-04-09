@@ -232,30 +232,32 @@ export default function UnifiedExamsContainer() {
                 </Box>
               )}
 
-              {/* Right: Classroom */}
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                <Paper
-                  variant="outlined"
-                  sx={{ borderRadius: 3, p: 2.5, bgcolor: 'background.paper' }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <Typography
-                      variant="caption"
-                      fontWeight={700}
-                      sx={{
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.8,
-                        color: 'text.secondary',
-                        fontSize: '0.68rem',
-                      }}
-                    >
-                      Classroom
-                    </Typography>
-                    <Divider sx={{ flex: 1 }} />
-                  </Box>
-                  {classroomView}
-                </Paper>
-              </Box>
+              {/* Right: Classroom — students only; teachers use the full-width box below */}
+              {!isTeacher && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  <Paper
+                    variant="outlined"
+                    sx={{ borderRadius: 3, p: 2.5, bgcolor: 'background.paper' }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <Typography
+                        variant="caption"
+                        fontWeight={700}
+                        sx={{
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.8,
+                          color: 'text.secondary',
+                          fontSize: '0.68rem',
+                        }}
+                      >
+                        Classroom
+                      </Typography>
+                      <Divider sx={{ flex: 1 }} />
+                    </Box>
+                    {classroomView}
+                  </Paper>
+                </Box>
+              )}
 
               {/* Full-width classroom for teacher (no journey panel) */}
               {isTeacher && (
@@ -339,6 +341,10 @@ export default function UnifiedExamsContainer() {
           classroomId={activeClassroom.id}
           getToken={getToken}
           onSubmitted={handleDateSubmitted}
+          myPlan={(() => {
+            const me = data.schedule.stats.students.find(s => s.student_id === user?.id);
+            return me ? { plan_state: me.plan_state, target_year: me.target_year, application_number: me.application_number } : null;
+          })()}
         />
       )}
 

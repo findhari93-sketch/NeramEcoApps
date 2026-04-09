@@ -32,6 +32,10 @@ export interface StudentSummary {
   state: string | null;
   exam_completed_at: string | null;
   attempt_id: string | null;
+  // Exam intent fields (from nexus_student_exam_plans)
+  plan_state: 'still_thinking' | 'planning_to_write' | 'applied' | 'not_this_year' | 'completed' | null;
+  target_year: string | null;
+  application_number: string | null;
   // Only present on removed_students
   deleted_at?: string | null;
   deletion_reason?: string | null;
@@ -56,6 +60,15 @@ export interface WeekData {
   is_past: boolean;
 }
 
+// 5-bucket intent breakdown
+export interface ExamIntentBuckets {
+  date_booked: number;
+  applied_no_date: number;
+  planning: number;
+  not_this_year: number;
+  no_response: number;
+}
+
 // Summary stats (now includes full student lists for popups)
 export interface ExamScheduleStats {
   total_students: number;
@@ -66,6 +79,7 @@ export interface ExamScheduleStats {
   students: StudentSummary[];
   submitted_students: StudentSummary[];
   removed_students: StudentSummary[];
+  buckets: ExamIntentBuckets;
 }
 
 // Navigation bounds

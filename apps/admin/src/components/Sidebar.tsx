@@ -58,12 +58,16 @@ import { useSidebar } from '@/contexts/SidebarContext';
 const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
 const MOBILE_DRAWER_WIDTH = 280;
 
+type BadgeKey = 'careers' | 'leads' | 'students' | 'demo_classes' | 'support_tickets' | 'app_feedback' | 'qa_moderation' | 'payments';
+
 interface MenuItem {
   text: string;
   icon: typeof DashboardIcon;
   path: string;
-  hasBadge?: boolean | string;
+  hasBadge?: true | BadgeKey;
 }
+
+type BadgeCounts = Record<BadgeKey, number>;
 
 interface MenuGroup {
   label: string;
@@ -81,12 +85,12 @@ const menuGroups: MenuGroup[] = [
     label: 'People & CRM',
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
-      { text: 'Leads', icon: PersonSearchIcon, path: '/leads' },
-      { text: 'Students', icon: SchoolIcon, path: '/students' },
+      { text: 'Leads', icon: PersonSearchIcon, path: '/leads', hasBadge: 'leads' },
+      { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
       { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
-      { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes' },
+      { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes', hasBadge: 'demo_classes' },
     ],
   },
   {
@@ -101,7 +105,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: 'Finance',
     items: [
-      { text: 'Payments', icon: PaymentIcon, path: '/payments' },
+      { text: 'Payments', icon: PaymentIcon, path: '/payments', hasBadge: 'payments' },
       { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
       { text: 'Expenses', icon: ReceiptLongIcon, path: '/expenses' },
       { text: 'Staff Assignments', icon: BusinessCenterIcon, path: '/staff-assignments' },
@@ -119,10 +123,10 @@ const menuGroups: MenuGroup[] = [
     label: 'Communication',
     items: [
       { text: 'Messages', icon: MailOutlinedIcon, path: '/messages', hasBadge: true },
-      { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets' },
-      { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback' },
+      { text: 'Support Tickets', icon: SupportAgentIcon, path: '/support-tickets', hasBadge: 'support_tickets' },
+      { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback', hasBadge: 'app_feedback' },
       { text: 'WhatsApp Templates', icon: WhatsAppIcon, path: '/whatsapp-templates' },
-      { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation' },
+      { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation', hasBadge: 'qa_moderation' },
       { text: 'Chat History', icon: ForumIcon, path: '/chat-history' },
       { text: 'Aintra Training', icon: SmartToyIcon, path: '/aintra-kb' },
       { text: 'Training Guide', icon: MenuBookIcon, path: '/aintra-guide' },
@@ -152,8 +156,19 @@ export default function Sidebar() {
   const { collapsed, toggleSidebar, sidebarWidth, isMobile, mobileOpen, setMobileOpen } = useSidebar();
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [careersNewCount, setCareersNewCount] = useState(0);
+  const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({
+    careers: 0,
+    leads: 0,
+    students: 0,
+    demo_classes: 0,
+    support_tickets: 0,
+    app_feedback: 0,
+    qa_moderation: 0,
+    payments: 0,
+  });
   const messageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const careersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const badgesIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMessageUnreadCount = useCallback(async () => {
     try {
@@ -179,20 +194,31 @@ export default function Sidebar() {
     }
   }, []);
 
+  const fetchBadgeCounts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin-badges');
+      if (res.ok) {
+        const data = await res.json();
+        setBadgeCounts((prev) => ({ ...prev, ...data }));
+      }
+    } catch {
+      // Silently fail — keep previous counts
+    }
+  }, []);
+
   useEffect(() => {
     fetchMessageUnreadCount();
     fetchCareersNewCount();
+    fetchBadgeCounts();
     messageIntervalRef.current = setInterval(fetchMessageUnreadCount, 60000);
     careersIntervalRef.current = setInterval(fetchCareersNewCount, 60000);
+    badgesIntervalRef.current = setInterval(fetchBadgeCounts, 60000);
     return () => {
-      if (messageIntervalRef.current) {
-        clearInterval(messageIntervalRef.current);
-      }
-      if (careersIntervalRef.current) {
-        clearInterval(careersIntervalRef.current);
-      }
+      if (messageIntervalRef.current) clearInterval(messageIntervalRef.current);
+      if (careersIntervalRef.current) clearInterval(careersIntervalRef.current);
+      if (badgesIntervalRef.current) clearInterval(badgesIntervalRef.current);
     };
-  }, [fetchMessageUnreadCount, fetchCareersNewCount]);
+  }, [fetchMessageUnreadCount, fetchCareersNewCount, fetchBadgeCounts]);
 
   const handleLogout = async () => {
     await signOut();
@@ -208,6 +234,12 @@ export default function Sidebar() {
     }
     if (item.hasBadge === 'careers' && careersNewCount > 0) {
       return <Badge badgeContent={careersNewCount} color="error" max={99}>{iconEl}</Badge>;
+    }
+    if (typeof item.hasBadge === 'string' && item.hasBadge in badgeCounts) {
+      const count = badgeCounts[item.hasBadge as BadgeKey];
+      if (count > 0) {
+        return <Badge badgeContent={count} color="error" max={99}>{iconEl}</Badge>;
+      }
     }
     return iconEl;
   };

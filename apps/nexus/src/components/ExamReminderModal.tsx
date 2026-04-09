@@ -37,7 +37,7 @@ export default function ExamReminderModal() {
   const [action, setAction] = useState<string | null>(null);
   const [applicationNumber, setApplicationNumber] = useState('');
   const [saving, setSaving] = useState(false);
-  const [confirmNotWriting, setConfirmNotWriting] = useState(false);
+  const [selectedTargetYear, setSelectedTargetYear] = useState<string | null>(null);
 
   const currentPlan = plans[currentPlanIndex];
 
@@ -80,8 +80,10 @@ export default function ExamReminderModal() {
     checkPrompts();
   }, [isStudent, isOnboardingComplete, activeClassroom, getToken]);
 
+  const TARGET_YEARS = ['2026-27', '2027-28', '2028-29'];
+
   const handleResponse = useCallback(
-    async (responseAction: 'applied' | 'planning' | 'snooze' | 'not_writing') => {
+    async (responseAction: 'applied' | 'planning' | 'snooze' | 'not_this_year', targetYear?: string) => {
       if (!currentPlan) return;
       setSaving(true);
 
@@ -97,6 +99,9 @@ export default function ExamReminderModal() {
         if (responseAction === 'applied' && applicationNumber.trim()) {
           body.application_number = applicationNumber.trim();
         }
+        if (responseAction === 'not_this_year' && targetYear) {
+          body.target_year = targetYear;
+        }
 
         await fetch('/api/onboarding/exam-prompt', {
           method: 'POST',
@@ -104,7 +109,6 @@ export default function ExamReminderModal() {
           body: JSON.stringify(body),
         });
 
-        // Mark as prompted today
         if (activeClassroom) {
           localStorage.setItem(
             `exam_prompt_${activeClassroom.id}`,
@@ -112,12 +116,11 @@ export default function ExamReminderModal() {
           );
         }
 
-        // Move to next plan or close
         if (currentPlanIndex < plans.length - 1) {
           setCurrentPlanIndex((i) => i + 1);
           setAction(null);
           setApplicationNumber('');
-          setConfirmNotWriting(false);
+          setSelectedTargetYear(null);
         } else {
           setOpen(false);
         }
@@ -205,29 +208,40 @@ export default function ExamReminderModal() {
               </Button>
             </Box>
           </Box>
-        ) : confirmNotWriting ? (
+        ) : action === 'not_this_year' ? (
           <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" color="error.main" sx={{ mb: 2 }}>
-              Are you sure? This will remove {examLabel} from your exam tracker.
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Which year are you planning to write?
             </Typography>
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', mb: 2 }}>
+              {TARGET_YEARS.map((year) => (
+                <Chip
+                  key={year}
+                  label={year}
+                  onClick={() => setSelectedTargetYear(year)}
+                  color={selectedTargetYear === year ? 'primary' : 'default'}
+                  variant={selectedTargetYear === year ? 'filled' : 'outlined'}
+                  sx={{ fontWeight: 600, minHeight: 36 }}
+                />
+              ))}
+            </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button
                 variant="outlined"
                 fullWidth
-                onClick={() => setConfirmNotWriting(false)}
+                onClick={() => { setAction(null); setSelectedTargetYear(null); }}
                 sx={{ borderRadius: 2, textTransform: 'none' }}
               >
-                Cancel
+                Back
               </Button>
               <Button
                 variant="contained"
-                color="error"
                 fullWidth
-                disabled={saving}
-                onClick={() => handleResponse('not_writing')}
+                disabled={saving || !selectedTargetYear}
+                onClick={() => handleResponse('not_this_year', selectedTargetYear!)}
                 sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
               >
-                Yes, Remove
+                {saving ? 'Saving...' : 'Confirm'}
               </Button>
             </Box>
           </Box>
@@ -252,7 +266,7 @@ export default function ExamReminderModal() {
               startIcon={<EventOutlinedIcon />}
               sx={{ py: 1.5, borderRadius: 2, textTransform: 'none' }}
             >
-              I&apos;m Planning to Apply
+              Writing 2025-26, haven&apos;t applied yet
             </Button>
 
             <Button
@@ -273,11 +287,11 @@ export default function ExamReminderModal() {
               variant="text"
               fullWidth
               color="error"
-              onClick={() => setConfirmNotWriting(true)}
+              onClick={() => setAction('not_this_year')}
               startIcon={<CancelOutlinedIcon />}
               sx={{ py: 1, textTransform: 'none', fontSize: '0.85rem' }}
             >
-              I&apos;ve Decided Not to Write
+              Not writing this year
             </Button>
           </Box>
         )}

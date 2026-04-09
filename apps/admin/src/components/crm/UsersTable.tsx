@@ -38,6 +38,8 @@ import BlockIcon from '@mui/icons-material/Block';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
+import LockPersonIcon from '@mui/icons-material/LockPerson';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
@@ -57,6 +59,7 @@ interface UsersTableProps {
   onMarkDeadLead?: (user: UserJourney) => void;
   onMarkIrrelevant?: (user: UserJourney) => void;
   onDiagnosticsClick?: (user: UserJourney) => void;
+  onDisableToggle?: (user: UserJourney) => void;
   isFullscreen?: boolean;
 }
 
@@ -457,6 +460,7 @@ export default function UsersTable(props: UsersTableProps) {
     onMarkDeadLead,
     onMarkIrrelevant,
     onDiagnosticsClick,
+    onDisableToggle,
     isFullscreen,
   } = props;
 
@@ -570,6 +574,22 @@ export default function UsersTable(props: UsersTableProps) {
                     fontWeight: 700,
                     bgcolor: '#FF980014',
                     color: '#E65100',
+                    borderRadius: 0.75,
+                    mt: 0.25,
+                  }}
+                />
+              )}
+              {row.original.is_disabled && (
+                <Chip
+                  label="Disabled"
+                  size="small"
+                  icon={<LockPersonIcon sx={{ fontSize: '10px !important' }} />}
+                  sx={{
+                    height: 18,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    bgcolor: '#D32F2F14',
+                    color: '#C62828',
                     borderRadius: 0.75,
                     mt: 0.25,
                   }}
@@ -1046,6 +1066,7 @@ export default function UsersTable(props: UsersTableProps) {
     muiTableBodyRowProps: ({ row }) => {
       const isDeadLead = row.original.contacted_status === 'dead_lead';
       const isIrrelevant = row.original.contacted_status === 'irrelevant';
+      const isDisabled = row.original.is_disabled;
       const isDimmed = isDeadLead || isIrrelevant;
       return {
         onClick: (e: React.MouseEvent) => {
@@ -1065,8 +1086,11 @@ export default function UsersTable(props: UsersTableProps) {
             opacity: 0.5,
             bgcolor: 'grey.50',
           }),
+          ...(isDisabled && !isDimmed && {
+            bgcolor: '#FFF5F5',
+          }),
           '&:hover': {
-            bgcolor: isDimmed ? 'grey.100' : 'primary.50',
+            bgcolor: isDimmed ? 'grey.100' : isDisabled ? '#FFEBEE' : 'primary.50',
             opacity: isDimmed ? 0.7 : 1,
           },
           '&:hover td': {
@@ -1196,6 +1220,24 @@ export default function UsersTable(props: UsersTableProps) {
             <RemoveCircleOutlineIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Mark as irrelevant</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (actionMenuUser && onDisableToggle) onDisableToggle(actionMenuUser);
+            setActionMenuAnchor(null);
+            setActionMenuUser(null);
+          }}
+          sx={{ fontSize: 14, py: 1 }}
+        >
+          <ListItemIcon>
+            {actionMenuUser?.is_disabled
+              ? <LockOpenIcon fontSize="small" sx={{ color: 'success.main' }} />
+              : <LockPersonIcon fontSize="small" sx={{ color: 'warning.dark' }} />
+            }
+          </ListItemIcon>
+          <ListItemText sx={{ color: actionMenuUser?.is_disabled ? 'success.main' : 'warning.dark' }}>
+            {actionMenuUser?.is_disabled ? 'Enable account' : 'Disable account'}
+          </ListItemText>
         </MenuItem>
         <Divider sx={{ my: 0.5 }} />
         <MenuItem

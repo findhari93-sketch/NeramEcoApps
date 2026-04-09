@@ -109,6 +109,33 @@ export async function POST(request: NextRequest) {
             .eq('user_id', user.id)
             .eq('is_active', true);
         }
+
+        // Sync exam plan when academic_year is set: students in future years are "not_this_year"
+        if (body.academic_year && body.academic_year > '2025-26') {
+          const db = supabase as any;
+          const { data: enrollment } = await db
+            .from('nexus_enrollments')
+            .select('classroom_id')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .single();
+
+          if (enrollment?.classroom_id) {
+            await db
+              .from('nexus_student_exam_plans')
+              .upsert(
+                {
+                  student_id: user.id,
+                  classroom_id: enrollment.classroom_id,
+                  exam_type: 'nata',
+                  state: 'not_this_year',
+                  target_year: body.academic_year,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'student_id,classroom_id,exam_type' }
+              );
+          }
+        }
         break;
 
       case 'submit': {

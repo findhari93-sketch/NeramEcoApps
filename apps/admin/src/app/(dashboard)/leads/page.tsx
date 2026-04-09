@@ -211,6 +211,21 @@ export default function LeadsPage() {
     setSearchDebounce(timeout);
   };
 
+  const handleDisableToggle = async (user: UserJourney) => {
+    if (!supabaseUserId) return;
+    try {
+      const res = await fetch(`/api/crm/users/${user.id}/disable`, {
+        method: user.is_disabled ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: user.is_disabled ? undefined : JSON.stringify({ adminId: supabaseUserId }),
+      });
+      if (!res.ok) throw new Error('Failed to update user access');
+      await fetchLeads();
+    } catch (err: any) {
+      console.error('Disable toggle error:', err);
+    }
+  };
+
   const handleBulkDeleteRequest = (selectedUsers: UserJourney[]) => {
     setUsersToDelete(selectedUsers);
     setDeleteDialogOpen(true);
@@ -473,6 +488,7 @@ export default function LeadsPage() {
           onRowClick={handleRowClick}
           onBulkDeleteRequest={handleBulkDeleteRequest}
           onDiagnosticsClick={handleDiagnosticsClick}
+          onDisableToggle={handleDisableToggle}
           isFullscreen={isFullscreen}
         />
       </Paper>

@@ -26,7 +26,7 @@ export default function WeekNavigator({
   currentUserId,
 }: WeekNavigatorProps) {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [activeDay, setActiveDay] = useState<'fri' | 'sat'>(week.friday ? 'fri' : 'sat');
 
   const canGoBack = weekOffset > navigation.min_week_offset;

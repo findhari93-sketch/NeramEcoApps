@@ -56,11 +56,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'plan_id and action required' }, { status: 400 });
     }
 
-    if (!['applied', 'planning', 'snooze', 'not_writing'].includes(action)) {
+    if (!['applied', 'planning', 'snooze', 'not_writing', 'not_this_year'].includes(action)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    await updateExamPlanPrompt(plan_id, action, { application_number });
+    await updateExamPlanPrompt(plan_id, action, { application_number, target_year: body.target_year });
 
     return NextResponse.json({ success: true });
   } catch (err) {

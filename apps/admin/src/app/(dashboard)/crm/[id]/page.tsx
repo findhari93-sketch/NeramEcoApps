@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Box, CircularProgress, Alert, Grid, Button } from '@neram/ui';
+import { Box, CircularProgress, Alert, Grid, Button, Snackbar } from '@neram/ui';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
+import LinkIcon from '@mui/icons-material/Link';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import type { UserJourneyDetail } from '@neram/database';
 
@@ -36,6 +37,8 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
   const [editOpen, setEditOpen] = useState(false);
   const [directEnrollOpen, setDirectEnrollOpen] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
+  const [paymentLinkCopied, setPaymentLinkCopied] = useState(false);
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
 
   const adminId = supabaseUserId || 'unknown';
   const adminName = supabaseName || 'Admin';
@@ -61,6 +64,21 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
+
+  const handleCopyPaymentLink = async () => {
+    setPaymentLinkLoading(true);
+    try {
+      const res = await fetch(`/api/crm/users/${params.id}/payment-link`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to generate link');
+      const { link } = await res.json();
+      await navigator.clipboard.writeText(link);
+      setPaymentLinkCopied(true);
+    } catch (err) {
+      console.error('Payment link error:', err);
+    } finally {
+      setPaymentLinkLoading(false);
+    }
+  };
 
   // Scroll to section when navigating from notification click
   useEffect(() => {
@@ -135,6 +153,23 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 startIcon={<PersonAddAlt1Icon />}
               >
                 Generate Direct Enrollment Link
+              </Button>
+            </Box>
+          )}
+
+          {/* Copy Payment Link - for approved leads without email/Google auth */}
+          {detail.leadProfile?.status === 'approved' && (
+            <Box sx={{ mb: 2 }}>
+              <Button
+                variant="outlined"
+                color="success"
+                fullWidth
+                onClick={handleCopyPaymentLink}
+                disabled={paymentLinkLoading}
+                sx={{ borderRadius: 1, py: 1.2, fontWeight: 600, textTransform: 'none' }}
+                startIcon={<LinkIcon />}
+              >
+                {paymentLinkLoading ? 'Generating...' : 'Copy Payment Link'}
               </Button>
             </Box>
           )}
@@ -236,6 +271,15 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           link={shareLink}
         />
       )}
+
+      {/* Payment link copied toast */}
+      <Snackbar
+        open={paymentLinkCopied}
+        autoHideDuration={4000}
+        onClose={() => setPaymentLinkCopied(false)}
+        message="Payment link copied. Valid for 7 days."
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, alpha, useTheme } from '@neram/ui';
+import { Box, Typography, alpha, useTheme } from '@neram/ui';
 import ButtonBase from '@mui/material/ButtonBase';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -10,11 +10,12 @@ import type { ExamScheduleStats } from '@/types/exam-schedule';
 
 interface SummaryStatsBarProps {
   stats: ExamScheduleStats;
+  isTeacher?: boolean;
   onStudentsClick?: () => void;
   onSubmittedClick?: () => void;
 }
 
-export default function SummaryStatsBar({ stats, onStudentsClick, onSubmittedClick }: SummaryStatsBarProps) {
+export default function SummaryStatsBar({ stats, isTeacher, onStudentsClick, onSubmittedClick }: SummaryStatsBarProps) {
   const theme = useTheme();
 
   const cardSx = (clickable: boolean) => clickable ? {
@@ -34,6 +35,7 @@ export default function SummaryStatsBar({ stats, onStudentsClick, onSubmittedCli
   } : {};
 
   return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
     <Box
       sx={{
         display: 'grid',
@@ -90,6 +92,46 @@ export default function SummaryStatsBar({ stats, onStudentsClick, onSubmittedCli
         size="compact"
         variant="surface"
       />
+    </Box>
+
+    {/* Teacher bucket breakdown pills */}
+
+    {isTeacher && stats.buckets && (
+      <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.75 }}>
+        {stats.buckets.applied_no_date > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, px: 1, py: 0.3, borderRadius: 10, bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
+            <Typography variant="caption" fontWeight={700} color="primary.main" sx={{ fontSize: '0.65rem' }}>
+              {stats.buckets.applied_no_date}
+            </Typography>
+            <Typography variant="caption" color="primary.main" sx={{ fontSize: '0.65rem' }}>applied</Typography>
+          </Box>
+        )}
+        {stats.buckets.planning > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, px: 1, py: 0.3, borderRadius: 10, bgcolor: alpha(theme.palette.info.main, 0.08) }}>
+            <Typography variant="caption" fontWeight={700} color="info.main" sx={{ fontSize: '0.65rem' }}>
+              {stats.buckets.planning}
+            </Typography>
+            <Typography variant="caption" color="info.main" sx={{ fontSize: '0.65rem' }}>planning</Typography>
+          </Box>
+        )}
+        {stats.buckets.not_this_year > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, px: 1, py: 0.3, borderRadius: 10, bgcolor: alpha(theme.palette.text.primary, 0.06) }}>
+            <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+              {stats.buckets.not_this_year}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>next year</Typography>
+          </Box>
+        )}
+        {stats.buckets.no_response > 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, px: 1, py: 0.3, borderRadius: 10, bgcolor: alpha(theme.palette.warning.main, 0.08) }}>
+            <Typography variant="caption" fontWeight={700} color="warning.main" sx={{ fontSize: '0.65rem' }}>
+              {stats.buckets.no_response}
+            </Typography>
+            <Typography variant="caption" color="warning.main" sx={{ fontSize: '0.65rem' }}>no response</Typography>
+          </Box>
+        )}
+      </Box>
+    )}
     </Box>
   );
 }

@@ -9,6 +9,7 @@ import WeekNavigator from '@/components/exam-schedule/WeekNavigator';
 import RecentlyCompletedStrip from '@/components/exam-schedule/RecentlyCompletedStrip';
 import DateRail from '@/components/exam-schedule/DateRail';
 import StudentsPopup from '@/components/exam-schedule/StudentsPopup';
+import ExamStatusCard from '@/components/exams/ExamStatusCard';
 
 interface ClassroomViewProps {
   schedule: ExamScheduleData;
@@ -97,10 +98,26 @@ export default function ClassroomView({
     if (newOffset !== weekOffset) onWeekChange(newOffset);
   };
 
+  // Find current user's summary for the student status card
+  const myStudentSummary = !isTeacher
+    ? schedule.stats.students.find(s => s.student_id === currentUserId)
+    : null;
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {!isTeacher && (
+        <ExamStatusCard
+          planState={myStudentSummary?.plan_state ?? null}
+          targetYear={myStudentSummary?.target_year ?? null}
+          applicationNumber={myStudentSummary?.application_number ?? null}
+          examDate={myStudentSummary?.exam_date ?? null}
+          examCity={myStudentSummary?.exam_city ?? null}
+          onUpdateStatus={onAddMyDate}
+        />
+      )}
       <SummaryStatsBar
         stats={schedule.stats}
+        isTeacher={isTeacher}
         onStudentsClick={() => setStudentsOpen(true)}
         onSubmittedClick={() => setSubmittedOpen(true)}
       />
@@ -142,6 +159,8 @@ export default function ClassroomView({
         mode="all"
         students={schedule.stats.students}
         totalStudents={schedule.stats.total_students}
+        isTeacher={isTeacher}
+        buckets={schedule.stats.buckets}
       />
 
       {/* Submitted popup */}
@@ -152,6 +171,8 @@ export default function ClassroomView({
         students={schedule.stats.students}
         submittedStudents={schedule.stats.submitted_students}
         totalStudents={schedule.stats.total_students}
+        isTeacher={isTeacher}
+        buckets={schedule.stats.buckets}
       />
     </Box>
   );

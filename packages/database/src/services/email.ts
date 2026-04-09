@@ -49,9 +49,9 @@ export async function sendEmail(data: EmailData): Promise<{ success: boolean; er
     }
 
     return { success: true };
-  } catch (err) {
+  } catch (err: any) {
     console.error('Email service error:', err);
-    return { success: false, error: 'Failed to send email' };
+    return { success: false, error: err?.message ?? 'Failed to send email' };
   }
 }
 

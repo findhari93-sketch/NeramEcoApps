@@ -174,6 +174,21 @@ export default function CRMPage() {
     setSearchDebounce(timeout);
   };
 
+  const handleDisableToggle = async (user: UserJourney) => {
+    if (!supabaseUserId) return;
+    try {
+      const res = await fetch(`/api/crm/users/${user.id}/disable`, {
+        method: user.is_disabled ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: user.is_disabled ? undefined : JSON.stringify({ adminId: supabaseUserId }),
+      });
+      if (!res.ok) throw new Error('Failed to update user access');
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const handleMarkDeadLead = async (user: UserJourney) => {
     if (!supabaseUserId) return;
     try {
@@ -419,6 +434,7 @@ export default function CRMPage() {
           onBulkDeleteRequest={handleBulkDeleteRequest}
           onMarkDeadLead={handleMarkDeadLead}
           onMarkIrrelevant={handleMarkIrrelevant}
+          onDisableToggle={handleDisableToggle}
           isFullscreen={isFullscreen}
         />
       </Paper>

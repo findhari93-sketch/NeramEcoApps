@@ -294,8 +294,8 @@ export async function getExamPlansNeedingPrompt(
 
 export async function updateExamPlanPrompt(
   planId: string,
-  action: 'applied' | 'planning' | 'snooze' | 'not_writing',
-  extraData?: { application_number?: string; notes?: string }
+  action: 'applied' | 'planning' | 'snooze' | 'not_writing' | 'not_this_year',
+  extraData?: { application_number?: string; notes?: string; target_year?: string }
 ): Promise<void> {
   const now = new Date();
   const updates: Record<string, unknown> = { last_prompted_at: now.toISOString() };
@@ -303,26 +303,32 @@ export async function updateExamPlanPrompt(
   switch (action) {
     case 'applied':
       updates.state = 'applied';
-      updates.next_prompt_at = null; // Stop prompting
+      updates.next_prompt_at = null;
       if (extraData?.application_number) updates.application_number = extraData.application_number;
       break;
-    case 'planning':
-      // Next Monday
+    case 'planning': {
       const nextMonday = new Date(now);
       nextMonday.setDate(now.getDate() + ((8 - now.getDay()) % 7 || 7));
       nextMonday.setHours(0, 0, 0, 0);
       updates.state = 'planning_to_write';
       updates.next_prompt_at = nextMonday.toISOString();
       break;
-    case 'snooze':
-      // 3 days from now
+    }
+    case 'snooze': {
       const snoozeUntil = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
       updates.prompt_snooze_until = snoozeUntil.toISOString();
       break;
+    }
     case 'not_writing':
       updates.state = 'completed';
       updates.next_prompt_at = null;
       updates.notes = 'Student decided not to write this exam';
+      break;
+    case 'not_this_year':
+      updates.state = 'not_this_year';
+      updates.next_prompt_at = null;
+      updates.target_year = extraData?.target_year ?? null;
+      updates.notes = `Student writing in ${extraData?.target_year ?? 'a future year'}`;
       break;
   }
 

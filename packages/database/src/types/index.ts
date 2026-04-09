@@ -132,6 +132,11 @@ export interface User extends Timestamps {
   linked_classroom_at: string | null;
   linked_classroom_by: string | null;
 
+  // Disable / restrict access
+  is_disabled: boolean;
+  disabled_at: string | null;
+  disabled_by: string | null;
+
   // Metadata
   last_login_at: string | null;
   metadata: Record<string, unknown> | null;
@@ -393,6 +398,10 @@ export interface LeadProfile extends Timestamps {
   installment_2_amount: number | null;
   installment_2_due_days: number;
   admin_coupon_id: string | null;
+
+  // Shareable payment link (for students without email/Google auth)
+  payment_link_token: string | null;
+  payment_link_expires_at: string | null;
 }
 
 /**
@@ -2920,6 +2929,7 @@ export interface UserJourney {
   last_login_at: string | null;
   preferred_language: string;
   linked_classroom_email: string | null;
+  is_disabled: boolean;
 
   // Computed pipeline stage
   pipeline_stage: PipelineStage;

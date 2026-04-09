@@ -132,8 +132,29 @@ export async function listUserJourneys(
     throw error;
   }
 
+  // Enrich with is_disabled from the users table (not in view yet)
+  const rows = data || [];
+  let disableMap: Record<string, boolean> = {};
+  if (rows.length > 0) {
+    const ids = rows.map((r: any) => r.id).filter(Boolean);
+    const { data: disableData } = await supabase
+      .from('users')
+      .select('id, is_disabled')
+      .in('id', ids);
+    if (disableData) {
+      for (const u of disableData) {
+        disableMap[u.id] = (u as any).is_disabled ?? false;
+      }
+    }
+  }
+
+  const users = rows.map((r: any) => ({
+    ...r,
+    is_disabled: disableMap[r.id] ?? false,
+  })) as UserJourney[];
+
   return {
-    users: (data || []) as UserJourney[],
+    users,
     total: count || 0,
   };
 }
@@ -1084,4 +1105,58 @@ export async function getDueCallbackReminders(
     user_name: cb.users?.name || cb.name || 'Unknown',
     user_phone: cb.users?.phone || cb.phone || '',
   })) as (CallbackRequest & { user_name: string; user_phone: string })[];
+}
+
+/**
+ * Generate a shareable payment link token for a lead profile.
+ * Used when the student has no email or Google account.
+ * Token expires in 7 days. Calling again overwrites the previous token.
+ */
+export async function generatePaymentLinkToken(
+  leadProfileId: string,
+  client?: TypedSupabaseClient
+): Promise<{ token: string; expiresAt: string }> {
+  const supabase = client || getSupabaseAdminClient();
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error } = await supabase
+    .from('lead_profiles')
+    .update({
+      payment_link_token: token,
+      payment_link_expires_at: expiresAt,
+    })
+    .eq('id', leadProfileId);
+
+  if (error) throw error;
+  return { token, expiresAt };
+}
+
+/**
+ * Look up a lead profile by its shareable payment link token.
+ * Returns null if the token does not exist.
+ * Caller is responsible for checking expiry and status.
+ */
+export async function getLeadProfileByPaymentToken(
+  token: string,
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('lead_profiles')
+    .select('id, application_number, status, payment_link_expires_at, user_id, users!inner(phone, email, name, firebase_uid)')
+    .eq('payment_link_token', token)
+    .single();
+
+  if (error) return null;
+  return data as {
+    id: string;
+    application_number: string | null;
+    status: string;
+    payment_link_expires_at: string | null;
+    user_id: string;
+    users: { phone: string | null; email: string | null; name: string | null; firebase_uid: string | null };
+  };
+}
 }

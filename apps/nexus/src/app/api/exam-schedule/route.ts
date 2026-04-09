@@ -234,6 +234,16 @@ export async function GET(request: NextRequest) {
 
     const allStudentIds = (allStudents || []).map((s: any) => s.user_id) as string[];
 
+    // Get exam plans for all students (intent tracking)
+    const { data: examPlans } = await db
+      .from('nexus_student_exam_plans')
+      .select('student_id, state, target_year, application_number')
+      .eq('classroom_id', classroomId)
+      .eq('exam_type', examType);
+
+    const planMap: Record<string, { state: string; target_year: string | null; application_number: string | null }> = {};
+    for (const p of (examPlans || [])) planMap[p.student_id] = p;
+
     // Get student names + academic year for ALL enrolled students
     const studentNameMap: Record<string, string> = {};
     const academicYearMap: Record<string, string | null> = {};
@@ -330,6 +340,7 @@ export async function GET(request: NextRequest) {
     // Build full student summary list for popup (all enrolled students)
     function buildStudentSummary(studentId: string) {
       const academicYear = academicYearMap[studentId] ?? null;
+      const plan = planMap[studentId] ?? null;
       const studentAttempts = attempts.filter((a: any) => a.student_id === studentId);
       // Pick the most recent/upcoming attempt for summary
       const primaryAttempt = studentAttempts.sort((a: any, b: any) =>
@@ -339,7 +350,7 @@ export async function GET(request: NextRequest) {
         student_id: studentId,
         name: studentNameMap[studentId] || 'Unknown',
         academic_year: academicYear,
-        not_this_year: academicYear ? academicYear > '2025-26' : false,
+        not_this_year: plan?.state === 'not_this_year' || (academicYear ? academicYear > '2025-26' : false),
         has_date: studentAttempts.length > 0,
         exam_date: primaryAttempt?.exam_date ?? null,
         exam_city: primaryAttempt?.exam_city ?? null,
@@ -347,6 +358,9 @@ export async function GET(request: NextRequest) {
         state: primaryAttempt?.state ?? null,
         exam_completed_at: primaryAttempt?.exam_completed_at ?? null,
         attempt_id: primaryAttempt?.id ?? null,
+        plan_state: plan?.state ?? null,
+        target_year: plan?.target_year ?? null,
+        application_number: plan?.application_number ?? null,
       };
     }
 
@@ -377,6 +391,22 @@ export async function GET(request: NextRequest) {
       deletion_reason: a.deletion_reason,
     }));
 
+    // 5-bucket intent breakdown
+    const buckets = {
+      date_booked: allStudentIds.filter(id => submittedStudentIds.has(id)).length,
+      applied_no_date: allStudentIds.filter(id =>
+        !submittedStudentIds.has(id) && planMap[id]?.state === 'applied'
+      ).length,
+      planning: allStudentIds.filter(id =>
+        !submittedStudentIds.has(id) &&
+        ['planning_to_write', 'still_thinking'].includes(planMap[id]?.state ?? '')
+      ).length,
+      not_this_year: allStudentIds.filter(id => planMap[id]?.state === 'not_this_year').length,
+      no_response: allStudentIds.filter(id =>
+        !submittedStudentIds.has(id) && !planMap[id]
+      ).length,
+    };
+
     const stats = {
       total_students: allStudentIds.length,
       submitted_count: submittedStudentIds.size,
@@ -386,13 +416,16 @@ export async function GET(request: NextRequest) {
       students: allStudentSummaries,
       submitted_students: submittedSummaries,
       removed_students: removedSummaries,
+      buckets,
     };
 
-    // Not submitted students with names
-    const notSubmitted = notSubmittedIds.map(id => ({
-      id,
-      name: studentNameMap[id] || 'Unknown',
-    }));
+    // Not submitted students with names — exclude not_this_year
+    const notSubmitted = notSubmittedIds
+      .filter(id => planMap[id]?.state !== 'not_this_year')
+      .map(id => ({
+        id,
+        name: studentNameMap[id] || 'Unknown',
+      }));
 
     // Recently completed (last 7 days)
     const sevenDaysAgo = new Date();
