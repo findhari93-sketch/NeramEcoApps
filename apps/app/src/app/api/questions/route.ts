@@ -152,6 +152,7 @@ export async function POST(req: NextRequest) {
       .single() as unknown as { data: { user_type: string } | null };
     const isAdmin = dbUser?.user_type === 'admin';
 
+    const now = new Date();
     const question = await createQuestionPost(
       auth.userId,
       {
@@ -159,8 +160,8 @@ export async function POST(req: NextRequest) {
         body: questionBody.trim(),
         category: category.trim() as NataQuestionCategory,
         exam_type: examType || 'NATA',
-        exam_year: examYear || new Date().getFullYear(),
-        exam_month: examMonth || (new Date().getMonth() + 1),
+        exam_year: examYear || now.getFullYear(),
+        exam_month: examMonth || (now.getMonth() + 1),
         exam_session: examSession || null,
         tags: tags || [],
         image_urls: Array.isArray(imageUrls) ? imageUrls : [],
