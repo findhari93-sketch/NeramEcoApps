@@ -189,6 +189,9 @@ export default function EditQuestionDialog({
 
             {/* Tags */}
             <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Tags
+              </Typography>
               <Stack direction="row" spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
                 {tags.map((tag) => (
                   <Chip
