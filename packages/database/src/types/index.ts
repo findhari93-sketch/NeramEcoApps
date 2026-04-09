@@ -3207,7 +3207,7 @@ export interface CreateQuestionPostInput {
   category: NataQuestionCategory;
   exam_type?: string;
   exam_year?: number;
-  exam_month?: number;
+  exam_month?: number | null;
   exam_session?: string;
   image_urls?: string[];
   tags?: string[];
