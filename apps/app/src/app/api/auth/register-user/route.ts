@@ -100,6 +100,9 @@ export async function POST(req: NextRequest) {
       lastLoginUpdate.avatar_url = decodedToken.picture;
     }
     await updateUser(user.id, lastLoginUpdate as any, adminClient);
+    if (lastLoginUpdate.avatar_url) {
+      (user as any).avatar_url = lastLoginUpdate.avatar_url;
+    }
 
     // Schedule auto first-touch message for new users (30 min delay)
     if (isNewUser) {
