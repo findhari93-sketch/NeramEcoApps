@@ -23,8 +23,14 @@ export async function PATCH(
 
     const body = await request.json();
 
+    const editableFields = ['title', 'body', 'category', 'exam_year', 'exam_month', 'exam_session', 'confidence_level', 'tags'] as const;
+    const hasUpdate = editableFields.some((f) => body[f] !== undefined);
+    if (!hasUpdate) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
     // Validate category if provided
-    const validCategories = [
+    const validCategories: NataQuestionCategory[] = [
       'mathematics', 'general_aptitude', 'drawing',
       'logical_reasoning', 'aesthetic_sensitivity', 'other',
     ];
@@ -52,7 +58,7 @@ export async function PATCH(
   } catch (error: any) {
     console.error('Error editing question:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to update question' },
+      { error: 'Failed to update question' },
       { status: 500 },
     );
   }
