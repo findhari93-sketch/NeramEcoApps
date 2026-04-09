@@ -73,18 +73,22 @@ async function callGemini(base64: string, mimeType: string, prompt: string, retr
       return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
 
-    const err = await res.json().catch(() => ({}));
+    const errBody = await res.json().catch(() => ({}));
+
+    if (res.status === 400 || res.status === 403) {
+      console.error(`Gemini API auth error (${res.status}):`, JSON.stringify(errBody));
+      throw new Error(`Gemini API key invalid or unauthorized (${res.status}). Check GEMINI_API_KEY env var.`);
+    }
 
     if (res.status === 429) {
       if (attempt < retries) {
-        // Flash is rate-limited — retry immediately with flash-lite
         console.warn(`Gemini ${model} rate limited (429), retrying with flash-lite...`);
         continue;
       }
       throw new Error('Gemini API 429: rate limit reached');
     }
 
-    console.error('Gemini API error:', JSON.stringify(err));
+    console.error(`Gemini API error (${res.status}):`, JSON.stringify(errBody));
     throw new Error(`Gemini API error: ${res.status}`);
   }
 

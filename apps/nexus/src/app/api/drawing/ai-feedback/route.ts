@@ -41,14 +41,18 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'AI feedback failed';
     console.error('AI feedback error:', message);
 
-    // Propagate Gemini rate limit as 429 with a user-friendly message
     if (message.includes('429')) {
       return NextResponse.json(
-        { error: 'Gemini API rate limit reached. Wait 1 minute and try again.' },
+        { error: 'Gemini rate limit reached. Wait 1 minute and try again.' },
         { status: 429 }
       );
     }
-
+    if (message.includes('invalid or unauthorized')) {
+      return NextResponse.json(
+        { error: 'AI configuration error. Contact admin.' },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
