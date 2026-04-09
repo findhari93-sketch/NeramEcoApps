@@ -431,9 +431,16 @@ export default function QuestionModerationPage() {
                           variant="outlined"
                           sx={{ height: 22, fontSize: '0.7rem' }}
                         />
-                        {item.exam_year && (
+                        {(item.exam_month && item.exam_year) ? (
+                          <Chip
+                            label={`${MONTH_NAMES[(item.exam_month as number) - 1]} ${item.exam_year}`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ height: 22, fontSize: '0.7rem' }}
+                          />
+                        ) : item.exam_year ? (
                           <Chip label={`NATA ${item.exam_year}`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
-                        )}
+                        ) : null}
                         {item.confidence_level && item.confidence_level !== 3 && (
                           <Chip label={`Confidence: ${item.confidence_level}/5`} size="small" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
                         )}
@@ -758,7 +765,7 @@ export default function QuestionModerationPage() {
                 <Typography variant="caption" color="text.disabled">
                   Posted: {new Date(viewQuestion.created_at).toLocaleString()}
                 </Typography>
-                {viewQuestion.updated_at !== viewQuestion.created_at && (
+                {new Date(viewQuestion.updated_at).getTime() !== new Date(viewQuestion.created_at).getTime() && (
                   <Typography variant="caption" color="text.disabled">
                     Updated: {new Date(viewQuestion.updated_at).toLocaleString()}
                   </Typography>
