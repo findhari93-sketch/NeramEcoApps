@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const body = await req.json();
-    const { title, body: questionBody, category, examType, examYear, examSession, tags, confidenceLevel, imageUrls } = body;
+    const { title, body: questionBody, category, examType, examYear, examMonth, examSession, tags, confidenceLevel, imageUrls } = body;
 
     // Validate required fields
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -159,7 +159,8 @@ export async function POST(req: NextRequest) {
         body: questionBody.trim(),
         category: category.trim() as NataQuestionCategory,
         exam_type: examType || 'NATA',
-        exam_year: examYear || null,
+        exam_year: examYear || new Date().getFullYear(),
+        exam_month: examMonth || (new Date().getMonth() + 1),
         exam_session: examSession || null,
         tags: tags || [],
         image_urls: Array.isArray(imageUrls) ? imageUrls : [],
