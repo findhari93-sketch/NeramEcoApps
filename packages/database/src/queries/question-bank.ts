@@ -199,7 +199,8 @@ export async function createQuestionPost(
       body: input.body,
       category: input.category,
       exam_type: input.exam_type || 'NATA',
-      exam_year: input.exam_year || null,
+      exam_year: input.exam_year ?? null,
+      exam_month: input.exam_month ?? null,
       exam_session: input.exam_session || null,
       image_urls: input.image_urls || [],
       tags: input.tags || [],
@@ -631,6 +632,49 @@ export async function approveQuestion(
   if (error) {
     throw new Error(`Failed to approve question: ${error.message}`);
   }
+}
+
+/**
+ * Admin edit a question's fields.
+ */
+export async function adminEditQuestion(
+  questionId: string,
+  fields: {
+    title?: string;
+    body?: string;
+    category?: NataQuestionCategory;
+    exam_year?: number | null;
+    exam_month?: number | null;
+    exam_session?: string | null;
+    confidence_level?: number;
+    tags?: string[];
+  },
+  client?: TypedSupabaseClient
+): Promise<QuestionPost> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (fields.title !== undefined) updateData.title = fields.title;
+  if (fields.body !== undefined) updateData.body = fields.body;
+  if (fields.category !== undefined) updateData.category = fields.category;
+  if (fields.exam_year !== undefined) updateData.exam_year = fields.exam_year;
+  if (fields.exam_month !== undefined) updateData.exam_month = fields.exam_month;
+  if (fields.exam_session !== undefined) updateData.exam_session = fields.exam_session;
+  if (fields.confidence_level !== undefined) updateData.confidence_level = fields.confidence_level;
+  if (fields.tags !== undefined) updateData.tags = fields.tags;
+
+  const { data, error } = await (supabase as any)
+    .from('question_posts')
+    .update(updateData)
+    .eq('id', questionId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to update question: ${error.message}`);
+  return data as QuestionPost;
 }
 
 /**
