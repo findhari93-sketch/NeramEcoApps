@@ -568,7 +568,7 @@ export default function AIFeedbackWorkspace({
             {/* Level tabs */}
             <Tabs
               value={activeLevel}
-              onChange={(_, v) => setActiveLevel(v)}
+              onChange={(_, v) => { setActiveLevel(v); setReferenceCopied(false); }}
               sx={{ mb: 1.5, minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.25, textTransform: 'none', fontSize: '0.8rem' } }}
             >
               <Tab value="beginner" label="Beginner" />
