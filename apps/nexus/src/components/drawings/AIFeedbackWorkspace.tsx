@@ -16,6 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource } from '@neram/database/types';
@@ -424,6 +425,25 @@ export default function AIFeedbackWorkspace({
                   <Button
                     size="small"
                     variant="outlined"
+                    startIcon={<OpenInNewIcon />}
+                    onClick={() => window.open(submission.original_image_url, '_blank')}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    View Student Image
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<OpenInNewIcon />}
+                    onClick={() => window.open('https://chat.openai.com', '_blank')}
+                    sx={{ textTransform: 'none', minHeight: 36 }}
+                  >
+                    Open ChatGPT
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
                     startIcon={regenerating ? <CircularProgress size={14} /> : <RefreshIcon />}
                     onClick={handleRegenerate}
                     disabled={regenerating}
@@ -432,6 +452,9 @@ export default function AIFeedbackWorkspace({
                     {regenerating ? 'Re-generating...' : 'Re-generate'}
                   </Button>
                 </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                  Copy the prompt, view and long-press (mobile) or right-click (desktop) the student image to copy it, then paste both into ChatGPT.
+                </Typography>
               </Box>
             ) : aiDraftStatus === 'generating' ? (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
