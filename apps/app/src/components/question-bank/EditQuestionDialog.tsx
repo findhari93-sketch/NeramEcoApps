@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Button, Typography, Alert, Box,
+  TextField, Button, Typography, Alert, Box, Stack, Chip,
   Select, MenuItem, FormControl, InputLabel, CircularProgress,
   IconButton,
   useTheme, useMediaQuery,
@@ -40,9 +40,19 @@ export default function EditQuestionDialog({
   const [title, setTitle] = useState(question.title);
   const [body, setBody] = useState(question.body);
   const [category, setCategory] = useState<NataQuestionCategory>(question.category);
+  const [tags, setTags] = useState<string[]>(question.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const handleAddTag = () => {
+    const t = tagInput.trim().toLowerCase();
+    if (t && !tags.includes(t)) setTags([...tags, t]);
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tag: string) => setTags(tags.filter((x) => x !== tag));
 
   const handleSubmit = async () => {
     setError('');
@@ -75,6 +85,7 @@ export default function EditQuestionDialog({
           proposed_title: title.trim(),
           proposed_body: body.trim(),
           proposed_category: category,
+          proposed_tags: tags,
         }),
       });
 
@@ -175,6 +186,33 @@ export default function EditQuestionDialog({
                 ))}
               </Select>
             </FormControl>
+
+            {/* Tags */}
+            <Box sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+                {tags.map((tag) => (
+                  <Chip
+                    key={tag}
+                    label={tag}
+                    size="small"
+                    onDelete={() => handleRemoveTag(tag)}
+                  />
+                ))}
+              </Stack>
+              <Stack direction="row" spacing={1}>
+                <TextField
+                  size="small"
+                  label="Add tag (optional)"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                  sx={{ flex: 1 }}
+                />
+                <Button variant="outlined" size="small" onClick={handleAddTag} disabled={!tagInput.trim()}>
+                  Add
+                </Button>
+              </Stack>
+            </Box>
           </>
         )}
       </DialogContent>
