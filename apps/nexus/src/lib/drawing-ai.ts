@@ -74,7 +74,7 @@ async function callGemini(base64: string, mimeType: string, prompt: string, retr
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 1200,
+          maxOutputTokens: 2000,
         },
       }),
     });
@@ -112,7 +112,7 @@ async function callAnthropic(base64: string, mediaType: string, prompt: string):
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1200,
+    max_tokens: 2000,
     messages: [{
       role: 'user',
       content: [

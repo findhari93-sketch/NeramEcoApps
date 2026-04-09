@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
     }
 
-    await verifyIdToken(authHeader.slice(7));
+    const decodedToken = await verifyIdToken(authHeader.slice(7));
 
     const { notification_id } = await request.json();
     if (!notification_id) {
@@ -72,10 +72,14 @@ export async function PATCH(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdminClient();
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404, headers: corsHeaders });
+
     await (supabase as any)
       .from('drawing_notifications')
       .update({ read: true })
-      .eq('id', notification_id);
+      .eq('id', notification_id)
+      .eq('student_id', user.id);
 
     return NextResponse.json({ success: true }, { headers: corsHeaders });
   } catch (err: any) {
