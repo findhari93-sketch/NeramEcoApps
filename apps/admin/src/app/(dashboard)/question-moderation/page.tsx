@@ -5,12 +5,19 @@ import {
   Box, Typography, Button, Chip, Stack, Paper, Avatar,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Tabs, Tab, ToggleButton, ToggleButtonGroup,
+  IconButton, EditIcon,
 } from '@neram/ui';
 import type {
   QuestionPostDisplay,
   QuestionPostStatus,
   QuestionChangeRequestDisplay,
 } from '@neram/database';
+import AdminEditQuestionDialog from '@/components/question-bank/AdminEditQuestionDialog';
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 const CATEGORY_LABELS: Record<string, string> = {
   mathematics: 'Mathematics',
@@ -70,6 +77,7 @@ export default function QuestionModerationPage() {
 
   // View dialog
   const [viewQuestion, setViewQuestion] = useState<QuestionPostDisplay | null>(null);
+  const [editQuestion, setEditQuestion] = useState<QuestionPostDisplay | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -690,6 +698,13 @@ export default function QuestionModerationPage() {
                 {viewQuestion.is_admin_post && (
                   <Chip label="Official" size="small" color="warning" />
                 )}
+                <IconButton
+                  size="small"
+                  title="Edit question"
+                  onClick={() => { setViewQuestion(null); setEditQuestion(viewQuestion); }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
                 <Chip
                   label={viewQuestion.status}
                   size="small"
@@ -708,7 +723,15 @@ export default function QuestionModerationPage() {
 
               <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
                 <Chip label={CATEGORY_LABELS[viewQuestion.category] || viewQuestion.category} size="small" color="primary" variant="outlined" />
-                {viewQuestion.exam_year && <Chip label={`NATA ${viewQuestion.exam_year}`} size="small" variant="outlined" />}
+                {(viewQuestion.exam_month && viewQuestion.exam_year) ? (
+                  <Chip
+                    label={`${MONTH_NAMES[(viewQuestion.exam_month as number) - 1]} ${viewQuestion.exam_year}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                ) : viewQuestion.exam_year ? (
+                  <Chip label={`NATA ${viewQuestion.exam_year}`} size="small" variant="outlined" />
+                ) : null}
                 {viewQuestion.exam_session && <Chip label={viewQuestion.exam_session} size="small" variant="outlined" />}
                 {viewQuestion.confidence_level && viewQuestion.confidence_level !== 3 && (
                   <Chip label={`Confidence: ${viewQuestion.confidence_level}/5`} size="small" variant="outlined" />
@@ -730,6 +753,16 @@ export default function QuestionModerationPage() {
                 <Typography variant="body2" color="text.secondary">
                   {viewQuestion.improvement_count} improvements
                 </Typography>
+              </Stack>
+              <Stack direction="row" spacing={3} sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.disabled">
+                  Posted: {new Date(viewQuestion.created_at).toLocaleString()}
+                </Typography>
+                {viewQuestion.updated_at !== viewQuestion.created_at && (
+                  <Typography variant="caption" color="text.disabled">
+                    Updated: {new Date(viewQuestion.updated_at).toLocaleString()}
+                  </Typography>
+                )}
               </Stack>
 
               {viewQuestion.rejection_reason && (
@@ -762,6 +795,21 @@ export default function QuestionModerationPage() {
           </>
         )}
       </Dialog>
+
+      {/* Admin Edit Dialog */}
+      {editQuestion && (
+        <AdminEditQuestionDialog
+          open={!!editQuestion}
+          onClose={() => setEditQuestion(null)}
+          question={editQuestion}
+          onSaved={(updated) => {
+            setQuestions((prev) =>
+              prev.map((q) => (q.id === updated.id ? { ...q, ...updated } : q))
+            );
+            setEditQuestion(null);
+          }}
+        />
+      )}
     </Box>
   );
 }
