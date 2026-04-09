@@ -171,7 +171,7 @@ export default function DrawingReviewDetailPage() {
           startIcon={<CheckCircleOutlineIcon />}
           sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
         >
-          {saving && action === 'complete' ? 'Saving...' : 'Mark Complete'}
+          {saving && action === 'complete' ? 'Saving...' : ['reviewed', 'redo', 'completed'].includes(submission.status) ? 'Save Changes' : 'Mark Complete'}
         </Button>
       </Box>
       <FormControlLabel
@@ -186,6 +186,14 @@ export default function DrawingReviewDetailPage() {
   const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+        {['reviewed', 'redo', 'completed'].includes(submission.status) && (
+          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9' }}>
+            <Typography variant="body2" color="success.dark" fontWeight={600}>
+              This submission has already been reviewed. Any changes you save will notify the student.
+            </Typography>
+          </Paper>
+        )}
+
         {/* Student note if provided */}
         {submission.self_note && (
           <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
