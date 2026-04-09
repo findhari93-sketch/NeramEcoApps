@@ -104,7 +104,18 @@ export default function AdminEditQuestionDialog({
       }
 
       const { data: updated } = await res.json();
-      onSaved({ ...question, ...updated });
+      onSaved({
+        ...question,
+        title: updated.title,
+        body: updated.body,
+        category: updated.category,
+        exam_year: updated.exam_year,
+        exam_month: updated.exam_month,
+        exam_session: updated.exam_session,
+        confidence_level: updated.confidence_level,
+        tags: updated.tags,
+        updated_at: updated.updated_at,
+      });
       onClose();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save question';
