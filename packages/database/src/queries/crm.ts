@@ -1159,4 +1159,3 @@ export async function getLeadProfileByPaymentToken(
     users: { phone: string | null; email: string | null; name: string | null; firebase_uid: string | null };
   };
 }
-}
