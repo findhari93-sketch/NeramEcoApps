@@ -3095,6 +3095,7 @@ export interface QuestionPost extends Timestamps {
   category: NataQuestionCategory;
   exam_type: string;
   exam_year: number | null;
+  exam_month: number | null;
   exam_session: string | null;
   image_urls: string[];
   tags: string[];
@@ -3261,6 +3262,9 @@ export interface QuestionChangeRequest {
   proposed_category: NataQuestionCategory | null;
   proposed_image_urls: string[];
   proposed_tags: string[];
+  proposed_exam_year: number | null;
+  proposed_exam_month: number | null;
+  proposed_exam_session: string | null;
   // Delete field
   reason: string | null;
   // Admin moderation
