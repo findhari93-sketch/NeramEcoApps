@@ -176,6 +176,7 @@ export default function DrawingReviewDetailPage() {
           submission={sub}
           getToken={getToken}
           onChange={handleWorkspaceChange}
+          defaultCollapsed={isMobile}
         />
 
         <Box sx={{ mt: 2 }}>

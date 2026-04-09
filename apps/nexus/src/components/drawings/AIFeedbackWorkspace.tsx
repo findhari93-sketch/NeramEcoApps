@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Box, Typography, Button, TextField, Rating, Paper, Chip, IconButton,
-  CircularProgress, Collapse, Dialog,
+  CircularProgress, Collapse, Dialog, useTheme, useMediaQuery,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -39,6 +39,7 @@ interface AIFeedbackWorkspaceProps {
   };
   getToken: () => Promise<string | null>;
   onChange: (data: WorkspaceData) => void;
+  defaultCollapsed?: boolean;
 }
 
 const SEVERITY_COLORS: Record<string, 'error' | 'warning' | 'success'> = {
@@ -46,7 +47,7 @@ const SEVERITY_COLORS: Record<string, 'error' | 'warning' | 'success'> = {
 };
 
 export default function AIFeedbackWorkspace({
-  submission, getToken, onChange,
+  submission, getToken, onChange, defaultCollapsed = false,
 }: AIFeedbackWorkspaceProps) {
   const aiDraftStatus = (submission as any).ai_draft_status || 'pending';
   const initialAnnotations = (submission as any).ai_overlay_annotations as OverlayAnnotation[] | null;
@@ -72,12 +73,15 @@ export default function AIFeedbackWorkspace({
   const [uploadingCorrected, setUploadingCorrected] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState('');
-  const [overlayExpanded, setOverlayExpanded] = useState(true);
-  const [correctedExpanded, setCorrectedExpanded] = useState(true);
-  const [feedbackExpanded, setFeedbackExpanded] = useState(true);
+  const [overlayExpanded, setOverlayExpanded] = useState(!defaultCollapsed);
+  const [correctedExpanded, setCorrectedExpanded] = useState(!defaultCollapsed);
+  const [feedbackExpanded, setFeedbackExpanded] = useState(!defaultCollapsed);
   const [pasteError, setPasteError] = useState('');
 
   const pasteZoneRef = useRef<HTMLDivElement>(null);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const notify = useCallback((overrides?: Partial<WorkspaceData>) => {
     onChange({
@@ -270,7 +274,7 @@ export default function AIFeedbackWorkspace({
       {/* Section 1: Overlay Annotations */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box
-          sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
+          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 1 : 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
           onClick={() => setOverlayExpanded(!overlayExpanded)}
         >
           <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
@@ -378,7 +382,7 @@ export default function AIFeedbackWorkspace({
       {/* Section 2: Corrected Reference Image */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box
-          sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
+          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 1 : 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
           onClick={() => setCorrectedExpanded(!correctedExpanded)}
         >
           <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
@@ -520,7 +524,7 @@ export default function AIFeedbackWorkspace({
       {/* Section 3: Written Feedback + Resources */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box
-          sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
+          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 1 : 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
           onClick={() => setFeedbackExpanded(!feedbackExpanded)}
         >
           <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
