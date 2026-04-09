@@ -44,11 +44,11 @@
 
 Open `apps/nexus/.env.local`. Find line 20:
 ```
-GEMINI_API_KEY=AIzaSyC79STLrAhGIQQG8cjopOd_ltq0hgTQP-0
+GEMINI_API_KEY=<YOUR_NEW_GEMINI_API_KEY>
 ```
-Replace with:
+Replace with your new key from Google AI Studio:
 ```
-GEMINI_API_KEY=AIzaSyCb3ZQ0a0NdMx1yHcb-3EMj887lirW84ok
+GEMINI_API_KEY=<YOUR_NEW_GEMINI_API_KEY>
 ```
 
 - [ ] **Step 2: Improve callGemini error handling in drawing-ai.ts**
@@ -105,8 +105,8 @@ Open a drawing submission at `http://localhost:3012/teacher/drawing-reviews/[any
 
 ```bash
 cd apps/nexus
-echo "AIzaSyCb3ZQ0a0NdMx1yHcb-3EMj887lirW84ok" | vercel env add GEMINI_API_KEY production
-echo "AIzaSyCb3ZQ0a0NdMx1yHcb-3EMj887lirW84ok" | vercel env add GEMINI_API_KEY preview
+echo "<YOUR_NEW_GEMINI_API_KEY>" | vercel env add GEMINI_API_KEY production
+echo "<YOUR_NEW_GEMINI_API_KEY>" | vercel env add GEMINI_API_KEY preview
 ```
 
 - [ ] **Step 6: Commit**

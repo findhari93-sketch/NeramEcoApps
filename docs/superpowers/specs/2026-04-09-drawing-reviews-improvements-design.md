@@ -35,7 +35,7 @@ Two-prompt AI system, level-based reference image, AI feedback draft button.
 - `apps/nexus/src/lib/drawing-ai.ts` — improve error handling in `callGemini()`
 
 **Changes:**
-- Replace old key `AIzaSyC79STLrAhGIQQG8cjopOd_ltq0hgTQP-0` with new key `AIzaSyCb3ZQ0a0NdMx1yHcb-3EMj887lirW84ok`
+- Replace old key `<REVOKED_KEY>` with new key from Google AI Studio (set in `.env.local` and Vercel env vars)
 - In `callGemini()` (line 76-88), log the actual Gemini error response body
 - Handle `400` (invalid key) and `403` (permission denied) separately from `429` (rate limit) with distinct error messages surfaced to the teacher
 - Update Vercel production env var via CLI: `echo "<key>" | vercel env add GEMINI_API_KEY production`

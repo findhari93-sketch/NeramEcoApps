@@ -192,6 +192,22 @@ export async function GET(request: Request) {
               unsubscribeUrl,
             });
           } else {
+            // Skip first_touch email if user has since verified their phone
+            const { data: ftUserRow } = await (supabase as any)
+              .from('users')
+              .select('phone_verified')
+              .eq('id', msg.user_id)
+              .single();
+
+            if (ftUserRow?.phone_verified) {
+              await updateAutoMessageResult(msg.id, {
+                success: false,
+                error: 'phone_verified: first_touch email skipped',
+              }, supabase);
+              failed++;
+              continue;
+            }
+
             result = await sendFirstTouchEmail(email, { userName });
           }
         }

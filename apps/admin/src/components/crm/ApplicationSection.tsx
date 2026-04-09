@@ -128,7 +128,7 @@ export default function ApplicationSection({
   const [finalFee, setFinalFee] = useState(0);
   const [customOverride, setCustomOverride] = useState(false);
   const [approveNotes, setApproveNotes] = useState('');
-  const [fullPaymentDiscount, setFullPaymentDiscount] = useState(5000);
+  const [fullPaymentDiscount, setFullPaymentDiscount] = useState(0);
   const [paymentRecommendation, setPaymentRecommendation] = useState<PaymentRecommendation>('full');
 
   // Allowed payment modes state
@@ -176,10 +176,14 @@ export default function ApplicationSection({
       const discount = selectedFeeStructure.single_payment_discount || 0;
       setDiscountAmount(discount);
       setFinalFee(baseFee - discount);
+      setFullPaymentDiscount(0); // full_only has no separate full payment incentive
     } else {
-      // Both options: finalFee is the full amount (discount is an incentive via fullPaymentDiscount)
+      // Both options: finalFee is the full amount
+      // fullPaymentDiscount is an incentive shown to student for paying in full
+      // Auto-populate from fee structure's single_payment_discount
       setDiscountAmount(0);
       setFinalFee(baseFee);
+      setFullPaymentDiscount(selectedFeeStructure.single_payment_discount || 0);
     }
   }, [selectedFeeStructure, allowedPaymentModes, customOverride]);
 
@@ -1104,7 +1108,7 @@ export default function ApplicationSection({
               onChange={(e) => setFullPaymentDiscount(Number(e.target.value) || 0)}
               fullWidth
               size="small"
-              helperText="Discount given to student if they pay in full (default Rs. 5,000)"
+              helperText="Auto-filled from fee structure. 0 means no full payment incentive shown to student."
               sx={{ '& .MuiOutlinedInput-root': { borderRadius: 0.75 } }}
             />
 
