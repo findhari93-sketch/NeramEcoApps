@@ -92,9 +92,14 @@ export async function POST(req: NextRequest) {
     }).catch(() => {});
 
     // Update last login time (use admin client to bypass RLS)
-    await updateUser(user.id, {
+    // Also sync Google avatar for users who authenticated before avatar_url was stored
+    const lastLoginUpdate: { last_login_at: string; avatar_url?: string } = {
       last_login_at: new Date().toISOString(),
-    }, adminClient);
+    };
+    if (!user.avatar_url && decodedToken.picture) {
+      lastLoginUpdate.avatar_url = decodedToken.picture;
+    }
+    await updateUser(user.id, lastLoginUpdate as any, adminClient);
 
     // Schedule auto first-touch message for new users (30 min delay)
     if (isNewUser) {
