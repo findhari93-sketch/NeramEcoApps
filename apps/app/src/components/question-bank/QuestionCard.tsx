@@ -15,6 +15,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function wasEdited(createdAt: string, updatedAt: string): boolean {
+  return new Date(updatedAt).getTime() - new Date(createdAt).getTime() > 5 * 60 * 1000;
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -60,6 +69,9 @@ export default function QuestionCard({ question }: QuestionCardProps) {
           <AdminBadge isAdminPost={question.is_admin_post} authorUserType={question.author?.user_type} />
           <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
             {timeAgo(question.created_at)}
+            {wasEdited(question.created_at, question.updated_at) && (
+              <> · Updated {timeAgo(question.updated_at)}</>
+            )}
           </Typography>
         </Stack>
 
@@ -92,6 +104,21 @@ export default function QuestionCard({ question }: QuestionCardProps) {
             variant="outlined"
             sx={{ height: 22, fontSize: '0.7rem' }}
           />
+          {question.exam_month && question.exam_year ? (
+            <Chip
+              label={`${MONTH_NAMES[question.exam_month - 1]} ${question.exam_year}`}
+              size="small"
+              variant="outlined"
+              sx={{ height: 22, fontSize: '0.7rem' }}
+            />
+          ) : question.exam_year ? (
+            <Chip
+              label={`NATA ${question.exam_year}`}
+              size="small"
+              variant="outlined"
+              sx={{ height: 22, fontSize: '0.7rem' }}
+            />
+          ) : null}
           {question.exam_session && (
             <Chip
               label={question.exam_session}
