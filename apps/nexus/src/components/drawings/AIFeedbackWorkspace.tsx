@@ -35,6 +35,8 @@ interface AIFeedbackWorkspaceProps {
   submission: DrawingSubmission & {
     ai_overlay_annotations?: OverlayAnnotation[] | null;
     ai_corrected_image_prompt?: string | null;
+    ai_annotation_prompt?: string | null;
+    ai_reference_prompts?: { beginner: string; medium: string; expert: string } | null;
     corrected_image_url?: string | null;
     ai_draft_status?: 'pending' | 'generating' | 'ready' | 'failed';
   };
@@ -53,6 +55,10 @@ export default function AIFeedbackWorkspace({
   const aiDraftStatus = (submission as any).ai_draft_status || 'pending';
   const initialAnnotations = (submission as any).ai_overlay_annotations as OverlayAnnotation[] | null;
   const initialPrompt = (submission as any).ai_corrected_image_prompt as string | null;
+  const initialAnnotationPrompt = (submission as any).ai_annotation_prompt as string | null;
+  const initialReferencePrompts = (submission as any).ai_reference_prompts as {
+    beginner: string; medium: string; expert: string;
+  } | null;
 
   // Workspace state
   const [annotations, setAnnotations] = useState<OverlayAnnotation[]>(initialAnnotations || []);
@@ -67,6 +73,16 @@ export default function AIFeedbackWorkspace({
   );
   const [resources, setResources] = useState<TutorResource[]>(submission.tutor_resources || []);
   const [rating, setRating] = useState(submission.tutor_rating || 0);
+
+  const [annotationPrompt, setAnnotationPrompt] = useState<string | null>(initialAnnotationPrompt);
+  const [referencePrompts, setReferencePrompts] = useState<{ beginner: string; medium: string; expert: string } | null>(initialReferencePrompts);
+  const [activeLevel, setActiveLevel] = useState<'beginner' | 'medium' | 'expert'>('medium');
+  const [annotationPromptCopied, setAnnotationPromptCopied] = useState(false);
+  const [referenceCopied, setReferenceCopied] = useState(false);
+  const [latestAiFeedback, setLatestAiFeedback] = useState<Record<string, unknown> | null>(
+    submission.ai_feedback as Record<string, unknown> | null
+  );
+  const [uploadingAnnotation, setUploadingAnnotation] = useState(false);
 
   // UI state
   const [sketchOpen, setSketchOpen] = useState(false);
@@ -122,6 +138,21 @@ export default function AIFeedbackWorkspace({
     setTimeout(() => setPromptCopied(false), 2500);
   };
 
+  const handleCopyAnnotationPrompt = async () => {
+    if (!annotationPrompt) return;
+    await navigator.clipboard.writeText(annotationPrompt);
+    setAnnotationPromptCopied(true);
+    setTimeout(() => setAnnotationPromptCopied(false), 2500);
+  };
+
+  const handleCopyReferencePrompt = async () => {
+    const prompt = referencePrompts?.[activeLevel];
+    if (!prompt) return;
+    await navigator.clipboard.writeText(prompt);
+    setReferenceCopied(true);
+    setTimeout(() => setReferenceCopied(false), 2500);
+  };
+
   const handleCorrectedUpload = useCallback(async (file: File) => {
     setUploadingCorrected(true);
     setPasteError('');
@@ -141,6 +172,27 @@ export default function AIFeedbackWorkspace({
       notify({ correctedImageUrl: url });
     } catch { /* silent */ } finally {
       setUploadingCorrected(false);
+    }
+  }, [getToken, notify]);
+
+  const handleAnnotationOverlayUpload = useCallback(async (file: File) => {
+    setUploadingAnnotation(true);
+    try {
+      const token = await getToken();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'drawing-reviewed');
+      const res = await fetch('/api/drawing/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const { url } = await res.json();
+      setOverlayImageUrl(url);
+      notify({ overlayImageUrl: url });
+    } catch { /* silent */ } finally {
+      setUploadingAnnotation(false);
     }
   }, [getToken, notify]);
 
@@ -164,25 +216,29 @@ export default function AIFeedbackWorkspace({
     }
   }, [handleCorrectedUpload]);
 
-  // Listen for Ctrl+V paste when corrected section is expanded
+  // Listen for Ctrl+V paste when corrected or overlay section is expanded
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
-      if (!correctedExpanded || correctedImageUrl) return;
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of Array.from(items)) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
-          if (file) {
+          if (!file) continue;
+          if (overlayExpanded && !overlayImageUrl) {
+            handleAnnotationOverlayUpload(file);
+            return;
+          }
+          if (correctedExpanded && !correctedImageUrl) {
             handleCorrectedUpload(file);
-            break;
+            return;
           }
         }
       }
     };
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [correctedExpanded, correctedImageUrl, handleCorrectedUpload]);
+  }, [overlayExpanded, overlayImageUrl, correctedExpanded, correctedImageUrl, handleAnnotationOverlayUpload, handleCorrectedUpload]);
 
   // Re-generate: calls AI, updates ALL 3 sections at once
   const handleRegenerate = async () => {
@@ -211,6 +267,14 @@ export default function AIFeedbackWorkspace({
       if (feedback?.corrected_image_prompt) {
         setAiPrompt(feedback.corrected_image_prompt);
       }
+
+      if (feedback?.annotation_overlay_prompt) {
+        setAnnotationPrompt(feedback.annotation_overlay_prompt);
+      }
+      if (feedback?.reference_prompts) {
+        setReferencePrompts(feedback.reference_prompts);
+      }
+      setLatestAiFeedback(feedback);
 
       // Pre-fill written feedback if currently empty
       if (!tutorFeedback) {
