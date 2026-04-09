@@ -1,5 +1,3 @@
-'use server';
-
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { createAdminClient, getLeadProfileByPaymentToken } from '@neram/database';
