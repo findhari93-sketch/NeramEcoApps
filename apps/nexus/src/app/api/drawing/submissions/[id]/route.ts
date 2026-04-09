@@ -20,7 +20,8 @@ export async function GET(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load submission';
     console.error('Submission GET error:', message);
-    return NextResponse.json({ error: message }, { status: 401 });
+    const isAuthError = message.toLowerCase().includes('unauthorized') || message.toLowerCase().includes('token') || message.toLowerCase().includes('auth');
+    return NextResponse.json({ error: message }, { status: isAuthError ? 401 : 500 });
   }
 }
 

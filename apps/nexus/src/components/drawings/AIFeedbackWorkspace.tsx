@@ -260,9 +260,11 @@ export default function AIFeedbackWorkspace({
       const { feedback } = await res.json();
 
       // Update overlay annotations
+      const newAnnotations = Array.isArray(feedback?.overlay_annotations)
+        ? feedback.overlay_annotations
+        : annotations;
       if (Array.isArray(feedback?.overlay_annotations)) {
-        setAnnotations(feedback.overlay_annotations);
-        notify({ overlayAnnotations: feedback.overlay_annotations });
+        setAnnotations(newAnnotations);
       }
 
       // Update corrected image prompt
@@ -279,13 +281,20 @@ export default function AIFeedbackWorkspace({
       setLatestAiFeedback(feedback);
 
       // Pre-fill written feedback if currently empty
+      let newFeedbackText: string | null = null;
       if (!tutorFeedback) {
         const text = buildAIFeedbackText(feedback);
         if (text) {
+          newFeedbackText = text;
           setTutorFeedback(text);
-          notify({ tutorFeedback: text, overlayAnnotations: feedback?.overlay_annotations || annotations });
         }
       }
+
+      // Always notify parent with the latest workspace state after regeneration
+      notify({
+        overlayAnnotations: newAnnotations,
+        ...(newFeedbackText ? { tutorFeedback: newFeedbackText } : {}),
+      });
     } catch (err) {
       setRegenError(err instanceof Error ? err.message : 'Re-generation failed. Try again.');
     } finally {
