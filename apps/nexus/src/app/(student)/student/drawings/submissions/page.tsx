@@ -16,12 +16,20 @@ const STATUS_TABS = [
   { value: 'reviewed', label: 'Reviewed' },
 ];
 
+interface DrawingNotification {
+  id: string;
+  submission_id: string;
+  message: string;
+  created_at: string;
+}
+
 export default function MySubmissionsPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
   const [submissions, setSubmissions] = useState<DrawingSubmissionWithQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
+  const [notifications, setNotifications] = useState<DrawingNotification[]>([]);
 
   const fetchSubmissions = useCallback(async () => {
     setLoading(true);
@@ -41,7 +49,40 @@ export default function MySubmissionsPage() {
     }
   }, [getToken, status]);
 
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/drawing/notifications', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+      }
+    } catch {
+      // Non-critical: notifications silently fail
+    }
+  }, [getToken]);
+
+  const markNotificationRead = useCallback(async (notificationId: string) => {
+    try {
+      const token = await getToken();
+      await fetch('/api/drawing/notifications', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notification_id: notificationId }),
+      });
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+    } catch {
+      // Non-critical
+    }
+  }, [getToken]);
+
   useEffect(() => { fetchSubmissions(); }, [fetchSubmissions]);
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   return (
     <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, maxWidth: 800, mx: 'auto' }}>
@@ -70,12 +111,20 @@ export default function MySubmissionsPage() {
         </Box>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {submissions.map((s) => (
+          {submissions.map((s) => {
+            const unreadNotification = notifications.find((n) => n.submission_id === s.id);
+            return (
             <Paper
               key={s.id}
               variant="outlined"
-              sx={{ p: 1.5, cursor: 'pointer' }}
-              onClick={() => router.push(`/student/drawings/submissions/${s.id}`)}
+              sx={{
+                p: 1.5, cursor: 'pointer',
+                ...(unreadNotification ? { borderColor: 'primary.main', borderWidth: 2 } : {}),
+              }}
+              onClick={() => {
+                if (unreadNotification) markNotificationRead(unreadNotification.id);
+                router.push(`/student/drawings/submissions/${s.id}`);
+              }}
             >
               <Box sx={{ display: 'flex', gap: 1.5 }}>
                 <Box
@@ -85,13 +134,20 @@ export default function MySubmissionsPage() {
                   sx={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 1 }}
                 />
                 <Box sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
+                  <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5, flexWrap: 'wrap' }}>
                     {s.question && <CategoryBadge category={s.question.category} />}
                     <Chip
                       label={s.status}
                       size="small"
                       color={s.status === 'reviewed' ? 'success' : 'warning'}
                     />
+                    {unreadNotification && (
+                      <Chip
+                        label="Updated feedback"
+                        size="small"
+                        color="primary"
+                      />
+                    )}
                   </Box>
                   <Typography variant="body2" sx={{
                     display: '-webkit-box', WebkitLineClamp: 2,
@@ -110,7 +166,8 @@ export default function MySubmissionsPage() {
                 </Box>
               </Box>
             </Paper>
-          ))}
+            );
+          })}
         </Box>
       )}
     </Box>

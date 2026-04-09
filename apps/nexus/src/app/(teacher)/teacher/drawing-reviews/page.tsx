@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Paper, Skeleton, Tabs, Tab, Avatar, Chip,
+  IconButton, Button, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@neram/ui';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import type { DrawingSubmissionWithDetails } from '@neram/database/types';
@@ -29,6 +31,27 @@ export default function DrawingReviewsPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('submitted');
   const [reviewedSubFilter, setReviewedSubFilter] = useState('all');
+  const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteDialogId) return;
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/submissions/${deleteDialogId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      setSubmissions((prev) => prev.filter((s) => s.id !== deleteDialogId));
+      setDeleteDialogId(null);
+    } catch {
+      // keep dialog open on failure
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -100,9 +123,18 @@ export default function DrawingReviewsPage() {
             <Paper
               key={s.id}
               variant="outlined"
-              sx={{ p: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+              sx={{ p: 1.5, cursor: 'pointer', position: 'relative', '&:hover': { bgcolor: 'action.hover' } }}
               onClick={() => router.push(`/teacher/drawing-reviews/${s.id}`)}
             >
+              <IconButton
+                size="small"
+                color="error"
+                onClick={(e) => { e.stopPropagation(); setDeleteDialogId(s.id); }}
+                sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
+                aria-label="Delete submission"
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
                 <Box
                   component="img"
@@ -149,6 +181,23 @@ export default function DrawingReviewsPage() {
           ))}
         </Box>
       )}
+
+      <Dialog open={!!deleteDialogId} onClose={() => !deleting && setDeleteDialogId(null)}>
+        <DialogTitle>Delete Submission?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete the submission and all associated images. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogId(null)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

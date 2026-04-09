@@ -5,8 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
   Button, useMediaQuery, useTheme, Drawer, FormControlLabel, Checkbox,
+  Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -46,6 +49,25 @@ export default function DrawingReviewDetailPage() {
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
   const [publishToGallery, setPublishToGallery] = useState(false);
   const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteSubmission = async () => {
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/submissions/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Delete failed');
+      router.push('/teacher/drawing-reviews');
+    } catch {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -149,7 +171,7 @@ export default function DrawingReviewDetailPage() {
           startIcon={<CheckCircleOutlineIcon />}
           sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
         >
-          {saving && action === 'complete' ? 'Saving...' : 'Mark Complete'}
+          {saving && action === 'complete' ? 'Saving...' : ['reviewed', 'redo', 'completed'].includes(submission.status) ? 'Save Changes' : 'Mark Complete'}
         </Button>
       </Box>
       <FormControlLabel
@@ -164,6 +186,14 @@ export default function DrawingReviewDetailPage() {
   const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+        {['reviewed', 'redo', 'completed'].includes(submission.status) && (
+          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9' }}>
+            <Typography variant="body2" color="success.dark" fontWeight={600}>
+              This submission has already been reviewed. Any changes you save will notify the student.
+            </Typography>
+          </Paper>
+        )}
+
         {/* Student note if provided */}
         {submission.self_note && (
           <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
@@ -176,6 +206,7 @@ export default function DrawingReviewDetailPage() {
           submission={sub}
           getToken={getToken}
           onChange={handleWorkspaceChange}
+          defaultCollapsed={isMobile}
         />
 
         <Box sx={{ mt: 2 }}>
@@ -215,6 +246,13 @@ export default function DrawingReviewDetailPage() {
               <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
             </Box>
             {submission.question && <CategoryBadge category={submission.question.category} />}
+            <IconButton
+              size="small"
+              onClick={(e) => setMenuAnchor(e.currentTarget)}
+              aria-label="More actions"
+            >
+              <MoreVertIcon />
+            </IconButton>
           </Box>
 
           {submission.question && (
@@ -264,6 +302,37 @@ export default function DrawingReviewDetailPage() {
           </Box>
           {reviewPanel}
         </Drawer>
+
+        {/* More actions menu */}
+        <Menu
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
+          onClose={() => setMenuAnchor(null)}
+        >
+          <MenuItem
+            onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }}
+            sx={{ color: 'error.main' }}
+          >
+            <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
+            Delete Submission
+          </MenuItem>
+        </Menu>
+
+        {/* Delete confirmation dialog */}
+        <Dialog open={deleteDialogOpen} onClose={() => !deleting && setDeleteDialogOpen(false)}>
+          <DialogTitle>Delete Submission?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              This will permanently delete the submission and all associated images. This cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Cancel</Button>
+            <Button onClick={handleDeleteSubmission} color="error" variant="contained" disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </>
     );
   }
@@ -307,6 +376,13 @@ export default function DrawingReviewDetailPage() {
           {submission.attempt_number > 1 && (
             <Chip label={`Attempt #${submission.attempt_number}`} size="small" variant="outlined" />
           )}
+          <IconButton
+            size="small"
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            aria-label="More actions"
+          >
+            <MoreVertIcon />
+          </IconButton>
         </Box>
 
         {/* Question strip */}
@@ -337,6 +413,37 @@ export default function DrawingReviewDetailPage() {
         </Box>
         {reviewPanel}
       </Box>
+
+      {/* More actions menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+      >
+        <MenuItem
+          onClick={() => { setMenuAnchor(null); setDeleteDialogOpen(true); }}
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />
+          Delete Submission
+        </MenuItem>
+      </Menu>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => !deleting && setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete Submission?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will permanently delete the submission and all associated images. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>Cancel</Button>
+          <Button onClick={handleDeleteSubmission} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

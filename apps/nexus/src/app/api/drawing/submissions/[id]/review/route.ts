@@ -22,6 +22,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
+    // Fetch current status before update to detect re-reviews
+    const { data: currentSub } = await supabase
+      .from('drawing_submissions')
+      .select('status, student_id')
+      .eq('id', id)
+      .single();
+    const wasAlreadyReviewed = ['reviewed', 'redo', 'completed'].includes(currentSub?.status || '');
+
     const body = await request.json();
     const { tutor_rating, tutor_feedback, reviewed_image_url, corrected_image_url, ai_overlay_annotations, tutor_resources, action } = body;
     const reviewAction = action || 'complete'; // backward compat
@@ -62,6 +70,19 @@ export async function PATCH(
       } catch {
         // Non-critical
       }
+    }
+
+    // Notify student if this is a re-review
+    if (wasAlreadyReviewed) {
+      supabase
+        .from('drawing_notifications' as any)
+        .insert({
+          student_id: submission.student_id,
+          submission_id: id,
+          message: 'Your teacher has reviewed your drawing again. Check the updated feedback.',
+        })
+        .then(() => {})
+        .catch(() => {}); // non-critical, fire and forget
     }
 
     return NextResponse.json({ submission });

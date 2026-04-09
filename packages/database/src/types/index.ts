@@ -6931,6 +6931,21 @@ export interface DrawingSubmission {
   ai_corrected_image_prompt: string | null;
   corrected_image_url: string | null;
   ai_draft_status: 'pending' | 'generating' | 'ready' | 'failed';
+  ai_annotation_prompt?: string | null;
+  ai_reference_prompts?: {
+    beginner: string;
+    medium: string;
+    expert: string;
+  } | null;
+}
+
+export interface DrawingNotification {
+  id: string;
+  student_id: string;
+  submission_id: string;
+  message: string;
+  read: boolean;
+  created_at: string;
 }
 
 export interface DrawingSubmissionWithQuestion extends DrawingSubmission {

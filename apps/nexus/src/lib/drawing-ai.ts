@@ -22,7 +22,13 @@ Evaluate on these criteria:
 
 Also provide:
 6. OVERLAY ANNOTATIONS: Identify 3-6 specific areas in this drawing that need correction. For each, give the rough position (choose from: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right), a short label (max 6 words), and severity (high/medium/low).
-7. CORRECTED IMAGE PROMPT: Write a ChatGPT/DALL-E prompt to generate an ideal reference version of this drawing. DRAWING_MEDIUM_CONTEXT Include style: "hand-drawn appearance, not digital, looks manually created by a student, pencil/colour-pencil texture". Max 150 words.
+
+7. ANNOTATION OVERLAY PROMPT: Write a ChatGPT prompt that a teacher will use alongside this student image to get an annotated correction overlay. The prompt should instruct ChatGPT to: keep the original drawing visible, draw red arrows pointing to each problem area identified above, add short text labels near each arrow explaining what needs correction. Reference the specific issues found. Max 120 words.
+
+8. REFERENCE IMAGE PROMPTS: Write three ChatGPT prompts to generate ideal reference versions of this drawing at different skill levels. DRAWING_MEDIUM_CONTEXT Include style: "hand-drawn appearance, not digital, looks manually created by a student, pencil/colour-pencil texture".
+   - beginner: Simple, basic shapes, minimal detail, focus on correct placement only. Max 80 words.
+   - medium: Moderate detail, correct proportions, some shading. Max 100 words.
+   - expert: Full technique, shading, texture, professional finish. Max 120 words.
 
 Respond ONLY in valid JSON format (no markdown, no code blocks, no backticks):
 {
@@ -39,7 +45,12 @@ Respond ONLY in valid JSON format (no markdown, no code blocks, no backticks):
     {"area": "top-left", "label": "Proportion off", "severity": "high"},
     {"area": "center", "label": "Good shading here", "severity": "low"}
   ],
-  "corrected_image_prompt": "Draw a 2D composition using... [full prompt here]"
+  "annotation_overlay_prompt": "I am sharing a student drawing with you. Please redraw keeping the original marks visible, then overlay corrections: draw red arrows to the problem areas and add short text labels. Keep it educational.",
+  "reference_prompts": {
+    "beginner": "Draw a basic version of this drawing with simple shapes only...",
+    "medium": "Draw this composition with moderate detail and correct proportions...",
+    "expert": "Draw a refined version with full technique, shading, and texture..."
+  }
 }`;
 
 async function callGemini(base64: string, mimeType: string, prompt: string, retries = 2): Promise<string> {
@@ -63,7 +74,7 @@ async function callGemini(base64: string, mimeType: string, prompt: string, retr
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 1200,
+          maxOutputTokens: 2000,
         },
       }),
     });
@@ -73,18 +84,22 @@ async function callGemini(base64: string, mimeType: string, prompt: string, retr
       return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
 
-    const err = await res.json().catch(() => ({}));
+    const errBody = await res.json().catch(() => ({}));
+
+    if (res.status === 400 || res.status === 403) {
+      console.error(`Gemini API auth error (${res.status}):`, JSON.stringify(errBody));
+      throw new Error(`Gemini API key invalid or unauthorized (${res.status}). Check GEMINI_API_KEY env var.`);
+    }
 
     if (res.status === 429) {
       if (attempt < retries) {
-        // Flash is rate-limited — retry immediately with flash-lite
         console.warn(`Gemini ${model} rate limited (429), retrying with flash-lite...`);
         continue;
       }
       throw new Error('Gemini API 429: rate limit reached');
     }
 
-    console.error('Gemini API error:', JSON.stringify(err));
+    console.error(`Gemini API error (${res.status}):`, JSON.stringify(errBody));
     throw new Error(`Gemini API error: ${res.status}`);
   }
 
@@ -97,7 +112,7 @@ async function callAnthropic(base64: string, mediaType: string, prompt: string):
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1200,
+    max_tokens: 2000,
     messages: [{
       role: 'user',
       content: [
@@ -211,7 +226,13 @@ Difficulty: ${question.difficulty_tag || 'medium'}`
       }
     }
 
-    const { overlay_annotations, corrected_image_prompt, ...aiFeedback } = parsed as any;
+    const {
+      overlay_annotations,
+      annotation_overlay_prompt,
+      reference_prompts,
+      corrected_image_prompt,
+      ...aiFeedback
+    } = parsed as any;
 
     // Save all fields to DB
     await supabase
@@ -220,11 +241,20 @@ Difficulty: ${question.difficulty_tag || 'medium'}`
         ai_feedback: { ...aiFeedback, provider },
         ai_overlay_annotations: overlay_annotations || null,
         ai_corrected_image_prompt: corrected_image_prompt || null,
+        ai_annotation_prompt: annotation_overlay_prompt || null,
+        ai_reference_prompts: reference_prompts || null,
         ai_draft_status: 'ready',
       })
       .eq('id', submission_id);
 
-    return { ...aiFeedback, overlay_annotations, corrected_image_prompt, provider };
+    return {
+      ...aiFeedback,
+      overlay_annotations,
+      corrected_image_prompt,
+      annotation_overlay_prompt,
+      reference_prompts,
+      provider,
+    };
   } catch (err) {
     // Mark as failed so teacher knows generation didn't succeed
     await supabase
