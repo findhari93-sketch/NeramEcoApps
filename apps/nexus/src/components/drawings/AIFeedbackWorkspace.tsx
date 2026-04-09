@@ -18,6 +18,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource } from '@neram/database/types';
@@ -730,6 +731,27 @@ export default function AIFeedbackWorkspace({
           <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
             3. Written Feedback
           </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            color="secondary"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={(e) => {
+              e.stopPropagation();
+              const feedbackSource = latestAiFeedback || submission.ai_feedback;
+              if (!feedbackSource) return;
+              const draft = buildAIFeedbackText(feedbackSource as any);
+              if (draft) {
+                setTutorFeedback(draft);
+                notify({ tutorFeedback: draft });
+              }
+            }}
+            disabled={!latestAiFeedback && !submission.ai_feedback}
+            title={!latestAiFeedback && !submission.ai_feedback ? 'Generate AI draft first using Re-generate above' : 'Pre-fill feedback from AI analysis'}
+            sx={{ textTransform: 'none', mr: 1, minHeight: 28, fontSize: '0.75rem' }}
+          >
+            AI Draft
+          </Button>
           {feedbackExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </Box>
         <Collapse in={feedbackExpanded}>
@@ -746,10 +768,8 @@ export default function AIFeedbackWorkspace({
               }}
               sx={{ mb: 2 }}
               helperText={
-                tutorFeedback && submission.ai_feedback
+                tutorFeedback && (latestAiFeedback || submission.ai_feedback)
                   ? 'Pre-filled from AI analysis. Edit as needed.'
-                  : !tutorFeedback
-                  ? 'Re-generate in Section 2 to get AI-drafted feedback here.'
                   : undefined
               }
             />
