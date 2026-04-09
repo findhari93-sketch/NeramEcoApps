@@ -83,3 +83,4 @@ nul
 
 # Claude local settings (contains secrets)
 .claude/settings.local.json
+.worktrees/
