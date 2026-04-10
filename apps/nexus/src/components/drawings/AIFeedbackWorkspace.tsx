@@ -344,13 +344,6 @@ export default function AIFeedbackWorkspace({
           </Typography>
         </Paper>
       )}
-      {(aiDraftStatus === 'failed' || aiDraftStatus === 'pending') && !initialAnnotations && !initialPrompt && (
-        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#fff8e1' }}>
-          <Typography variant="body2" color="warning.dark" fontWeight={600}>
-            AI draft not available. Click Re-generate below to get AI annotations, prompt, and feedback.
-          </Typography>
-        </Paper>
-      )}
 
       {/* Re-generate error */}
       {regenError && (

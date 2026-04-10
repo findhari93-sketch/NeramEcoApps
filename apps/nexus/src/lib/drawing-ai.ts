@@ -222,16 +222,27 @@ Difficulty: ${question.difficulty_tag || 'medium'}`
       provider = 'anthropic';
     }
 
-    // Parse JSON
+    // Parse JSON — strip markdown code fences first (gemini-2.5-flash wraps in ```json ... ```)
+    const cleanedText = responseText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/i, '')
+      .trim();
+
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(responseText);
+      parsed = JSON.parse(cleanedText);
     } catch {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      // Last resort: extract the outermost {...} block
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch {
+          console.error(`Failed to parse ${provider} response:`, cleanedText.substring(0, 500));
+          throw new Error('Failed to parse AI response');
+        }
       } else {
-        console.error(`Failed to parse ${provider} response:`, responseText.substring(0, 500));
+        console.error(`Failed to parse ${provider} response:`, cleanedText.substring(0, 500));
         throw new Error('Failed to parse AI response');
       }
     }
