@@ -85,6 +85,7 @@ export default function AIFeedbackWorkspace({
     submission.ai_feedback as Record<string, unknown> | null
   );
   const [uploadingAnnotation, setUploadingAnnotation] = useState(false);
+  const autoTriggeredRef = useRef(false);
 
   // UI state
   const [sketchOpen, setSketchOpen] = useState(false);
@@ -241,6 +242,17 @@ export default function AIFeedbackWorkspace({
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
   }, [overlayExpanded, overlayImageUrl, correctedExpanded, correctedImageUrl, handleAnnotationOverlayUpload, handleCorrectedUpload]);
+
+  // Auto-trigger AI generation when draft is missing on mount
+  useEffect(() => {
+    if (autoTriggeredRef.current) return;
+    const hasAiData = initialAnnotations || initialPrompt || initialReferencePrompts || submission.ai_feedback;
+    if (!hasAiData && (aiDraftStatus === 'pending' || aiDraftStatus === 'failed')) {
+      autoTriggeredRef.current = true;
+      handleRegenerate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Re-generate: calls AI, updates ALL 3 sections at once
   const handleRegenerate = async () => {

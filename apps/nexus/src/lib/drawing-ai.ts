@@ -53,13 +53,12 @@ Respond ONLY in valid JSON format (no markdown, no code blocks, no backticks):
   }
 }`;
 
-async function callGemini(base64: string, mimeType: string, prompt: string, retries = 2): Promise<string> {
-  // Try flash first, fall back to flash-lite on rate limit (higher RPM quota)
-  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+async function callGemini(base64: string, mimeType: string, prompt: string): Promise<string> {
+  // Try models in order — matches what works in marketing chat
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    // Alternate models: flash on even attempts, flash-lite on odd attempts after first failure
-    const model = attempt === 0 ? models[0] : models[1];
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
 
     const res = await fetch(url, {
@@ -91,19 +90,20 @@ async function callGemini(base64: string, mimeType: string, prompt: string, retr
       throw new Error(`Gemini API key invalid or unauthorized (${res.status}). Check GEMINI_API_KEY env var.`);
     }
 
-    if (res.status === 429) {
-      if (attempt < retries) {
-        console.warn(`Gemini ${model} rate limited (429), retrying with flash-lite...`);
+    if (res.status === 404 || res.status === 429) {
+      const reason = res.status === 404 ? 'not found' : 'rate limited';
+      if (i < models.length - 1) {
+        console.warn(`Gemini ${model} ${reason} (${res.status}), trying ${models[i + 1]}...`);
         continue;
       }
-      throw new Error('Gemini API 429: rate limit reached');
+      if (res.status === 429) throw new Error('Gemini API 429: rate limit reached on all models');
     }
 
-    console.error(`Gemini API error (${res.status}):`, JSON.stringify(errBody));
+    console.error(`Gemini API error (${res.status}) on model ${model}:`, JSON.stringify(errBody));
     throw new Error(`Gemini API error: ${res.status}`);
   }
 
-  throw new Error('Gemini API: all retries exhausted');
+  throw new Error('Gemini API: all models exhausted');
 }
 
 async function callAnthropic(base64: string, mediaType: string, prompt: string): Promise<string> {
@@ -201,12 +201,22 @@ Difficulty: ${question.difficulty_tag || 'medium'}`
       .replace('QUESTION_CONTEXT', questionContext)
       .replace('DRAWING_MEDIUM_CONTEXT', mediumContext);
 
-    // Call AI
+    // Call AI: Gemini first, fall back to Anthropic if Gemini fails
     let responseText: string;
     let provider: string;
     if (GEMINI_API_KEY) {
-      responseText = await callGemini(base64, mimeType, prompt);
-      provider = 'gemini';
+      try {
+        responseText = await callGemini(base64, mimeType, prompt);
+        provider = 'gemini';
+      } catch (geminiErr) {
+        if (ANTHROPIC_API_KEY) {
+          console.warn('Gemini failed, falling back to Anthropic:', geminiErr instanceof Error ? geminiErr.message : geminiErr);
+          responseText = await callAnthropic(base64, mimeType, prompt);
+          provider = 'anthropic';
+        } else {
+          throw geminiErr;
+        }
+      }
     } else {
       responseText = await callAnthropic(base64, mimeType, prompt);
       provider = 'anthropic';
