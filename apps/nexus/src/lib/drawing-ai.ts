@@ -73,7 +73,7 @@ async function callGemini(base64: string, mimeType: string, prompt: string): Pro
         }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 2000,
+          maxOutputTokens: 8192,
         },
       }),
     });
