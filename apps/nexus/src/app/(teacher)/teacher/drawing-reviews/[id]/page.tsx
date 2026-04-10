@@ -14,6 +14,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
@@ -45,6 +46,8 @@ export default function DrawingReviewDetailPage() {
   const [workspaceData, setWorkspaceData] = useState<WorkspaceData>(workspaceRef.current);
 
   const [saving, setSaving] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
   const [publishToGallery, setPublishToGallery] = useState(false);
@@ -66,6 +69,35 @@ export default function DrawingReviewDetailPage() {
     } catch {
       setDeleting(false);
       setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setDraftSaving(true);
+    setError('');
+    try {
+      const token = await getToken();
+      const ws = workspaceRef.current;
+      const res = await fetch(`/api/drawing/submissions/${submission!.id}/review`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tutor_rating: ws.rating || null,
+          tutor_feedback: ws.tutorFeedback || null,
+          reviewed_image_url: ws.overlayImageUrl,
+          corrected_image_url: ws.correctedImageUrl,
+          ai_overlay_annotations: ws.overlayAnnotations,
+          tutor_resources: ws.resources,
+          action: 'draft',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save draft');
+      setDraftSaved(true);
+      setTimeout(() => setDraftSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save draft');
+    } finally {
+      setDraftSaving(false);
     }
   };
 
@@ -148,15 +180,28 @@ export default function DrawingReviewDetailPage() {
 
   // Action button bar (used in both desktop and mobile)
   const actionBar = (
-    <Box sx={{ p: 2, pt: 1, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
+    <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
       {error && <Typography color="error" variant="caption" sx={{ mb: 0.5, display: 'block' }}>{error}</Typography>}
+      {/* Save Draft row */}
+      <Button
+        variant="outlined"
+        fullWidth
+        onClick={handleSaveDraft}
+        disabled={draftSaving || saving}
+        startIcon={draftSaving ? undefined : <SaveOutlinedIcon />}
+        color={draftSaved ? 'success' : 'inherit'}
+        sx={{ minHeight: 40, textTransform: 'none', fontWeight: 600, mb: 1, fontSize: '0.85rem' }}
+      >
+        {draftSaving ? 'Saving...' : draftSaved ? 'Draft Saved' : 'Save Draft'}
+      </Button>
+      {/* Final action row */}
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button
           variant="outlined"
           color="warning"
           fullWidth
           onClick={() => { setAction('redo'); handleSaveReview('redo'); }}
-          disabled={saving}
+          disabled={saving || draftSaving}
           startIcon={<ReplayIcon />}
           sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
         >
@@ -167,7 +212,7 @@ export default function DrawingReviewDetailPage() {
           color="success"
           fullWidth
           onClick={() => { setAction('complete'); handleSaveReview('complete'); }}
-          disabled={saving}
+          disabled={saving || draftSaving}
           startIcon={<CheckCircleOutlineIcon />}
           sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
         >
@@ -184,8 +229,8 @@ export default function DrawingReviewDetailPage() {
 
   // Workspace + comments panel content (shared between desktop right panel and mobile sheet)
   const reviewPanel = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, WebkitOverflowScrolling: 'touch' }}>
         {['reviewed', 'redo', 'completed'].includes(submission.status) && (
           <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9' }}>
             <Typography variant="body2" color="success.dark" fontWeight={600}>
@@ -295,7 +340,7 @@ export default function DrawingReviewDetailPage() {
         <Drawer
           anchor="bottom" open={reviewSheetOpen}
           onClose={() => setReviewSheetOpen(false)}
-          PaperProps={{ sx: { maxHeight: '88vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+          PaperProps={{ sx: { height: '88vh', borderTopLeftRadius: 16, borderTopRightRadius: 16, display: 'flex', flexDirection: 'column' } }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
             <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
