@@ -411,15 +411,6 @@ export default function AIFeedbackWorkspace({
                   <Button
                     size="small"
                     variant="outlined"
-                    startIcon={<OpenInNewIcon />}
-                    onClick={() => window.open(submission.original_image_url, '_blank')}
-                    sx={{ textTransform: 'none', minHeight: 36 }}
-                  >
-                    View Student Image
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
                     color="secondary"
                     startIcon={<OpenInNewIcon />}
                     onClick={() => window.open('https://chat.openai.com', '_blank')}
@@ -611,15 +602,6 @@ export default function AIFeedbackWorkspace({
                     sx={{ textTransform: 'none', minHeight: 36 }}
                   >
                     {referenceCopied ? 'Copied!' : 'Copy Prompt'}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<OpenInNewIcon />}
-                    onClick={() => window.open(submission.original_image_url, '_blank')}
-                    sx={{ textTransform: 'none', minHeight: 36 }}
-                  >
-                    View Student Image
                   </Button>
                   <Button
                     size="small"

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, ToggleButton, ToggleButtonGroup, Chip, Typography } from '@neram/ui';
+import { Box, ToggleButton, ToggleButtonGroup, Chip, Typography, IconButton, Tooltip } from '@neram/ui';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 
 export interface OverlayAnnotation {
   area: string;
@@ -36,6 +38,23 @@ const SEVERITY_COLORS: Record<string, 'error' | 'warning' | 'success' | 'info'> 
   low:    'success',
 };
 
+async function convertToPng(blob: Blob): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d')!.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((b) => b ? resolve(b) : reject(new Error('canvas toBlob failed')), 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+    img.src = url;
+  });
+}
+
 export default function ImageToggleTabs({
   originalImageUrl,
   overlayAnnotations,
@@ -47,6 +66,18 @@ export default function ImageToggleTabs({
   const hasCorrected = !!correctedImageUrl;
 
   const [tab, setTab] = useState<'original' | 'overlay' | 'corrected'>('original');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyImage = async () => {
+    try {
+      const res = await fetch(displayImageUrl);
+      const blob = await res.blob();
+      const pngBlob = blob.type === 'image/png' ? blob : await convertToPng(blob);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { /* silent — clipboard may be denied */ }
+  };
 
   // If current tab becomes unavailable (e.g. corrected was removed), fall back
   const activeTab = tab === 'corrected' && !hasCorrected
@@ -137,6 +168,25 @@ export default function ImageToggleTabs({
             </Box>
           );
         })}
+
+        {/* Copy to clipboard button — top-right corner */}
+        <Tooltip title={copied ? 'Copied!' : 'Copy image to clipboard'} placement="left">
+          <IconButton
+            onClick={handleCopyImage}
+            size="small"
+            sx={{
+              position: 'absolute', top: 8, right: 8, zIndex: 3,
+              bgcolor: copied ? 'success.main' : 'rgba(0,0,0,0.55)',
+              color: '#fff',
+              backdropFilter: 'blur(4px)',
+              '&:hover': { bgcolor: copied ? 'success.dark' : 'rgba(0,0,0,0.75)' },
+              width: 32, height: 32,
+              transition: 'background-color 0.2s',
+            }}
+          >
+            {copied ? <CheckIcon sx={{ fontSize: 16 }} /> : <ContentCopyIcon sx={{ fontSize: 16 }} />}
+          </IconButton>
+        </Tooltip>
 
         {/* Caption for corrected image */}
         {activeTab === 'corrected' && (
