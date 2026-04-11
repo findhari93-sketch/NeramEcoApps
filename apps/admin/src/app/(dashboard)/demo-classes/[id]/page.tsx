@@ -32,6 +32,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import LinkIcon from '@mui/icons-material/Link';
 import DataTable from '@/components/DataTable';
+import CopyablePhone from '@/components/CopyablePhone';
 import type { DemoClassSlot, DemoClassRegistration, DemoSlotStats } from '@neram/database';
 
 interface TabPanelProps {
@@ -262,7 +263,14 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
       ),
     },
     { field: 'name', headerName: 'Name', width: 150 },
-    { field: 'phone', headerName: 'Phone', width: 130 },
+    {
+      field: 'phone',
+      headerName: 'Phone',
+      width: 160,
+      renderCell: (params: { value: string }) => (
+        <CopyablePhone phone={params.value} showOnHover noWrap />
+      ),
+    },
     { field: 'email', headerName: 'Email', width: 180 },
     { field: 'current_class', headerName: 'Class', width: 100 },
     { field: 'interest_course', headerName: 'Interest', width: 100 },
@@ -299,7 +307,14 @@ export default function DemoSlotDetailPage({ params }: { params: { id: string } 
 
   const attendanceColumns = [
     { field: 'name', headerName: 'Name', width: 150 },
-    { field: 'phone', headerName: 'Phone', width: 130 },
+    {
+      field: 'phone',
+      headerName: 'Phone',
+      width: 160,
+      renderCell: (params: { value: string }) => (
+        <CopyablePhone phone={params.value} showOnHover noWrap />
+      ),
+    },
     {
       field: 'status',
       headerName: 'Status',

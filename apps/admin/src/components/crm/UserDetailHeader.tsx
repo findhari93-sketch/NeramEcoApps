@@ -14,6 +14,7 @@ import SchoolIcon from '@mui/icons-material/School';
 import LinkIcon from '@mui/icons-material/Link';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import ClassIcon from '@mui/icons-material/Class';
+import CopyablePhone from '@/components/CopyablePhone';
 import { useRouter } from 'next/navigation';
 import type { UserJourneyDetail } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
@@ -245,9 +246,7 @@ export default function UserDetailHeader({
                   {user.phone && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <PhoneIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
-                      <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: 13 }}>
-                        {user.phone}
-                      </Typography>
+                      <CopyablePhone phone={user.phone} mono variant="body2" textSx={{ color: 'text.secondary' }} />
                       {user.phone_verified && (
                         <VerifiedIcon sx={{ fontSize: 13, color: 'success.main' }} />
                       )}

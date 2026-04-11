@@ -42,6 +42,7 @@ import SendIcon from '@mui/icons-material/Send';
 import TextField from '@mui/material/TextField';
 import Snackbar from '@mui/material/Snackbar';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import CopyablePhone from '@/components/CopyablePhone';
 
 interface ContactMessage {
   id: string;
@@ -595,9 +596,7 @@ export default function MessagesPage() {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {message.phone || '-'}
-                        </Typography>
+                        <CopyablePhone phone={message.phone} showOnHover textSx={{ color: 'text.secondary' }} />
                       </TableCell>
                       <TableCell>
                         <Typography
@@ -708,14 +707,7 @@ export default function MessagesPage() {
                       <Typography variant="caption" color="text.secondary">
                         Phone
                       </Typography>
-                      <Typography variant="body2" fontWeight={500}>
-                        <a
-                          href={`tel:${selectedMessage.phone}`}
-                          style={{ color: '#1565C0', textDecoration: 'none' }}
-                        >
-                          {selectedMessage.phone}
-                        </a>
-                      </Typography>
+                      <CopyablePhone phone={selectedMessage.phone} variant="body2" textSx={{ fontWeight: 500 }} />
                     </Box>
                   )}
                   <Box>

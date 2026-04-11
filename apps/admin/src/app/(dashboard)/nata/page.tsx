@@ -24,6 +24,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import DataTable from '@/components/DataTable';
+import CopyablePhone from '@/components/CopyablePhone';
 
 // ============================================
 // Types
@@ -1018,9 +1019,9 @@ export default function NataContentPage() {
     {
       field: 'phone',
       headerName: 'Phone',
-      width: 130,
+      width: 160,
       renderCell: (params: any) => (
-        <Typography variant="body2" sx={{ fontSize: 13 }}>{params.value}</Typography>
+        <CopyablePhone phone={params.value} showOnHover noWrap textSx={{ fontSize: 13 }} />
       ),
     },
     {

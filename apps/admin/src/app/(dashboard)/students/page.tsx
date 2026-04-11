@@ -46,6 +46,7 @@ import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DataTable from '@/components/DataTable';
+import CopyablePhone from '@/components/CopyablePhone';
 import { useRouter } from 'next/navigation';
 
 // Types for the student data
@@ -653,11 +654,9 @@ export default function StudentsPage() {
     {
       field: 'phone',
       headerName: 'Phone',
-      width: 140,
+      width: 170,
       renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2" noWrap>
-          {row.phone || '-'}
-        </Typography>
+        <CopyablePhone phone={row.phone} noWrap showOnHover />
       ),
     },
     {

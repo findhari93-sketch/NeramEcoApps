@@ -43,6 +43,7 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
+import CopyablePhone from '@/components/CopyablePhone';
 
 interface UsersTableProps {
   data: UserJourney[];
@@ -257,9 +258,7 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
         {/* Phone with verification */}
         {user.phone && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
-              {user.phone}
-            </Typography>
+            <CopyablePhone phone={user.phone} variant="caption" mono textSx={{ fontSize: 11, color: 'text.secondary' }} />
             {user.phone_verified && (
               <VerifiedIcon sx={{ fontSize: 12, color: 'success.main' }} />
             )}

@@ -7,6 +7,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import type { UserJourneyDetail, AcademicData, SchoolStudentAcademicData, DiplomaStudentAcademicData, CollegeStudentAcademicData, WorkingProfessionalAcademicData, ApplicantCategory } from '@neram/database';
 import { EDUCATION_BOARD_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
+import CopyablePhone from '@/components/CopyablePhone';
 
 interface UserProfileSectionProps {
   detail: UserJourneyDetail;
@@ -179,7 +180,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
         } />
         <InfoRow label="Phone" value={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{user.phone || '--'}</span>
+            <CopyablePhone phone={user.phone} mono fallback="--" />
             {user.phone_verified && (
               <Chip label="Verified" size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: '#4CAF5014', color: '#2E7D32', borderRadius: 1 }} />
             )}

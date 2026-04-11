@@ -28,6 +28,7 @@ import FeeCalculator, { FeeDetails } from '@/components/FeeCalculator';
 import CouponGenerator, { CouponData } from '@/components/CouponGenerator';
 import ScholarshipReview from '@/components/ScholarshipReview';
 import CashbackSummary from '@/components/CashbackSummary';
+import CopyablePhone from '@/components/CopyablePhone';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -278,9 +279,12 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
               {lead.fullName}
             </Typography>
             <Stack direction="row" spacing={2} alignItems="center">
-              <Typography variant="body1" color="text.secondary">
-                {lead.email} • {lead.phone}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography variant="body1" color="text.secondary">
+                  {lead.email} •
+                </Typography>
+                <CopyablePhone phone={lead.phone} variant="body1" textSx={{ color: 'text.secondary' }} />
+              </Box>
               <Chip
                 label={lead.status.toUpperCase()}
                 color={getStatusColor(lead.status)}
@@ -339,7 +343,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2" color="text.secondary">Phone</Typography>
-                  <Typography variant="body1" fontWeight={500}>{lead.phone}</Typography>
+                  <CopyablePhone phone={lead.phone} variant="body1" textSx={{ fontWeight: 500 }} />
                 </Grid>
                 <Grid item xs={12}>
                   <Typography variant="body2" color="text.secondary">Email</Typography>

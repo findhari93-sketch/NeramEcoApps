@@ -52,6 +52,7 @@ import type {
   SupportTicketPriority,
 } from '@neram/database';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import CopyablePhone from '@/components/CopyablePhone';
 
 // ============================================
 // CONSTANTS
@@ -454,7 +455,7 @@ function TicketDetailDialog({ open, onClose, ticketId, adminName, onTicketUpdate
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 150 }}>
                     <Typography variant="caption" color="text.secondary">Phone</Typography>
-                    <Typography variant="body2">{ticket.user_phone || '-'}</Typography>
+                    <CopyablePhone phone={ticket.user_phone} />
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 3, mt: 1.5, flexWrap: 'wrap' }}>

@@ -17,6 +17,7 @@ import {
   Divider,
 } from '@neram/ui';
 import DataTable from '@/components/DataTable';
+import CopyablePhone from '@/components/CopyablePhone';
 import type {
   JobApplicationWithJob,
   JobApplicationStatus,
@@ -155,7 +156,14 @@ export default function ApplicationsPage() {
   const columns = [
     { field: 'applicant_name', headerName: 'Name', width: 160 },
     { field: 'applicant_email', headerName: 'Email', width: 200 },
-    { field: 'applicant_phone', headerName: 'Phone', width: 130 },
+    {
+      field: 'applicant_phone',
+      headerName: 'Phone',
+      width: 160,
+      renderCell: ({ value }: { value: string }) => (
+        <CopyablePhone phone={value} showOnHover noWrap />
+      ),
+    },
     {
       field: 'job_posting',
       headerName: 'Job Title',
@@ -258,7 +266,7 @@ export default function ApplicationsPage() {
                 <Typography variant="subtitle2" color="text.secondary">Applicant</Typography>
                 <Typography variant="body1" fontWeight={600}>{detailDialog.applicant_name}</Typography>
                 <Typography variant="body2">{detailDialog.applicant_email}</Typography>
-                <Typography variant="body2">{detailDialog.applicant_phone}</Typography>
+                <CopyablePhone phone={detailDialog.applicant_phone} />
               </Box>
 
               <Divider />

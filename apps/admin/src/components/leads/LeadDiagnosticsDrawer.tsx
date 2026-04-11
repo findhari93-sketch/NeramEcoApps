@@ -28,6 +28,7 @@ import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
 import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
 import TabletIcon from '@mui/icons-material/Tablet';
 import type { UserFunnelEvent } from '@neram/database';
+import CopyablePhone from '@/components/CopyablePhone';
 
 interface UserErrorLog {
   id: string;
@@ -175,9 +176,7 @@ export default function LeadDiagnosticsDrawer({
             {userEmail || 'No email'}
           </Typography>
           {userPhone && (
-            <Typography variant="caption" color="text.secondary">
-              {userPhone}
-            </Typography>
+            <CopyablePhone phone={userPhone} variant="caption" textSx={{ color: 'text.secondary' }} />
           )}
           <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5 }}>
             Joined {formatRelative(createdAt)}

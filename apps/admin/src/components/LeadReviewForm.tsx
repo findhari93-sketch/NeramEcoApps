@@ -10,6 +10,7 @@ import {
   Chip,
   Divider,
 } from '@neram/ui';
+import CopyablePhone from '@/components/CopyablePhone';
 
 interface Lead {
   id: string;
@@ -96,9 +97,9 @@ export default function LeadReviewForm({
           <Typography variant="body2" color="text.secondary" gutterBottom>
             Phone
           </Typography>
-          <Typography variant="body1" fontWeight="medium" gutterBottom>
-            {lead.phone}
-          </Typography>
+          <Box sx={{ mb: 1 }}>
+            <CopyablePhone phone={lead.phone} variant="body1" textSx={{ fontWeight: 500 }} />
+          </Box>
         </Grid>
 
         <Grid item xs={12} md={6}>
@@ -123,9 +124,9 @@ export default function LeadReviewForm({
           <Typography variant="body2" color="text.secondary" gutterBottom>
             Parent Phone
           </Typography>
-          <Typography variant="body1" fontWeight="medium" gutterBottom>
-            {lead.parentPhone}
-          </Typography>
+          <Box sx={{ mb: 1 }}>
+            <CopyablePhone phone={lead.parentPhone} variant="body1" textSx={{ fontWeight: 500 }} />
+          </Box>
         </Grid>
 
         <Grid item xs={12}>

@@ -50,6 +50,7 @@ import SchoolIcon from '@mui/icons-material/School';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import InitializeIcon from '@mui/icons-material/PlaylistAdd';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import CopyablePhone from '@/components/CopyablePhone';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1091,7 +1092,7 @@ function StudentProgressTab({
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2">{student.phone || '-'}</Typography>
+                          <CopyablePhone phone={student.phone} showOnHover />
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">{student.course_name || '-'}</Typography>
@@ -1172,9 +1173,7 @@ function StudentProgressTab({
                 {selectedStudentName}
               </Typography>
               {selectedStudentPhone && (
-                <Typography variant="body2" color="text.secondary">
-                  {selectedStudentPhone}
-                </Typography>
+                <CopyablePhone phone={selectedStudentPhone} textSx={{ color: 'text.secondary' }} />
               )}
               <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                 {selectedStudentCourse && (
