@@ -339,7 +339,7 @@ export default function TeacherDashboard() {
       </Box>
 
       {/* ── Quick Actions: Horizontal scroll on mobile ── */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2, overflow: 'hidden' }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
           Quick Actions
         </Typography>
@@ -352,12 +352,15 @@ export default function TeacherDashboard() {
             overflowX: 'auto',
             mx: -2,
             px: 2,
-            pb: 1,
+            pb: 1.5,
             scrollSnapType: 'x mandatory',
             WebkitOverflowScrolling: 'touch',
             '&::-webkit-scrollbar': { display: 'none' },
             msOverflowStyle: 'none',
             scrollbarWidth: 'none',
+            // Fade hint on right edge to indicate scrollability
+            maskImage: 'linear-gradient(to right, transparent 0%, black 2%, black 85%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 2%, black 85%, transparent 100%)',
           }}
         >
           {quickActions.map((action) => (

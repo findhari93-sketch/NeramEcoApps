@@ -330,14 +330,16 @@ export default function FoundationLearningContent({
   }, [quizOpen]);
 
   const handleSectionEnd = useCallback((sectionIndex: number) => {
-    // Non-blocking: show quiz notification chip instead of immediately opening modal
-    // Video keeps playing — student opens quiz when ready
+    // Mandatory: auto-pause video and open quiz modal immediately
     const section = data?.sections[sectionIndex];
     if (section) {
       const tracker = watchTracker.current.get(section.id);
       if (tracker) tracker.pauseCount += 1;
     }
-    setQuizPendingSectionIndex(sectionIndex);
+    // Auto-open the quiz modal (video is already paused by VideoPlayer)
+    setQuizSectionIndex(sectionIndex);
+    setQuizOpen(true);
+    setQuizPendingSectionIndex(null);
   }, [data]);
 
   const handleOpenPendingQuiz = useCallback((index: number) => {
@@ -859,11 +861,9 @@ export default function FoundationLearningContent({
           open={quizOpen}
           sectionTitle={sections[quizSectionIndex].title}
           questions={sections[quizSectionIndex].quiz_questions}
-          dismissable
+          dismissable={false}
           onClose={() => {
             setQuizOpen(false);
-            // Re-show the chip so student can reopen the quiz later
-            setQuizPendingSectionIndex(quizSectionIndex);
             const player = (window as any).__foundationPlayer;
             if (player?.play) player.play();
           }}

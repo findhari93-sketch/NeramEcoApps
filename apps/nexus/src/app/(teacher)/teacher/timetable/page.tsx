@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Typography, Fab, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText } from '@neram/ui';
+import { Box, Typography, Fab, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, useMediaQuery, useTheme, Menu, MenuItem, ListItemIcon, ListItemText, Tooltip } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
@@ -10,6 +10,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SyncIcon from '@mui/icons-material/Sync';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import WeeklyCalendarGrid, { getWeekDates } from '@/components/timetable/WeeklyCalendarGrid';
 import TimeSlotGrid from '@/components/timetable/TimeSlotGrid';
@@ -72,6 +73,9 @@ export default function TeacherTimetable() {
   const [rsvpData, setRsvpData] = useState<Record<string, { attending: number; total: number }>>({});
   // Rating data
   const [averageRatings, setAverageRatings] = useState<Record<string, number>>({});
+
+  // Toolbar overflow menu (mobile)
+  const [toolbarMenuAnchor, setToolbarMenuAnchor] = useState<HTMLElement | null>(null);
 
   // Slot action menu
   const [slotMenuAnchor, setSlotMenuAnchor] = useState<HTMLElement | null>(null);
@@ -648,7 +652,7 @@ export default function TeacherTimetable() {
         <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }}>
           Timetable
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, md: 1 } }}>
           {isDesktop && (
             <ToggleButtonGroup
               value={viewMode}
@@ -665,49 +669,109 @@ export default function TeacherTimetable() {
               </ToggleButton>
             </ToggleButtonGroup>
           )}
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<EventBusyIcon />}
-            onClick={() => setHolidayManagerOpen(true)}
-            sx={{ textTransform: 'none', minHeight: 40 }}
-          >
-            Holidays
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<AssessmentIcon />}
-            onClick={() => {
-              setRsvpDashboardClassId(undefined);
-              setRsvpDashboardOpen(true);
-            }}
-            sx={{ textTransform: 'none', minHeight: 40 }}
-          >
-            RSVP
-          </Button>
-          {activeClassroom?.ms_team_id && (
+
+          {/* Mobile: icon-only buttons for Holidays & RSVP */}
+          {!isDesktop ? (
             <>
+              <Tooltip title="Holidays">
+                <IconButton
+                  size="small"
+                  onClick={() => setHolidayManagerOpen(true)}
+                  sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 2, minWidth: 40, minHeight: 40 }}
+                >
+                  <EventBusyIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="RSVP Dashboard">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setRsvpDashboardClassId(undefined);
+                    setRsvpDashboardOpen(true);
+                  }}
+                  sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 2, minWidth: 40, minHeight: 40 }}
+                >
+                  <AssessmentIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              {/* Overflow menu for Sync actions on mobile */}
+              {activeClassroom?.ms_team_id && (
+                <>
+                  <Tooltip title="More actions">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => setToolbarMenuAnchor(e.currentTarget)}
+                      sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 2, minWidth: 40, minHeight: 40 }}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Menu
+                    anchorEl={toolbarMenuAnchor}
+                    open={Boolean(toolbarMenuAnchor)}
+                    onClose={() => setToolbarMenuAnchor(null)}
+                  >
+                    <MenuItem onClick={() => { setToolbarMenuAnchor(null); handleSyncMembers(); }}>
+                      <ListItemIcon><SyncIcon fontSize="small" /></ListItemIcon>
+                      <ListItemText>Sync Members</ListItemText>
+                    </MenuItem>
+                    <MenuItem onClick={() => { setToolbarMenuAnchor(null); handleSyncFromTeams(); }}>
+                      <ListItemIcon><CloudDownloadIcon fontSize="small" /></ListItemIcon>
+                      <ListItemText>Sync from Teams</ListItemText>
+                    </MenuItem>
+                  </Menu>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Desktop: full text buttons */}
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<SyncIcon />}
-                onClick={handleSyncMembers}
+                startIcon={<EventBusyIcon />}
+                onClick={() => setHolidayManagerOpen(true)}
                 sx={{ textTransform: 'none', minHeight: 40 }}
               >
-                Sync Members
+                Holidays
               </Button>
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<CloudDownloadIcon />}
-                onClick={handleSyncFromTeams}
+                startIcon={<AssessmentIcon />}
+                onClick={() => {
+                  setRsvpDashboardClassId(undefined);
+                  setRsvpDashboardOpen(true);
+                }}
                 sx={{ textTransform: 'none', minHeight: 40 }}
               >
-                Sync from Teams
+                RSVP
               </Button>
+              {activeClassroom?.ms_team_id && (
+                <>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<SyncIcon />}
+                    onClick={handleSyncMembers}
+                    sx={{ textTransform: 'none', minHeight: 40 }}
+                  >
+                    Sync Members
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<CloudDownloadIcon />}
+                    onClick={handleSyncFromTeams}
+                    sx={{ textTransform: 'none', minHeight: 40 }}
+                  >
+                    Sync from Teams
+                  </Button>
+                </>
+              )}
             </>
           )}
+
           {activeClassroom && (
             <TimetableNotificationBell
               classroomId={activeClassroom.id}

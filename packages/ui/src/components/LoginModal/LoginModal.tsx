@@ -93,6 +93,8 @@ function getFirebaseErrorMessage(error: any): string {
       return 'Security check failed. Please refresh and try again.';
     case 'auth/network-request-failed':
       return 'Network error. Please check your connection and try again.';
+    case 'auth/internal-error':
+      return 'Verification service error. Please try again.';
     case 'auth/popup-closed-by-user':
       return 'Sign-in popup was closed. Please try again.';
     case 'auth/cancelled-popup-request':
@@ -322,14 +324,13 @@ export default function LoginModal({
         // Non-critical: don't block OTP send if capture fails
       }
 
-      // Ensure reCAPTCHA is initialized before sending OTP
-      // It may have been consumed by a previous attempt
-      if (!recaptchaInitialized.current) {
-        clearRecaptcha();
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        initRecaptcha('recaptcha-container-login-modal');
-        recaptchaInitialized.current = true;
-      }
+      // Always reinitialize reCAPTCHA before each OTP attempt.
+      // Firebase consumes the verifier on each signInWithPhoneNumber call,
+      // so reusing a stale verifier causes silent failures.
+      clearRecaptcha();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      initRecaptcha('recaptcha-container-login-modal');
+      recaptchaInitialized.current = true;
 
       await sendPhoneOTP(phoneNumber);
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed' });
@@ -338,8 +339,11 @@ export default function LoginModal({
     } catch (err: any) {
       const errMsg = getFirebaseErrorMessage(err);
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_request_failed', status: 'failed', error_message: errMsg, error_code: err?.code });
-      // If reCAPTCHA error, try reinitializing and retry once
-      if (err?.message?.includes('reCAPTCHA') || err?.code === 'auth/captcha-check-failed') {
+      // If reCAPTCHA or auth error, try reinitializing and retry once
+      const isRetryable = err?.message?.includes('reCAPTCHA')
+        || err?.code === 'auth/captcha-check-failed'
+        || err?.code === 'auth/internal-error';
+      if (isRetryable) {
         try {
           const { clearRecaptcha, initRecaptcha, sendPhoneOTP } = await import('@neram/auth');
           clearRecaptcha();

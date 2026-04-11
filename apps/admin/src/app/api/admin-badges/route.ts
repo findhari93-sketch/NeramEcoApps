@@ -12,6 +12,7 @@ const ZERO_COUNTS = {
   app_feedback: 0,
   qa_moderation: 0,
   payments: 0,
+  chat_history: 0,
 };
 
 // GET /api/admin-badges - Get action-required badge counts for sidebar menu items
@@ -19,7 +20,10 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
 
-    const [leads, students, demos, tickets, feedback, qa, payments] = await Promise.all([
+    // Chat history: conversations from the last 24 hours that haven't been reviewed
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [leads, students, demos, tickets, feedback, qa, payments, chatHistory] = await Promise.all([
       // Leads: phone verified but WA not confirmed, OR submitted but call not made
       supabase
         .from('lead_profiles')
@@ -63,6 +67,14 @@ export async function GET() {
         .select('id', { count: 'exact', head: true })
         .not('screenshot_url', 'is', null)
         .eq('screenshot_verified', false),
+
+      // Chat History: new conversations in the last 24 hours not yet reviewed
+      supabase
+        .from('chatbot_conversations')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', twentyFourHoursAgo)
+        .is('admin_correction', null)
+        .is('thumbs_up', null),
     ]);
 
     return NextResponse.json({
@@ -73,6 +85,7 @@ export async function GET() {
       app_feedback: feedback.count ?? 0,
       qa_moderation: qa.count ?? 0,
       payments: payments.count ?? 0,
+      chat_history: chatHistory.count ?? 0,
     });
   } catch (err) {
     console.error('Error fetching admin badge counts:', err);

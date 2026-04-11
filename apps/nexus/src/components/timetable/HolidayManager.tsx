@@ -172,6 +172,8 @@ export default function HolidayManager({
         setDescription('');
         fetchHolidays();
         onHolidaysChanged();
+        // Auto-close so timetable updates are immediately visible
+        onClose();
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error || 'Failed to add holiday');
@@ -200,6 +202,7 @@ export default function HolidayManager({
       if (res.ok) {
         fetchHolidays();
         onHolidaysChanged();
+        onClose();
       }
     } catch {
       // ignore

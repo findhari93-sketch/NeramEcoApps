@@ -137,7 +137,8 @@ export default function SharePointPlayer({ videoUrl, chapterId, token, sections,
             hasTriggeredQuizRef.current.add(i);
             isRewatchingRef.current = false;
             rewatchMaxTimeRef.current = 0;
-            // Don't auto-pause — parent shows a non-blocking quiz notification
+            // Auto-pause video so the mandatory quiz can be taken
+            video.pause();
             onSectionEndRef.current(i);
             return;
           }

@@ -58,7 +58,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
 const MOBILE_DRAWER_WIDTH = 280;
 
-type BadgeKey = 'careers' | 'leads' | 'students' | 'demo_classes' | 'support_tickets' | 'app_feedback' | 'qa_moderation' | 'payments';
+type BadgeKey = 'careers' | 'leads' | 'students' | 'demo_classes' | 'support_tickets' | 'app_feedback' | 'qa_moderation' | 'payments' | 'chat_history';
 
 interface MenuItem {
   text: string;
@@ -127,7 +127,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback', hasBadge: 'app_feedback' },
       { text: 'WhatsApp Templates', icon: WhatsAppIcon, path: '/whatsapp-templates' },
       { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation', hasBadge: 'qa_moderation' },
-      { text: 'Chat History', icon: ForumIcon, path: '/chat-history' },
+      { text: 'Chat History', icon: ForumIcon, path: '/chat-history', hasBadge: 'chat_history' },
       { text: 'Aintra Training', icon: SmartToyIcon, path: '/aintra-kb' },
       { text: 'Training Guide', icon: MenuBookIcon, path: '/aintra-guide' },
     ],
@@ -165,6 +165,7 @@ export default function Sidebar() {
     app_feedback: 0,
     qa_moderation: 0,
     payments: 0,
+    chat_history: 0,
   });
   const messageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const careersIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
