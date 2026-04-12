@@ -4,14 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
-  Button, useMediaQuery, useTheme, Drawer, FormControlLabel, Checkbox,
+  Button, useMediaQuery, useTheme, FormControlLabel, Checkbox,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
@@ -51,7 +50,6 @@ export default function DrawingReviewDetailPage() {
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
   const [publishToGallery, setPublishToGallery] = useState(false);
-  const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -266,16 +264,12 @@ export default function DrawingReviewDetailPage() {
   if (isMobile) {
     return (
       <>
-        <Box sx={{
-          mx: -2, mt: -2, mb: -10,
-          display: 'flex', flexDirection: 'column',
-          height: 'calc(100vh - 56px)',
-          overflow: 'hidden', bgcolor: '#1a1a1a',
-        }}>
+        <Box sx={{ mx: -2, mt: -2 }}>
           {/* Header */}
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
-            bgcolor: '#fff', flexShrink: 0,
+            bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider',
+            position: 'sticky', top: 0, zIndex: 10,
           }}>
             <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
               <ArrowBackIcon />
@@ -301,7 +295,7 @@ export default function DrawingReviewDetailPage() {
           </Box>
 
           {submission.question && (
-            <Box sx={{ px: 1.5, py: 0.75, bgcolor: '#f5f5f5', flexShrink: 0 }}>
+            <Box sx={{ px: 1.5, py: 0.75, bgcolor: '#f5f5f5' }}>
               <Typography variant="caption" sx={{
                 display: '-webkit-box', WebkitLineClamp: 2,
                 WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4,
@@ -312,7 +306,7 @@ export default function DrawingReviewDetailPage() {
           )}
 
           {/* Image with toggle tabs */}
-          <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', p: 1 }}>
+          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', p: 1 }}>
             <ImageToggleTabs
               originalImageUrl={submission.original_image_url}
               overlayAnnotations={workspaceData.overlayAnnotations || sub.ai_overlay_annotations}
@@ -321,32 +315,43 @@ export default function DrawingReviewDetailPage() {
             />
           </Box>
 
-          {/* Bottom bar */}
-          <Box sx={{
-            display: 'flex', gap: 1, px: 1.5, py: 1, bgcolor: '#fff',
-            flexShrink: 0, borderTop: '1px solid', borderColor: 'divider',
-          }}>
-            <Button
-              variant="contained" fullWidth
-              onClick={() => setReviewSheetOpen(true)}
-              startIcon={<StarOutlineIcon />}
-              sx={{ textTransform: 'none', minHeight: 44 }}
-            >
-              Give Feedback
-            </Button>
+          {/* Feedback Workspace - visible inline */}
+          <Box sx={{ bgcolor: 'background.paper' }}>
+            <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="subtitle2" fontWeight={700}>Feedback Workspace</Typography>
+            </Box>
+
+            <Box sx={{ p: 2 }}>
+              {['reviewed', 'redo', 'completed'].includes(submission.status) && (
+                <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9' }}>
+                  <Typography variant="body2" color="success.dark" fontWeight={600}>
+                    This submission has already been reviewed. Any changes you save will notify the student.
+                  </Typography>
+                </Paper>
+              )}
+
+              {submission.self_note && (
+                <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#f0f7ff' }}>
+                  <Typography variant="caption" fontWeight={600} color="primary.dark">Student&apos;s Note</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.25 }}>{submission.self_note}</Typography>
+                </Paper>
+              )}
+
+              <AIFeedbackWorkspace
+                submission={sub}
+                getToken={getToken}
+                onChange={handleWorkspaceChange}
+                defaultCollapsed={false}
+              />
+
+              <Box sx={{ mt: 2 }}>
+                <CommentSection submissionId={submission.id} getToken={getToken} canComment={true} />
+              </Box>
+            </Box>
+
+            {actionBar}
           </Box>
         </Box>
-
-        <Drawer
-          anchor="bottom" open={reviewSheetOpen}
-          onClose={() => setReviewSheetOpen(false)}
-          PaperProps={{ sx: { height: '88vh', borderTopLeftRadius: 16, borderTopRightRadius: 16, display: 'flex', flexDirection: 'column' } }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
-          </Box>
-          {reviewPanel}
-        </Drawer>
 
         {/* More actions menu */}
         <Menu

@@ -4,13 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, Typography, Paper,
-  IconButton, Skeleton, Rating, Chip, Drawer, Button,
+  IconButton, Skeleton, Rating, Chip, Button,
   useMediaQuery, useTheme,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
@@ -28,7 +27,6 @@ export default function SubmissionDetailPage() {
 
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false);
   const [replacing, setReplacing] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -228,16 +226,12 @@ export default function SubmissionDetailPage() {
   if (isMobile) {
     return (
       <>
-        <Box sx={{
-          mx: -1, mt: -1, mb: -10,
-          display: 'flex', flexDirection: 'column',
-          height: 'calc(100vh - 56px)',
-          overflow: 'hidden', bgcolor: '#1a1a1a',
-        }}>
+        <Box sx={{ mx: -1, mt: -1 }}>
           {/* Header */}
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
-            bgcolor: '#fff', flexShrink: 0,
+            bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider',
+            position: 'sticky', top: 0, zIndex: 10,
           }}>
             <IconButton onClick={() => router.back()} size="small">
               <ArrowBackIcon />
@@ -263,7 +257,7 @@ export default function SubmissionDetailPage() {
           </Box>
 
           {/* Image with toggle tabs */}
-          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 0.5, overflow: 'hidden' }}>
+          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', p: 0.5 }}>
             <ImageToggleTabs
               originalImageUrl={submission.original_image_url}
               overlayAnnotations={sub.ai_overlay_annotations}
@@ -275,56 +269,26 @@ export default function SubmissionDetailPage() {
           {/* Hidden file input for replace */}
           <input ref={replaceFileRef} type="file" accept="image/*" style={{ display: 'none' }} id="replace-file-mobile" />
 
-          {/* Bottom bar */}
-          <Box sx={{
-            display: 'flex', gap: 1, px: 1.5, py: 1, bgcolor: '#fff',
-            flexShrink: 0, borderTop: '1px solid', borderColor: 'divider',
-          }}>
-            {submission.status === 'submitted' && (
+          {/* Replace button */}
+          {submission.status === 'submitted' && (
+            <Box sx={{ px: 1.5, py: 1, bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider' }}>
               <Button
-                variant="outlined" size="small"
+                variant="outlined" size="small" fullWidth
                 startIcon={<SwapHorizIcon />}
                 onClick={() => document.getElementById('replace-file-mobile')?.click()}
                 disabled={replacing}
-                sx={{ textTransform: 'none', minHeight: 44, minWidth: 'auto', px: 1.5 }}
-              >
-                {replacing ? '...' : 'Replace'}
-              </Button>
-            )}
-            {hasReview ? (
-              <Button
-                variant="contained" fullWidth
-                startIcon={<ChatBubbleOutlineIcon />}
-                onClick={() => setFeedbackSheetOpen(true)}
                 sx={{ textTransform: 'none', minHeight: 44 }}
               >
-                View Feedback
-                {submission.tutor_rating ? ` (${submission.tutor_rating}★)` : ''}
+                {replacing ? 'Replacing...' : 'Replace Drawing'}
               </Button>
-            ) : (
-              <Button
-                variant="outlined" fullWidth
-                startIcon={<ChatBubbleOutlineIcon />}
-                onClick={() => setFeedbackSheetOpen(true)}
-                sx={{ textTransform: 'none', minHeight: 44 }}
-              >
-                Comments
-              </Button>
-            )}
+            </Box>
+          )}
+
+          {/* Feedback and comments - visible inline */}
+          <Box sx={{ bgcolor: 'background.paper' }}>
+            {feedbackContent}
           </Box>
         </Box>
-
-        {/* Feedback bottom sheet */}
-        <Drawer
-          anchor="bottom" open={feedbackSheetOpen}
-          onClose={() => setFeedbackSheetOpen(false)}
-          PaperProps={{ sx: { maxHeight: '80vh', borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.300' }} />
-          </Box>
-          {feedbackContent}
-        </Drawer>
       </>
     );
   }
