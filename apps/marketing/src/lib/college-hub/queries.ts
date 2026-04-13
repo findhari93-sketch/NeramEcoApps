@@ -244,6 +244,67 @@ export const getCollegesByFeeRange = cache(async (rangeKey: FeeRangeKey): Promis
   return (data ?? []) as CollegeListItem[];
 });
 
+// ─── Landing page stats ─────────────────────────────────────────────────────
+
+export const getLandingStats = cache(async (): Promise<{
+  totalColleges: number;
+  totalStates: number;
+  coaApprovedCount: number;
+}> => {
+  const supabase = createAdminClientISR(ISR_COLLEGE);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select('state_slug, coa_approved');
+  if (error) return { totalColleges: 0, totalStates: 0, coaApprovedCount: 0 };
+
+  const rows = data ?? [];
+  const states = new Set(rows.map((r) => r.state_slug).filter(Boolean));
+  const coa = rows.filter((r) => r.coa_approved).length;
+  return { totalColleges: rows.length, totalStates: states.size, coaApprovedCount: coa };
+});
+
+export const getCollegeCountByType = cache(async (): Promise<{ type: string; count: number }[]> => {
+  const supabase = createAdminClientISR(ISR_COLLEGE);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select('type');
+  if (error) return [];
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    if (!r.type) continue;
+    counts.set(r.type, (counts.get(r.type) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([type, count]) => ({ type, count }));
+});
+
+export const getCollegeCountByCounseling = cache(async (): Promise<{ system: string; count: number }[]> => {
+  const supabase = createAdminClientISR(ISR_COLLEGE);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select('counseling_systems');
+  if (error) return [];
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    for (const sys of r.counseling_systems ?? []) {
+      counts.set(sys, (counts.get(sys) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries()).map(([system, count]) => ({ system, count }));
+});
+
+export const getFeaturedColleges = cache(async (): Promise<CollegeListItem[]> => {
+  const supabase = createAdminClientISR(ISR_COLLEGE);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select(LISTING_SELECT)
+    .order('name', { ascending: true })
+    .limit(8);
+  if (error) return [];
+  return (data ?? []) as CollegeListItem[];
+});
+
 // ─── Similar ──────────────────────────────────────────────────────────────────
 
 export const getSimilarColleges = cache(

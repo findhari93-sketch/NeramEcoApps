@@ -1,13 +1,25 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Container, Grid, Stack, Typography, Box } from '@mui/material';
-import ClientPagination from '@/components/college-hub/ClientPagination';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateCollegesListingMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
-import { getColleges } from '@/lib/college-hub/queries';
-import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
-import FilterSidebar from '@/components/college-hub/FilterSidebar';
+import {
+  getColleges,
+  getLandingStats,
+  getActiveStates,
+  getCollegeCountByType,
+  getCollegeCountByCounseling,
+  getFeaturedColleges,
+} from '@/lib/college-hub/queries';
+import {
+  CollegeHubHero,
+  PlatformFeatures,
+  BrowseByCategory,
+  FeaturedCollegesCarousel,
+  ForCollegesCTA,
+  CollegeHubFAQ,
+  BrowseAllSection,
+} from '@/components/college-hub/landing';
 import type { CollegeFilters } from '@/lib/college-hub/types';
 
 export const revalidate = 3600;
@@ -35,6 +47,7 @@ export async function generateMetadata({ params: { locale } }: Props): Promise<M
 export default async function CollegesPage({ params: { locale }, searchParams }: Props) {
   setRequestLocale(locale);
 
+  // Parse filters for the Browse All section
   const filters: CollegeFilters = {
     state: searchParams.state,
     type: searchParams.type,
@@ -49,7 +62,23 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
     limit: 20,
   };
 
-  const { data: colleges, count } = await getColleges(filters);
+  // Fetch all data in parallel
+  const [
+    { data: colleges, count },
+    stats,
+    stateData,
+    typeData,
+    counselingData,
+    featuredColleges,
+  ] = await Promise.all([
+    getColleges(filters),
+    getLandingStats(),
+    getActiveStates(),
+    getCollegeCountByType(),
+    getCollegeCountByCounseling(),
+    getFeaturedColleges(),
+  ]);
+
   const totalPages = Math.ceil(count / 20);
 
   const breadcrumb = generateListingBreadcrumbSchema([
@@ -60,60 +89,37 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
   return (
     <>
       <JsonLd data={breadcrumb} />
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-        {/* Header */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
-            B.Arch Colleges in India
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-            Compare {count.toLocaleString()} colleges — fees, NATA cutoffs, rankings, and placements
-          </Typography>
-        </Box>
 
-        <Grid container spacing={3}>
-          {/* Sidebar */}
-          <Grid item xs={12} md={3}>
-            <FilterSidebar
-              filters={filters}
-              totalCount={count}
-            />
-          </Grid>
+      {/* Section 1: Hero */}
+      <CollegeHubHero stats={stats} />
 
-          {/* Listing */}
-          <Grid item xs={12} md={9}>
-            {colleges.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
-                <Typography variant="h6" color="text.secondary">
-                  No colleges match your filters.
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Try removing some filters to see more results.
-                </Typography>
-              </Box>
-            ) : (
-              <>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                  Showing {colleges.length} of {count.toLocaleString()} colleges
-                </Typography>
-                <Grid container spacing={2}>
-                  {colleges.map((college) => (
-                    <Grid key={college.id} item xs={12} sm={6} lg={4}>
-                      <CollegeListingCard college={college} />
-                    </Grid>
-                  ))}
-                </Grid>
+      {/* Section 2: What's Inside */}
+      <PlatformFeatures />
 
-                {totalPages > 1 && (
-                  <Stack alignItems="center" sx={{ mt: 4 }}>
-                    <ClientPagination totalPages={totalPages} currentPage={filters.page ?? 1} />
-                  </Stack>
-                )}
-              </>
-            )}
-          </Grid>
-        </Grid>
-      </Container>
+      {/* Section 3: Browse by Category */}
+      <BrowseByCategory
+        stateData={stateData}
+        counselingData={counselingData}
+        typeData={typeData}
+        locale={locale}
+      />
+
+      {/* Section 4: Featured Colleges */}
+      <FeaturedCollegesCarousel colleges={featuredColleges} />
+
+      {/* Section 5: For Colleges */}
+      <ForCollegesCTA />
+
+      {/* Section 6: FAQ */}
+      <CollegeHubFAQ />
+
+      {/* Section 7: Browse All (existing filter + grid) */}
+      <BrowseAllSection
+        colleges={colleges}
+        totalCount={count}
+        totalPages={totalPages}
+        filters={filters}
+      />
     </>
   );
 }

@@ -10,22 +10,22 @@ const BASE_URL = 'https://neramclasses.com';
 // ─── All-India listing page ──────────────────────────────────────────────────
 
 export function generateCollegesListingMetadata(locale: string): Metadata {
-  const title = 'B.Arch Colleges in India 2026 — Fees, Cutoffs, Rankings';
+  const title = 'B.Arch Colleges in India 2026: Compare Fees, Rankings, Cutoffs | Neram College Hub';
   const description =
-    'Find the best B.Arch colleges in India. Compare NATA cutoffs, fees, NAAC grades, NIRF rankings, placements, and infrastructure. Filter by state, exam, and fee range.';
+    "India's first architecture college discovery platform. Compare fees, NATA cutoffs, NIRF rankings, ArchIndex scores, placements, and infrastructure for B.Arch colleges. Free and open.";
 
   return {
     title,
     description,
     keywords:
-      'B.Arch colleges India, architecture colleges India, NATA colleges, best architecture colleges, B.Arch admissions 2026',
+      'B.Arch colleges India, architecture colleges India, NATA colleges, best architecture colleges, B.Arch admissions 2026, college comparison, TNEA colleges, JoSAA architecture',
     alternates: buildAlternates(locale, '/colleges'),
     openGraph: {
       title,
       description,
       type: 'website',
       url: `${BASE_URL}/colleges`,
-      images: [buildOgImage(title, 'Compare 55+ B.Arch Colleges', 'tool')],
+      images: [buildOgImage(title, 'Compare B.Arch Colleges', 'tool')],
     },
     twitter: { card: 'summary_large_image', title, description },
   };
