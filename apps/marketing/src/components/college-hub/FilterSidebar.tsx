@@ -1,220 +1,345 @@
 'use client';
 
+import { useRouter, usePathname } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
-  Box,
-  Button,
-  Checkbox,
-  Divider,
-  Drawer,
-  FormControlLabel,
-  FormGroup,
-  Radio,
-  RadioGroup,
-  Slider,
-  Stack,
-  Typography,
+  Box, Typography, Paper, FormGroup, FormControlLabel, Checkbox,
+  Select, MenuItem, FormControl, InputLabel, Button,
+  Drawer, IconButton, Divider, Stack, Chip,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
-import { useState } from 'react';
-import { COLLEGE_TYPES, COUNSELING_LABELS, NAAC_GRADES, SORT_OPTIONS } from '@/lib/college-hub/constants';
+import { useState, useCallback } from 'react';
 import type { CollegeFilters } from '@/lib/college-hub/types';
+
+const COLLEGE_TYPES = [
+  { value: 'Government', label: 'Government' },
+  { value: 'Private', label: 'Private' },
+  { value: 'Deemed', label: 'Deemed University' },
+  { value: 'Autonomous', label: 'Autonomous' },
+];
+
+const COUNSELING_SYSTEMS = [
+  { value: 'TNEA', label: 'TNEA (Tamil Nadu)' },
+  { value: 'JoSAA', label: 'JoSAA (Central)' },
+  { value: 'NATA', label: 'NATA Direct' },
+];
+
+const NAAC_GRADES = ['A++', 'A+', 'A', 'B++', 'B+', 'B'];
+
+const SORT_OPTIONS = [
+  { value: 'arch_index', label: 'ArchIndex Score' },
+  { value: 'nirf_rank', label: 'NIRF Rank' },
+  { value: 'fee_low', label: 'Fee: Low to High' },
+  { value: 'fee_high', label: 'Fee: High to Low' },
+  { value: 'name', label: 'Name (A-Z)' },
+];
 
 interface FilterSidebarProps {
   filters: CollegeFilters;
-  onChange: (filters: CollegeFilters) => void;
   totalCount: number;
+  onChange?: () => void;
 }
 
-export default function FilterSidebar({ filters, onChange, totalCount }: FilterSidebarProps) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+function SidebarContent({
+  filters,
+  totalCount,
+  onClose,
+}: FilterSidebarProps & { onClose?: () => void }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const handleReset = () => {
-    onChange({ sortBy: 'arch_index', page: 1 });
+  const updateFilter = useCallback(
+    (key: string, value: string | undefined) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+      params.delete('page');
+      router.push(`${pathname}?${params.toString()}`);
+      if (onClose) onClose();
+    },
+    [router, pathname, searchParams, onClose]
+  );
+
+  const clearAll = () => {
+    router.push(pathname);
+    if (onClose) onClose();
   };
 
-  const activeFilterCount = Object.entries(filters).filter(
-    ([k, v]) => !['sortBy', 'page', 'limit'].includes(k) && v !== undefined
-  ).length;
+  const activeFilterCount = [
+    filters.state,
+    filters.type,
+    filters.counselingSystem,
+    filters.naacGrade,
+    filters.coa,
+    filters.minFee,
+    filters.maxFee,
+  ].filter(Boolean).length;
 
-  const SidebarContent = (
-    <Box sx={{ p: 2.5, width: { xs: 300, sm: 280 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-          Filters
-        </Typography>
+  return (
+    <Box sx={{ p: 2 }}>
+      {/* Header */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Stack direction="row" alignItems="center" gap={1}>
+          <FilterListIcon sx={{ fontSize: 18 }} />
+          <Typography variant="subtitle1" fontWeight={700}>Filters</Typography>
+          {activeFilterCount > 0 && (
+            <Chip label={activeFilterCount} size="small" color="primary" />
+          )}
+        </Stack>
         <Stack direction="row" gap={1}>
           {activeFilterCount > 0 && (
-            <Button size="small" color="error" onClick={handleReset}>
+            <Button size="small" onClick={clearAll} sx={{ fontSize: '0.75rem' }}>
               Clear all
             </Button>
           )}
-          <Box sx={{ display: { sm: 'none' } }}>
-            <Button size="small" onClick={() => setDrawerOpen(false)}>
-              <CloseIcon />
-            </Button>
-          </Box>
+          {onClose && (
+            <IconButton size="small" onClick={onClose}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          )}
         </Stack>
       </Stack>
 
       {/* Sort */}
-      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        Sort By
-      </Typography>
-      <RadioGroup
-        value={filters.sortBy ?? 'arch_index'}
-        onChange={(e) => onChange({ ...filters, sortBy: e.target.value as CollegeFilters['sortBy'], page: 1 })}
-        sx={{ mt: 0.5, mb: 2 }}
-      >
-        {SORT_OPTIONS.map((opt) => (
-          <FormControlLabel
-            key={opt.value}
-            value={opt.value}
-            control={<Radio size="small" />}
-            label={<Typography variant="body2">{opt.label}</Typography>}
-          />
-        ))}
-      </RadioGroup>
+      <Box sx={{ mb: 2.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}
+        >
+          Sort By
+        </Typography>
+        <FormControl size="small" fullWidth>
+          <Select
+            value={filters.sortBy ?? 'arch_index'}
+            onChange={(e) => updateFilter('sort', e.target.value)}
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
-      <Divider sx={{ mb: 2 }} />
+      <Divider sx={{ my: 1.5 }} />
 
-      {/* Type */}
-      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        College Type
-      </Typography>
-      <FormGroup sx={{ mt: 0.5, mb: 2 }}>
-        {COLLEGE_TYPES.map((t) => (
-          <FormControlLabel
-            key={t.value}
-            control={
-              <Checkbox
-                size="small"
-                checked={filters.type === t.value}
-                onChange={(e) => onChange({ ...filters, type: e.target.checked ? t.value : undefined, page: 1 })}
-              />
-            }
-            label={<Typography variant="body2">{t.label}</Typography>}
-          />
-        ))}
-      </FormGroup>
+      {/* College Type */}
+      <Box sx={{ mb: 2.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}
+        >
+          College Type
+        </Typography>
+        <FormGroup>
+          {COLLEGE_TYPES.map((t) => (
+            <FormControlLabel
+              key={t.value}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={filters.type === t.value}
+                  onChange={(e) =>
+                    updateFilter('type', e.target.checked ? t.value : undefined)
+                  }
+                />
+              }
+              label={<Typography variant="body2">{t.label}</Typography>}
+            />
+          ))}
+        </FormGroup>
+      </Box>
 
-      <Divider sx={{ mb: 2 }} />
+      <Divider sx={{ my: 1.5 }} />
 
-      {/* Counseling */}
-      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        Counseling
-      </Typography>
-      <FormGroup sx={{ mt: 0.5, mb: 2 }}>
-        {Object.entries(COUNSELING_LABELS).map(([value, label]) => (
-          <FormControlLabel
-            key={value}
-            control={
-              <Checkbox
-                size="small"
-                checked={filters.counselingSystem === value}
-                onChange={(e) =>
-                  onChange({ ...filters, counselingSystem: e.target.checked ? (value as CollegeFilters['counselingSystem']) : undefined, page: 1 })
-                }
-              />
-            }
-            label={<Typography variant="body2">{label}</Typography>}
-          />
-        ))}
-      </FormGroup>
+      {/* Counseling System */}
+      <Box sx={{ mb: 2.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}
+        >
+          Counseling System
+        </Typography>
+        <FormGroup>
+          {COUNSELING_SYSTEMS.map((t) => (
+            <FormControlLabel
+              key={t.value}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={filters.counselingSystem === t.value}
+                  onChange={(e) =>
+                    updateFilter('counseling', e.target.checked ? t.value : undefined)
+                  }
+                />
+              }
+              label={<Typography variant="body2">{t.label}</Typography>}
+            />
+          ))}
+        </FormGroup>
+      </Box>
 
-      <Divider sx={{ mb: 2 }} />
+      <Divider sx={{ my: 1.5 }} />
 
       {/* NAAC Grade */}
-      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        NAAC Grade
-      </Typography>
-      <FormGroup sx={{ mt: 0.5, mb: 2 }}>
-        {NAAC_GRADES.map((grade) => (
-          <FormControlLabel
-            key={grade}
-            control={
-              <Checkbox
-                size="small"
-                checked={filters.naacGrade === grade}
-                onChange={(e) => onChange({ ...filters, naacGrade: e.target.checked ? grade : undefined, page: 1 })}
-              />
-            }
-            label={<Typography variant="body2">{grade}</Typography>}
-          />
-        ))}
-      </FormGroup>
-
-      <Divider sx={{ mb: 2 }} />
-
-      {/* COA */}
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={filters.coa === true}
-            onChange={(e) => onChange({ ...filters, coa: e.target.checked ? true : undefined, page: 1 })}
-          />
-        }
-        label={<Typography variant="body2" sx={{ fontWeight: 500 }}>COA Approved Only</Typography>}
-      />
-
-      {/* Annual Fee slider */}
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Annual Fee (approx)
+      <Box sx={{ mb: 2.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}
+        >
+          NAAC Grade
         </Typography>
-        <Slider
-          value={[filters.minFee ?? 0, filters.maxFee ?? 500000]}
-          min={0}
-          max={500000}
-          step={10000}
-          onChange={(_, v) => {
-            const [min, max] = v as [number, number];
-            onChange({ ...filters, minFee: min > 0 ? min : undefined, maxFee: max < 500000 ? max : undefined, page: 1 });
-          }}
-          valueLabelDisplay="auto"
-          valueLabelFormat={(v) => v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : `₹${(v / 1000).toFixed(0)}K`}
-          sx={{ mt: 1 }}
-        />
-        <Stack direction="row" justifyContent="space-between">
-          <Typography variant="caption" color="text.secondary">₹0</Typography>
-          <Typography variant="caption" color="text.secondary">₹5L+</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={0.75}>
+          {NAAC_GRADES.map((g) => (
+            <Chip
+              key={g}
+              label={g}
+              size="small"
+              clickable
+              variant={filters.naacGrade === g ? 'filled' : 'outlined'}
+              color={filters.naacGrade === g ? 'primary' : 'default'}
+              onClick={() =>
+                updateFilter('naac', filters.naacGrade === g ? undefined : g)
+              }
+            />
+          ))}
         </Stack>
       </Box>
+
+      <Divider sx={{ my: 1.5 }} />
+
+      {/* COA Approved */}
+      <Box sx={{ mb: 2.5 }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              size="small"
+              checked={filters.coa === true}
+              onChange={(e) =>
+                updateFilter('coa', e.target.checked ? 'true' : undefined)
+              }
+            />
+          }
+          label={<Typography variant="body2">COA Approved only</Typography>}
+        />
+      </Box>
+
+      <Divider sx={{ my: 1.5 }} />
+
+      {/* Annual Fee Range */}
+      <Box sx={{ mb: 2 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          fontWeight={600}
+          sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}
+        >
+          Annual Fee
+        </Typography>
+        <Stack direction="row" gap={1}>
+          <FormControl size="small" sx={{ flex: 1 }}>
+            <InputLabel>Min</InputLabel>
+            <Select
+              label="Min"
+              value={filters.minFee?.toString() ?? ''}
+              onChange={(e) => updateFilter('minFee', e.target.value || undefined)}
+            >
+              <MenuItem value="">Any</MenuItem>
+              <MenuItem value="50000">50K</MenuItem>
+              <MenuItem value="100000">1L</MenuItem>
+              <MenuItem value="200000">2L</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ flex: 1 }}>
+            <InputLabel>Max</InputLabel>
+            <Select
+              label="Max"
+              value={filters.maxFee?.toString() ?? ''}
+              onChange={(e) => updateFilter('maxFee', e.target.value || undefined)}
+            >
+              <MenuItem value="">Any</MenuItem>
+              <MenuItem value="100000">1L</MenuItem>
+              <MenuItem value="200000">2L</MenuItem>
+              <MenuItem value="500000">5L</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+      </Box>
+
+      {/* Result count */}
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+        {totalCount.toLocaleString()} colleges match
+      </Typography>
     </Box>
   );
+}
+
+export default function FilterSidebar({ filters, totalCount }: FilterSidebarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <>
-      {/* Mobile trigger */}
-      <Box sx={{ display: { md: 'none' }, mb: 2 }}>
+      {/* Mobile: floating filter button */}
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
         <Button
           variant="outlined"
           startIcon={<FilterListIcon />}
-          onClick={() => setDrawerOpen(true)}
+          onClick={() => setMobileOpen(true)}
           size="small"
         >
-          Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+          Filters and Sort
         </Button>
-        <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-          {totalCount.toLocaleString()} colleges
-        </Typography>
       </Box>
 
-      {/* Mobile drawer */}
+      {/* Mobile bottom drawer */}
       <Drawer
-        anchor="left"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        sx={{ display: { md: 'none' } }}
+        anchor="bottom"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        PaperProps={{
+          sx: {
+            maxHeight: '85vh',
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+          },
+        }}
       >
-        {SidebarContent}
+        <Box sx={{ overflow: 'auto' }}>
+          <SidebarContent
+            filters={filters}
+            totalCount={totalCount}
+            onClose={() => setMobileOpen(false)}
+          />
+        </Box>
       </Drawer>
 
-      {/* Desktop sidebar */}
-      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-        {SidebarContent}
-      </Box>
+      {/* Desktop sticky sidebar */}
+      <Paper
+        variant="outlined"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          position: 'sticky',
+          top: 80,
+          maxHeight: 'calc(100vh - 100px)',
+          overflow: 'auto',
+        }}
+      >
+        <SidebarContent filters={filters} totalCount={totalCount} />
+      </Paper>
     </>
   );
 }

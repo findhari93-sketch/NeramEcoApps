@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Container, Grid, Pagination, Stack, Typography, Box } from '@mui/material';
+import { Container, Grid, Stack, Typography, Box } from '@mui/material';
+import ClientPagination from '@/components/college-hub/ClientPagination';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateCollegesListingMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
@@ -75,9 +76,6 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
           <Grid item xs={12} md={3}>
             <FilterSidebar
               filters={filters}
-              onChange={() => {
-                // URL navigation handled client-side inside FilterSidebar
-              }}
               totalCount={count}
             />
           </Grid>
@@ -108,12 +106,7 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
 
                 {totalPages > 1 && (
                   <Stack alignItems="center" sx={{ mt: 4 }}>
-                    <Pagination
-                      count={totalPages}
-                      page={filters.page ?? 1}
-                      color="primary"
-                      shape="rounded"
-                    />
+                    <ClientPagination totalPages={totalPages} currentPage={filters.page ?? 1} />
                   </Stack>
                 )}
               </>
