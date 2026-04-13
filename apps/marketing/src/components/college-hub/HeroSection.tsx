@@ -1,6 +1,7 @@
 import { Box, Chip, Stack, Typography, Link as MuiLink } from '@mui/material';
 import Image from 'next/image';
 import VerifiedIcon from '@mui/icons-material/Verified';
+import HandshakeIcon from '@mui/icons-material/Handshake';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BadgePills from './BadgePills';
@@ -94,6 +95,20 @@ export default function HeroSection({ college }: HeroSectionProps) {
               </Typography>
               {college.verified && (
                 <VerifiedIcon sx={{ color: '#2563eb', fontSize: 20 }} titleAccess="Verified by Neram" />
+              )}
+              {college.partnership_page_status === 'approved' && (
+                <Chip
+                  icon={<HandshakeIcon sx={{ fontSize: 13, '&&': { color: '#15803d' } }} />}
+                  label="Neram Partner"
+                  size="small"
+                  sx={{
+                    bgcolor: '#dcfce7',
+                    color: '#15803d',
+                    border: '1px solid #bbf7d0',
+                    fontWeight: 600,
+                    fontSize: '0.68rem',
+                  }}
+                />
               )}
               <Chip
                 label={tier.label}

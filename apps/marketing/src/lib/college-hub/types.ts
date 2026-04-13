@@ -69,6 +69,9 @@ export interface College {
   hero_image_url: string | null;
   gallery_images: string[] | null;
   virtual_tour_scenes?: VirtualTourScene[] | null;
+  // Partnership SEO
+  partnership_page_url?: string | null;
+  partnership_page_status?: 'none' | 'pending' | 'approved' | 'rejected' | null;
   // Content
   highlights: string[] | null;
   about: string | null;

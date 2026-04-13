@@ -54,6 +54,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import WindowIcon from '@mui/icons-material/Window';
 import CommentIcon from '@mui/icons-material/Comment';
 import TourIcon from '@mui/icons-material/Tour';
+import HandshakeIcon from '@mui/icons-material/Handshake';
 import DevicesIcon from '@mui/icons-material/Devices';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -160,6 +161,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Lead Windows', icon: WindowIcon, path: '/college-hub/lead-windows' },
       { text: 'Comments', icon: CommentIcon, path: '/college-hub/comments' },
       { text: 'Virtual Tour', icon: TourIcon, path: '/college-hub/virtual-tour' },
+      { text: 'Partnership Pages', icon: HandshakeIcon, path: '/college-hub/partnership' },
       { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
     ],
   },
