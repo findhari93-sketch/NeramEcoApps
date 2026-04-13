@@ -2,6 +2,7 @@ import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
 import { getAllCenterSeoSlugs } from '@neram/database/queries';
 import { getSitemapLocations, getIndianStates } from '@neram/database';
+import { getAllCollegeSlugs, getActiveStates } from '@/lib/college-hub/queries';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -23,6 +24,10 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/fees', lastModified: '2026-03-01', i18n: true },
   { path: '/demo-class', lastModified: '2026-03-05', i18n: true },
   { path: '/centers', lastModified: '2026-02-25', i18n: true },
+  // College Hub (i18n: true — hreflang for all 5 locales)
+  { path: '/colleges', lastModified: '2026-04-12', i18n: true },
+  { path: '/colleges/tnea', lastModified: '2026-04-12', i18n: true },
+  { path: '/colleges/josaa', lastModified: '2026-04-12', i18n: true },
   { path: '/scholarship', lastModified: '2026-02-01', i18n: true },
   { path: '/youtube-reward', lastModified: '2026-01-10', i18n: true },
   { path: '/free-resources', lastModified: '2026-02-15', i18n: true },
@@ -219,6 +224,48 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (err) {
     console.error('Failed to fetch center slugs for sitemap:', err);
+  }
+
+  // ─── College Hub: state pages (all locales) ───────────────────────────────
+  try {
+    const activeStates = await getActiveStates();
+    for (const { state_slug } of activeStates) {
+      const statePath = `/colleges/${state_slug}`;
+      for (const locale of locales) {
+        entries.push({
+          url: localeUrl(locale, statePath),
+          lastModified: new Date('2026-04-12'),
+          changeFrequency: 'weekly' as const,
+          priority: 0.85,
+          alternates: {
+            languages: Object.fromEntries(locales.map((l) => [l, localeUrl(l, statePath)])),
+          },
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch college state slugs for sitemap:', err);
+  }
+
+  // ─── College Hub: individual college pages (all locales) ─────────────────
+  try {
+    const collegeSlugs = await getAllCollegeSlugs();
+    for (const { state, slug } of collegeSlugs) {
+      const collegePath = `/colleges/${state}/${slug}`;
+      for (const locale of locales) {
+        entries.push({
+          url: localeUrl(locale, collegePath),
+          lastModified: new Date('2026-04-12'),
+          changeFrequency: 'weekly' as const,
+          priority: 0.8,
+          alternates: {
+            languages: Object.fromEntries(locales.map((l) => [l, localeUrl(l, collegePath)])),
+          },
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch college slugs for sitemap:', err);
   }
 
   return entries;

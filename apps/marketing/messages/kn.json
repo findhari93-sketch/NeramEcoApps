@@ -657,5 +657,71 @@
       "title": "ನೀವು ಈಗಾಗಲೇ ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಸಲ್ಲಿಸಿದ್ದೀರಿ",
       "message": "ನಿಮ್ಮ ಅಭಿಪ್ರಾಯಗಳನ್ನು ನಮ್ಮೊಂದಿಗೆ ಹಂಚಿಕೊಂಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದಗಳು!"
     }
+  },
+  "collegeHub": {
+    "meta": {
+      "listingTitle": "B.Arch Colleges in India 2026",
+      "listingDescription": "Find and compare the best B.Arch colleges.",
+      "stateTitle": "Best B.Arch Colleges in {state} 2026",
+      "tnea": "TNEA B.Arch Colleges 2026",
+      "josaa": "JoSAA B.Arch Colleges 2026"
+    },
+    "listing": {
+      "title": "B.Arch Colleges in India",
+      "subtitle": "Compare {count} colleges",
+      "noResults": "No colleges match your filters.",
+      "noResultsHint": "Try removing some filters.",
+      "showing": "Showing {shown} of {total} colleges",
+      "stateTitle": "Best B.Arch Colleges in {state}",
+      "stateSubtitle": "{count} colleges"
+    },
+    "filters": {
+      "title": "Filters",
+      "clearAll": "Clear all",
+      "sortBy": "Sort By",
+      "collegeType": "College Type",
+      "counseling": "Counseling",
+      "naacGrade": "NAAC Grade",
+      "coaOnly": "COA Approved Only",
+      "annualFee": "Annual Fee"
+    },
+    "card": {
+      "feeOnRequest": "Fee on request",
+      "seats": "{count} seats",
+      "verified": "Verified"
+    },
+    "detail": {
+      "overview": "Overview",
+      "fees": "Fees",
+      "cutoffs": "Cutoffs",
+      "placements": "Placements",
+      "infrastructure": "Infrastructure",
+      "faculty": "Faculty",
+      "about": "About the College",
+      "highlights": "Key Highlights",
+      "quickFacts": "Quick Facts",
+      "contact": "Contact Admissions",
+      "similarColleges": "Similar Colleges",
+      "claimTitle": "Are you from {name}?",
+      "claimBody": "Claim this profile to update details and get leads.",
+      "claimButton": "Claim Profile",
+      "barchSeats": "B.Arch Seats",
+      "established": "Established",
+      "type": "Type",
+      "annualFee": "Annual Fee",
+      "acceptedExams": "Accepted Exams",
+      "applyCtaTitle": "Preparing for NATA 2026?",
+      "applyCtaBody": "Join Neram Classes for expert B.Arch coaching.",
+      "applyCtaButton": "Apply to Neram"
+    },
+    "archIndex": {
+      "label": "ArchIndex",
+      "tooltip": "Neram ArchIndex: Composite rating for B.Arch colleges.",
+      "excellent": "Excellent",
+      "veryGood": "Very Good",
+      "good": "Good",
+      "average": "Average",
+      "belowAverage": "Below Average"
+    }
   }
 }

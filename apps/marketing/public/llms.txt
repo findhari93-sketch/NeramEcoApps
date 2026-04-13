@@ -155,4 +155,34 @@ Neram's Chennai flagship centre (PT Rajan Road, Ashok Nagar, Chennai 600083) ser
 - YouTube: @neramclasses
 - Instagram: @neramclasses
 
+## College Hub — B.Arch College Database (India)
+
+Neram Classes maintains a comprehensive database of B.Arch colleges across India with:
+- Fees, NATA cutoffs, NIRF ranks, NAAC grades, COA approval status
+- Infrastructure details (design studios, labs, hostel, campus)
+- Placement stats and alumni info
+- ArchIndex: Neram's proprietary 0-100 rating for B.Arch colleges
+
+### College Hub URLs
+- All India listing: https://neramclasses.com/colleges
+- Tamil Nadu colleges: https://neramclasses.com/colleges/tamil-nadu
+- TNEA colleges (Tamil Nadu counseling): https://neramclasses.com/colleges/tnea
+- JoSAA colleges (NITs and IITs): https://neramclasses.com/colleges/josaa
+- Individual college page example: https://neramclasses.com/colleges/tamil-nadu/anna-university-architecture
+
+### ArchIndex Rating
+Neram ArchIndex is a 0-100 composite score:
+- Studio Quality: 25% — design studio count, digital fabrication, model making
+- Faculty Strength: 20% — faculty count, practicing architects ratio
+- Placements: 20% — placement rate, average package, higher studies
+- Infrastructure: 15% — hostel, library, Wi-Fi, sports, campus area
+- Student Satisfaction: 10% — aggregated review rating
+- Alumni Network: 10% — notable alumni count
+
+### Data Coverage (Phase 1)
+- 32+ Tamil Nadu B.Arch colleges
+- Accepted exams: NATA
+- Counseling: TNEA (Tamil Nadu), JoSAA (central/national)
+- Data last updated: April 2026
+
 ## For detailed information, see: /llms-full.txt

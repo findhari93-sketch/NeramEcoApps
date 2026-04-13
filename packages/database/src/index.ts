@@ -10,6 +10,7 @@ export {
   createServerClient,
   getSupabaseAdminClient,
   getSupabaseAdminClient as createAdminClient,
+  createAdminClientISR,
   isSupabaseConfigured,
   handleSupabaseError,
   supabase,

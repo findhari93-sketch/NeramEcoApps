@@ -1265,6 +1265,53 @@ export type Database = {
         }
         Relationships: []
       }
+      college_admins: {
+        Row: {
+          college_id: string
+          created_at: string | null
+          created_by: string | null
+          email: string
+          id: string
+          is_active: boolean | null
+          last_login_at: string | null
+          name: string
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          college_id: string
+          created_at?: string | null
+          created_by?: string | null
+          email: string
+          id?: string
+          is_active?: boolean | null
+          last_login_at?: string | null
+          name: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          college_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean | null
+          last_login_at?: string | null
+          name?: string
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_admins_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       college_counseling_participation: {
         Row: {
           branches: Json
@@ -1319,140 +1366,593 @@ export type Database = {
           },
         ]
       }
+      college_cutoffs: {
+        Row: {
+          academic_year: string
+          category: string
+          college_id: string
+          counseling_system: string
+          created_at: string | null
+          cutoff_type: string
+          cutoff_value: number | null
+          filled_seats: number | null
+          id: string
+          round_number: number | null
+          source: string | null
+          total_seats: number | null
+        }
+        Insert: {
+          academic_year: string
+          category: string
+          college_id: string
+          counseling_system: string
+          created_at?: string | null
+          cutoff_type: string
+          cutoff_value?: number | null
+          filled_seats?: number | null
+          id?: string
+          round_number?: number | null
+          source?: string | null
+          total_seats?: number | null
+        }
+        Update: {
+          academic_year?: string
+          category?: string
+          college_id?: string
+          counseling_system?: string
+          created_at?: string | null
+          cutoff_type?: string
+          cutoff_value?: number | null
+          filled_seats?: number | null
+          id?: string
+          round_number?: number | null
+          source?: string | null
+          total_seats?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_cutoffs_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      college_faculty: {
+        Row: {
+          college_id: string
+          created_at: string | null
+          designation: string | null
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          is_practicing_architect: boolean | null
+          name: string
+          profile_url: string | null
+          qualification: string | null
+          specialization: string | null
+        }
+        Insert: {
+          college_id: string
+          created_at?: string | null
+          designation?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_practicing_architect?: boolean | null
+          name: string
+          profile_url?: string | null
+          qualification?: string | null
+          specialization?: string | null
+        }
+        Update: {
+          college_id?: string
+          created_at?: string | null
+          designation?: string | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_practicing_architect?: boolean | null
+          name?: string
+          profile_url?: string | null
+          qualification?: string | null
+          specialization?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_faculty_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      college_fees: {
+        Row: {
+          academic_year: string
+          caution_deposit: number | null
+          college_id: string
+          created_at: string | null
+          estimated_field_trips: number | null
+          estimated_materials: number | null
+          exam_fees: number | null
+          fee_category: string
+          hostel: number | null
+          id: string
+          lab_fees: number | null
+          library_fees: number | null
+          mess: number | null
+          other_fees: number | null
+          tuition: number | null
+          updated_at: string | null
+          verified: boolean | null
+          verified_source: string | null
+          year_number: number
+        }
+        Insert: {
+          academic_year: string
+          caution_deposit?: number | null
+          college_id: string
+          created_at?: string | null
+          estimated_field_trips?: number | null
+          estimated_materials?: number | null
+          exam_fees?: number | null
+          fee_category?: string
+          hostel?: number | null
+          id?: string
+          lab_fees?: number | null
+          library_fees?: number | null
+          mess?: number | null
+          other_fees?: number | null
+          tuition?: number | null
+          updated_at?: string | null
+          verified?: boolean | null
+          verified_source?: string | null
+          year_number: number
+        }
+        Update: {
+          academic_year?: string
+          caution_deposit?: number | null
+          college_id?: string
+          created_at?: string | null
+          estimated_field_trips?: number | null
+          estimated_materials?: number | null
+          exam_fees?: number | null
+          fee_category?: string
+          hostel?: number | null
+          id?: string
+          lab_fees?: number | null
+          library_fees?: number | null
+          mess?: number | null
+          other_fees?: number | null
+          tuition?: number | null
+          updated_at?: string | null
+          verified?: boolean | null
+          verified_source?: string | null
+          year_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_fees_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      college_infrastructure: {
+        Row: {
+          campus_area_acres: number | null
+          campus_type: string | null
+          college_id: string
+          design_studios: number | null
+          has_digital_fabrication: boolean | null
+          has_hostel_boys: boolean | null
+          has_hostel_girls: boolean | null
+          has_library: boolean | null
+          has_material_library: boolean | null
+          has_mess: boolean | null
+          has_model_making_lab: boolean | null
+          has_sports: boolean | null
+          has_wifi: boolean | null
+          hostel_capacity: number | null
+          hostel_type: string | null
+          id: string
+          library_books_count: number | null
+          software_available: string[] | null
+          sports_facilities: string[] | null
+          studio_student_ratio: string | null
+          updated_at: string | null
+          workshops: string[] | null
+        }
+        Insert: {
+          campus_area_acres?: number | null
+          campus_type?: string | null
+          college_id: string
+          design_studios?: number | null
+          has_digital_fabrication?: boolean | null
+          has_hostel_boys?: boolean | null
+          has_hostel_girls?: boolean | null
+          has_library?: boolean | null
+          has_material_library?: boolean | null
+          has_mess?: boolean | null
+          has_model_making_lab?: boolean | null
+          has_sports?: boolean | null
+          has_wifi?: boolean | null
+          hostel_capacity?: number | null
+          hostel_type?: string | null
+          id?: string
+          library_books_count?: number | null
+          software_available?: string[] | null
+          sports_facilities?: string[] | null
+          studio_student_ratio?: string | null
+          updated_at?: string | null
+          workshops?: string[] | null
+        }
+        Update: {
+          campus_area_acres?: number | null
+          campus_type?: string | null
+          college_id?: string
+          design_studios?: number | null
+          has_digital_fabrication?: boolean | null
+          has_hostel_boys?: boolean | null
+          has_hostel_girls?: boolean | null
+          has_library?: boolean | null
+          has_material_library?: boolean | null
+          has_mess?: boolean | null
+          has_model_making_lab?: boolean | null
+          has_sports?: boolean | null
+          has_wifi?: boolean | null
+          hostel_capacity?: number | null
+          hostel_type?: string | null
+          id?: string
+          library_books_count?: number | null
+          software_available?: string[] | null
+          sports_facilities?: string[] | null
+          studio_student_ratio?: string | null
+          updated_at?: string | null
+          workshops?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_infrastructure_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: true
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      college_placements: {
+        Row: {
+          academic_year: string
+          average_package_lpa: number | null
+          college_id: string
+          created_at: string | null
+          entrepreneurship_percent: number | null
+          higher_studies_percent: number | null
+          highest_package_lpa: number | null
+          id: string
+          median_package_lpa: number | null
+          placement_rate_percent: number | null
+          source: string | null
+          students_placed: number | null
+          top_recruiters: string[] | null
+          top_sectors: string[] | null
+          total_eligible: number | null
+          verified: boolean | null
+        }
+        Insert: {
+          academic_year: string
+          average_package_lpa?: number | null
+          college_id: string
+          created_at?: string | null
+          entrepreneurship_percent?: number | null
+          higher_studies_percent?: number | null
+          highest_package_lpa?: number | null
+          id?: string
+          median_package_lpa?: number | null
+          placement_rate_percent?: number | null
+          source?: string | null
+          students_placed?: number | null
+          top_recruiters?: string[] | null
+          top_sectors?: string[] | null
+          total_eligible?: number | null
+          verified?: boolean | null
+        }
+        Update: {
+          academic_year?: string
+          average_package_lpa?: number | null
+          college_id?: string
+          created_at?: string | null
+          entrepreneurship_percent?: number | null
+          higher_studies_percent?: number | null
+          highest_package_lpa?: number | null
+          id?: string
+          median_package_lpa?: number | null
+          placement_rate_percent?: number | null
+          source?: string | null
+          students_placed?: number | null
+          top_recruiters?: string[] | null
+          top_sectors?: string[] | null
+          total_eligible?: number | null
+          verified?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_placements_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       colleges: {
         Row: {
+          about: string | null
+          accepted_exams: string[] | null
           address: string | null
+          admissions_email: string | null
+          admissions_phone: string | null
+          affiliated_university: string | null
           affiliation: string | null
+          airport_distance_km: number | null
           annual_fee_approx: number | null
           annual_fee_max: number | null
           annual_fee_min: number | null
+          arch_index_score: number | null
           city: string
+          claimed: boolean | null
+          claimed_at: string | null
+          claimed_by: string | null
           coa_approved: boolean | null
+          coa_validity_till: string | null
+          counseling_systems: string[] | null
           courses_offered: string[] | null
           created_at: string | null
           created_by: string | null
+          data_completeness: number | null
+          data_source: string | null
           description: string | null
           district: string | null
           email: string | null
           established_year: number | null
+          facebook_url: string | null
           facilities: string[] | null
           facilities_data: Json | null
+          gallery_images: string[] | null
+          has_management_quota: boolean | null
+          has_nri_quota: boolean | null
+          hero_image_url: string | null
+          highlights: string[] | null
           id: string
           images: string[] | null
+          instagram_handle: string | null
           intake_capacity: number | null
           is_active: boolean | null
+          last_data_update: string | null
           latitude: number | null
+          linkedin_url: string | null
+          location_type: string | null
           logo_url: string | null
           longitude: number | null
           meta_description: string | null
           meta_title: string | null
           naac_grade: string | null
+          naac_valid_till: string | null
           name: string
+          nba_accredited: boolean | null
+          nba_valid_till: string | null
+          nearest_airport: string | null
+          nearest_railway: string | null
           neram_tier: string | null
           nirf_rank: number | null
           nirf_rank_architecture: number | null
+          nirf_score: number | null
+          nirf_year: number | null
           phone: string | null
           pincode: string | null
           placement_data: Json | null
+          railway_distance_km: number | null
           rating: number | null
           short_name: string | null
           slug: string
           state: string
+          state_slug: string | null
+          tier_amount: number | null
+          tier_end_date: string | null
+          tier_start_date: string | null
           total_barch_seats: number | null
           type: string | null
           updated_at: string | null
           updated_by: string | null
+          verified: boolean | null
+          verified_at: string | null
           website: string | null
+          youtube_channel_id: string | null
+          youtube_channel_url: string | null
         }
         Insert: {
+          about?: string | null
+          accepted_exams?: string[] | null
           address?: string | null
+          admissions_email?: string | null
+          admissions_phone?: string | null
+          affiliated_university?: string | null
           affiliation?: string | null
+          airport_distance_km?: number | null
           annual_fee_approx?: number | null
           annual_fee_max?: number | null
           annual_fee_min?: number | null
+          arch_index_score?: number | null
           city: string
+          claimed?: boolean | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           coa_approved?: boolean | null
+          coa_validity_till?: string | null
+          counseling_systems?: string[] | null
           courses_offered?: string[] | null
           created_at?: string | null
           created_by?: string | null
+          data_completeness?: number | null
+          data_source?: string | null
           description?: string | null
           district?: string | null
           email?: string | null
           established_year?: number | null
+          facebook_url?: string | null
           facilities?: string[] | null
           facilities_data?: Json | null
+          gallery_images?: string[] | null
+          has_management_quota?: boolean | null
+          has_nri_quota?: boolean | null
+          hero_image_url?: string | null
+          highlights?: string[] | null
           id?: string
           images?: string[] | null
+          instagram_handle?: string | null
           intake_capacity?: number | null
           is_active?: boolean | null
+          last_data_update?: string | null
           latitude?: number | null
+          linkedin_url?: string | null
+          location_type?: string | null
           logo_url?: string | null
           longitude?: number | null
           meta_description?: string | null
           meta_title?: string | null
           naac_grade?: string | null
+          naac_valid_till?: string | null
           name: string
+          nba_accredited?: boolean | null
+          nba_valid_till?: string | null
+          nearest_airport?: string | null
+          nearest_railway?: string | null
           neram_tier?: string | null
           nirf_rank?: number | null
           nirf_rank_architecture?: number | null
+          nirf_score?: number | null
+          nirf_year?: number | null
           phone?: string | null
           pincode?: string | null
           placement_data?: Json | null
+          railway_distance_km?: number | null
           rating?: number | null
           short_name?: string | null
           slug: string
           state: string
+          state_slug?: string | null
+          tier_amount?: number | null
+          tier_end_date?: string | null
+          tier_start_date?: string | null
           total_barch_seats?: number | null
           type?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          verified?: boolean | null
+          verified_at?: string | null
           website?: string | null
+          youtube_channel_id?: string | null
+          youtube_channel_url?: string | null
         }
         Update: {
+          about?: string | null
+          accepted_exams?: string[] | null
           address?: string | null
+          admissions_email?: string | null
+          admissions_phone?: string | null
+          affiliated_university?: string | null
           affiliation?: string | null
+          airport_distance_km?: number | null
           annual_fee_approx?: number | null
           annual_fee_max?: number | null
           annual_fee_min?: number | null
+          arch_index_score?: number | null
           city?: string
+          claimed?: boolean | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           coa_approved?: boolean | null
+          coa_validity_till?: string | null
+          counseling_systems?: string[] | null
           courses_offered?: string[] | null
           created_at?: string | null
           created_by?: string | null
+          data_completeness?: number | null
+          data_source?: string | null
           description?: string | null
           district?: string | null
           email?: string | null
           established_year?: number | null
+          facebook_url?: string | null
           facilities?: string[] | null
           facilities_data?: Json | null
+          gallery_images?: string[] | null
+          has_management_quota?: boolean | null
+          has_nri_quota?: boolean | null
+          hero_image_url?: string | null
+          highlights?: string[] | null
           id?: string
           images?: string[] | null
+          instagram_handle?: string | null
           intake_capacity?: number | null
           is_active?: boolean | null
+          last_data_update?: string | null
           latitude?: number | null
+          linkedin_url?: string | null
+          location_type?: string | null
           logo_url?: string | null
           longitude?: number | null
           meta_description?: string | null
           meta_title?: string | null
           naac_grade?: string | null
+          naac_valid_till?: string | null
           name?: string
+          nba_accredited?: boolean | null
+          nba_valid_till?: string | null
+          nearest_airport?: string | null
+          nearest_railway?: string | null
           neram_tier?: string | null
           nirf_rank?: number | null
           nirf_rank_architecture?: number | null
+          nirf_score?: number | null
+          nirf_year?: number | null
           phone?: string | null
           pincode?: string | null
           placement_data?: Json | null
+          railway_distance_km?: number | null
           rating?: number | null
           short_name?: string | null
           slug?: string
           state?: string
+          state_slug?: string | null
+          tier_amount?: number | null
+          tier_end_date?: string | null
+          tier_start_date?: string | null
           total_barch_seats?: number | null
           type?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          verified?: boolean | null
+          verified_at?: string | null
           website?: string | null
+          youtube_channel_id?: string | null
+          youtube_channel_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_colleges_claimed_by"
+            columns: ["claimed_by"]
+            isOneToOne: false
+            referencedRelation: "college_admins"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       comment_likes: {
         Row: {
@@ -2922,6 +3422,55 @@ export type Database = {
           },
         ]
       }
+      drawing_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          read: boolean
+          student_id: string
+          submission_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean
+          student_id: string
+          submission_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean
+          student_id?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawing_notifications_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "user_journey_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawing_notifications_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawing_notifications_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "drawing_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       drawing_objects: {
         Row: {
           basic_form: string | null
@@ -3075,10 +3624,12 @@ export type Database = {
       }
       drawing_submissions: {
         Row: {
+          ai_annotation_prompt: string | null
           ai_corrected_image_prompt: string | null
           ai_draft_status: string | null
           ai_feedback: Json | null
           ai_overlay_annotations: Json | null
+          ai_reference_prompts: Json | null
           attempt_number: number | null
           corrected_image_url: string | null
           homework_id: string | null
@@ -3099,10 +3650,12 @@ export type Database = {
           tutor_resources: Json | null
         }
         Insert: {
+          ai_annotation_prompt?: string | null
           ai_corrected_image_prompt?: string | null
           ai_draft_status?: string | null
           ai_feedback?: Json | null
           ai_overlay_annotations?: Json | null
+          ai_reference_prompts?: Json | null
           attempt_number?: number | null
           corrected_image_url?: string | null
           homework_id?: string | null
@@ -3123,10 +3676,12 @@ export type Database = {
           tutor_resources?: Json | null
         }
         Update: {
+          ai_annotation_prompt?: string | null
           ai_corrected_image_prompt?: string | null
           ai_draft_status?: string | null
           ai_feedback?: Json | null
           ai_overlay_annotations?: Json | null
+          ai_reference_prompts?: Json | null
           attempt_number?: number | null
           corrected_image_url?: string | null
           homework_id?: string | null
@@ -4328,6 +4883,8 @@ export type Database = {
           longitude: number | null
           parent_phone: string | null
           payment_deadline: string | null
+          payment_link_expires_at: string | null
+          payment_link_token: string | null
           payment_recommendation: string | null
           payment_scheme: string | null
           phone_verified: boolean | null
@@ -4406,6 +4963,8 @@ export type Database = {
           longitude?: number | null
           parent_phone?: string | null
           payment_deadline?: string | null
+          payment_link_expires_at?: string | null
+          payment_link_token?: string | null
           payment_recommendation?: string | null
           payment_scheme?: string | null
           phone_verified?: boolean | null
@@ -4484,6 +5043,8 @@ export type Database = {
           longitude?: number | null
           parent_phone?: string | null
           payment_deadline?: string | null
+          payment_link_expires_at?: string | null
+          payment_link_token?: string | null
           payment_recommendation?: string | null
           payment_scheme?: string | null
           phone_verified?: boolean | null
@@ -10949,6 +11510,7 @@ export type Database = {
           prompt_snooze_until: string | null
           state: string
           student_id: string
+          target_year: string | null
           updated_at: string | null
         }
         Insert: {
@@ -10963,6 +11525,7 @@ export type Database = {
           prompt_snooze_until?: string | null
           state?: string
           student_id: string
+          target_year?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -10977,6 +11540,7 @@ export type Database = {
           prompt_snooze_until?: string | null
           state?: string
           student_id?: string
+          target_year?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -12620,6 +13184,9 @@ export type Database = {
           proposed_category:
             | Database["public"]["Enums"]["nata_question_category"]
             | null
+          proposed_exam_month: number | null
+          proposed_exam_session: string | null
+          proposed_exam_year: number | null
           proposed_image_urls: string[] | null
           proposed_tags: string[] | null
           proposed_title: string | null
@@ -12640,6 +13207,9 @@ export type Database = {
           proposed_category?:
             | Database["public"]["Enums"]["nata_question_category"]
             | null
+          proposed_exam_month?: number | null
+          proposed_exam_session?: string | null
+          proposed_exam_year?: number | null
           proposed_image_urls?: string[] | null
           proposed_tags?: string[] | null
           proposed_title?: string | null
@@ -12660,6 +13230,9 @@ export type Database = {
           proposed_category?:
             | Database["public"]["Enums"]["nata_question_category"]
             | null
+          proposed_exam_month?: number | null
+          proposed_exam_session?: string | null
+          proposed_exam_year?: number | null
           proposed_image_urls?: string[] | null
           proposed_tags?: string[] | null
           proposed_title?: string | null
@@ -12886,6 +13459,7 @@ export type Database = {
           confidence_level: number
           created_at: string
           downvote_count: number
+          exam_month: number | null
           exam_session: string | null
           exam_type: string
           exam_year: number | null
@@ -12912,6 +13486,7 @@ export type Database = {
           confidence_level?: number
           created_at?: string
           downvote_count?: number
+          exam_month?: number | null
           exam_session?: string | null
           exam_type?: string
           exam_year?: number | null
@@ -12938,6 +13513,7 @@ export type Database = {
           confidence_level?: number
           created_at?: string
           downvote_count?: number
+          exam_month?: number | null
           exam_session?: string | null
           exam_type?: string
           exam_year?: number | null
@@ -15295,6 +15871,8 @@ export type Database = {
           created_at: string | null
           date_of_birth: string | null
           description: string | null
+          disabled_at: string | null
+          disabled_by: string | null
           email: string | null
           email_opt_out: boolean
           email_opt_out_at: string | null
@@ -15305,6 +15883,7 @@ export type Database = {
           google_id: string | null
           has_password: boolean | null
           id: string
+          is_disabled: boolean
           last_login_at: string | null
           last_name: string | null
           linked_classroom_at: string | null
@@ -15331,6 +15910,8 @@ export type Database = {
           created_at?: string | null
           date_of_birth?: string | null
           description?: string | null
+          disabled_at?: string | null
+          disabled_by?: string | null
           email?: string | null
           email_opt_out?: boolean
           email_opt_out_at?: string | null
@@ -15341,6 +15922,7 @@ export type Database = {
           google_id?: string | null
           has_password?: boolean | null
           id?: string
+          is_disabled?: boolean
           last_login_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
@@ -15367,6 +15949,8 @@ export type Database = {
           created_at?: string | null
           date_of_birth?: string | null
           description?: string | null
+          disabled_at?: string | null
+          disabled_by?: string | null
           email?: string | null
           email_opt_out?: boolean
           email_opt_out_at?: string | null
@@ -15377,6 +15961,7 @@ export type Database = {
           google_id?: string | null
           has_password?: boolean | null
           id?: string
+          is_disabled?: boolean
           last_login_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
@@ -15824,24 +16409,44 @@ export type Database = {
       }
     }
     Functions: {
-      admin_bulk_delete_users: {
-        Args: { admin_id: string; user_ids: string[] }
-        Returns: {
-          deleted_admin_notes: number
-          deleted_cashback_claims: number
-          deleted_demo_registrations: number
-          deleted_documents: number
-          deleted_installments: number
-          deleted_lead_profiles: number
-          deleted_onboarding_responses: number
-          deleted_onboarding_sessions: number
-          deleted_payments: number
-          deleted_profile_history: number
-          deleted_scholarships: number
-          deleted_student_profiles: number
-          deleted_users: number
-        }[]
-      }
+      admin_bulk_delete_users:
+        | {
+            Args: { admin_id: string; user_ids: string[] }
+            Returns: {
+              deleted_admin_notes: number
+              deleted_cashback_claims: number
+              deleted_demo_registrations: number
+              deleted_documents: number
+              deleted_drawing_submissions: number
+              deleted_installments: number
+              deleted_lead_profiles: number
+              deleted_onboarding_responses: number
+              deleted_onboarding_sessions: number
+              deleted_payments: number
+              deleted_profile_history: number
+              deleted_scholarships: number
+              deleted_student_profiles: number
+              deleted_users: number
+            }[]
+          }
+        | {
+            Args: { admin_id: string; user_ids: string[] }
+            Returns: {
+              deleted_admin_notes: number
+              deleted_cashback_claims: number
+              deleted_demo_registrations: number
+              deleted_documents: number
+              deleted_installments: number
+              deleted_lead_profiles: number
+              deleted_onboarding_responses: number
+              deleted_onboarding_sessions: number
+              deleted_payments: number
+              deleted_profile_history: number
+              deleted_scholarships: number
+              deleted_student_profiles: number
+              deleted_users: number
+            }[]
+          }
       check_username_available: {
         Args: { p_exclude_user_id?: string; p_username: string }
         Returns: boolean

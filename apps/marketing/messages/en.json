@@ -657,5 +657,119 @@
     "provenResults": "PROVEN RESULTS",
     "ourPride": "Our Students, Our Pride",
     "ourPrideDesc": "Real results from real students. Scorecards, scores, and college placements that speak for themselves."
+  },
+  "collegeHub": {
+    "meta": {
+      "listingTitle": "B.Arch Colleges in India 2026",
+      "listingDescription": "Find and compare the best B.Arch colleges. Check fees, NATA cutoffs, NAAC grades, and placements.",
+      "stateTitle": "Best B.Arch Colleges in {state} 2026",
+      "tnea": "TNEA B.Arch Colleges 2026",
+      "josaa": "JoSAA B.Arch Colleges 2026"
+    },
+    "listing": {
+      "title": "B.Arch Colleges in India",
+      "subtitle": "Compare {count} colleges — fees, NATA cutoffs, rankings, and placements",
+      "noResults": "No colleges match your filters.",
+      "noResultsHint": "Try removing some filters to see more results.",
+      "showing": "Showing {shown} of {total} colleges",
+      "stateTitle": "Best B.Arch Colleges in {state}",
+      "stateSubtitle": "{count} colleges — compare fees, TNEA cutoffs, NAAC grades, and placements"
+    },
+    "filters": {
+      "title": "Filters",
+      "clearAll": "Clear all",
+      "sortBy": "Sort By",
+      "collegeType": "College Type",
+      "counseling": "Counseling",
+      "naacGrade": "NAAC Grade",
+      "coaOnly": "COA Approved Only",
+      "annualFee": "Annual Fee (approx)"
+    },
+    "card": {
+      "feeOnRequest": "Fee on request",
+      "seats": "{count} seats",
+      "verified": "Verified"
+    },
+    "detail": {
+      "overview": "Overview",
+      "fees": "Fees",
+      "cutoffs": "Cutoffs",
+      "placements": "Placements",
+      "infrastructure": "Infrastructure",
+      "faculty": "Faculty",
+      "about": "About the College",
+      "highlights": "Key Highlights",
+      "quickFacts": "Quick Facts",
+      "contact": "Contact Admissions",
+      "similarColleges": "Similar B.Arch Colleges",
+      "claimTitle": "Are you from {name}?",
+      "claimBody": "Claim this profile to update details, add photos, respond to queries, and get leads from interested students.",
+      "claimButton": "Claim Profile",
+      "barchSeats": "B.Arch Seats",
+      "established": "Established",
+      "type": "Type",
+      "annualFee": "Annual Fee",
+      "acceptedExams": "Accepted Exams",
+      "applyCtaTitle": "Preparing for NATA 2026?",
+      "applyCtaBody": "Join Neram Classes — Tamil Nadu's most trusted B.Arch entrance coaching.",
+      "applyCtaButton": "Apply to Neram"
+    },
+    "archIndex": {
+      "label": "ArchIndex",
+      "tooltip": "Neram ArchIndex: Composite 0-100 rating based on studio quality, faculty strength, placements, infrastructure, student satisfaction, and alumni network.",
+      "excellent": "Excellent",
+      "veryGood": "Very Good",
+      "good": "Good",
+      "average": "Average",
+      "belowAverage": "Below Average"
+    },
+    "fees": {
+      "noData": "Fee details not yet available for this college.",
+      "academicYear": "Academic Year",
+      "category": "Category",
+      "year": "Year {n}",
+      "tuition": "Tuition",
+      "hostel": "Hostel",
+      "other": "Other",
+      "totalPerYear": "Total/Year",
+      "fiveYearTotal": "5-Year Total"
+    },
+    "cutoffs": {
+      "noData": "Cutoff data not yet available.",
+      "latestCutoff": "{year} Cutoff ({category})",
+      "seats": "{count} seats"
+    },
+    "placements": {
+      "noData": "Placement data not yet available for this college.",
+      "reportTitle": "{year} Placement Report",
+      "verified": "Verified data",
+      "placementRate": "Placement Rate",
+      "avgPackage": "Avg Package",
+      "highestPackage": "Highest Package",
+      "higherStudies": "Higher Studies",
+      "topRecruiters": "Top Recruiters"
+    },
+    "infrastructure": {
+      "noData": "Infrastructure details not yet available.",
+      "studios": "Design Studios",
+      "amenities": "Campus Amenities",
+      "softwareAvailable": "Software Available",
+      "workshops": "Workshop Facilities"
+    },
+    "faculty": {
+      "noData": "Faculty details not yet available.",
+      "practicingArchitect": "Practicing Architect"
+    },
+    "tnea": {
+      "title": "TNEA B.Arch Colleges 2026",
+      "subtitle": "{count} colleges accepting TNEA counseling for B.Arch admissions",
+      "info": "TNEA (Tamil Nadu Engineering Admissions) allots B.Arch seats in Tamil Nadu government and aided colleges based on NATA scores and 12th marks. Cutoff ranks are updated after each counseling round."
+    },
+    "josaa": {
+      "title": "JoSAA B.Arch Colleges 2026 — NITs and IITs",
+      "subtitle": "{count} NIT and IIT programs admitting through JoSAA counseling (JEE Paper 2)",
+      "info": "JoSAA (Joint Seat Allocation Authority) handles admissions to B.Arch programs at NITs, IITs, and other centrally funded institutions. Eligibility requires JEE Paper 2 and a valid NATA score.",
+      "noData": "JoSAA college data will be updated soon."
+    }
   }
 }

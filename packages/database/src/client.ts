@@ -102,6 +102,38 @@ export function getSupabaseAdminClient(): TypedSupabaseClient {
 }
 
 // ============================================
+// ISR ADMIN CLIENT (Service Role + ISR caching)
+// ============================================
+
+/**
+ * Create Supabase admin client for ISR-compatible static generation.
+ * Uses `next: { revalidate }` in fetch so Next.js can cache responses
+ * during `next build` — unlike getSupabaseAdminClient which uses `no-store`.
+ *
+ * Use this in pages/queries that have `export const revalidate = N`.
+ * Do NOT use this for mutations or user-specific data.
+ */
+export function createAdminClientISR(revalidateSeconds: number): TypedSupabaseClient {
+  if (!supabaseServiceKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
+  }
+  return createClient<Database>(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      fetch: (url, options = {}) => {
+        return fetch(url, {
+          ...options,
+          next: { revalidate: revalidateSeconds },
+        } as RequestInit);
+      },
+    },
+  });
+}
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 
