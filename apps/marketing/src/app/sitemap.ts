@@ -28,6 +28,8 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/colleges', lastModified: '2026-04-12', i18n: true },
   { path: '/colleges/tnea', lastModified: '2026-04-12', i18n: true },
   { path: '/colleges/josaa', lastModified: '2026-04-12', i18n: true },
+  { path: '/nata-hub', lastModified: '2026-04-13', i18n: true },
+  { path: '/jee-barch-hub', lastModified: '2026-04-13', i18n: true },
   { path: '/scholarship', lastModified: '2026-02-01', i18n: true },
   { path: '/youtube-reward', lastModified: '2026-01-10', i18n: true },
   { path: '/free-resources', lastModified: '2026-02-15', i18n: true },
