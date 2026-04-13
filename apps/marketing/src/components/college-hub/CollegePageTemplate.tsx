@@ -17,6 +17,7 @@ import InfrastructureSection from './InfrastructureSection';
 import SimilarColleges from './SimilarColleges';
 import ClaimProfileCTA from './ClaimProfileCTA';
 import ReviewSection from './ReviewSection';
+import CommentSection from './CommentSection';
 import type { CollegeDetail, CollegeListItem } from '@/lib/college-hub/types';
 
 interface CollegePageTemplateProps {
@@ -170,6 +171,11 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
             <Box id="reviews" sx={{ mb: 4 }}>
               <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>Student Reviews</Typography>
               <ReviewSection collegeId={college.id} collegeName={college.name} />
+            </Box>
+
+            {/* Q&A section */}
+            <Box id="qa" sx={{ mb: 4 }}>
+              <CommentSection collegeId={college.id} collegeName={college.name} />
             </Box>
 
             {/* Claim CTA */}
