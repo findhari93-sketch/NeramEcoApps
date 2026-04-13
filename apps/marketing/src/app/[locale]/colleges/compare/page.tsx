@@ -158,7 +158,7 @@ function CompareContent() {
             </Box>
           </Grid>
           {colleges.map((college, i) => {
-            const raw = college ? (college as Record<string, unknown>)[key] : null;
+            const raw = college ? (college as unknown as Record<string, unknown>)[key] : null;
             const display =
               raw != null ? (format ? format(raw) : String(raw)) : 'N/A';
             return (

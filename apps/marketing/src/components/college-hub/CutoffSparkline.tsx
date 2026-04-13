@@ -111,13 +111,11 @@ export default function CutoffSparkline({
               />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                formatter={
-                // recharts v3 Formatter type is overly strict; cast via unknown
-                ((value: number) =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={((value: number) =>
                   isRankBased
                     ? `Rank #${Math.round(value).toLocaleString()}`
-                    : `${value}%`) as unknown as (v: number) => string
-              }
+                    : `${value}%`) as any}
               />
               <Line
                 type="monotone"

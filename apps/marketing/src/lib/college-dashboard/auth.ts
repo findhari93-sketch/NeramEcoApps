@@ -19,20 +19,31 @@ export async function verifyCollegeDashboardAuth(request: NextRequest): Promise<
   if (error || !user) throw new Error('Invalid token');
 
   const admin = createAdminClient();
-  const { data: collegeAdmin, error: adminError } = await admin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: collegeAdminRaw, error: adminError } = await (admin as any)
     .from('college_admins')
     .select('id, college_id, name, role, is_active')
     .eq('supabase_uid', user.id)
     .single();
 
-  if (adminError || !collegeAdmin) throw new Error('College admin record not found');
+  if (adminError || !collegeAdminRaw) throw new Error('College admin record not found');
+
+  // Cast to concrete type since Supabase generated types are too deep for TS inference
+  const collegeAdmin = collegeAdminRaw as unknown as {
+    id: string;
+    college_id: string;
+    name: string;
+    role: string;
+    is_active: boolean;
+  };
+
   if (!collegeAdmin.is_active) throw new Error('Account is inactive. Contact Neram Classes support.');
 
   return {
     userId: user.id,
-    id: collegeAdmin.id as string,
-    college_id: collegeAdmin.college_id as string,
-    name: collegeAdmin.name as string,
-    role: collegeAdmin.role as string,
+    id: collegeAdmin.id,
+    college_id: collegeAdmin.college_id,
+    name: collegeAdmin.name,
+    role: collegeAdmin.role,
   };
 }

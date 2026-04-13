@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { getSupabaseBrowserClient } from '@neram/database';
-import { Session } from '@supabase/supabase-js';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Session = { access_token: string; user: { id: string } | null } & Record<string, any>;
 import { useRouter } from 'next/navigation';
 
 interface CollegeInfo {
