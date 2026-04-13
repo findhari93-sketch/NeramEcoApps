@@ -288,8 +288,6 @@ export default function AintraKBPage() {
         rows={items}
         columns={columns}
         loading={loading}
-        getRowId={(row: KBItem) => row.id}
-        rowHeight={60}
       />
 
       {/* Create / Edit Dialog */}

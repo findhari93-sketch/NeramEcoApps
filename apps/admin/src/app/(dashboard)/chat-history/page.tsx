@@ -460,16 +460,6 @@ export default function ChatHistoryPage() {
         rows={rows}
         columns={columns}
         loading={loading}
-        getRowId={(row: Conversation) => row.id}
-        rowHeight={64}
-        paginationMode="server"
-        rowCount={total}
-        paginationModel={{ page, pageSize }}
-        onPaginationModelChange={(model: any) => {
-          setPage(model.page);
-          setPageSize(model.pageSize);
-        }}
-        pageSizeOptions={[25, 50, 100]}
       />
 
       {/* Correction Dialog */}
