@@ -4,6 +4,8 @@ import Link from 'next/link';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import ArchIndexRing from './ArchIndexRing';
+import SaveCollegeButton from './SaveCollegeButton';
+import CompareButton from './CompareButton';
 import type { CollegeListItem } from '@/lib/college-hub/types';
 
 interface CollegeListingCardProps {
@@ -147,11 +149,19 @@ export default function CollegeListingCard({ college, compact = false }: College
             >
               {formatFee(college.annual_fee_min, college.annual_fee_max, college.annual_fee_approx)}
             </Typography>
-            {college.total_barch_seats && (
-              <Typography variant="caption" color="text.secondary">
-                {college.total_barch_seats} seats
-              </Typography>
-            )}
+            <Stack direction="row" alignItems="center" gap={0.5}>
+              {college.total_barch_seats && (
+                <Typography variant="caption" color="text.secondary">
+                  {college.total_barch_seats} seats
+                </Typography>
+              )}
+              {!compact && (
+                <>
+                  <CompareButton slug={college.slug} collegeName={college.name} />
+                  <SaveCollegeButton slug={college.slug} collegeName={college.name} size="small" />
+                </>
+              )}
+            </Stack>
           </Stack>
         </CardContent>
       </CardActionArea>

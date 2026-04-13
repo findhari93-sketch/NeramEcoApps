@@ -11,6 +11,7 @@ import AuthProvider from '@/components/AuthProvider';
 import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
 import dynamic from 'next/dynamic';
 const GeneralChatbot = dynamic(() => import('@/components/GeneralChatbot'), { ssr: false });
+const ComparisonTray = dynamic(() => import('@/components/college-hub/ComparisonTray'), { ssr: false });
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import '@/styles/globals.css';
 
@@ -174,6 +175,7 @@ export default async function RootLayout({
               <main>{children}</main>
               <Footer />
               <StickyAchievementWidget locale={locale} />
+              <ComparisonTray />
               <GeneralChatbot />
             </AuthProvider>
           </ThemeRegistry>
