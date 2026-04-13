@@ -50,6 +50,9 @@ import DomainIcon from '@mui/icons-material/Domain';
 import StarHalfIcon from '@mui/icons-material/StarHalf';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
+import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
+import WindowIcon from '@mui/icons-material/Window';
+import CommentIcon from '@mui/icons-material/Comment';
 import DevicesIcon from '@mui/icons-material/Devices';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -152,6 +155,9 @@ const menuGroups: MenuGroup[] = [
       { text: 'Colleges', icon: LeaderboardIcon, path: '/college-hub/colleges' },
       { text: 'Review Queue', icon: StarHalfIcon, path: '/college-hub/reviews' },
       { text: 'Leads', icon: PeopleIcon, path: '/college-hub/leads' },
+      { text: 'College Accounts', icon: ManageAccountsIcon, path: '/college-hub/accounts' },
+      { text: 'Lead Windows', icon: WindowIcon, path: '/college-hub/lead-windows' },
+      { text: 'Comments', icon: CommentIcon, path: '/college-hub/comments' },
       { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
     ],
   },

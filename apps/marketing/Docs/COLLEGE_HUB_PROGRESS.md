@@ -182,6 +182,53 @@
 
 ---
 
+## Phase 5: College Dashboard + Admin Completions (COMPLETE — 2026-04-13)
+
+### DB Migration
+
+- [x] `supabase/migrations/20260413_college_hub_phase5.sql`
+  - ALTER TABLE college_admins: added supabase_uid, phone, designation, invited_at
+  - CREATE TABLE lead_windows (id, name, description, start_date, end_date, applies_to, eligible_tiers, is_active, created_by, created_at, updated_at)
+  - Partial unique index: only one active lead window at a time
+  - CREATE TABLE college_page_views (id, college_id, viewed_at, city, country) with RLS (public INSERT, service-role SELECT only)
+  - TypeScript types regenerated in packages/database/src/types/supabase.ts
+
+### Admin Completions
+
+- [x] `apps/admin/.../college-hub/accounts/page.tsx` — College Accounts DataGrid + Create Account dialog
+- [x] `apps/admin/src/app/api/college-hub/accounts/route.ts` — GET list, POST create auth user + admin row, PATCH toggle active
+- [x] `apps/admin/.../college-hub/lead-windows/page.tsx` — Lead Windows cards with Activate/Deactivate
+- [x] `apps/admin/src/app/api/college-hub/lead-windows/route.ts` — GET, POST, PATCH (auto-deactivates other windows on activate)
+- [x] `apps/admin/.../college-hub/comments/page.tsx` — Comments Moderation with approved/removed tabs
+- [x] `apps/admin/src/app/api/college-hub/comments/route.ts` — GET by status, PATCH status
+- [x] `apps/admin/src/components/Sidebar.tsx` — Added College Accounts, Lead Windows, Comments to College Hub group
+
+### Lead Window System
+
+- [x] `apps/marketing/src/app/api/colleges/lead-window-status/route.ts` — checks active window, college tier, counseling_systems match
+- [x] `apps/marketing/src/components/college-hub/LeadCaptureButton.tsx` — updated with lead window check: shows skeleton, then active button or off-season notice
+
+### College Dashboard (marketing app at /college-dashboard/)
+
+- [x] `apps/marketing/src/lib/college-dashboard/auth.ts` — `verifyCollegeDashboardAuth()` using Supabase `auth.getUser(token)` + college_admins lookup
+- [x] `apps/marketing/src/app/college-dashboard/context.tsx` — `CollegeDashboardProvider` + `useCollegeDashboard()` hook
+- [x] `apps/marketing/src/app/college-dashboard/layout.tsx` — protected shell with sticky navbar, sign out
+- [x] `apps/marketing/src/app/college-dashboard/login/page.tsx` — email+password login with show/hide password
+- [x] `apps/marketing/src/app/api/college-dashboard/profile/route.ts` — GET profile, PATCH allowed fields only
+- [x] `apps/marketing/src/app/college-dashboard/page.tsx` — welcome, tier badge, quick stats, profile completion bar, profile editor
+- [x] `apps/marketing/src/app/api/college-dashboard/leads/route.ts` — GET (with phone masking for free/silver), PATCH status
+- [x] `apps/marketing/src/app/college-dashboard/leads/page.tsx` — leads table with status select, phone masking notice
+- [x] `apps/marketing/src/app/api/college-dashboard/analytics/route.ts` — page views 7d/30d/90d, leads, reviews, saves counts
+- [x] `apps/marketing/src/app/college-dashboard/analytics/page.tsx` — period toggle tabs, stat cards
+
+### Page View Tracking
+
+- [x] `apps/marketing/src/app/api/colleges/pageview/route.ts` — fire-and-forget POST, inserts to college_page_views (fail silent)
+- [x] `apps/marketing/src/components/college-hub/PageViewTracker.tsx` — client component with useRef guard, loaded via `next/dynamic ssr: false`
+- [x] `apps/marketing/src/app/[locale]/colleges/[state]/[slug]/page.tsx` — PageViewTracker added via dynamic import
+
+---
+
 ## Session Log
 
 | Date | Session | Completed | Notes |
@@ -190,3 +237,4 @@
 | 2026-04-12 | Phase 1 implementation | All Phase 1 code complete, 0 TS errors | Need local verification + deploy |
 | 2026-04-13 | Phase 1 build fix | Build passes (770 pages), committed to main | Fixed ISR vs no-store conflict; fixed neram_tier null crash |
 | 2026-04-13 | Phases 2-4 implementation | All phases complete in one session | DB migration + 13 tasks: reviews, comments, save, compare, tier gate, leads, admin hub, rankings, fee pages |
+| 2026-04-13 | Phase 5 implementation | All 10 tasks complete | DB migration (lead_windows, college_page_views, college_admins columns), Admin completions (Accounts/Lead Windows/Comments pages), College Dashboard (auth, profile, leads, analytics), PageViewTracker |

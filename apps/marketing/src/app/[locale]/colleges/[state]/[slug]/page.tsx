@@ -1,7 +1,13 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { JsonLd } from '@/components/seo/JsonLd';
+
+const PageViewTracker = dynamic(
+  () => import('@/components/college-hub/PageViewTracker'),
+  { ssr: false }
+);
 import { generateCollegeDetailMetadata } from '@/lib/college-hub/seo';
 import {
   generateCollegeOrUniversitySchema,
@@ -48,6 +54,7 @@ export default async function CollegeDetailPage({ params: { locale, state, slug 
 
   return (
     <>
+      <PageViewTracker collegeId={college.id} />
       <JsonLd data={collegeSchema} />
       <JsonLd data={breadcrumbSchema} />
       <JsonLd data={faqSchema} />

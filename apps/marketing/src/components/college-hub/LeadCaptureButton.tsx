@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Stack, Alert, CircularProgress, Typography, Checkbox,
-  FormControlLabel,
+  FormControlLabel, Box,
 } from '@mui/material';
 import SchoolIcon from '@mui/icons-material/School';
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 
 interface LeadCaptureButtonProps {
   collegeId: string;
@@ -14,6 +15,7 @@ interface LeadCaptureButtonProps {
 }
 
 export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptureButtonProps) {
+  const [windowActive, setWindowActive] = useState<boolean | null>(null); // null = loading
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -24,6 +26,13 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/colleges/lead-window-status?college_id=${collegeId}`)
+      .then((r) => r.json())
+      .then((j) => setWindowActive(j.active === true))
+      .catch(() => setWindowActive(false));
+  }, [collegeId]);
 
   const handleSubmit = async () => {
     if (!name || !phone || !consent) {
@@ -54,6 +63,42 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
       setSubmitting(false);
     }
   };
+
+  // Still loading — show skeleton placeholder
+  if (windowActive === null) {
+    return (
+      <Box
+        sx={{
+          height: 48, bgcolor: 'grey.100', borderRadius: 2,
+          animation: 'pulse 1.5s ease-in-out infinite',
+          '@keyframes pulse': {
+            '0%, 100%': { opacity: 1 },
+            '50%': { opacity: 0.4 },
+          },
+        }}
+      />
+    );
+  }
+
+  // Lead window not active — show informational notice instead
+  if (!windowActive) {
+    return (
+      <Box
+        sx={{
+          p: 2, border: '1px solid', borderColor: 'divider',
+          borderRadius: 2, bgcolor: 'grey.50', textAlign: 'center',
+        }}
+      >
+        <NotificationsOffIcon sx={{ fontSize: 28, color: 'text.disabled', mb: 0.5 }} />
+        <Typography variant="body2" color="text.secondary" fontWeight={600}>
+          Lead inquiries open during admission season
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          (June to September each year)
+        </Typography>
+      </Box>
+    );
+  }
 
   if (success) {
     return (
