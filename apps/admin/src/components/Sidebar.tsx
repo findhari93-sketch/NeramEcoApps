@@ -46,6 +46,10 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import WorkIcon from '@mui/icons-material/Work';
 import FeedbackIcon from '@mui/icons-material/Feedback';
+import DomainIcon from '@mui/icons-material/Domain';
+import StarHalfIcon from '@mui/icons-material/StarHalf';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import DevicesIcon from '@mui/icons-material/Devices';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -139,6 +143,15 @@ const menuGroups: MenuGroup[] = [
       { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
       { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
       { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' },
+    ],
+  },
+  {
+    label: 'College Hub',
+    items: [
+      { text: 'Overview', icon: DomainIcon, path: '/college-hub' },
+      { text: 'Colleges', icon: LeaderboardIcon, path: '/college-hub/colleges' },
+      { text: 'Review Queue', icon: StarHalfIcon, path: '/college-hub/reviews' },
+      { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
     ],
   },
   {
