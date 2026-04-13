@@ -22,9 +22,16 @@ import {
   HelpOutlineIcon,
   useScrollDirection,
   ListItemIcon,
+  Popover,
+  Collapse,
 } from '@neram/ui';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import SearchIcon from '@mui/icons-material/Search';
+import SchoolIcon from '@mui/icons-material/School';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
@@ -33,6 +40,8 @@ import UserNotificationBell from './UserNotificationBell';
 import SearchDialog from './SearchDialog';
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
+
+// ─── CTA config (unchanged) ────────────────────────────────────────────────
 
 function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslations>) {
   switch (status) {
@@ -101,16 +110,116 @@ function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslat
   }
 }
 
-const navigationLinks = [
-  { labelKey: 'about' as const, href: '/about' as const },
-  { labelKey: 'courses' as const, href: '/courses' as const },
-  { labelKey: 'testimonials' as const, href: '/testimonials' as const },
-  { labelKey: 'nata2026' as const, href: '/nata-2026' as const, badge: 'NEW' as const },
-  { labelKey: 'counseling' as const, href: '/counseling' as const },
-  { labelKey: 'fees' as const, href: '/fees' as const },
-  { labelKey: 'contact' as const, href: '/contact' as const },
-  { labelKey: 'careers' as const, href: '/careers' as const },
+// ─── Nav group structure ────────────────────────────────────────────────────
+
+interface NavLink {
+  label: string;
+  href: string;
+  badge?: string;
+}
+
+interface NavColumn {
+  title: string;
+  links: NavLink[];
+}
+
+interface NavGroup {
+  key: string;
+  labelKey: 'colleges' | 'nataPrepNav' | 'counselingNav' | 'aboutNav';
+  icon: React.ReactNode;
+  columns: NavColumn[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    key: 'colleges',
+    labelKey: 'colleges',
+    icon: <SchoolIcon fontSize="small" />,
+    columns: [
+      {
+        title: 'Browse',
+        links: [
+          { label: 'All Architecture Colleges', href: '/colleges' },
+          { label: 'Tamil Nadu Colleges', href: '/colleges/tamil-nadu' },
+          { label: 'Compare Colleges', href: '/colleges/compare' },
+          { label: 'Saved Colleges', href: '/colleges/saved' },
+        ],
+      },
+      {
+        title: 'Rankings',
+        links: [
+          { label: 'NIRF Architecture', href: '/colleges/rankings/nirf' },
+          { label: 'ArchIndex Rankings', href: '/colleges/rankings/archindex' },
+        ],
+      },
+      {
+        title: 'By Admission',
+        links: [
+          { label: 'TNEA Colleges', href: '/colleges/tnea' },
+          { label: 'JoSAA Colleges', href: '/colleges/josaa' },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'nata',
+    labelKey: 'nataPrepNav',
+    icon: <MenuBookIcon fontSize="small" />,
+    columns: [
+      {
+        title: 'Courses',
+        links: [
+          { label: 'NATA 2026', href: '/nata-2026', badge: 'NEW' },
+          { label: 'All Courses', href: '/courses' },
+          { label: 'Fees & Scholarships', href: '/fees' },
+        ],
+      },
+      {
+        title: 'Resources',
+        links: [
+          { label: 'NATA Syllabus', href: '/nata-syllabus' },
+          { label: 'Previous Year Papers', href: '/previous-year-papers' },
+          { label: 'Best Books', href: '/best-books-nata-jee' },
+          { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'counseling',
+    labelKey: 'counselingNav',
+    icon: <TrendingUpIcon fontSize="small" />,
+    columns: [
+      {
+        title: 'Admission Help',
+        links: [
+          { label: 'Counseling Guide', href: '/counseling' },
+          { label: 'College Predictor', href: '/tools/college-predictor' },
+          { label: 'Rank Predictor', href: '/tools/rank-predictor' },
+          { label: 'COA Checker', href: '/tools/coa-checker' },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'about',
+    labelKey: 'aboutNav',
+    icon: <InfoOutlinedIcon fontSize="small" />,
+    columns: [
+      {
+        title: '',
+        links: [
+          { label: 'About Us', href: '/about' },
+          { label: 'Student Reviews', href: '/testimonials' },
+          { label: 'Careers', href: '/careers' },
+          { label: 'Contact', href: '/contact' },
+        ],
+      },
+    ],
+  },
 ];
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Header() {
   const params = useParams();
@@ -129,6 +238,12 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // Desktop: which group's popover is open
+  const [openMenu, setOpenMenu] = useState<{ key: string; anchorEl: HTMLElement } | null>(null);
+
+  // Mobile: which group is expanded in accordion
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+
   const handleLocaleChange = (newLocale: Locale) => {
     router.replace(pathname, { locale: newLocale });
   };
@@ -144,9 +259,27 @@ export default function Header() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
+
+  const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
+
+  const handleMenuOpen = (key: string, event: React.MouseEvent<HTMLElement>) => {
+    setOpenMenu({ key, anchorEl: event.currentTarget });
   };
+
+  const handleMenuClose = () => setOpenMenu(null);
+
+  const toggleMobileGroup = (key: string) =>
+    setExpandedGroup((prev) => (prev === key ? null : key));
+
+  // Check if any link in a group matches the current path
+  const isGroupActive = (group: NavGroup) =>
+    group.columns.some((col) =>
+      col.links.some(
+        (link) =>
+          pathname === link.href ||
+          (link.href !== '/' && pathname.startsWith(link.href)),
+      ),
+    );
 
   return (
     <>
@@ -155,20 +288,21 @@ export default function Header() {
         elevation={1}
         sx={{
           top: 'var(--broadcast-banner-height, 0px)',
-          transform: scrollDirection === 'down' && !isAtTop && !mobileMenuOpen
-            ? 'translateY(-100%)'
-            : 'translateY(0)',
-          transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms ease',
+          transform:
+            scrollDirection === 'down' && !isAtTop && !mobileMenuOpen
+              ? 'translateY(-100%)'
+              : 'translateY(0)',
+          transition:
+            'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms ease',
           backgroundImage: 'none',
           borderRadius: 0,
-          '@media (prefers-reduced-motion: reduce)': {
-            transition: 'none',
-          },
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
         <Container maxWidth="lg">
           <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 } }}>
-            {/* Logo + Microsoft Badge */}
+
+            {/* ── Logo + Microsoft Badge ── */}
             <Box
               component={Link}
               href="/"
@@ -176,9 +310,10 @@ export default function Header() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-end',
-                mr: { xs: 0, md: 4 },
+                mr: { xs: 0, md: 3 },
                 textDecoration: 'none',
                 color: 'inherit',
+                flexShrink: 0,
               }}
             >
               <Typography
@@ -192,26 +327,19 @@ export default function Header() {
                 <Box component="span" sx={{ fontWeight: 700 }}>neram</Box>
                 <Box component="span" sx={{ fontWeight: 300 }}>Classes</Box>
               </Typography>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                }}
-              >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                 <Typography
                   sx={{
                     fontSize: '9px',
                     fontStyle: 'italic',
                     fontWeight: 400,
-                    color: 'rgb(81 81 81);',
+                    color: 'rgb(81 81 81)',
                     letterSpacing: '0.19px',
                     lineHeight: 1,
                   }}
                 >
                   Supported by
                 </Typography>
-                {/* Microsoft 4-color logo */}
                 <Box sx={{ width: 9, height: 9, position: 'relative', flexShrink: 0 }}>
                   <Box sx={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '4px', bgcolor: '#F25022', borderRadius: '0.5px' }} />
                   <Box sx={{ position: 'absolute', top: 0, right: 0, width: '4px', height: '4px', bgcolor: '#7FBA00', borderRadius: '0.5px' }} />
@@ -232,122 +360,114 @@ export default function Header() {
               </Box>
             </Box>
 
-            {/* Desktop Navigation Links */}
-              <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, gap: 0.5, alignItems: 'center' }}>
-                {pathname !== '/' && (
-                  <Tooltip title={t('nav.home')} arrow>
-                    <IconButton
-                      component={Link}
-                      href={'/'}
-                      color="inherit"
-                      size="small"
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '8px',
-                        opacity: 0.75,
-                        transition: 'opacity 0.2s, background-color 0.2s',
-                        '&:hover': {
-                          opacity: 1,
-                          bgcolor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <HomeRoundedIcon sx={{ fontSize: 20 }} />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                {navigationLinks.map((link) => {
-                  const isActive = pathname === link.href || (link.href as string !== '/' && pathname.startsWith(link.href));
-                  return (
-                    <Button
-                      key={link.href}
-                      component={Link}
-                      href={link.href}
-                      sx={{
-                        color: 'inherit',
-                        minWidth: 0,
-                        px: 1.5,
-                        py: 1,
-                        fontWeight: isActive ? 600 : 400,
-                        opacity: isActive ? 1 : 0.8,
-                        bgcolor: 'transparent',
-                        borderRadius: '8px',
-                        position: 'relative',
-                        overflow: 'visible',
-                        transition: 'opacity 0.25s ease, background-color 0.25s ease',
-                        '&::after': {
-                          content: '""',
-                          position: 'absolute',
-                          bottom: 4,
-                          left: '50%',
-                          width: isActive ? '60%' : '0%',
-                          height: '2px',
-                          bgcolor: 'currentcolor',
-                          borderRadius: '1px',
-                          transform: 'translateX(-50%)',
-                          transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        },
-                        '&:hover': {
-                          opacity: 1,
-                          bgcolor: 'action.hover',
-                          '&::after': {
-                            width: '60%',
-                          },
-                        },
-                      }}
-                    >
-                      {'badge' in link && link.badge && (
-                        <Box
-                          component="span"
-                          sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: -2,
-                            fontSize: '0.5rem',
-                            fontWeight: 800,
-                            letterSpacing: '0.05em',
-                            lineHeight: 1,
-                            color: '#fff',
-                            bgcolor: '#FF6B35',
-                            px: 0.6,
-                            py: 0.3,
-                            borderRadius: '6px',
-                            transform: 'rotate(-15deg)',
-                          }}
-                        >
-                          {link.badge}
-                        </Box>
-                      )}
-                      {t(`nav.${link.labelKey}`)}
-                    </Button>
-                  );
-                })}
-              </Box>
+            {/* ── Desktop: Grouped nav buttons ── */}
+            <Box
+              sx={{
+                flexGrow: 1,
+                display: { xs: 'none', md: 'flex' },
+                gap: 0.25,
+                alignItems: 'center',
+              }}
+            >
+              {/* Home icon (when not on homepage) */}
+              {pathname !== '/' && (
+                <Tooltip title={t('nav.home')} arrow>
+                  <IconButton
+                    component={Link}
+                    href="/"
+                    color="inherit"
+                    size="small"
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      opacity: 0.75,
+                      transition: 'opacity 0.2s, background-color 0.2s',
+                      '&:hover': { opacity: 1, bgcolor: 'action.hover' },
+                    }}
+                  >
+                    <HomeRoundedIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
 
+              {/* Group buttons */}
+              {NAV_GROUPS.map((group) => {
+                const isActive = isGroupActive(group);
+                const isOpen = openMenu?.key === group.key;
+                return (
+                  <Button
+                    key={group.key}
+                    onClick={(e) => isOpen ? handleMenuClose() : handleMenuOpen(group.key, e)}
+                    endIcon={
+                      <KeyboardArrowDownIcon
+                        sx={{
+                          fontSize: '16px !important',
+                          transition: 'transform 200ms ease',
+                          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        }}
+                      />
+                    }
+                    sx={{
+                      color: 'inherit',
+                      minWidth: 0,
+                      px: 1.25,
+                      py: 1,
+                      fontWeight: isActive || isOpen ? 600 : 400,
+                      opacity: isActive || isOpen ? 1 : 0.85,
+                      bgcolor: isOpen ? 'rgba(255,255,255,0.12)' : 'transparent',
+                      borderRadius: '8px',
+                      position: 'relative',
+                      overflow: 'visible',
+                      transition: 'opacity 0.2s ease, background-color 0.2s ease',
+                      '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        bottom: 4,
+                        left: '50%',
+                        width: isActive ? '60%' : '0%',
+                        height: '2px',
+                        bgcolor: 'currentcolor',
+                        borderRadius: '1px',
+                        transform: 'translateX(-50%)',
+                        transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      },
+                      '&:hover': {
+                        opacity: 1,
+                        bgcolor: 'rgba(255,255,255,0.1)',
+                        '&::after': { width: '60%' },
+                      },
+                    }}
+                  >
+                    {t(`nav.${group.labelKey}`)}
+                  </Button>
+                );
+              })}
+            </Box>
 
-            {/* Desktop Search Button */}
+            {/* ── Desktop Search ── */}
             <Tooltip title="Search (Ctrl+K)" arrow>
               <IconButton
                 color="inherit"
                 size="small"
                 onClick={() => setSearchOpen(true)}
                 sx={{
-                  display: { xs: "none", md: "flex" },
+                  display: { xs: 'none', md: 'flex' },
                   width: 32,
                   height: 32,
-                  borderRadius: "8px",
+                  borderRadius: '8px',
                   opacity: 0.75,
-                  "&:hover": { opacity: 1, bgcolor: "action.hover" },
+                  '&:hover': { opacity: 1, bgcolor: 'action.hover' },
                 }}
               >
                 <SearchIcon sx={{ fontSize: 20 }} />
               </IconButton>
             </Tooltip>
+
             {/* Spacer for mobile */}
             <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
 
-            {/* My Enrollment link for enrolled students */}
+            {/* My Enrollment (enrolled students) */}
             {isEnrolled && (
               <Button
                 component={Link}
@@ -370,7 +490,7 @@ export default function Header() {
               </Button>
             )}
 
-            {/* CTA Button: "Need Help?" on /apply, dynamic status-aware button elsewhere */}
+            {/* CTA */}
             {isApplyPage ? (
               <Button
                 component={Link}
@@ -387,10 +507,7 @@ export default function Header() {
                   textTransform: 'none',
                   color: 'white',
                   borderColor: 'rgba(255,255,255,0.6)',
-                  '&:hover': {
-                    borderColor: 'white',
-                    bgcolor: 'rgba(255,255,255,0.1)',
-                  },
+                  '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
                 }}
               >
                 {t('header.needHelp')}
@@ -433,13 +550,13 @@ export default function Header() {
               </Button>
             )}
 
-            {/* Desktop: Notifications + Auth Button */}
+            {/* Desktop: Notifications + Auth */}
             <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}>
               <UserNotificationBell />
               <AuthButton />
             </Box>
 
-            {/* Mobile: Hamburger Menu */}
+            {/* Mobile: Hamburger */}
             <Box sx={{ display: { xs: 'block', md: 'none' } }}>
               <IconButton
                 edge="end"
@@ -454,7 +571,120 @@ export default function Header() {
           </Toolbar>
         </Container>
 
-        {/* Mobile Navigation Drawer */}
+        {/* ── Desktop Dropdown Popovers ── */}
+        {NAV_GROUPS.map((group) => (
+          <Popover
+            key={group.key}
+            open={openMenu?.key === group.key}
+            anchorEl={openMenu?.anchorEl ?? null}
+            onClose={handleMenuClose}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+            disableScrollLock
+            PaperProps={{
+              elevation: 8,
+              sx: {
+                mt: 1,
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'divider',
+                overflow: 'visible',
+                minWidth: 220,
+              },
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 0,
+                p: 1,
+              }}
+            >
+              {group.columns.map((col, ci) => (
+                <Box
+                  key={ci}
+                  sx={{
+                    minWidth: 180,
+                    px: 1,
+                    borderRight: ci < group.columns.length - 1 ? '1px solid' : 'none',
+                    borderColor: 'divider',
+                  }}
+                >
+                  {col.title && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: 'block',
+                        fontWeight: 700,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        color: 'text.disabled',
+                        px: 1.5,
+                        pt: 1,
+                        pb: 0.5,
+                        fontSize: '0.65rem',
+                      }}
+                    >
+                      {col.title}
+                    </Typography>
+                  )}
+                  {col.links.map((link) => {
+                    const isActive =
+                      pathname === link.href ||
+                      (link.href !== '/' && pathname.startsWith(link.href));
+                    return (
+                      <ListItemButton
+                        key={link.href}
+                        component={Link}
+                        href={link.href as any}
+                        onClick={handleMenuClose}
+                        selected={isActive}
+                        sx={{
+                          borderRadius: 1.5,
+                          py: 0.75,
+                          px: 1.5,
+                          mb: 0.25,
+                          minHeight: 36,
+                          '&.Mui-selected': {
+                            bgcolor: 'primary.50',
+                            color: 'primary.main',
+                            '&:hover': { bgcolor: 'primary.100' },
+                          },
+                        }}
+                      >
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <Typography variant="body2" sx={{ fontWeight: isActive ? 600 : 400 }}>
+                                {link.label}
+                              </Typography>
+                              {link.badge && (
+                                <Chip
+                                  label={link.badge}
+                                  size="small"
+                                  sx={{
+                                    height: 16,
+                                    fontSize: '0.55rem',
+                                    fontWeight: 800,
+                                    bgcolor: '#FF6B35',
+                                    color: '#fff',
+                                    '& .MuiChip-label': { px: 0.5 },
+                                  }}
+                                />
+                              )}
+                            </Box>
+                          }
+                        />
+                      </ListItemButton>
+                    );
+                  })}
+                </Box>
+              ))}
+            </Box>
+          </Popover>
+        ))}
+
+        {/* ── Mobile Navigation Drawer ── */}
         <SwipeableDrawer
           anchor="right"
           open={mobileMenuOpen}
@@ -484,23 +714,8 @@ export default function Header() {
                 <Box component="span" sx={{ fontWeight: 700 }}>neram</Box>
                 <Box component="span" sx={{ fontWeight: 300 }}>Classes</Box>
               </Typography>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                }}
-              >
-                <Typography
-                  sx={{
-                    fontSize: '9px',
-                    fontStyle: 'italic',
-                    fontWeight: 400,
-                    color: 'text.primary',
-                    letterSpacing: '0.19px',
-                    lineHeight: 1,
-                  }}
-                >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <Typography sx={{ fontSize: '9px', fontStyle: 'italic', fontWeight: 400, color: 'text.primary', letterSpacing: '0.19px', lineHeight: 1 }}>
                   Supported by
                 </Typography>
                 <Box sx={{ width: 9, height: 9, position: 'relative', flexShrink: 0 }}>
@@ -509,109 +724,135 @@ export default function Header() {
                   <Box sx={{ position: 'absolute', bottom: 0, left: 0, width: '4px', height: '4px', bgcolor: '#00A4EF', borderRadius: '0.5px' }} />
                   <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: '4px', height: '4px', bgcolor: '#FFB900', borderRadius: '0.5px' }} />
                 </Box>
-                <Typography
-                  sx={{
-                    fontSize: '9.6px',
-                    fontWeight: 700,
-                    color: 'text.primary',
-                    letterSpacing: '0.19px',
-                    lineHeight: 1,
-                  }}
-                >
+                <Typography sx={{ fontSize: '9.6px', fontWeight: 700, color: 'text.primary', letterSpacing: '0.19px', lineHeight: 1 }}>
                   Microsoft
                 </Typography>
               </Box>
             </Box>
-            <IconButton
-              onClick={toggleMobileMenu}
-              aria-label={t('header.closeMenu')}
-            >
+            <IconButton onClick={toggleMobileMenu} aria-label={t('header.closeMenu')}>
               <CloseIcon />
             </IconButton>
           </Box>
           <Divider />
 
-          {/* Navigation Links */}
+          {/* Search */}
           <ListItemButton
             onClick={() => { setMobileMenuOpen(false); setSearchOpen(true); }}
             sx={{ py: 1.5 }}
           >
-            <ListItemIcon sx={{ minWidth: 32 }}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
               <SearchIcon sx={{ fontSize: 20 }} />
             </ListItemIcon>
-            <ListItemText
-              primary="Search"
-              primaryTypographyProps={{ fontWeight: 400 }}
-            />
+            <ListItemText primary="Search" primaryTypographyProps={{ fontWeight: 400 }} />
           </ListItemButton>
-          <List sx={{ flexGrow: 1, py: 1 }}>
-            {pathname !== '/' && (
-              <ListItemButton
-                component={Link}
-                href={'/'}
-                onClick={toggleMobileMenu}
-                sx={{ py: 1.5 }}
-              >
-                <ListItemIcon sx={{ minWidth: 32 }}>
-                  <HomeRoundedIcon sx={{ fontSize: 20 }} />
-                </ListItemIcon>
-                <ListItemText
-                  primary={t('nav.home')}
-                  primaryTypographyProps={{ fontWeight: 400 }}
-                />
-              </ListItemButton>
-            )}
-            {navigationLinks.map((link) => {
-              const isActive = pathname === link.href || (link.href as string !== '/' && pathname.startsWith(link.href));
+
+          {/* Home (when not on homepage) */}
+          {pathname !== '/' && (
+            <ListItemButton
+              component={Link}
+              href="/"
+              onClick={toggleMobileMenu}
+              sx={{ py: 1.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <HomeRoundedIcon sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              <ListItemText primary={t('nav.home')} primaryTypographyProps={{ fontWeight: 400 }} />
+            </ListItemButton>
+          )}
+
+          {/* Nav groups as accordion */}
+          <List sx={{ flexGrow: 1, py: 0 }}>
+            {NAV_GROUPS.map((group) => {
+              const isOpen = expandedGroup === group.key;
+              const isActive = isGroupActive(group);
+              const allLinks = group.columns.flatMap((col) => col.links);
+
               return (
-                <ListItemButton
-                  key={link.href}
-                  component={Link}
-                  href={link.href}
-                  selected={isActive}
-                  onClick={toggleMobileMenu}
-                  sx={{
-                    py: 1.5,
-                    '&.Mui-selected': {
-                      color: 'primary.main',
-                      borderLeft: '3px solid',
-                      borderColor: 'primary.main',
-                      bgcolor: 'primary.50',
-                    },
-                  }}
-                >
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {t(`nav.${link.labelKey}`)}
-                        {'badge' in link && link.badge && (
-                          <Chip
-                            label={link.badge}
-                            size="small"
-                            sx={{
-                              height: 18,
-                              fontSize: '0.6rem',
-                              fontWeight: 800,
-                              letterSpacing: '0.05em',
-                              bgcolor: '#FF6B35',
-                              color: '#fff',
-                              '& .MuiChip-label': { px: 0.75, py: 0 },
-                            }}
-                          />
-                        )}
-                      </Box>
-                    }
-                    primaryTypographyProps={{
-                      fontWeight: isActive ? 600 : 400,
-                      component: 'div',
+                <Box key={group.key}>
+                  <ListItemButton
+                    onClick={() => toggleMobileGroup(group.key)}
+                    sx={{
+                      py: 1.5,
+                      borderLeft: isActive ? '3px solid' : '3px solid transparent',
+                      borderColor: isActive ? 'primary.main' : 'transparent',
+                      bgcolor: isActive ? 'primary.50' : 'transparent',
                     }}
-                  />
-                </ListItemButton>
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      {group.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={t(`nav.${group.labelKey}`)}
+                      primaryTypographyProps={{ fontWeight: isActive ? 600 : 400 }}
+                    />
+                    <KeyboardArrowDownIcon
+                      sx={{
+                        fontSize: 20,
+                        color: 'text.secondary',
+                        transition: 'transform 200ms ease',
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  </ListItemButton>
+
+                  <Collapse in={isOpen} timeout={200}>
+                    <List disablePadding sx={{ bgcolor: 'grey.50' }}>
+                      {allLinks.map((link) => {
+                        const isLinkActive =
+                          pathname === link.href ||
+                          (link.href !== '/' && pathname.startsWith(link.href));
+                        return (
+                          <ListItemButton
+                            key={link.href}
+                            component={Link}
+                            href={link.href as any}
+                            onClick={toggleMobileMenu}
+                            selected={isLinkActive}
+                            sx={{
+                              pl: 6.5,
+                              py: 1.25,
+                              '&.Mui-selected': {
+                                color: 'primary.main',
+                                bgcolor: 'primary.50',
+                              },
+                            }}
+                          >
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: isLinkActive ? 600 : 400 }}>
+                                    {link.label}
+                                  </Typography>
+                                  {link.badge && (
+                                    <Chip
+                                      label={link.badge}
+                                      size="small"
+                                      sx={{
+                                        height: 16,
+                                        fontSize: '0.55rem',
+                                        fontWeight: 800,
+                                        bgcolor: '#FF6B35',
+                                        color: '#fff',
+                                        '& .MuiChip-label': { px: 0.5 },
+                                      }}
+                                    />
+                                  )}
+                                </Box>
+                              }
+                            />
+                          </ListItemButton>
+                        );
+                      })}
+                    </List>
+                  </Collapse>
+                  <Divider />
+                </Box>
               );
             })}
           </List>
 
-          {/* Mobile: My Enrollment link for enrolled students */}
+          {/* My Enrollment */}
           {isEnrolled && (
             <Box sx={{ px: 2, pb: 1 }}>
               <Button
@@ -627,7 +868,7 @@ export default function Header() {
             </Box>
           )}
 
-          {/* Mobile CTA Button */}
+          {/* Mobile CTA */}
           {!isApplyPage && (
             <Box sx={{ px: 2, pb: 1.5 }}>
               {ctaConfig.href ? (
@@ -644,21 +885,11 @@ export default function Header() {
                     textTransform: 'none',
                     py: 1.2,
                     ...(appStatus === 'approved'
-                      ? {
-                        bgcolor: '#2E7D32',
-                        color: '#fff',
-                        '&:hover': { bgcolor: '#1B5E20' },
-                      }
+                      ? { bgcolor: '#2E7D32', color: '#fff', '&:hover': { bgcolor: '#1B5E20' } }
                       : appStatus === 'draft'
-                        ? {
-                          borderColor: 'primary.main',
-                          color: 'primary.main',
-                        }
+                        ? { borderColor: 'primary.main', color: 'primary.main' }
                         : appStatus
-                          ? {
-                            borderColor: '#1976D2',
-                            color: '#1976D2',
-                          }
+                          ? { borderColor: '#1976D2', color: '#1976D2' }
                           : {}),
                   }}
                 >
@@ -686,7 +917,7 @@ export default function Header() {
           )}
           <Divider />
 
-          {/* Auth Section */}
+          {/* Auth */}
           <Box
             sx={{
               px: 2,
@@ -702,7 +933,7 @@ export default function Header() {
           </Box>
           <Divider />
 
-          {/* Language Section */}
+          {/* Language */}
           <Box sx={{ px: 2, py: 2 }}>
             <Typography
               variant="caption"
@@ -717,10 +948,7 @@ export default function Header() {
                   key={loc}
                   size="small"
                   variant={loc === locale ? 'contained' : 'outlined'}
-                  onClick={() => {
-                    handleLocaleChange(loc);
-                    toggleMobileMenu();
-                  }}
+                  onClick={() => { handleLocaleChange(loc); toggleMobileMenu(); }}
                   sx={{
                     minWidth: 0,
                     minHeight: 36,
@@ -736,9 +964,13 @@ export default function Header() {
           </Box>
         </SwipeableDrawer>
       </AppBar>
-      {/* Spacer to prevent content from sliding under fixed AppBar + broadcast banner */}
+
+      {/* Spacer */}
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }} />
+      <Toolbar
+        disableGutters
+        sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }}
+      />
     </>
   );
 }

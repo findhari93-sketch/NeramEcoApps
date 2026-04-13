@@ -20,6 +20,8 @@ const footerLinks = {
     { label: 'Home', href: '/' },
     { label: 'About Us', href: '/about' },
     { label: 'Courses', href: '/courses' },
+    { label: 'Architecture Colleges', href: '/colleges' },
+    { label: 'Compare Colleges', href: '/colleges/compare' },
     { label: 'Coaching', href: '/coaching' },
     { label: 'Apply Now', href: '/apply' },
     { label: 'Contact', href: '/contact' },
