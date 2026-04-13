@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import {
   Container, Typography, Box, Grid, Paper, Stack, CircularProgress, Button,
 } from '@mui/material';
@@ -48,7 +48,7 @@ const COMPARE_ROWS: Array<{
   { label: 'State', key: 'state' },
 ];
 
-export default function ComparePage() {
+function CompareContent() {
   const searchParams = useSearchParams();
   const slugsParam = searchParams.get('slugs') ?? '';
   const slugs = slugsParam.split(',').filter(Boolean).slice(0, 3);
@@ -188,5 +188,13 @@ export default function ComparePage() {
         </Button>
       </Stack>
     </Container>
+  );
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<Container sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Container>}>
+      <CompareContent />
+    </Suspense>
   );
 }
