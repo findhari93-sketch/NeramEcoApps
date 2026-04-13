@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Box, Container, Grid, Paper, Stack, Typography } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
@@ -7,6 +8,8 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import BusinessIcon from '@mui/icons-material/Business';
 import PeopleIcon from '@mui/icons-material/People';
 import HouseIcon from '@mui/icons-material/House';
+import PlayCircleIcon from '@mui/icons-material/PlayCircle';
+import TourIcon from '@mui/icons-material/Tour';
 
 import HeroSection from './HeroSection';
 import NavPills from './NavPills';
@@ -20,21 +23,41 @@ import ReviewSection from './ReviewSection';
 import CommentSection from './CommentSection';
 import TierGate from './TierGate';
 import LeadCaptureButton from './LeadCaptureButton';
+import CollegeYouTube from './CollegeYouTube';
 import type { CollegeDetail, CollegeListItem, CollegeTier } from '@/lib/college-hub/types';
+
+const AintraChat = dynamic(() => import('./AintraChat'), { ssr: false });
+const VirtualTour = dynamic(() => import('./VirtualTour'), { ssr: false });
 
 interface CollegePageTemplateProps {
   college: CollegeDetail;
   similarColleges: CollegeListItem[];
 }
 
-const NAV_PILLS = [
-  { id: 'overview', label: 'Overview', icon: <InfoIcon sx={{ fontSize: 16 }} /> },
-  { id: 'fees', label: 'Fees', icon: <AttachMoneyIcon sx={{ fontSize: 16 }} /> },
-  { id: 'cutoffs', label: 'Cutoffs', icon: <TrendingUpIcon sx={{ fontSize: 16 }} /> },
-  { id: 'placements', label: 'Placements', icon: <TrendingUpIcon sx={{ fontSize: 16 }} /> },
-  { id: 'infrastructure', label: 'Infrastructure', icon: <BusinessIcon sx={{ fontSize: 16 }} /> },
-  { id: 'faculty', label: 'Faculty', icon: <PeopleIcon sx={{ fontSize: 16 }} /> },
-];
+function buildNavPills(college: CollegeDetail) {
+  const pills = [
+    { id: 'overview', label: 'Overview', icon: <InfoIcon sx={{ fontSize: 16 }} /> },
+    { id: 'fees', label: 'Fees', icon: <AttachMoneyIcon sx={{ fontSize: 16 }} /> },
+    { id: 'cutoffs', label: 'Cutoffs', icon: <TrendingUpIcon sx={{ fontSize: 16 }} /> },
+    { id: 'placements', label: 'Placements', icon: <TrendingUpIcon sx={{ fontSize: 16 }} /> },
+    { id: 'infrastructure', label: 'Infrastructure', icon: <BusinessIcon sx={{ fontSize: 16 }} /> },
+    { id: 'faculty', label: 'Faculty', icon: <PeopleIcon sx={{ fontSize: 16 }} /> },
+  ];
+
+  if (college.youtube_channel_url) {
+    pills.push({ id: 'youtube', label: 'Videos', icon: <PlayCircleIcon sx={{ fontSize: 16 }} /> });
+  }
+
+  if (
+    college.neram_tier === 'platinum' &&
+    college.virtual_tour_scenes &&
+    college.virtual_tour_scenes.length > 0
+  ) {
+    pills.push({ id: 'virtual-tour', label: '360\u00b0 Tour', icon: <TourIcon sx={{ fontSize: 16 }} /> });
+  }
+
+  return pills;
+}
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
@@ -58,7 +81,7 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
       <HeroSection college={college} />
 
       {/* Nav Pills — sticky */}
-      <NavPills pills={NAV_PILLS} />
+      <NavPills pills={buildNavPills(college)} />
 
       <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
         {/* Mobile lead capture — below hero, above content */}
@@ -192,6 +215,25 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
               </TierGate>
             </Section>
 
+            {/* YouTube Channel */}
+            {college.youtube_channel_url && (
+              <Section id="youtube" title="Official YouTube Channel">
+                <CollegeYouTube youtubeChannelUrl={college.youtube_channel_url} />
+              </Section>
+            )}
+
+            {/* Virtual Campus Tour — Platinum only, when scenes exist */}
+            {college.neram_tier === 'platinum' &&
+              college.virtual_tour_scenes &&
+              college.virtual_tour_scenes.length > 0 && (
+                <Section id="virtual-tour" title="Virtual Campus Tour">
+                  <VirtualTour
+                    scenes={college.virtual_tour_scenes}
+                    collegeName={college.name}
+                  />
+                </Section>
+              )}
+
             {/* Reviews section */}
             <Box id="reviews" sx={{ mb: 4 }}>
               <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>Student Reviews</Typography>
@@ -202,6 +244,14 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
             <Box id="qa" sx={{ mb: 4 }}>
               <CommentSection collegeId={college.id} collegeName={college.name} />
             </Box>
+
+            {/* Aintra AI Chat — Gold and Platinum only */}
+            {(college.neram_tier === 'gold' || college.neram_tier === 'platinum') && (
+              <AintraChat
+                collegeId={college.id}
+                collegeName={college.short_name ?? college.name}
+              />
+            )}
 
             {/* Claim CTA */}
             {!college.claimed && (

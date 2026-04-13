@@ -68,6 +68,7 @@ export interface College {
   logo_url: string | null;
   hero_image_url: string | null;
   gallery_images: string[] | null;
+  virtual_tour_scenes?: VirtualTourScene[] | null;
   // Content
   highlights: string[] | null;
   about: string | null;
@@ -276,6 +277,21 @@ export interface CollegeComment {
   status: 'approved' | 'removed';
   created_at: string;
   replies?: CollegeComment[];
+}
+
+// Phase 6: Virtual campus tour data (Platinum-tier colleges only)
+export interface VirtualTourHotspot {
+  pitch: number;
+  yaw: number;
+  text: string;
+  targetScene?: string;
+}
+
+export interface VirtualTourScene {
+  id: string;
+  label: string;
+  imageUrl: string;
+  hotspots?: VirtualTourHotspot[];
 }
 
 export interface CollegeLead {
