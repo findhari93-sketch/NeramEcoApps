@@ -19,6 +19,7 @@ import ClaimProfileCTA from './ClaimProfileCTA';
 import ReviewSection from './ReviewSection';
 import CommentSection from './CommentSection';
 import TierGate from './TierGate';
+import LeadCaptureButton from './LeadCaptureButton';
 import type { CollegeDetail, CollegeListItem, CollegeTier } from '@/lib/college-hub/types';
 
 interface CollegePageTemplateProps {
@@ -60,6 +61,11 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
       <NavPills pills={NAV_PILLS} />
 
       <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        {/* Mobile lead capture — below hero, above content */}
+        <Box sx={{ display: { xs: 'block', md: 'none' }, py: 2 }}>
+          <LeadCaptureButton collegeId={college.id} collegeName={college.name} />
+        </Box>
+
         <Grid container spacing={{ xs: 0, md: 3 }}>
           {/* Main content */}
           <Grid item xs={12} md={8}>
@@ -255,6 +261,11 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
                   )}
                 </Stack>
               </Paper>
+
+              {/* Lead capture CTA */}
+              <Box sx={{ mt: 2 }}>
+                <LeadCaptureButton collegeId={college.id} collegeName={college.name} />
+              </Box>
 
               {/* Contact card */}
               {(college.website || college.admissions_phone || college.admissions_email) && (

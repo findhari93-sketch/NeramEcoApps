@@ -151,6 +151,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Overview', icon: DomainIcon, path: '/college-hub' },
       { text: 'Colleges', icon: LeaderboardIcon, path: '/college-hub/colleges' },
       { text: 'Review Queue', icon: StarHalfIcon, path: '/college-hub/reviews' },
+      { text: 'Leads', icon: PeopleIcon, path: '/college-hub/leads' },
       { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
     ],
   },
