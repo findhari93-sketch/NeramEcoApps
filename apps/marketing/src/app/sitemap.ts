@@ -30,6 +30,8 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/colleges/josaa', lastModified: '2026-04-12', i18n: true },
   { path: '/nata-hub', lastModified: '2026-04-13', i18n: true },
   { path: '/jee-barch-hub', lastModified: '2026-04-13', i18n: true },
+  { path: '/colleges/rankings/nirf', lastModified: '2026-04-13', i18n: true },
+  { path: '/colleges/rankings/archindex', lastModified: '2026-04-13', i18n: true },
   { path: '/scholarship', lastModified: '2026-02-01', i18n: true },
   { path: '/youtube-reward', lastModified: '2026-01-10', i18n: true },
   { path: '/free-resources', lastModified: '2026-02-15', i18n: true },
@@ -268,6 +270,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (err) {
     console.error('Failed to fetch college slugs for sitemap:', err);
+  }
+
+  // ─── Fee-based programmatic pages ────────────────────────────────────────
+  const FEE_RANGE_SLUGS = [
+    'below-1-lakh', 'below-2-lakhs', 'below-3-lakhs',
+    'below-5-lakhs', '5-to-10-lakhs', 'above-10-lakhs',
+  ];
+  for (const range of FEE_RANGE_SLUGS) {
+    entries.push({
+      url: `${baseUrl}/colleges/fees/${range}`,
+      lastModified: new Date('2026-04-13'),
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    });
   }
 
   return entries;

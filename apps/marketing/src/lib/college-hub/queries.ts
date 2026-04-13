@@ -189,6 +189,63 @@ export async function getActiveStates(): Promise<
   }));
 }
 
+// ─── Rankings ────────────────────────────────────────────────────────────────
+
+// ISR: NIRF ranked colleges
+export const getNIRFRankedColleges = cache(async (): Promise<CollegeListItem[]> => {
+  const supabase = createAdminClientISR(ISR_EXAM_HUB);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select(LISTING_SELECT)
+    .not('nirf_rank_architecture', 'is', null)
+    .order('nirf_rank_architecture', { ascending: true, nullsFirst: false })
+    .limit(100);
+  if (error) return [];
+  return (data ?? []) as CollegeListItem[];
+});
+
+// ISR: ArchIndex ranked colleges
+export const getArchIndexRankedColleges = cache(async (): Promise<CollegeListItem[]> => {
+  const supabase = createAdminClientISR(ISR_EXAM_HUB);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select(LISTING_SELECT)
+    .not('arch_index_score', 'is', null)
+    .order('arch_index_score', { ascending: false, nullsFirst: false })
+    .limit(100);
+  if (error) return [];
+  return (data ?? []) as CollegeListItem[];
+});
+
+// ─── Fee Range ────────────────────────────────────────────────────────────────
+
+export const FEE_RANGES = {
+  'below-1-lakh':   { label: 'Below ₹1 Lakh/year',   min: 0,       max: 100000 },
+  'below-2-lakhs':  { label: 'Below ₹2 Lakhs/year',  min: 0,       max: 200000 },
+  'below-3-lakhs':  { label: 'Below ₹3 Lakhs/year',  min: 0,       max: 300000 },
+  'below-5-lakhs':  { label: 'Below ₹5 Lakhs/year',  min: 0,       max: 500000 },
+  '5-to-10-lakhs':  { label: '₹5L - ₹10L/year',      min: 500000,  max: 1000000 },
+  'above-10-lakhs': { label: 'Above ₹10 Lakhs/year', min: 1000000, max: 99999999 },
+} as const;
+
+export type FeeRangeKey = keyof typeof FEE_RANGES;
+
+export const getCollegesByFeeRange = cache(async (rangeKey: FeeRangeKey): Promise<CollegeListItem[]> => {
+  const range = FEE_RANGES[rangeKey];
+  if (!range) return [];
+  const supabase = createAdminClientISR(ISR_EXAM_HUB);
+  const { data, error } = await supabase
+    .from('colleges')
+    .select(LISTING_SELECT)
+    .gte('annual_fee_approx', range.min)
+    .lte('annual_fee_approx', range.max)
+    .order('arch_index_score', { ascending: false, nullsFirst: false });
+  if (error) return [];
+  return (data ?? []) as CollegeListItem[];
+});
+
+// ─── Similar ──────────────────────────────────────────────────────────────────
+
 export const getSimilarColleges = cache(
   async (college: Pick<College, 'id' | 'state_slug' | 'type' | 'annual_fee_approx'>): Promise<CollegeListItem[]> => {
     const supabase = createAdminClientISR(ISR_COLLEGE);
