@@ -12,6 +12,7 @@
     "clean:build": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@mui/icons-material": "^5.15.0",
     "@mui/material": "^5.15.0",
     "@neram/auth": "workspace:*",
