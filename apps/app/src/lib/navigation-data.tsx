@@ -21,6 +21,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GavelIcon from '@mui/icons-material/Gavel';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import AppsIcon from '@mui/icons-material/Apps';
 import DescriptionIcon from '@mui/icons-material/Description';
 import InsightsIcon from '@mui/icons-material/Insights';
@@ -66,6 +67,7 @@ export interface GeneralNavItem {
 export const SIDEBAR_BOTTOM_NAV: GeneralNavItem[] = [
   { title: 'Dashboard', href: '/dashboard', icon: <DashboardIcon fontSize="small" /> },
   { title: 'My Applications', href: '/my-applications', icon: <AssignmentIcon fontSize="small" /> },
+  { title: 'Saved Colleges', href: '/saved-colleges', icon: <FavoriteIcon fontSize="small" /> },
   { title: 'Support', href: '/support', icon: <HelpOutlineIcon fontSize="small" /> },
   { title: 'Profile', href: '/profile', icon: <PersonIcon fontSize="small" /> },
 ];

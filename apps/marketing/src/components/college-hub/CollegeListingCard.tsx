@@ -158,7 +158,7 @@ export default function CollegeListingCard({ college, compact = false }: College
               {!compact && (
                 <>
                   <CompareButton slug={college.slug} collegeName={college.name} />
-                  <SaveCollegeButton slug={college.slug} collegeName={college.name} size="small" />
+                  <SaveCollegeButton slug={college.slug} collegeId={college.id} collegeName={college.name} size="small" />
                 </>
               )}
             </Stack>
