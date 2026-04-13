@@ -18,7 +18,8 @@ import SimilarColleges from './SimilarColleges';
 import ClaimProfileCTA from './ClaimProfileCTA';
 import ReviewSection from './ReviewSection';
 import CommentSection from './CommentSection';
-import type { CollegeDetail, CollegeListItem } from '@/lib/college-hub/types';
+import TierGate from './TierGate';
+import type { CollegeDetail, CollegeListItem, CollegeTier } from '@/lib/college-hub/types';
 
 interface CollegePageTemplateProps {
   college: CollegeDetail;
@@ -112,59 +113,77 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
 
             {/* Placements */}
             <Section id="placements" title="Placements">
-              <PlacementStats placements={college.placements} />
+              <TierGate
+                requiredTier="gold"
+                featureName="Placement Statistics"
+                collegeTier={college.neram_tier as CollegeTier}
+              >
+                <PlacementStats placements={college.placements} />
+              </TierGate>
             </Section>
 
             {/* Infrastructure */}
             <Section id="infrastructure" title="Infrastructure">
-              <InfrastructureSection infrastructure={college.infrastructure} />
+              <TierGate
+                requiredTier="silver"
+                featureName="Infrastructure Details"
+                collegeTier={college.neram_tier as CollegeTier}
+              >
+                <InfrastructureSection infrastructure={college.infrastructure} />
+              </TierGate>
             </Section>
 
             {/* Faculty */}
             <Section id="faculty" title="Faculty">
-              {college.faculty.length === 0 ? (
-                <Typography color="text.secondary" variant="body2">
-                  Faculty details not yet available.
-                </Typography>
-              ) : (
-                <Grid container spacing={1.5}>
-                  {college.faculty.map((f) => (
-                    <Grid key={f.id} item xs={12} sm={6}>
-                      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-                        <Stack direction="row" gap={1.5} alignItems="center">
-                          <Box
-                            sx={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: '50%',
-                              bgcolor: '#f1f5f9',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <PeopleIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
-                          </Box>
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {f.name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {[f.designation, f.specialization].filter(Boolean).join(' · ')}
-                            </Typography>
-                            {f.is_practicing_architect && (
-                              <Typography variant="caption" sx={{ display: 'block', color: 'success.main', fontWeight: 500 }}>
-                                Practicing Architect
+              <TierGate
+                requiredTier="silver"
+                featureName="Faculty Profiles"
+                collegeTier={college.neram_tier as CollegeTier}
+              >
+                {college.faculty.length === 0 ? (
+                  <Typography color="text.secondary" variant="body2">
+                    Faculty details not yet available.
+                  </Typography>
+                ) : (
+                  <Grid container spacing={1.5}>
+                    {college.faculty.map((f) => (
+                      <Grid key={f.id} item xs={12} sm={6}>
+                        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+                          <Stack direction="row" gap={1.5} alignItems="center">
+                            <Box
+                              sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: '50%',
+                                bgcolor: '#f1f5f9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <PeopleIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                            </Box>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {f.name}
                               </Typography>
-                            )}
-                          </Box>
-                        </Stack>
-                      </Paper>
-                    </Grid>
-                  ))}
-                </Grid>
-              )}
+                              <Typography variant="caption" color="text.secondary">
+                                {[f.designation, f.specialization].filter(Boolean).join(' · ')}
+                              </Typography>
+                              {f.is_practicing_architect && (
+                                <Typography variant="caption" sx={{ display: 'block', color: 'success.main', fontWeight: 500 }}>
+                                  Practicing Architect
+                                </Typography>
+                              )}
+                            </Box>
+                          </Stack>
+                        </Paper>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
+              </TierGate>
             </Section>
 
             {/* Reviews section */}
