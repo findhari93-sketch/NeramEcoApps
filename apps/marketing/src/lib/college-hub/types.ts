@@ -238,3 +238,61 @@ export interface ArchIndexBreakdown {
   satisfaction: number;
   alumni: number;
 }
+
+// Phase 2: Engagement types
+
+export interface CollegeReview {
+  id: string;
+  college_id: string;
+  reviewer_name: string;
+  reviewer_phone?: string | null;
+  reviewer_year?: string | null;
+  firebase_uid?: string | null;
+  rating_overall?: number | null;
+  rating_studio?: number | null;
+  rating_faculty?: number | null;
+  rating_campus?: number | null;
+  rating_placements?: number | null;
+  rating_value?: number | null;
+  rating_infrastructure?: number | null;
+  title?: string | null;
+  body: string;
+  pros?: string | null;
+  cons?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'flagged';
+  rejected_reason?: string | null;
+  created_at: string;
+}
+
+export interface CollegeComment {
+  id: string;
+  college_id: string;
+  parent_id?: string | null;
+  author_name: string;
+  author_phone?: string | null;
+  firebase_uid?: string | null;
+  body: string;
+  is_ambassador: boolean;
+  status: 'approved' | 'removed';
+  created_at: string;
+  replies?: CollegeComment[];
+}
+
+export interface CollegeLead {
+  id: string;
+  college_id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  nata_score?: number | null;
+  jee_score?: number | null;
+  city?: string | null;
+  message?: string | null;
+  consent_given: boolean;
+  source?: string | null;
+  firebase_uid?: string | null;
+  lead_window_active?: boolean | null;
+  status: 'new' | 'contacted' | 'qualified' | 'converted' | 'dropped';
+  created_at: string;
+  updated_at?: string;
+}

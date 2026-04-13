@@ -1312,6 +1312,63 @@ export type Database = {
           },
         ]
       }
+      college_comments: {
+        Row: {
+          author_name: string
+          author_phone: string | null
+          body: string
+          college_id: string
+          created_at: string | null
+          firebase_uid: string | null
+          id: string
+          is_ambassador: boolean | null
+          parent_id: string | null
+          removed_reason: string | null
+          status: string
+        }
+        Insert: {
+          author_name: string
+          author_phone?: string | null
+          body: string
+          college_id: string
+          created_at?: string | null
+          firebase_uid?: string | null
+          id?: string
+          is_ambassador?: boolean | null
+          parent_id?: string | null
+          removed_reason?: string | null
+          status?: string
+        }
+        Update: {
+          author_name?: string
+          author_phone?: string | null
+          body?: string
+          college_id?: string
+          created_at?: string | null
+          firebase_uid?: string | null
+          id?: string
+          is_ambassador?: boolean | null
+          parent_id?: string | null
+          removed_reason?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_comments_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "college_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "college_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       college_counseling_participation: {
         Row: {
           branches: Json
@@ -1626,6 +1683,71 @@ export type Database = {
           },
         ]
       }
+      college_leads: {
+        Row: {
+          city: string | null
+          college_id: string
+          consent_given: boolean
+          created_at: string | null
+          email: string | null
+          firebase_uid: string | null
+          id: string
+          jee_score: number | null
+          lead_window_active: boolean | null
+          message: string | null
+          name: string
+          nata_score: number | null
+          phone: string
+          source: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          city?: string | null
+          college_id: string
+          consent_given?: boolean
+          created_at?: string | null
+          email?: string | null
+          firebase_uid?: string | null
+          id?: string
+          jee_score?: number | null
+          lead_window_active?: boolean | null
+          message?: string | null
+          name: string
+          nata_score?: number | null
+          phone: string
+          source?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          city?: string | null
+          college_id?: string
+          consent_given?: boolean
+          created_at?: string | null
+          email?: string | null
+          firebase_uid?: string | null
+          id?: string
+          jee_score?: number | null
+          lead_window_active?: boolean | null
+          message?: string | null
+          name?: string
+          nata_score?: number | null
+          phone?: string
+          source?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_leads_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       college_placements: {
         Row: {
           academic_year: string
@@ -1684,6 +1806,92 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "college_placements_college_id_fkey"
+            columns: ["college_id"]
+            isOneToOne: false
+            referencedRelation: "colleges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      college_reviews: {
+        Row: {
+          body: string
+          college_id: string
+          cons: string | null
+          created_at: string | null
+          firebase_uid: string | null
+          id: string
+          moderated_at: string | null
+          moderated_by: string | null
+          pros: string | null
+          rating_campus: number | null
+          rating_faculty: number | null
+          rating_infrastructure: number | null
+          rating_overall: number | null
+          rating_placements: number | null
+          rating_studio: number | null
+          rating_value: number | null
+          rejected_reason: string | null
+          reviewer_name: string
+          reviewer_phone: string | null
+          reviewer_year: string | null
+          status: string
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          body: string
+          college_id: string
+          cons?: string | null
+          created_at?: string | null
+          firebase_uid?: string | null
+          id?: string
+          moderated_at?: string | null
+          moderated_by?: string | null
+          pros?: string | null
+          rating_campus?: number | null
+          rating_faculty?: number | null
+          rating_infrastructure?: number | null
+          rating_overall?: number | null
+          rating_placements?: number | null
+          rating_studio?: number | null
+          rating_value?: number | null
+          rejected_reason?: string | null
+          reviewer_name: string
+          reviewer_phone?: string | null
+          reviewer_year?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          body?: string
+          college_id?: string
+          cons?: string | null
+          created_at?: string | null
+          firebase_uid?: string | null
+          id?: string
+          moderated_at?: string | null
+          moderated_by?: string | null
+          pros?: string | null
+          rating_campus?: number | null
+          rating_faculty?: number | null
+          rating_infrastructure?: number | null
+          rating_overall?: number | null
+          rating_placements?: number | null
+          rating_studio?: number | null
+          rating_value?: number | null
+          rejected_reason?: string | null
+          reviewer_name?: string
+          reviewer_phone?: string | null
+          reviewer_year?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "college_reviews_college_id_fkey"
             columns: ["college_id"]
             isOneToOne: false
             referencedRelation: "colleges"
