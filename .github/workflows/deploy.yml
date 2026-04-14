@@ -178,8 +178,9 @@ jobs:
     needs: [test, detect-changes]
     if: |
       always() &&
-      (needs.test.result == 'success') &&
-      (needs.detect-changes.outputs.marketing == 'true' || needs.detect-changes.outputs.shared == 'true')
+      (needs.detect-changes.result == 'success') &&
+      (needs.detect-changes.outputs.marketing == 'true' || needs.detect-changes.outputs.shared == 'true') &&
+      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
     env:
       VERCEL_PROJECT_ID: prj_kCLOVjMqr99PfKvbdiZdM8vHpNST
     steps:
@@ -243,8 +244,9 @@ jobs:
     needs: [test, detect-changes]
     if: |
       always() &&
-      (needs.test.result == 'success') &&
-      (needs.detect-changes.outputs.app == 'true' || needs.detect-changes.outputs.shared == 'true')
+      (needs.detect-changes.result == 'success') &&
+      (needs.detect-changes.outputs.app == 'true' || needs.detect-changes.outputs.shared == 'true') &&
+      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
     env:
       VERCEL_PROJECT_ID: prj_n1hKWpSZezUx3m3ui0i2eLKq13OR
     steps:
@@ -308,8 +310,9 @@ jobs:
     needs: [test, detect-changes]
     if: |
       always() &&
-      (needs.test.result == 'success') &&
-      (needs.detect-changes.outputs.nexus == 'true' || needs.detect-changes.outputs.shared == 'true')
+      (needs.detect-changes.result == 'success') &&
+      (needs.detect-changes.outputs.nexus == 'true' || needs.detect-changes.outputs.shared == 'true') &&
+      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
     env:
       VERCEL_PROJECT_ID: prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX
     steps:
@@ -373,8 +376,9 @@ jobs:
     needs: [test, detect-changes]
     if: |
       always() &&
-      (needs.test.result == 'success') &&
-      (needs.detect-changes.outputs.admin == 'true' || needs.detect-changes.outputs.shared == 'true')
+      (needs.detect-changes.result == 'success') &&
+      (needs.detect-changes.outputs.admin == 'true' || needs.detect-changes.outputs.shared == 'true') &&
+      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
     env:
       VERCEL_PROJECT_ID: prj_QoCOUGXPvDYAfOXHYFpF62f57hWV
     steps:
