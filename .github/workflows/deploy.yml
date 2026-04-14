@@ -23,10 +23,11 @@ concurrency:
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  VERCEL_ORG_ID: team_pINk5YGOGsajESQgHpsgyoEU
 
 jobs:
   # ===========================================
-  # RUN TESTS BEFORE ANY DEPLOYMENT
+  # PRE-DEPLOY TESTS
   # ===========================================
   test:
     name: Pre-Deploy Tests
@@ -59,16 +60,47 @@ jobs:
         run: pnpm test:run
 
   # ===========================================
-  # STAGING: Database Migrations
-  # Vercel GitHub integration handles app deploys automatically
+  # DETECT WHICH APPS CHANGED
   # ===========================================
-  deploy-staging:
-    name: Deploy to Staging
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      marketing: ${{ steps.filter.outputs.marketing }}
+      app: ${{ steps.filter.outputs.app }}
+      nexus: ${{ steps.filter.outputs.nexus }}
+      admin: ${{ steps.filter.outputs.admin }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            marketing:
+              - 'apps/marketing/**'
+            app:
+              - 'apps/app/**'
+            nexus:
+              - 'apps/nexus/**'
+            admin:
+              - 'apps/admin/**'
+            shared:
+              - 'packages/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'turbo.json'
+
+  # ===========================================
+  # DATABASE MIGRATIONS (Staging)
+  # ===========================================
+  deploy-db-staging:
+    name: DB Migrations (Staging)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
-    environment:
-      name: staging
-      url: https://staging.neramclasses.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,31 +131,14 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_STAGING }}
 
-      - name: Post Staging URLs
-        run: |
-          echo "## Staging Deployment 🚀" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "DB migrations pushed. App deploys handled by Vercel GitHub integration." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| App | URL |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|-----|" >> $GITHUB_STEP_SUMMARY
-          echo "| Marketing | https://staging.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| App | https://staging-app.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| Nexus | https://staging-nexus.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| Admin | https://staging-admin.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-
   # ===========================================
-  # PRODUCTION: Database Migrations (Requires tests to pass)
-  # Vercel GitHub integration handles app deploys automatically
+  # DATABASE MIGRATIONS (Production)
   # ===========================================
-  deploy-production:
-    name: Deploy to Production
+  deploy-db-production:
+    name: DB Migrations (Production)
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    environment:
-      name: production
-      url: https://neramclasses.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -154,15 +169,305 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_PRODUCTION }}
 
-      - name: Post Production URLs
+  # ===========================================
+  # BUILD & DEPLOY: Marketing
+  # ===========================================
+  deploy-marketing:
+    name: Deploy Marketing
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes]
+    if: |
+      always() &&
+      (needs.test.result == 'success') &&
+      (needs.detect-changes.outputs.marketing == 'true' || needs.detect-changes.outputs.shared == 'true')
+    env:
+      VERCEL_PROJECT_ID: prj_kCLOVjMqr99PfKvbdiZdM8vHpNST
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Pull Vercel Environment
         run: |
-          echo "## Production Deployment 🎉" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy (prebuilt)
+        id: deploy
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          else
+            url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          fi
+          echo "url=$url" >> $GITHUB_OUTPUT
+
+      - name: Post deploy URL
+        run: |
+          echo "### Marketing deployed" >> $GITHUB_STEP_SUMMARY
+          echo "URL: ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # BUILD & DEPLOY: App
+  # ===========================================
+  deploy-app:
+    name: Deploy App
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes]
+    if: |
+      always() &&
+      (needs.test.result == 'success') &&
+      (needs.detect-changes.outputs.app == 'true' || needs.detect-changes.outputs.shared == 'true')
+    env:
+      VERCEL_PROJECT_ID: prj_n1hKWpSZezUx3m3ui0i2eLKq13OR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy (prebuilt)
+        id: deploy
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          else
+            url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          fi
+          echo "url=$url" >> $GITHUB_OUTPUT
+
+      - name: Post deploy URL
+        run: |
+          echo "### App deployed" >> $GITHUB_STEP_SUMMARY
+          echo "URL: ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # BUILD & DEPLOY: Nexus
+  # ===========================================
+  deploy-nexus:
+    name: Deploy Nexus
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes]
+    if: |
+      always() &&
+      (needs.test.result == 'success') &&
+      (needs.detect-changes.outputs.nexus == 'true' || needs.detect-changes.outputs.shared == 'true')
+    env:
+      VERCEL_PROJECT_ID: prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy (prebuilt)
+        id: deploy
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          else
+            url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          fi
+          echo "url=$url" >> $GITHUB_OUTPUT
+
+      - name: Post deploy URL
+        run: |
+          echo "### Nexus deployed" >> $GITHUB_STEP_SUMMARY
+          echo "URL: ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # BUILD & DEPLOY: Admin
+  # ===========================================
+  deploy-admin:
+    name: Deploy Admin
+    runs-on: ubuntu-latest
+    needs: [test, detect-changes]
+    if: |
+      always() &&
+      (needs.test.result == 'success') &&
+      (needs.detect-changes.outputs.admin == 'true' || needs.detect-changes.outputs.shared == 'true')
+    env:
+      VERCEL_PROJECT_ID: prj_QoCOUGXPvDYAfOXHYFpF62f57hWV
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Pull Vercel Environment
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy (prebuilt)
+        id: deploy
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          else
+            url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          fi
+          echo "url=$url" >> $GITHUB_OUTPUT
+
+      - name: Post deploy URL
+        run: |
+          echo "### Admin deployed" >> $GITHUB_STEP_SUMMARY
+          echo "URL: ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # DEPLOYMENT SUMMARY
+  # ===========================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [detect-changes, deploy-marketing, deploy-app, deploy-nexus, deploy-admin]
+    if: always()
+    steps:
+      - name: Post summary
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENV="Production"
+          else
+            ENV="Staging"
+          fi
+
+          echo "## $ENV Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "DB migrations pushed. App deploys handled by Vercel GitHub integration." >> $GITHUB_STEP_SUMMARY
+          echo "| App | Changed | Deploy Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|---------|---------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Marketing | ${{ needs.detect-changes.outputs.marketing == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-marketing.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| App | ${{ needs.detect-changes.outputs.app == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-app.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Nexus | ${{ needs.detect-changes.outputs.nexus == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-nexus.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Admin | ${{ needs.detect-changes.outputs.admin == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-admin.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| App | URL |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|-----|" >> $GITHUB_STEP_SUMMARY
-          echo "| Marketing | https://neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| App | https://app.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| Nexus | https://nexus.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          echo "| Admin | https://admin.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$ENV" = "Production" ]; then
+            echo "| App | URL |" >> $GITHUB_STEP_SUMMARY
+            echo "|-----|-----|" >> $GITHUB_STEP_SUMMARY
+            echo "| Marketing | https://neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+            echo "| App | https://app.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+            echo "| Nexus | https://nexus.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+            echo "| Admin | https://admin.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| App | URL |" >> $GITHUB_STEP_SUMMARY
+            echo "|-----|-----|" >> $GITHUB_STEP_SUMMARY
+            echo "| Marketing | https://staging.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+            echo "| App | https://staging-app.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+            echo "| Nexus | https://staging-nexus.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+            echo "| Admin | https://staging-admin.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -34,7 +34,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**", ".vercel/**"],
-      "env": ["VERCEL_URL"]
+      "env": []
     },
     "dev": {
       "cache": false,
