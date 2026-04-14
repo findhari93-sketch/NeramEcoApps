@@ -80,13 +80,13 @@ export async function GET(request: NextRequest) {
 
     // Fetch drawing progress
     const { count: totalExercises } = await supabase
-      .from('nexus_drawing_exercises')
+      .from('nexus_drawing_exercises' as any)
       .select('*, category:nexus_drawing_categories!inner(level:nexus_drawing_levels!inner(classroom_id))', { count: 'exact', head: true })
       .eq('nexus_drawing_categories.nexus_drawing_levels.classroom_id', classroomId)
       .eq('is_active', true);
 
     const { count: approvedExercises } = await supabase
-      .from('nexus_drawing_submissions')
+      .from('nexus_drawing_submissions' as any)
       .select('*, exercise:nexus_drawing_exercises!inner(category:nexus_drawing_categories!inner(level:nexus_drawing_levels!inner(classroom_id)))', { count: 'exact', head: true })
       .eq('student_id', studentId)
       .eq('status', 'approved')

@@ -90,15 +90,15 @@ export async function PATCH(
 
     // Notify student if this is a re-review
     if (wasAlreadyReviewed) {
-      void supabase
-        .from('drawing_notifications' as any)
-        .insert({
-          student_id: submission.student_id,
-          submission_id: id,
-          message: 'Your teacher has reviewed your drawing again. Check the updated feedback.',
-        })
-        .then(() => {})
-        .catch(() => {}); // non-critical, fire and forget
+      void Promise.resolve(
+        supabase
+          .from('drawing_notifications' as any)
+          .insert({
+            student_id: submission.student_id,
+            submission_id: id,
+            message: 'Your teacher has reviewed your drawing again. Check the updated feedback.',
+          })
+      ).catch(() => {}); // non-critical, fire and forget
     }
 
     return NextResponse.json({ submission });

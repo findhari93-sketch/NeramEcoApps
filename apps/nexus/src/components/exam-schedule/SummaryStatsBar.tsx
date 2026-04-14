@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Typography, alpha, useTheme } from '@neram/ui';
-import { ButtonBase } from '@mui/material';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
@@ -44,7 +43,7 @@ export default function SummaryStatsBar({ stats, isTeacher, onStudentsClick, onS
       }}
     >
       {onStudentsClick ? (
-        <ButtonBase sx={cardSx(true)} onClick={onStudentsClick}>
+        <Box component="button" sx={{ all: 'unset', ...cardSx(true) }} onClick={onStudentsClick}>
           <StatCard
             title="Students"
             value={stats.total_students}
@@ -52,7 +51,7 @@ export default function SummaryStatsBar({ stats, isTeacher, onStudentsClick, onS
             size="compact"
             variant="surface"
           />
-        </ButtonBase>
+        </Box>
       ) : (
         <StatCard
           title="Students"
@@ -64,7 +63,7 @@ export default function SummaryStatsBar({ stats, isTeacher, onStudentsClick, onS
       )}
 
       {onSubmittedClick ? (
-        <ButtonBase sx={cardSx(true)} onClick={onSubmittedClick}>
+        <Box component="button" sx={{ all: 'unset', ...cardSx(true) }} onClick={onSubmittedClick}>
           <StatCard
             title="Submitted"
             value={`${stats.submitted_count}/${stats.total_students}`}
@@ -73,7 +72,7 @@ export default function SummaryStatsBar({ stats, isTeacher, onStudentsClick, onS
             variant="surface"
             color="#43AA8B"
           />
-        </ButtonBase>
+        </Box>
       ) : (
         <StatCard
           title="Submitted"
