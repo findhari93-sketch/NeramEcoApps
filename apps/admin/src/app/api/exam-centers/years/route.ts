@@ -4,6 +4,8 @@ import {
   getDistinctYears,
 } from '@neram/database';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/exam-centers/years — List available years
 export async function GET() {
   try {

@@ -4,6 +4,8 @@ import {
   getNataExamCentersStats,
 } from '@neram/database';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/exam-centers/stats?year=2025 — Stats overview
 export async function GET(request: NextRequest) {
   try {
