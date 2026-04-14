@@ -3,7 +3,7 @@
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install",
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@neram/admin",
-  "ignoreCommand": "git diff $VERCEL_GIT_PREVIOUS_SHA HEAD --quiet -- . ../../packages/",
+  "ignoreCommand": "git fetch --deepen=100 2>/dev/null; git diff $VERCEL_GIT_PREVIOUS_SHA HEAD --quiet -- . ../../packages/",
   "headers": [
     {
       "source": "/(.*)",
