@@ -63,23 +63,40 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
   };
 
   // Fetch all data in parallel — wrap each query so one failure doesn't crash the page
-  const [
-    collegesResult,
-    stats,
-    stateData,
-    typeData,
-    counselingData,
-    featuredColleges,
-  ] = await Promise.all([
-    getColleges(filters).catch(() => ({ data: [] as any[], count: 0 })),
-    getLandingStats().catch(() => ({ totalColleges: 0, totalStates: 0, coaApprovedCount: 0 })),
-    getActiveStates().catch(() => []),
-    getCollegeCountByType().catch(() => []),
-    getCollegeCountByCounseling().catch(() => []),
-    getFeaturedColleges().catch(() => []),
-  ]);
+  let colleges: any[] = [];
+  let count = 0;
+  let stats = { totalColleges: 0, totalStates: 0, coaApprovedCount: 0 };
+  let stateData: any[] = [];
+  let typeData: any[] = [];
+  let counselingData: any[] = [];
+  let featuredColleges: any[] = [];
 
-  const { data: colleges, count } = collegesResult;
+  try {
+    const results = await Promise.allSettled([
+      getColleges(filters),
+      getLandingStats(),
+      getActiveStates(),
+      getCollegeCountByType(),
+      getCollegeCountByCounseling(),
+      getFeaturedColleges(),
+    ]);
+
+    if (results[0].status === 'fulfilled') { colleges = results[0].value.data; count = results[0].value.count; }
+    if (results[1].status === 'fulfilled') stats = results[1].value;
+    if (results[2].status === 'fulfilled') stateData = results[2].value;
+    if (results[3].status === 'fulfilled') typeData = results[3].value;
+    if (results[4].status === 'fulfilled') counselingData = results[4].value;
+    if (results[5].status === 'fulfilled') featuredColleges = results[5].value;
+
+    // Log any failures for Vercel function logs
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(`[CollegeHub] Query ${i} failed:`, r.reason?.message ?? r.reason);
+      }
+    });
+  } catch (err) {
+    console.error('[CollegeHub] Promise.allSettled failed:', err);
+  }
 
   const totalPages = Math.ceil(count / 20);
 
