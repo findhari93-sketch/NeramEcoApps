@@ -977,11 +977,12 @@ describe('recordGamificationEvent', () => {
     let callIndex = 0;
     const { mock } = createChainableMock();
 
+    const today = new Date().toISOString().split('T')[0];
     const streakData = {
       student_id: 's1',
       current_streak: 3,
       longest_streak: 5,
-      last_active_date: '2026-03-27',
+      last_active_date: today,
       streak_started_date: '2026-03-25',
     };
 

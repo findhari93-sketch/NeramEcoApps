@@ -46,29 +46,29 @@ describe('ImageToggleTabs', () => {
     expect(overlayBtn.hasAttribute('disabled')).toBe(false);
   });
 
-  it('does not render Corrected tab when correctedImageUrl is not provided', () => {
+  it('does not render Reference tab when correctedImageUrl is not provided', () => {
     render(<ImageToggleTabs originalImageUrl={ORIGINAL_URL} />);
-    expect(screen.queryByRole('button', { name: /Corrected/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reference/i })).toBeNull();
   });
 
-  it('renders Corrected tab when correctedImageUrl is provided', () => {
+  it('renders Reference tab when correctedImageUrl is provided', () => {
     render(
       <ImageToggleTabs
         originalImageUrl={ORIGINAL_URL}
         correctedImageUrl={CORRECTED_URL}
       />
     );
-    expect(screen.getByRole('button', { name: /Corrected/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Reference/i })).toBeDefined();
   });
 
-  it('switches to corrected image when Corrected tab is clicked', () => {
+  it('switches to corrected image when Reference tab is clicked', () => {
     render(
       <ImageToggleTabs
         originalImageUrl={ORIGINAL_URL}
         correctedImageUrl={CORRECTED_URL}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: /Corrected/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Reference/i }));
     const img = screen.getByRole('img', { name: /Drawing/i });
     expect((img as HTMLImageElement).src).toBe(CORRECTED_URL);
   });
@@ -110,14 +110,14 @@ describe('ImageToggleTabs', () => {
     expect(screen.queryByText('Proportion off')).toBeNull();
   });
 
-  it('shows Corrected Reference caption when corrected tab is active', () => {
+  it('shows Teacher Reference caption when reference tab is active', () => {
     render(
       <ImageToggleTabs
         originalImageUrl={ORIGINAL_URL}
         correctedImageUrl={CORRECTED_URL}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: /Corrected/i }));
-    expect(screen.getByText(/Corrected Reference/i)).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: /Reference/i }));
+    expect(screen.getByText(/Teacher Reference/i)).toBeDefined();
   });
 });
