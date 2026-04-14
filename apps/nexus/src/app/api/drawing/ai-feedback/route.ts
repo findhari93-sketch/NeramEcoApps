@@ -1,58 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
-import { generateDrawingAIFeedback } from '@/lib/drawing-ai';
+import { NextResponse } from 'next/server';
 
 /**
  * POST /api/drawing/ai-feedback
- * Body: { submission_id: string }
  *
- * Uses Google Gemini (free tier) by default.
- * Falls back to Anthropic Claude if ANTHROPIC_API_KEY is set and GEMINI_API_KEY is not.
- *
- * Env vars:
- * - GEMINI_API_KEY (free: 15 RPM, 1M tokens/day)
- * - ANTHROPIC_API_KEY (paid, optional fallback)
- *
- * Also accepts internal calls with X-Service-Key header (no MS token needed).
- * Used by the submission creation endpoint to trigger background AI generation.
+ * AI feedback generation has been disabled. Drawing evaluation is now done
+ * manually by teachers using standardized prompts copied into Gemini.
+ * Existing AI feedback data in the database is preserved for old submissions.
  */
-
-export async function POST(request: NextRequest) {
-  try {
-    // Allow internal server-side calls using service key (no MS token needed)
-    const serviceKey = request.headers.get('X-Service-Key');
-    const isInternalCall = serviceKey && serviceKey === process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!isInternalCall) {
-      // Regular authenticated call from teacher or student UI
-      await verifyMsToken(request.headers.get('Authorization'));
-    }
-
-    const body = await request.json();
-    const { submission_id } = body;
-
-    if (!submission_id) {
-      return NextResponse.json({ error: 'Missing submission_id' }, { status: 400 });
-    }
-
-    const feedback = await generateDrawingAIFeedback(submission_id);
-    return NextResponse.json({ feedback });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'AI feedback failed';
-    console.error('AI feedback error:', message);
-
-    if (message.includes('429')) {
-      return NextResponse.json(
-        { error: 'Gemini rate limit reached. Wait 1 minute and try again.' },
-        { status: 429 }
-      );
-    }
-    if (message.includes('invalid or unauthorized')) {
-      return NextResponse.json(
-        { error: 'AI configuration error. Contact admin.' },
-        { status: 500 }
-      );
-    }
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+export async function POST() {
+  return NextResponse.json(
+    { error: 'AI feedback generation has been disabled. Use the manual evaluation workflow instead.' },
+    { status: 410 }
+  );
 }

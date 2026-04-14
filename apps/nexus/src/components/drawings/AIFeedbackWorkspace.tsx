@@ -2,46 +2,35 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  Box, Typography, Button, TextField, Rating, Paper, Chip, IconButton,
-  CircularProgress, Collapse, Dialog, useTheme, useMediaQuery, Select, MenuItem,
-  Tabs, Tab,
+  Box, Typography, Button, TextField, Rating, Paper, IconButton,
+  CircularProgress, Collapse, Dialog, useTheme, useMediaQuery,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource } from '@neram/database/types';
-import type { OverlayAnnotation } from './ImageToggleTabs';
+import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
+import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import { compressImage } from '@/utils/imageCompression';
 
 export interface WorkspaceData {
-  overlayAnnotations: OverlayAnnotation[] | null;
+  overlayAnnotations: null; // kept for backwards compat, no longer used for zone chips
   overlayImageUrl: string | null;
   correctedImageUrl: string | null;
   tutorFeedback: string;
   resources: TutorResource[];
   rating: number;
+  regionAnnotations?: RegionAnnotation[];
 }
 
 interface AIFeedbackWorkspaceProps {
   submission: DrawingSubmission & {
-    ai_overlay_annotations?: OverlayAnnotation[] | null;
-    ai_corrected_image_prompt?: string | null;
-    ai_annotation_prompt?: string | null;
-    ai_reference_prompts?: { beginner: string; medium: string; expert: string } | null;
     corrected_image_url?: string | null;
-    ai_draft_status?: 'pending' | 'generating' | 'ready' | 'failed';
   };
   getToken: () => Promise<string | null>;
   onChange: (data: WorkspaceData) => void;
@@ -49,65 +38,30 @@ interface AIFeedbackWorkspaceProps {
   readOnly?: boolean;
 }
 
-const SEVERITY_COLORS: Record<string, 'error' | 'warning' | 'success'> = {
-  high: 'error', medium: 'warning', low: 'success',
-};
-
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
 }: AIFeedbackWorkspaceProps) {
-  const aiDraftStatus = (submission as any).ai_draft_status || 'pending';
-  const initialAnnotations = (submission as any).ai_overlay_annotations as OverlayAnnotation[] | null;
-  const initialPrompt = (submission as any).ai_corrected_image_prompt as string | null;
-  const initialAnnotationPrompt = (submission as any).ai_annotation_prompt as string | null;
-  const initialReferencePrompts = (submission as any).ai_reference_prompts as {
-    beginner: string; medium: string; expert: string;
-  } | null;
-
   // Workspace state
-  const [annotations, setAnnotations] = useState<OverlayAnnotation[]>(initialAnnotations || []);
-  const [editingAnnotations, setEditingAnnotations] = useState(false);
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
   const [correctedImageUrl, setCorrectedImageUrl] = useState<string | null>((submission as any).corrected_image_url || null);
-  // aiPrompt is local state so it updates after re-generation
-  const [aiPrompt, setAiPrompt] = useState<string | null>(initialPrompt);
-  const [tutorFeedback, setTutorFeedback] = useState(
-    submission.tutor_feedback ||
-    (submission.ai_feedback ? buildAIFeedbackText(submission.ai_feedback) : '')
-  );
+  const [tutorFeedback, setTutorFeedback] = useState(submission.tutor_feedback || '');
   const [resources, setResources] = useState<TutorResource[]>(submission.tutor_resources || []);
   const [rating, setRating] = useState(submission.tutor_rating || 0);
 
-  const [annotationPrompt, setAnnotationPrompt] = useState<string | null>(initialAnnotationPrompt);
-  const [referencePrompts, setReferencePrompts] = useState<{ beginner: string; medium: string; expert: string } | null>(initialReferencePrompts);
-  const [activeLevel, setActiveLevel] = useState<'beginner' | 'medium' | 'expert'>('medium');
-  const [annotationPromptCopied, setAnnotationPromptCopied] = useState(false);
-  const [referenceCopied, setReferenceCopied] = useState(false);
-  const [latestAiFeedback, setLatestAiFeedback] = useState<Record<string, unknown> | null>(
-    submission.ai_feedback as Record<string, unknown> | null
-  );
-  const [uploadingAnnotation, setUploadingAnnotation] = useState(false);
-  const autoTriggeredRef = useRef(false);
-
   // UI state
   const [sketchOpen, setSketchOpen] = useState(false);
-  const [promptCopied, setPromptCopied] = useState(false);
+  const [uploadingOverlay, setUploadingOverlay] = useState(false);
   const [uploadingCorrected, setUploadingCorrected] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [regenError, setRegenError] = useState('');
-  const [overlayExpanded, setOverlayExpanded] = useState(!defaultCollapsed);
-  const [correctedExpanded, setCorrectedExpanded] = useState(!defaultCollapsed);
-  const [feedbackExpanded, setFeedbackExpanded] = useState(!defaultCollapsed);
-  const [pasteError, setPasteError] = useState('');
-
-  const pasteZoneRef = useRef<HTMLDivElement>(null);
+  const [imagesExpanded, setImagesExpanded] = useState(!defaultCollapsed);
+  const [feedbackExpanded, setFeedbackExpanded] = useState(true);
+  const [pasteTarget, setPasteTarget] = useState<'overlay' | 'corrected' | null>(null);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const notify = useCallback((overrides?: Partial<WorkspaceData>) => {
     onChange({
-      overlayAnnotations: annotations,
+      overlayAnnotations: null,
       overlayImageUrl,
       correctedImageUrl,
       tutorFeedback,
@@ -115,7 +69,37 @@ export default function AIFeedbackWorkspace({
       rating,
       ...overrides,
     });
-  }, [annotations, correctedImageUrl, onChange, overlayImageUrl, rating, resources, tutorFeedback]);
+  }, [correctedImageUrl, onChange, overlayImageUrl, rating, resources, tutorFeedback]);
+
+  // ─── Upload handlers ────────────────────────────────────────────────────────
+
+  const handleUpload = useCallback(async (file: File, target: 'overlay' | 'corrected') => {
+    const setUploading = target === 'overlay' ? setUploadingOverlay : setUploadingCorrected;
+    setUploading(true);
+    try {
+      const token = await getToken();
+      const compressed = await compressImage(file, 1920, 0.85, `${target}.jpg`).catch(() => file);
+      const formData = new FormData();
+      formData.append('file', compressed);
+      formData.append('bucket', 'drawing-reviewed');
+      const res = await fetch('/api/drawing/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const { url } = await res.json();
+      if (target === 'overlay') {
+        setOverlayImageUrl(url);
+        notify({ overlayImageUrl: url });
+      } else {
+        setCorrectedImageUrl(url);
+        notify({ correctedImageUrl: url });
+      }
+    } catch { /* silent */ } finally {
+      setUploading(false);
+    }
+  }, [getToken, notify]);
 
   const handleSketchSave = async (blob: Blob) => {
     try {
@@ -134,97 +118,41 @@ export default function AIFeedbackWorkspace({
       setOverlayImageUrl(url);
       setSketchOpen(false);
       notify({ overlayImageUrl: url });
-    } catch { /* user sees nothing, canvas stays open */ }
+    } catch { /* canvas stays open */ }
   };
 
-  const handleCopyPrompt = async () => {
-    if (!aiPrompt) return;
-    await navigator.clipboard.writeText(aiPrompt);
-    setPromptCopied(true);
-    setTimeout(() => setPromptCopied(false), 2500);
-  };
-
-  const handleCopyAnnotationPrompt = async () => {
-    if (!annotationPrompt) return;
-    await navigator.clipboard.writeText(annotationPrompt);
-    setAnnotationPromptCopied(true);
-    setTimeout(() => setAnnotationPromptCopied(false), 2500);
-  };
-
-  const handleCopyReferencePrompt = async () => {
-    const prompt = referencePrompts?.[activeLevel];
-    if (!prompt) return;
-    await navigator.clipboard.writeText(prompt);
-    setReferenceCopied(true);
-    setTimeout(() => setReferenceCopied(false), 2500);
-  };
-
-  const handleCorrectedUpload = useCallback(async (file: File) => {
-    setUploadingCorrected(true);
-    setPasteError('');
-    try {
-      const token = await getToken();
-      const compressed = await compressImage(file, 1920, 0.85, 'reference.jpg').catch(() => file);
-      const formData = new FormData();
-      formData.append('file', compressed);
-      formData.append('bucket', 'drawing-reviewed');
-      const res = await fetch('/api/drawing/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
-      setCorrectedImageUrl(url);
-      notify({ correctedImageUrl: url });
-    } catch { /* silent */ } finally {
-      setUploadingCorrected(false);
-    }
-  }, [getToken, notify]);
-
-  const handleAnnotationOverlayUpload = useCallback(async (file: File) => {
-    setUploadingAnnotation(true);
-    try {
-      const token = await getToken();
-      const compressed = await compressImage(file, 1920, 0.85, 'overlay.jpg').catch(() => file);
-      const formData = new FormData();
-      formData.append('file', compressed);
-      formData.append('bucket', 'drawing-reviewed');
-      const res = await fetch('/api/drawing/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
-      setOverlayImageUrl(url);
-      notify({ overlayImageUrl: url });
-    } catch { /* silent */ } finally {
-      setUploadingAnnotation(false);
-    }
-  }, [getToken, notify]);
-
-  const handlePasteImage = useCallback(async () => {
-    setPasteError('');
+  // Combined upload/paste handler
+  const handlePasteOrUpload = useCallback(async (target: 'overlay' | 'corrected') => {
     try {
       const items = await navigator.clipboard.read();
       for (const item of items) {
         for (const type of item.types) {
           if (type.startsWith('image/')) {
             const blob = await item.getType(type);
-            const file = new File([blob], 'pasted-image.png', { type });
-            handleCorrectedUpload(file);
+            handleUpload(new File([blob], 'pasted-image.png', { type }), target);
             return;
           }
         }
       }
-      setPasteError('No image found in clipboard. Copy an image first, then paste.');
+      // No image in clipboard, open file picker as fallback
+      setPasteTarget(target);
     } catch {
-      setPasteError('Clipboard access denied. Use the upload button instead.');
+      // Clipboard denied, open file picker
+      setPasteTarget(target);
     }
-  }, [handleCorrectedUpload]);
+  }, [handleUpload]);
 
-  // Listen for Ctrl+V paste when corrected or overlay section is expanded (disabled in read-only)
+  // Auto-trigger file input when paste fails
+  const overlayFileRef = useRef<HTMLInputElement>(null);
+  const correctedFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (pasteTarget === 'overlay') overlayFileRef.current?.click();
+    if (pasteTarget === 'corrected') correctedFileRef.current?.click();
+    setPasteTarget(null);
+  }, [pasteTarget]);
+
+  // Global Ctrl+V paste listener
   useEffect(() => {
     if (readOnly) return;
     const handleGlobalPaste = (e: ClipboardEvent) => {
@@ -234,12 +162,13 @@ export default function AIFeedbackWorkspace({
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
           if (!file) continue;
-          if (overlayExpanded && !overlayImageUrl) {
-            handleAnnotationOverlayUpload(file);
+          // Route to overlay first if expanded and empty, then corrected
+          if (imagesExpanded && !overlayImageUrl) {
+            handleUpload(file, 'overlay');
             return;
           }
-          if (correctedExpanded && !correctedImageUrl) {
-            handleCorrectedUpload(file);
+          if (imagesExpanded && !correctedImageUrl) {
+            handleUpload(file, 'corrected');
             return;
           }
         }
@@ -247,584 +176,160 @@ export default function AIFeedbackWorkspace({
     };
     document.addEventListener('paste', handleGlobalPaste);
     return () => document.removeEventListener('paste', handleGlobalPaste);
-  }, [overlayExpanded, overlayImageUrl, correctedExpanded, correctedImageUrl, handleAnnotationOverlayUpload, handleCorrectedUpload]);
+  }, [imagesExpanded, overlayImageUrl, correctedImageUrl, handleUpload, readOnly]);
 
-  // Auto-trigger AI generation when draft is missing on mount (skip in read-only mode)
-  useEffect(() => {
-    if (readOnly) return;
-    if (autoTriggeredRef.current) return;
-    const hasAiData = initialAnnotations || initialPrompt || initialReferencePrompts || submission.ai_feedback;
-    if (!hasAiData && (aiDraftStatus === 'pending' || aiDraftStatus === 'failed')) {
-      autoTriggeredRef.current = true;
-      handleRegenerate();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // ─── Render helpers ─────────────────────────────────────────────────────────
 
-  // Re-generate: calls AI, updates ALL 3 sections at once
-  const handleRegenerate = async () => {
-    setRegenerating(true);
-    setRegenError('');
-    try {
-      const token = await getToken();
-      const res = await fetch('/api/drawing/ai-feedback', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submission_id: submission.id }),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `AI generation failed (${res.status})`);
-      }
-      const { feedback } = await res.json();
-
-      // Update overlay annotations
-      const newAnnotations = Array.isArray(feedback?.overlay_annotations)
-        ? feedback.overlay_annotations
-        : annotations;
-      if (Array.isArray(feedback?.overlay_annotations)) {
-        setAnnotations(newAnnotations);
-      }
-
-      // Update corrected image prompt
-      if (feedback?.corrected_image_prompt) {
-        setAiPrompt(feedback.corrected_image_prompt);
-      }
-
-      if (feedback?.annotation_overlay_prompt) {
-        setAnnotationPrompt(feedback.annotation_overlay_prompt);
-      }
-      if (feedback?.reference_prompts) {
-        setReferencePrompts(feedback.reference_prompts);
-      }
-      setLatestAiFeedback(feedback);
-
-      // Pre-fill written feedback if currently empty
-      let newFeedbackText: string | null = null;
-      if (!tutorFeedback) {
-        const text = buildAIFeedbackText(feedback);
-        if (text) {
-          newFeedbackText = text;
-          setTutorFeedback(text);
-        }
-      }
-
-      // Always notify parent with the latest workspace state after regeneration
-      notify({
-        overlayAnnotations: newAnnotations,
-        ...(newFeedbackText ? { tutorFeedback: newFeedbackText } : {}),
-      });
-    } catch (err) {
-      setRegenError(err instanceof Error ? err.message : 'Re-generation failed. Try again.');
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
-  const handleAnnotationChange = (idx: number, field: keyof OverlayAnnotation, value: string) => {
-    const updated = annotations.map((a, i) => i === idx ? { ...a, [field]: value } : a);
-    setAnnotations(updated);
-    notify({ overlayAnnotations: updated });
-  };
-
-  const handleAnnotationDelete = (idx: number) => {
-    const updated = annotations.filter((_, i) => i !== idx);
-    setAnnotations(updated);
-    notify({ overlayAnnotations: updated });
-  };
-
-  const handleAddAnnotation = () => {
-    const updated = [...annotations, { area: 'center', label: 'New note', severity: 'medium' as const }];
-    setAnnotations(updated);
-    notify({ overlayAnnotations: updated });
-  };
+  const renderImageSlot = (
+    label: string,
+    imageUrl: string | null,
+    target: 'overlay' | 'corrected',
+    uploading: boolean,
+    setUrl: (url: string | null) => void,
+    fileRef: React.RefObject<HTMLInputElement | null>,
+    extraButton?: React.ReactNode,
+  ) => (
+    <Box sx={{ mb: 1.5 }}>
+      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        {label}
+      </Typography>
+      {readOnly ? (
+        imageUrl ? (
+          <Box component="img" src={imageUrl} alt={label}
+            sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />
+        ) : (
+          <Typography variant="body2" color="text.secondary">Not added</Typography>
+        )
+      ) : imageUrl ? (
+        <Box>
+          <Box component="img" src={imageUrl} alt={label}
+            sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 0.75 }} />
+          <Button
+            size="small" variant="outlined" color="error"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={() => { setUrl(null); notify({ [target === 'overlay' ? 'overlayImageUrl' : 'correctedImageUrl']: null }); }}
+            sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.78rem' }}
+          >
+            Remove
+          </Button>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+          {extraButton}
+          <input ref={fileRef as any} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleUpload(file, target);
+              e.target.value = '';
+            }} />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={uploading ? <CircularProgress size={14} /> : <CloudUploadOutlinedIcon />}
+            disabled={uploading}
+            onClick={() => handlePasteOrUpload(target)}
+            sx={{ textTransform: 'none', minHeight: 36, borderStyle: 'dashed', flex: 1, fontSize: '0.78rem' }}
+          >
+            {uploading ? 'Uploading...' : 'Upload or Paste'}
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
-      {/* AI Status Banner */}
-      {aiDraftStatus === 'generating' && (
-        <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#e3f2fd' }}>
-          <CircularProgress size={16} />
-          <Typography variant="body2" color="primary.main" fontWeight={600}>
-            AI is analyzing the drawing...
-          </Typography>
-        </Paper>
-      )}
-
-      {/* Re-generate error */}
-      {regenError && (
-        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#fce4ec' }}>
-          <Typography variant="body2" color="error.main" sx={{ fontSize: '0.8rem' }}>{regenError}</Typography>
-        </Paper>
-      )}
-
-      {/* Section 1: Overlay Annotations */}
+      {/* Section 1: Review Images */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box
-          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 1 : 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
-          onClick={() => setOverlayExpanded(!overlayExpanded)}
+          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 0.75 : 1, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
+          onClick={() => setImagesExpanded(!imagesExpanded)}
         >
-          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
-            1. Overlay Annotations
+          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
+            Review Images
           </Typography>
-          {annotations.length > 0 && (
-            <Chip label={`${annotations.length} notes`} size="small" color="primary" sx={{ mr: 1 }} />
+          {(overlayImageUrl || correctedImageUrl) && (
+            <Typography variant="caption" color="success.main" fontWeight={600} sx={{ mr: 1 }}>
+              {[overlayImageUrl && 'Overlay', correctedImageUrl && 'Reference'].filter(Boolean).join(' + ')}
+            </Typography>
           )}
-          {overlayImageUrl && !annotations.length && (
-            <Chip label="Image" size="small" color="success" variant="outlined" sx={{ mr: 1 }} />
-          )}
-          {overlayExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+          {imagesExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </Box>
-        <Collapse in={overlayExpanded}>
+        <Collapse in={imagesExpanded}>
           <Box sx={{ p: isMobile ? 1.5 : 2 }}>
-            {readOnly ? (
-              /* Read-only view */
-              <Box>
-                {overlayImageUrl ? (
-                  <Box
-                    component="img"
-                    src={overlayImageUrl}
-                    alt="Annotated overlay"
-                    sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-                  />
-                ) : annotations.length > 0 ? (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    {annotations.map((ann, i) => (
-                      <Chip
-                        key={i}
-                        label={`${ann.area}: ${ann.label}`}
-                        size="small"
-                        color={SEVERITY_COLORS[ann.severity]}
-                        variant="outlined"
-                      />
-                    ))}
-                  </Box>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">No overlay added.</Typography>
-                )}
-              </Box>
-            ) : (
-              /* Edit view */
-              <Box>
-                {/* Path A: Manual Drawing */}
-                <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                  DRAW MANUALLY
-                </Typography>
+            {/* Overlay Image slot */}
+            {renderImageSlot(
+              'OVERLAY (ANNOTATED DRAWING)',
+              overlayImageUrl,
+              'overlay',
+              uploadingOverlay,
+              setOverlayImageUrl,
+              overlayFileRef,
+              !readOnly ? (
                 <Button
                   variant="outlined"
+                  size="small"
                   startIcon={<BrushOutlinedIcon />}
                   onClick={() => setSketchOpen(true)}
-                  sx={{ textTransform: 'none', minHeight: 40, mb: 2 }}
-                  size="small"
-                  fullWidth
+                  sx={{ textTransform: 'none', minHeight: 36, flex: 1, fontSize: '0.78rem' }}
                 >
-                  Open Drawing Canvas
+                  Draw on Image
                 </Button>
+              ) : undefined,
+            )}
 
-                {/* Path B: AI Annotation Prompt */}
-                <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                  AI ANNOTATION PROMPT FOR CHATGPT
-                </Typography>
-                {annotationPrompt ? (
-                  <Box>
-                    <Paper
-                      variant="outlined"
-                      sx={{ p: 1.5, bgcolor: '#f9f9f9', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5, mb: 1 }}
-                    >
-                      <Typography variant="body2" sx={{ fontSize: '0.78rem', fontFamily: 'inherit' }}>
-                        {annotationPrompt}
-                      </Typography>
-                    </Paper>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                      <Button
-                        size="small"
-                        variant={annotationPromptCopied ? 'contained' : 'outlined'}
-                        startIcon={annotationPromptCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
-                        onClick={handleCopyAnnotationPrompt}
-                        color={annotationPromptCopied ? 'success' : 'primary'}
-                        sx={{ textTransform: 'none', minHeight: 36 }}
-                      >
-                        {annotationPromptCopied ? 'Copied!' : 'Copy Prompt'}
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="secondary"
-                        startIcon={<OpenInNewIcon />}
-                        onClick={() => window.open('https://chat.openai.com', '_blank')}
-                        sx={{ textTransform: 'none', minHeight: 36 }}
-                      >
-                        Open ChatGPT
-                      </Button>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                      Copy prompt, open student image (long-press on mobile or right-click on desktop to copy), then paste both into ChatGPT.
-                    </Typography>
+            <Box sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1, pt: 1 }} />
 
-                    {/* Paste annotated image back */}
-                    {overlayImageUrl ? (
-                      <Box>
-                        <Box
-                          component="img"
-                          src={overlayImageUrl}
-                          alt="Annotated overlay"
-                          sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 1 }}
-                        />
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          startIcon={<DeleteOutlineIcon />}
-                          onClick={() => { setOverlayImageUrl(null); notify({ overlayImageUrl: null }); }}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          Remove Annotated Image
-                        </Button>
-                      </Box>
-                    ) : (
-                      <Box>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: 'none' }}
-                          id="upload-annotation-overlay"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleAnnotationOverlayUpload(file);
-                            e.target.value = '';
-                          }}
-                        />
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                          <Button
-                            variant="outlined"
-                            startIcon={uploadingAnnotation ? <CircularProgress size={16} /> : <CloudUploadOutlinedIcon />}
-                            disabled={uploadingAnnotation}
-                            onClick={() => document.getElementById('upload-annotation-overlay')?.click()}
-                            sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
-                            size="small"
-                          >
-                            {uploadingAnnotation ? 'Uploading...' : 'Upload Annotated Image'}
-                          </Button>
-                          <Button
-                            variant="outlined"
-                            startIcon={<ContentPasteIcon />}
-                            disabled={uploadingAnnotation}
-                            onClick={async () => {
-                              try {
-                                const items = await navigator.clipboard.read();
-                                for (const item of items) {
-                                  for (const type of item.types) {
-                                    if (type.startsWith('image/')) {
-                                      const blob = await item.getType(type);
-                                      handleAnnotationOverlayUpload(new File([blob], 'annotated.png', { type }));
-                                      return;
-                                    }
-                                  }
-                                }
-                              } catch { /* silent */ }
-                            }}
-                            sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
-                            size="small"
-                          >
-                            Paste Image
-                          </Button>
-                        </Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                          Paste the annotated drawing from ChatGPT here (Ctrl+V also works)
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No AI annotation prompt yet. Re-generate in Section 2 to get one.
-                  </Typography>
-                )}
+            {/* Reference Image slot */}
+            {renderImageSlot(
+              'REFERENCE IMAGE',
+              correctedImageUrl,
+              'corrected',
+              uploadingCorrected,
+              setCorrectedImageUrl,
+              correctedFileRef,
+            )}
 
-                {/* Zone-based annotation chips */}
-                {annotations.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                      ZONE ANNOTATIONS
-                    </Typography>
-                    {annotations.map((ann, i) => (
-                      <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                        {editingAnnotations ? (
-                          <>
-                            <TextField size="small" value={ann.label} sx={{ flex: 1 }}
-                              onChange={(e) => handleAnnotationChange(i, 'label', e.target.value)} />
-                            <Select size="small" value={ann.severity}
-                              onChange={(e) => handleAnnotationChange(i, 'severity', e.target.value as string)}>
-                              <MenuItem value="high">High</MenuItem>
-                              <MenuItem value="medium">Medium</MenuItem>
-                              <MenuItem value="low">Low</MenuItem>
-                            </Select>
-                            <IconButton size="small" color="error" onClick={() => handleAnnotationDelete(i)}>
-                              <DeleteOutlineIcon fontSize="small" />
-                            </IconButton>
-                          </>
-                        ) : (
-                          <Chip
-                            label={`${ann.area}: ${ann.label}`}
-                            size="small"
-                            color={SEVERITY_COLORS[ann.severity]}
-                            variant="outlined"
-                          />
-                        )}
-                      </Box>
-                    ))}
-                    <Box sx={{ display: 'flex', gap: 1, mt: 0.75 }}>
-                      <Button size="small" startIcon={<EditOutlinedIcon />}
-                        onClick={() => setEditingAnnotations(!editingAnnotations)}
-                        sx={{ textTransform: 'none' }}>
-                        {editingAnnotations ? 'Done' : 'Edit'}
-                      </Button>
-                      {editingAnnotations && (
-                        <Button size="small" startIcon={<AddIcon />}
-                          onClick={handleAddAnnotation} sx={{ textTransform: 'none' }}>
-                          Add
-                        </Button>
-                      )}
-                    </Box>
-                  </Box>
-                )}
-              </Box>
+            {!readOnly && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Paste images from Gemini here (Ctrl+V also works anywhere on the page)
+              </Typography>
             )}
           </Box>
         </Collapse>
       </Paper>
 
-      {/* Section 2: Corrected Reference Image */}
+      {/* Section 2: Feedback & Rating */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box
-          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 1 : 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
-          onClick={() => setCorrectedExpanded(!correctedExpanded)}
-        >
-          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
-            2. Reference Image
-          </Typography>
-          {correctedImageUrl && (
-            <Chip label="Image uploaded" size="small" color="success" sx={{ mr: 1 }} />
-          )}
-          {correctedExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </Box>
-        <Collapse in={correctedExpanded}>
-          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
-            {readOnly ? (
-              /* Read-only view */
-              <Box>
-                {correctedImageUrl ? (
-                  <Box
-                    component="img"
-                    src={correctedImageUrl}
-                    alt="Reference image"
-                    sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
-                  />
-                ) : (
-                  <Typography variant="body2" color="text.secondary">No reference image added.</Typography>
-                )}
-              </Box>
-            ) : (
-              /* Edit view */
-              <Box>
-                {/* Level tabs */}
-                <Tabs
-                  value={activeLevel}
-                  onChange={(_, v) => { setActiveLevel(v); setReferenceCopied(false); }}
-                  sx={{ mb: 1.5, minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.25, textTransform: 'none', fontSize: '0.8rem' } }}
-                >
-                  <Tab value="beginner" label="Beginner" />
-                  <Tab value="medium" label="Medium" />
-                  <Tab value="expert" label="Expert" />
-                </Tabs>
-
-                {/* Prompt for selected level */}
-                {referencePrompts ? (
-                  <Box sx={{ mb: 2 }}>
-                    <Paper
-                      variant="outlined"
-                      sx={{ p: 1.5, bgcolor: '#f9f9f9', fontFamily: 'monospace', fontSize: '0.78rem', lineHeight: 1.5, mb: 1 }}
-                    >
-                      <Typography variant="body2" sx={{ fontSize: '0.78rem', fontFamily: 'inherit' }}>
-                        {referencePrompts[activeLevel]}
-                      </Typography>
-                    </Paper>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                      <Button
-                        size="small"
-                        variant={referenceCopied ? 'contained' : 'outlined'}
-                        startIcon={referenceCopied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
-                        onClick={handleCopyReferencePrompt}
-                        color={referenceCopied ? 'success' : 'primary'}
-                        sx={{ textTransform: 'none', minHeight: 36 }}
-                      >
-                        {referenceCopied ? 'Copied!' : 'Copy Prompt'}
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="secondary"
-                        startIcon={<OpenInNewIcon />}
-                        onClick={() => window.open('https://chat.openai.com', '_blank')}
-                        sx={{ textTransform: 'none', minHeight: 36 }}
-                      >
-                        Open ChatGPT
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={regenerating ? <CircularProgress size={14} /> : <RefreshIcon />}
-                        onClick={handleRegenerate}
-                        disabled={regenerating}
-                        sx={{ textTransform: 'none', minHeight: 36 }}
-                      >
-                        {regenerating ? 'Re-generating...' : 'Re-generate'}
-                      </Button>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                      Copy the {activeLevel} prompt, paste into ChatGPT (with student image for context), then paste the result below.
-                    </Typography>
-                  </Box>
-                ) : aiDraftStatus === 'generating' ? (
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
-                    <CircularProgress size={14} />
-                    <Typography variant="body2" color="text.secondary">Generating prompts...</Typography>
-                  </Box>
-                ) : (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                      No reference prompts yet. Click Re-generate to get prompts for all three levels.
-                    </Typography>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      startIcon={regenerating ? <CircularProgress size={14} /> : <RefreshIcon />}
-                      onClick={handleRegenerate}
-                      disabled={regenerating}
-                      sx={{ textTransform: 'none', minHeight: 36 }}
-                    >
-                      {regenerating ? 'Re-generating...' : 'Re-generate AI Draft'}
-                    </Button>
-                  </Box>
-                )}
-
-                {/* Upload / Paste corrected image */}
-                {correctedImageUrl ? (
-                  <Box>
-                    <Box
-                      component="img"
-                      src={correctedImageUrl}
-                      alt="Reference image"
-                      sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 1 }}
-                    />
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteOutlineIcon />}
-                      onClick={() => { setCorrectedImageUrl(null); notify({ correctedImageUrl: null }); }}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Remove Image
-                    </Button>
-                  </Box>
-                ) : (
-                  <Box ref={pasteZoneRef}>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      id="upload-corrected"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleCorrectedUpload(file);
-                        e.target.value = '';
-                      }}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      <Button
-                        variant="outlined"
-                        startIcon={uploadingCorrected ? <CircularProgress size={16} /> : <CloudUploadOutlinedIcon />}
-                        disabled={uploadingCorrected}
-                        onClick={() => document.getElementById('upload-corrected')?.click()}
-                        sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
-                        size="small"
-                      >
-                        {uploadingCorrected ? 'Uploading...' : 'Upload Reference Image'}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        startIcon={uploadingCorrected ? <CircularProgress size={16} /> : <ContentPasteIcon />}
-                        disabled={uploadingCorrected}
-                        onClick={handlePasteImage}
-                        sx={{ textTransform: 'none', minHeight: 44, borderStyle: 'dashed', flex: 1 }}
-                        size="small"
-                      >
-                        Paste Image
-                      </Button>
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                      Paste the reference image from ChatGPT here (Ctrl+V also works)
-                    </Typography>
-                    {pasteError && (
-                      <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>{pasteError}</Typography>
-                    )}
-                  </Box>
-                )}
-              </Box>
-            )}
-          </Box>
-        </Collapse>
-      </Paper>
-
-      {/* Section 3: Written Feedback + Resources */}
-      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-        <Box
-          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 1 : 1.25, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
+          sx={{ px: isMobile ? 1.5 : 2, py: isMobile ? 0.75 : 1, display: 'flex', alignItems: 'center', cursor: 'pointer', bgcolor: 'grey.50' }}
           onClick={() => setFeedbackExpanded(!feedbackExpanded)}
         >
-          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
-            3. Written Feedback
+          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
+            Feedback & Rating
           </Typography>
-          <Button
-            size="small"
-            variant="outlined"
-            color="secondary"
-            startIcon={<AutoAwesomeIcon />}
-            onClick={(e) => {
-              e.stopPropagation();
-              const feedbackSource = latestAiFeedback || submission.ai_feedback;
-              if (!feedbackSource) return;
-              const draft = buildAIFeedbackText(feedbackSource as any);
-              if (draft) {
-                setTutorFeedback(draft);
-                notify({ tutorFeedback: draft });
-              }
-            }}
-            disabled={!latestAiFeedback && !submission.ai_feedback}
-            title={!latestAiFeedback && !submission.ai_feedback ? 'Generate AI draft first using Re-generate above' : 'Pre-fill feedback from AI analysis'}
-            sx={{ textTransform: 'none', mr: 1, minHeight: 28, fontSize: '0.75rem' }}
-          >
-            AI Draft
-          </Button>
+          {rating > 0 && (
+            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
+              {rating}/5 {RATING_LABELS[rating] || ''}
+            </Typography>
+          )}
           {feedbackExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </Box>
         <Collapse in={feedbackExpanded}>
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: isMobile ? 1.5 : 2 }}>
             {readOnly ? (
-              /* Read-only view */
               <Box>
                 {rating > 0 && (
-                  <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                     <Rating value={rating} readOnly size="medium" />
+                    <Typography variant="body2" fontWeight={600} color="text.secondary">
+                      {RATING_LABELS[rating] || ''}
+                    </Typography>
                   </Box>
                 )}
                 {tutorFeedback ? (
-                  <Typography
-                    variant="body2"
-                    sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, mb: resources.length ? 2 : 0 }}
-                  >
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, mb: resources.length ? 2 : 0 }}>
                     {tutorFeedback}
                   </Typography>
                 ) : (
@@ -834,30 +339,51 @@ export default function AIFeedbackWorkspace({
                 )}
                 {resources.length > 0 && (
                   <Box>
-                    <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                    <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
                       RESOURCES
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {resources.map((r, i) => (
-                        <Chip
+                        <Button
                           key={i}
-                          label={r.title || r.url}
                           size="small"
                           variant="outlined"
                           onClick={() => window.open(r.url, '_blank')}
-                          icon={<OpenInNewIcon sx={{ fontSize: '0.85rem !important' }} />}
-                          sx={{ cursor: 'pointer', maxWidth: 220, fontSize: '0.75rem' }}
-                        />
+                          sx={{ textTransform: 'none', fontSize: '0.75rem', minHeight: 28 }}
+                        >
+                          {r.title || r.url}
+                        </Button>
                       ))}
                     </Box>
                   </Box>
                 )}
               </Box>
             ) : (
-              /* Edit view */
               <Box>
+                {/* Rating with label */}
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    RATING
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Rating
+                      value={rating}
+                      onChange={(_, v) => { setRating(v || 0); notify({ rating: v || 0 }); }}
+                      size="large"
+                    />
+                    <Typography
+                      variant="body2"
+                      fontWeight={600}
+                      color={rating >= 4 ? 'success.main' : rating >= 3 ? 'primary.main' : rating >= 1 ? 'warning.main' : 'text.disabled'}
+                    >
+                      {rating > 0 ? RATING_LABELS[rating] : 'Tap to rate'}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Written feedback */}
                 <TextField
-                  placeholder="Share what the student should improve, practice areas, step-by-step tips..."
+                  placeholder="Paste feedback from Gemini or write your own..."
                   multiline
                   rows={4}
                   fullWidth
@@ -867,29 +393,14 @@ export default function AIFeedbackWorkspace({
                     notify({ tutorFeedback: e.target.value });
                   }}
                   sx={{ mb: 2 }}
-                  helperText={
-                    tutorFeedback && (latestAiFeedback || submission.ai_feedback)
-                      ? 'Pre-filled from AI analysis. Edit as needed.'
-                      : undefined
-                  }
                 />
 
+                {/* Resources */}
                 <ResourceLinkSearch
                   resources={resources}
                   onChange={(r) => { setResources(r); notify({ resources: r }); }}
                   getToken={getToken}
                 />
-
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                    Rating (optional)
-                  </Typography>
-                  <Rating
-                    value={rating}
-                    onChange={(_, v) => { setRating(v || 0); notify({ rating: v || 0 }); }}
-                    size="large"
-                  />
-                </Box>
               </Box>
             )}
           </Box>
@@ -906,17 +417,4 @@ export default function AIFeedbackWorkspace({
       </Dialog>
     </Box>
   );
-}
-
-function buildAIFeedbackText(aiFeedback: { feedback?: string[]; improvement_tip?: string } | null | Record<string, unknown>): string {
-  if (!aiFeedback) return '';
-  const lines: string[] = [];
-  const f = aiFeedback as { feedback?: string[]; improvement_tip?: string };
-  if (Array.isArray(f.feedback)) {
-    lines.push(...f.feedback);
-  }
-  if (f.improvement_tip) {
-    lines.push(`Tip: ${f.improvement_tip}`);
-  }
-  return lines.join('\n');
 }
