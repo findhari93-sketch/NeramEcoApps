@@ -17,6 +17,7 @@ import CommentSection from '@/components/drawings/CommentSection';
 import AIFeedbackPanel from '@/components/drawings/AIFeedbackPanel';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
 import type { DrawingSubmissionWithDetails, TutorResource } from '@neram/database/types';
+import { compressImage } from '@/utils/imageCompression';
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -52,8 +53,9 @@ export default function SubmissionDetailPage() {
       setReplacing(true);
       try {
         const token = await getToken();
+        const compressed = await compressImage(file, 1920, 0.85, 'drawing.jpg').catch(() => file);
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', compressed);
         formData.append('bucket', 'drawing-uploads');
         const uploadRes = await fetch('/api/drawing/upload', {
           method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
@@ -93,15 +95,23 @@ export default function SubmissionDetailPage() {
   // Feedback content (shared between desktop panel and mobile sheet)
   const feedbackContent = hasReview ? (
     <Box sx={{ p: 2 }}>
-      {/* Rating */}
-      {submission.tutor_rating && (
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-            TUTOR RATING
+      {/* Feedback received banner */}
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="body2" fontWeight={700} color="success.dark">
+            Your teacher reviewed this drawing
           </Typography>
-          <Rating value={submission.tutor_rating} readOnly size="large" />
+          {submission.tutor_rating ? (
+            <Rating value={submission.tutor_rating} readOnly size="small" sx={{ mt: 0.25 }} />
+          ) : null}
         </Box>
-      )}
+        {submission.status === 'redo' && (
+          <Chip label="Redo requested" size="small" color="warning" />
+        )}
+        {submission.status === 'completed' && (
+          <Chip label="Completed" size="small" color="success" />
+        )}
+      </Paper>
 
       {/* Written feedback */}
       {submission.tutor_feedback && (
@@ -110,7 +120,7 @@ export default function SubmissionDetailPage() {
             FEEDBACK
           </Typography>
           <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#f8f8f8' }}>
-            <Typography variant="body2" sx={{ lineHeight: 1.6 }}>{submission.tutor_feedback}</Typography>
+            <Typography variant="body2" sx={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{submission.tutor_feedback}</Typography>
           </Paper>
         </Box>
       )}

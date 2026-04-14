@@ -111,7 +111,6 @@ export default function CutoffSparkline({
               />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formatter={((value: number) =>
                   isRankBased
                     ? `Rank #${Math.round(value).toLocaleString()}`

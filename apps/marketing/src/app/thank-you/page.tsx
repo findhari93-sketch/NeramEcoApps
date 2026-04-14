@@ -7,6 +7,7 @@ import { CheckCircleOutlined } from '@mui/icons-material';
 
 const GA_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
 const GA_ADS_PURCHASE_LABEL = process.env.NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_LABEL;
+const GA_ADS_CREDIT_SIGNUP_LABEL = process.env.NEXT_PUBLIC_GOOGLE_ADS_CREDIT_SIGNUP_LABEL;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 export default function ThankYouPage() {
@@ -21,12 +22,21 @@ function ThankYouContent() {
   const searchParams = useSearchParams();
   const applicationNumber = searchParams.get('app') || '';
 
-  // Fire Google Ads "Purchase" conversion on page load
+  // Fire Google Ads conversions on page load
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).gtag && GA_ADS_ID && GA_ADS_PURCHASE_LABEL) {
-      (window as any).gtag('event', 'conversion', {
-        send_to: `${GA_ADS_ID}/${GA_ADS_PURCHASE_LABEL}`,
-      });
+    if (typeof window !== 'undefined' && (window as any).gtag && GA_ADS_ID) {
+      if (GA_ADS_PURCHASE_LABEL) {
+        (window as any).gtag('event', 'conversion', {
+          send_to: `${GA_ADS_ID}/${GA_ADS_PURCHASE_LABEL}`,
+        });
+      }
+      if (GA_ADS_CREDIT_SIGNUP_LABEL) {
+        (window as any).gtag('event', 'conversion', {
+          send_to: `${GA_ADS_ID}/${GA_ADS_CREDIT_SIGNUP_LABEL}`,
+          value: 1.0,
+          currency: 'INR',
+        });
+      }
     }
   }, []);
 

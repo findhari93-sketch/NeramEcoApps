@@ -19,7 +19,6 @@ export async function verifyCollegeDashboardAuth(request: NextRequest): Promise<
   if (error || !user) throw new Error('Invalid token');
 
   const admin = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: collegeAdminRaw, error: adminError } = await (admin as any)
     .from('college_admins')
     .select('id, college_id, name, role, is_active')

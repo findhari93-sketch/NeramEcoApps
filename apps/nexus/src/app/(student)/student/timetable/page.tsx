@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Box, Typography, Snackbar, Alert, Button, IconButton, ToggleButton, ToggleButtonGroup, Chip, useMediaQuery, useTheme } from '@neram/ui';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import CloseIcon from '@mui/icons-material/Close';
@@ -167,10 +167,41 @@ export default function StudentTimetable() {
     setMyAttendance(attendanceMap);
   };
 
+  // Refs so the sync-on-mount effect always calls the latest fetchClasses / getToken
+  // without re-running the sync effect every time the week changes.
+  const fetchClassesRef = useRef(fetchClasses);
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    fetchClassesRef.current = fetchClasses;
+    getTokenRef.current = getToken;
+  }, [fetchClasses, getToken]);
+
   useEffect(() => {
     fetchClasses();
     fetchHolidays();
   }, [fetchClasses, fetchHolidays]);
+
+  // Background sync on first mount: pulls latest Teams meetings and recordings,
+  // then re-fetches the timetable so new classes appear without a manual refresh.
+  useEffect(() => {
+    const syncOnMount = async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        const res = await fetch('/api/timetable/sync-now', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          // Re-fetch to show newly synced meetings and recording badges
+          await fetchClassesRef.current();
+        }
+      } catch {
+        // Sync failure is silent — user already sees their existing data
+      }
+    };
+    syncOnMount();
+  }, []); // Empty deps: run exactly once on mount
 
   useEffect(() => {
     setLiveBannerDismissed(false);

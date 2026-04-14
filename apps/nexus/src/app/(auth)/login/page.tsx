@@ -3,12 +3,13 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Typography, CircularProgress, Alert } from '@neram/ui';
-import { useMicrosoftAuth, getMsalErrorMessage } from '@neram/auth';
+import { getMsalErrorMessage } from '@neram/auth';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, user, loading } = useMicrosoftAuth();
+  const { signIn, user, loading } = useNexusAuthContext();
   const [signingIn, setSigningIn] = useState(false);
   const [loginError, setLoginError] = useState<{ message: string; canRetry: boolean } | null>(null);
   const [showOnboardingHint, setShowOnboardingHint] = useState(false);

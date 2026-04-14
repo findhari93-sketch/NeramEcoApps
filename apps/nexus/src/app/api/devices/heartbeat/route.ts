@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     console.error('Heartbeat error:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
-      { status: error.message?.includes('Authorization') ? 401 : 500 }
+      { status: (error.message?.includes('Authorization') || error.message?.includes('Invalid Microsoft token') || error.message?.includes('token')) ? 401 : 500 }
     );
   }
 }

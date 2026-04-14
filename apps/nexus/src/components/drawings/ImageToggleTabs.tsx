@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, ToggleButton, ToggleButtonGroup, Chip, Typography, IconButton, Tooltip } from '@neram/ui';
+import { Box, ToggleButton, ToggleButtonGroup, Chip, Typography, IconButton, Tooltip, Badge } from '@neram/ui';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
+import BrokenImageOutlinedIcon from '@mui/icons-material/BrokenImageOutlined';
 
 export interface OverlayAnnotation {
   area: string;
@@ -67,6 +68,7 @@ export default function ImageToggleTabs({
 
   const [tab, setTab] = useState<'original' | 'overlay' | 'corrected'>('original');
   const [copied, setCopied] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const handleCopyImage = async () => {
     try {
@@ -100,7 +102,7 @@ export default function ImageToggleTabs({
         <ToggleButtonGroup
           value={activeTab}
           exclusive
-          onChange={(_, v) => { if (v) setTab(v); }}
+          onChange={(_, v) => { if (v) { setTab(v); setImgError(false); } }}
           size="small"
           sx={{
             bgcolor: 'rgba(255,255,255,0.92)',
@@ -115,9 +117,26 @@ export default function ImageToggleTabs({
           }}
         >
           <ToggleButton value="original">My Drawing</ToggleButton>
-          <ToggleButton value="overlay" disabled={!hasOverlay}>Overlay</ToggleButton>
+          <ToggleButton value="overlay" disabled={!hasOverlay}>
+            <Badge
+              variant="dot"
+              color="primary"
+              invisible={!hasOverlay}
+              sx={{ '& .MuiBadge-dot': { top: -2, right: -4 } }}
+            >
+              Overlay
+            </Badge>
+          </ToggleButton>
           {hasCorrected && (
-            <ToggleButton value="corrected">Corrected</ToggleButton>
+            <ToggleButton value="corrected">
+              <Badge
+                variant="dot"
+                color="success"
+                sx={{ '& .MuiBadge-dot': { top: -2, right: -4 } }}
+              >
+                Reference
+              </Badge>
+            </ToggleButton>
           )}
         </ToggleButtonGroup>
       </Box>
@@ -132,12 +151,20 @@ export default function ImageToggleTabs({
         minHeight: 0,
         overflow: 'hidden',
       }}>
-        <Box
-          component="img"
-          src={displayImageUrl}
-          alt="Drawing"
-          sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
-        />
+        {imgError ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, opacity: 0.5 }}>
+            <BrokenImageOutlinedIcon sx={{ fontSize: 40, color: '#fff' }} />
+            <Typography variant="caption" sx={{ color: '#fff' }}>Image unavailable</Typography>
+          </Box>
+        ) : (
+          <Box
+            component="img"
+            src={displayImageUrl}
+            alt="Drawing"
+            onError={() => setImgError(true)}
+            sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+          />
+        )}
 
         {/* AI overlay annotation labels (only when overlay tab and no overlayImageUrl) */}
         {activeTab === 'overlay' && !overlayImageUrl && overlayAnnotations?.map((ann, i) => {
@@ -169,8 +196,8 @@ export default function ImageToggleTabs({
           );
         })}
 
-        {/* Copy to clipboard button — top-right corner */}
-        <Tooltip title={copied ? 'Copied!' : 'Copy image to clipboard'} placement="left">
+        {/* Copy to clipboard button — top-right corner (hidden when image failed) */}
+        {!imgError && <Tooltip title={copied ? 'Copied!' : 'Copy image to clipboard'} placement="left">
           <IconButton
             onClick={handleCopyImage}
             size="small"
@@ -186,17 +213,17 @@ export default function ImageToggleTabs({
           >
             {copied ? <CheckIcon sx={{ fontSize: 16 }} /> : <ContentCopyIcon sx={{ fontSize: 16 }} />}
           </IconButton>
-        </Tooltip>
+        </Tooltip>}
 
-        {/* Caption for corrected image */}
-        {activeTab === 'corrected' && (
+        {/* Caption for reference image */}
+        {activeTab === 'corrected' && !imgError && (
           <Box sx={{
             position: 'absolute', bottom: 8, left: 0, right: 0,
             display: 'flex', justifyContent: 'center',
           }}>
             <Box sx={{ bgcolor: 'rgba(0,0,0,0.55)', borderRadius: 1, px: 1.5, py: 0.4 }}>
               <Typography variant="caption" sx={{ color: '#fff', fontWeight: 600 }}>
-                Corrected Reference
+                Teacher Reference
               </Typography>
             </Box>
           </Box>

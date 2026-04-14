@@ -171,7 +171,24 @@ export default function ClassCard({
             <VideocamIcon sx={{ fontSize: 14, color: isLive ? 'error.main' : 'primary.main' }} />
           )}
           {hasRecording && isCompleted && (
-            <PlayCircleOutlineIcon sx={{ fontSize: 14, color: 'success.main' }} />
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.25,
+                px: 0.5,
+                py: 0.125,
+                borderRadius: 0.5,
+                bgcolor: 'success.main',
+                color: '#fff',
+                lineHeight: 1,
+              }}
+            >
+              <PlayCircleOutlineIcon sx={{ fontSize: 10 }} />
+              <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, lineHeight: 1 }}>
+                REC
+              </Typography>
+            </Box>
           )}
         </Box>
       </Box>

@@ -14,6 +14,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
@@ -53,6 +54,7 @@ export default function DrawingReviewDetailPage() {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const handleDeleteSubmission = async () => {
     setDeleting(true);
@@ -117,6 +119,24 @@ export default function DrawingReviewDetailPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Initialize workspaceData from submission so ImageToggleTabs shows saved images immediately
+  useEffect(() => {
+    if (!submission) return;
+    const initial: WorkspaceData = {
+      overlayAnnotations: (submission as any).ai_overlay_annotations || null,
+      overlayImageUrl: submission.reviewed_image_url || null,
+      correctedImageUrl: (submission as any).corrected_image_url || null,
+      tutorFeedback: submission.tutor_feedback || '',
+      resources: (submission.tutor_resources as any) || [],
+      rating: submission.tutor_rating || 0,
+    };
+    workspaceRef.current = initial;
+    setWorkspaceData(initial);
+    // Read-only by default for already-reviewed submissions; editable for new ones
+    const isReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
+    setIsEditMode(!isReviewed);
+  }, [submission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleWorkspaceChange = useCallback((data: WorkspaceData) => {
     workspaceRef.current = data;
     setWorkspaceData(data);
@@ -176,8 +196,8 @@ export default function DrawingReviewDetailPage() {
   const timeAgo = getTimeAgo(submission.submitted_at);
   const sub = submission as any;
 
-  // Action button bar (used in both desktop and mobile)
-  const actionBar = (
+  // Action button bar (used in both desktop and mobile) — only visible in edit mode
+  const actionBar = isEditMode ? (
     <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
       {error && <Typography color="error" variant="caption" sx={{ mb: 0.5, display: 'block' }}>{error}</Typography>}
       {/* Save Draft row */}
@@ -223,16 +243,16 @@ export default function DrawingReviewDetailPage() {
         sx={{ mt: 0.5, ml: 0 }}
       />
     </Box>
-  );
+  ) : null;
 
   // Workspace + comments panel content (shared between desktop right panel and mobile sheet)
   const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2, WebkitOverflowScrolling: 'touch' }}>
-        {['reviewed', 'redo', 'completed'].includes(submission.status) && (
-          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9' }}>
-            <Typography variant="body2" color="success.dark" fontWeight={600}>
-              This submission has already been reviewed. Any changes you save will notify the student.
+        {['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && (
+          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
+            <Typography variant="body2" color="warning.dark" fontWeight={600}>
+              Editing a reviewed submission. Any changes you save will notify the student.
             </Typography>
           </Paper>
         )}
@@ -250,6 +270,7 @@ export default function DrawingReviewDetailPage() {
           getToken={getToken}
           onChange={handleWorkspaceChange}
           defaultCollapsed={isMobile}
+          readOnly={!isEditMode}
         />
 
         <Box sx={{ mt: 2 }}>
@@ -317,15 +338,26 @@ export default function DrawingReviewDetailPage() {
 
           {/* Feedback Workspace - visible inline */}
           <Box sx={{ bgcolor: 'background.paper' }}>
-            <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Typography variant="subtitle2" fontWeight={700}>Feedback Workspace</Typography>
+            <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center' }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>Feedback Workspace</Typography>
+              {!isEditMode && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<EditOutlinedIcon />}
+                  onClick={() => setIsEditMode(true)}
+                  sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.78rem' }}
+                >
+                  Edit Review
+                </Button>
+              )}
             </Box>
 
             <Box sx={{ p: 2 }}>
-              {['reviewed', 'redo', 'completed'].includes(submission.status) && (
-                <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#e8f5e9' }}>
-                  <Typography variant="body2" color="success.dark" fontWeight={600}>
-                    This submission has already been reviewed. Any changes you save will notify the student.
+              {['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && (
+                <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
+                  <Typography variant="body2" color="warning.dark" fontWeight={600}>
+                    Editing a reviewed submission. Any changes you save will notify the student.
                   </Typography>
                 </Paper>
               )}
@@ -342,6 +374,7 @@ export default function DrawingReviewDetailPage() {
                 getToken={getToken}
                 onChange={handleWorkspaceChange}
                 defaultCollapsed={false}
+                readOnly={!isEditMode}
               />
 
               <Box sx={{ mt: 2 }}>
@@ -458,8 +491,19 @@ export default function DrawingReviewDetailPage() {
         width: 400, flexShrink: 0, borderLeft: '1px solid', borderColor: 'divider',
         bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
-        <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-          <Typography variant="subtitle2" fontWeight={700}>Feedback Workspace</Typography>
+        <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>Feedback Workspace</Typography>
+          {!isEditMode && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<EditOutlinedIcon />}
+              onClick={() => setIsEditMode(true)}
+              sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.78rem' }}
+            >
+              Edit Review
+            </Button>
+          )}
         </Box>
         {reviewPanel}
       </Box>

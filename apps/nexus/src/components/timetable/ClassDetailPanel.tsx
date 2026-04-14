@@ -364,15 +364,22 @@ export default function ClassDetailPanel({
           {/* Watch recording */}
           {isCompleted && hasRecording && (
             <Button
-              variant="outlined"
+              variant="contained"
+              color="success"
               fullWidth
               href={cls.recording_url!}
               target="_blank"
+              rel="noopener noreferrer"
               startIcon={<PlayCircleOutlineIcon />}
-              sx={{ minHeight: 48, textTransform: 'none' }}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
             >
               Watch Recording
             </Button>
+          )}
+          {isCompleted && !hasRecording && cls.teams_meeting_id && (
+            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', display: 'block', py: 0.5 }}>
+              Recording not yet available
+            </Typography>
           )}
 
           {/* Rate class (student) */}

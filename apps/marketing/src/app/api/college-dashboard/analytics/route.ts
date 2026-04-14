@@ -7,7 +7,6 @@ import { verifyCollegeDashboardAuth } from '@/lib/college-dashboard/auth';
 export async function GET(request: NextRequest) {
   try {
     const authUser = await verifyCollegeDashboardAuth(request);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = createAdminClient() as any;
 
     const now = new Date();

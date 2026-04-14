@@ -29,23 +29,11 @@ export function useActiveTimeTracker({
   const isActiveRef = useRef(true);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Only used by sendBeacon on page hide (async getToken unavailable there)
   const tokenRef = useRef<string | null>(null);
 
-  // Keep token fresh
-  useEffect(() => {
-    if (!enabled || !deviceId) return;
-    let cancelled = false;
-    async function refreshToken() {
-      const token = await getToken();
-      if (!cancelled) tokenRef.current = token;
-    }
-    refreshToken();
-    const interval = setInterval(refreshToken, 5 * 60_000); // Refresh every 5 min
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [enabled, deviceId, getToken]);
-
   const sendHeartbeat = useCallback(async () => {
-    if (!deviceId || !tokenRef.current) return;
+    if (!deviceId) return;
     const active = activeSecondsRef.current;
     const idle = idleSecondsRef.current;
 
@@ -56,6 +44,13 @@ export function useActiveTimeTracker({
     if (active === 0 && idle === 0) return;
 
     try {
+      // Always get a fresh token — MSAL handles caching and auto-refresh internally
+      const token = await getToken();
+      if (!token) return;
+
+      // Keep beacon ref up to date with the last known valid token
+      tokenRef.current = token;
+
       // Collect location if available
       let location: { latitude: number; longitude: number; accuracy: number } | null = null;
       if (navigator.geolocation) {
@@ -76,7 +71,7 @@ export function useActiveTimeTracker({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${tokenRef.current}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           deviceId,
@@ -89,7 +84,7 @@ export function useActiveTimeTracker({
     } catch {
       // Heartbeat failures should never break the app
     }
-  }, [deviceId, sessionId]);
+  }, [deviceId, sessionId, getToken]);
 
   useEffect(() => {
     if (!enabled || !deviceId) return;

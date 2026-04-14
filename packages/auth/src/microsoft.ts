@@ -157,12 +157,32 @@ function clearInteractionState(): void {
 let msalInstance: PublicClientApplication | null = null;
 let msalInitialized = false;
 let redirectResult: AuthenticationResult | null = null;
+let initPromise: Promise<PublicClientApplication> | null = null;
 
 export async function initializeMsal(): Promise<PublicClientApplication> {
   if (msalInstance && msalInitialized) {
     return msalInstance;
   }
 
+  // Guard against concurrent calls (e.g. NexusAuthProvider + login page both mounting).
+  // Without this, two calls race through initialization, creating duplicate MSAL instances
+  // where handleRedirectPromise() hangs on the second one.
+  if (initPromise) {
+    return initPromise;
+  }
+
+  initPromise = doInitializeMsal();
+  try {
+    return await initPromise;
+  } finally {
+    // Clear the promise only on failure so retries work; on success msalInitialized guards.
+    if (!msalInitialized) {
+      initPromise = null;
+    }
+  }
+}
+
+async function doInitializeMsal(): Promise<PublicClientApplication> {
   // IMPORTANT: Do NOT clear interaction state here.
   // When the user returns from Microsoft's login redirect, the auth response data
   // is stored in localStorage. Clearing it before handleRedirectPromise() reads it
@@ -176,7 +196,15 @@ export async function initializeMsal(): Promise<PublicClientApplication> {
 
   // Handle redirect response (returns result if user just came back from redirect login)
   try {
-    const result = await msalInstance.handleRedirectPromise();
+    // Timeout handleRedirectPromise — it can hang if MSAL state is corrupt
+    const result = await Promise.race([
+      msalInstance.handleRedirectPromise(),
+      new Promise<null>((resolve) => setTimeout(() => {
+        console.warn('[MSAL] handleRedirectPromise timed out after 10s, clearing stale state');
+        clearInteractionState();
+        resolve(null);
+      }, 10_000)),
+    ]);
     if (result?.account) {
       msalInstance.setActiveAccount(result.account);
       redirectResult = result;
@@ -238,6 +266,7 @@ export async function signInWithMicrosoft(
         clearInteractionState();
         msalInstance = null;
         msalInitialized = false;
+        initPromise = null;
         const freshMsal = await initializeMsal();
 
         try {
@@ -290,6 +319,7 @@ export async function signInWithMicrosoft(
         clearInteractionState();
         msalInstance = null;
         msalInitialized = false;
+        initPromise = null;
         const freshMsal = await initializeMsal();
         await freshMsal.loginRedirect(request);
       } else {

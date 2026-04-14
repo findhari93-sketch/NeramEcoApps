@@ -346,6 +346,47 @@ Test accounts are **Microsoft Entra ID** users with **MFA disabled** for Playwri
 | Cross-app SSO | `*integration*.spec.ts` | `integration` |
 | Mobile/PWA | `*mobile*.spec.ts` | `mobile-chrome` |
 
+## Vercel Cost Optimization (CRITICAL - ALL AGENTS MUST FOLLOW)
+
+> **Every Next.js code change must minimize Vercel Pro usage costs. These rules apply to all apps in the monorepo.**
+
+### Build Minutes (biggest cost driver)
+- **Never add `force-dynamic`** unless absolutely necessary (e.g., per-request auth checks)
+- Default all new pages to `export const revalidate = 3600` or higher unless real-time data is required
+- Prefer `generateStaticParams` and ISR over dynamic routes wherever possible
+- Avoid changing barrel files or shared packages unnecessarily — it triggers rebuilds across all apps
+- When modifying a single app (e.g. nexus), confirm the change is scoped to that package only
+
+### Function Invocations
+- Always cache Supabase responses where data does not change per-user
+- Use `unstable_cache` or `React.cache` for repeated DB queries within a request
+- Prefer Server Components fetching data directly over API routes — API routes cost function invocations
+- Batch multiple Supabase queries into a single function call instead of separate fetches
+
+### Edge vs Serverless
+- Use `export const runtime = 'edge'` for lightweight routes (auth checks, redirects, simple lookups) — cheaper and faster
+- Reserve serverless (default) for heavy DB operations or Node.js-only packages
+
+### ISR / Caching Strategy by Page Type
+
+| Page Type | Caching Rule |
+|-----------|-------------|
+| Marketing pages (neramclasses.com) | Fully static, `revalidate = false` |
+| Question bank, college predictor, TNEA data | ISR, `revalidate = 86400` or more |
+| Course catalog, public content | ISR, `revalidate = 3600` |
+| Student dashboard, attendance | Dynamic (per-user), that is fine |
+| Admin/staff pages | Dynamic (low traffic), that is fine |
+
+### Before Adding Any New API Route, Answer These
+
+1. Can this be a Server Component fetch instead?
+2. Can this response be cached (even for 60 seconds)?
+3. Does this need to run on every request, or just on build/revalidate?
+
+If the answer to #1 or #2 is yes, use a Server Component or cached fetch. Only create an API route if the data must be user-specific and uncacheable, or if it handles mutations (POST/PUT/DELETE).
+
+---
+
 ## Deployment Pipeline
 
 ### Environments
