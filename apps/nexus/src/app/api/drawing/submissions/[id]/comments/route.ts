@@ -44,7 +44,7 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const authorRole = ['teacher', 'admin'].includes(user.user_type) ? 'teacher' : 'student';
+    const authorRole = ['teacher', 'admin'].includes(user.user_type ?? '') ? 'teacher' : 'student';
 
     const comment = await addDrawingSubmissionComment({
       submission_id: id,

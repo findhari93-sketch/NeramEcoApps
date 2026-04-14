@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient();
     const { data: user } = await supabase.from('users').select('id, user_type').eq('ms_oid', msUser.oid).single();
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (!user || !['teacher', 'admin'].includes(user.user_type ?? '')) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 

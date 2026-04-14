@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { createDrawingSubmissionWithThread, recordGamificationEvent } from '@neram/database/queries/nexus';
-import { generateDrawingAIFeedback } from '@/lib/drawing-ai';
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,20 +51,15 @@ export async function POST(request: NextRequest) {
           student_id: user.id,
           classroom_id: (enrollment as any).classroom_id,
           batch_id: (enrollment as any).batch_id || null,
-          event_type: isRedo ? 'drawing_redo_submitted' : 'drawing_submitted',
+          event_type: 'drawing_submitted',
           points: isRedo ? 3 : 5,
           source_id: `draw_${submission.id}`,
-          activity_type: isRedo ? 'drawing_redo_submitted' : 'drawing_submitted',
+          activity_type: 'drawing_submitted',
           activity_title: isRedo ? `Resubmitted drawing (attempt #${attemptNumber})` : 'Submitted a drawing practice',
           metadata: { question_id, submission_id: submission.id, attempt_number: attemptNumber },
         }).catch(() => {});
       }
     } catch { /* Non-critical */ }
-
-    // Fire-and-forget background AI draft generation (does not block student)
-    generateDrawingAIFeedback(submission.id).catch((err) => {
-      console.error('Background AI draft generation failed for submission', submission.id, err);
-    });
 
     return NextResponse.json({ submission, attemptNumber }, { status: 201 });
   } catch (err) {

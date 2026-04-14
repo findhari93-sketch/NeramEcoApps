@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const { data: user } = await supabase.from('users').select('id, user_type').eq('ms_oid', msUser.oid).single();
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const role = ['teacher', 'admin'].includes(user.user_type) ? 'teacher' : 'student';
+    const role = ['teacher', 'admin'].includes(user.user_type ?? '') ? 'teacher' : 'student';
     const homework = await getDrawingHomeworkList(user.id, role as any);
     return NextResponse.json({ homework });
   } catch (err) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient();
     const { data: user } = await supabase.from('users').select('id, user_type').eq('ms_oid', msUser.oid).single();
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (!user || !['teacher', 'admin'].includes(user.user_type ?? '')) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 

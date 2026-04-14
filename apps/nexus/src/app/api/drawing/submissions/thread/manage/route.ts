@@ -28,7 +28,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const isTeacher = ['teacher', 'admin'].includes(user.user_type);
+    const isTeacher = ['teacher', 'admin'].includes(user.user_type ?? '');
     const targetStudentId = isTeacher && studentId ? studentId : user.id;
 
     // Students can't delete completed threads

@@ -18,7 +18,7 @@ export async function PATCH(
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (!user || !['teacher', 'admin'].includes(user.user_type ?? '')) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
@@ -75,10 +75,10 @@ export async function PATCH(
             student_id: submission.student_id,
             classroom_id: (enrollment as any).classroom_id,
             batch_id: (enrollment as any).batch_id || null,
-            event_type: 'drawing_completed',
+            event_type: 'drawing_reviewed',
             points: 10,
             source_id: `review_${submission.id}`,
-            activity_type: 'drawing_completed',
+            activity_type: 'drawing_reviewed',
             activity_title: 'Drawing reviewed and completed by tutor',
             metadata: { submission_id: submission.id, rating: tutor_rating },
           }).catch(() => {});
@@ -90,7 +90,7 @@ export async function PATCH(
 
     // Notify student if this is a re-review
     if (wasAlreadyReviewed) {
-      supabase
+      void supabase
         .from('drawing_notifications' as any)
         .insert({
           student_id: submission.student_id,

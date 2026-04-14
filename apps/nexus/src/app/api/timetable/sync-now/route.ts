@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Get classroom details (only active, only those with a linked Teams team)
     const { data: classrooms } = await supabase
       .from('nexus_classrooms')
-      .select('id, ms_team_id, last_synced_at')
+      .select('id, ms_team_id')
       .in('id', classroomIds)
       .eq('is_active', true);
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const futureDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
+
 
     let totalImported = 0;
     let totalUpdated = 0;
@@ -76,9 +76,6 @@ export async function POST(request: NextRequest) {
     // ─── 1. MEETING SYNC ─────────────────────────────────────────────────────
     for (const classroom of classrooms || []) {
       if (!classroom.ms_team_id) continue;
-
-      // Rate limit: skip if this classroom was synced within the last 5 minutes
-      if (classroom.last_synced_at && classroom.last_synced_at > fiveMinutesAgo) continue;
 
       try {
         const result = await syncClassroomMeetings(
@@ -93,11 +90,7 @@ export async function POST(request: NextRequest) {
         totalCancelled += result.cancelled;
         syncedCount++;
 
-        // Update last_synced_at
-        await supabase
-          .from('nexus_classrooms')
-          .update({ last_synced_at: now.toISOString() })
-          .eq('id', classroom.id);
+        // Sync completed for this classroom
       } catch (err) {
         console.error(`[sync-now] Meeting sync failed for classroom ${classroom.id}:`, err);
       }

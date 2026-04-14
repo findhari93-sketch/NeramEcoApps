@@ -40,7 +40,7 @@ export async function DELETE(
       .eq('ms_oid', msUser.oid)
       .single();
 
-    if (!user || !['teacher', 'admin'].includes(user.user_type)) {
+    if (!user || !['teacher', 'admin'].includes(user.user_type ?? '')) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Typography, alpha, useTheme } from '@neram/ui';
-import ButtonBase from '@mui/material/ButtonBase';
+import { ButtonBase } from '@mui/material';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';

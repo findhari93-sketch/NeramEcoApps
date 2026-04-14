@@ -1,11 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import {
-  Box, Typography, Button, Paper, Chip, LinearProgress,
-  Accordion, AccordionSummary, AccordionDetails, CircularProgress,
+  Box, Typography, Paper,
+  Accordion, AccordionSummary, AccordionDetails,
 } from '@neram/ui';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import TipsAndUpdatesOutlinedIcon from '@mui/icons-material/TipsAndUpdatesOutlined';
@@ -44,80 +42,23 @@ const CRITERIA = [
   { key: 'technique', label: 'Technique', icon: '✏️' },
 ];
 
+/**
+ * Read-only display of existing AI feedback.
+ * AI generation has been disabled. This component only shows
+ * previously generated feedback from old submissions.
+ */
 export default function AIFeedbackPanel({
-  submissionId, existingFeedback, getToken,
+  existingFeedback,
 }: AIFeedbackPanelProps) {
-  const [feedback, setFeedback] = useState<AIFeedback | null>(existingFeedback);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const feedback = existingFeedback;
 
-  const requestFeedback = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const token = await getToken();
-      const res = await fetch('/api/drawing/ai-feedback', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submission_id: submissionId }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to get feedback');
-      }
-
-      const data = await res.json();
-      setFeedback(data.feedback);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // No feedback yet, show request button
-  if (!feedback && !loading) {
-    return (
-      <Box>
-        <Button
-          variant="outlined"
-          startIcon={<AutoAwesomeOutlinedIcon />}
-          onClick={requestFeedback}
-          fullWidth
-          sx={{ textTransform: 'none', minHeight: 44, mb: error ? 1 : 0 }}
-        >
-          Get AI Feedback
-        </Button>
-        {error && (
-          <Typography color="error" variant="caption">{error}</Typography>
-        )}
-      </Box>
-    );
-  }
-
-  // Loading
-  if (loading) {
-    return (
-      <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-        <CircularProgress size={24} sx={{ mb: 1 }} />
-        <Typography variant="body2" color="text.secondary">
-          Analyzing your drawing...
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          This may take a few seconds
-        </Typography>
-      </Paper>
-    );
-  }
-
-  // Display feedback
+  // No existing feedback, show nothing
   if (!feedback) return null;
 
   return (
     <Box>
       <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-        AI FEEDBACK
+        AI FEEDBACK (PREVIOUSLY GENERATED)
       </Typography>
 
       {/* Grade badge */}
@@ -160,7 +101,7 @@ export default function AIFeedbackPanel({
         </AccordionSummary>
         <AccordionDetails sx={{ pt: 0 }}>
           {CRITERIA.map((c) => {
-            const value = (feedback as Record<string, unknown>)[c.key];
+            const value = (feedback as unknown as Record<string, unknown>)[c.key];
             if (!value) return null;
             return (
               <Box key={c.key} sx={{ mb: 1.5 }}>
@@ -203,18 +144,6 @@ export default function AIFeedbackPanel({
           </Box>
         </Paper>
       )}
-
-      {/* Regenerate button */}
-      <Button
-        variant="text"
-        size="small"
-        startIcon={<AutoAwesomeOutlinedIcon />}
-        onClick={requestFeedback}
-        disabled={loading}
-        sx={{ mt: 1, textTransform: 'none' }}
-      >
-        Regenerate Feedback
-      </Button>
     </Box>
   );
 }
