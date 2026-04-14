@@ -3,17 +3,14 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
- * GET /api/documents/exam-plans?classroom={id}
- * Returns student's exam plans for the classroom
+ * GET /api/documents/exam-plans?exam_type=nata
+ * Returns student's exam plans. No classroom filter needed.
+ * Accepts optional classroom param for backward compatibility.
  */
 export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const classroomId = request.nextUrl.searchParams.get('classroom');
-
-    if (!classroomId) {
-      return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
-    }
+    const examType = request.nextUrl.searchParams.get('exam_type');
 
     const supabase = getSupabaseAdminClient();
     const { data: user } = await supabase
@@ -24,13 +21,16 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // nexus_student_exam_plans may not be in generated types
-    const { data, error } = await (supabase as any)
+    let query = (supabase as any)
       .from('nexus_student_exam_plans')
       .select('*')
-      .eq('student_id', user.id)
-      .eq('classroom_id', classroomId);
+      .eq('student_id', user.id);
 
+    if (examType) {
+      query = query.eq('exam_type', examType);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
     return NextResponse.json({ plans: data || [] });
@@ -42,8 +42,9 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/documents/exam-plans
- * Create or update an exam plan
- * Body: { classroom_id, exam_type, state, application_number?, notes? }
+ * Create or update an exam plan.
+ * Body: { exam_type, state, application_number?, notes?, classroom_id? }
+ * classroom_id is optional (kept for backward compat, stored for audit).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -59,10 +60,10 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const body = await request.json();
-    const { classroom_id, exam_type, state, application_number, notes } = body;
+    const { exam_type, state, application_number, notes, classroom_id, target_year } = body;
 
-    if (!classroom_id || !exam_type || !state) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    if (!exam_type || !state) {
+      return NextResponse.json({ error: 'Missing required fields: exam_type, state' }, { status: 400 });
     }
 
     const { data, error } = await (supabase as any)
@@ -70,14 +71,15 @@ export async function POST(request: NextRequest) {
       .upsert(
         {
           student_id: user.id,
-          classroom_id,
+          classroom_id: classroom_id || null,
           exam_type,
           state,
           application_number: application_number || null,
+          target_year: target_year || null,
           notes: notes || null,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'student_id,classroom_id,exam_type' }
+        { onConflict: 'student_id,exam_type' }
       )
       .select()
       .single();

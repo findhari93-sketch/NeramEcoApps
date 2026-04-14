@@ -197,10 +197,10 @@ export default function UnifiedExamsContainer() {
         <>
           {/* Desktop: professional side-by-side layout */}
           {isDesktop ? (
-            <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 3, alignItems: 'start' }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 3, alignItems: 'start', minWidth: 0 }}>
               {/* Left: My Journey */}
               {!isTeacher && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, overflow: 'hidden' }}>
                   <PersonalHeroCard
                     nextExam={data.next_exam}
                     progress={data.overall_progress}
@@ -234,7 +234,7 @@ export default function UnifiedExamsContainer() {
 
               {/* Right: Classroom — students only; teachers use the full-width box below */}
               {!isTeacher && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, overflow: 'hidden' }}>
                   <Paper
                     variant="outlined"
                     sx={{ borderRadius: 3, p: 2.5, bgcolor: 'background.paper' }}

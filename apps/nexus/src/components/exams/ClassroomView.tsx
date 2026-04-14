@@ -104,7 +104,7 @@ export default function ClassroomView({
     : null;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}>
       {!isTeacher && (
         <ExamStatusCard
           planState={myStudentSummary?.plan_state ?? null}

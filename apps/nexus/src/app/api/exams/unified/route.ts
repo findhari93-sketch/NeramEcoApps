@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { getExamConfig } from '@/lib/exam-config';
+import { getExamRoster } from '@/lib/exam-roster';
 
 function formatLocalDate(d: Date): string {
   const year = d.getFullYear();
@@ -10,19 +12,15 @@ function formatLocalDate(d: Date): string {
 }
 
 /**
- * GET /api/exams/unified?classroom={id}&exam_type=nata&year=2026&phase=phase_1&week_offset=0
+ * GET /api/exams/unified?exam_type=nata&year=2026&phase=phase_1&week_offset=0
  * Returns combined personal exam data + classroom schedule in one call.
+ * Exam data is aggregated across all classrooms the user is enrolled in.
  */
 export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const classroomId = request.nextUrl.searchParams.get('classroom');
     const examType = request.nextUrl.searchParams.get('exam_type') || 'nata';
     const year = parseInt(request.nextUrl.searchParams.get('year') || String(new Date().getFullYear()));
-
-    if (!classroomId) {
-      return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
-    }
 
     const supabase = getSupabaseAdminClient();
     const db = supabase as any;
@@ -35,33 +33,29 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Verify enrollment
-    const { data: enrollment } = await db
-      .from('nexus_enrollments')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('classroom_id', classroomId)
-      .eq('is_active', true)
-      .single();
-
-    if (!enrollment) {
-      return NextResponse.json({ error: 'Not enrolled in this classroom' }, { status: 403 });
+    // Verify user has at least one active enrollment
+    const { studentIds, isTeacher } = await getExamRoster(db, user.id);
+    if (studentIds.length === 0 && !isTeacher) {
+      return NextResponse.json({ error: 'Not enrolled in any classroom' }, { status: 403 });
     }
 
-    // 1. Personal: registrations
+    // Get exam config
+    const examConfig = getExamConfig(examType);
+
+    // 1. Personal: registrations (no classroom filter)
     const { data: registrations } = await db
       .from('nexus_student_exam_registrations')
       .select('id, exam_type, is_writing, application_number')
       .eq('student_id', user.id)
-      .eq('classroom_id', classroomId);
+      .eq('exam_type', examType);
 
-    // 2. Personal: my attempts (with resolved exam_date)
+    // 2. Personal: my attempts (no classroom filter)
     const { data: rawAttempts } = await db
       .from('nexus_student_exam_attempts')
       .select('id, exam_type, phase, attempt_number, exam_date, exam_date_id, exam_city, exam_session, state, aptitude_score, drawing_score, total_score, exam_completed_at')
       .eq('student_id', user.id)
-      .eq('classroom_id', classroomId)
       .eq('exam_type', examType)
+      .is('deleted_at', null)
       .order('attempt_number', { ascending: true });
 
     // Resolve exam_date from exam_date_id for any missing
@@ -74,7 +68,6 @@ export async function GET(request: NextRequest) {
         .select('id, exam_date')
         .in('id', dateIds);
       const dateMap: Record<string, string> = {};
-      // Normalize timestamp to YYYY-MM-DD
       for (const d of (resolved || [])) dateMap[d.id] = d.exam_date?.split('T')[0] || d.exam_date;
       myAttempts = myAttempts.map((a: any) => ({
         ...a,
@@ -105,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Overall progress
-    const totalPossible = examType === 'nata' ? 3 : 2; // Phase 1 (2) + Phase 2 (1) for NATA
+    const totalPossible = examType === 'nata' ? 3 : 2;
     const activated = myAttempts.length;
     const completed = myAttempts.filter((a: any) => a.state === 'completed' || a.state === 'scorecard_uploaded').length;
     const scores = myAttempts
@@ -113,12 +106,24 @@ export async function GET(request: NextRequest) {
       .filter((s: any) => s !== null && s !== undefined) as number[];
     const bestScore = scores.length > 0 ? Math.max(...scores) : null;
 
-    // 5. Forward to schedule API (reuse the same request with params)
+    // 5. Phase 2 eligibility (NATA-specific)
+    let phase2Eligible = true;
+    let phase2Reason: string | null = null;
+    if (examType === 'nata' && examConfig?.phase2Rule === 'only_if_missed_phase1') {
+      const phase1Attempted = myAttempts.some(
+        (a: any) => a.phase === 'phase_1' && ['applied', 'completed', 'scorecard_uploaded'].includes(a.state)
+      );
+      if (phase1Attempted) {
+        phase2Eligible = false;
+        phase2Reason = 'Phase 2 is only for students who missed Phase 1';
+      }
+    }
+
+    // 6. Forward to schedule API
     const phase = request.nextUrl.searchParams.get('phase') || 'phase_1';
     const weekOffset = request.nextUrl.searchParams.get('week_offset') || '0';
 
     const scheduleUrl = new URL('/api/exam-schedule', request.url);
-    scheduleUrl.searchParams.set('classroom', classroomId);
     scheduleUrl.searchParams.set('exam_type', examType);
     scheduleUrl.searchParams.set('year', String(year));
     scheduleUrl.searchParams.set('phase', phase);
@@ -140,6 +145,9 @@ export async function GET(request: NextRequest) {
         completed,
         best_score: bestScore,
       },
+      phase_2_eligible: phase2Eligible,
+      phase_2_reason: phase2Reason,
+      exam_config: examConfig || null,
       schedule,
     });
   } catch (err) {

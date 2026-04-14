@@ -138,11 +138,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               component="main"
               sx={{
                 flexGrow: 1,
-                overflow: 'hidden',
+                overflowX: 'hidden',
+                overflowY: 'auto',
                 bgcolor: (theme) => theme.palette.mode === 'light' ? '#FAFAFA' : 'background.default',
-                pt: { xs: 1, md: 3 },
+                pt: { xs: 2, md: 3 },
                 pb: { xs: 10, md: 3 },
-                px: { xs: 1, sm: 3, md: 4 },
+                px: { xs: 2, sm: 3, md: 4 },
               }}
             >
               <Container maxWidth="lg" disableGutters>

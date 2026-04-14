@@ -17,8 +17,10 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import EditOffIcon from '@mui/icons-material/EditOff';
 import RegionAnnotationLayer from './RegionAnnotationLayer';
 import {
-  type DrawingMedium, type SkillLevel, type RegionAnnotation,
-  MEDIUM_LABELS, LEVEL_LABELS, buildCombinedPrompt, getMediumFromCategory,
+  type DrawingMedium, type SkillLevel, type RegionAnnotation, type PromptType,
+  MEDIUM_LABELS, LEVEL_LABELS, PROMPT_TYPE_LABELS,
+  buildAnnotationPrompt, buildReferencePrompt, buildFeedbackPrompt,
+  getMediumFromCategory,
 } from '@/lib/drawing-prompt-templates';
 
 export interface OverlayAnnotation {
@@ -99,7 +101,7 @@ export default function ImageToggleTabs({
 
   // Smart copy menu state
   const [copyMenuAnchor, setCopyMenuAnchor] = useState<null | HTMLElement>(null);
-  const [promptBanner, setPromptBanner] = useState(false);
+  const [promptBanner, setPromptBanner] = useState<string | false>(false);
 
   // Medium and level selectors
   const [medium, setMedium] = useState<DrawingMedium>(
@@ -130,11 +132,23 @@ export default function ImageToggleTabs({
     setCopyMenuAnchor(null);
   };
 
-  const handleCopyWithPrompt = async () => {
-    const prompt = buildCombinedPrompt(medium, level, regionAnnotations, questionContext);
+  const handleCopyPrompt = async (type: PromptType) => {
+    let prompt: string;
+    switch (type) {
+      case 'annotation':
+        prompt = buildAnnotationPrompt(medium, level, regionAnnotations, questionContext);
+        break;
+      case 'reference':
+        prompt = buildReferencePrompt(medium, level, questionContext);
+        break;
+      case 'feedback':
+        prompt = buildFeedbackPrompt(medium, level, regionAnnotations, questionContext);
+        break;
+    }
     try {
       await navigator.clipboard.writeText(prompt);
-      setPromptBanner(true);
+      const label = PROMPT_TYPE_LABELS[type].label;
+      setPromptBanner(label);
     } catch { /* clipboard may be denied */ }
     setCopyMenuAnchor(null);
   };
@@ -328,15 +342,31 @@ export default function ImageToggleTabs({
             <ListItemText primary="Copy Image Only" secondary="Copies the displayed image" />
           </MenuItem>
           {isEditMode && (
-            <MenuItem onClick={handleCopyWithPrompt}>
-              <ListItemIcon><DescriptionOutlinedIcon fontSize="small" /></ListItemIcon>
-              <ListItemText
-                primary="Copy AI Prompt"
-                secondary={`${MEDIUM_LABELS[medium]}, ${LEVEL_LABELS[level]}${regionAnnotations.length ? ` + ${regionAnnotations.length} annotation${regionAnnotations.length > 1 ? 's' : ''}` : ''}`}
-              />
-            </MenuItem>
+            <>
+              <MenuItem onClick={() => handleCopyPrompt('annotation')} sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+                <ListItemIcon><DescriptionOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText
+                  primary={`${PROMPT_TYPE_LABELS.annotation.icon} Annotation Prompt`}
+                  secondary={`Arrows, circles, labels on drawing${regionAnnotations.length ? ` (${regionAnnotations.length} area${regionAnnotations.length > 1 ? 's' : ''} marked)` : ''}`}
+                />
+              </MenuItem>
+              <MenuItem onClick={() => handleCopyPrompt('reference')}>
+                <ListItemIcon><DescriptionOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText
+                  primary={`${PROMPT_TYPE_LABELS.reference.icon} Reference Prompt`}
+                  secondary={`Corrected ${LEVEL_LABELS[level].toLowerCase()} version`}
+                />
+              </MenuItem>
+              <MenuItem onClick={() => handleCopyPrompt('feedback')}>
+                <ListItemIcon><DescriptionOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText
+                  primary={`${PROMPT_TYPE_LABELS.feedback.icon} Feedback Prompt`}
+                  secondary="Written evaluation with rating"
+                />
+              </MenuItem>
+            </>
           )}
-          <MenuItem onClick={() => { window.open('https://gemini.google.com', '_blank'); setCopyMenuAnchor(null); }}>
+          <MenuItem onClick={() => { window.open('https://gemini.google.com', '_blank'); setCopyMenuAnchor(null); }} sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
             <ListItemIcon><OpenInNewIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Open Gemini" />
           </MenuItem>
@@ -392,7 +422,7 @@ export default function ImageToggleTabs({
 
       {/* Prompt copied banner (Snackbar) */}
       <Snackbar
-        open={promptBanner}
+        open={!!promptBanner}
         autoHideDuration={8000}
         onClose={() => setPromptBanner(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
@@ -400,7 +430,7 @@ export default function ImageToggleTabs({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <CheckIcon sx={{ fontSize: 18, color: '#4caf50' }} />
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Prompt copied! Now {isMobile ? 'long-press' : 'right-click'} the image to copy it, then paste both into Gemini.
+              {promptBanner} prompt copied! {isMobile ? 'Long-press' : 'Right-click'} the image to copy it, then paste both into Gemini.
             </Typography>
             <Button
               size="small"
