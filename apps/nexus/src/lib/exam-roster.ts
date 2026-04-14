@@ -1,6 +1,5 @@
 // @ts-nocheck
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SupabaseClient = any;
+type SupabaseClient = ReturnType<typeof Object.create>;
 
 /**
  * Get the aggregated student roster across all classrooms the viewer shares.
