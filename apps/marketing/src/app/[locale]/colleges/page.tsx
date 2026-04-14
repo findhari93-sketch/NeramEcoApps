@@ -62,22 +62,24 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
     limit: 20,
   };
 
-  // Fetch all data in parallel
+  // Fetch all data in parallel — wrap each query so one failure doesn't crash the page
   const [
-    { data: colleges, count },
+    collegesResult,
     stats,
     stateData,
     typeData,
     counselingData,
     featuredColleges,
   ] = await Promise.all([
-    getColleges(filters),
-    getLandingStats(),
-    getActiveStates(),
-    getCollegeCountByType(),
-    getCollegeCountByCounseling(),
-    getFeaturedColleges(),
+    getColleges(filters).catch(() => ({ data: [] as any[], count: 0 })),
+    getLandingStats().catch(() => ({ totalColleges: 0, totalStates: 0, coaApprovedCount: 0 })),
+    getActiveStates().catch(() => []),
+    getCollegeCountByType().catch(() => []),
+    getCollegeCountByCounseling().catch(() => []),
+    getFeaturedColleges().catch(() => []),
   ]);
+
+  const { data: colleges, count } = collegesResult;
 
   const totalPages = Math.ceil(count / 20);
 
