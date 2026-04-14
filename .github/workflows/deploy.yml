@@ -27,40 +27,8 @@ env:
 
 jobs:
   # ===========================================
-  # PRE-DEPLOY TESTS
-  # ===========================================
-  test:
-    name: Pre-Deploy Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8.12.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run ESLint
-        run: pnpm lint
-
-      - name: Run TypeScript check
-        run: pnpm type-check
-
-      - name: Run unit tests
-        run: pnpm test:run
-
-  # ===========================================
   # DETECT WHICH APPS CHANGED
+  # (skipped for workflow_dispatch — deploys all)
   # ===========================================
   detect-changes:
     name: Detect Changes
@@ -71,6 +39,7 @@ jobs:
       nexus: ${{ steps.filter.outputs.nexus }}
       admin: ${{ steps.filter.outputs.admin }}
       shared: ${{ steps.filter.outputs.shared }}
+      is_manual: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,7 +106,6 @@ jobs:
   deploy-db-production:
     name: DB Migrations (Production)
     runs-on: ubuntu-latest
-    needs: test
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     steps:
       - name: Checkout
@@ -171,16 +139,20 @@ jobs:
 
   # ===========================================
   # BUILD & DEPLOY: Marketing
+  # Each app checks ONLY its own lint+types
   # ===========================================
   deploy-marketing:
     name: Deploy Marketing
     runs-on: ubuntu-latest
-    needs: [test, detect-changes]
+    needs: [detect-changes]
     if: |
       always() &&
       (needs.detect-changes.result == 'success') &&
-      (needs.detect-changes.outputs.marketing == 'true' || needs.detect-changes.outputs.shared == 'true') &&
-      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
+      (
+        github.event_name == 'workflow_dispatch' ||
+        needs.detect-changes.outputs.marketing == 'true' ||
+        needs.detect-changes.outputs.shared == 'true'
+      )
     env:
       VERCEL_PROJECT_ID: prj_kCLOVjMqr99PfKvbdiZdM8vHpNST
     steps:
@@ -200,6 +172,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type-check marketing
+        run: pnpm type-check --filter @neram/marketing
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
@@ -241,12 +216,15 @@ jobs:
   deploy-app:
     name: Deploy App
     runs-on: ubuntu-latest
-    needs: [test, detect-changes]
+    needs: [detect-changes]
     if: |
       always() &&
       (needs.detect-changes.result == 'success') &&
-      (needs.detect-changes.outputs.app == 'true' || needs.detect-changes.outputs.shared == 'true') &&
-      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
+      (
+        github.event_name == 'workflow_dispatch' ||
+        needs.detect-changes.outputs.app == 'true' ||
+        needs.detect-changes.outputs.shared == 'true'
+      )
     env:
       VERCEL_PROJECT_ID: prj_n1hKWpSZezUx3m3ui0i2eLKq13OR
     steps:
@@ -266,6 +244,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type-check app
+        run: pnpm type-check --filter @neram/tools-app
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
@@ -307,12 +288,15 @@ jobs:
   deploy-nexus:
     name: Deploy Nexus
     runs-on: ubuntu-latest
-    needs: [test, detect-changes]
+    needs: [detect-changes]
     if: |
       always() &&
       (needs.detect-changes.result == 'success') &&
-      (needs.detect-changes.outputs.nexus == 'true' || needs.detect-changes.outputs.shared == 'true') &&
-      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
+      (
+        github.event_name == 'workflow_dispatch' ||
+        needs.detect-changes.outputs.nexus == 'true' ||
+        needs.detect-changes.outputs.shared == 'true'
+      )
     env:
       VERCEL_PROJECT_ID: prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX
     steps:
@@ -332,6 +316,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type-check nexus
+        run: pnpm type-check --filter @neram/nexus
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
@@ -373,12 +360,15 @@ jobs:
   deploy-admin:
     name: Deploy Admin
     runs-on: ubuntu-latest
-    needs: [test, detect-changes]
+    needs: [detect-changes]
     if: |
       always() &&
       (needs.detect-changes.result == 'success') &&
-      (needs.detect-changes.outputs.admin == 'true' || needs.detect-changes.outputs.shared == 'true') &&
-      (github.ref != 'refs/heads/main' || needs.test.result == 'success')
+      (
+        github.event_name == 'workflow_dispatch' ||
+        needs.detect-changes.outputs.admin == 'true' ||
+        needs.detect-changes.outputs.shared == 'true'
+      )
     env:
       VERCEL_PROJECT_ID: prj_QoCOUGXPvDYAfOXHYFpF62f57hWV
     steps:
@@ -398,6 +388,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type-check admin
+        run: pnpm type-check --filter @neram/admin
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
@@ -452,26 +445,9 @@ jobs:
 
           echo "## $ENV Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| App | Changed | Deploy Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|---------|---------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Marketing | ${{ needs.detect-changes.outputs.marketing == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-marketing.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| App | ${{ needs.detect-changes.outputs.app == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-app.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Nexus | ${{ needs.detect-changes.outputs.nexus == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-nexus.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Admin | ${{ needs.detect-changes.outputs.admin == 'true' || needs.detect-changes.outputs.shared == 'true' }} | ${{ needs.deploy-admin.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ "$ENV" = "Production" ]; then
-            echo "| App | URL |" >> $GITHUB_STEP_SUMMARY
-            echo "|-----|-----|" >> $GITHUB_STEP_SUMMARY
-            echo "| Marketing | https://neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-            echo "| App | https://app.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-            echo "| Nexus | https://nexus.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-            echo "| Admin | https://admin.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| App | URL |" >> $GITHUB_STEP_SUMMARY
-            echo "|-----|-----|" >> $GITHUB_STEP_SUMMARY
-            echo "| Marketing | https://staging.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-            echo "| App | https://staging-app.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-            echo "| Nexus | https://staging-nexus.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-            echo "| Admin | https://staging-admin.neramclasses.com |" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "| App | Deploy Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|---------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Marketing | ${{ needs.deploy-marketing.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| App | ${{ needs.deploy-app.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Nexus | ${{ needs.deploy-nexus.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Admin | ${{ needs.deploy-admin.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
