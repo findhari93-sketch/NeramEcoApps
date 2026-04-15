@@ -5792,6 +5792,11 @@ export interface NTAParsedQuestion {
   explanation_brief?: string | null;
   /** Detailed step-by-step explanation */
   explanation_detailed?: string | null;
+  // Drawing-specific fields (for DRAWING_PROMPT format)
+  drawing_objects?: string[];
+  drawing_color_constraint?: string;
+  drawing_design_principle?: string;
+  drawing_sub_type?: '2d_composition' | '3d_composition' | 'kit_sculpture';
 }
 
 export interface NTAParsedPaper {
@@ -6897,6 +6902,25 @@ export interface DrawingQuestion {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** FK to nexus_qb_questions for cross-module linking */
+  qb_question_id: string | null;
+  /** Sequential number per year (Q1, Q2, ...) */
+  question_number: number | null;
+}
+
+export type DrawingAttemptStatus = 'not_attempted' | 'in_progress' | 'redo' | 'completed';
+
+export interface DrawingQuestionEnriched extends DrawingQuestion {
+  /** Number of years/papers this question appeared in */
+  repeat_count: number;
+  /** List of years this question appeared in */
+  repeat_years: number[];
+  /** Teacher reference solution image from QB */
+  solution_image_url: string | null;
+  /** Teacher reference solution video from QB */
+  solution_video_url: string | null;
+  /** Current student's attempt status for this question */
+  attempt_status: DrawingAttemptStatus;
 }
 
 export interface DrawingSubmission {

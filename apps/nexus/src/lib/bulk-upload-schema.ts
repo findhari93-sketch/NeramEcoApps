@@ -84,6 +84,11 @@ export interface ReviewQuestion {
   _modified?: boolean;
   /** Validation errors for this question */
   _errors?: string[];
+  // --- Drawing-specific fields (for DRAWING_PROMPT format) ---
+  drawing_objects?: string[];
+  drawing_color_constraint?: string;
+  drawing_design_principle?: string;
+  drawing_sub_type?: '2d_composition' | '3d_composition' | 'kit_sculpture';
 }
 
 // ============================================
@@ -137,6 +142,15 @@ export interface BulkUploadQuestion {
   explanation_brief?: string;
   /** Detailed step-by-step explanation */
   explanation_detailed?: string;
+  // --- Drawing-specific fields (for DRAWING_PROMPT format) ---
+  /** Objects to include in the drawing */
+  drawing_objects?: string[];
+  /** Color constraint (e.g., "primary colors only", "maximum 4 colours") */
+  drawing_color_constraint?: string;
+  /** Design principle tested (e.g., "balance", "rhythm", "emphasis") */
+  drawing_design_principle?: string;
+  /** Drawing sub-type */
+  drawing_sub_type?: '2d_composition' | '3d_composition' | 'kit_sculpture';
 }
 
 // ============================================
@@ -235,6 +249,13 @@ export function validateAndConvertJSON(data: unknown): ValidationResult {
         solution_video_url: q.solution_video_url || undefined,
         explanation_brief: q.explanation_brief || undefined,
         explanation_detailed: q.explanation_detailed || undefined,
+        // Drawing-specific fields
+        ...(format === 'DRAWING_PROMPT' && {
+          drawing_objects: q.drawing_objects || undefined,
+          drawing_color_constraint: q.drawing_color_constraint || undefined,
+          drawing_design_principle: q.drawing_design_principle || undefined,
+          drawing_sub_type: q.drawing_sub_type || undefined,
+        }),
       });
     }
   }
@@ -463,7 +484,11 @@ ${JSON.stringify(JSON_SCHEMA_EXAMPLE, null, 2)}
    - If the question has a diagram/figure, include it as a base64 data URL in \`question_image\`.
    - For MCQ: include all options with labels A, B, C, D (convert from (1),(2),(3),(4) if needed), with LaTeX for math in option text.
    - For NUMERICAL: set \`question_format\` to \`"NUMERICAL"\`, no options needed.
-   - For DRAWING_PROMPT: set \`question_format\` to \`"DRAWING_PROMPT"\`.
+   - For DRAWING_PROMPT: set \`question_format\` to \`"DRAWING_PROMPT"\`. Also extract:
+     * \`drawing_objects\`: array of object names to include (e.g. \`["chair", "table", "lamp"]\`)
+     * \`drawing_color_constraint\`: color rules (e.g. "primary colors only", "maximum 4 colours")
+     * \`drawing_design_principle\`: principle tested (e.g. "balance", "rhythm", "emphasis")
+     * \`drawing_sub_type\`: one of \`"2d_composition"\`, \`"3d_composition"\`, \`"kit_sculpture"\`
    - Include \`nta_question_id\` if visible in the PDF. Omit or use empty string for old-format papers.
 6. **Extract marks from paper instructions:**
    - Modern NTA: MCQ +4/-1, Numerical +4/0, Drawing +100/0

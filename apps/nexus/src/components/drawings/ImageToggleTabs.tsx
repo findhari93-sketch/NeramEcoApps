@@ -15,6 +15,8 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import EditOffIcon from '@mui/icons-material/EditOff';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import GestureIcon from '@mui/icons-material/Gesture';
 import RegionAnnotationLayer from './RegionAnnotationLayer';
 import {
   type DrawingMedium, type SkillLevel, type RegionAnnotation, type PromptType,
@@ -41,6 +43,9 @@ interface ImageToggleTabsProps {
   onRegionAnnotationsChange?: (annotations: RegionAnnotation[]) => void;
   questionCategory?: string;
   questionContext?: string;
+  onOpenSketch?: () => void;
+  /** Hide teacher-only menu items like "Open Gemini" and prompt copy options */
+  studentView?: boolean;
 }
 
 // Maps rough area names to approximate percentage positions on the image (backwards compat)
@@ -88,6 +93,8 @@ export default function ImageToggleTabs({
   onRegionAnnotationsChange,
   questionCategory,
   questionContext,
+  onOpenSketch,
+  studentView = false,
 }: ImageToggleTabsProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -102,6 +109,9 @@ export default function ImageToggleTabs({
   // Smart copy menu state
   const [copyMenuAnchor, setCopyMenuAnchor] = useState<null | HTMLElement>(null);
   const [promptBanner, setPromptBanner] = useState<string | false>(false);
+
+  // Pencil tools menu state
+  const [pencilMenuAnchor, setPencilMenuAnchor] = useState<null | HTMLElement>(null);
 
   // Medium and level selectors
   const [medium, setMedium] = useState<DrawingMedium>(
@@ -122,12 +132,16 @@ export default function ImageToggleTabs({
       ? correctedImageUrl!
       : originalImageUrl;
 
+  // Snackbar state for student direct-copy feedback
+  const [copiedBanner, setCopiedBanner] = useState(false);
+
   const handleCopyImage = async () => {
     try {
       const res = await fetch(displayImageUrl);
       const blob = await res.blob();
       const pngBlob = blob.type === 'image/png' ? blob : await convertToPng(blob);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+      if (studentView) setCopiedBanner(true);
     } catch { /* clipboard may be denied */ }
     setCopyMenuAnchor(null);
   };
@@ -157,8 +171,9 @@ export default function ImageToggleTabs({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height, width: '100%' }}>
-      {/* Toggle row */}
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', pb: 1, gap: 1, flexShrink: 0, flexWrap: 'wrap' }}>
+      {/* Toggle row + copy button */}
+      <Box sx={{ display: 'flex', alignItems: 'center', pb: 1, flexShrink: 0, px: 1 }}>
+        <Box sx={{ flex: 1 }} />
         <ToggleButtonGroup
           value={activeTab}
           exclusive
@@ -192,35 +207,24 @@ export default function ImageToggleTabs({
             </ToggleButton>
           )}
         </ToggleButtonGroup>
-
-        {/* Medium / Level chips (visible in edit mode) */}
-        {isEditMode && activeTab === 'original' && (
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {(Object.entries(MEDIUM_LABELS) as [DrawingMedium, string][]).map(([key, label]) => (
-              <Chip
-                key={key}
-                label={label}
+        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          {!imgError && (
+            <Tooltip title={studentView ? 'Copy image' : 'Copy options'} placement="left">
+              <IconButton
+                onClick={studentView ? handleCopyImage : (e) => setCopyMenuAnchor(e.currentTarget)}
                 size="small"
-                variant={medium === key ? 'filled' : 'outlined'}
-                color={medium === key ? 'primary' : 'default'}
-                onClick={() => setMedium(key)}
-                sx={{ fontSize: '0.68rem', height: 24, cursor: 'pointer' }}
-              />
-            ))}
-            <Box sx={{ width: 1, borderLeft: '1px solid rgba(255,255,255,0.3)', mx: 0.25 }} />
-            {(Object.entries(LEVEL_LABELS) as [SkillLevel, string][]).map(([key, label]) => (
-              <Chip
-                key={key}
-                label={label}
-                size="small"
-                variant={level === key ? 'filled' : 'outlined'}
-                color={level === key ? 'secondary' : 'default'}
-                onClick={() => setLevel(key)}
-                sx={{ fontSize: '0.68rem', height: 24, cursor: 'pointer' }}
-              />
-            ))}
-          </Box>
-        )}
+                sx={{
+                  bgcolor: 'rgba(0,0,0,0.55)', color: '#fff',
+                  backdropFilter: 'blur(4px)',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                  width: 32, height: 32,
+                }}
+              >
+                <ContentCopyIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </Box>
 
       {/* Image area */}
@@ -311,25 +315,6 @@ export default function ImageToggleTabs({
           );
         })}
 
-        {/* Smart copy menu button (top-right) */}
-        {!imgError && (
-          <Tooltip title="Copy options" placement="left">
-            <IconButton
-              onClick={(e) => setCopyMenuAnchor(e.currentTarget)}
-              size="small"
-              sx={{
-                position: 'absolute', top: 8, right: 8, zIndex: 6,
-                bgcolor: 'rgba(0,0,0,0.55)', color: '#fff',
-                backdropFilter: 'blur(4px)',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
-                width: 32, height: 32,
-              }}
-            >
-              <ContentCopyIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-        )}
-
         <Menu
           anchorEl={copyMenuAnchor}
           open={Boolean(copyMenuAnchor)}
@@ -337,6 +322,42 @@ export default function ImageToggleTabs({
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         >
+          {isEditMode && (
+            <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
+                MEDIUM
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, mb: 1.5 }}>
+                {(Object.entries(MEDIUM_LABELS) as [DrawingMedium, string][]).map(([key, label]) => (
+                  <Chip
+                    key={key}
+                    label={label}
+                    size="small"
+                    variant={medium === key ? 'filled' : 'outlined'}
+                    color={medium === key ? 'primary' : 'default'}
+                    onClick={() => setMedium(key)}
+                    sx={{ fontSize: '0.68rem', height: 24, cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
+              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
+                LEVEL
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {(Object.entries(LEVEL_LABELS) as [SkillLevel, string][]).map(([key, label]) => (
+                  <Chip
+                    key={key}
+                    label={label}
+                    size="small"
+                    variant={level === key ? 'filled' : 'outlined'}
+                    color={level === key ? 'secondary' : 'default'}
+                    onClick={() => setLevel(key)}
+                    sx={{ fontSize: '0.68rem', height: 24, cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
           <MenuItem onClick={handleCopyImage}>
             <ListItemIcon><ImageOutlinedIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Copy Image Only" secondary="Copies the displayed image" />
@@ -366,17 +387,19 @@ export default function ImageToggleTabs({
               </MenuItem>
             </>
           )}
-          <MenuItem onClick={() => { window.open('https://gemini.google.com', '_blank'); setCopyMenuAnchor(null); }} sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
-            <ListItemIcon><OpenInNewIcon fontSize="small" /></ListItemIcon>
-            <ListItemText primary="Open Gemini" />
-          </MenuItem>
+          {!studentView && (
+            <MenuItem onClick={() => { window.open('https://gemini.google.com', '_blank'); setCopyMenuAnchor(null); }} sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+              <ListItemIcon><OpenInNewIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primary="Open Gemini" />
+            </MenuItem>
+          )}
         </Menu>
 
-        {/* Annotate toggle button (bottom-left, visible in edit mode on original tab) */}
+        {/* Pencil tools button (bottom-left, visible in edit mode on original tab) */}
         {isEditMode && activeTab === 'original' && (
-          <Tooltip title={annotateMode ? 'Stop annotating' : 'Annotate drawing'} placement="right">
+          <>
             <IconButton
-              onClick={() => setAnnotateMode(!annotateMode)}
+              onClick={annotateMode ? () => setAnnotateMode(false) : (e) => setPencilMenuAnchor(e.currentTarget)}
               size="small"
               sx={{
                 position: 'absolute', bottom: 8, left: 8, zIndex: 6,
@@ -390,10 +413,28 @@ export default function ImageToggleTabs({
             >
               {annotateMode ? <EditOffIcon sx={{ fontSize: 18 }} /> : <EditOutlinedIcon sx={{ fontSize: 18 }} />}
             </IconButton>
-          </Tooltip>
+            <Menu
+              anchorEl={pencilMenuAnchor}
+              open={Boolean(pencilMenuAnchor)}
+              onClose={() => setPencilMenuAnchor(null)}
+              anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+            >
+              <MenuItem onClick={() => { setAnnotateMode(true); setPencilMenuAnchor(null); }}>
+                <ListItemIcon><GestureIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Annotate regions" secondary="Mark areas with comments" />
+              </MenuItem>
+              {onOpenSketch && (
+                <MenuItem onClick={() => { onOpenSketch(); setPencilMenuAnchor(null); }}>
+                  <ListItemIcon><BrushOutlinedIcon fontSize="small" /></ListItemIcon>
+                  <ListItemText primary="Draw on image" secondary="Sketch corrections over drawing" />
+                </MenuItem>
+              )}
+            </Menu>
+          </>
         )}
 
-        {/* Annotation count badge (bottom-left, next to annotate button) */}
+        {/* Annotation count badge (bottom-left, next to pencil button) */}
         {isEditMode && activeTab === 'original' && regionAnnotations.length > 0 && (
           <Box sx={{
             position: 'absolute', bottom: 12, left: 52, zIndex: 6,
@@ -420,7 +461,7 @@ export default function ImageToggleTabs({
         )}
       </Box>
 
-      {/* Prompt copied banner (Snackbar) */}
+      {/* Prompt copied banner (Snackbar) - teacher only */}
       <Snackbar
         open={!!promptBanner}
         autoHideDuration={8000}
@@ -448,6 +489,23 @@ export default function ImageToggleTabs({
             bgcolor: '#1a1a1a',
             maxWidth: isMobile ? '95vw' : 600,
           },
+        }}
+      />
+
+      {/* Image copied banner (student view) */}
+      <Snackbar
+        open={copiedBanner}
+        autoHideDuration={2500}
+        onClose={() => setCopiedBanner(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CheckIcon sx={{ fontSize: 16, color: '#4caf50' }} />
+            <Typography variant="body2" fontWeight={600}>Image copied to clipboard</Typography>
+          </Box>
+        }
+        sx={{
+          '& .MuiSnackbarContent-root': { bgcolor: '#1a1a1a', minWidth: 'auto' },
         }}
       />
     </Box>

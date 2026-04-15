@@ -14,7 +14,6 @@ import {
   useMediaQuery,
   LinearProgress,
 } from '@neram/ui';
-import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatsRow from '@/components/question-bank/StatsRow';
@@ -22,7 +21,6 @@ import PresetChips from '@/components/question-bank/PresetChips';
 import type {
   NexusQBSavedPreset,
   QBProgressStats,
-  NexusQBClassroomLink,
   QBExamTree,
   QBExamTreeExam,
   QBExamTreeYear,
@@ -96,9 +94,8 @@ function buildPaperCards(examTree: QBExamTree): PaperCard[] {
 export default function QuestionBankHome() {
   const router = useRouter();
   const theme = useTheme();
-  const { activeClassroom, getToken } = useNexusAuthContext();
+  const { getToken } = useNexusAuthContext();
 
-  const [enabled, setEnabled] = useState<boolean | null>(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [stats, setStats] = useState<QBProgressStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -107,46 +104,20 @@ export default function QuestionBankHome() {
   const [presets, setPresets] = useState<NexusQBSavedPreset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
 
+  // QB is globally available, no classroom gating needed
   useEffect(() => {
-    if (!activeClassroom) return;
-    checkAccess();
-  }, [activeClassroom]);
-
-  useEffect(() => {
-    if (enabled !== true) return;
+    setCheckingAccess(false);
     fetchStats();
     fetchExamTree();
     fetchPresets();
-  }, [enabled]);
-
-  async function checkAccess() {
-    setCheckingAccess(true);
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/classroom-link?classroom_id=${activeClassroom!.id}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (!res.ok) {
-        setEnabled(false);
-        return;
-      }
-      const json = await res.json();
-      const link = json.data as NexusQBClassroomLink | null;
-      setEnabled(link?.is_active === true);
-    } catch {
-      setEnabled(false);
-    } finally {
-      setCheckingAccess(false);
-    }
-  }
+  }, []);
 
   async function fetchStats() {
     setStatsLoading(true);
     try {
       const token = await getToken();
       const res = await fetch(
-        `/api/question-bank/stats?classroom_id=${activeClassroom!.id}`,
+        `/api/question-bank/stats`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
@@ -165,7 +136,7 @@ export default function QuestionBankHome() {
     try {
       const token = await getToken();
       const res = await fetch(
-        `/api/question-bank/exam-tree?classroom_id=${activeClassroom!.id}`,
+        `/api/question-bank/exam-tree`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
@@ -184,7 +155,7 @@ export default function QuestionBankHome() {
     try {
       const token = await getToken();
       const res = await fetch(
-        `/api/question-bank/presets?classroom_id=${activeClassroom!.id}`,
+        `/api/question-bank/presets`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (res.ok) {
@@ -239,26 +210,6 @@ export default function QuestionBankHome() {
             <Skeleton key={i} variant="rounded" height={140} />
           ))}
         </Box>
-      </Box>
-    );
-  }
-
-  // ====== NOT ENABLED ======
-  if (enabled === false) {
-    return (
-      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 600, mx: 'auto' }}>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 3 }}>
-          Question Bank
-        </Typography>
-        <Paper
-          variant="outlined"
-          sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}
-        >
-          <BlockOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="body1" color="text.secondary">
-            Question Bank is not available for this classroom yet.
-          </Typography>
-        </Paper>
       </Box>
     );
   }

@@ -58,6 +58,7 @@ export default function DrawingReviewDetailPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [sketchTrigger, setSketchTrigger] = useState(0);
 
   const handleDeleteSubmission = async () => {
     setDeleting(true);
@@ -265,7 +266,22 @@ export default function DrawingReviewDetailPage() {
   // Workspace + comments panel content
   const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, WebkitOverflowScrolling: 'touch' }}>
+      <Box sx={{
+        flex: 1, overflowY: 'auto', p: 2, WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'transparent transparent',
+        '&:hover': { scrollbarColor: 'rgba(0,0,0,0.15) transparent' },
+        '&::-webkit-scrollbar': { width: 4 },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
+        '&::-webkit-scrollbar-thumb': {
+          background: 'transparent',
+          borderRadius: 2,
+        },
+        '&:hover::-webkit-scrollbar-thumb': {
+          background: 'rgba(0,0,0,0.15)',
+          '&:hover': { background: 'rgba(0,0,0,0.25)' },
+        },
+      }}>
         {['reviewed', 'redo', 'completed'].includes(submission.status) && isEditMode && (
           <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: '#fff8e1' }}>
             <Typography variant="body2" color="warning.dark" fontWeight={600}>
@@ -287,6 +303,7 @@ export default function DrawingReviewDetailPage() {
           onChange={handleWorkspaceChange}
           defaultCollapsed={isMobile}
           readOnly={!isEditMode}
+          sketchTrigger={sketchTrigger}
         />
 
         <Box sx={{ mt: 2 }}>
@@ -301,12 +318,11 @@ export default function DrawingReviewDetailPage() {
   if (isMobile) {
     return (
       <>
-        <Box sx={{ mx: -2, mt: -2 }}>
+        <Box sx={{ mx: { xs: -2, sm: -3 }, mt: -2, mb: -10 }}>
           {/* Compact header: avatar + name + time + category + menu in one row */}
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
             bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider',
-            position: 'sticky', top: 0, zIndex: 10,
           }}>
             <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small" sx={{ p: 0.5 }}>
               <ArrowBackIcon fontSize="small" />
@@ -340,7 +356,7 @@ export default function DrawingReviewDetailPage() {
           </Box>
 
           {/* Image with toggle tabs + region annotations */}
-          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', p: 1 }}>
+          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', px: 0.5, pt: 0.5, pb: 0.5 }}>
             <ImageToggleTabs
               originalImageUrl={submission.original_image_url}
               overlayAnnotations={(sub.ai_overlay_annotations as any) || undefined}
@@ -351,6 +367,7 @@ export default function DrawingReviewDetailPage() {
               onRegionAnnotationsChange={setRegionAnnotations}
               questionCategory={submission.question?.category}
               questionContext={questionText}
+              onOpenSketch={() => setSketchTrigger(t => t + 1)}
             />
           </Box>
 
@@ -391,6 +408,7 @@ export default function DrawingReviewDetailPage() {
                 onChange={handleWorkspaceChange}
                 defaultCollapsed={false}
                 readOnly={!isEditMode}
+                sketchTrigger={sketchTrigger}
               />
 
               <Box sx={{ mt: 2 }}>
@@ -442,12 +460,16 @@ export default function DrawingReviewDetailPage() {
   // ===================== DESKTOP LAYOUT =====================
   return (
     <Box sx={{
+      // Negate parent padding to go edge-to-edge
       mx: { md: -4, sm: -3, xs: -2 },
       mt: { md: -3, xs: -2 },
       mb: { md: -3, xs: -10 },
       display: 'flex',
       height: 'calc(100vh - 64px)',
       overflow: 'hidden',
+      // Break out of Container maxWidth on wide screens
+      width: { md: 'calc(100% + 64px)', sm: 'calc(100% + 48px)' },
+      maxWidth: { md: 'none' },
     }}>
       {/* LEFT: image with toggle tabs */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
@@ -498,6 +520,7 @@ export default function DrawingReviewDetailPage() {
             onRegionAnnotationsChange={setRegionAnnotations}
             questionCategory={submission.question?.category}
             questionContext={questionText}
+            onOpenSketch={() => setSketchTrigger(t => t + 1)}
           />
         </Box>
       </Box>

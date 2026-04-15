@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef } from 'react';
-import { Box, Paper, Typography, Collapse, Skeleton, IconButton, alpha, useTheme } from '@neram/ui';
+import { Box, Paper, Typography, Collapse, Skeleton, IconButton, Chip, alpha, useTheme } from '@neram/ui';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import type { NexusQBQuestionListItem, NexusQBQuestionDetail } from '@neram/database';
 import SourceBadges from './SourceBadges';
@@ -135,7 +135,7 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
             );
           })()}
 
-          {/* Bottom row: categories, attempt indicator */}
+          {/* Bottom row: categories, drawing badge, attempt indicator */}
           {!expanded && (
             <Box
               sx={{
@@ -150,6 +150,13 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
                 size="small"
                 onCategoryClick={onCategoryClick}
               />
+              {question.question_format === 'DRAWING_PROMPT' && (
+                <Chip
+                  label="Drawing"
+                  size="small"
+                  sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, bgcolor: 'secondary.50', color: 'secondary.dark', '& .MuiChip-label': { px: 0.5 } }}
+                />
+              )}
               <Box sx={{ flexGrow: 1 }} />
               <AttemptIndicator summary={question.attempt_summary} />
             </Box>

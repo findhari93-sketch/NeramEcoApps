@@ -1,0 +1,8 @@
+# DNS Migration State
+# Auto-generated, do not edit manually
+
+phase0=completed # 2026-04-15 17:19:53
+phase1=completed # 2026-04-15 18:55:08
+phase2=in_progress # 2026-04-15 19:07:03
+phase4=completed # 2026-04-15 19:17:58
+phase5=in_progress # 2026-04-15 19:30:49

@@ -2,6 +2,8 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import type {
   DrawingQuestion,
+  DrawingQuestionEnriched,
+  DrawingAttemptStatus,
   DrawingSubmission,
   DrawingSubmissionWithQuestion,
   DrawingSubmissionWithDetails,
@@ -35,7 +37,7 @@ export async function getDrawingQuestions(
     .select('*', { count: 'exact' })
     .eq('is_active', true)
     .order('year', { ascending: false })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: true });
 
   if (filters?.category) query = query.eq('category', filters.category);
   if (filters?.sub_type) query = query.eq('sub_type', filters.sub_type);
@@ -50,6 +52,183 @@ export async function getDrawingQuestions(
   const { data, error, count } = await query;
   if (error) throw error;
   return { data: (data as DrawingQuestion[]) || [], count: count || 0 };
+}
+
+/**
+ * Get distinct years that have active drawing questions.
+ */
+export async function getAvailableDrawingYears(
+  client?: TypedSupabaseClient
+): Promise<number[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('drawing_questions' as any)
+    .select('year')
+    .eq('is_active', true)
+    .order('year', { ascending: false });
+
+  if (error) throw error;
+  const years = [...new Set((data || []).map((d: any) => d.year as number))];
+  return years;
+}
+
+/**
+ * Batch-fetch attempt statuses for a student across multiple questions.
+ * Returns a map from question_id to attempt status.
+ */
+export async function getDrawingQuestionAttemptStatuses(
+  studentId: string,
+  questionIds: string[],
+  client?: TypedSupabaseClient
+): Promise<Record<string, DrawingAttemptStatus>> {
+  if (questionIds.length === 0) return {};
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('drawing_thread_status' as any)
+    .select('question_id, status')
+    .eq('student_id', studentId)
+    .in('question_id', questionIds);
+
+  if (error) throw error;
+
+  const statusMap: Record<string, DrawingAttemptStatus> = {};
+  for (const qId of questionIds) {
+    statusMap[qId] = 'not_attempted';
+  }
+  for (const row of (data || []) as Array<{ question_id: string; status: string }>) {
+    if (row.status === 'completed') statusMap[row.question_id] = 'completed';
+    else if (row.status === 'redo') statusMap[row.question_id] = 'redo';
+    else statusMap[row.question_id] = 'in_progress';
+  }
+  return statusMap;
+}
+
+/**
+ * Enrich drawing questions with QB data: repeat counts, solution URLs.
+ * Fetches linked QB questions and their sources in two batch queries.
+ */
+export async function enrichDrawingQuestions(
+  questions: DrawingQuestion[],
+  studentId: string | null,
+  client?: TypedSupabaseClient
+): Promise<DrawingQuestionEnriched[]> {
+  if (questions.length === 0) return [];
+  const supabase = client || getSupabaseAdminClient();
+
+  const qbIds = questions
+    .map((q) => q.qb_question_id)
+    .filter((id): id is string => id !== null);
+
+  // Batch-fetch QB data for linked questions
+  let qbMap: Record<string, { repeat_group_id: string | null; solution_image_url: string | null; solution_video_url: string | null }> = {};
+  if (qbIds.length > 0) {
+    const { data: qbData } = await supabase
+      .from('nexus_qb_questions' as any)
+      .select('id, repeat_group_id, solution_image_url, solution_video_url')
+      .in('id', qbIds);
+
+    for (const qb of (qbData || []) as any[]) {
+      qbMap[qb.id] = {
+        repeat_group_id: qb.repeat_group_id,
+        solution_image_url: qb.solution_image_url,
+        solution_video_url: qb.solution_video_url,
+      };
+    }
+  }
+
+  // Collect unique repeat_group_ids for repeat count queries
+  const repeatGroupIds = [...new Set(
+    Object.values(qbMap)
+      .map((v) => v.repeat_group_id)
+      .filter((id): id is string => id !== null)
+  )];
+
+  // Fetch repeat counts: for each repeat_group_id, get all source years
+  let repeatMap: Record<string, number[]> = {};
+  if (repeatGroupIds.length > 0) {
+    // Get all question IDs in those repeat groups
+    const { data: groupQuestions } = await supabase
+      .from('nexus_qb_questions' as any)
+      .select('id, repeat_group_id')
+      .in('repeat_group_id', repeatGroupIds);
+
+    const groupQIds = (groupQuestions || []).map((g: any) => g.id);
+    if (groupQIds.length > 0) {
+      const { data: sources } = await supabase
+        .from('nexus_qb_question_sources' as any)
+        .select('question_id, year')
+        .in('question_id', groupQIds);
+
+      // Build repeat_group_id -> years map
+      const qIdToGroup: Record<string, string> = {};
+      for (const g of (groupQuestions || []) as any[]) {
+        qIdToGroup[g.id] = g.repeat_group_id;
+      }
+      const groupYears: Record<string, Set<number>> = {};
+      for (const s of (sources || []) as any[]) {
+        const gid = qIdToGroup[s.question_id];
+        if (gid) {
+          if (!groupYears[gid]) groupYears[gid] = new Set();
+          groupYears[gid].add(s.year);
+        }
+      }
+      for (const [gid, years] of Object.entries(groupYears)) {
+        repeatMap[gid] = [...years].sort((a, b) => b - a);
+      }
+    }
+  }
+
+  // Also fetch source years for questions NOT in a repeat group (single appearances)
+  const nonGroupQbIds = qbIds.filter((id) => !qbMap[id]?.repeat_group_id);
+  if (nonGroupQbIds.length > 0) {
+    const { data: singleSources } = await supabase
+      .from('nexus_qb_question_sources' as any)
+      .select('question_id, year')
+      .in('question_id', nonGroupQbIds);
+
+    for (const s of (singleSources || []) as any[]) {
+      // Use question_id as key for non-grouped questions
+      const key = `_single_${s.question_id}`;
+      if (!repeatMap[key]) repeatMap[key] = [];
+      if (!repeatMap[key].includes(s.year)) repeatMap[key].push(s.year);
+    }
+    // Sort each
+    for (const key of Object.keys(repeatMap)) {
+      if (key.startsWith('_single_')) {
+        repeatMap[key].sort((a, b) => b - a);
+      }
+    }
+  }
+
+  // Fetch attempt statuses if student is provided
+  let attemptMap: Record<string, DrawingAttemptStatus> = {};
+  if (studentId) {
+    const questionIds = questions.map((q) => q.id);
+    attemptMap = await getDrawingQuestionAttemptStatuses(studentId, questionIds, supabase);
+  }
+
+  // Assemble enriched questions
+  return questions.map((q): DrawingQuestionEnriched => {
+    const qb = q.qb_question_id ? qbMap[q.qb_question_id] : null;
+    let repeatYears: number[] = [];
+
+    if (qb?.repeat_group_id && repeatMap[qb.repeat_group_id]) {
+      repeatYears = repeatMap[qb.repeat_group_id];
+    } else if (q.qb_question_id && repeatMap[`_single_${q.qb_question_id}`]) {
+      repeatYears = repeatMap[`_single_${q.qb_question_id}`];
+    }
+
+    return {
+      ...q,
+      repeat_count: repeatYears.length,
+      repeat_years: repeatYears,
+      solution_image_url: qb?.solution_image_url || null,
+      solution_video_url: qb?.solution_video_url || null,
+      attempt_status: attemptMap[q.id] || 'not_attempted',
+    };
+  });
 }
 
 export async function getDrawingQuestionById(

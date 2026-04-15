@@ -7,6 +7,7 @@ import {
   updateQBQuestion,
   softDeleteQBQuestion,
 } from '@neram/database';
+import { getLinkedDrawingQuestionId } from '@neram/database/queries/nexus';
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +28,13 @@ export async function GET(
       return NextResponse.json({ error: 'Question not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ data }, { status: 200 });
+    // For DRAWING_PROMPT questions, include the linked drawing_question_id
+    let drawing_question_id: string | null = null;
+    if (data.question_format === 'DRAWING_PROMPT') {
+      drawing_question_id = await getLinkedDrawingQuestionId(id);
+    }
+
+    return NextResponse.json({ data: { ...data, drawing_question_id } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', message);

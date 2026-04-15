@@ -1,0 +1,61 @@
+============================================
+DNS Backup for neramclasses.com
+Date: Wed Apr 15 17:19:43 IST 2026
+============================================
+
+[1m--- neramclasses.com ---[0m
+  A:     104.21.64.116
+
+[1m--- www.neramclasses.com ---[0m
+  A:     104.21.64.116
+
+[1m--- app.neramclasses.com ---[0m
+  A:     172.67.183.173
+
+[1m--- nexus.neramclasses.com ---[0m
+  A:     76.76.21.98
+  CNAME: cname.vercel-dns.com
+
+[1m--- admin.neramclasses.com ---[0m
+  A:     104.21.64.116
+
+[1m--- staging.neramclasses.com ---[0m
+  A:     172.67.183.173
+
+[1m--- staging-app.neramclasses.com ---[0m
+  A:     76.76.21.61
+  CNAME: cname.vercel-dns.com
+
+[1m--- staging-nexus.neramclasses.com ---[0m
+  A:     66.33.60.194
+  CNAME: cname.vercel-dns.com
+
+[1m--- staging-admin.neramclasses.com ---[0m
+  A:     76.76.21.61
+  CNAME: cname.vercel-dns.com
+
+[1m--- db.neramclasses.com ---[0m
+  A:     172.67.183.173
+
+[1m--- db-staging.neramclasses.com ---[0m
+  A:     104.21.64.116
+
+
+=== Nameservers ===
+clay.ns.cloudflare.com
+virginia.ns.cloudflare.com
+
+=== MX Records ===
+neramclasses-com.mail.protection.outlook.com
+neramclasses.com	MX preference = 0, mail exchanger = neramclasses-com.mail.protection.outlook.com
+
+=== TXT Records ===
+  (no TXT records found)
+  (no DMARC record found)
+
+=== Cloudflare Zone ===
+Status: active
+Assigned NS: [
+  "clay.ns.cloudflare.com",
+  "virginia.ns.cloudflare.com"
+]

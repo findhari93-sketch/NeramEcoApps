@@ -5,12 +5,11 @@ import {
   Box, Typography, Button, TextField, Rating, Paper, IconButton,
   CircularProgress, Collapse, Dialog, useTheme, useMediaQuery,
 } from '@neram/ui';
-import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
-import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import CloseIcon from '@mui/icons-material/Close';
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource } from '@neram/database/types';
@@ -36,10 +35,12 @@ interface AIFeedbackWorkspaceProps {
   onChange: (data: WorkspaceData) => void;
   defaultCollapsed?: boolean;
   readOnly?: boolean;
+  sketchTrigger?: number;
 }
 
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
+  sketchTrigger = 0,
 }: AIFeedbackWorkspaceProps) {
   // Workspace state
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
@@ -178,62 +179,98 @@ export default function AIFeedbackWorkspace({
     return () => document.removeEventListener('paste', handleGlobalPaste);
   }, [imagesExpanded, overlayImageUrl, correctedImageUrl, handleUpload, readOnly]);
 
+  // Open sketch when triggered externally (from pencil menu on canvas)
+  useEffect(() => {
+    if (sketchTrigger > 0) setSketchOpen(true);
+  }, [sketchTrigger]);
+
   // ─── Render helpers ─────────────────────────────────────────────────────────
 
-  const renderImageSlot = (
+  const renderDropZone = (
     label: string,
+    icon: React.ReactNode,
     imageUrl: string | null,
     target: 'overlay' | 'corrected',
     uploading: boolean,
     setUrl: (url: string | null) => void,
     fileRef: React.RefObject<HTMLInputElement | null>,
-    extraButton?: React.ReactNode,
   ) => (
-    <Box sx={{ mb: 1.5 }}>
-      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-        {label}
-      </Typography>
-      {readOnly ? (
-        imageUrl ? (
+    <Box
+      onClick={() => !readOnly && !imageUrl && !uploading && handlePasteOrUpload(target)}
+      sx={{
+        flex: 1,
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '2px dashed',
+        borderColor: imageUrl ? 'primary.200' : 'divider',
+        borderRadius: 2,
+        overflow: 'hidden',
+        cursor: readOnly || imageUrl ? 'default' : 'pointer',
+        minHeight: isMobile ? 100 : 110,
+        bgcolor: imageUrl ? 'transparent' : 'grey.50',
+        transition: 'all 0.2s',
+        ...(!readOnly && !imageUrl && {
+          '&:hover': { borderColor: 'primary.main', bgcolor: 'primary.50' },
+          '&:active': { bgcolor: 'primary.100' },
+        }),
+      }}
+    >
+      <input ref={fileRef as any} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleUpload(file, target);
+          e.target.value = '';
+        }} />
+
+      {imageUrl ? (
+        <>
           <Box component="img" src={imageUrl} alt={label}
-            sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider' }} />
-        ) : (
-          <Typography variant="body2" color="text.secondary">Not added</Typography>
-        )
-      ) : imageUrl ? (
-        <Box>
-          <Box component="img" src={imageUrl} alt={label}
-            sx={{ width: '100%', borderRadius: 1, border: '1px solid', borderColor: 'divider', mb: 0.75 }} />
-          <Button
-            size="small" variant="outlined" color="error"
-            startIcon={<DeleteOutlineIcon />}
-            onClick={() => { setUrl(null); notify({ [target === 'overlay' ? 'overlayImageUrl' : 'correctedImageUrl']: null }); }}
-            sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.78rem' }}
-          >
-            Remove
-          </Button>
-        </Box>
+            sx={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
+          {!readOnly && (
+            <IconButton
+              onClick={(e) => { e.stopPropagation(); setUrl(null); notify({ [target === 'overlay' ? 'overlayImageUrl' : 'correctedImageUrl']: null }); }}
+              size="small"
+              sx={{
+                position: 'absolute', top: 4, right: 4, zIndex: 2,
+                bgcolor: 'rgba(0,0,0,0.55)', color: '#fff',
+                '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                width: 24, height: 24,
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          )}
+        </>
+      ) : uploading ? (
+        <CircularProgress size={24} />
       ) : (
-        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-          {extraButton}
-          <input ref={fileRef as any} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleUpload(file, target);
-              e.target.value = '';
-            }} />
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={uploading ? <CircularProgress size={14} /> : <CloudUploadOutlinedIcon />}
-            disabled={uploading}
-            onClick={() => handlePasteOrUpload(target)}
-            sx={{ textTransform: 'none', minHeight: 36, borderStyle: 'dashed', flex: 1, fontSize: '0.78rem' }}
-          >
-            {uploading ? 'Uploading...' : 'Upload or Paste'}
-          </Button>
-        </Box>
+        <>
+          <Box sx={{ color: 'text.disabled', mb: 0.5 }}>{icon}</Box>
+          <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ fontSize: '0.68rem', lineHeight: 1.3, px: 1 }}>
+            Tap to paste or upload
+          </Typography>
+        </>
       )}
+
+      {/* Bottom label strip */}
+      <Box sx={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        textAlign: 'center', py: 0.25, px: 0.5,
+        bgcolor: imageUrl ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.04)',
+        zIndex: 1,
+      }}>
+        <Typography variant="caption" fontWeight={700} sx={{
+          fontSize: '0.65rem',
+          color: imageUrl ? '#fff' : 'text.secondary',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          {label}
+        </Typography>
+      </Box>
     </Box>
   );
 
@@ -258,42 +295,31 @@ export default function AIFeedbackWorkspace({
         </Box>
         <Collapse in={imagesExpanded}>
           <Box sx={{ p: isMobile ? 1.5 : 2 }}>
-            {/* Overlay Image slot */}
-            {renderImageSlot(
-              'OVERLAY (ANNOTATED DRAWING)',
-              overlayImageUrl,
-              'overlay',
-              uploadingOverlay,
-              setOverlayImageUrl,
-              overlayFileRef,
-              !readOnly ? (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<BrushOutlinedIcon />}
-                  onClick={() => setSketchOpen(true)}
-                  sx={{ textTransform: 'none', minHeight: 36, flex: 1, fontSize: '0.78rem' }}
-                >
-                  Draw on Image
-                </Button>
-              ) : undefined,
-            )}
-
-            <Box sx={{ borderTop: '1px solid', borderColor: 'divider', mt: 1, pt: 1 }} />
-
-            {/* Reference Image slot */}
-            {renderImageSlot(
-              'REFERENCE IMAGE',
-              correctedImageUrl,
-              'corrected',
-              uploadingCorrected,
-              setCorrectedImageUrl,
-              correctedFileRef,
-            )}
+            {/* Side-by-side thumbnail drop zones */}
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              {renderDropZone(
+                'Overlay',
+                <LayersOutlinedIcon sx={{ fontSize: 28 }} />,
+                overlayImageUrl,
+                'overlay',
+                uploadingOverlay,
+                setOverlayImageUrl,
+                overlayFileRef,
+              )}
+              {renderDropZone(
+                'Reference',
+                <ImageOutlinedIcon sx={{ fontSize: 28 }} />,
+                correctedImageUrl,
+                'corrected',
+                uploadingCorrected,
+                setCorrectedImageUrl,
+                correctedFileRef,
+              )}
+            </Box>
 
             {!readOnly && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Paste images from Gemini here (Ctrl+V also works anywhere on the page)
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center', fontSize: '0.68rem' }}>
+                Ctrl+V pastes into the first empty slot
               </Typography>
             )}
           </Box>
@@ -392,7 +418,16 @@ export default function AIFeedbackWorkspace({
                     setTutorFeedback(e.target.value);
                     notify({ tutorFeedback: e.target.value });
                   }}
-                  sx={{ mb: 2 }}
+                  sx={{
+                    mb: 2,
+                    '& textarea': {
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: 'rgba(0,0,0,0.15) transparent',
+                      '&::-webkit-scrollbar': { width: 3 },
+                      '&::-webkit-scrollbar-track': { background: 'transparent' },
+                      '&::-webkit-scrollbar-thumb': { background: 'rgba(0,0,0,0.15)', borderRadius: 2 },
+                    },
+                  }}
                 />
 
                 {/* Resources */}

@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Chip, Paper, Skeleton, IconButton, Tabs, Tab,
+  useTheme, useMediaQuery,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import type { DrawingSubmissionWithQuestion } from '@neram/database/types';
@@ -13,8 +15,27 @@ import type { DrawingSubmissionWithQuestion } from '@neram/database/types';
 const STATUS_TABS = [
   { value: '', label: 'All' },
   { value: 'submitted', label: 'Pending' },
-  { value: 'reviewed', label: 'Reviewed' },
+  { value: 'redo', label: 'Redo' },
+  { value: 'completed', label: 'Completed' },
 ];
+
+const STATUS_LABEL: Record<string, string> = {
+  submitted: 'Pending',
+  under_review: 'Reviewing',
+  redo: 'Redo',
+  reviewed: 'Reviewed',
+  completed: 'Completed',
+  published: 'Completed',
+};
+
+const STATUS_COLOR: Record<string, 'default' | 'warning' | 'success' | 'info' | 'error'> = {
+  submitted: 'default',
+  under_review: 'info',
+  redo: 'warning',
+  reviewed: 'success',
+  completed: 'success',
+  published: 'success',
+};
 
 interface DrawingNotification {
   id: string;
@@ -30,6 +51,8 @@ export default function MySubmissionsPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [notifications, setNotifications] = useState<DrawingNotification[]>([]);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const fetchSubmissions = useCallback(async () => {
     setLoading(true);
@@ -85,91 +108,148 @@ export default function MySubmissionsPage() {
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   return (
-    <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, maxWidth: 800, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton onClick={() => router.push('/student/drawings')} size="small">
-          <ArrowBackIcon />
+    <Box sx={{
+      px: isMobile ? 0 : { sm: 3 },
+      py: isMobile ? 0 : 2,
+      maxWidth: 800,
+      mx: 'auto',
+      ...(isMobile && { mx: { xs: -2, sm: -3 }, mt: -2 }),
+    }}>
+      {/* Header */}
+      <Box sx={{
+        display: 'flex', alignItems: 'center', gap: 1,
+        px: isMobile ? 1 : 0,
+        py: isMobile ? 0.75 : 0,
+        mb: isMobile ? 0 : 2,
+        ...(isMobile && {
+          bgcolor: '#fff',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }),
+      }}>
+        <IconButton onClick={() => router.push('/student/drawings')} size="small" sx={{ p: 0.5 }}>
+          <ArrowBackIcon fontSize="small" />
         </IconButton>
-        <Typography variant="h6" fontWeight={700}>My Submissions</Typography>
+        <Typography
+          variant={isMobile ? 'subtitle1' : 'h6'}
+          fontWeight={700}
+          sx={{ fontSize: isMobile ? '0.95rem' : undefined }}
+        >
+          My Submissions
+        </Typography>
       </Box>
 
+      {/* Status tabs */}
       <Tabs
         value={status}
         onChange={(_, v) => setStatus(v)}
-        sx={{ mb: 2, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none' } }}
+        variant={isMobile ? 'fullWidth' : 'standard'}
+        sx={{
+          mb: isMobile ? 0.75 : 2,
+          minHeight: isMobile ? 32 : 36,
+          '& .MuiTab-root': {
+            minHeight: isMobile ? 32 : 36,
+            py: 0.25,
+            px: isMobile ? 0.5 : 2,
+            textTransform: 'none',
+            fontSize: isMobile ? '0.78rem' : undefined,
+            minWidth: 0,
+          },
+          ...(isMobile && { px: 0.5 }),
+        }}
       >
         {STATUS_TABS.map((t) => (
           <Tab key={t.value} value={t.value} label={t.label} />
         ))}
       </Tabs>
 
-      {loading ? (
-        Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={80} sx={{ mb: 1 }} />)
-      ) : submissions.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography color="text.secondary">No submissions yet</Typography>
-        </Box>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {submissions.map((s) => {
-            const unreadNotification = notifications.find((n) => n.submission_id === s.id);
-            return (
-            <Paper
-              key={s.id}
-              variant="outlined"
-              sx={{
-                p: 1.5, cursor: 'pointer',
-                ...(unreadNotification ? { borderColor: 'primary.main', borderWidth: 2 } : {}),
-              }}
-              onClick={() => {
-                if (unreadNotification) markNotificationRead(unreadNotification.id);
-                router.push(`/student/drawings/submissions/${s.id}`);
-              }}
-            >
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Box
-                  component="img"
-                  src={s.original_image_url}
-                  alt="Drawing"
-                  sx={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 1 }}
-                />
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5, flexWrap: 'wrap' }}>
-                    {s.question && <CategoryBadge category={s.question.category} />}
-                    <Chip
-                      label={s.status}
-                      size="small"
-                      color={s.status === 'reviewed' ? 'success' : 'warning'}
-                    />
-                    {unreadNotification && (
+      {/* List */}
+      <Box sx={{ px: isMobile ? 1 : 0 }}>
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={70} sx={{ mb: 0.75 }} />)
+        ) : submissions.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography color="text.secondary" variant="body2">No submissions yet</Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 0.75 : 1.5 }}>
+            {submissions.map((s) => {
+              const unreadNotification = notifications.find((n) => n.submission_id === s.id);
+              return (
+              <Paper
+                key={s.id}
+                variant="outlined"
+                sx={{
+                  p: isMobile ? 1 : 1.5, cursor: 'pointer',
+                  ...(unreadNotification ? { borderColor: 'primary.main', borderWidth: 2 } : {}),
+                }}
+                onClick={() => {
+                  if (unreadNotification) markNotificationRead(unreadNotification.id);
+                  router.push(`/student/drawings/submissions/${s.id}`);
+                }}
+              >
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Box
+                    component="img"
+                    src={s.original_image_url}
+                    alt="Drawing"
+                    sx={{ width: isMobile ? 56 : 70, height: isMobile ? 56 : 70, objectFit: 'cover', borderRadius: 1 }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', gap: 0.5, mb: 0.25, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {s.question && <CategoryBadge category={s.question.category} />}
                       <Chip
-                        label="Updated feedback"
+                        label={STATUS_LABEL[s.status] || s.status}
                         size="small"
-                        color="primary"
+                        color={STATUS_COLOR[s.status] || 'default'}
+                        sx={isMobile ? { height: 20, fontSize: '0.65rem' } : undefined}
                       />
-                    )}
-                  </Box>
-                  <Typography variant="body2" sx={{
-                    display: '-webkit-box', WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: '0.82rem',
-                  }}>
-                    {s.question?.question_text || 'Free Practice'}
-                  </Typography>
-                  {s.tutor_rating && (
-                    <Typography variant="caption">
-                      {'★'.repeat(s.tutor_rating)}{'☆'.repeat(5 - s.tutor_rating)}
+                      {(s as any).is_gallery_published && (
+                        <Chip
+                          icon={<EmojiEventsOutlinedIcon sx={{ fontSize: '0.85rem !important' }} />}
+                          label="Gallery"
+                          size="small"
+                          sx={{
+                            height: isMobile ? 20 : 24,
+                            fontSize: isMobile ? '0.65rem' : '0.75rem',
+                            bgcolor: '#fff8e1',
+                            color: '#f57f17',
+                            border: '1px solid #ffe082',
+                            fontWeight: 700,
+                            '& .MuiChip-icon': { color: '#f57f17' },
+                          }}
+                        />
+                      )}
+                      {unreadNotification && (
+                        <Chip
+                          label="New feedback"
+                          size="small"
+                          color="primary"
+                          sx={isMobile ? { height: 20, fontSize: '0.65rem' } : undefined}
+                        />
+                      )}
+                    </Box>
+                    <Typography variant="body2" noWrap sx={{ fontSize: isMobile ? '0.8rem' : '0.82rem' }}>
+                      {s.question?.question_text || 'Free Practice'}
                     </Typography>
-                  )}
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {new Date(s.submitted_at).toLocaleDateString()}
-                  </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {s.tutor_rating && (
+                        <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                          {'★'.repeat(s.tutor_rating)}{'☆'.repeat(5 - s.tutor_rating)}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                        {new Date(s.submitted_at).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                  </Box>
                 </Box>
-              </Box>
-            </Paper>
-            );
-          })}
-        </Box>
-      )}
+              </Paper>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }

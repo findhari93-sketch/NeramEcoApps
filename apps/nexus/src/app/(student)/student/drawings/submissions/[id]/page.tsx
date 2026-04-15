@@ -192,7 +192,7 @@ export default function SubmissionDetailPage() {
 
       {/* Redo CTA */}
       {submission.status === 'redo' && submission.question_id && (
-        <Box sx={{ mx: 2, mb: 2, p: 2, bgcolor: '#fff8e1', borderRadius: 2, border: '1px solid #ffe082' }}>
+        <Box sx={{ mt: 2, p: 1.5, bgcolor: '#fff8e1', borderRadius: 2, border: '1px solid #ffe082' }}>
           <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
             Teacher requested improvements.
           </Typography>
@@ -236,23 +236,25 @@ export default function SubmissionDetailPage() {
   if (isMobile) {
     return (
       <>
-        <Box sx={{ mx: -1, mt: -1 }}>
-          {/* Header */}
+        <Box sx={{ mx: { xs: -2, sm: -3 }, mt: -2, mb: -10 }}>
+          {/* Compact header */}
           <Box sx={{
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
             bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider',
-            position: 'sticky', top: 0, zIndex: 10,
           }}>
-            <IconButton onClick={() => router.back()} size="small">
-              <ArrowBackIcon />
+            <IconButton onClick={() => router.back()} size="small" sx={{ p: 0.5 }}>
+              <ArrowBackIcon fontSize="small" />
             </IconButton>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" fontWeight={600} noWrap>
-                {submission.question?.question_text || 'Free Practice'}
-              </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <AccessTimeIcon sx={{ fontSize: 12, color: 'text.secondary' }} />
-                <Typography variant="caption" color="text.secondary">{timeAgo}</Typography>
+                <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.82rem' }}>
+                  {submission.question?.question_text || 'Free Practice'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                  {timeAgo}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 {submission.question && (
                   <CategoryBadge category={submission.question.category} />
                 )}
@@ -260,19 +262,20 @@ export default function SubmissionDetailPage() {
                   label={submission.status}
                   size="small"
                   color={hasReview ? 'success' : submission.status === 'redo' ? 'warning' : 'default'}
-                  sx={{ height: 20, fontSize: '0.65rem', ml: 0.5 }}
+                  sx={{ height: 20, fontSize: '0.65rem' }}
                 />
               </Box>
             </Box>
           </Box>
 
           {/* Image with toggle tabs */}
-          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', p: 0.5 }}>
+          <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', px: 0.5, pt: 0.5, pb: 0.5 }}>
             <ImageToggleTabs
               originalImageUrl={submission.original_image_url}
               overlayAnnotations={sub.ai_overlay_annotations}
               overlayImageUrl={submission.reviewed_image_url}
               correctedImageUrl={sub.corrected_image_url}
+              studentView
             />
           </Box>
 
@@ -294,8 +297,8 @@ export default function SubmissionDetailPage() {
             </Box>
           )}
 
-          {/* Feedback and comments - visible inline */}
-          <Box sx={{ bgcolor: 'background.paper' }}>
+          {/* Feedback and comments */}
+          <Box sx={{ bgcolor: 'background.paper', pb: 10 }}>
             {feedbackContent}
           </Box>
         </Box>
@@ -306,8 +309,8 @@ export default function SubmissionDetailPage() {
   // ===================== DESKTOP =====================
   return (
     <Box sx={{
-      mx: { md: -4, sm: -3, xs: -1 },
-      mt: { md: -3, xs: -1 },
+      mx: { md: -4, sm: -3, xs: -2 },
+      mt: { md: -3, xs: -2 },
       mb: { md: -3, xs: -10 },
       display: 'flex',
       height: 'calc(100vh - 64px)',
@@ -362,6 +365,7 @@ export default function SubmissionDetailPage() {
             overlayAnnotations={sub.ai_overlay_annotations}
             overlayImageUrl={submission.reviewed_image_url}
             correctedImageUrl={sub.corrected_image_url}
+            studentView
           />
         </Box>
       </Box>

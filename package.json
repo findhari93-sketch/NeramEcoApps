@@ -82,7 +82,10 @@
     "deploy:admin:staging": "bash scripts/deploy-app.sh --app admin --target staging",
     "deploy:admin:prod": "bash scripts/deploy-app.sh --app admin --target production",
     "promote:prod": "bash scripts/promote.sh",
-    "promote:prod:auto": "bash scripts/promote.sh --auto-merge"
+    "promote:prod:auto": "bash scripts/promote.sh --auto-merge",
+    "dns:migrate": "C:/PROGRA~1/Git/bin/bash.exe scripts/dns-migration/migrate.sh",
+    "dns:audit": "C:/PROGRA~1/Git/bin/bash.exe scripts/dns-migration/migrate.sh phase0",
+    "dns:status": "C:/PROGRA~1/Git/bin/bash.exe scripts/dns-migration/migrate.sh status"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0",

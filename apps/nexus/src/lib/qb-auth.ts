@@ -58,34 +58,8 @@ export async function verifyQBAccess(
     return { ok: true, caller: { id: caller.id, user_type: caller.user_type ?? 'student' } };
   }
 
-  // Students require classroom_id
-  if (!classroomId) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'classroom_id is required' }, { status: 400 }),
-    };
-  }
-
-  // Verify enrollment
-  const role = await getUserRoleInClassroom(caller.id, classroomId);
-  if (!role) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'Not enrolled in this classroom' }, { status: 403 }),
-    };
-  }
-
-  // Verify QB is enabled for the classroom
-  const enabled = await isQBEnabledForClassroom(classroomId);
-  if (!enabled) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: 'Question Bank is not enabled for this classroom' },
-        { status: 403 },
-      ),
-    };
-  }
-
+  // QB is globally available to all enrolled students (no classroom gating).
+  // If a classroomId is provided, we can optionally verify enrollment,
+  // but it's not required for access.
   return { ok: true, caller: { id: caller.id, user_type: caller.user_type ?? 'student' } };
 }

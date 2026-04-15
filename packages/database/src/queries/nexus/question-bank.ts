@@ -66,23 +66,33 @@ export async function getQBExamTree(
 ): Promise<QBExamTree> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Get all sources for active questions, grouped by exam_type/year/session
-  const { data, error } = await supabase
-    .from('nexus_qb_question_sources')
-    .select('exam_type, year, session, shift, question_id');
+  // Paginated fetch helper (Supabase limits to 1000 rows per request)
+  async function fetchAll<T>(query: any): Promise<T[]> {
+    const PAGE = 1000;
+    let all: T[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await query.range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      all = all.concat((data || []) as T[]);
+      if (!data || data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  }
 
-  if (error) throw error;
+  // Get all sources (paginated to handle >1000 rows)
+  const data = await fetchAll<any>(
+    supabase.from('nexus_qb_question_sources').select('exam_type, year, session, shift, question_id')
+  );
 
-  // Filter to only active questions
+  // Get all active question IDs (paginated)
   const activeQuestionIds = new Set<string>();
-  const { data: activeQ, error: activeErr } = await supabase
-    .from('nexus_qb_questions')
-    .select('id')
-    .eq('is_active', true)
-    .eq('status' as any, 'active');
-  if (activeErr) throw activeErr;
-  for (const q of activeQ || []) {
-    activeQuestionIds.add((q as any).id);
+  const activeQ = await fetchAll<any>(
+    supabase.from('nexus_qb_questions').select('id').eq('is_active', true).eq('status' as any, 'active')
+  );
+  for (const q of activeQ) {
+    activeQuestionIds.add(q.id);
   }
 
   // Build grouped counts
@@ -1258,6 +1268,14 @@ export async function bulkCreateDraftQuestions(
     nta_question_id: q.nta_question_id,
     is_active: false,
     created_by: createdBy,
+    // Drawing-specific fields (only populated for DRAWING_PROMPT)
+    ...(q.question_format === 'DRAWING_PROMPT' && {
+      objects_to_include: q.drawing_objects
+        ? q.drawing_objects.map((name: string) => ({ name }))
+        : null,
+      colour_constraint: q.drawing_color_constraint || null,
+      design_principle_tested: q.drawing_design_principle || null,
+    }),
   }));
 
   // Batch insert questions
@@ -2238,4 +2256,113 @@ export async function refreshTopicSessionCounts(
       .update({ session_appearance_count: sessions.size })
       .eq('id', topicId);
   }
+}
+
+// ============================================================
+// Drawing <-> QB Bridge Helpers
+// ============================================================
+
+/**
+ * Get the linked drawing_questions.id for a QB DRAWING_PROMPT question.
+ * Used by the "Practice" button in QB to navigate to the drawing module.
+ */
+export async function getLinkedDrawingQuestionId(
+  qbQuestionId: string,
+  client?: TypedSupabaseClient
+): Promise<string | null> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await (supabase as any)
+    .from('drawing_questions')
+    .select('id')
+    .eq('qb_question_id', qbQuestionId)
+    .eq('is_active', true)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  return data?.id || null;
+}
+
+/**
+ * Create a drawing_questions row from an activated QB DRAWING_PROMPT question.
+ * Maps QB fields to drawing_questions fields and sets the qb_question_id link.
+ * Returns the new drawing_questions.id.
+ */
+export async function createDrawingQuestionFromQB(
+  qbQuestionId: string,
+  client?: TypedSupabaseClient
+): Promise<string | null> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Get the QB question
+  const { data: qbQ, error: qbError } = await (supabase as any)
+    .from('nexus_qb_questions')
+    .select('*')
+    .eq('id', qbQuestionId)
+    .eq('question_format', 'DRAWING_PROMPT')
+    .single();
+
+  if (qbError || !qbQ) return null;
+
+  // Check if already linked
+  const { data: existing } = await (supabase as any)
+    .from('drawing_questions')
+    .select('id')
+    .eq('qb_question_id', qbQuestionId)
+    .single();
+
+  if (existing) return existing.id;
+
+  // Get the year from question_sources
+  const { data: sources } = await (supabase as any)
+    .from('nexus_qb_question_sources')
+    .select('year, question_number')
+    .eq('question_id', qbQuestionId)
+    .order('year', { ascending: false })
+    .limit(1);
+
+  const year = sources?.[0]?.year || new Date().getFullYear();
+  const questionNumber = sources?.[0]?.question_number || null;
+
+  // Map QB categories to drawing category
+  const categories: string[] = qbQ.categories || [];
+  let category = '2d_composition';
+  if (categories.includes('3d_composition')) category = '3d_composition';
+  else if (categories.includes('kit_sculpture')) category = 'kit_sculpture';
+  else if (categories.includes('2d_composition')) category = '2d_composition';
+
+  // Map QB objects_to_include to string array
+  const objects: string[] = (qbQ.objects_to_include || []).map((o: any) => o.name || String(o));
+
+  // Map difficulty
+  const difficultyMap: Record<string, string> = { EASY: 'easy', MEDIUM: 'medium', HARD: 'hard' };
+  const difficulty = difficultyMap[qbQ.difficulty] || 'medium';
+
+  // Insert drawing_questions row
+  const { data: newDQ, error: insertError } = await (supabase as any)
+    .from('drawing_questions')
+    .insert({
+      year,
+      category,
+      sub_type: category, // default sub_type to category
+      question_text: qbQ.question_text,
+      objects,
+      color_constraint: qbQ.colour_constraint || null,
+      design_principle: qbQ.design_principle_tested || null,
+      difficulty_tag: difficulty,
+      tags: [],
+      reference_images: [],
+      solution_images: null,
+      is_active: true,
+      qb_question_id: qbQuestionId,
+      question_number: questionNumber,
+    })
+    .select('id')
+    .single();
+
+  if (insertError) throw insertError;
+  return newDQ?.id || null;
 }
