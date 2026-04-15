@@ -110,6 +110,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Submit URLs to IndexNow
+        continue-on-error: true
         run: pnpm seo:indexnow
         env:
           INDEXNOW_API_KEY: ${{ secrets.INDEXNOW_API_KEY }}

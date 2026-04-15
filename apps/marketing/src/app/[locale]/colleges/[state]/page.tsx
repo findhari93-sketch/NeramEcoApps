@@ -14,11 +14,15 @@ export const revalidate = 3600;
 type Props = { params: { locale: string; state: string } };
 
 export async function generateStaticParams() {
-  const states = await getActiveStates();
-  const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-  return locales.flatMap((locale) =>
-    states.map((s) => ({ locale, state: s.state_slug }))
-  );
+  try {
+    const states = await getActiveStates();
+    const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
+    return locales.flatMap((locale) =>
+      states.map((s) => ({ locale, state: s.state_slug }))
+    );
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({ params: { locale, state } }: Props): Promise<Metadata> {

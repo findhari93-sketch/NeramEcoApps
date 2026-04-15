@@ -22,11 +22,15 @@ export const revalidate = 3600;
 type Props = { params: { locale: string; state: string; slug: string } };
 
 export async function generateStaticParams() {
-  const slugs = await getAllCollegeSlugs();
-  const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-  return locales.flatMap((locale) =>
-    slugs.map(({ state, slug }) => ({ locale, state, slug }))
-  );
+  try {
+    const slugs = await getAllCollegeSlugs();
+    const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
+    return locales.flatMap((locale) =>
+      slugs.map(({ state, slug }) => ({ locale, state, slug }))
+    );
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({ params: { locale, slug } }: Props): Promise<Metadata> {
