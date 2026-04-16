@@ -29,13 +29,17 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now();
     const filePath = `${user.id}/${timestamp}.${ext}`;
 
+    // Normalize MIME type for Android edge cases (e.g. image/jpg → image/jpeg)
+    let contentType = file.type || 'image/jpeg';
+    if (contentType === 'image/jpg') contentType = 'image/jpeg';
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(filePath, buffer, {
-        contentType: file.type,
+        contentType,
         upsert: false,
       });
 
@@ -49,6 +53,9 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload failed';
     console.error('Drawing upload error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes('Invalid Microsoft token') || message.includes('Authorization') ? 401
+      : message.includes('mime') || message.includes('type') ? 415
+      : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

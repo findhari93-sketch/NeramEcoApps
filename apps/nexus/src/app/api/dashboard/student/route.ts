@@ -30,19 +30,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    // Compute "now" in IST (Asia/Kolkata, UTC+5:30) so time filtering
+    // works correctly on Vercel's UTC servers.
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 + now.getTimezoneOffset()) * 60 * 1000);
+    const today = istNow.toISOString().split('T')[0];
+    const nowTimeHHMM = istNow.toTimeString().slice(0, 5); // "HH:MM"
 
     // Fetch all data in parallel
     const [
-      upcomingClassesResult,
+      upcomingClassesRaw,
       attendanceResult,
-      completedClassesResult,
+      completedClassesCountResult,
+      recentCompletedResult,
       checklistTotalResult,
       checklistCompletedResult,
       topicTotalResult,
       topicCompletedResult,
     ] = await Promise.all([
-      // Upcoming classes
+      // Upcoming classes (over-fetch to filter today's ended classes in JS)
       supabase
         .from('nexus_scheduled_classes')
         .select('id, title, scheduled_date, start_time, end_time, status, teams_meeting_url, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name)')
@@ -51,7 +57,7 @@ export async function GET(request: NextRequest) {
         .in('status', ['scheduled', 'live'])
         .order('scheduled_date', { ascending: true })
         .order('start_time', { ascending: true })
-        .limit(5),
+        .limit(10),
 
       // Attendance: classes attended
       supabase
@@ -60,12 +66,22 @@ export async function GET(request: NextRequest) {
         .eq('student_id', user.id)
         .eq('attended', true),
 
-      // Total completed classes in classroom
+      // Total completed classes in classroom (for attendance %)
       supabase
         .from('nexus_scheduled_classes')
         .select('id', { count: 'exact', head: true })
         .eq('classroom_id', classroomId)
         .eq('status', 'completed'),
+
+      // Recent completed classes with recordings (for dashboard section)
+      supabase
+        .from('nexus_scheduled_classes')
+        .select('id, title, scheduled_date, start_time, end_time, status, recording_url, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name)')
+        .eq('classroom_id', classroomId)
+        .eq('status', 'completed')
+        .order('scheduled_date', { ascending: false })
+        .order('start_time', { ascending: false })
+        .limit(5),
 
       // Total checklist items
       supabase
@@ -98,11 +114,18 @@ export async function GET(request: NextRequest) {
         .eq('status', 'completed'),
     ]);
 
-    const totalClasses = completedClassesResult.count || 0;
+    // Filter out today's classes whose end_time has already passed
+    const upcomingClasses = (upcomingClassesRaw.data || []).filter((cls) => {
+      if (cls.scheduled_date > today) return true;
+      return cls.end_time > nowTimeHHMM;
+    }).slice(0, 5);
+
+    const totalClasses = completedClassesCountResult.count || 0;
     const attendedClasses = attendanceResult.count || 0;
 
     return NextResponse.json({
-      upcomingClasses: upcomingClassesResult.data || [],
+      upcomingClasses,
+      completedClasses: recentCompletedResult.data || [],
       attendanceSummary: {
         total: totalClasses,
         attended: attendedClasses,

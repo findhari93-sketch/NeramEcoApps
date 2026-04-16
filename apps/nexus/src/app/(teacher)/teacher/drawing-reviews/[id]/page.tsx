@@ -206,12 +206,18 @@ export default function DrawingReviewDetailPage() {
   const timeAgo = getTimeAgo(submission.submitted_at);
   const sub = submission as any;
 
-  // Compact action bar
+  // Compact action bar (sticky on mobile so it stays above bottom nav)
   const actionBar = isEditMode ? (
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 0.75, p: 1,
       borderTop: '1px solid', borderColor: 'divider', flexShrink: 0,
       bgcolor: 'background.paper',
+      ...(isMobile && {
+        position: 'sticky',
+        bottom: 64, // height of BottomNav
+        zIndex: 10,
+        boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
+      }),
     }}>
       <Button
         variant="outlined"
@@ -418,6 +424,8 @@ export default function DrawingReviewDetailPage() {
 
             {/* Sticky bottom action bar */}
             {actionBar}
+            {/* Spacer so content/action bar isn't hidden behind fixed BottomNav (64px + safe area) */}
+            <Box sx={{ height: 72, flexShrink: 0 }} />
           </Box>
         </Box>
 

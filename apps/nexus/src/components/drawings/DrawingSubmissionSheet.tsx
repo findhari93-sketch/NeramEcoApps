@@ -56,6 +56,11 @@ export default function DrawingSubmissionSheet({
 
     try {
       const token = await getToken();
+      if (!token) {
+        setError('Session expired. Please refresh the page and try again.');
+        setUploading(false);
+        return;
+      }
 
       const formData = new FormData();
       formData.append('file', file);
@@ -68,7 +73,10 @@ export default function DrawingSubmissionSheet({
         body: formData,
       });
 
-      if (!uploadRes.ok) throw new Error('Upload failed');
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json().catch(() => ({}));
+        throw new Error(errData.error || 'Upload failed');
+      }
       const { url } = await uploadRes.json();
       setProgress(60);
 
@@ -86,7 +94,10 @@ export default function DrawingSubmissionSheet({
         }),
       });
 
-      if (!submitRes.ok) throw new Error('Submission failed');
+      if (!submitRes.ok) {
+        const errData = await submitRes.json().catch(() => ({}));
+        throw new Error(errData.error || 'Submission failed');
+      }
       setProgress(100);
 
       setFile(null);

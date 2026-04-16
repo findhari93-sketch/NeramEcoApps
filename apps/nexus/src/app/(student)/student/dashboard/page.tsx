@@ -22,6 +22,8 @@ import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlin
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StatCard from '@/components/StatCard';
 import FoundationOverviewCard from '@/components/foundation/FoundationOverviewCard';
@@ -39,8 +41,21 @@ interface UpcomingClass {
   teacher: { name: string } | null;
 }
 
+interface CompletedClass {
+  id: string;
+  title: string;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  recording_url: string | null;
+  topic: { title: string; category: string } | null;
+  teacher: { name: string } | null;
+}
+
 interface DashboardData {
   upcomingClasses: UpcomingClass[];
+  completedClasses: CompletedClass[];
   attendanceSummary: { total: number; attended: number; percentage: number };
   checklistProgress: { completed: number; total: number };
   topicProgress: { completed: number; total: number };
@@ -143,6 +158,17 @@ export default function StudentDashboard() {
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour % 12 || 12;
     return `${displayHour}:${m} ${ampm}`;
+  };
+
+  const formatRelativeDate = (dateStr: string) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    const now = new Date();
+    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(todayDate.getTime() - 86400000);
+    const classDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    if (classDate.getTime() === todayDate.getTime()) return 'Today';
+    if (classDate.getTime() === yesterday.getTime()) return 'Yesterday';
+    return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
   const attendancePct = data?.attendanceSummary.percentage ?? 0;
@@ -314,10 +340,10 @@ export default function StudentDashboard() {
                   All caught up!
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-                  No upcoming classes
+                  No classes scheduled yet
                 </Typography>
                 <Typography variant="caption" sx={{ color: alpha('#fff', 0.8) }}>
-                  Check your timetable for the full schedule
+                  Check back later for new classes
                 </Typography>
               </Box>
             </Box>
@@ -501,7 +527,7 @@ export default function StudentDashboard() {
           >
             <CalendarTodayOutlinedIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 0.75 }} />
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              No upcoming classes scheduled
+              No other class has been scheduled yet. Check back later.
             </Typography>
             <Button
               size="small"
@@ -579,6 +605,131 @@ export default function StudentDashboard() {
                   >
                     Join Class
                   </Button>
+                )}
+              </Paper>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      {/* ── Completed Classes ── */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            Completed Classes
+          </Typography>
+          <Button
+            size="small"
+            endIcon={<ArrowForwardIcon sx={{ fontSize: '0.85rem !important' }} />}
+            onClick={() => router.push('/student/timetable')}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+          >
+            View All
+          </Button>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rounded" height={68} sx={{ borderRadius: 2.5 }} />
+            ))}
+          </Box>
+        ) : !data?.completedClasses?.length ? (
+          <Paper
+            elevation={0}
+            sx={{
+              py: 2.5,
+              textAlign: 'center',
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.divider}`,
+            }}
+          >
+            <HistoryOutlinedIcon sx={{ fontSize: 32, color: 'text.disabled', mb: 0.75 }} />
+            <Typography variant="body2" color="text.secondary">
+              No completed classes yet
+            </Typography>
+          </Paper>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {data.completedClasses.map((cls, i) => (
+              <Paper
+                key={cls.id}
+                elevation={0}
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  bgcolor: alpha(theme.palette.background.default, 0.5),
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderLeft: `4px solid ${theme.palette.success.main}`,
+                  display: 'flex',
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  gap: 1.5,
+                  animation: `fadeInUp 350ms cubic-bezier(0.05, 0.7, 0.1, 1) ${i * 50}ms both`,
+                  '@keyframes fadeInUp': {
+                    from: { opacity: 0, transform: 'translateY(8px)' },
+                    to: { opacity: 1, transform: 'translateY(0)' },
+                  },
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {cls.title}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                    <AccessTimeIcon sx={{ fontSize: '0.8rem', color: 'text.disabled' }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {formatRelativeDate(cls.scheduled_date)} &middot; {formatTime(cls.start_time)} - {formatTime(cls.end_time)}
+                    </Typography>
+                  </Box>
+                  {cls.topic && (
+                    <Chip
+                      label={cls.topic.title}
+                      size="small"
+                      sx={{
+                        mt: 0.75,
+                        height: 22,
+                        fontSize: '0.675rem',
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                        color: 'primary.main',
+                        fontWeight: 500,
+                      }}
+                    />
+                  )}
+                </Box>
+                {cls.recording_url ? (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    href={cls.recording_url}
+                    target="_blank"
+                    startIcon={<PlayCircleOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
+                    color="success"
+                    sx={{
+                      textTransform: 'none',
+                      minHeight: 40,
+                      borderRadius: 2,
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      px: 2.5,
+                      boxShadow: 'none',
+                      '&:hover': { boxShadow: 'none' },
+                    }}
+                  >
+                    Watch Recording
+                  </Button>
+                ) : (
+                  <Chip
+                    label="No recording"
+                    size="small"
+                    sx={{
+                      height: 28,
+                      fontSize: '0.7rem',
+                      color: 'text.disabled',
+                      borderColor: 'divider',
+                    }}
+                    variant="outlined"
+                  />
                 )}
               </Paper>
             ))}
