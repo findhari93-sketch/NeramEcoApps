@@ -241,12 +241,15 @@ export interface CollegeFilters {
   state?: string;
   type?: string;
   counselingSystem?: CounselingSystem;
+  exam?: 'NATA' | 'JEE_PAPER_2';
+  city?: string;
+  rating?: number;
   minFee?: number;
   maxFee?: number;
   naacGrade?: string;
   coa?: boolean;
   search?: string;
-  sortBy?: 'arch_index' | 'nirf_rank' | 'fee_low' | 'fee_high' | 'name';
+  sortBy?: 'arch_index' | 'nirf_rank' | 'fee_low' | 'fee_high' | 'name' | 'placement_high' | 'naac_grade';
   page?: number;
   limit?: number;
 }

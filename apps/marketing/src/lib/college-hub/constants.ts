@@ -117,25 +117,25 @@ export const FEE_CATEGORY_LABELS: Record<string, string> = {
 };
 
 // ─── NAAC Grade Labels ───────────────────────────────────────────────────────
-export const NAAC_GRADES = ['A++', 'A+', 'A', 'B++', 'B+', 'B', 'C'] as const;
+export const NAAC_GRADES = ['A++', 'A+', 'A', 'B++', 'B+', 'B'] as const;
 
 // ─── Sort Options ────────────────────────────────────────────────────────────
 export const SORT_OPTIONS = [
-  { value: 'arch_index', label: 'ArchIndex Score' },
-  { value: 'nirf_rank', label: 'NIRF Rank' },
+  { value: 'arch_index', label: 'Relevance' },
+  { value: 'placement_high', label: 'Highest Placement' },
   { value: 'fee_low', label: 'Fee: Low to High' },
   { value: 'fee_high', label: 'Fee: High to Low' },
+  { value: 'naac_grade', label: 'NAAC Grade' },
   { value: 'name', label: 'Name (A-Z)' },
+  { value: 'nirf_rank', label: 'NIRF Rank' },
 ] as const;
 
 // ─── College Type Options ────────────────────────────────────────────────────
 export const COLLEGE_TYPES = [
-  { value: 'government', label: 'Government' },
-  { value: 'aided', label: 'Government Aided' },
-  { value: 'private', label: 'Private' },
-  { value: 'deemed', label: 'Deemed University' },
-  { value: 'nit', label: 'NIT' },
-  { value: 'iit', label: 'IIT' },
+  { value: 'Government', label: 'Government' },
+  { value: 'Private', label: 'Private' },
+  { value: 'Deemed', label: 'Deemed University' },
+  { value: 'Government Aided', label: 'Government Aided' },
 ] as const;
 
 // ─── Page size ───────────────────────────────────────────────────────────────
@@ -186,3 +186,20 @@ export const ACCREDITATION_FILTERS: Record<string, { label: string; description:
   'coa-approved': { label: 'COA Approved', description: 'Colleges approved by the Council of Architecture' },
   'naac-a-plus': { label: 'NAAC A+ and Above', description: 'Colleges with NAAC A+ or A++ grade' },
 };
+
+// Listing layout
+export const FEATURED_COUNT = 5;
+export const AD_INTERVAL_COMPACT = 5;
+export const AD_AFTER_FEATURED = 2;
+
+export const FEE_PRESETS = [
+  { label: 'Under ₹1L', minFee: 0, maxFee: 100000 },
+  { label: '₹1-2L', minFee: 100000, maxFee: 200000 },
+  { label: '₹2-5L', minFee: 200000, maxFee: 500000 },
+  { label: '₹5L+', minFee: 500000, maxFee: undefined },
+] as const;
+
+export const EXAM_TYPES = [
+  { value: 'NATA', label: 'NATA' },
+  { value: 'JEE_PAPER_2', label: 'JEE Paper 2' },
+] as const;

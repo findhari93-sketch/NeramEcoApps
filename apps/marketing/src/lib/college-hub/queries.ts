@@ -36,6 +36,9 @@ export async function getColleges(
     state,
     type,
     counselingSystem,
+    exam,
+    city,
+    rating,
     minFee,
     maxFee,
     naacGrade,
@@ -53,6 +56,8 @@ export async function getColleges(
   if (state) query = query.eq('state_slug', state);
   if (type) query = query.eq('type', type);
   if (counselingSystem) query = query.contains('counseling_systems', [counselingSystem]);
+  if (exam) query = query.contains('accepted_exams', [exam]);
+  if (city) query = query.eq('city_slug', city);
   if (coa !== undefined) query = query.eq('coa_approved', coa);
   if (naacGrade) query = query.eq('naac_grade', naacGrade);
   if (minFee) query = query.gte('annual_fee_approx', minFee);
@@ -65,6 +70,8 @@ export async function getColleges(
   else if (sortBy === 'fee_low') query = query.order('annual_fee_approx', { ascending: true, nullsFirst: false });
   else if (sortBy === 'fee_high') query = query.order('annual_fee_approx', { ascending: false, nullsFirst: false });
   else if (sortBy === 'name') query = query.order('name', { ascending: true });
+  else if (sortBy === 'placement_high') query = query.order('avg_placement_salary', { ascending: false, nullsFirst: false });
+  else if (sortBy === 'naac_grade') query = query.order('naac_grade', { ascending: true, nullsFirst: false });
 
   // Pagination
   const from = (page - 1) * limit;
@@ -244,6 +251,50 @@ export async function getActiveStates(): Promise<
     state: v.state,
     count: v.count,
   }));
+}
+
+export async function getCitiesForState(
+  stateSlug: string
+): Promise<{ city: string; city_slug: string; count: number }[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('colleges')
+    .select('city, city_slug')
+    .eq('state_slug', stateSlug)
+    .not('city_slug', 'is', null);
+  if (error) throw error;
+
+  const counts = new Map<string, { city: string; city_slug: string; count: number }>();
+  for (const row of data ?? []) {
+    const key = row.city_slug!;
+    const existing = counts.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      counts.set(key, { city: row.city, city_slug: key, count: 1 });
+    }
+  }
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
+export async function getTypeCountsForState(
+  stateSlug: string
+): Promise<{ type: string; count: number }[]> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('colleges')
+    .select('type')
+    .eq('state_slug', stateSlug)
+    .not('type', 'is', null);
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    counts.set(row.type!, (counts.get(row.type!) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count);
 }
 
 export const getActiveCities = cache(
