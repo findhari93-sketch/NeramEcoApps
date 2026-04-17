@@ -137,26 +137,48 @@ const NAV_GROUPS: NavGroup[] = [
     icon: <SchoolIcon fontSize="small" />,
     columns: [
       {
-        title: 'Browse',
+        title: 'By State',
         links: [
-          { label: 'All Architecture Colleges', href: '/colleges' },
-          { label: 'Tamil Nadu Colleges', href: '/colleges/tamil-nadu' },
-          { label: 'Compare Colleges', href: '/colleges/compare' },
-          { label: 'Saved Colleges', href: '/colleges/saved' },
+          { label: 'Tamil Nadu', href: '/colleges/tamil-nadu' },
+          { label: 'Karnataka', href: '/colleges/karnataka' },
+          { label: 'Maharashtra', href: '/colleges/maharashtra' },
+          { label: 'Delhi NCR', href: '/colleges/delhi' },
+          { label: 'Kerala', href: '/colleges/kerala' },
+          { label: 'Telangana', href: '/colleges/telangana' },
+          { label: 'View all states \u2192', href: '/colleges' },
         ],
       },
       {
-        title: 'Rankings',
+        title: 'By Exam & Counseling',
+        links: [
+          { label: 'NATA Colleges', href: '/colleges' },
+          { label: 'JEE Main Paper 2', href: '/colleges' },
+          { label: 'TNEA Counseling', href: '/colleges/tnea' },
+          { label: 'JoSAA Counseling', href: '/colleges/josaa' },
+          { label: 'KEAM Counseling', href: '/colleges/counseling/keam' },
+          { label: 'KCET Counseling', href: '/colleges/counseling/kcet' },
+          { label: 'All counseling \u2192', href: '/colleges' },
+        ],
+      },
+      {
+        title: 'Rankings & Filters',
         links: [
           { label: 'NIRF Architecture', href: '/colleges/rankings/nirf' },
-          { label: 'ArchIndex Rankings', href: '/colleges/rankings/archindex' },
+          { label: 'ArchIndex Top Rated', href: '/colleges/rankings/archindex' },
+          { label: 'COA Approved', href: '/colleges/accreditation/coa-approved' },
+          { label: 'Government Colleges', href: '/colleges/type/government' },
+          { label: 'Private Colleges', href: '/colleges/type/private' },
+          { label: 'Fee: Under \u20B93L', href: '/colleges/fees/below-3-lakhs' },
+          { label: 'All fee ranges \u2192', href: '/colleges' },
         ],
       },
       {
-        title: 'By Admission',
+        title: 'Quick Links',
         links: [
-          { label: 'TNEA Colleges', href: '/colleges/tnea' },
-          { label: 'JoSAA Colleges', href: '/colleges/josaa' },
+          { label: '\u2B50 Featured Colleges', href: '/colleges' },
+          { label: '\uD83D\uDD0D Compare Colleges', href: '/colleges/compare' },
+          { label: '\uD83D\uDCBE Saved Colleges', href: '/colleges/saved' },
+          { label: '\uD83C\uDFD9\uFE0F Browse by City', href: '/colleges' },
         ],
       },
     ],
@@ -637,7 +659,8 @@ export default function Header() {
                 border: '1px solid',
                 borderColor: 'divider',
                 overflow: 'visible',
-                minWidth: 220,
+                minWidth: group.columns.length >= 4 ? 760 : 220,
+                maxWidth: '95vw',
               },
             }}
           >
