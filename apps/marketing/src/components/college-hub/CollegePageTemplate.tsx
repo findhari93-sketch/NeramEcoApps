@@ -23,6 +23,7 @@ import ClaimProfileCTA from './ClaimProfileCTA';
 import ReviewSection from './ReviewSection';
 import CommentSection from './CommentSection';
 import TierGate from './TierGate';
+import ROICalculator from './ROICalculator';
 import LeadCaptureButton from './LeadCaptureButton';
 import CollegeYouTube from './CollegeYouTube';
 import type { CollegeDetail, CollegeListItem, CollegeTier } from '@/lib/college-hub/types';
@@ -44,6 +45,10 @@ function buildNavPills(college: CollegeDetail) {
     { id: 'infrastructure', label: 'Infrastructure', icon: <BusinessIcon sx={{ fontSize: 16 }} /> },
     { id: 'faculty', label: 'Faculty', icon: <PeopleIcon sx={{ fontSize: 16 }} /> },
   ];
+
+  if (college.avg_placement_salary) {
+    pills.push({ id: 'roi', label: 'ROI', icon: <AttachMoneyIcon sx={{ fontSize: 16 }} /> });
+  }
 
   if (college.youtube_channel_url) {
     pills.push({ id: 'youtube', label: 'Videos', icon: <PlayCircleIcon sx={{ fontSize: 16 }} /> });
@@ -162,6 +167,26 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
                 <PlacementStats placements={college.placements} />
               </TierGate>
             </Section>
+
+            {/* ROI Calculator */}
+            {college.avg_placement_salary && (college.annual_fee_approx ?? college.annual_fee_min) && (
+              <Section id="roi" title="Return on Investment">
+                <TierGate
+                  requiredTier="gold"
+                  featureName="ROI Calculator"
+                  collegeTier={college.neram_tier as CollegeTier}
+                >
+                  <ROICalculator
+                    annualFee={college.annual_fee_approx ?? college.annual_fee_min!}
+                    avgSalary={college.avg_placement_salary}
+                    minSalary={college.min_placement_salary ?? null}
+                    maxSalary={college.max_placement_salary ?? null}
+                    citySlug={college.city_slug ?? null}
+                    city={college.city}
+                  />
+                </TierGate>
+              </Section>
+            )}
 
             {/* Infrastructure */}
             <Section id="infrastructure" title="Infrastructure">
