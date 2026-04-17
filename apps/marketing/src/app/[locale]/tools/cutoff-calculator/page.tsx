@@ -4,12 +4,14 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import {
   generateBreadcrumbSchema,
   generateWebApplicationSchema,
+  generateFAQSchema,
 } from '@/lib/seo/schemas';
-import CutoffCalculatorContent from '@/components/CutoffCalculatorContent';
-import { buildAlternates } from '@/lib/seo/metadata';
-
+import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
+import ToolLandingPage from '@/components/tools/ToolLandingPage';
+import { cutoffCalculatorConfig } from '@/lib/tools/configs/cutoff-calculator';
 
 const baseUrl = 'https://neramclasses.com';
+const config = cutoffCalculatorConfig;
 
 export async function generateMetadata({
   params: { locale },
@@ -17,18 +19,19 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA Cutoff Calculator 2026 - Check Your Score & College Chances',
-    description:
-      'Free NATA cutoff calculator. Enter your section scores to calculate total marks, percentile, and check admission chances at top architecture colleges across India.',
-    keywords:
-      'NATA cutoff calculator, NATA score calculator, NATA percentile calculator, architecture college cutoff, NATA 2026 cutoff',
-    alternates: buildAlternates(locale, '/tools/cutoff-calculator'),
+    title: config.metaTitle,
+    description: config.metaDescription,
+    keywords: config.keywords.join(', '),
+    alternates: buildAlternates(locale, `/tools/${config.slug}`),
     openGraph: {
-      title: 'NATA Cutoff Calculator 2026 - Check Your Score & College Chances',
-      description:
-        'Free NATA cutoff calculator. Enter your section scores to calculate total marks, percentile, and check admission chances at top architecture colleges.',
-      url: locale === 'en' ? `${baseUrl}/tools/cutoff-calculator` : `${baseUrl}/${locale}/tools/cutoff-calculator`,
+      title: config.metaTitle,
+      description: config.metaDescription,
+      url:
+        locale === 'en'
+          ? `${baseUrl}/tools/${config.slug}`
+          : `${baseUrl}/${locale}/tools/${config.slug}`,
       type: 'website',
+      images: [{ url: buildOgImage(config.ogImageTitle, config.ogImageSubtitle, 'tool') }],
     },
   };
 }
@@ -39,29 +42,25 @@ export default function CutoffCalculatorPage({
   params: { locale: string };
 }) {
   setRequestLocale(locale);
-
   return (
     <>
       <JsonLd
         data={[
           generateBreadcrumbSchema([
             { name: 'Home', url: baseUrl },
-            { name: 'Tools', url: `${baseUrl}/tools` },
-            {
-              name: 'Cutoff Calculator',
-              url: `${baseUrl}/tools/cutoff-calculator`,
-            },
+            { name: 'Free Tools', url: `${baseUrl}/tools` },
+            { name: config.title, url: `${baseUrl}/tools/${config.slug}` },
           ]),
           generateWebApplicationSchema({
-            name: 'NATA Cutoff Calculator',
-            description:
-              'Free NATA cutoff calculator to estimate your rank and check admission chances at top architecture colleges across India.',
-            url: `${baseUrl}/tools/cutoff-calculator`,
+            name: config.title,
+            description: config.metaDescription,
+            url: `${baseUrl}/tools/${config.slug}`,
             applicationCategory: 'EducationalApplication',
           }),
+          generateFAQSchema(config.faqs),
         ]}
       />
-      <CutoffCalculatorContent />
+      <ToolLandingPage config={config} />
     </>
   );
 }
