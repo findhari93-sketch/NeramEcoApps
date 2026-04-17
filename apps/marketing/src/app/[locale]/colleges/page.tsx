@@ -10,6 +10,8 @@ import {
   getCollegeCountByType,
   getCollegeCountByCounseling,
   getFeaturedColleges,
+  getActiveCities,
+  getActiveCounselingSystems,
 } from '@/lib/college-hub/queries';
 import {
   CollegeHubHero,
@@ -20,6 +22,7 @@ import {
   CollegeHubFAQ,
   BrowseAllSection,
 } from '@/components/college-hub/landing';
+import ExploreCategoriesSection from '@/components/college-hub/landing/ExploreCategoriesSection';
 import type { CollegeFilters } from '@/lib/college-hub/types';
 
 export const revalidate = 3600;
@@ -70,6 +73,8 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
   let typeData: any[] = [];
   let counselingData: any[] = [];
   let featuredColleges: any[] = [];
+  let cityData: any[] = [];
+  let counselingSystemData: any[] = [];
 
   try {
     const results = await Promise.allSettled([
@@ -79,6 +84,8 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
       getCollegeCountByType(),
       getCollegeCountByCounseling(),
       getFeaturedColleges(),
+      getActiveCities(),
+      getActiveCounselingSystems(),
     ]);
 
     if (results[0].status === 'fulfilled') { colleges = results[0].value.data; count = results[0].value.count; }
@@ -87,6 +94,8 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
     if (results[3].status === 'fulfilled') typeData = results[3].value;
     if (results[4].status === 'fulfilled') counselingData = results[4].value;
     if (results[5].status === 'fulfilled') featuredColleges = results[5].value;
+    if (results[6].status === 'fulfilled') cityData = results[6].value;
+    if (results[7].status === 'fulfilled') counselingSystemData = results[7].value;
 
     // Log any failures for Vercel function logs
     results.forEach((r, i) => {
@@ -121,6 +130,13 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
         counselingData={counselingData}
         typeData={typeData}
         locale={locale}
+      />
+
+      {/* Section 3.5: Explore Categories */}
+      <ExploreCategoriesSection
+        stateData={stateData}
+        counselingData={counselingSystemData}
+        cityData={cityData}
       />
 
       {/* Section 4: Featured Colleges */}
