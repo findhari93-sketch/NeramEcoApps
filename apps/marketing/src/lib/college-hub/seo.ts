@@ -4,6 +4,7 @@
 import type { Metadata } from 'next';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import type { College, CollegeListItem } from './types';
+import { COUNSELING_LABELS, COLLEGE_TYPE_SLUGS, ACCREDITATION_FILTERS } from './constants';
 
 const BASE_URL = 'https://neramclasses.com';
 
@@ -133,6 +134,92 @@ export function generateJoSAAMetadata(locale: string, collegeCount: number): Met
       type: 'website',
       url: `${BASE_URL}/colleges/josaa`,
       images: [buildOgImage(title, `${collegeCount} NITs and IITs`, 'tool')],
+    },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
+
+// ─── Counseling system page ─────────────────────────────────────────────────
+
+export function generateCounselingMetadata(locale: string, systemKey: string, collegeCount: number): Metadata {
+  const label = COUNSELING_LABELS[systemKey] ?? systemKey;
+  const title = `B.Arch Colleges under ${label} Counseling 2026 | Neram College Hub`;
+  const description = `${collegeCount} architecture colleges accepting ${label} counseling. Compare fees, cutoffs, rankings, and placements. Updated for 2026 admissions.`;
+  const path = `/colleges/counseling/${systemKey.toLowerCase().replace(/_/g, '-')}`;
+  return {
+    title,
+    description,
+    keywords: `${label} architecture colleges, ${systemKey} B.Arch colleges, ${label} counseling architecture`,
+    alternates: buildAlternates(locale, path),
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      images: [buildOgImage(title, `${collegeCount} colleges`, 'tool')],
+    },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
+
+// ─── City listing page ──────────────────────────────────────────────────────
+
+export function generateCityMetadata(locale: string, cityName: string, collegeCount: number): Metadata {
+  const title = `Architecture Colleges in ${cityName} 2026 — Fees, Rankings | Neram`;
+  const description = `${collegeCount} B.Arch colleges in ${cityName}. Compare fees, NATA cutoffs, placements, and rankings. Find the best architecture college in ${cityName}.`;
+  const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
+  const path = `/colleges/city/${citySlug}`;
+  return {
+    title,
+    description,
+    alternates: buildAlternates(locale, path),
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      images: [buildOgImage(title, `${collegeCount} colleges`, 'tool')],
+    },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
+
+// ─── College type page ──────────────────────────────────────────────────────
+
+export function generateTypeMetadata(locale: string, typeSlug: string, collegeCount: number): Metadata {
+  const typeName = COLLEGE_TYPE_SLUGS[typeSlug] ?? typeSlug;
+  const title = `${typeName} Architecture Colleges in India 2026 | Neram College Hub`;
+  const description = `${collegeCount} ${typeName.toLowerCase()} B.Arch colleges in India. Compare fees, rankings, cutoffs, and placements across ${typeName.toLowerCase()} architecture colleges.`;
+  const path = `/colleges/type/${typeSlug}`;
+  return {
+    title,
+    description,
+    alternates: buildAlternates(locale, path),
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      images: [buildOgImage(title, `${collegeCount} colleges`, 'tool')],
+    },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
+
+// ─── Accreditation filter page ──────────────────────────────────────────────
+
+export function generateAccreditationMetadata(locale: string, filterKey: string, collegeCount: number): Metadata {
+  const filter = ACCREDITATION_FILTERS[filterKey];
+  const label = filter?.label ?? filterKey;
+  const title = `${label} Architecture Colleges in India 2026 | Neram`;
+  const description = `${collegeCount} ${label.toLowerCase()} B.Arch colleges. ${filter?.description ?? ''} Compare fees, rankings, and placements.`;
+  const path = `/colleges/accreditation/${filterKey}`;
+  return {
+    title,
+    description,
+    alternates: buildAlternates(locale, path),
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      images: [buildOgImage(title, `${collegeCount} colleges`, 'tool')],
     },
     twitter: { card: 'summary_large_image', title, description },
   };
