@@ -1,44 +1,65 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Container, Grid, Typography, Box } from '@mui/material';
+import { Container, Grid, Typography, Box, Stack, Divider } from '@mui/material';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateStateListingMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
-import { getStateColleges, getActiveStates } from '@/lib/college-hub/queries';
-import { STATE_NAMES } from '@/lib/college-hub/constants';
-import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
+import { getColleges, getCitiesForState, getTypeCountsForState } from '@/lib/college-hub/queries';
+import { STATE_NAMES, FEATURED_COUNT, AD_INTERVAL_COMPACT, AD_AFTER_FEATURED } from '@/lib/college-hub/constants';
+import type { CollegeFilters } from '@/lib/college-hub/types';
+import FilterSidebar from '@/components/college-hub/FilterSidebar';
+import FeaturedCollegeCard from '@/components/college-hub/FeaturedCollegeCard';
+import CompactCollegeCard from '@/components/college-hub/CompactCollegeCard';
+import SponsoredBanner from '@/components/college-hub/SponsoredBanner';
+import CollegeSearch from '@/components/college-hub/CollegeSearch';
+import ActiveFilterPills from '@/components/college-hub/ActiveFilterPills';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
-export const revalidate = 3600;
+// Dynamic: filters require searchParams
+export const dynamic = 'force-dynamic';
 
-type Props = { params: { locale: string; state: string } };
-
-export async function generateStaticParams() {
-  try {
-    const states = await getActiveStates();
-    const locales = ['en', 'ta', 'hi', 'kn', 'ml'];
-    return locales.flatMap((locale) =>
-      states.map((s) => ({ locale, state: s.state_slug }))
-    );
-  } catch {
-    return [];
-  }
-}
+type Props = {
+  params: { locale: string; state: string };
+  searchParams: Record<string, string | undefined>;
+};
 
 export async function generateMetadata({ params: { locale, state } }: Props): Promise<Metadata> {
   const stateName = STATE_NAMES[state] ?? state.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  const colleges = await getStateColleges(state);
-  return generateStateListingMetadata(locale, state, stateName, colleges.length);
+  const { count } = await getColleges({ state, limit: 1 });
+  return generateStateListingMetadata(locale, state, stateName, count);
 }
 
-export default async function StateCollegesPage({ params: { locale, state } }: Props) {
+export default async function StateCollegesPage({ params: { locale, state }, searchParams }: Props) {
   setRequestLocale(locale);
 
-  const colleges = await getStateColleges(state);
-  if (colleges.length === 0) notFound();
-
   const stateName = STATE_NAMES[state] ?? state.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const filters: CollegeFilters = {
+    state,
+    type: searchParams.type,
+    exam: searchParams.exam as CollegeFilters['exam'],
+    city: searchParams.city,
+    coa: searchParams.coa === 'true' ? true : undefined,
+    naacGrade: searchParams.naac,
+    minFee: searchParams.minFee ? Number(searchParams.minFee) : undefined,
+    maxFee: searchParams.maxFee ? Number(searchParams.maxFee) : undefined,
+    search: searchParams.q,
+    sortBy: (searchParams.sort as CollegeFilters['sortBy']) ?? 'arch_index',
+    page: searchParams.page ? Number(searchParams.page) : 1,
+    limit: 50,
+  };
+
+  const [{ data: colleges, count: totalCount }, cityCounts, typeCounts] = await Promise.all([
+    getColleges(filters),
+    getCitiesForState(state),
+    getTypeCountsForState(state),
+  ]);
+
+  if (colleges.length === 0 && !searchParams.q && !searchParams.type) notFound();
+
+  const featured = colleges.slice(0, FEATURED_COUNT);
+  const compact = colleges.slice(FEATURED_COUNT);
 
   const breadcrumb = generateListingBreadcrumbSchema([
     { name: 'Home', path: '' },
@@ -49,26 +70,86 @@ export default async function StateCollegesPage({ params: { locale, state } }: P
   return (
     <>
       <JsonLd data={breadcrumb} />
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
         <Breadcrumbs items={[
           { name: 'Colleges', href: '/colleges' },
           { name: stateName },
         ]} />
+
+        {/* Page Header */}
         <Box sx={{ mb: 3 }}>
-          <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
+          <Typography variant="h1" sx={{ fontSize: { xs: '1.4rem', sm: '1.8rem' }, fontWeight: 800 }}>
             Best B.Arch Colleges in {stateName}
           </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-            {colleges.length} colleges — compare fees, NATA cutoffs, NAAC grades, and placements
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            <strong style={{ color: '#1565C0' }}>{totalCount}</strong> colleges, compare fees, NATA cutoffs, NAAC grades, and placements
           </Typography>
         </Box>
 
-        <Grid container spacing={2}>
-          {colleges.map((college) => (
-            <Grid key={college.id} item xs={12} sm={6} md={4}>
-              <CollegeListingCard college={college} />
-            </Grid>
-          ))}
+        <Grid container spacing={3}>
+          {/* Filter Sidebar */}
+          <Grid item xs={12} md={3.5}>
+            <FilterSidebar
+              filters={filters}
+              totalCount={totalCount}
+              cityCounts={cityCounts}
+              typeCounts={typeCounts}
+            />
+          </Grid>
+
+          {/* Content */}
+          <Grid item xs={12} md={8.5}>
+            {/* Search bar (desktop) */}
+            <Box sx={{ display: { xs: 'none', md: 'block' }, mb: 2 }}>
+              <CollegeSearch defaultValue={filters.search} />
+            </Box>
+
+            <ActiveFilterPills stateName={stateName} />
+
+            {/* Results count */}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Showing <strong>{colleges.length}</strong> of {totalCount} colleges
+            </Typography>
+
+            {/* Featured cards */}
+            {featured.map((college, i) => (
+              <Box key={college.id}>
+                <FeaturedCollegeCard college={college} rank={i + 1} />
+                {i + 1 === AD_AFTER_FEATURED && <SponsoredBanner variant="featured" />}
+              </Box>
+            ))}
+
+            {/* Divider */}
+            {compact.length > 0 && (
+              <Stack direction="row" alignItems="center" gap={1.5} sx={{ my: 3 }}>
+                <Divider sx={{ flex: 1 }} />
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  More Colleges
+                </Typography>
+                <Divider sx={{ flex: 1 }} />
+              </Stack>
+            )}
+
+            {/* Compact cards */}
+            {compact.map((college, i) => (
+              <Box key={college.id}>
+                <CompactCollegeCard college={college} rank={FEATURED_COUNT + i + 1} />
+                {(i + 1) % AD_INTERVAL_COMPACT === 0 && i + 1 < compact.length && (
+                  <SponsoredBanner variant="compact" />
+                )}
+              </Box>
+            ))}
+
+            {/* Empty state */}
+            {colleges.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <Typography variant="h6" color="text.secondary">No colleges match your filters</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Try adjusting your filters or clearing them to see all colleges.
+                </Typography>
+              </Box>
+            )}
+          </Grid>
         </Grid>
       </Container>
     </>
