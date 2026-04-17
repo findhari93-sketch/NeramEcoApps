@@ -483,15 +483,16 @@ export default function Header() {
                 px: 1.5,
                 mr: 1,
                 borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: '1px solid',
+                borderColor: 'divider',
                 cursor: 'pointer',
-                color: 'rgba(255,255,255,0.7)',
+                color: 'text.secondary',
                 transition: 'all 0.2s ease',
                 flexShrink: 0,
                 '&:hover': {
-                  bgcolor: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.4)',
-                  color: 'white',
+                  bgcolor: 'action.hover',
+                  borderColor: 'text.secondary',
+                  color: 'text.primary',
                 },
               }}
             >
@@ -506,9 +507,10 @@ export default function Header() {
                   fontFamily: 'inherit',
                   px: 0.6,
                   py: 0.25,
-                  border: '1px solid rgba(255,255,255,0.25)',
+                  border: '1px solid',
+                  borderColor: 'divider',
                   borderRadius: '4px',
-                  color: 'rgba(255,255,255,0.5)',
+                  color: 'text.disabled',
                   letterSpacing: '0.02em',
                   lineHeight: 1.4,
                 }}
@@ -531,7 +533,7 @@ export default function Header() {
                 height: 40,
                 borderRadius: '8px',
                 mr: 0.5,
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+                '&:hover': { bgcolor: 'action.hover' },
               }}
             >
               <SearchIcon sx={{ fontSize: 22 }} />
