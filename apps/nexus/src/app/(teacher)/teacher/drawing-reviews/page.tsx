@@ -9,12 +9,14 @@ import {
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
+import GalleryFeed from '@/components/drawings/GalleryFeed';
 import type { DrawingSubmissionWithDetails } from '@neram/database/types';
 
 const STATUS_TABS = [
   { value: 'submitted', label: 'Pending' },
   { value: 'reviewed', label: 'Reviewed' },
   { value: 'completed', label: 'Completed' },
+  { value: 'gallery', label: 'Gallery' },
 ];
 
 // Sub-filters shown under the Reviewed tab
@@ -54,6 +56,7 @@ export default function DrawingReviewsPage() {
   };
 
   const fetchQueue = useCallback(async () => {
+    if (status === 'gallery') return; // Gallery tab uses GalleryFeed component
     setLoading(true);
     try {
       const token = await getToken();
@@ -109,7 +112,10 @@ export default function DrawingReviewsPage() {
         </Box>
       )}
 
-      {loading ? (
+      {/* Gallery tab: render GalleryFeed in teacher mode */}
+      {status === 'gallery' ? (
+        <GalleryFeed getToken={getToken} teacherMode={true} />
+      ) : loading ? (
         Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={80} sx={{ mb: 1 }} />)
       ) : submissions.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>

@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const posts = await getGalleryFeed(user.id, {
       category: params.get('category') || undefined,
-      limit: params.get('limit') ? parseInt(params.get('limit')!) : 20,
+      limit: params.get('limit') ? parseInt(params.get('limit')!) : 12,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,
+      hasReference: params.get('hasReference') === 'true',
     });
     return NextResponse.json({ posts });
   } catch (err) {

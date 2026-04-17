@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Container, Typography, Grid, Stack } from '@mui/material';
 import FilterSidebar from '../FilterSidebar';
 import CollegeListingCard from '../CollegeListingCard';

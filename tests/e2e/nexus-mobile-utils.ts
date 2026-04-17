@@ -149,13 +149,13 @@ export async function injectAuthForPage(
     authDataCache[role] = await response.json();
   }
 
-  const { user, nexusRole, classrooms, testToken } = authDataCache[role];
+  const { user, nexusRole, classrooms, testToken, onboardingStatus, profileComplete } = authDataCache[role] as any;
 
   // Navigate to login page to access localStorage domain
   await page.goto('http://localhost:3012/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   // Inject auth into localStorage
-  await page.evaluate(({ user, nexusRole, classrooms, testToken }) => {
+  await page.evaluate(({ user, nexusRole, classrooms, testToken, onboardingStatus, profileComplete }) => {
     localStorage.setItem('nexus_test_token', testToken);
     localStorage.setItem('nexus_auth_user', JSON.stringify(user));
     localStorage.setItem('nexus_auth_role', nexusRole);
@@ -163,7 +163,14 @@ export async function injectAuthForPage(
     if (classrooms.length > 0) {
       localStorage.setItem('nexus_active_classroom_id', classrooms[0].id);
     }
-  }, { user, nexusRole, classrooms, testToken });
+    // Store onboarding/profile status so RoleGuard doesn't redirect
+    if (onboardingStatus) {
+      localStorage.setItem('nexus_auth_onboarding_status', onboardingStatus);
+    }
+    if (profileComplete !== undefined) {
+      localStorage.setItem('nexus_auth_profile_complete', String(profileComplete));
+    }
+  }, { user, nexusRole, classrooms, testToken, onboardingStatus, profileComplete });
 
   // Set auth header for API requests
   await page.context().setExtraHTTPHeaders({

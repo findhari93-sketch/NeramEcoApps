@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Card, CardActionArea, CardContent, Chip, Stack, Typography } from '@mui/material';
 import Image from 'next/image';
 import Link from 'next/link';

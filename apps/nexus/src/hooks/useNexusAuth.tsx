@@ -114,6 +114,16 @@ export function useNexusAuth(): NexusAuthState {
         setNexusRole(roleStr as NexusRole);
         setClassrooms(parsedClassrooms);
 
+        // Restore onboarding/profile status from localStorage (set during test-login injection)
+        const storedOnboardingStatus = localStorage.getItem('nexus_auth_onboarding_status');
+        if (storedOnboardingStatus) {
+          setOnboardingStatus(storedOnboardingStatus as OnboardingStatus);
+        }
+        const storedProfileComplete = localStorage.getItem('nexus_auth_profile_complete');
+        if (storedProfileComplete !== null) {
+          setProfileComplete(storedProfileComplete === 'true');
+        }
+
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
         const savedClassroom = parsedClassrooms.find(c => c.id === savedClassroomId);
         setActiveClassroomState(savedClassroom || parsedClassrooms[0] || null);

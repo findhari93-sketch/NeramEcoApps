@@ -130,6 +130,32 @@ export async function POST(request: NextRequest) {
             ? 'teacher'
             : 'student';
 
+    // Check onboarding status (same logic as /api/auth/me)
+    let onboardingStatus: string | null = null;
+    let profileComplete = true;
+
+    if (nexusRole === 'student' && enrollments && enrollments.length > 0) {
+      const hasNoOnboardingClassroom = enrollments.some(
+        (e: any) => e.classroom?.type === 'common' || e.classroom?.type === 'nata',
+      );
+
+      if (hasNoOnboardingClassroom) {
+        onboardingStatus = 'approved';
+      } else {
+        const { data: onboarding } = await supabase
+          .from('nexus_student_onboarding')
+          .select('status')
+          .eq('student_id', user.id)
+          .maybeSingle();
+
+        onboardingStatus = onboarding?.status || null;
+      }
+
+      if (onboardingStatus === 'approved') {
+        profileComplete = !!(user.phone && user.date_of_birth && user.gender);
+      }
+    }
+
     // Generate test token: test_<base64(email)>
     const testToken = `test_${Buffer.from(email).toString('base64')}`;
 
@@ -143,6 +169,8 @@ export async function POST(request: NextRequest) {
         user_type: user.user_type,
       },
       nexusRole,
+      onboardingStatus,
+      profileComplete,
       classrooms: (enrollments || []).map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,

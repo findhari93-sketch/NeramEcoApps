@@ -8,7 +8,7 @@ import type { GalleryPost, GalleryReactionType, DrawingHomework, DrawingHomework
 
 export async function getGalleryFeed(
   userId: string,
-  filters?: { category?: string; limit?: number; offset?: number },
+  filters?: { category?: string; limit?: number; offset?: number; hasReference?: boolean },
   client?: TypedSupabaseClient
 ): Promise<GalleryPost[]> {
   const supabase = client || getSupabaseAdminClient();
@@ -18,6 +18,10 @@ export async function getGalleryFeed(
     .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
     .eq('is_gallery_published', true)
     .order('reviewed_at', { ascending: false });
+
+  if (filters?.hasReference) {
+    query = query.not('corrected_image_url', 'is', null);
+  }
 
   const limit = filters?.limit || 20;
   const offset = filters?.offset || 0;

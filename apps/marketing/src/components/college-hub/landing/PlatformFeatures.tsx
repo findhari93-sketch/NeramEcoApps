@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Container, Typography, Paper, Chip, Stack } from '@mui/material';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';

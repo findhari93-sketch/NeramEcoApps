@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Container, Typography, Button, Stack } from '@mui/material';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';

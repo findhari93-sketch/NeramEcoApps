@@ -1,3 +1,5 @@
+'use client';
+
 import { Box, Container, Typography, Button, Stack, Paper } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';

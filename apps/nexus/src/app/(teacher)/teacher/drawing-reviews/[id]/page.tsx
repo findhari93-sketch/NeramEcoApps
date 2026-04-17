@@ -206,63 +206,94 @@ export default function DrawingReviewDetailPage() {
   const timeAgo = getTimeAgo(submission.submitted_at);
   const sub = submission as any;
 
-  // Compact action bar (sticky on mobile so it stays above bottom nav)
+  // Action bar: fixed on mobile (above BottomNav), inline on desktop
   const actionBar = isEditMode ? (
     <Box sx={{
-      display: 'flex', alignItems: 'center', gap: 0.75, p: 1,
-      borderTop: '1px solid', borderColor: 'divider', flexShrink: 0,
+      display: 'flex', alignItems: 'center',
+      gap: { xs: 0.5, md: 0.75 },
+      px: { xs: 1, md: 1 },
+      py: 0.75,
+      borderTop: '1px solid', borderColor: 'divider',
       bgcolor: 'background.paper',
+      // Desktop: inline at bottom of panel
+      ...(!isMobile && { flexShrink: 0 }),
+      // Mobile: fixed above BottomNav
       ...(isMobile && {
-        position: 'sticky',
-        bottom: 64, // height of BottomNav
+        position: 'fixed',
+        bottom: 64, // BottomNav height
+        left: 0,
+        right: 0,
         zIndex: 10,
-        boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
+        boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
       }),
     }}>
-      <Button
-        variant="outlined"
-        size="small"
+      {/* Draft: icon-only on mobile, icon+text on desktop */}
+      <IconButton
         onClick={handleSaveDraft}
         disabled={draftSaving || saving}
-        startIcon={draftSaved ? <CheckCircleOutlineIcon /> : <SaveOutlinedIcon />}
-        color={draftSaved ? 'success' : 'inherit'}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0 }}
+        color={draftSaved ? 'success' : 'default'}
+        size="small"
+        title={draftSaving ? 'Saving...' : draftSaved ? 'Draft saved!' : 'Save draft'}
+        sx={{
+          border: '1px solid', borderColor: draftSaved ? 'success.main' : 'divider',
+          borderRadius: 1.5, width: 36, height: 36,
+          ...(!isMobile && { display: 'none' }),
+        }}
       >
-        {draftSaving ? '...' : draftSaved ? 'Saved!' : 'Draft'}
-      </Button>
+        {draftSaved ? <CheckCircleOutlineIcon fontSize="small" /> : <SaveOutlinedIcon fontSize="small" />}
+      </IconButton>
+      {!isMobile && (
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={handleSaveDraft}
+          disabled={draftSaving || saving}
+          startIcon={draftSaved ? <CheckCircleOutlineIcon /> : <SaveOutlinedIcon />}
+          color={draftSaved ? 'success' : 'inherit'}
+          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0 }}
+        >
+          {draftSaving ? '...' : draftSaved ? 'Saved!' : 'Draft'}
+        </Button>
+      )}
+
+      {/* Redo */}
       <Button
         variant="outlined"
         color="warning"
         size="small"
         onClick={() => { setAction('redo'); handleSaveReview('redo'); }}
         disabled={saving || draftSaving}
-        startIcon={<ReplayIcon />}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0 }}
+        {...(isMobile ? {} : { startIcon: <ReplayIcon /> })}
+        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, minWidth: 0, px: { xs: 1.5, md: 2 } }}
       >
         {saving && action === 'redo' ? '...' : 'Redo'}
       </Button>
+
+      {/* Complete / Save: primary action, takes remaining space */}
       <Button
         variant="contained"
         color="success"
         size="small"
         onClick={() => { setAction('complete'); handleSaveReview('complete'); }}
         disabled={saving || draftSaving}
-        startIcon={<CheckCircleOutlineIcon />}
-        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, flex: 1 }}
+        {...(isMobile ? {} : { startIcon: <CheckCircleOutlineIcon /> })}
+        sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.78rem', minHeight: 36, flex: 1, px: { xs: 1.5, md: 2 } }}
       >
         {saving && action === 'complete' ? '...' : ['reviewed', 'redo', 'completed'].includes(submission.status) ? 'Save' : 'Complete'}
       </Button>
-      <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
-        <Switch
-          checked={publishToGallery}
-          onChange={(e) => setPublishToGallery(e.target.checked)}
-          size="small"
-          title="Publish to Art Gallery"
-        />
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', lineHeight: 1.2 }}>
+
+      {/* Gallery toggle: switch only, no label on mobile */}
+      <Switch
+        checked={publishToGallery}
+        onChange={(e) => setPublishToGallery(e.target.checked)}
+        size="small"
+        title="Publish to Art Gallery"
+      />
+      {!isMobile && (
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', lineHeight: 1.2, ml: -0.5 }}>
           Gallery
         </Typography>
-      </Box>
+      )}
     </Box>
   ) : null;
 
@@ -422,12 +453,13 @@ export default function DrawingReviewDetailPage() {
               </Box>
             </Box>
 
-            {/* Sticky bottom action bar */}
-            {actionBar}
-            {/* Spacer so content/action bar isn't hidden behind fixed BottomNav (64px + safe area) */}
-            <Box sx={{ height: 72, flexShrink: 0 }} />
+            {/* Bottom padding to clear fixed action bar (48px) + BottomNav (64px) */}
+            <Box sx={{ height: isEditMode ? 120 : 72, flexShrink: 0 }} />
           </Box>
         </Box>
+
+        {/* Fixed action bar above BottomNav */}
+        {actionBar}
 
         {/* More actions menu */}
         <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
