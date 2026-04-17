@@ -3,7 +3,7 @@ export interface SearchEntry {
   title: string;
   description: string;
   keywords: string[];
-  category: 'page' | 'course' | 'tool' | 'nata' | 'blog' | 'legal';
+  category: 'page' | 'course' | 'tool' | 'nata' | 'blog' | 'legal' | 'college';
 }
 
 export const SEARCH_INDEX: SearchEntry[] = [
@@ -412,6 +412,7 @@ const CATEGORY_LABELS: Record<SearchEntry['category'], string> = {
   nata: 'NATA 2026',
   blog: 'Blog',
   legal: 'Legal',
+  college: 'Colleges',
 };
 
 export function getCategoryLabel(category: SearchEntry['category']): string {
