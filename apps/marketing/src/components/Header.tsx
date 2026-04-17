@@ -446,26 +446,74 @@ export default function Header() {
             </Box>
 
             {/* ── Desktop Search ── */}
-            <Tooltip title="Search (Ctrl+K)" arrow>
-              <IconButton
-                color="inherit"
-                size="small"
-                onClick={() => setSearchOpen(true)}
+            <Box
+              onClick={() => setSearchOpen(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}
+              aria-label="Search (Ctrl+K)"
+              sx={{
+                display: { xs: 'none', md: 'flex' },
+                alignItems: 'center',
+                gap: 1,
+                height: 36,
+                minWidth: 200,
+                px: 1.5,
+                mr: 1,
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.7)',
+                transition: 'all 0.2s ease',
+                flexShrink: 0,
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  color: 'white',
+                },
+              }}
+            >
+              <SearchIcon sx={{ fontSize: 17 }} />
+              <Typography variant="body2" sx={{ flex: 1, fontSize: '0.85rem', color: 'inherit' }}>
+                Search
+              </Typography>
+              <Box
+                component="kbd"
                 sx={{
-                  display: { xs: 'none', md: 'flex' },
-                  width: 32,
-                  height: 32,
-                  borderRadius: '8px',
-                  opacity: 0.75,
-                  '&:hover': { opacity: 1, bgcolor: 'action.hover' },
+                  fontSize: '0.65rem',
+                  fontFamily: 'inherit',
+                  px: 0.6,
+                  py: 0.25,
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  borderRadius: '4px',
+                  color: 'rgba(255,255,255,0.5)',
+                  letterSpacing: '0.02em',
+                  lineHeight: 1.4,
                 }}
               >
-                <SearchIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </Tooltip>
+                Ctrl K
+              </Box>
+            </Box>
 
             {/* Spacer for mobile */}
             <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
+
+            {/* ── Mobile Search Icon ── */}
+            <IconButton
+              color="inherit"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Search"
+              sx={{
+                display: { xs: 'flex', md: 'none' },
+                width: 40,
+                height: 40,
+                borderRadius: '8px',
+                mr: 0.5,
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
+              }}
+            >
+              <SearchIcon sx={{ fontSize: 22 }} />
+            </IconButton>
 
             {/* My Enrollment (enrolled students) */}
             {isEnrolled && (
