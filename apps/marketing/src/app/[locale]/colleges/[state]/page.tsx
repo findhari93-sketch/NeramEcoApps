@@ -8,6 +8,7 @@ import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup
 import { getStateColleges, getActiveStates } from '@/lib/college-hub/queries';
 import { STATE_NAMES } from '@/lib/college-hub/constants';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 export const revalidate = 3600;
 
@@ -49,6 +50,10 @@ export default async function StateCollegesPage({ params: { locale, state } }: P
     <>
       <JsonLd data={breadcrumb} />
       <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+        <Breadcrumbs items={[
+          { name: 'Colleges', href: '/colleges' },
+          { name: stateName },
+        ]} />
         <Box sx={{ mb: 3 }}>
           <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
             Best B.Arch Colleges in {stateName}

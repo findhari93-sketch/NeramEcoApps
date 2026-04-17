@@ -5,6 +5,7 @@ import { Container, Typography, Box, Grid, Button } from '@mui/material';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import Link from 'next/link';
 import { getSavedColleges } from '@/components/college-hub/SaveCollegeButton';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 export default function SavedCollegesPage() {
   const [savedSlugs, setSavedSlugs] = useState<string[]>([]);
@@ -15,6 +16,10 @@ export default function SavedCollegesPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Breadcrumbs items={[
+        { name: 'Colleges', href: '/colleges' },
+        { name: 'Saved Colleges' },
+      ]} />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <BookmarkIcon color="primary" />
         <Typography variant="h4" fontWeight={800}>Saved Colleges</Typography>

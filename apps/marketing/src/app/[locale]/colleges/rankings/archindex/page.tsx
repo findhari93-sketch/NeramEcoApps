@@ -8,6 +8,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { setRequestLocale } from 'next-intl/server';
 import { getArchIndexRankedColleges } from '@/lib/college-hub/queries';
 import ArchIndexRing from '@/components/college-hub/ArchIndexRing';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 export const revalidate = 86400;
 
@@ -24,6 +25,10 @@ export default async function ArchIndexRankingsPage({ params: { locale } }: { pa
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Breadcrumbs items={[
+        { name: 'Colleges', href: '/colleges' },
+        { name: 'ArchIndex Rankings' },
+      ]} />
       <Box sx={{ mb: 3 }}>
         <Chip label="Neram Exclusive" color="secondary" sx={{ mb: 1, fontWeight: 700 }} />
         <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>

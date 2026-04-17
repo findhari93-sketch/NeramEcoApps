@@ -6,6 +6,7 @@ import {
 import Link from 'next/link';
 import { setRequestLocale } from 'next-intl/server';
 import { getNIRFRankedColleges } from '@/lib/college-hub/queries';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 export const revalidate = 86400;
 
@@ -22,6 +23,10 @@ export default async function NIRFRankingsPage({ params: { locale } }: { params:
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Breadcrumbs items={[
+        { name: 'Colleges', href: '/colleges' },
+        { name: 'NIRF Architecture Rankings' },
+      ]} />
       <Box sx={{ mb: 3 }}>
         <Chip label="NIRF 2025" color="primary" sx={{ mb: 1, fontWeight: 700 }} />
         <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>

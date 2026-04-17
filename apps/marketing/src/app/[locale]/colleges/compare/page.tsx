@@ -7,6 +7,7 @@ import {
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { CollegeDetail } from '@/lib/college-hub/types';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 const COMPARE_ROWS: Array<{
   label: string;
@@ -102,6 +103,10 @@ function CompareContent() {
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Breadcrumbs items={[
+        { name: 'Colleges', href: '/colleges' },
+        { name: 'Compare Colleges' },
+      ]} />
       <Typography variant="h4" fontWeight={800} gutterBottom>
         Compare Colleges
       </Typography>

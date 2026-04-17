@@ -11,6 +11,7 @@ import HouseIcon from '@mui/icons-material/House';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import TourIcon from '@mui/icons-material/Tour';
 
+import Breadcrumbs from '../seo/Breadcrumbs';
 import HeroSection from './HeroSection';
 import NavPills from './NavPills';
 import FeeBreakdown from './FeeBreakdown';
@@ -77,6 +78,17 @@ function Section({ id, title, children }: { id: string; title: string; children:
 export default function CollegePageTemplate({ college, similarColleges }: CollegePageTemplateProps) {
   return (
     <Box sx={{ bgcolor: 'background.default' }}>
+      {/* Breadcrumbs */}
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Box sx={{ pt: { xs: 1.5, sm: 2 } }}>
+          <Breadcrumbs items={[
+            { name: 'Colleges', href: '/colleges' },
+            { name: college.state, href: `/colleges/${college.state_slug ?? 'india'}` },
+            { name: college.short_name ?? college.name },
+          ]} />
+        </Box>
+      </Container>
+
       {/* Hero */}
       <HeroSection college={college} />
 

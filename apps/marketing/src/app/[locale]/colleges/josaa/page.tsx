@@ -6,6 +6,7 @@ import { generateJoSAAMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
 import { getJoSAAColleges } from '@/lib/college-hub/queries';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 export const revalidate = 86400;
 
@@ -31,6 +32,10 @@ export default async function JoSAACollegesPage({ params: { locale } }: Props) {
     <>
       <JsonLd data={breadcrumb} />
       <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+        <Breadcrumbs items={[
+          { name: 'Colleges', href: '/colleges' },
+          { name: 'JoSAA Colleges' },
+        ]} />
         <Box sx={{ mb: 3 }}>
           <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
             JoSAA B.Arch Colleges 2026 — NITs and IITs

@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
 import { getCollegesByFeeRange, FEE_RANGES, type FeeRangeKey } from '@/lib/college-hub/queries';
 import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
+import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
 export const revalidate = 86400;
 
@@ -38,6 +39,10 @@ export default async function CollegeFeeRangePage({
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+      <Breadcrumbs items={[
+        { name: 'Colleges', href: '/colleges' },
+        { name: rangeInfo.label },
+      ]} />
       <Box sx={{ mb: 3 }}>
         <Chip label="Fee Filter" color="primary" sx={{ mb: 1 }} />
         <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>
