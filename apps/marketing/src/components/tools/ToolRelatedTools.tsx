@@ -10,13 +10,14 @@ export default function ToolRelatedTools({
   const relatedTools = relatedToolSlugs
     .map((slug) => {
       const tool = TOOL_BY_SLUG[slug];
-      return tool ? { slug, ...tool } : null;
+      if (!tool) return null;
+      return {
+        slug: tool.slug,
+        title: tool.title,
+        description: tool.metaDescription,
+      };
     })
-    .filter(Boolean) as Array<{
-    slug: string;
-    title: string;
-    description: string;
-  }>;
+    .filter((t): t is { slug: string; title: string; description: string } => t !== null);
 
   if (relatedTools.length === 0) return null;
 

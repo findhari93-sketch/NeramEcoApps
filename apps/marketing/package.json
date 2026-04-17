@@ -7,7 +7,7 @@
     "build": "npx tsx ../../scripts/generate-search-index.ts && next build",
     "start": "next start -p 3010",
     "lint": "next lint",
-    "type-check": "tsc --noEmit",
+    "type-check": "npx tsx ../../scripts/generate-search-index.ts && tsc --noEmit",
     "clean": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\"",
     "clean:build": "node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true})\""
   },
