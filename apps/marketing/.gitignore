@@ -1,2 +1,5 @@
 .vercel
 .env*.local
+
+# Auto-generated search index (created at build time)
+src/lib/generated-search-index.ts
