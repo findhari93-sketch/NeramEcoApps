@@ -22,7 +22,8 @@ const LISTING_SELECT = `
   coa_approved, naac_grade, nirf_rank, nirf_rank_architecture, arch_index_score,
   annual_fee_min, annual_fee_max, annual_fee_approx, total_barch_seats,
   accepted_exams, counseling_systems, logo_url, hero_image_url, highlights,
-  verified, data_completeness
+  verified, data_completeness, admissions_phone, brochure_url,
+  avg_placement_salary, min_placement_salary, max_placement_salary, city_slug
 `;
 
 // Dynamic: called from /colleges?state=...&sort=... — page reads searchParams
@@ -111,6 +112,62 @@ export const getJoSAAColleges = cache(async (): Promise<CollegeListItem[]> => {
   return (data ?? []) as CollegeListItem[];
 });
 
+// ISR: counseling system hub (e.g. TNEA, JoSAA, COMEDK, etc.)
+export const getCollegesByCounseling = cache(
+  async (systemKey: string): Promise<CollegeListItem[]> => {
+    const supabase = createAdminClientISR(86400);
+    const { data } = await supabase
+      .from('colleges')
+      .select(LISTING_SELECT)
+      .contains('counseling_systems', [systemKey])
+      .order('arch_index_score', { ascending: false, nullsFirst: false });
+    return (data ?? []) as CollegeListItem[];
+  }
+);
+
+// ISR: city hub pages
+export const getCollegesByCity = cache(
+  async (citySlug: string): Promise<CollegeListItem[]> => {
+    const supabase = createAdminClientISR(3600);
+    const { data } = await supabase
+      .from('colleges')
+      .select(LISTING_SELECT)
+      .eq('city_slug', citySlug)
+      .order('arch_index_score', { ascending: false, nullsFirst: false });
+    return (data ?? []) as CollegeListItem[];
+  }
+);
+
+// ISR: college type hub pages
+export const getCollegesByType = cache(
+  async (type: string): Promise<CollegeListItem[]> => {
+    const supabase = createAdminClientISR(3600);
+    const { data } = await supabase
+      .from('colleges')
+      .select(LISTING_SELECT)
+      .ilike('type', type)
+      .order('arch_index_score', { ascending: false, nullsFirst: false });
+    return (data ?? []) as CollegeListItem[];
+  }
+);
+
+// ISR: accreditation filter pages (COA approved, NAAC A+/A++)
+export const getCollegesByAccreditation = cache(
+  async (filter: string): Promise<CollegeListItem[]> => {
+    const supabase = createAdminClientISR(3600);
+    let query = supabase.from('colleges').select(LISTING_SELECT);
+
+    if (filter === 'coa-approved') {
+      query = query.eq('coa_approved', true);
+    } else if (filter === 'naac-a-plus') {
+      query = query.in('naac_grade', ['A++', 'A+']);
+    }
+
+    const { data } = await query.order('arch_index_score', { ascending: false, nullsFirst: false });
+    return (data ?? []) as CollegeListItem[];
+  }
+);
+
 // ─── Detail query ────────────────────────────────────────────────────────────
 
 // ISR: college detail pages are prerendered via generateStaticParams
@@ -188,6 +245,53 @@ export async function getActiveStates(): Promise<
     count: v.count,
   }));
 }
+
+export const getActiveCities = cache(
+  async (): Promise<Array<{ city_slug: string; city: string; count: number }>> => {
+    const supabase = createAdminClientISR(3600);
+    const { data } = await supabase
+      .from('colleges')
+      .select('city, city_slug')
+      .not('city_slug', 'is', null);
+
+    if (!data) return [];
+
+    const counts = new Map<string, { city: string; count: number }>();
+    for (const r of data) {
+      if (!r.city_slug) continue;
+      const existing = counts.get(r.city_slug);
+      if (existing) existing.count++;
+      else counts.set(r.city_slug, { city: r.city, count: 1 });
+    }
+
+    return Array.from(counts.entries())
+      .map(([city_slug, v]) => ({ city_slug, city: v.city, count: v.count }))
+      .filter((c) => c.count >= 2)
+      .sort((a, b) => b.count - a.count);
+  }
+);
+
+export const getActiveCounselingSystems = cache(
+  async (): Promise<Array<{ system: string; count: number }>> => {
+    const supabase = createAdminClientISR(3600);
+    const { data } = await supabase
+      .from('colleges')
+      .select('counseling_systems');
+
+    if (!data) return [];
+
+    const counts = new Map<string, number>();
+    for (const r of data) {
+      for (const sys of r.counseling_systems ?? []) {
+        counts.set(sys, (counts.get(sys) ?? 0) + 1);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([system, count]) => ({ system, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+);
 
 // ─── Rankings ────────────────────────────────────────────────────────────────
 
