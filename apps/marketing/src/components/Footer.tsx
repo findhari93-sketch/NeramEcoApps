@@ -30,6 +30,7 @@ const footerLinks = {
     { label: 'Careers', href: '/careers' },
   ],
   resources: [
+    { label: 'Free Tools', href: '/tools' },
     { label: 'NATA Syllabus 2026', href: '/nata-syllabus' },
     { label: 'NATA Preparation Guide', href: '/nata-preparation-guide' },
     { label: 'How to Score 150+ in NATA', href: '/how-to-score-150-in-nata' },

@@ -465,6 +465,43 @@ export default function Header() {
                   </Button>
                 );
               })}
+
+              {/* Free Tools direct link */}
+              <Button
+                component={Link}
+                href="/tools"
+                sx={{
+                  color: 'inherit',
+                  minWidth: 0,
+                  px: 1.25,
+                  py: 1,
+                  fontWeight: pathname === '/tools' || pathname.startsWith('/tools/') ? 600 : 400,
+                  opacity: pathname === '/tools' || pathname.startsWith('/tools/') ? 1 : 0.85,
+                  borderRadius: '8px',
+                  position: 'relative',
+                  overflow: 'visible',
+                  transition: 'opacity 0.2s ease, background-color 0.2s ease',
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    bottom: 4,
+                    left: '50%',
+                    width: pathname === '/tools' || pathname.startsWith('/tools/') ? '60%' : '0%',
+                    height: '2px',
+                    bgcolor: 'currentcolor',
+                    borderRadius: '1px',
+                    transform: 'translateX(-50%)',
+                    transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  },
+                  '&:hover': {
+                    opacity: 1,
+                    bgcolor: 'rgba(255,255,255,0.1)',
+                    '&::after': { width: '60%' },
+                  },
+                }}
+              >
+                Free Tools
+              </Button>
             </Box>
 
             {/* ── Desktop Search ── */}
@@ -924,6 +961,30 @@ export default function Header() {
               );
             })}
           </List>
+
+          {/* Free Tools */}
+          <ListItemButton
+            component={Link}
+            href="/tools"
+            onClick={toggleMobileMenu}
+            selected={pathname === '/tools' || pathname.startsWith('/tools/')}
+            sx={{
+              py: 1.5,
+              borderLeft: pathname === '/tools' || pathname.startsWith('/tools/') ? '3px solid' : '3px solid transparent',
+              borderColor: pathname === '/tools' || pathname.startsWith('/tools/') ? 'primary.main' : 'transparent',
+              bgcolor: pathname === '/tools' || pathname.startsWith('/tools/') ? 'primary.50' : 'transparent',
+              '&.Mui-selected': { color: 'primary.main', bgcolor: 'primary.50' },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <TrendingUpIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Free Tools"
+              primaryTypographyProps={{ fontWeight: pathname === '/tools' || pathname.startsWith('/tools/') ? 600 : 400 }}
+            />
+          </ListItemButton>
+          <Divider />
 
           {/* My Enrollment */}
           {isEnrolled && (
