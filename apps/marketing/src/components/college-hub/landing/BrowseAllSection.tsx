@@ -63,7 +63,7 @@ export default function BrowseAllSection({
                 </Typography>
                 <Grid container spacing={2}>
                   {colleges.map((college) => (
-                    <Grid key={college.id} item xs={12} sm={6} lg={4}>
+                    <Grid key={college.id} item xs={12} md={6}>
                       <CollegeListingCard college={college} />
                     </Grid>
                   ))}
