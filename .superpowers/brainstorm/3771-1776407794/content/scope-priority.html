@@ -1,0 +1,57 @@
+<h2>What's the scope for this project?</h2>
+<p class="subtitle">You've mentioned several College Hub enhancements. Should we build them all together or in phases?</p>
+
+<h3>Everything you've mentioned so far:</h3>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px;">
+  <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px;">
+    <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Navigation</div>
+    <div style="font-weight: 600; margin-bottom: 6px;">1. Breadcrumb Navigation</div>
+    <div style="font-size: 14px; color: #aaa;">Back to College Hub from any college page</div>
+  </div>
+  <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px;">
+    <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Discovery</div>
+    <div style="font-weight: 600; margin-bottom: 6px;">2. Category Navigation System</div>
+    <div style="font-size: 14px; color: #aaa;">Mega-menu + homepage section with all categories (state, city, exam, counseling, fee, type, rankings)</div>
+  </div>
+  <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px;">
+    <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">College Cards</div>
+    <div style="font-weight: 600; margin-bottom: 6px;">3. Enhanced Listing Cards</div>
+    <div style="font-size: 14px; color: #aaa;">Campus photo, placement salary (min/max), call button, download brochure</div>
+  </div>
+  <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 20px;">
+    <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">College Profile</div>
+    <div style="font-weight: 600; margin-bottom: 6px;">4. ROI Calculator</div>
+    <div style="font-size: 14px; color: #aaa;">Total investment vs expected placement package, payback period</div>
+  </div>
+</div>
+
+<h3>How should we scope this?</h3>
+<div class="options">
+  <div class="option" data-choice="all-together" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>All Together (One Big Release)</h3>
+      <p>Build everything as a single "College Hub v2" release. More work upfront, but a cohesive launch. Could take longer before anything ships.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="phased" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Phased (Ship Incrementally)</h3>
+      <p><strong>Phase 1:</strong> Breadcrumbs + Category Navigation (fix the core navigation problem first)<br>
+      <strong>Phase 2:</strong> Enhanced Listing Cards (campus photos, placement salary, call/brochure)<br>
+      <strong>Phase 3:</strong> ROI Calculator on college profiles<br>
+      Each phase ships independently and adds value.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="cherry-pick" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Cherry-Pick (You Decide Priority)</h3>
+      <p>Tell me which specific features you want first. We'll build exactly what you need now and come back to the rest later.</p>
+    </div>
+  </div>
+</div>

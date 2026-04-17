@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>College Listing Layout Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f8fafc; color: #1a2027; }
+
+  /* Header */
+  .page-header { background: white; border-bottom: 1px solid #e2e8f0; padding: 16px 24px; }
+  .breadcrumb { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+  .breadcrumb a { color: #1565C0; text-decoration: none; }
+  .page-title { font-size: 26px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+  .page-subtitle { font-size: 14px; color: #64748b; }
+  .page-subtitle strong { color: #1565C0; }
+
+  /* Main Layout */
+  .main-layout { display: flex; gap: 24px; max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+  /* Filter Sidebar */
+  .filter-sidebar { width: 280px; flex-shrink: 0; position: sticky; top: 20px; align-self: flex-start; }
+  .filter-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+  .filter-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .filter-header h3 { font-size: 16px; font-weight: 600; }
+  .filter-clear { font-size: 12px; color: #1565C0; cursor: pointer; text-decoration: none; }
+  .filter-section { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; }
+  .filter-section:last-child { border-bottom: none; }
+  .filter-label { font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .filter-label .count { font-size: 11px; color: #94a3b8; font-weight: 400; }
+  .filter-chevron { font-size: 10px; color: #94a3b8; cursor: pointer; }
+
+  /* Sort Dropdown */
+  .sort-select { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; color: #334155; background: #f8fafc; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+
+  /* Checkboxes */
+  .filter-checkbox { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+  .filter-checkbox input { accent-color: #1565C0; width: 16px; height: 16px; }
+  .filter-checkbox label { font-size: 13px; color: #475569; cursor: pointer; flex: 1; }
+  .filter-checkbox .badge { font-size: 11px; color: #94a3b8; }
+
+  /* Chips */
+  .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { padding: 5px 12px; border-radius: 20px; font-size: 12px; border: 1px solid #e2e8f0; background: white; cursor: pointer; color: #475569; transition: all 0.15s; }
+  .chip:hover { border-color: #1565C0; color: #1565C0; }
+  .chip.active { background: #1565C0; color: white; border-color: #1565C0; }
+
+  /* Fee Range */
+  .fee-range { display: flex; gap: 8px; align-items: center; }
+  .fee-input { width: 100px; padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; text-align: center; }
+  .fee-divider { color: #94a3b8; font-size: 12px; }
+
+  /* Content Area */
+  .content-area { flex: 1; min-width: 0; }
+  .results-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .results-count { font-size: 14px; color: #64748b; }
+  .results-count strong { color: #0f172a; }
+  .active-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .active-filter { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 20px; font-size: 12px; color: #1565C0; }
+  .active-filter .remove { cursor: pointer; font-size: 14px; color: #93c5fd; }
+
+  /* Featured Card (Top 5) */
+  .featured-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; margin-bottom: 16px; transition: all 0.2s; position: relative; }
+  .featured-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-color: #93c5fd; }
+  .featured-badge { position: absolute; top: 16px; left: 16px; z-index: 2; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+  .rank-badge { position: absolute; top: 16px; right: 16px; z-index: 2; width: 40px; height: 40px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: #1565C0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  .featured-image { width: 100%; height: 200px; object-fit: cover; background: linear-gradient(135deg, #1e3a5f, #2d5a87); display: flex; align-items: center; justify-content: center; position: relative; }
+  .featured-image::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(transparent, rgba(0,0,0,0.4)); }
+  .featured-image .placeholder { color: rgba(255,255,255,0.5); font-size: 14px; }
+  .featured-body { padding: 20px; }
+  .featured-top-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .college-name { font-size: 18px; font-weight: 700; color: #0f172a; }
+  .college-location { font-size: 13px; color: #64748b; margin-top: 2px; }
+  .college-logo { width: 48px; height: 48px; border-radius: 8px; background: white; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #1565C0; font-size: 18px; flex-shrink: 0; }
+  .badges-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .badge-coa { background: #dcfce7; color: #166534; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .badge-naac { background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .badge-exam { background: #dbeafe; color: #1e40af; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .badge-type { background: #f3e8ff; color: #6b21a8; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; margin-bottom: 14px; }
+  .stat { text-align: center; }
+  .stat-value { font-size: 16px; font-weight: 700; color: #0f172a; }
+  .stat-value.fee { color: #059669; }
+  .stat-value.placement { color: #1565C0; }
+  .stat-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .featured-actions { display: flex; gap: 10px; align-items: center; }
+  .btn-primary { padding: 10px 24px; background: #1565C0; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .btn-primary:hover { background: #1256a3; }
+  .btn-outline { padding: 10px 20px; background: white; color: #1565C0; border: 1px solid #1565C0; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-icon { width: 40px; height: 40px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; font-size: 16px; }
+
+  /* Compact Card (After Top 5) */
+  .compact-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; transition: all 0.2s; }
+  .compact-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #93c5fd; }
+  .compact-rank { width: 32px; height: 32px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #475569; flex-shrink: 0; }
+  .compact-logo { width: 44px; height: 44px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #1565C0; font-size: 16px; flex-shrink: 0; }
+  .compact-info { flex: 1; min-width: 0; }
+  .compact-name { font-size: 15px; font-weight: 600; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .compact-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .compact-badges { display: flex; gap: 4px; flex-shrink: 0; }
+  .compact-stats { display: flex; gap: 20px; flex-shrink: 0; }
+  .compact-stat { text-align: center; }
+  .compact-stat-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .compact-stat-label { font-size: 10px; color: #94a3b8; }
+  .compact-action { flex-shrink: 0; }
+  .btn-sm { padding: 7px 16px; font-size: 12px; background: #1565C0; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+
+  /* Ad Banner */
+  .ad-banner { background: linear-gradient(135deg, #fef3c7, #fef9c3); border: 1px dashed #f59e0b; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center; }
+  .ad-banner-label { font-size: 10px; color: #92400e; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .ad-banner-text { font-size: 14px; color: #78350f; font-weight: 500; }
+
+  /* Section Label */
+  .section-divider { display: flex; align-items: center; gap: 12px; margin: 24px 0 16px; }
+  .section-divider .line { flex: 1; height: 1px; background: #e2e8f0; }
+  .section-divider .text { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Mobile indicator */
+  .mobile-note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin: 24px 0; font-size: 13px; color: #1e40af; }
+  .mobile-note strong { font-weight: 600; }
+
+  /* Toggle for mobile view */
+  .view-toggle { display: flex; gap: 2px; background: #f1f5f9; padding: 3px; border-radius: 8px; }
+  .view-toggle button { padding: 6px 14px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: #64748b; font-weight: 500; }
+  .view-toggle button.active { background: white; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+</style>
+</head>
+<body>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div style="max-width: 1280px; margin: 0 auto;">
+    <div class="breadcrumb">
+      <a href="#">Colleges</a> &rsaquo; Tamil Nadu
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div>
+        <h1 class="page-title">Best B.Arch Colleges in Tamil Nadu</h1>
+        <p class="page-subtitle"><strong>32 colleges</strong> &middot; compare fees, NATA cutoffs, NAAC grades, and placements</p>
+      </div>
+      <div class="view-toggle">
+        <button class="active">Desktop</button>
+        <button onclick="alert('Mobile mockup coming next!')">Mobile</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main-layout">
+
+  <!-- ===================== FILTER SIDEBAR ===================== -->
+  <aside class="filter-sidebar">
+    <div class="filter-card">
+      <div class="filter-header">
+        <h3>🔍 Filters</h3>
+        <a class="filter-clear" href="#">Clear all</a>
+      </div>
+
+      <!-- Sort -->
+      <div class="filter-section">
+        <div class="filter-label">Sort By</div>
+        <select class="sort-select">
+          <option>Relevance (Default)</option>
+          <option>Highest Placement</option>
+          <option>Fee: Low to High</option>
+          <option>Fee: High to Low</option>
+          <option>NAAC Grade</option>
+          <option>Name (A-Z)</option>
+          <option>NIRF Rank</option>
+        </select>
+      </div>
+
+      <!-- COA Approved -->
+      <div class="filter-section">
+        <div class="filter-label">
+          COA Approved
+          <span class="count">28 of 32</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="coa" checked>
+          <label for="coa">Show only COA approved</label>
+        </div>
+      </div>
+
+      <!-- Exam Type -->
+      <div class="filter-section">
+        <div class="filter-label">Accepted Exam</div>
+        <div class="chip-group">
+          <span class="chip active">All</span>
+          <span class="chip">NATA</span>
+          <span class="chip">JEE Paper 2</span>
+        </div>
+        <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
+          💡 Most TN colleges accept NATA. JEE Paper 2 is for NITs/SPAs only.
+        </div>
+      </div>
+
+      <!-- College Type -->
+      <div class="filter-section">
+        <div class="filter-label">College Type</div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="govt">
+          <label for="govt">Government</label>
+          <span class="badge">5</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="private">
+          <label for="private">Private</label>
+          <span class="badge">18</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="deemed">
+          <label for="deemed">Deemed University</label>
+          <span class="badge">6</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="aided">
+          <label for="aided">Government Aided</label>
+          <span class="badge">3</span>
+        </div>
+      </div>
+
+      <!-- NAAC Grade -->
+      <div class="filter-section">
+        <div class="filter-label">NAAC Grade</div>
+        <div class="chip-group">
+          <span class="chip">A++</span>
+          <span class="chip">A+</span>
+          <span class="chip">A</span>
+          <span class="chip">B++</span>
+          <span class="chip">B+</span>
+          <span class="chip">B</span>
+        </div>
+      </div>
+
+      <!-- Fee Range -->
+      <div class="filter-section">
+        <div class="filter-label">Annual Fee Range</div>
+        <div class="fee-range">
+          <input class="fee-input" placeholder="₹ Min" value="₹0">
+          <span class="fee-divider">to</span>
+          <input class="fee-input" placeholder="₹ Max" value="₹5L">
+        </div>
+        <div style="margin-top: 8px;">
+          <div class="chip-group">
+            <span class="chip">Under ₹1L</span>
+            <span class="chip">₹1-2L</span>
+            <span class="chip">₹2-5L</span>
+            <span class="chip">₹5L+</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- City -->
+      <div class="filter-section">
+        <div class="filter-label">City</div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="chennai">
+          <label for="chennai">Chennai</label>
+          <span class="badge">12</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="coimbatore">
+          <label for="coimbatore">Coimbatore</label>
+          <span class="badge">4</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="trichy">
+          <label for="trichy">Trichy</label>
+          <span class="badge">3</span>
+        </div>
+        <div class="filter-checkbox">
+          <input type="checkbox" id="madurai">
+          <label for="madurai">Madurai</label>
+          <span class="badge">2</span>
+        </div>
+        <a href="#" style="font-size: 12px; color: #1565C0; text-decoration: none; display: inline-block; margin-top: 6px;">+ 5 more cities</a>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ===================== CONTENT AREA ===================== -->
+  <main class="content-area">
+
+    <!-- Active Filters & Results Count -->
+    <div class="results-bar">
+      <span class="results-count">Showing <strong>32 colleges</strong> in Tamil Nadu</span>
+    </div>
+    <div class="active-filters">
+      <span class="active-filter">Tamil Nadu <span class="remove">&times;</span></span>
+      <span class="active-filter">COA Approved <span class="remove">&times;</span></span>
+    </div>
+
+    <!-- ===== TOP 5 FEATURED CARDS ===== -->
+
+    <!-- Featured Card #1 -->
+    <div class="featured-card">
+      <div class="featured-badge">⭐ Featured</div>
+      <div class="rank-badge">#1</div>
+      <div class="featured-image">
+        <span class="placeholder">🏛️ Measi Academy of Architecture, Chennai (Campus Photo)</span>
+      </div>
+      <div class="featured-body">
+        <div class="featured-top-row">
+          <div>
+            <div class="college-name">Measi Academy of Architecture</div>
+            <div class="college-location">📍 Chennai, Tamil Nadu &middot; Private</div>
+          </div>
+          <div class="college-logo">M</div>
+        </div>
+        <div class="badges-row">
+          <span class="badge-coa">✓ COA</span>
+          <span class="badge-naac">NAAC A</span>
+          <span class="badge-exam">NATA</span>
+          <span class="badge-type">TNEA Counseling</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-value fee">₹1.4L/yr</div>
+            <div class="stat-label">Annual Fee</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">160</div>
+            <div class="stat-label">B.Arch Seats</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value placement">₹6.2L/yr</div>
+            <div class="stat-label">Avg Placement</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">1978</div>
+            <div class="stat-label">Established</div>
+          </div>
+        </div>
+        <div class="featured-actions">
+          <button class="btn-primary">View Details</button>
+          <button class="btn-outline">Compare</button>
+          <button class="btn-icon" title="Download Brochure">📄</button>
+          <button class="btn-icon" title="Save">🤍</button>
+          <button class="btn-icon" title="Call Admissions">📞</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Featured Card #2 -->
+    <div class="featured-card">
+      <div class="rank-badge">#2</div>
+      <div class="featured-image" style="background: linear-gradient(135deg, #2d3748, #4a5568);">
+        <span class="placeholder">🏛️ Aalim Muhammed Salegh Academy, Chennai (Campus Photo)</span>
+      </div>
+      <div class="featured-body">
+        <div class="featured-top-row">
+          <div>
+            <div class="college-name">Aalim Muhammed Salegh Academy of Architecture</div>
+            <div class="college-location">📍 Chennai, Tamil Nadu &middot; Private</div>
+          </div>
+          <div class="college-logo">A</div>
+        </div>
+        <div class="badges-row">
+          <span class="badge-coa">✓ COA</span>
+          <span class="badge-exam">NATA</span>
+          <span class="badge-type">TNEA Counseling</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-value fee">₹50K/yr</div>
+            <div class="stat-label">Annual Fee</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">40</div>
+            <div class="stat-label">B.Arch Seats</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value placement">₹4.8L/yr</div>
+            <div class="stat-label">Avg Placement</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">2005</div>
+            <div class="stat-label">Established</div>
+          </div>
+        </div>
+        <div class="featured-actions">
+          <button class="btn-primary">View Details</button>
+          <button class="btn-outline">Compare</button>
+          <button class="btn-icon" title="Save">🤍</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ad Banner after #2 -->
+    <div class="ad-banner">
+      <div class="ad-banner-label">Sponsored</div>
+      <div class="ad-banner-text">🎓 Apply for B.Arch 2025 Admissions. Limited seats available. <strong style="color: #1565C0; cursor: pointer;">Learn More →</strong></div>
+    </div>
+
+    <!-- Featured Card #3 (compact featured) -->
+    <div class="featured-card" style="border-left: 3px solid #1565C0;">
+      <div class="rank-badge">#3</div>
+      <div class="featured-image" style="height: 160px; background: linear-gradient(135deg, #1a365d, #2b6cb0);">
+        <span class="placeholder">🏛️ CAAD Chennai Academy of Architecture (Campus Photo)</span>
+      </div>
+      <div class="featured-body">
+        <div class="featured-top-row">
+          <div>
+            <div class="college-name">CAAD Chennai Academy of Architecture & Design</div>
+            <div class="college-location">📍 Chennai, Tamil Nadu &middot; Private</div>
+          </div>
+          <div class="college-logo">C</div>
+        </div>
+        <div class="badges-row">
+          <span class="badge-coa">✓ COA</span>
+          <span class="badge-exam">NATA</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat"><div class="stat-value fee">₹1.8L/yr</div><div class="stat-label">Annual Fee</div></div>
+          <div class="stat"><div class="stat-value">60</div><div class="stat-label">B.Arch Seats</div></div>
+          <div class="stat"><div class="stat-value placement">₹5.5L/yr</div><div class="stat-label">Avg Placement</div></div>
+          <div class="stat"><div class="stat-value">2010</div><div class="stat-label">Established</div></div>
+        </div>
+        <div class="featured-actions">
+          <button class="btn-primary">View Details</button>
+          <button class="btn-outline">Compare</button>
+          <button class="btn-icon">🤍</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section Divider -->
+    <div class="section-divider">
+      <span class="line"></span>
+      <span class="text">More Colleges</span>
+      <span class="line"></span>
+    </div>
+
+    <!-- ===== COMPACT CARDS (After Top 5) ===== -->
+
+    <div class="compact-card">
+      <div class="compact-rank">6</div>
+      <div class="compact-logo">M</div>
+      <div class="compact-info">
+        <div class="compact-name">Mohamed Sathak Engineering College</div>
+        <div class="compact-meta">📍 Ramanathapuram &middot; Private &middot; <span style="color: #166534;">✓ COA</span></div>
+      </div>
+      <div class="compact-badges">
+        <span class="badge-exam" style="font-size: 10px; padding: 2px 8px;">NATA</span>
+      </div>
+      <div class="compact-stats">
+        <div class="compact-stat">
+          <div class="compact-stat-value" style="color: #059669;">₹80K</div>
+          <div class="compact-stat-label">Fee/yr</div>
+        </div>
+        <div class="compact-stat">
+          <div class="compact-stat-value">60</div>
+          <div class="compact-stat-label">Seats</div>
+        </div>
+      </div>
+      <div class="compact-action">
+        <button class="btn-sm">Details</button>
+      </div>
+    </div>
+
+    <div class="compact-card">
+      <div class="compact-rank">7</div>
+      <div class="compact-logo">P</div>
+      <div class="compact-info">
+        <div class="compact-name">Prime College of Architecture & Planning</div>
+        <div class="compact-meta">📍 Nagapattinam &middot; Private &middot; <span style="color: #166534;">✓ COA</span></div>
+      </div>
+      <div class="compact-badges">
+        <span class="badge-exam" style="font-size: 10px; padding: 2px 8px;">NATA</span>
+      </div>
+      <div class="compact-stats">
+        <div class="compact-stat">
+          <div class="compact-stat-value" style="color: #059669;">₹50K</div>
+          <div class="compact-stat-label">Fee/yr</div>
+        </div>
+        <div class="compact-stat">
+          <div class="compact-stat-value">40</div>
+          <div class="compact-stat-label">Seats</div>
+        </div>
+      </div>
+      <div class="compact-action">
+        <button class="btn-sm">Details</button>
+      </div>
+    </div>
+
+    <div class="compact-card">
+      <div class="compact-rank">8</div>
+      <div class="compact-logo">S</div>
+      <div class="compact-info">
+        <div class="compact-name">School of Architecture & Interior Design</div>
+        <div class="compact-meta">📍 Chennai &middot; Private &middot; <span style="color: #166534;">✓ COA</span></div>
+      </div>
+      <div class="compact-badges">
+        <span class="badge-exam" style="font-size: 10px; padding: 2px 8px;">NATA</span>
+      </div>
+      <div class="compact-stats">
+        <div class="compact-stat">
+          <div class="compact-stat-value" style="color: #059669;">₹1.2L</div>
+          <div class="compact-stat-label">Fee/yr</div>
+        </div>
+        <div class="compact-stat">
+          <div class="compact-stat-value">80</div>
+          <div class="compact-stat-label">Seats</div>
+        </div>
+      </div>
+      <div class="compact-action">
+        <button class="btn-sm">Details</button>
+      </div>
+    </div>
+
+    <!-- Ad Banner in compact section -->
+    <div class="ad-banner">
+      <div class="ad-banner-label">Sponsored</div>
+      <div class="ad-banner-text">📚 Free NATA preparation guide. Download now! <strong style="color: #1565C0; cursor: pointer;">Get Free Guide →</strong></div>
+    </div>
+
+    <div class="compact-card">
+      <div class="compact-rank">9</div>
+      <div class="compact-logo">R</div>
+      <div class="compact-info">
+        <div class="compact-name">RV College of Architecture</div>
+        <div class="compact-meta">📍 Coimbatore &middot; Private</div>
+      </div>
+      <div class="compact-badges">
+        <span class="badge-exam" style="font-size: 10px; padding: 2px 8px;">NATA</span>
+      </div>
+      <div class="compact-stats">
+        <div class="compact-stat">
+          <div class="compact-stat-value" style="color: #059669;">₹1.5L</div>
+          <div class="compact-stat-label">Fee/yr</div>
+        </div>
+        <div class="compact-stat">
+          <div class="compact-stat-value">40</div>
+          <div class="compact-stat-label">Seats</div>
+        </div>
+      </div>
+      <div class="compact-action">
+        <button class="btn-sm">Details</button>
+      </div>
+    </div>
+
+    <!-- Mobile Note -->
+    <div class="mobile-note">
+      <strong>📱 Mobile View:</strong> On mobile, the filter sidebar becomes a floating "Filters" button at the bottom that opens a full-screen drawer. Featured cards stack vertically with smaller campus photos. Compact cards keep the same horizontal layout but without the stats columns (tap to expand).
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

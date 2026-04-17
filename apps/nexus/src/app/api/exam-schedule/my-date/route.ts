@@ -125,6 +125,8 @@ export async function POST(request: NextRequest) {
           exam_city: exam_city || null,
           exam_session: exam_session || null,
           state: 'applied',
+          deleted_at: null,
+          deletion_reason: null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'student_id,exam_type,phase,attempt_number' }
@@ -136,7 +138,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ attempt: data });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to submit exam date';
+    const message = err instanceof Error
+      ? err.message
+      : (err as any)?.message || 'Failed to submit exam date';
+    console.error('Exam date submission error:', err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

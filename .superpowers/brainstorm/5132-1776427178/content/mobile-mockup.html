@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile College Listing Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #e2e8f0; display: flex; justify-content: center; gap: 32px; padding: 24px; flex-wrap: wrap; }
+
+  /* Phone Frame */
+  .phone-frame { width: 375px; background: #f8fafc; border-radius: 40px; border: 8px solid #1a1a2e; box-shadow: 0 20px 60px rgba(0,0,0,0.2); overflow: hidden; position: relative; }
+  .phone-notch { width: 120px; height: 28px; background: #1a1a2e; border-radius: 0 0 16px 16px; margin: 0 auto; position: relative; z-index: 10; }
+  .phone-screen { height: 780px; overflow-y: auto; background: #f8fafc; scrollbar-width: thin; }
+  .phone-screen::-webkit-scrollbar { width: 3px; }
+  .phone-screen::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .phone-label { text-align: center; margin-top: 12px; font-size: 14px; font-weight: 600; color: #475569; }
+  .phone-sublabel { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 2px; }
+
+  /* Mobile Header */
+  .m-header { background: white; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 5; }
+  .m-breadcrumb { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+  .m-breadcrumb a { color: #1565C0; text-decoration: none; }
+  .m-title { font-size: 18px; font-weight: 700; color: #0f172a; line-height: 1.3; }
+  .m-subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .m-subtitle strong { color: #1565C0; }
+
+  /* Search Bar */
+  .m-search { padding: 10px 16px; background: white; border-bottom: 1px solid #e2e8f0; }
+  .m-search-input { width: 100%; padding: 10px 14px 10px 36px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; background: #f8fafc; color: #334155; position: relative; }
+  .m-search-wrap { position: relative; }
+  .m-search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; color: #94a3b8; }
+
+  /* Filter Bar (horizontal scroll) */
+  .m-filter-bar { padding: 10px 16px; background: white; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .m-filter-bar::-webkit-scrollbar { display: none; }
+  .m-filter-chip { padding: 7px 14px; border-radius: 20px; font-size: 12px; border: 1px solid #e2e8f0; background: white; color: #475569; white-space: nowrap; flex-shrink: 0; font-weight: 500; }
+  .m-filter-chip.active { background: #1565C0; color: white; border-color: #1565C0; }
+  .m-filter-chip.has-value { background: #eff6ff; color: #1565C0; border-color: #bfdbfe; }
+
+  /* Active Filters */
+  .m-active-filters { padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .m-active-pill { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 16px; font-size: 11px; color: #1565C0; }
+  .m-active-pill .x { font-size: 13px; color: #93c5fd; cursor: pointer; }
+
+  /* Sort + Count Bar */
+  .m-sort-bar { padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .m-count { font-size: 12px; color: #64748b; }
+  .m-count strong { color: #0f172a; }
+  .m-sort-btn { font-size: 12px; color: #1565C0; font-weight: 500; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+
+  /* Featured Card Mobile */
+  .m-featured { margin: 8px 12px; background: white; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; position: relative; }
+  .m-featured:active { transform: scale(0.99); }
+  .m-feat-image { width: 100%; height: 150px; background: linear-gradient(135deg, #1e3a5f, #2d5a87); display: flex; align-items: center; justify-content: center; position: relative; }
+  .m-feat-image::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60px; background: linear-gradient(transparent, rgba(0,0,0,0.5)); }
+  .m-feat-image .placeholder { color: rgba(255,255,255,0.5); font-size: 12px; z-index: 1; }
+  .m-feat-rank { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #1565C0; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 2; }
+  .m-feat-badge { position: absolute; top: 10px; left: 10px; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 3px 10px; border-radius: 14px; font-size: 10px; font-weight: 600; z-index: 2; }
+  .m-feat-logo { width: 40px; height: 40px; border-radius: 8px; background: white; border: 2px solid white; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #1565C0; font-size: 16px; position: absolute; bottom: -20px; left: 16px; z-index: 3; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  .m-feat-body { padding: 28px 14px 14px; }
+  .m-feat-name { font-size: 16px; font-weight: 700; color: #0f172a; line-height: 1.3; }
+  .m-feat-location { font-size: 12px; color: #64748b; margin-top: 3px; }
+  .m-feat-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  .m-badge { padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; }
+  .m-badge-coa { background: #dcfce7; color: #166534; }
+  .m-badge-naac { background: #fef3c7; color: #92400e; }
+  .m-badge-exam { background: #dbeafe; color: #1e40af; }
+  .m-badge-type { background: #f3e8ff; color: #6b21a8; }
+  .m-feat-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f5f9; }
+  .m-stat { text-align: center; }
+  .m-stat-val { font-size: 14px; font-weight: 700; color: #0f172a; }
+  .m-stat-val.green { color: #059669; }
+  .m-stat-val.blue { color: #1565C0; }
+  .m-stat-lbl { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+  .m-feat-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .m-btn-primary { flex: 1; padding: 10px; background: #1565C0; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; }
+  .m-btn-outline { padding: 10px 14px; background: white; color: #1565C0; border: 1px solid #1565C0; border-radius: 8px; font-size: 13px; font-weight: 500; }
+  .m-btn-icon { width: 40px; height: 40px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+
+  /* Compact Card Mobile */
+  .m-compact { margin: 6px 12px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 14px; display: flex; gap: 12px; align-items: flex-start; }
+  .m-compact:active { background: #f8fafc; }
+  .m-comp-left { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+  .m-comp-rank { width: 26px; height: 26px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #475569; }
+  .m-comp-logo { width: 36px; height: 36px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #1565C0; font-size: 14px; }
+  .m-comp-info { flex: 1; min-width: 0; }
+  .m-comp-name { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.3; }
+  .m-comp-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .m-comp-meta .coa { color: #166534; }
+  .m-comp-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .m-comp-stats { display: flex; gap: 16px; }
+  .m-comp-stat-val { font-size: 13px; font-weight: 600; }
+  .m-comp-stat-lbl { font-size: 9px; color: #94a3b8; }
+  .m-comp-arrow { color: #94a3b8; font-size: 18px; flex-shrink: 0; }
+
+  /* Ad Banner Mobile */
+  .m-ad { margin: 10px 12px; background: linear-gradient(135deg, #fef3c7, #fef9c3); border: 1px dashed #f59e0b; border-radius: 10px; padding: 14px; text-align: center; }
+  .m-ad-label { font-size: 9px; color: #92400e; text-transform: uppercase; letter-spacing: 1px; }
+  .m-ad-text { font-size: 13px; color: #78350f; margin-top: 3px; }
+
+  /* Section Divider */
+  .m-divider { display: flex; align-items: center; gap: 10px; padding: 16px 16px 8px; }
+  .m-divider .line { flex: 1; height: 1px; background: #e2e8f0; }
+  .m-divider .text { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Floating Filter Button */
+  .m-fab { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 20; }
+  .m-fab-btn { padding: 12px 20px; border-radius: 24px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 6px; }
+  .m-fab-filter { background: #1565C0; color: white; }
+  .m-fab-sort { background: white; color: #334155; border: 1px solid #e2e8f0; }
+  .m-fab-badge { background: #ef4444; color: white; font-size: 10px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+  /* Filter Drawer */
+  .m-drawer-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 30; display: none; }
+  .m-drawer { position: absolute; bottom: 0; left: 0; right: 0; background: white; border-radius: 20px 20px 0 0; z-index: 31; max-height: 85%; overflow-y: auto; display: none; }
+  .m-drawer-handle { width: 40px; height: 4px; background: #d1d5db; border-radius: 4px; margin: 10px auto; }
+  .m-drawer-header { padding: 12px 20px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; }
+  .m-drawer-title { font-size: 18px; font-weight: 700; }
+  .m-drawer-clear { font-size: 13px; color: #1565C0; cursor: pointer; }
+  .m-drawer-section { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; }
+  .m-drawer-label { font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 10px; }
+  .m-drawer-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .m-drawer-chip { padding: 8px 16px; border-radius: 20px; font-size: 13px; border: 1px solid #e2e8f0; background: white; color: #475569; min-height: 38px; display: flex; align-items: center; }
+  .m-drawer-chip.active { background: #1565C0; color: white; border-color: #1565C0; }
+  .m-drawer-check { display: flex; align-items: center; gap: 10px; padding: 8px 0; min-height: 44px; }
+  .m-drawer-check input { width: 20px; height: 20px; accent-color: #1565C0; }
+  .m-drawer-check label { font-size: 14px; color: #334155; flex: 1; }
+  .m-drawer-check .cnt { font-size: 12px; color: #94a3b8; }
+  .m-drawer-apply { padding: 16px 20px; background: white; border-top: 1px solid #e2e8f0; position: sticky; bottom: 0; display: flex; gap: 12px; }
+  .m-drawer-apply-btn { flex: 1; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; }
+  .m-drawer-apply-primary { background: #1565C0; color: white; }
+  .m-drawer-apply-reset { background: #f1f5f9; color: #475569; }
+
+  /* Scroll hint */
+  .scroll-hint { text-align: center; padding: 16px; font-size: 11px; color: #94a3b8; }
+
+  /* Show/hide drawer */
+  .phone-frame.drawer-open .m-drawer-overlay,
+  .phone-frame.drawer-open .m-drawer { display: block; }
+  .phone-frame.drawer-open .m-fab { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ==================== SCREEN 1: LISTING VIEW ==================== -->
+<div>
+  <div class="phone-frame" id="phone1">
+    <div class="phone-notch"></div>
+    <div class="phone-screen">
+
+      <!-- Header -->
+      <div class="m-header">
+        <div class="m-breadcrumb"><a href="#">Colleges</a> &rsaquo; Tamil Nadu</div>
+        <div class="m-title">Best B.Arch Colleges in Tamil Nadu</div>
+        <div class="m-subtitle"><strong>32 colleges</strong> &middot; fees, cutoffs & placements</div>
+      </div>
+
+      <!-- Search -->
+      <div class="m-search">
+        <div class="m-search-wrap">
+          <span class="m-search-icon">🔍</span>
+          <input class="m-search-input" placeholder="Search colleges..." style="padding-left: 36px;">
+        </div>
+      </div>
+
+      <!-- Horizontal Filter Chips -->
+      <div class="m-filter-bar">
+        <span class="m-filter-chip has-value">COA ✓</span>
+        <span class="m-filter-chip">Fee Range</span>
+        <span class="m-filter-chip">NATA / JEE</span>
+        <span class="m-filter-chip">Govt / Pvt</span>
+        <span class="m-filter-chip">NAAC</span>
+        <span class="m-filter-chip">City</span>
+        <span class="m-filter-chip">Rating</span>
+      </div>
+
+      <!-- Active Filters -->
+      <div class="m-active-filters">
+        <span class="m-active-pill">COA Approved <span class="x">&times;</span></span>
+      </div>
+
+      <!-- Sort + Count -->
+      <div class="m-sort-bar">
+        <span class="m-count"><strong>32</strong> colleges found</span>
+        <span class="m-sort-btn">↕ Sort: Relevance</span>
+      </div>
+
+      <!-- Featured Card #1 -->
+      <div class="m-featured">
+        <div class="m-feat-badge">⭐ Featured</div>
+        <div class="m-feat-rank">#1</div>
+        <div class="m-feat-image">
+          <span class="placeholder">🏛️ Measi Academy Campus Photo</span>
+          <div class="m-feat-logo">M</div>
+        </div>
+        <div class="m-feat-body">
+          <div class="m-feat-name">Measi Academy of Architecture</div>
+          <div class="m-feat-location">📍 Chennai, Tamil Nadu &middot; Private</div>
+          <div class="m-feat-badges">
+            <span class="m-badge m-badge-coa">✓ COA</span>
+            <span class="m-badge m-badge-naac">NAAC A</span>
+            <span class="m-badge m-badge-exam">NATA</span>
+            <span class="m-badge m-badge-type">TNEA</span>
+          </div>
+          <div class="m-feat-stats">
+            <div class="m-stat"><div class="m-stat-val green">₹1.4L/yr</div><div class="m-stat-lbl">Annual Fee</div></div>
+            <div class="m-stat"><div class="m-stat-val">160</div><div class="m-stat-lbl">Seats</div></div>
+            <div class="m-stat"><div class="m-stat-val blue">₹6.2L/yr</div><div class="m-stat-lbl">Avg Package</div></div>
+          </div>
+          <div class="m-feat-actions">
+            <button class="m-btn-primary">View Details</button>
+            <button class="m-btn-outline">Compare</button>
+            <button class="m-btn-icon">🤍</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Featured Card #2 -->
+      <div class="m-featured">
+        <div class="m-feat-rank">#2</div>
+        <div class="m-feat-image" style="background: linear-gradient(135deg, #2d3748, #4a5568);">
+          <span class="placeholder">🏛️ Aalim Muhammed Salegh Academy</span>
+          <div class="m-feat-logo">A</div>
+        </div>
+        <div class="m-feat-body">
+          <div class="m-feat-name">Aalim Muhammed Salegh Academy</div>
+          <div class="m-feat-location">📍 Chennai, Tamil Nadu &middot; Private</div>
+          <div class="m-feat-badges">
+            <span class="m-badge m-badge-coa">✓ COA</span>
+            <span class="m-badge m-badge-exam">NATA</span>
+            <span class="m-badge m-badge-type">TNEA</span>
+          </div>
+          <div class="m-feat-stats">
+            <div class="m-stat"><div class="m-stat-val green">₹50K/yr</div><div class="m-stat-lbl">Annual Fee</div></div>
+            <div class="m-stat"><div class="m-stat-val">40</div><div class="m-stat-lbl">Seats</div></div>
+            <div class="m-stat"><div class="m-stat-val blue">₹4.8L/yr</div><div class="m-stat-lbl">Avg Package</div></div>
+          </div>
+          <div class="m-feat-actions">
+            <button class="m-btn-primary">View Details</button>
+            <button class="m-btn-outline">Compare</button>
+            <button class="m-btn-icon">🤍</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ad Banner -->
+      <div class="m-ad">
+        <div class="m-ad-label">Sponsored</div>
+        <div class="m-ad-text">🎓 Apply for B.Arch 2025. Limited seats. <strong style="color:#1565C0;">Learn More →</strong></div>
+      </div>
+
+      <!-- Divider -->
+      <div class="m-divider">
+        <span class="line"></span>
+        <span class="text">More Colleges</span>
+        <span class="line"></span>
+      </div>
+
+      <!-- Compact Cards -->
+      <div class="m-compact">
+        <div class="m-comp-left">
+          <div class="m-comp-rank">6</div>
+          <div class="m-comp-logo">M</div>
+        </div>
+        <div class="m-comp-info">
+          <div class="m-comp-name">Mohamed Sathak Engineering College</div>
+          <div class="m-comp-meta">📍 Ramanathapuram &middot; Private &middot; <span class="coa">✓ COA</span></div>
+          <div class="m-comp-row">
+            <div class="m-comp-stats">
+              <div><div class="m-comp-stat-val" style="color:#059669;">₹80K/yr</div><div class="m-comp-stat-lbl">Fee</div></div>
+              <div><div class="m-comp-stat-val">60</div><div class="m-comp-stat-lbl">Seats</div></div>
+            </div>
+            <div class="m-comp-arrow">›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="m-compact">
+        <div class="m-comp-left">
+          <div class="m-comp-rank">7</div>
+          <div class="m-comp-logo">P</div>
+        </div>
+        <div class="m-comp-info">
+          <div class="m-comp-name">Prime College of Architecture</div>
+          <div class="m-comp-meta">📍 Nagapattinam &middot; Private &middot; <span class="coa">✓ COA</span></div>
+          <div class="m-comp-row">
+            <div class="m-comp-stats">
+              <div><div class="m-comp-stat-val" style="color:#059669;">₹50K/yr</div><div class="m-comp-stat-lbl">Fee</div></div>
+              <div><div class="m-comp-stat-val">40</div><div class="m-comp-stat-lbl">Seats</div></div>
+            </div>
+            <div class="m-comp-arrow">›</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ad in compact -->
+      <div class="m-ad">
+        <div class="m-ad-label">Sponsored</div>
+        <div class="m-ad-text">📚 Free NATA prep guide. <strong style="color:#1565C0;">Download →</strong></div>
+      </div>
+
+      <div class="m-compact">
+        <div class="m-comp-left">
+          <div class="m-comp-rank">8</div>
+          <div class="m-comp-logo">S</div>
+        </div>
+        <div class="m-comp-info">
+          <div class="m-comp-name">School of Architecture & Interior Design</div>
+          <div class="m-comp-meta">📍 Chennai &middot; Private &middot; <span class="coa">✓ COA</span></div>
+          <div class="m-comp-row">
+            <div class="m-comp-stats">
+              <div><div class="m-comp-stat-val" style="color:#059669;">₹1.2L/yr</div><div class="m-comp-stat-lbl">Fee</div></div>
+              <div><div class="m-comp-stat-val">80</div><div class="m-comp-stat-lbl">Seats</div></div>
+            </div>
+            <div class="m-comp-arrow">›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scroll-hint">↓ Scroll for more colleges</div>
+
+    </div>
+
+    <!-- Floating Action Buttons -->
+    <div class="m-fab">
+      <button class="m-fab-btn m-fab-filter" onclick="document.getElementById('phone1').classList.add('drawer-open')">
+        🎛️ Filters <span class="m-fab-badge">2</span>
+      </button>
+      <button class="m-fab-btn m-fab-sort">↕ Sort</button>
+    </div>
+
+    <!-- Filter Drawer (hidden, shown on tap) -->
+    <div class="m-drawer-overlay" onclick="document.getElementById('phone1').classList.remove('drawer-open')"></div>
+    <div class="m-drawer">
+      <div class="m-drawer-handle"></div>
+      <div class="m-drawer-header">
+        <span class="m-drawer-title">Filters</span>
+        <span class="m-drawer-clear" onclick="document.getElementById('phone1').classList.remove('drawer-open')">Clear all</span>
+      </div>
+
+      <!-- Search inside drawer -->
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">🔍 Search College</div>
+        <input style="width:100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px;" placeholder="Type college name...">
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">COA Approved</div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-coa" checked>
+          <label for="d-coa">Show only COA approved</label>
+          <span class="cnt">28</span>
+        </div>
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">Accepted Exam</div>
+        <div class="m-drawer-chips">
+          <span class="m-drawer-chip active">All</span>
+          <span class="m-drawer-chip">NATA</span>
+          <span class="m-drawer-chip">JEE Paper 2</span>
+        </div>
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">Ownership</div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-govt">
+          <label for="d-govt">Government</label>
+          <span class="cnt">5</span>
+        </div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-pvt">
+          <label for="d-pvt">Private</label>
+          <span class="cnt">18</span>
+        </div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-deemed">
+          <label for="d-deemed">Deemed University</label>
+          <span class="cnt">6</span>
+        </div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-aided">
+          <label for="d-aided">Government Aided</label>
+          <span class="cnt">3</span>
+        </div>
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">NAAC Grade</div>
+        <div class="m-drawer-chips">
+          <span class="m-drawer-chip">A++</span>
+          <span class="m-drawer-chip">A+</span>
+          <span class="m-drawer-chip">A</span>
+          <span class="m-drawer-chip">B++</span>
+          <span class="m-drawer-chip">B+</span>
+          <span class="m-drawer-chip">B</span>
+        </div>
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">Annual Fee Range</div>
+        <div class="m-drawer-chips">
+          <span class="m-drawer-chip">Under ₹1L</span>
+          <span class="m-drawer-chip">₹1-2L</span>
+          <span class="m-drawer-chip">₹2-5L</span>
+          <span class="m-drawer-chip">₹5L+</span>
+        </div>
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">City</div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-chennai">
+          <label for="d-chennai">Chennai</label>
+          <span class="cnt">12</span>
+        </div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-cbe">
+          <label for="d-cbe">Coimbatore</label>
+          <span class="cnt">4</span>
+        </div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-trichy">
+          <label for="d-trichy">Trichy</label>
+          <span class="cnt">3</span>
+        </div>
+        <div class="m-drawer-check">
+          <input type="checkbox" id="d-madurai">
+          <label for="d-madurai">Madurai</label>
+          <span class="cnt">2</span>
+        </div>
+      </div>
+
+      <div class="m-drawer-section">
+        <div class="m-drawer-label">College Rating</div>
+        <div class="m-drawer-chips">
+          <span class="m-drawer-chip">4★ & above</span>
+          <span class="m-drawer-chip">3★ & above</span>
+          <span class="m-drawer-chip">Any</span>
+        </div>
+      </div>
+
+      <!-- Apply Button -->
+      <div class="m-drawer-apply">
+        <button class="m-drawer-apply-btn m-drawer-apply-reset" onclick="document.getElementById('phone1').classList.remove('drawer-open')">Reset</button>
+        <button class="m-drawer-apply-btn m-drawer-apply-primary" onclick="document.getElementById('phone1').classList.remove('drawer-open')">Show 28 colleges</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone-label">Mobile Listing View</div>
+  <div class="phone-sublabel">Tap "Filters" button to open drawer →</div>
+</div>
+
+<!-- ==================== SCREEN 2: KEY INTERACTIONS ==================== -->
+<div>
+  <div class="phone-frame" id="phone2">
+    <div class="phone-notch"></div>
+    <div class="phone-screen" style="background: #0f172a; padding: 20px;">
+
+      <h2 style="color: white; font-size: 18px; font-weight: 700; margin-bottom: 20px; text-align: center;">📱 Mobile UX Patterns</h2>
+
+      <!-- Pattern 1 -->
+      <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">1. Floating Filter + Sort Buttons</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          Two floating pills at bottom center. "Filters" shows active count badge. "Sort" opens a bottom sheet with sort options. Always visible while scrolling.
+        </div>
+      </div>
+
+      <!-- Pattern 2 -->
+      <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">2. Horizontal Quick-Filter Chips</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          Scrollable chip bar below search. Tap a chip to toggle or open a mini bottom-sheet for that filter. Shows selected state with blue highlight.
+        </div>
+      </div>
+
+      <!-- Pattern 3 -->
+      <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">3. Full-Screen Filter Drawer</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          Tapping the floating "Filters" button opens an 85%-height bottom drawer with all filter options. Includes search, checkboxes, chips. Sticky "Apply" button at bottom. 48px+ touch targets.
+        </div>
+      </div>
+
+      <!-- Pattern 4 -->
+      <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">4. Featured Cards: Stacked Vertical</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          Top 5 colleges get full-width cards with 150px campus photo, logo overlay, 3-column stats grid, and action buttons. Thumb-friendly zone for CTA buttons.
+        </div>
+      </div>
+
+      <!-- Pattern 5 -->
+      <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">5. Compact Cards: Tap to Navigate</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          Remaining colleges in horizontal row cards. Rank + logo on left, info in middle, chevron on right. Entire card is tappable to go to detail page. Shows fee + seats inline.
+        </div>
+      </div>
+
+      <!-- Pattern 6 -->
+      <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; margin-bottom: 14px;">
+        <div style="font-size: 13px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">6. Ad Banners: Native-Feel</div>
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+          Subtle sponsored cards blend with the listing. Appear after every 3-5 colleges. Labeled "Sponsored" clearly. Touch-friendly CTA.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="phone-label">UX Patterns Reference</div>
+  <div class="phone-sublabel">Key mobile interaction patterns</div>
+</div>
+
+</body>
+</html>

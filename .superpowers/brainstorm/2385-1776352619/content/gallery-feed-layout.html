@@ -1,0 +1,243 @@
+<h2>Drawing Gallery Feed: Desktop & Mobile</h2>
+<p class="subtitle">Single feed with smart cards. Side-by-side on desktop, swipe-to-toggle on mobile. Toggle at top to filter teacher references only.</p>
+
+<div class="split">
+  <!-- DESKTOP MOCKUP -->
+  <div class="mockup">
+    <div class="mockup-header">Desktop View (1200px+)</div>
+    <div class="mockup-body" style="background:#fafafa; padding:16px; font-family:system-ui,-apple-system,sans-serif;">
+
+      <!-- Top filter bar -->
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; padding:12px 16px; background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <div style="display:flex; gap:8px;">
+          <span style="padding:6px 14px; background:#7c3aed; color:#fff; border-radius:20px; font-size:13px; font-weight:500;">All</span>
+          <span style="padding:6px 14px; background:#f3f4f6; color:#374151; border-radius:20px; font-size:13px;">2D</span>
+          <span style="padding:6px 14px; background:#f3f4f6; color:#374151; border-radius:20px; font-size:13px;">3D</span>
+          <span style="padding:6px 14px; background:#f3f4f6; color:#374151; border-radius:20px; font-size:13px;">Kit</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:12px; color:#6b7280;">Teacher Refs Only</span>
+          <div style="width:36px; height:20px; background:#e5e7eb; border-radius:10px; position:relative;">
+            <div style="width:16px; height:16px; background:#fff; border-radius:50%; position:absolute; top:2px; left:2px; box-shadow:0 1px 2px rgba(0,0,0,0.2);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gallery Card 1: With teacher reference (side-by-side) -->
+      <div style="background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); margin-bottom:16px;">
+        <!-- Card Header -->
+        <div style="display:flex; align-items:center; padding:12px 16px; gap:10px;">
+          <div style="width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#a78bfa,#7c3aed); display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:600;">SR</div>
+          <div style="flex:1;">
+            <div style="font-size:14px; font-weight:600; color:#111;">Sanjeevraj Ramesh</div>
+            <div style="font-size:11px; color:#9ca3af;">2 days ago</div>
+          </div>
+          <span style="padding:3px 10px; background:#dbeafe; color:#2563eb; border-radius:12px; font-size:11px; font-weight:500;">2D Composition</span>
+          <span style="color:#f59e0b; font-size:13px;">&#9733;&#9733;&#9733;&#9733;&#9734;</span>
+        </div>
+
+        <!-- Side-by-side images -->
+        <div style="display:flex; gap:2px;">
+          <div style="flex:1; position:relative;">
+            <div style="background:linear-gradient(145deg,#fce4ec,#f8bbd0); height:200px; display:flex; align-items:center; justify-content:center;">
+              <div style="text-align:center;">
+                <div style="font-size:40px; opacity:0.4;">&#9998;</div>
+                <div style="font-size:11px; color:#666; margin-top:4px;">Student's Drawing</div>
+              </div>
+            </div>
+            <div style="position:absolute; bottom:8px; left:8px; padding:3px 8px; background:rgba(0,0,0,0.6); color:#fff; border-radius:6px; font-size:10px;">Student</div>
+          </div>
+          <div style="flex:1; position:relative;">
+            <div style="background:linear-gradient(145deg,#e8f5e9,#c8e6c9); height:200px; display:flex; align-items:center; justify-content:center;">
+              <div style="text-align:center;">
+                <div style="font-size:40px; opacity:0.4;">&#127912;</div>
+                <div style="font-size:11px; color:#666; margin-top:4px;">Teacher's Reference</div>
+              </div>
+            </div>
+            <div style="position:absolute; bottom:8px; left:8px; padding:3px 8px; background:rgba(124,58,237,0.8); color:#fff; border-radius:6px; font-size:10px;">&#10003; Teacher Ref</div>
+          </div>
+        </div>
+
+        <!-- Question context -->
+        <div style="padding:10px 16px; background:#f9fafb; border-top:1px solid #f3f4f6;">
+          <div style="font-size:12px; color:#6b7280; line-height:1.4;">
+            <strong>Q:</strong> 2D composition: any composition with 8 pentagons using warm colors
+          </div>
+        </div>
+
+        <!-- Reactions bar -->
+        <div style="display:flex; align-items:center; padding:8px 16px; gap:12px; border-top:1px solid #f3f4f6;">
+          <span style="font-size:14px; cursor:pointer;">&#10084;&#65039; <span style="font-size:12px; color:#6b7280;">12</span></span>
+          <span style="font-size:14px; cursor:pointer;">&#128079; <span style="font-size:12px; color:#6b7280;">5</span></span>
+          <span style="font-size:14px; cursor:pointer;">&#128293; <span style="font-size:12px; color:#6b7280;">3</span></span>
+          <span style="font-size:14px; cursor:pointer;">&#11088; <span style="font-size:12px; color:#6b7280;">8</span></span>
+          <span style="font-size:14px; cursor:pointer;">&#128562; <span style="font-size:12px; color:#6b7280;">1</span></span>
+          <span style="flex:1;"></span>
+          <span style="font-size:12px; color:#9ca3af; cursor:pointer;">&#128172; 4 comments</span>
+        </div>
+      </div>
+
+      <!-- Gallery Card 2: Student-only (no teacher ref yet) -->
+      <div style="background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06); margin-bottom:16px;">
+        <div style="display:flex; align-items:center; padding:12px 16px; gap:10px;">
+          <div style="width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#fb923c,#ea580c); display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:600;">DM</div>
+          <div style="flex:1;">
+            <div style="font-size:14px; font-weight:600; color:#111;">Devavarini Motish Kumar</div>
+            <div style="font-size:11px; color:#9ca3af;">5 days ago</div>
+          </div>
+          <span style="padding:3px 10px; background:#dbeafe; color:#2563eb; border-radius:12px; font-size:11px; font-weight:500;">2D</span>
+          <span style="color:#f59e0b; font-size:13px;">&#9733;&#9733;&#9733;&#9734;&#9734;</span>
+        </div>
+        <!-- Single image (no teacher ref) -->
+        <div style="position:relative;">
+          <div style="background:linear-gradient(145deg,#fff3e0,#ffe0b2); height:240px; display:flex; align-items:center; justify-content:center;">
+            <div style="text-align:center;">
+              <div style="font-size:48px; opacity:0.4;">&#9998;</div>
+              <div style="font-size:12px; color:#666; margin-top:4px;">Student's Drawing Only</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 16px; background:#f9fafb; border-top:1px solid #f3f4f6;">
+          <div style="font-size:12px; color:#6b7280; line-height:1.4;">
+            <strong>Q:</strong> 2D composition using few 2D shapes like circles, triangle, rectangle, square
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; padding:8px 16px; gap:12px; border-top:1px solid #f3f4f6;">
+          <span style="font-size:14px;">&#10084;&#65039; <span style="font-size:12px; color:#6b7280;">7</span></span>
+          <span style="font-size:14px;">&#128079; <span style="font-size:12px; color:#6b7280;">2</span></span>
+          <span style="flex:1;"></span>
+          <span style="font-size:12px; color:#9ca3af;">&#128172; 1 comment</span>
+        </div>
+      </div>
+
+      <!-- Load More -->
+      <div style="text-align:center; padding:16px;">
+        <button style="padding:10px 32px; background:#7c3aed; color:#fff; border:none; border-radius:24px; font-size:14px; cursor:pointer; font-weight:500;">Load More</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE MOCKUP -->
+  <div class="mockup">
+    <div class="mockup-header">Mobile View (375px)</div>
+    <div class="mockup-body" style="background:#fafafa; padding:0; font-family:system-ui,-apple-system,sans-serif; max-width:375px; margin:0 auto;">
+
+      <!-- Mobile top bar -->
+      <div style="padding:10px 12px; background:#fff; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #f3f4f6;">
+        <div style="display:flex; gap:6px; overflow-x:auto;">
+          <span style="padding:5px 12px; background:#7c3aed; color:#fff; border-radius:16px; font-size:12px; white-space:nowrap;">All</span>
+          <span style="padding:5px 12px; background:#f3f4f6; color:#374151; border-radius:16px; font-size:12px; white-space:nowrap;">2D</span>
+          <span style="padding:5px 12px; background:#f3f4f6; color:#374151; border-radius:16px; font-size:12px; white-space:nowrap;">3D</span>
+          <span style="padding:5px 12px; background:#f3f4f6; color:#374151; border-radius:16px; font-size:12px; white-space:nowrap;">Kit</span>
+        </div>
+        <div style="font-size:11px; color:#7c3aed; white-space:nowrap; margin-left:8px;">&#127912; Refs</div>
+      </div>
+
+      <!-- Mobile Card with swipe toggle -->
+      <div style="background:#fff; margin:8px 0; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+        <!-- Header -->
+        <div style="display:flex; align-items:center; padding:10px 12px; gap:8px;">
+          <div style="width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,#a78bfa,#7c3aed); display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:600;">SR</div>
+          <div style="flex:1;">
+            <div style="font-size:13px; font-weight:600;">Sanjeevraj Ramesh</div>
+            <div style="font-size:10px; color:#9ca3af;">2 days ago</div>
+          </div>
+          <span style="padding:2px 8px; background:#dbeafe; color:#2563eb; border-radius:10px; font-size:10px;">2D</span>
+        </div>
+
+        <!-- Swipeable image area -->
+        <div style="position:relative;">
+          <div style="background:linear-gradient(145deg,#fce4ec,#f8bbd0); height:300px; display:flex; align-items:center; justify-content:center;">
+            <div style="text-align:center;">
+              <div style="font-size:48px; opacity:0.3;">&#9998;</div>
+              <div style="font-size:12px; color:#666; margin-top:4px;">Student's Drawing</div>
+            </div>
+          </div>
+          <!-- Toggle pills overlay -->
+          <div style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; background:rgba(0,0,0,0.5); border-radius:16px; padding:2px;">
+            <span style="padding:4px 14px; background:#fff; color:#111; border-radius:14px; font-size:11px; font-weight:500;">Student</span>
+            <span style="padding:4px 14px; color:#fff; border-radius:14px; font-size:11px;">Reference</span>
+          </div>
+          <!-- Swipe hint -->
+          <div style="position:absolute; bottom:10px; left:50%; transform:translateX(-50%); padding:4px 12px; background:rgba(0,0,0,0.4); color:#fff; border-radius:12px; font-size:10px;">
+            &#8592; Swipe to compare &#8594;
+          </div>
+          <!-- Rating badge -->
+          <div style="position:absolute; top:10px; right:10px; padding:3px 8px; background:rgba(0,0,0,0.5); color:#f59e0b; border-radius:8px; font-size:12px;">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
+        </div>
+
+        <!-- Question -->
+        <div style="padding:8px 12px; background:#f9fafb;">
+          <div style="font-size:11px; color:#6b7280; line-height:1.3;">
+            <strong>Q:</strong> 2D composition with 8 pentagons, warm colors
+          </div>
+        </div>
+
+        <!-- Reactions (compact mobile) -->
+        <div style="display:flex; align-items:center; padding:8px 12px; gap:10px;">
+          <span style="font-size:16px;">&#10084;&#65039;<sup style="font-size:10px; color:#6b7280;">12</sup></span>
+          <span style="font-size:16px;">&#128079;<sup style="font-size:10px; color:#6b7280;">5</sup></span>
+          <span style="font-size:16px;">&#128293;<sup style="font-size:10px; color:#6b7280;">3</sup></span>
+          <span style="font-size:16px;">&#11088;<sup style="font-size:10px; color:#6b7280;">8</sup></span>
+          <span style="flex:1;"></span>
+          <span style="font-size:11px; color:#9ca3af;">&#128172; 4</span>
+        </div>
+      </div>
+
+      <!-- Mobile Card 2: student only -->
+      <div style="background:#fff; margin:8px 0; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+        <div style="display:flex; align-items:center; padding:10px 12px; gap:8px;">
+          <div style="width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,#fb923c,#ea580c); display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:600;">DM</div>
+          <div style="flex:1;">
+            <div style="font-size:13px; font-weight:600;">Devavarini Motish</div>
+            <div style="font-size:10px; color:#9ca3af;">5 days ago</div>
+          </div>
+          <span style="padding:2px 8px; background:#dbeafe; color:#2563eb; border-radius:10px; font-size:10px;">2D</span>
+        </div>
+        <div style="background:linear-gradient(145deg,#fff3e0,#ffe0b2); height:260px; display:flex; align-items:center; justify-content:center;">
+          <div style="text-align:center;">
+            <div style="font-size:48px; opacity:0.3;">&#9998;</div>
+            <div style="font-size:12px; color:#666;">Student's Drawing Only</div>
+            <div style="font-size:10px; color:#999; margin-top:4px;">(No teacher reference)</div>
+          </div>
+        </div>
+        <div style="padding:8px 12px; background:#f9fafb;">
+          <div style="font-size:11px; color:#6b7280;"><strong>Q:</strong> 2D shapes: circles, triangle, rectangle, square</div>
+        </div>
+        <div style="display:flex; align-items:center; padding:8px 12px; gap:10px;">
+          <span style="font-size:16px;">&#10084;&#65039;<sup style="font-size:10px; color:#6b7280;">7</sup></span>
+          <span style="font-size:16px;">&#128079;<sup style="font-size:10px; color:#6b7280;">2</sup></span>
+          <span style="flex:1;"></span>
+          <span style="font-size:11px; color:#9ca3af;">&#128172; 1</span>
+        </div>
+      </div>
+
+      <!-- Load More -->
+      <div style="text-align:center; padding:12px;">
+        <button style="padding:10px 28px; background:#7c3aed; color:#fff; border:none; border-radius:20px; font-size:13px; cursor:pointer;">Load More</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;">
+  <h3>Key Design Decisions</h3>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
+    <div style="padding:12px; background:#f0fdf4; border-radius:8px; border-left:3px solid #22c55e;">
+      <strong style="font-size:13px;">With Teacher Reference</strong>
+      <p style="font-size:12px; color:#374151; margin-top:4px;">Side-by-side on desktop. Swipe toggle (Student | Reference) on mobile. Purple badge marks teacher content.</p>
+    </div>
+    <div style="padding:12px; background:#eff6ff; border-radius:8px; border-left:3px solid #3b82f6;">
+      <strong style="font-size:13px;">Without Teacher Reference</strong>
+      <p style="font-size:12px; color:#374151; margin-top:4px;">Full-width single image. No toggle needed. Card adapts automatically based on available data.</p>
+    </div>
+    <div style="padding:12px; background:#faf5ff; border-radius:8px; border-left:3px solid #7c3aed;">
+      <strong style="font-size:13px;">Filter: Teacher Refs Only</strong>
+      <p style="font-size:12px; color:#374151; margin-top:4px;">Toggle at top filters to only show posts that have teacher references. Shows question + teacher image for study.</p>
+    </div>
+    <div style="padding:12px; background:#fefce8; border-radius:8px; border-left:3px solid #eab308;">
+      <strong style="font-size:13px;">Load More (not infinite scroll)</strong>
+      <p style="font-size:12px; color:#374151; margin-top:4px;">Explicit "Load More" button. Students control when to load. Saves bandwidth on mobile. 12 posts per batch.</p>
+    </div>
+  </div>
+</div>

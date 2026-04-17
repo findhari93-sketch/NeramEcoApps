@@ -1,0 +1,280 @@
+<h2>College Hub v2: Complete Design</h2>
+<p class="subtitle">Review each section. This is everything we're building together.</p>
+
+<!-- Section 1: Breadcrumbs -->
+<div class="section" style="margin-bottom: 32px;">
+  <h3>1. Breadcrumb Navigation (All College Pages)</h3>
+  <div class="mockup">
+    <div class="mockup-header">College Profile Page: Top Area</div>
+    <div class="mockup-body" style="padding: 16px;">
+      <div style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
+        <span style="color: #3b82f6; cursor: pointer;">Colleges</span>
+        <span style="margin: 0 6px;">›</span>
+        <span style="color: #3b82f6; cursor: pointer;">Tamil Nadu</span>
+        <span style="margin: 0 6px;">›</span>
+        <span style="color: #0f172a; font-weight: 600;">CARE School of Architecture</span>
+      </div>
+      <div style="background: linear-gradient(135deg, #334155, #475569); height: 80px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #94a3b8;">[ Hero Section ]</div>
+    </div>
+  </div>
+  <p style="color: #aaa; font-size: 14px; margin-top: 8px;">Added to: college profiles, state listings, compare, saved, rankings, fee pages, counseling pages. Uses the existing Breadcrumbs component.</p>
+</div>
+
+<!-- Section 2: Mega-Menu -->
+<div class="section" style="margin-bottom: 32px;">
+  <h3>2. Enhanced Header Mega-Menu</h3>
+  <div class="mockup">
+    <div class="mockup-header">Header: Colleges Dropdown (Desktop)</div>
+    <div class="mockup-body" style="padding: 0;">
+      <!-- Fake header -->
+      <div style="background: #fff; padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 24px; align-items: center;">
+        <span style="font-weight: 800; color: #0f172a; font-size: 15px;">neram<span style="color: #f97316;">Classes</span></span>
+        <span style="font-size: 13px; color: #64748b; cursor: pointer; padding-bottom: 2px; border-bottom: 2px solid transparent;">Colleges ▾</span>
+        <span style="font-size: 13px; color: #64748b;">NATA Prep</span>
+        <span style="font-size: 13px; color: #64748b;">Counseling</span>
+        <span style="font-size: 13px; color: #64748b;">About</span>
+      </div>
+      <!-- Mega menu -->
+      <div style="background: #fff; padding: 20px; border-top: 2px solid #f97316;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 24px; font-size: 13px;">
+          <div>
+            <div style="color: #f97316; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">By State</div>
+            <div style="color: #334155; margin-bottom: 4px;">Tamil Nadu</div>
+            <div style="color: #334155; margin-bottom: 4px;">Karnataka</div>
+            <div style="color: #334155; margin-bottom: 4px;">Maharashtra</div>
+            <div style="color: #334155; margin-bottom: 4px;">Delhi NCR</div>
+            <div style="color: #334155; margin-bottom: 4px;">Kerala</div>
+            <div style="color: #334155; margin-bottom: 4px;">Telangana</div>
+            <div style="color: #3b82f6; margin-top: 8px; font-size: 12px;">View all states →</div>
+          </div>
+          <div>
+            <div style="color: #f97316; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">By Exam & Counseling</div>
+            <div style="color: #334155; margin-bottom: 4px;">NATA Colleges</div>
+            <div style="color: #334155; margin-bottom: 4px;">JEE Main Paper 2</div>
+            <div style="color: #334155; margin-bottom: 4px;">TNEA Counseling</div>
+            <div style="color: #334155; margin-bottom: 4px;">JoSAA Counseling</div>
+            <div style="color: #334155; margin-bottom: 4px;">KEAM Counseling</div>
+            <div style="color: #334155; margin-bottom: 4px;">KCET Counseling</div>
+            <div style="color: #3b82f6; margin-top: 8px; font-size: 12px;">All counseling →</div>
+          </div>
+          <div>
+            <div style="color: #f97316; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Rankings & Filters</div>
+            <div style="color: #334155; margin-bottom: 4px;">NIRF Architecture</div>
+            <div style="color: #334155; margin-bottom: 4px;">ArchIndex Top Rated</div>
+            <div style="color: #334155; margin-bottom: 4px;">COA Approved</div>
+            <div style="color: #334155; margin-bottom: 4px;">Government Colleges</div>
+            <div style="color: #334155; margin-bottom: 4px;">Private Colleges</div>
+            <div style="color: #334155; margin-bottom: 4px;">Fee: Under ₹3L</div>
+            <div style="color: #3b82f6; margin-top: 8px; font-size: 12px;">All fee ranges →</div>
+          </div>
+          <div>
+            <div style="color: #f97316; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Quick Links</div>
+            <div style="background: linear-gradient(135deg, #1e3a5f, #1e40af); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+              <div style="color: white; font-weight: 600; font-size: 12px;">⭐ Featured Colleges</div>
+              <div style="color: #93c5fd; font-size: 11px;">Premium partner profiles</div>
+            </div>
+            <div style="color: #334155; margin-bottom: 4px;">🔍 Compare Colleges</div>
+            <div style="color: #334155; margin-bottom: 4px;">💾 Saved Colleges</div>
+            <div style="color: #334155; margin-bottom: 4px;">🏙️ By City</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #aaa; font-size: 14px; margin-top: 8px;">On mobile: collapses into an accordion-style menu under the hamburger. Each category becomes an expandable section.</p>
+</div>
+
+<!-- Section 3: Homepage Category Section -->
+<div class="section" style="margin-bottom: 32px;">
+  <h3>3. Homepage Category Discovery Section</h3>
+  <div class="mockup">
+    <div class="mockup-header">/colleges Homepage: "Explore Architecture Colleges" Section</div>
+    <div class="mockup-body" style="padding: 24px; background: #f8fafc;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-weight: 800; font-size: 18px; color: #0f172a;">Explore Architecture Colleges</div>
+        <div style="color: #64748b; font-size: 13px;">Browse by state, counseling, rankings, fees, and more</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; font-size: 13px;">
+        <!-- Col 1 -->
+        <div style="background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; color: #f97316; font-size: 12px; margin-bottom: 10px;">📍 TOP COLLEGES BY STATE</div>
+          <div style="color: #334155; margin-bottom: 5px;">Tamil Nadu <span style="color:#94a3b8; font-size:11px;">(28)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Karnataka <span style="color:#94a3b8; font-size:11px;">(22)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Maharashtra <span style="color:#94a3b8; font-size:11px;">(18)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Delhi NCR <span style="color:#94a3b8; font-size:11px;">(12)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Uttar Pradesh <span style="color:#94a3b8; font-size:11px;">(15)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Kerala <span style="color:#94a3b8; font-size:11px;">(9)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Telangana <span style="color:#94a3b8; font-size:11px;">(8)</span></div>
+          <div style="color: #334155; margin-bottom: 5px;">Rajasthan <span style="color:#94a3b8; font-size:11px;">(7)</span></div>
+          <div style="color: #3b82f6; margin-top: 8px; font-size: 12px;">View all states →</div>
+        </div>
+        <!-- Col 2 -->
+        <div style="background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; color: #f97316; font-size: 12px; margin-bottom: 10px;">📝 BY COUNSELING</div>
+          <div style="color: #334155; margin-bottom: 5px;">TNEA (Tamil Nadu)</div>
+          <div style="color: #334155; margin-bottom: 5px;">JoSAA (All India)</div>
+          <div style="color: #334155; margin-bottom: 5px;">KEAM (Kerala)</div>
+          <div style="color: #334155; margin-bottom: 5px;">KCET (Karnataka)</div>
+          <div style="color: #334155; margin-bottom: 5px;">AP EAPCET (AP)</div>
+          <div style="color: #334155; margin-bottom: 5px;">TS EAPCET (Telangana)</div>
+          <div style="color: #334155; margin-bottom: 5px;">UPSEE (UP)</div>
+          <div style="color: #334155; margin-bottom: 5px;">MHT CET (Maharashtra)</div>
+          <div style="color: #3b82f6; margin-top: 8px; font-size: 12px;">All counseling →</div>
+        </div>
+        <!-- Col 3 -->
+        <div style="background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; color: #f97316; font-size: 12px; margin-bottom: 10px;">🏆 RANKINGS</div>
+          <div style="color: #334155; margin-bottom: 5px;">NIRF Architecture Rankings</div>
+          <div style="color: #334155; margin-bottom: 5px;">ArchIndex Top Rated</div>
+          <div style="color: #334155; margin-bottom: 5px;">COA Approved Colleges</div>
+          <div style="color: #334155; margin-bottom: 5px;">NAAC A+ Colleges</div>
+          <div style="font-weight: 700; color: #f97316; font-size: 12px; margin-bottom: 10px; margin-top: 16px;">🏙️ TOP CITIES</div>
+          <div style="color: #334155; margin-bottom: 5px;">Chennai</div>
+          <div style="color: #334155; margin-bottom: 5px;">Bangalore</div>
+          <div style="color: #334155; margin-bottom: 5px;">Mumbai</div>
+          <div style="color: #3b82f6; margin-top: 8px; font-size: 12px;">All cities →</div>
+        </div>
+        <!-- Col 4 -->
+        <div style="background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; color: #f97316; font-size: 12px; margin-bottom: 10px;">💰 BY FEE RANGE</div>
+          <div style="color: #334155; margin-bottom: 5px;">Under ₹1 Lakh</div>
+          <div style="color: #334155; margin-bottom: 5px;">₹1L to ₹3L</div>
+          <div style="color: #334155; margin-bottom: 5px;">₹3L to ₹5L</div>
+          <div style="color: #334155; margin-bottom: 5px;">₹5L to ₹10L</div>
+          <div style="color: #334155; margin-bottom: 5px;">Above ₹10L</div>
+          <div style="font-weight: 700; color: #f97316; font-size: 12px; margin-bottom: 10px; margin-top: 16px;">🏫 BY TYPE</div>
+          <div style="color: #334155; margin-bottom: 5px;">Government Colleges</div>
+          <div style="color: #334155; margin-bottom: 5px;">Private Colleges</div>
+          <div style="color: #334155; margin-bottom: 5px;">Deemed Universities</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #aaa; font-size: 14px; margin-top: 8px;">Placed between "Browse by Category" cards and the "Browse All" listing. On mobile: stacks into single column, each category card full-width.</p>
+</div>
+
+<!-- Section 4: Enhanced Listing Card -->
+<div class="section" style="margin-bottom: 32px;">
+  <h3>4. Enhanced Listing Card (Horizontal + ROI)</h3>
+  <div class="mockup">
+    <div class="mockup-header">College Listing Card (Desktop View)</div>
+    <div class="mockup-body" style="padding: 20px;">
+      <div style="background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; display: flex; max-width: 580px;">
+        <div style="width: 180px; flex-shrink: 0; background: linear-gradient(135deg, #1e293b, #334155); position: relative;">
+          <div style="position: absolute; bottom: 8px; left: 8px; width: 40px; height: 40px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #64748b;">C</div>
+          <div style="position: absolute; top: 8px; right: 8px; background: #f97316; color: white; font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Featured</div>
+        </div>
+        <div style="padding: 14px; flex: 1;">
+          <div style="font-weight: 700; font-size: 15px; color: #0f172a;">CARE School of Architecture</div>
+          <div style="font-size: 12px; color: #64748b; margin-top: 2px;">📍 Tiruchirappalli, Tamil Nadu · Private · Est. 2010</div>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px;">
+            <span style="background: #dcfce7; color: #166534; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500;">COA ✓</span>
+            <span style="background: #dbeafe; color: #1e40af; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500;">NATA</span>
+            <span style="background: #fef3c7; color: #92400e; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500;">NAAC B+</span>
+            <span style="background: #f3e8ff; color: #6b21a8; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500;">TNEA</span>
+          </div>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 10px; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 10px; color: #64748b;">Total 5yr Cost</div>
+                <div style="font-size: 13px; font-weight: 700; color: #dc2626;">₹16L</div>
+              </div>
+              <div style="color: #94a3b8;">→</div>
+              <div>
+                <div style="font-size: 10px; color: #64748b;">Avg Package</div>
+                <div style="font-size: 13px; font-weight: 700; color: #16a34a;">₹5.2L/yr</div>
+              </div>
+              <div style="background: #1e40af; color: white; font-size: 11px; padding: 4px 8px; border-radius: 4px; font-weight: 600;">~3yr payback</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px; margin-top: 10px;">
+            <button style="flex: 1; background: #1e40af; color: white; border: none; border-radius: 6px; padding: 8px; font-size: 12px; font-weight: 600; cursor: pointer;">View Details</button>
+            <button style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 12px;">📞</button>
+            <button style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 12px;">📄</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #aaa; font-size: 14px; margin-top: 8px;">On mobile: stacks vertically (photo on top, info below). ROI box only shows if placement data exists (gold+ tier colleges). Call button uses click-to-call. Brochure opens PDF if available, otherwise shows "Request Brochure" lead capture.</p>
+</div>
+
+<!-- Section 5: ROI on Profile -->
+<div class="section" style="margin-bottom: 32px;">
+  <h3>5. ROI Calculator on College Profile</h3>
+  <div class="mockup">
+    <div class="mockup-header">College Profile: ROI Section (below Placements)</div>
+    <div class="mockup-body" style="padding: 20px;">
+      <div style="max-width: 500px;">
+        <div style="font-weight: 700; font-size: 16px; color: #0f172a; margin-bottom: 16px;">💰 Return on Investment</div>
+        <!-- Investment side -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 16px;">
+            <div style="font-size: 12px; color: #991b1b; font-weight: 600; margin-bottom: 12px;">TOTAL INVESTMENT (5 years)</div>
+            <div style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: #64748b;">Tuition Fees</span>
+              <span style="font-size: 13px; font-weight: 600;">₹5.5L</span>
+            </div>
+            <div style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: #64748b;">Hostel + Living</span>
+              <span style="font-size: 13px; font-weight: 600;">₹7.5L</span>
+            </div>
+            <div style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: #64748b;">Materials & Travel</span>
+              <span style="font-size: 13px; font-weight: 600;">₹3L</span>
+            </div>
+            <div style="border-top: 1px solid #fecaca; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between;">
+              <span style="font-size: 14px; font-weight: 700; color: #dc2626;">Total</span>
+              <span style="font-size: 14px; font-weight: 700; color: #dc2626;">₹16L</span>
+            </div>
+          </div>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px;">
+            <div style="font-size: 12px; color: #166534; font-weight: 600; margin-bottom: 12px;">EXPECTED RETURNS</div>
+            <div style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: #64748b;">Min Package</span>
+              <span style="font-size: 13px; font-weight: 600;">₹3L/yr</span>
+            </div>
+            <div style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: #64748b;">Avg Package</span>
+              <span style="font-size: 13px; font-weight: 600;">₹5.2L/yr</span>
+            </div>
+            <div style="margin-bottom: 6px; display: flex; justify-content: space-between;">
+              <span style="font-size: 13px; color: #64748b;">Max Package</span>
+              <span style="font-size: 13px; font-weight: 600;">₹12L/yr</span>
+            </div>
+            <div style="border-top: 1px solid #bbf7d0; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between;">
+              <span style="font-size: 14px; font-weight: 700; color: #16a34a;">Payback Period</span>
+              <span style="font-size: 14px; font-weight: 700; color: #16a34a;">~3.1 years</span>
+            </div>
+          </div>
+        </div>
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #1e40af;">
+          ℹ️ Living costs estimated based on city tier (Tier 2). Actual costs may vary. Placement data from 2024-25 batch.
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #aaa; font-size: 14px; margin-top: 8px;">Appears as a new section after Placements on the college profile. Living costs are estimated by city tier (Tier 1/2/3). Placement data required (gold+ tier only). On mobile: cards stack vertically.</p>
+</div>
+
+<!-- Section 6: New Pages Summary -->
+<div class="section" style="margin-bottom: 16px;">
+  <h3>6. New Pages & Routes Required</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 14px;">
+      <div style="color: #f97316; font-weight: 600; margin-bottom: 8px;">New Dynamic Routes</div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;"><code style="color: #93c5fd;">/colleges/counseling/[system]</code></div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;"><code style="color: #93c5fd;">/colleges/city/[city]</code></div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;"><code style="color: #93c5fd;">/colleges/type/[type]</code></div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;"><code style="color: #93c5fd;">/colleges/accreditation/[filter]</code></div>
+    </div>
+    <div style="background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 14px;">
+      <div style="color: #f97316; font-weight: 600; margin-bottom: 8px;">DB Changes</div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;">Add <code style="color: #93c5fd;">brochure_url</code> column</div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;">Add <code style="color: #93c5fd;">avg_placement_salary</code> column</div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;">Add <code style="color: #93c5fd;">min/max_placement_salary</code> columns</div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;">Expand <code style="color: #93c5fd;">counseling_systems</code> enum values</div>
+      <div style="color: #cbd5e1; margin-bottom: 3px;">Add <code style="color: #93c5fd;">city_slug</code> column</div>
+    </div>
+  </div>
+</div>
