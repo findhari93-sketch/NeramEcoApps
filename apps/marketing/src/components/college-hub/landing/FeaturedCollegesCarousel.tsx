@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import { Box, Container, Typography, IconButton, Stack } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import CollegeListingCard from '../CollegeListingCard';
+import FeaturedCollegeCard from '../FeaturedCollegeCard';
 import type { CollegeListItem } from '@/lib/college-hub/types';
 
 interface FeaturedCollegesCarouselProps {
@@ -99,12 +99,12 @@ export default function FeaturedCollegesCarousel({ colleges }: FeaturedCollegesC
           <Box
             key={college.id}
             sx={{
-              flex: '0 0 280px',
+              flex: '0 0 300px',
               scrollSnapAlign: 'start',
-              maxWidth: 300,
+              maxWidth: 320,
             }}
           >
-            <CollegeListingCard college={college} />
+            <FeaturedCollegeCard college={college} variant="portrait" />
           </Box>
         ))}
       </Box>

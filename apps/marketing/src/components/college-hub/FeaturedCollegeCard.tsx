@@ -12,7 +12,9 @@ import type { CollegeListItem } from '@/lib/college-hub/types';
 
 interface FeaturedCollegeCardProps {
   college: CollegeListItem;
-  rank: number;
+  rank?: number;
+  /** "landscape" = full-width listing card (default). "portrait" = vertical card for carousels. */
+  variant?: 'landscape' | 'portrait';
 }
 
 function formatFee(approx: number | null, min: number | null): string {
@@ -28,9 +30,14 @@ function formatSalary(val: number | null): string {
   return `₹${(val / 100000).toFixed(1)}L/yr`;
 }
 
-export default function FeaturedCollegeCard({ college, rank }: FeaturedCollegeCardProps) {
+export default function FeaturedCollegeCard({ college, rank, variant = 'landscape' }: FeaturedCollegeCardProps) {
   const href = `/colleges/${college.state_slug ?? 'india'}/${college.slug}`;
   const isPremium = college.neram_tier === 'gold' || college.neram_tier === 'platinum';
+  const isPortrait = variant === 'portrait';
+
+  if (isPortrait) {
+    return <PortraitCard college={college} href={href} isPremium={isPremium} />;
+  }
 
   return (
     <Card
@@ -52,7 +59,7 @@ export default function FeaturedCollegeCard({ college, rank }: FeaturedCollegeCa
             fill
             style={{ objectFit: 'cover' }}
             sizes="(max-width: 900px) 100vw, 700px"
-            priority={rank <= 2}
+            priority={(rank ?? 99) <= 2}
           />
         ) : (
           <Box
@@ -79,17 +86,19 @@ export default function FeaturedCollegeCard({ college, rank }: FeaturedCollegeCa
             }}
           />
         )}
-        <Box
-          sx={{
-            position: 'absolute', top: 12, right: 12, zIndex: 2,
-            width: 40, height: 40, borderRadius: '50%', bgcolor: 'white',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: 16, color: 'primary.main',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          }}
-        >
-          #{rank}
-        </Box>
+        {rank != null && (
+          <Box
+            sx={{
+              position: 'absolute', top: 12, right: 12, zIndex: 2,
+              width: 40, height: 40, borderRadius: '50%', bgcolor: 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 700, fontSize: 16, color: 'primary.main',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            }}
+          >
+            #{rank}
+          </Box>
+        )}
         <Box
           sx={{
             position: 'absolute', bottom: -20, left: 16, zIndex: 3,
@@ -200,6 +209,158 @@ export default function FeaturedCollegeCard({ college, rank }: FeaturedCollegeCa
             </Tooltip>
           )}
         </Stack>
+      </Box>
+    </Card>
+  );
+}
+
+/** Portrait variant: vertical card for carousels (image top, details below) */
+function PortraitCard({
+  college,
+  href,
+  isPremium,
+}: {
+  college: CollegeListItem;
+  href: string;
+  isPremium: boolean;
+}) {
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        borderRadius: 3,
+        overflow: 'hidden',
+        transition: 'box-shadow 0.2s, border-color 0.2s',
+        '&:hover': { boxShadow: 4, borderColor: 'primary.light' },
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Campus Photo */}
+      <Box sx={{ position: 'relative', width: '100%', height: 160, flexShrink: 0 }}>
+        {college.hero_image_url ? (
+          <Image
+            src={college.hero_image_url}
+            alt={`${college.name} campus`}
+            fill
+            style={{ objectFit: 'cover' }}
+            sizes="300px"
+          />
+        ) : (
+          <Box
+            sx={{
+              width: '100%', height: '100%',
+              background: 'linear-gradient(135deg, #1e3a5f, #2d5a87)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Typography sx={{ color: 'rgba(255,255,255,0.2)', fontWeight: 800, fontSize: '4rem' }}>
+              {(college.short_name ?? college.name).charAt(0)}
+            </Typography>
+          </Box>
+        )}
+        <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 60, background: 'linear-gradient(transparent, rgba(0,0,0,0.35))' }} />
+        {isPremium && (
+          <Chip
+            label="⭐ Featured"
+            size="small"
+            sx={{
+              position: 'absolute', top: 10, left: 10, zIndex: 2,
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
+              fontWeight: 600, fontSize: '0.6rem', height: 22,
+            }}
+          />
+        )}
+        {/* Logo overlay */}
+        <Box
+          sx={{
+            position: 'absolute', bottom: -18, left: 14, zIndex: 3,
+            width: 40, height: 40, borderRadius: 1.5, bgcolor: 'white', border: '2px solid white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15)', overflow: 'hidden',
+          }}
+        >
+          {college.logo_url ? (
+            <Image src={college.logo_url} alt="" width={32} height={32} style={{ objectFit: 'contain' }} />
+          ) : (
+            <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: 16 }}>
+              {(college.short_name ?? college.name).charAt(0)}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      {/* Body */}
+      <Box sx={{ p: 1.75, pt: 3.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Typography
+            sx={{
+              fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.3,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              '&:hover': { color: 'primary.main' },
+            }}
+          >
+            {college.name}
+          </Typography>
+        </Link>
+        <Stack direction="row" alignItems="center" gap={0.4} sx={{ mt: 0.5 }}>
+          <LocationOnIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+            {college.city}, {college.state}{college.type ? ` · ${college.type}` : ''}
+          </Typography>
+        </Stack>
+
+        {/* Badges */}
+        <Stack direction="row" gap={0.4} flexWrap="wrap" sx={{ mt: 1.25 }}>
+          {college.coa_approved && (
+            <Chip label="✓ COA" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
+          )}
+          {college.naac_grade && (
+            <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
+          )}
+          {college.accepted_exams?.slice(0, 1).map((exam) => (
+            <Chip key={exam} label={exam} size="small" sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
+          ))}
+        </Stack>
+
+        {/* Stats row */}
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          sx={{ mt: 'auto', pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}
+        >
+          <Box>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: '#059669' }}>
+              {formatFee(college.annual_fee_approx, college.annual_fee_min)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Fee/yr</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
+              {college.total_barch_seats ?? '-'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Seats</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: 'primary.main' }}>
+              {formatSalary(college.avg_placement_salary)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Avg Pkg</Typography>
+          </Box>
+        </Stack>
+
+        {/* Action */}
+        <Button
+          component={Link}
+          href={href}
+          variant="contained"
+          size="small"
+          fullWidth
+          sx={{ mt: 1.5, textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderRadius: 2, py: 0.8 }}
+        >
+          View Details
+        </Button>
       </Box>
     </Card>
   );

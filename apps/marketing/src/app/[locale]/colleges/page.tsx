@@ -33,6 +33,8 @@ type Props = {
     state?: string;
     type?: string;
     counseling?: string;
+    exam?: string;
+    city?: string;
     coa?: string;
     naac?: string;
     minFee?: string;
@@ -40,6 +42,7 @@ type Props = {
     q?: string;
     sort?: string;
     page?: string;
+    rating?: string;
   };
 };
 
@@ -55,6 +58,8 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
     state: searchParams.state,
     type: searchParams.type,
     counselingSystem: searchParams.counseling as CollegeFilters['counselingSystem'],
+    exam: searchParams.exam as CollegeFilters['exam'],
+    city: searchParams.city,
     coa: searchParams.coa === 'true' ? true : undefined,
     naacGrade: searchParams.naac,
     minFee: searchParams.minFee ? Number(searchParams.minFee) : undefined,
@@ -62,7 +67,7 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
     search: searchParams.q,
     sortBy: (searchParams.sort as CollegeFilters['sortBy']) ?? 'arch_index',
     page: searchParams.page ? Number(searchParams.page) : 1,
-    limit: 20,
+    limit: 30,
   };
 
   // Fetch all data in parallel — wrap each query so one failure doesn't crash the page
@@ -107,7 +112,7 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
     console.error('[CollegeHub] Promise.allSettled failed:', err);
   }
 
-  const totalPages = Math.ceil(count / 20);
+  const totalPages = Math.ceil(count / 30);
 
   const breadcrumb = generateListingBreadcrumbSchema([
     { name: 'Home', path: '' },
@@ -154,6 +159,8 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
         totalCount={count}
         totalPages={totalPages}
         filters={filters}
+        cityCounts={cityData}
+        typeCounts={typeData}
       />
     </>
   );
