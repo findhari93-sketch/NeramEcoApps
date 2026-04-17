@@ -4,7 +4,12 @@
 
 export type CollegeTier = 'free' | 'silver' | 'gold' | 'platinum';
 export type FeeCategory = 'general' | 'obc' | 'obc_ncl' | 'sc' | 'st' | 'ews' | 'management' | 'nri';
-export type CounselingSystem = 'TNEA' | 'JoSAA' | 'KEAM' | 'KCET' | 'AP_EAPCET' | 'TS_EAPCET' | 'other';
+export type CounselingSystem =
+  | 'TNEA' | 'JoSAA' | 'KEAM' | 'KCET'
+  | 'AP_EAPCET' | 'TS_EAPCET'
+  | 'UPSEE' | 'MHT_CET' | 'WBJEE' | 'OJEE' | 'REAP'
+  | 'COMEDK' | 'BCECE' | 'GUJCET'
+  | 'other';
 export type CutoffType = 'rank' | 'score' | 'percentile';
 
 export interface College {
@@ -78,6 +83,14 @@ export interface College {
   // Data quality
   data_source: string | null;
   data_completeness: number;
+  // Placement salary data
+  avg_placement_salary: number | null;
+  min_placement_salary: number | null;
+  max_placement_salary: number | null;
+  // Downloads
+  brochure_url: string | null;
+  // City routing
+  city_slug: string | null;
   last_data_update: string | null;
   // Location details
   location_type: string | null;
@@ -212,6 +225,12 @@ export interface CollegeListItem {
   counseling_systems: string[] | null;
   logo_url: string | null;
   hero_image_url: string | null;
+  admissions_phone: string | null;
+  brochure_url: string | null;
+  avg_placement_salary: number | null;
+  min_placement_salary: number | null;
+  max_placement_salary: number | null;
+  city_slug: string | null;
   highlights: string[] | null;
   verified: boolean;
   data_completeness: number;

@@ -84,13 +84,25 @@ export const STATE_NAMES: Record<string, string> = Object.fromEntries(
 // ─── Counseling Systems ──────────────────────────────────────────────────────
 export const COUNSELING_LABELS: Record<string, string> = {
   TNEA: 'TNEA (Tamil Nadu)',
-  JoSAA: 'JoSAA (Central)',
+  JoSAA: 'JoSAA (All India)',
   KEAM: 'KEAM (Kerala)',
   KCET: 'KCET (Karnataka)',
-  AP_EAPCET: 'AP EAPCET',
-  TS_EAPCET: 'TS EAPCET',
+  AP_EAPCET: 'AP EAPCET (Andhra Pradesh)',
+  TS_EAPCET: 'TS EAPCET (Telangana)',
+  UPSEE: 'UPSEE (Uttar Pradesh)',
+  MHT_CET: 'MHT CET (Maharashtra)',
+  WBJEE: 'WBJEE (West Bengal)',
+  OJEE: 'OJEE (Odisha)',
+  REAP: 'REAP (Rajasthan)',
+  COMEDK: 'COMEDK (Karnataka Private)',
+  BCECE: 'BCECE (Bihar)',
+  GUJCET: 'GUJCET (Gujarat)',
   other: 'Other',
 };
+
+export const COUNSELING_SLUGS: Record<string, string> = Object.fromEntries(
+  Object.keys(COUNSELING_LABELS).map((key) => [key.toLowerCase().replace(/_/g, '-'), key])
+);
 
 // ─── Fee Category Labels ─────────────────────────────────────────────────────
 export const FEE_CATEGORY_LABELS: Record<string, string> = {
@@ -141,3 +153,36 @@ export const DATA_COMPLETENESS = {
   GOOD: 75,
   COMPLETE: 90,
 } as const;
+
+// ─── City Tier Living Costs (ROI Calculator) ────────────────────────────────
+
+/** Annual living cost estimate by city tier (hostel + food + misc) */
+export const CITY_TIER_LIVING_COST: Record<string, number> = {
+  // Tier 1: Metro cities
+  chennai: 180000, mumbai: 180000, delhi: 180000, bangalore: 180000,
+  hyderabad: 180000, kolkata: 180000, pune: 180000,
+  // Tier 2: Large cities
+  coimbatore: 150000, jaipur: 150000, lucknow: 150000, ahmedabad: 150000,
+  chandigarh: 150000, bhopal: 150000, nagpur: 150000, thiruvananthapuram: 150000,
+  kochi: 150000, mysore: 150000, madurai: 150000, mangalore: 150000,
+};
+
+/** Default living cost for cities not in the mapping (Tier 3) */
+export const DEFAULT_LIVING_COST = 120000;
+
+/** Annual materials & travel estimate */
+export const MATERIALS_TRAVEL_COST = 60000;
+
+/** B.Arch course duration in years */
+export const COURSE_DURATION_YEARS = 5;
+
+export const COLLEGE_TYPE_SLUGS: Record<string, string> = {
+  government: 'Government',
+  private: 'Private',
+  deemed: 'Deemed',
+};
+
+export const ACCREDITATION_FILTERS: Record<string, { label: string; description: string }> = {
+  'coa-approved': { label: 'COA Approved', description: 'Colleges approved by the Council of Architecture' },
+  'naac-a-plus': { label: 'NAAC A+ and Above', description: 'Colleges with NAAC A+ or A++ grade' },
+};
