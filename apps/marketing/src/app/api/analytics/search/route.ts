@@ -17,7 +17,8 @@ export async function POST(req: Request) {
     }
 
     const supabase = getSupabaseAdminClient();
-    await supabase.from('search_analytics').insert({
+    // Table exists in DB but types not yet regenerated - safe to cast
+    await (supabase.from as any)('search_analytics').insert({
       event_type,
       query: query.slice(0, 200),
       result_path: result_path?.slice(0, 500) || null,
