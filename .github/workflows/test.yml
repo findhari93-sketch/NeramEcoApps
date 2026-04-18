@@ -67,6 +67,7 @@ jobs:
       - name: Run E2E tests
         run: pnpm test:e2e
         env:
+          DEBUG: pw:webserver
           E2E_TEST_STUDENT_EMAIL: ${{ secrets.E2E_TEST_STUDENT_EMAIL }}
           E2E_TEST_STUDENT_PASSWORD: ${{ secrets.E2E_TEST_STUDENT_PASSWORD }}
           E2E_TEST_TEACHER_EMAIL: ${{ secrets.E2E_TEST_TEACHER_EMAIL }}
