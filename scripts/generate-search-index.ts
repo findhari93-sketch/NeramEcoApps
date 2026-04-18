@@ -8,7 +8,6 @@
  * Env: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY)
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -115,6 +114,19 @@ async function main() {
     writeFileSync(
       OUTPUT_PATH,
       `// AUTO-GENERATED - DO NOT EDIT\n// Generated at: ${new Date().toISOString()}\n// Colleges: 0 (env vars missing)\nimport type { SearchEntry } from './search-index';\nexport const GENERATED_COLLEGE_INDEX: SearchEntry[] = [];\n`,
+      'utf-8'
+    );
+    return;
+  }
+
+  let createClient: typeof import('@supabase/supabase-js').createClient;
+  try {
+    ({ createClient } = await import('@supabase/supabase-js'));
+  } catch (err) {
+    console.warn('[generate-search-index] @supabase/supabase-js not installed. Writing empty index.');
+    writeFileSync(
+      OUTPUT_PATH,
+      `// AUTO-GENERATED - DO NOT EDIT\n// Generated at: ${new Date().toISOString()}\n// Colleges: 0 (supabase-js not available)\nimport type { SearchEntry } from './search-index';\nexport const GENERATED_COLLEGE_INDEX: SearchEntry[] = [];\n`,
       'utf-8'
     );
     return;
