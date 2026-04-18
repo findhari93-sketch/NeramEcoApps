@@ -119,39 +119,34 @@ async function main() {
     return;
   }
 
-  let createClient: typeof import('@supabase/supabase-js').createClient;
+  const selectCols = 'slug,name,short_name,city,state,state_slug,type,established_year,coa_approved,naac_grade,nirf_rank,annual_fee_approx,accepted_exams,counseling_systems';
+  const url = `${supabaseUrl}/rest/v1/colleges?select=${selectCols}&slug=not.is.null&order=name.asc`;
+
+  let rows: CollegeRow[] = [];
   try {
-    ({ createClient } = await import('@supabase/supabase-js'));
+    const resp = await fetch(url, {
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+    }
+    rows = (await resp.json()) as CollegeRow[];
   } catch (err) {
-    console.warn('[generate-search-index] @supabase/supabase-js not installed. Writing empty index.');
-    writeFileSync(
-      OUTPUT_PATH,
-      `// AUTO-GENERATED - DO NOT EDIT\n// Generated at: ${new Date().toISOString()}\n// Colleges: 0 (supabase-js not available)\nimport type { SearchEntry } from './search-index';\nexport const GENERATED_COLLEGE_INDEX: SearchEntry[] = [];\n`,
-      'utf-8'
-    );
-    return;
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const { data: colleges, error } = await supabase
-    .from('colleges')
-    .select('slug, name, short_name, city, state, state_slug, type, established_year, coa_approved, naac_grade, nirf_rank, annual_fee_approx, accepted_exams, counseling_systems')
-    .not('slug', 'is', null)
-    .order('name');
-
-  if (error) {
-    console.error('[generate-search-index] Supabase error:', error.message);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[generate-search-index] Supabase fetch error:', msg);
     console.warn('[generate-search-index] Writing empty index as fallback.');
     writeFileSync(
       OUTPUT_PATH,
-      `// AUTO-GENERATED - DO NOT EDIT\n// Generated at: ${new Date().toISOString()}\n// Colleges: 0 (fetch error: ${error.message})\nimport type { SearchEntry } from './search-index';\nexport const GENERATED_COLLEGE_INDEX: SearchEntry[] = [];\n`,
+      `// AUTO-GENERATED - DO NOT EDIT\n// Generated at: ${new Date().toISOString()}\n// Colleges: 0 (fetch error: ${msg})\nimport type { SearchEntry } from './search-index';\nexport const GENERATED_COLLEGE_INDEX: SearchEntry[] = [];\n`,
       'utf-8'
     );
     return;
   }
 
-  const rows = (colleges || []) as CollegeRow[];
   console.log(`[generate-search-index] Fetched ${rows.length} colleges from Supabase`);
 
   const entries = rows.map((c) => {
