@@ -3,8 +3,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
-import { sendLeadNotificationToCollege } from '@/lib/college-outreach/lead-notification';
 
+// Student submits "I'm Interested" on a college page. Lead is inserted with
+// admin_review_status='pending'. No email is sent to the college yet; the
+// Neram staff reviews each lead in the admin app and the approve action there
+// triggers the notification email.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -31,68 +34,15 @@ export async function POST(request: NextRequest) {
         lead_window_active: true,
         source: 'interested_button',
         status: 'new',
+        // Always land in admin queue. College won't see this until Neram staff approves.
+        admin_review_status: 'pending',
       })
       .select('id')
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    // Best-effort lead notification to college. Do not block or fail on email errors.
-    sendLeadNotificationToCollegeSafely({
-      collegeId: college_id,
-      studentName: name,
-      studentPhone: phone,
-      studentEmail: email ?? null,
-      studentCity: city ?? null,
-      studentNataScore: typeof nata_score === 'number' ? nata_score : null,
-      studentMessage: message ?? null,
-    }).catch((err) => {
-      console.error('[leads] failed to notify college:', err);
-    });
-
     return NextResponse.json({ success: true, id: data.id });
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
-}
-
-// Fire-and-forget notification helper. Looks up college contact + tier, then sends.
-async function sendLeadNotificationToCollegeSafely(args: {
-  collegeId: string;
-  studentName: string;
-  studentPhone: string;
-  studentEmail: string | null;
-  studentCity: string | null;
-  studentNataScore: number | null;
-  studentMessage: string | null;
-}) {
-  const supabase = createAdminClient();
-  const { data: college } = await supabase
-    .from('colleges')
-    .select('name, slug, state_slug, email, admissions_email, neram_tier')
-    .eq('id', args.collegeId)
-    .single();
-
-  if (!college) return;
-
-  const to = (college.admissions_email || college.email) ?? null;
-  if (!to) {
-    console.warn(`[leads] college ${args.collegeId} has no email on record, skipping notification`);
-    return;
-  }
-
-  const collegePageUrl = `https://neramclasses.com/en/colleges/${college.state_slug ?? 'india'}/${college.slug}`;
-
-  await sendLeadNotificationToCollege({
-    to,
-    collegeName: college.name,
-    collegePageUrl,
-    studentName: args.studentName,
-    studentPhone: args.studentPhone,
-    studentEmail: args.studentEmail,
-    studentCity: args.studentCity,
-    studentNataScore: args.studentNataScore,
-    studentMessage: args.studentMessage,
-    neramTier: college.neram_tier,
-  });
 }

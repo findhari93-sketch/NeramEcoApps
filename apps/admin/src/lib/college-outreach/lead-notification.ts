@@ -1,15 +1,19 @@
+// Email template that notifies a college that a student has expressed interest.
+// Called only from /api/college-leads PATCH when admin approves the lead.
 import { sendOutreachEmail } from './send';
+import type { CollegeTier } from './types';
 
 interface LeadEmailInput {
   collegeName: string;
   collegePageUrl: string;
+  dashboardUrl: string; // deep-link for the college to view the lead
   studentName: string;
   studentPhone: string;
   studentEmail?: string | null;
   studentCity?: string | null;
   studentNataScore?: number | null;
   studentMessage?: string | null;
-  neramTier?: string | null;
+  neramTier?: CollegeTier | null;
 }
 
 function escape(s: string | number | null | undefined): string {
@@ -36,7 +40,7 @@ export function renderLeadNotificationEmail(input: LeadEmailInput): {
   const displayPhone = isGoldOrPlatinum ? input.studentPhone : maskPhone(input.studentPhone);
   const phoneNote = isGoldOrPlatinum
     ? ''
-    : '(Phone is partially hidden. Upgrade your plan or reply to this email to get full student contact details.)';
+    : 'Phone is partially hidden. Upgrade your plan to see full student contact details.';
 
   const subject = `New student interest for ${input.collegeName}: ${input.studentName}`;
 
@@ -55,13 +59,13 @@ export function renderLeadNotificationEmail(input: LeadEmailInput): {
     '',
     phoneNote,
     '',
-    'You can see this lead (and all future leads) on your Neram College Dashboard:',
-    'https://neramclasses.com/college-dashboard/leads',
+    'View this lead on your Neram dashboard:',
+    input.dashboardUrl,
     '',
     `The student's public college page:`,
     input.collegePageUrl,
     '',
-    'If you have not set up your dashboard login yet, reply to this email and we will send your access credentials.',
+    'If you do not yet have a dashboard account, reply to this email and we will get you set up.',
     '',
     'Warm regards,',
     'Neram Classes',
@@ -90,13 +94,14 @@ export function renderLeadNotificationEmail(input: LeadEmailInput): {
   ${phoneNote ? `<p style="margin:12px 0 0 0;font-size:12px;color:#64748b">${escape(phoneNote)}</p>` : ''}
 </div>
 
-<p>You can see this lead (and all future leads) on your Neram College Dashboard:<br>
-<a href="https://neramclasses.com/college-dashboard/leads" style="color:#2563eb">https://neramclasses.com/college-dashboard/leads</a></p>
+<p style="text-align:center;margin:24px 0">
+  <a href="${escape(input.dashboardUrl)}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">View this lead on your Neram dashboard</a>
+</p>
 
-<p>The student's public college page:<br>
+<p>Student's public college page:<br>
 <a href="${escape(input.collegePageUrl)}" style="color:#2563eb">${escape(input.collegePageUrl)}</a></p>
 
-<p>If you have not set up your dashboard login yet, reply to this email and we will send your access credentials.</p>
+<p>If you do not yet have a dashboard account, reply to this email and we will get you set up.</p>
 
 <p style="margin-top:28px">Warm regards,<br>
 Neram Classes<br>
@@ -109,15 +114,18 @@ Neram Classes<br>
 
 interface SendLeadArgs extends LeadEmailInput {
   to: string;
+  bcc?: string;
 }
 
-export async function sendLeadNotificationToCollege(args: SendLeadArgs): Promise<{ success: boolean; messageId?: string; error?: string }> {
+export async function sendLeadNotificationToCollege(
+  args: SendLeadArgs,
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const { subject, html, text } = renderLeadNotificationEmail(args);
   return sendOutreachEmail({
     to: args.to,
     subject,
     html,
     text,
-    bcc: 'info@neramclasses.com',
+    bcc: args.bcc ?? 'info@neramclasses.com',
   });
 }

@@ -165,6 +165,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Partnership Pages', icon: HandshakeIcon, path: '/college-hub/partnership' },
       { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
       { text: 'Outreach', icon: MarkEmailReadIcon, path: '/college-outreach' },
+      { text: 'Leads Review', icon: PeopleIcon, path: '/college-leads' },
     ],
   },
   {
