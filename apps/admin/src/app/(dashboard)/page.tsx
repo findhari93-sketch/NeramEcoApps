@@ -2,6 +2,7 @@
 
 import { Box, Typography } from '@neram/ui';
 import DashboardStats from '@/components/DashboardStats';
+import WhatsAppHealthBanner from '@/components/WhatsAppHealthBanner';
 
 export default function DashboardPage() {
   return (
@@ -12,6 +13,8 @@ export default function DashboardPage() {
       <Typography variant="body1" color="text.secondary" sx={{ mb: 1.5 }}>
         Welcome to the Neram Classes Admin Panel
       </Typography>
+
+      <WhatsAppHealthBanner />
 
       <DashboardStats />
 

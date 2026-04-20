@@ -6874,8 +6874,22 @@ export * from './expenses';
 
 export type DrawingCategory = '2d_composition' | '3d_composition' | 'kit_sculpture';
 export type DrawingDifficulty = 'easy' | 'medium' | 'hard';
-export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'redo' | 'completed' | 'reviewed' | 'published';
+export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'redo' | 'completed' | 'reviewed';
 export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice';
+
+export interface DrawingTag {
+  id: string;
+  slug: string;
+  label: string;
+  is_seed: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface DrawingSubmissionTag {
+  submission_id: string;
+  tag_id: string;
+}
 
 export interface TutorResource {
   type: 'nexus_video' | 'youtube' | 'image';
@@ -6949,7 +6963,7 @@ export interface DrawingSubmission {
   status: DrawingSubmissionStatus;
   thread_id: string | null;
   attempt_number: number;
-  is_gallery_published: boolean;
+  is_gallery_visible: boolean;
   submitted_at: string;
   reviewed_at: string | null;
   ai_overlay_annotations: Array<{
@@ -6984,6 +6998,7 @@ export interface DrawingSubmissionWithQuestion extends DrawingSubmission {
 export interface DrawingSubmissionWithDetails extends DrawingSubmission {
   question: DrawingQuestion | null;
   student: { id: string; name: string; email: string; avatar_url: string | null };
+  tags?: DrawingTag[];
 }
 
 // Thread & Comments

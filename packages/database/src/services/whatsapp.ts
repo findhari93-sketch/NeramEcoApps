@@ -59,6 +59,82 @@ interface WhatsAppSendResult {
 }
 
 // ============================================
+// ERROR PARSING
+// ============================================
+
+/**
+ * Stable prefixes for known Meta WhatsApp Cloud API error categories.
+ * Stored in `auto_messages.error_message` so the cron and CRM UI can
+ * decide what to do with a failure (retry, surface a tooltip, etc.)
+ * without re-parsing the raw Meta string.
+ */
+export const WA_ERROR_PREFIXES = {
+  /** #131030 — Recipient not in allowed list. App is in dev mode. */
+  DEV_MODE: 'WA_DEV_MODE',
+  /** #131026 — Recipient phone number is unreachable / not on WhatsApp. */
+  UNDELIVERABLE: 'WA_UNDELIVERABLE',
+  /** #132000 — Template parameter count or type mismatch. */
+  TEMPLATE_PARAM_MISMATCH: 'WA_TEMPLATE_PARAM_MISMATCH',
+  /** #131056 — Pair rate limit hit (too many sends to same number). */
+  RATE_LIMIT: 'WA_RATE_LIMIT',
+  /** #131047 — 24h customer service window expired, must use template. */
+  RE_ENGAGEMENT_REQUIRED: 'WA_24H_WINDOW',
+  /** Catch-all: WA_ERROR_<code>. */
+  GENERIC: 'WA_ERROR',
+} as const;
+
+/**
+ * Returns true if the error message indicates a permanent configuration
+ * problem that won't fix itself by retrying. The cron should skip these
+ * until an admin clicks Retry manually.
+ */
+export function isPermanentWhatsAppFailure(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  return (
+    errorMessage.startsWith(WA_ERROR_PREFIXES.DEV_MODE) ||
+    errorMessage.startsWith(WA_ERROR_PREFIXES.TEMPLATE_PARAM_MISMATCH) ||
+    errorMessage.startsWith(WA_ERROR_PREFIXES.UNDELIVERABLE)
+  );
+}
+
+/**
+ * Map a raw Meta Cloud API error response into a stable, prefixed string.
+ * Examples:
+ *   429 + code 131030 → "WA_DEV_MODE: WhatsApp Business App is not in production mode (Meta #131030)"
+ *   500 + no body     → "WA_ERROR: HTTP 500"
+ */
+export function formatWhatsAppError(
+  data: any,
+  fallbackHttpStatus?: number
+): string {
+  const metaError = data?.error;
+  const code: number | undefined = metaError?.code;
+  const subcode: number | undefined = metaError?.error_subcode;
+  const rawMessage: string =
+    metaError?.message ||
+    (fallbackHttpStatus ? `HTTP ${fallbackHttpStatus}` : 'Unknown WhatsApp error');
+
+  switch (code) {
+    case 131030:
+      return `${WA_ERROR_PREFIXES.DEV_MODE}: WhatsApp Business App is not in production mode (Meta #131030). Verify business in Meta Business Suite and switch the app to Live mode, or add this number to the test recipient allow-list.`;
+    case 131026:
+      return `${WA_ERROR_PREFIXES.UNDELIVERABLE}: Recipient phone is not reachable on WhatsApp (Meta #131026). The number may be invalid, blocked, or not registered with WhatsApp.`;
+    case 132000:
+      return `${WA_ERROR_PREFIXES.TEMPLATE_PARAM_MISMATCH}: Template parameter count or type mismatch (Meta #132000). Check the wa_templates row matches the Meta template definition.`;
+    case 131056:
+      return `${WA_ERROR_PREFIXES.RATE_LIMIT}: Pair rate limit hit (Meta #131056). Too many messages sent to this number recently. Will retry later.`;
+    case 131047:
+      return `${WA_ERROR_PREFIXES.RE_ENGAGEMENT_REQUIRED}: 24-hour customer service window expired (Meta #131047). A template message is required to re-engage this user.`;
+    default:
+      if (typeof code === 'number') {
+        const subPart = typeof subcode === 'number' ? `/${subcode}` : '';
+        return `${WA_ERROR_PREFIXES.GENERIC}_${code}${subPart}: ${rawMessage}`;
+      }
+      return `${WA_ERROR_PREFIXES.GENERIC}: ${rawMessage}`;
+  }
+}
+
+// ============================================
 // CORE API
 // ============================================
 
@@ -101,8 +177,8 @@ export async function sendWhatsAppTemplate(
     const data = await response.json();
 
     if (!response.ok) {
-      const errorMsg = (data as any)?.error?.message || `HTTP ${response.status}`;
-      console.error('WhatsApp API error:', errorMsg);
+      const errorMsg = formatWhatsAppError(data, response.status);
+      console.error('WhatsApp API error:', errorMsg, { metaCode: (data as any)?.error?.code });
       return { success: false, error: errorMsg };
     }
 
@@ -151,8 +227,8 @@ export async function sendWhatsAppTextMessage(
     const result = await response.json();
 
     if (!response.ok) {
-      const errorMsg = result?.error?.message || `WhatsApp API error (${response.status})`;
-      console.error('WhatsApp text send error:', result);
+      const errorMsg = formatWhatsAppError(result, response.status);
+      console.error('WhatsApp text send error:', errorMsg, { metaCode: result?.error?.code });
       return { success: false, error: errorMsg };
     }
 

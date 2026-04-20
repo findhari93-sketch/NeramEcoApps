@@ -15,12 +15,12 @@ on:
       run_indexnow:
         description: 'Submit URLs to IndexNow'
         required: false
-        default: 'false'
+        default: false
         type: boolean
       run_cwv:
         description: 'Run Core Web Vitals audit'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:

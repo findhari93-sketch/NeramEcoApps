@@ -24,8 +24,64 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import ReplayIcon from '@mui/icons-material/Replay';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 import type { AutoMessage } from '@neram/database';
+
+interface FriendlyError {
+  short: string;
+  detail: string;
+  actionLabel?: string;
+  actionUrl?: string;
+}
+
+function describeError(raw: string | null | undefined): FriendlyError | null {
+  if (!raw) return null;
+  if (raw.startsWith('WA_DEV_MODE')) {
+    return {
+      short: 'WhatsApp app is in development mode',
+      detail:
+        'Meta rejected the send because the WhatsApp Business App is not yet in Live mode. Verify the business in Meta Business Suite and switch the app to Live, or add this number to the test recipient allow-list. The cron will skip auto-retry until you click Retry manually.',
+      actionLabel: 'Open Meta Business',
+      actionUrl: 'https://business.facebook.com/settings/security',
+    };
+  }
+  if (raw.startsWith('WA_UNDELIVERABLE')) {
+    return {
+      short: 'Recipient not on WhatsApp',
+      detail:
+        'The phone number is not registered with WhatsApp or is unreachable. Confirm the number with the lead before retrying.',
+    };
+  }
+  if (raw.startsWith('WA_TEMPLATE_PARAM_MISMATCH')) {
+    return {
+      short: 'Template parameter mismatch',
+      detail:
+        'The template variables sent to Meta do not match the approved template. Check the wa_templates row matches the Meta template definition.',
+    };
+  }
+  if (raw.startsWith('WA_RATE_LIMIT')) {
+    return {
+      short: 'Pair rate limit hit',
+      detail:
+        'Too many WhatsApp messages sent to this number recently. The cron will retry automatically.',
+    };
+  }
+  if (raw.startsWith('WA_24H_WINDOW')) {
+    return {
+      short: '24-hour reply window expired',
+      detail:
+        'The recipient last messaged us more than 24 hours ago. A pre-approved template message is required to re-engage.',
+    };
+  }
+  if (raw.startsWith('WA_ERROR')) {
+    return {
+      short: 'WhatsApp send failed',
+      detail: raw,
+    };
+  }
+  return { short: 'Send failed', detail: raw };
+}
 
 function getPhoneDripStatus(messages: AutoMessage[]): string {
   const dripMessages = messages.filter(m => m.message_type.startsWith('phone_drip_'));
@@ -242,12 +298,46 @@ export default function AutoMessagesSection({ userId }: AutoMessagesSectionProps
         )}
 
         {messages.some(m => m.error_message) && (
-          <Box mt={1}>
-            {messages.filter(m => m.error_message).map(m => (
-              <Typography key={m.id} variant="caption" color="error" display="block">
-                Error: {m.error_message}
-              </Typography>
-            ))}
+          <Box mt={1} display="flex" flexDirection="column" gap={0.5}>
+            {messages.filter(m => m.error_message).map(m => {
+              const friendly = describeError(m.error_message);
+              if (!friendly) return null;
+              return (
+                <Tooltip
+                  key={m.id}
+                  title={friendly.detail}
+                  placement="bottom-start"
+                  arrow
+                >
+                  <Box display="inline-flex" alignItems="center" gap={0.5} sx={{ cursor: 'help' }}>
+                    <Typography variant="caption" color="error">
+                      Error: {friendly.short}
+                    </Typography>
+                    {friendly.actionUrl && (
+                      <Typography
+                        variant="caption"
+                        component="a"
+                        href={friendly.actionUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{
+                          color: 'primary.main',
+                          textDecoration: 'underline',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.25,
+                          ml: 0.5,
+                        }}
+                        onClick={(e: any) => e.stopPropagation()}
+                      >
+                        {friendly.actionLabel ?? 'Open'}
+                        <OpenInNewIcon sx={{ fontSize: 12 }} />
+                      </Typography>
+                    )}
+                  </Box>
+                </Tooltip>
+              );
+            })}
           </Box>
         )}
       </Box>

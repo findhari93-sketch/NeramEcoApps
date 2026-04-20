@@ -3,10 +3,11 @@
 import { Box, Typography, Paper, Avatar, Rating, IconButton, Chip } from '@neram/ui';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import CategoryBadge from './CategoryBadge';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import CommentSection from './CommentSection';
-import ImageCompareToggle from './ImageCompareToggle';
-import type { GalleryPost, GalleryReactionType } from '@neram/database/types';
+import GalleryImageViewer from './GalleryImageViewer';
+import type { GalleryPost, GalleryReactionType, DrawingTag } from '@neram/database/types';
+import type { DrawingViewMode } from '@/hooks/useDrawingViewMode';
 
 const REACTIONS: { type: GalleryReactionType; emoji: string }[] = [
   { type: 'heart', emoji: '\u2764\uFE0F' },
@@ -35,7 +36,9 @@ interface GalleryCardProps {
   commentsExpanded: boolean;
   getToken: () => Promise<string | null>;
   teacherMode?: boolean;
-  onUnpublish?: (submissionId: string) => void;
+  /** Teacher-only: hide this submission from the gallery (keeps the submission, just flips visibility). */
+  onHide?: (submissionId: string) => void;
+  viewMode?: DrawingViewMode;
 }
 
 export default function GalleryCard({
@@ -45,17 +48,43 @@ export default function GalleryCard({
   commentsExpanded,
   getToken,
   teacherMode,
-  onUnpublish,
+  onHide,
+  viewMode = 'comfortable',
 }: GalleryCardProps) {
   const totalReactions = Object.values(post.reactions).reduce((sum, v) => sum + v, 0);
+  const isRedoOrigin = post.status === 'redo';
+  const isCompact = viewMode === 'compact';
+  const tags = (post.tags as DrawingTag[] | undefined) || [];
+  const imageHeight = isCompact ? 200 : 280;
 
   return (
-    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+    <Paper variant="outlined" sx={{ overflow: 'hidden', position: 'relative' }}>
+      {/* Learning badge for redo-origin cards */}
+      {isRedoOrigin && (
+        <Chip
+          icon={<SchoolOutlinedIcon sx={{ fontSize: '0.85rem !important' }} />}
+          label="Learning"
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            zIndex: 3,
+            height: 22,
+            bgcolor: 'rgba(124,58,237,0.9)',
+            color: '#fff',
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            '& .MuiChip-icon': { color: '#fff' },
+          }}
+        />
+      )}
+
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1 }}>
         <Avatar
           src={post.student?.avatar_url || undefined}
-          sx={{ width: 32, height: 32, fontSize: '0.85rem' }}
+          sx={{ width: isCompact ? 26 : 32, height: isCompact ? 26 : 32, fontSize: '0.85rem' }}
         >
           {post.student?.name?.charAt(0) || '?'}
         </Avatar>
@@ -67,20 +96,22 @@ export default function GalleryCard({
             {getTimeAgo(post.reviewed_at || post.submitted_at)}
           </Typography>
         </Box>
-        {post.question && <CategoryBadge category={post.question.category} />}
         {post.tutor_rating && (
-          <Rating value={post.tutor_rating} readOnly size="small" sx={{ ml: 0.5 }} />
+          <Rating value={post.tutor_rating} readOnly size="small" />
         )}
       </Box>
 
-      {/* Image area: side-by-side (desktop) or scroll-snap toggle (mobile) */}
-      <ImageCompareToggle
+      {/* 3-mode image viewer. Redo-origin items default to overlay so students
+          see the teacher's corrections layered on the attempt at a glance. */}
+      <GalleryImageViewer
         originalImageUrl={post.original_image_url}
         correctedImageUrl={post.corrected_image_url || null}
+        defaultMode={isRedoOrigin ? 'overlay' : 'original'}
+        height={imageHeight}
       />
 
       {/* Question text */}
-      {post.question && (
+      {post.question && !isCompact && (
         <Box sx={{ px: 1.5, py: 0.75 }}>
           <Typography
             variant="body2"
@@ -94,6 +125,21 @@ export default function GalleryCard({
           >
             {post.question.question_text}
           </Typography>
+        </Box>
+      )}
+
+      {/* Tags */}
+      {tags.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, px: 1.5, py: 0.5 }}>
+          {tags.slice(0, isCompact ? 3 : 6).map((t) => (
+            <Chip
+              key={t.id}
+              label={t.label}
+              size="small"
+              variant="outlined"
+              sx={{ height: 20, fontSize: '0.65rem' }}
+            />
+          ))}
         </Box>
       )}
 
@@ -136,23 +182,24 @@ export default function GalleryCard({
         })}
         <Box sx={{ flex: 1 }} />
 
-        {/* Teacher mode: stats + unpublish */}
         {teacherMode && (
           <>
-            <Chip
-              label={`${totalReactions} reactions`}
-              size="small"
-              variant="outlined"
-              sx={{ height: 22, fontSize: '0.65rem' }}
-            />
+            {!isCompact && (
+              <Chip
+                label={`${totalReactions} reactions`}
+                size="small"
+                variant="outlined"
+                sx={{ height: 22, fontSize: '0.65rem' }}
+              />
+            )}
             <IconButton
               size="small"
               color="warning"
               onClick={(e) => {
                 e.stopPropagation();
-                onUnpublish?.(post.id);
+                onHide?.(post.id);
               }}
-              title="Unpublish from gallery"
+              title="Hide from gallery"
             >
               <VisibilityOffIcon sx={{ fontSize: 18 }} />
             </IconButton>

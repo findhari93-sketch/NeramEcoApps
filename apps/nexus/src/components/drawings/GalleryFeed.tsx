@@ -2,36 +2,34 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Tabs, Tab, Skeleton, Button, Switch, FormControlLabel,
-  useTheme, useMediaQuery, IconButton, Tooltip, CircularProgress,
+  Box, Typography, Skeleton, Button, CircularProgress,
 } from '@neram/ui';
-import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import GalleryCard from './GalleryCard';
+import TagFilterBar from './TagFilterBar';
 import type { GalleryPost, GalleryReactionType } from '@neram/database/types';
+import type { DrawingViewMode } from '@/hooks/useDrawingViewMode';
 
 const PAGE_SIZE = 12;
-
-const CATEGORIES = [
-  { value: '', label: 'All' },
-  { value: '2d_composition', label: '2D' },
-  { value: '3d_composition', label: '3D' },
-  { value: 'kit_sculpture', label: 'Kit' },
-];
 
 interface GalleryFeedProps {
   getToken: () => Promise<string | null>;
   teacherMode?: boolean;
+  /** Optional view mode override. Parent pages own the localStorage-backed state
+   *  so teacher and student gallery surfaces share the same preference. */
+  viewMode?: DrawingViewMode;
 }
 
-export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
+/**
+ * Unified gallery feed: any reviewed submission with `is_gallery_visible=true`,
+ * regardless of status (completed or redo). Filtered by free-form tags rather
+ * than the old 2D/3D/Kit sub-tabs. Redo-origin items are rendered with a
+ * default overlay view and a subtle Learning badge.
+ */
+export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfortable' }: GalleryFeedProps) {
   const [posts, setPosts] = useState<GalleryPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [category, setCategory] = useState('');
-  const [hasReference, setHasReference] = useState(false);
+  const [tagSlugs, setTagSlugs] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
@@ -44,8 +42,7 @@ export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps)
       try {
         const token = await getToken();
         const params = new URLSearchParams();
-        if (category) params.set('category', category);
-        if (hasReference) params.set('hasReference', 'true');
+        if (tagSlugs.length > 0) params.set('tags', tagSlugs.join(','));
         params.set('limit', String(PAGE_SIZE));
         params.set('offset', String(fetchOffset));
 
@@ -55,11 +52,8 @@ export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps)
         const data = await res.json();
         const newPosts: GalleryPost[] = data.posts || [];
 
-        if (append) {
-          setPosts((prev) => [...prev, ...newPosts]);
-        } else {
-          setPosts(newPosts);
-        }
+        if (append) setPosts((prev) => [...prev, ...newPosts]);
+        else setPosts(newPosts);
         setHasMore(newPosts.length === PAGE_SIZE);
       } catch {
         if (!append) setPosts([]);
@@ -69,10 +63,9 @@ export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps)
         setLoadingMore(false);
       }
     },
-    [getToken, category, hasReference],
+    [getToken, tagSlugs],
   );
 
-  // Reset and refetch when filters change
   useEffect(() => {
     setOffset(0);
     fetchFeed(0, false);
@@ -124,13 +117,14 @@ export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps)
     });
   };
 
-  const handleUnpublish = async (submissionId: string) => {
+  /** Teacher-only: flip the gallery-visibility boolean for a submission. */
+  const handleHide = async (submissionId: string) => {
     try {
       const token = await getToken();
       const res = await fetch('/api/drawing/gallery/publish', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submission_id: submissionId, publish: false }),
+        body: JSON.stringify({ submission_id: submissionId, visible: false }),
       });
       if (res.ok) {
         setPosts((prev) => prev.filter((p) => p.id !== submissionId));
@@ -140,74 +134,33 @@ export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps)
     }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} variant="rounded" height={300} />
-        ))}
-      </Box>
-    );
-  }
-
   return (
     <Box>
-      {/* Filter bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-        <Tabs
-          value={category}
-          onChange={(_, v) => setCategory(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            flex: 1,
-            minHeight: 32,
-            '& .MuiTab-root': { minHeight: 32, py: 0.25, textTransform: 'none' },
-          }}
-        >
-          {CATEGORIES.map((c) => (
-            <Tab key={c.value} value={c.value} label={c.label} />
+      <TagFilterBar selected={tagSlugs} onChange={setTagSlugs} />
+
+      {loading ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} variant="rounded" height={viewMode === 'compact' ? 180 : 300} />
           ))}
-        </Tabs>
-
-        {/* Teacher Refs Only toggle */}
-        {isMobile ? (
-          <Tooltip title="Teacher Refs Only">
-            <IconButton
-              size="small"
-              color={hasReference ? 'primary' : 'default'}
-              onClick={() => setHasReference((v) => !v)}
-            >
-              <PhotoLibraryIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        ) : (
-          <FormControlLabel
-            control={
-              <Switch
-                size="small"
-                checked={hasReference}
-                onChange={(_, v) => setHasReference(v)}
-              />
-            }
-            label={
-              <Typography variant="caption" color="text.secondary">
-                Teacher Refs Only
-              </Typography>
-            }
-            sx={{ ml: 0, mr: 0 }}
-          />
-        )}
-      </Box>
-
-      {posts.length === 0 ? (
+        </Box>
+      ) : posts.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography color="text.secondary">
-            {hasReference ? 'No drawings with teacher references yet' : 'No published drawings yet'}
+            {tagSlugs.length > 0 ? 'No drawings match these tags' : 'No drawings in the gallery yet'}
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 600, mx: 'auto' }}>
+        <Box
+          sx={{
+            display: viewMode === 'compact' ? 'grid' : 'flex',
+            flexDirection: viewMode === 'compact' ? undefined : 'column',
+            gridTemplateColumns: viewMode === 'compact' ? { xs: '1fr', sm: 'repeat(2, 1fr)' } : undefined,
+            gap: 2,
+            maxWidth: viewMode === 'compact' ? 1000 : 600,
+            mx: 'auto',
+          }}
+        >
           {posts.map((post) => (
             <GalleryCard
               key={post.id}
@@ -217,22 +170,20 @@ export default function GalleryFeed({ getToken, teacherMode }: GalleryFeedProps)
               commentsExpanded={expandedComments.has(post.id)}
               getToken={getToken}
               teacherMode={teacherMode}
-              onUnpublish={handleUnpublish}
+              onHide={handleHide}
+              viewMode={viewMode}
             />
           ))}
 
-          {/* Load More */}
           {hasMore && (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
+            <Box sx={{ textAlign: 'center', py: 2, gridColumn: '1 / -1' }}>
               <Button
                 variant="outlined"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
                 sx={{ borderRadius: 6, px: 4 }}
               >
-                {loadingMore ? (
-                  <CircularProgress size={20} sx={{ mr: 1 }} />
-                ) : null}
+                {loadingMore ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
                 {loadingMore ? 'Loading...' : 'Load More'}
               </Button>
             </Box>

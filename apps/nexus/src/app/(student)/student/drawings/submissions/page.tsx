@@ -204,7 +204,7 @@ export default function MySubmissionsPage() {
                         color={STATUS_COLOR[s.status] || 'default'}
                         sx={isMobile ? { height: 20, fontSize: '0.65rem' } : undefined}
                       />
-                      {(s as any).is_gallery_published && (
+                      {(s as any).is_gallery_visible && (
                         <Chip
                           icon={<EmojiEventsOutlinedIcon sx={{ fontSize: '0.85rem !important' }} />}
                           label="Gallery"

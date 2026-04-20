@@ -66,8 +66,15 @@ export default function TopBar() {
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const [classroomAnchor, setClassroomAnchor] = useState<null | HTMLElement>(null);
 
-  // Show classroom selector for students (always) and teachers only on the Teaching panel
-  const showClassroomSelector = !!activeClassroom && (nexusRole === 'student' || activePanel === 'teaching');
+  // Drawing reviews are not classroom-scoped (review queue is shared across classrooms),
+  // so hide the chip there to avoid implying a filter that doesn't exist.
+  const isDrawingReviewRoute = pathname?.startsWith('/teacher/drawing-reviews') ?? false;
+
+  // Show classroom selector for students (always) and teachers only on the Teaching panel,
+  // except on drawing-review routes for teachers.
+  const showClassroomSelector =
+    !!activeClassroom &&
+    (nexusRole === 'student' || (activePanel === 'teaching' && !isDrawingReviewRoute));
 
   const handleLogout = async () => {
     setProfileAnchor(null);

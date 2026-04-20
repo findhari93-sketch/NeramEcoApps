@@ -19,8 +19,9 @@ import CategoryBadge from '@/components/drawings/CategoryBadge';
 import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
 import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
 import CommentSection from '@/components/drawings/CommentSection';
+import TagEditor from '@/components/drawings/TagEditor';
 import { useNavBadges } from '@/components/NavBadgeProvider';
-import type { DrawingSubmissionWithDetails } from '@neram/database/types';
+import type { DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 
 export default function DrawingReviewDetailPage() {
@@ -53,7 +54,10 @@ export default function DrawingReviewDetailPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState('');
   const [action, setAction] = useState<'redo' | 'complete'>('complete');
-  const [publishToGallery, setPublishToGallery] = useState(false);
+  // Default ON: any submission with rating + feedback goes into the unified
+  // gallery. Teacher flips off for anything they want kept private.
+  const [showInGallery, setShowInGallery] = useState(true);
+  const [tagLabels, setTagLabels] = useState<string[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -92,6 +96,7 @@ export default function DrawingReviewDetailPage() {
           corrected_image_url: ws.correctedImageUrl,
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
+          tag_labels: tagLabels,
           action: 'draft',
         }),
       });
@@ -145,6 +150,14 @@ export default function DrawingReviewDetailPage() {
 
     const isReviewed = ['reviewed', 'redo', 'completed'].includes(submission.status);
     setIsEditMode(!isReviewed);
+
+    // Visibility toggle reflects the server state for reviewed submissions;
+    // for pending ones, default to true so a saved review lands in the gallery.
+    setShowInGallery(isReviewed ? !!(submission as any).is_gallery_visible : true);
+
+    // Hydrate tag labels from the loaded submission.
+    const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
+    setTagLabels(existingTags.map((t) => t.label));
   }, [submission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleWorkspaceChange = useCallback((data: WorkspaceData) => {
@@ -168,18 +181,12 @@ export default function DrawingReviewDetailPage() {
           corrected_image_url: ws.correctedImageUrl,
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
+          is_gallery_visible: showInGallery,
+          tag_labels: tagLabels,
           action: reviewAction,
         }),
       });
       if (!res.ok) throw new Error('Failed to save review');
-
-      if (publishToGallery && reviewAction === 'complete') {
-        await fetch('/api/drawing/gallery/publish', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ submission_id: submission!.id, publish: true }),
-        }).catch(() => {});
-      }
 
       refreshBadges();
       router.push('/teacher/drawing-reviews');
@@ -282,12 +289,12 @@ export default function DrawingReviewDetailPage() {
         {saving && action === 'complete' ? '...' : ['reviewed', 'redo', 'completed'].includes(submission.status) ? 'Save' : 'Complete'}
       </Button>
 
-      {/* Gallery toggle: switch only, no label on mobile */}
+      {/* Gallery visibility toggle: on by default once a rating + feedback are present */}
       <Switch
-        checked={publishToGallery}
-        onChange={(e) => setPublishToGallery(e.target.checked)}
+        checked={showInGallery}
+        onChange={(e) => setShowInGallery(e.target.checked)}
         size="small"
-        title="Publish to Art Gallery"
+        title="Show in Gallery"
       />
       {!isMobile && (
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', lineHeight: 1.2, ml: -0.5 }}>
@@ -342,6 +349,15 @@ export default function DrawingReviewDetailPage() {
           readOnly={!isEditMode}
           sketchTrigger={sketchTrigger}
         />
+
+        {isEditMode && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              Tags
+            </Typography>
+            <TagEditor value={tagLabels} onChange={setTagLabels} />
+          </Box>
+        )}
 
         <Box sx={{ mt: 2 }}>
           <CommentSection submissionId={submission.id} getToken={getToken} canComment={true} />
@@ -447,6 +463,15 @@ export default function DrawingReviewDetailPage() {
                 readOnly={!isEditMode}
                 sketchTrigger={sketchTrigger}
               />
+
+              {isEditMode && (
+                <Box sx={{ mt: 1.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Tags
+                  </Typography>
+                  <TagEditor value={tagLabels} onChange={setTagLabels} />
+                </Box>
+              )}
 
               <Box sx={{ mt: 2 }}>
                 <CommentSection submissionId={submission.id} getToken={getToken} canComment={true} />

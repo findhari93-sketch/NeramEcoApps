@@ -35,7 +35,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
       variant="caption"
       color="text.secondary"
       fontWeight={600}
-      sx={{ mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: 0.5 }}
+      sx={{
+        mb: 0.75,
+        display: 'block',
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
+        fontSize: '0.68rem',
+      }}
     >
       {children}
     </Typography>
@@ -91,7 +97,7 @@ function SidebarContent({
   const visibleCities = showAllCities ? cityCounts : cityCounts?.slice(0, 4);
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box sx={{ p: { xs: 2, md: 1.5 } }}>
       {/* Drag handle (mobile) */}
       <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 1.5 }}>
         <Box
@@ -103,12 +109,14 @@ function SidebarContent({
       </Box>
 
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
         <Stack direction="row" alignItems="center" gap={1}>
-          <FilterListIcon sx={{ fontSize: 18 }} />
-          <Typography variant="subtitle1" fontWeight={700}>Filters</Typography>
+          <FilterListIcon sx={{ fontSize: 16 }} />
+          <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: '0.875rem' }}>
+            Filters
+          </Typography>
           {activeFilterCount > 0 && (
-            <Chip label={activeFilterCount} size="small" color="primary" />
+            <Chip label={activeFilterCount} size="small" color="primary" sx={{ height: 18, fontSize: '0.7rem' }} />
           )}
         </Stack>
         <Stack direction="row" gap={1}>
@@ -126,7 +134,7 @@ function SidebarContent({
       </Stack>
 
       {/* Sort By */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>Sort By</SectionLabel>
         <FormControl size="small" fullWidth>
           <Select
@@ -142,10 +150,10 @@ function SidebarContent({
         </FormControl>
       </Box>
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* COA Approved */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <FormControlLabel
           control={
             <Checkbox
@@ -161,18 +169,18 @@ function SidebarContent({
         />
       </Box>
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* Search */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>Search Colleges</SectionLabel>
         <CollegeSearch placeholder="Search by name or city..." />
       </Box>
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* Accepted Exam */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>Accepted Exam</SectionLabel>
         <Stack direction="row" flexWrap="wrap" gap={0.75}>
           <Chip
@@ -199,10 +207,10 @@ function SidebarContent({
         </Stack>
       </Box>
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* Ownership / College Type */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>Ownership</SectionLabel>
         <FormGroup>
           {COLLEGE_TYPES.map((t) => {
@@ -237,10 +245,10 @@ function SidebarContent({
         </FormGroup>
       </Box>
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* NAAC Grade */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>NAAC Grade</SectionLabel>
         <Stack direction="row" flexWrap="wrap" gap={0.75}>
           {NAAC_GRADES.map((g) => (
@@ -259,10 +267,10 @@ function SidebarContent({
         </Stack>
       </Box>
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* Annual Fee Range */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>Annual Fee</SectionLabel>
         <Stack direction="row" gap={1}>
           <FormControl size="small" sx={{ flex: 1 }}>
@@ -336,8 +344,8 @@ function SidebarContent({
       {/* City Filter (only if cityCounts provided) */}
       {cityCounts && cityCounts.length > 0 && (
         <>
-          <Divider sx={{ my: 1.5 }} />
-          <Box sx={{ mb: 2.5 }}>
+          <Divider sx={{ my: 1 }} />
+          <Box sx={{ mb: 1.75 }}>
             <SectionLabel>City</SectionLabel>
             <FormGroup>
               {visibleCities?.map((c) => (
@@ -378,10 +386,10 @@ function SidebarContent({
         </>
       )}
 
-      <Divider sx={{ my: 1.5 }} />
+      <Divider sx={{ my: 1 }} />
 
       {/* Rating */}
-      <Box sx={{ mb: 2.5 }}>
+      <Box sx={{ mb: 1.75 }}>
         <SectionLabel>Rating</SectionLabel>
         <Stack direction="row" flexWrap="wrap" gap={0.75}>
           {[
@@ -623,15 +631,12 @@ export default function FilterSidebar({
         </Box>
       </Drawer>
 
-      {/* Desktop: sticky sidebar */}
+      {/* Desktop: sidebar content (stickiness handled by CollegeListingLayout) */}
       <Paper
         variant="outlined"
         sx={{
           display: { xs: 'none', md: 'block' },
-          position: 'sticky',
-          top: 80,
-          maxHeight: 'calc(100vh - 100px)',
-          overflow: 'auto',
+          borderRadius: 2,
         }}
       >
         <SidebarContent

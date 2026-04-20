@@ -12,6 +12,7 @@ import type {
   DrawingSubmissionCommentWithAuthor,
   DrawingThreadView,
   DrawingThreadAttempt,
+  DrawingTag,
 } from '../../types';
 
 // ============================================================
@@ -372,6 +373,7 @@ export async function getDrawingReviewQueue(
   filters?: {
     status?: string | string[];
     category?: string;
+    tagSlugs?: string[];
     student_id?: string;
     limit?: number;
     offset?: number;
@@ -379,6 +381,23 @@ export async function getDrawingReviewQueue(
   client?: TypedSupabaseClient
 ): Promise<DrawingSubmissionWithDetails[]> {
   const supabase = client || getSupabaseAdminClient();
+
+  // Pre-resolve tag filters to a set of submission_ids.
+  let tagRestrictedIds: string[] | null = null;
+  if (filters?.tagSlugs && filters.tagSlugs.length > 0) {
+    const { data: tagRows } = await supabase
+      .from('drawing_tags' as any)
+      .select('id')
+      .in('slug', filters.tagSlugs);
+    const tagIds = (tagRows || []).map((t: any) => t.id);
+    if (tagIds.length === 0) return [];
+    const { data: links } = await supabase
+      .from('drawing_submission_tags' as any)
+      .select('submission_id')
+      .in('tag_id', tagIds);
+    tagRestrictedIds = [...new Set((links || []).map((l: any) => l.submission_id))];
+    if (tagRestrictedIds.length === 0) return [];
+  }
 
   let query = supabase
     .from('drawing_submissions' as any)
@@ -393,6 +412,7 @@ export async function getDrawingReviewQueue(
   }
 
   if (filters?.student_id) query = query.eq('student_id', filters.student_id);
+  if (tagRestrictedIds) query = query.in('id', tagRestrictedIds);
 
   const limit = filters?.limit || 50;
   const offset = filters?.offset || 0;
@@ -403,29 +423,146 @@ export async function getDrawingReviewQueue(
 
   let results = (data as unknown as DrawingSubmissionWithDetails[]) || [];
 
-  // Filter by category if specified (requires joining through question)
+  // Legacy category filter still supported (via question.category) for compatibility.
   if (filters?.category) {
     results = results.filter((s) => s.question?.category === filters.category);
   }
 
-  // Enrich with thread info
   if (results.length > 0) {
-    const questionIds = results.filter(s => s.question?.id).map(s => s.question!.id);
+    const ids = results.map((s) => s.id);
+
+    // Thread info
+    const questionIds = results.filter((s) => s.question?.id).map((s) => s.question!.id);
+    let threadMap: Map<string, any> = new Map();
     if (questionIds.length > 0) {
       const { data: threads } = await supabase
         .from('drawing_thread_status' as any)
         .select('*')
         .in('question_id', questionIds);
-
-      const threadMap = new Map((threads || []).map((t: any) => [`${t.student_id}_${t.question_id}`, t]));
-      results = results.map(s => ({
-        ...s,
-        thread_info: s.question ? threadMap.get(`${s.student_id}_${s.question.id}`) || null : null,
-      }));
+      threadMap = new Map((threads || []).map((t: any) => [`${t.student_id}_${t.question_id}`, t]));
     }
+
+    // Tags
+    const { data: tagLinks } = await supabase
+      .from('drawing_submission_tags' as any)
+      .select('submission_id, tag:drawing_tags(*)')
+      .in('submission_id', ids);
+
+    const tagsBySubmission: Record<string, DrawingTag[]> = {};
+    for (const link of (tagLinks || []) as any[]) {
+      const sid = link.submission_id;
+      if (!tagsBySubmission[sid]) tagsBySubmission[sid] = [];
+      if (link.tag) tagsBySubmission[sid].push(link.tag as DrawingTag);
+    }
+
+    results = results.map((s) => ({
+      ...s,
+      thread_info: s.question ? threadMap.get(`${s.student_id}_${s.question.id}`) || null : null,
+      tags: tagsBySubmission[s.id] || [],
+    }));
   }
 
   return results;
+}
+
+// ============================================================
+// Drawing Tags
+// ============================================================
+
+function slugifyTagLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export async function listDrawingTags(
+  client?: TypedSupabaseClient
+): Promise<DrawingTag[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('drawing_tags' as any)
+    .select('*')
+    .order('is_seed', { ascending: false })
+    .order('label', { ascending: true });
+  if (error) throw error;
+  return (data as DrawingTag[]) || [];
+}
+
+/**
+ * Upsert a tag by slug. Creates the tag if it doesn't exist.
+ */
+export async function upsertDrawingTag(
+  label: string,
+  createdBy: string | null,
+  client?: TypedSupabaseClient
+): Promise<DrawingTag> {
+  const supabase = client || getSupabaseAdminClient();
+  const slug = slugifyTagLabel(label);
+  if (!slug) throw new Error('Tag label cannot be empty');
+
+  // Try existing first
+  const { data: existing } = await supabase
+    .from('drawing_tags' as any)
+    .select('*')
+    .eq('slug', slug)
+    .single();
+  if (existing) return existing as DrawingTag;
+
+  const { data, error } = await supabase
+    .from('drawing_tags' as any)
+    .insert({ slug, label, is_seed: false, created_by: createdBy })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as DrawingTag;
+}
+
+/**
+ * Replace the tag set for a submission. Accepts a list of tag slugs AND/OR
+ * free-form labels; labels that don't match an existing slug are created.
+ */
+export async function setSubmissionTags(
+  submissionId: string,
+  labels: string[],
+  createdBy: string | null,
+  client?: TypedSupabaseClient
+): Promise<DrawingTag[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // Resolve / create each label
+  const tags: DrawingTag[] = [];
+  for (const rawLabel of labels) {
+    const label = rawLabel.trim();
+    if (!label) continue;
+    const tag = await upsertDrawingTag(label, createdBy, supabase);
+    tags.push(tag);
+  }
+
+  // Replace link set
+  await supabase.from('drawing_submission_tags' as any).delete().eq('submission_id', submissionId);
+
+  if (tags.length > 0) {
+    await supabase.from('drawing_submission_tags' as any).insert(
+      tags.map((t) => ({ submission_id: submissionId, tag_id: t.id }))
+    );
+  }
+
+  return tags;
+}
+
+export async function getSubmissionTags(
+  submissionId: string,
+  client?: TypedSupabaseClient
+): Promise<DrawingTag[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('drawing_submission_tags' as any)
+    .select('tag:drawing_tags(*)')
+    .eq('submission_id', submissionId);
+  if (error) throw error;
+  return ((data || []) as any[]).map((row: any) => row.tag as DrawingTag).filter(Boolean);
 }
 
 export async function saveDrawingReview(
@@ -648,6 +785,12 @@ export async function saveDrawingReviewWithAction(
     corrected_image_url?: string | null;
     ai_overlay_annotations?: Array<{ area: string; label: string; severity: string }> | null;
     tutor_resources?: Array<{ type: string; url: string; title: string }>;
+    /**
+     * Whether this submission should appear in the unified gallery. Undefined
+     * means "use default": default is ON when the teacher provides both a
+     * rating and written feedback. Explicit true/false overrides the default.
+     */
+    is_gallery_visible?: boolean;
   },
   action: 'redo' | 'complete',
   client?: TypedSupabaseClient
@@ -655,6 +798,14 @@ export async function saveDrawingReviewWithAction(
   const supabase = client || getSupabaseAdminClient();
 
   const submissionStatus = action === 'redo' ? 'redo' : 'completed';
+
+  // Default-on gallery visibility: if the teacher gave both a rating and
+  // written feedback, the submission is learning material by default. The
+  // teacher can flip it off explicitly via the "Show in Gallery" toggle.
+  const hasRating = review.tutor_rating !== null && review.tutor_rating !== undefined && review.tutor_rating > 0;
+  const hasFeedback = !!(review.tutor_feedback && review.tutor_feedback.trim().length > 0);
+  const defaultVisible = hasRating && hasFeedback;
+  const visibility = review.is_gallery_visible === undefined ? defaultVisible : review.is_gallery_visible;
 
   const { data: submission, error } = await supabase
     .from('drawing_submissions' as any)
@@ -666,6 +817,7 @@ export async function saveDrawingReviewWithAction(
       ai_overlay_annotations: review.ai_overlay_annotations || null,
       tutor_resources: review.tutor_resources || [],
       status: submissionStatus,
+      is_gallery_visible: visibility,
       reviewed_at: new Date().toISOString(),
     })
     .eq('id', submissionId)

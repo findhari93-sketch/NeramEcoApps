@@ -3,5 +3,23 @@
     "context7@claude-plugins-official": true,
     "code-review@claude-plugins-official": true,
     "github@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(tail:*)",
+      "Bash(sleep:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(pnpm:*)",
+      "Bash(npm:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)"
+    ]
   }
 }

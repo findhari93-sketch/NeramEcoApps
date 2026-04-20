@@ -3889,7 +3889,7 @@ export type Database = {
           corrected_image_url: string | null
           homework_id: string | null
           id: string
-          is_gallery_published: boolean | null
+          is_gallery_visible: boolean | null
           original_image_url: string
           question_id: string | null
           reviewed_at: string | null
@@ -3915,7 +3915,7 @@ export type Database = {
           corrected_image_url?: string | null
           homework_id?: string | null
           id?: string
-          is_gallery_published?: boolean | null
+          is_gallery_visible?: boolean | null
           original_image_url: string
           question_id?: string | null
           reviewed_at?: string | null
@@ -3941,7 +3941,7 @@ export type Database = {
           corrected_image_url?: string | null
           homework_id?: string | null
           id?: string
-          is_gallery_published?: boolean | null
+          is_gallery_visible?: boolean | null
           original_image_url?: string
           question_id?: string | null
           reviewed_at?: string | null

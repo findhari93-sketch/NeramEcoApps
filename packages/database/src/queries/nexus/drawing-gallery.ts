@@ -1,6 +1,6 @@
 // @ts-nocheck — drawing tables not yet in generated Supabase types; regenerate with pnpm supabase:gen:types
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
-import type { GalleryPost, GalleryReactionType, DrawingHomework, DrawingHomeworkWithStatus } from '../../types';
+import type { GalleryPost, GalleryReactionType, DrawingHomework, DrawingHomeworkWithStatus, DrawingTag } from '../../types';
 
 // ============================================================
 // Gallery Feed
@@ -8,19 +8,39 @@ import type { GalleryPost, GalleryReactionType, DrawingHomework, DrawingHomework
 
 export async function getGalleryFeed(
   userId: string,
-  filters?: { category?: string; limit?: number; offset?: number; hasReference?: boolean },
+  filters?: { tagSlugs?: string[]; limit?: number; offset?: number },
   client?: TypedSupabaseClient
 ): Promise<GalleryPost[]> {
   const supabase = client || getSupabaseAdminClient();
 
+  // If tags are requested, resolve them first so we can restrict submission_ids.
+  let tagRestrictedIds: string[] | null = null;
+  if (filters?.tagSlugs && filters.tagSlugs.length > 0) {
+    const { data: tagRows } = await supabase
+      .from('drawing_tags' as any)
+      .select('id, slug')
+      .in('slug', filters.tagSlugs);
+    const tagIds = (tagRows || []).map((t: any) => t.id);
+    if (tagIds.length === 0) return [];
+
+    const { data: links } = await supabase
+      .from('drawing_submission_tags' as any)
+      .select('submission_id')
+      .in('tag_id', tagIds);
+    tagRestrictedIds = [...new Set((links || []).map((l: any) => l.submission_id))];
+    if (tagRestrictedIds.length === 0) return [];
+  }
+
   let query = supabase
     .from('drawing_submissions' as any)
     .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
-    .eq('is_gallery_published', true)
+    .eq('is_gallery_visible', true)
+    .not('tutor_feedback', 'is', null)
+    .not('tutor_rating', 'is', null)
     .order('reviewed_at', { ascending: false });
 
-  if (filters?.hasReference) {
-    query = query.not('corrected_image_url', 'is', null);
+  if (tagRestrictedIds) {
+    query = query.in('id', tagRestrictedIds);
   }
 
   const limit = filters?.limit || 20;
@@ -34,26 +54,36 @@ export async function getGalleryFeed(
 
   const subIds = submissions.map((s: any) => s.id);
 
-  // Get reaction counts
+  // Batch-fetch tags for these submissions
+  const { data: tagLinks } = await supabase
+    .from('drawing_submission_tags' as any)
+    .select('submission_id, tag:drawing_tags(*)')
+    .in('submission_id', subIds);
+
+  const tagsBySubmission: Record<string, DrawingTag[]> = {};
+  for (const link of (tagLinks || []) as any[]) {
+    const sid = link.submission_id;
+    if (!tagsBySubmission[sid]) tagsBySubmission[sid] = [];
+    if (link.tag) tagsBySubmission[sid].push(link.tag as DrawingTag);
+  }
+
+  // Reactions and comments (unchanged)
   const { data: reactions } = await supabase
     .from('drawing_gallery_reactions' as any)
     .select('submission_id, reaction_type')
     .in('submission_id', subIds);
 
-  // Get user's own reactions
   const { data: userReactions } = await supabase
     .from('drawing_gallery_reactions' as any)
     .select('submission_id, reaction_type')
     .eq('user_id', userId)
     .in('submission_id', subIds);
 
-  // Get comment counts
   const { data: comments } = await supabase
     .from('drawing_submission_comments' as any)
     .select('submission_id')
     .in('submission_id', subIds);
 
-  // Build maps
   const reactionCounts: Record<string, Record<string, number>> = {};
   for (const r of reactions || []) {
     const key = (r as any).submission_id;
@@ -74,14 +104,9 @@ export async function getGalleryFeed(
     commentCounts[key] = (commentCounts[key] || 0) + 1;
   }
 
-  // Filter by category if needed
-  let results = submissions as any[];
-  if (filters?.category) {
-    results = results.filter((s: any) => s.question?.category === filters.category);
-  }
-
-  return results.map((s: any) => ({
+  return (submissions as any[]).map((s: any) => ({
     ...s,
+    tags: tagsBySubmission[s.id] || [],
     reactions: {
       heart: reactionCounts[s.id]?.heart || 0,
       clap: reactionCounts[s.id]?.clap || 0,
@@ -102,7 +127,6 @@ export async function toggleGalleryReaction(
 ): Promise<{ added: boolean }> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Check if exists
   const { data: existing } = await supabase
     .from('drawing_gallery_reactions' as any)
     .select('id')
@@ -124,17 +148,25 @@ export async function toggleGalleryReaction(
   return { added: true };
 }
 
-export async function publishToGallery(
+/**
+ * Toggle whether a submission shows in the unified gallery.
+ * Only flips the visibility flag — the review lifecycle `status` is untouched,
+ * so the submission remains in its Completed / Reviewed / Redo bucket.
+ */
+export async function setGalleryVisibility(
   submissionId: string,
-  publish: boolean,
+  visible: boolean,
   client?: TypedSupabaseClient
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
   await supabase
     .from('drawing_submissions' as any)
-    .update({ is_gallery_published: publish, status: publish ? 'published' : 'completed' })
+    .update({ is_gallery_visible: visible })
     .eq('id', submissionId);
 }
+
+// Backwards-compatible alias; kept so no caller breaks during the rollout.
+export const publishToGallery = setGalleryVisibility;
 
 // ============================================================
 // Drawing Homework
@@ -169,7 +201,6 @@ export async function getDrawingHomeworkList(
   const { data: homework, error } = await query;
   if (error) throw error;
 
-  // For students, filter to assigned homework
   let filtered = homework || [];
   if (role === 'student') {
     filtered = filtered.filter((hw: any) =>
@@ -177,7 +208,6 @@ export async function getDrawingHomeworkList(
     );
   }
 
-  // Get submission counts per homework
   const hwIds = filtered.map((hw: any) => hw.id);
   const { data: submissions } = await supabase
     .from('drawing_submissions' as any)

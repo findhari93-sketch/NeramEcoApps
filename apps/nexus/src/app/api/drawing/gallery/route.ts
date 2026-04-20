@@ -11,11 +11,15 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const params = request.nextUrl.searchParams;
+    const tagsParam = params.get('tags');
+    const tagSlugs = tagsParam
+      ? tagsParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
     const posts = await getGalleryFeed(user.id, {
-      category: params.get('category') || undefined,
+      tagSlugs,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 12,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,
-      hasReference: params.get('hasReference') === 'true',
     });
     return NextResponse.json({ posts });
   } catch (err) {
