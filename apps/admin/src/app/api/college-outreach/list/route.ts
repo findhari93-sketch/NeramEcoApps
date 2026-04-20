@@ -1,30 +1,29 @@
 // @ts-nocheck
-// New outreach columns (contact_status, last_outreach_at, outreach_count) are not in
-// the generated Supabase types yet. Using @ts-nocheck matches the pattern in other
-// marketing queries.
+// Outreach tracking columns (contact_status, last_outreach_at, outreach_count)
+// are not in the generated Supabase types yet. Matches the @ts-nocheck
+// convention used across other marketing/admin queries.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
-import { getStaffSessionOptional } from '@/lib/admin/staff-auth';
+import { getSupabaseAdminClient } from '@neram/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const session = getStaffSessionOptional(req);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   const url = new URL(req.url);
   const state = url.searchParams.get('state');
   const tier = url.searchParams.get('tier');
   const status = url.searchParams.get('status');
   const search = url.searchParams.get('q');
 
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
   let query = supabase
     .from('colleges')
     .select(
-      'id, name, slug, state, state_slug, city, type, neram_tier, coa_approved, naac_grade, admissions_email, email, contact_status, last_outreach_at, outreach_count, claimed, verified, data_completeness, created_at',
+      'id, name, slug, state, state_slug, city, type, neram_tier, coa_approved, naac_grade, ' +
+        'established_year, total_barch_seats, annual_fee_approx, affiliated_university, ' +
+        'highlights, data_completeness, email, admissions_email, ' +
+        'contact_status, last_outreach_at, outreach_count, claimed, verified, created_at',
     )
     .order('name', { ascending: true });
 

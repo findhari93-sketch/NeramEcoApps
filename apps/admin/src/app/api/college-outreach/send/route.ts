@@ -1,12 +1,12 @@
 // @ts-nocheck
-// The college_outreach_log table and new colleges.contact_status/last_outreach_at/outreach_count
-// columns were added in migration 20260418_college_outreach.sql. Generated Supabase types
-// have not been regenerated to include them, so this route uses implicit `any` for DB calls.
-// Runtime behavior is validated against the DB schema, not the TS types.
+// Sends a first-touch outreach email to a college via Resend and writes to
+// college_outreach_log. Admin app doesn't currently do server-side MSAL token
+// verification on API routes (matches the existing pattern). Staff identity
+// comes from headers passed by the client, which is already authenticated
+// via useMicrosoftAuth() in the (dashboard) layout.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
-import { getStaffSessionOptional } from '@/lib/admin/staff-auth';
+import { getSupabaseAdminClient } from '@neram/database';
 import { renderOutreachEmail, getRecipientEmail, type SubjectVariant } from '@/lib/college-outreach/templates';
 import { sendOutreachEmail } from '@/lib/college-outreach/send';
 
@@ -25,29 +25,11 @@ interface RequestBody {
   override_subject?: string;
   force?: boolean;
   include_bcc?: boolean;
-}
-
-function originOk(req: NextRequest): boolean {
-  const expected = process.env.NEXT_PUBLIC_MARKETING_URL;
-  if (!expected) return true; // skip check if not configured (e.g., local dev)
-  const origin = req.headers.get('origin');
-  if (!origin) return true; // Next.js may omit origin on same-origin fetches
-  try {
-    return new URL(origin).origin === new URL(expected).origin;
-  } catch {
-    return false;
-  }
+  staff_name?: string;
+  staff_email?: string;
 }
 
 export async function POST(req: NextRequest) {
-  const session = getStaffSessionOptional(req);
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (!originOk(req)) {
-    return NextResponse.json({ error: 'Forbidden origin' }, { status: 403 });
-  }
-
   let body: RequestBody;
   try {
     body = (await req.json()) as RequestBody;
@@ -58,13 +40,17 @@ export async function POST(req: NextRequest) {
   if (!body.college_id) {
     return NextResponse.json({ error: 'college_id is required' }, { status: 400 });
   }
+
+  const senderName = (body.staff_name || req.headers.get('x-staff-name') || 'Neram Classes Team').trim();
+  const senderEmail = (body.staff_email || req.headers.get('x-staff-email') || '').trim() || null;
+
   const variant = body.template_variant ?? 'first_touch_v1';
   const subjectVariant = (body.subject_variant ?? 1) as SubjectVariant;
   const previewOnly = body.preview_only === true;
-  const includeBcc = body.include_bcc !== false; // default ON
+  const includeBcc = body.include_bcc !== false;
   const force = body.force === true;
 
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
   const { data: college, error: collegeError } = await supabase
     .from('colleges')
     .select(
@@ -89,7 +75,7 @@ export async function POST(req: NextRequest) {
     variant,
     subjectVariant,
     college: college as any,
-    senderName: session.name,
+    senderName,
   });
 
   const subject = body.override_subject?.trim() || rendered.subject;
@@ -124,16 +110,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Send via Resend
   const sendResult = await sendOutreachEmail({
     to: recipient,
-    bcc: bcc,
+    bcc,
     subject,
     html: rendered.html,
     text: rendered.text,
   });
 
-  // Insert log row regardless of success (capture failures)
   const { data: logRow, error: logErr } = await supabase
     .from('college_outreach_log')
     .insert({
@@ -148,8 +132,8 @@ export async function POST(req: NextRequest) {
       resend_message_id: sendResult.messageId ?? null,
       status: sendResult.success ? 'sent' : 'failed',
       error_message: sendResult.error ?? null,
-      sent_by_name: session.name,
-      sent_by_email: session.email,
+      sent_by_name: senderName,
+      sent_by_email: senderEmail,
     })
     .select('id')
     .single();
@@ -165,8 +149,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Conditional status transition: only move never_contacted -> emailed_v1.
-  // Do NOT regress replied / engaged / claimed / bounced / opted_out / emailed_v1.
   const currentStatus = (college as any).contact_status as string;
   const nextStatus = currentStatus === 'never_contacted' ? 'emailed_v1' : currentStatus;
   const nextOutreachCount = ((college as any).outreach_count ?? 0) + 1;
@@ -185,10 +167,7 @@ export async function POST(req: NextRequest) {
   const newContactStatus = refreshed?.contact_status ?? nextStatus;
   const newOutreachCount = refreshed?.outreach_count ?? nextOutreachCount;
 
-  if (logErr) {
-    // Log insert error is surfaced but doesn't block success
-    console.error('[outreach] failed to insert outreach log row:', logErr);
-  }
+  if (logErr) console.error('[college-outreach] failed to insert outreach log row:', logErr);
 
   return NextResponse.json({
     success: true,

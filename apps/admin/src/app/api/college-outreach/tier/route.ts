@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
-import { getStaffSessionOptional } from '@/lib/admin/staff-auth';
+import { getSupabaseAdminClient } from '@neram/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,9 +9,6 @@ const VALID_TIERS = ['free', 'silver', 'gold', 'platinum'] as const;
 type Tier = (typeof VALID_TIERS)[number];
 
 export async function PATCH(req: NextRequest) {
-  const session = getStaffSessionOptional(req);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   let body: { college_id?: string; tier?: Tier; tier_amount?: number };
   try {
     body = await req.json();
@@ -25,7 +21,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: `tier must be one of ${VALID_TIERS.join(', ')}` }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
   const updates: Record<string, unknown> = {
     neram_tier: body.tier,
     tier_start_date: new Date().toISOString().slice(0, 10),
@@ -41,5 +37,5 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true, college: data, updated_by: session.email });
+  return NextResponse.json({ success: true, college: data });
 }

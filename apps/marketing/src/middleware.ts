@@ -14,11 +14,11 @@ export default createMiddleware({
 
 export const config = {
   // Match only internationalized pathnames
-  // Excludes: api, sso, signout, thank-you, admin (staff tools), college-dashboard,
+  // Excludes: api, sso, signout, thank-you, college-dashboard (college admin portal),
   // Next.js internals, and anything with a file extension.
   matcher: [
     '/',
     '/(en|ta|hi|kn|ml)/:path*',
-    '/((?!api|sso|signout|thank-you|admin|college-dashboard|_next|_vercel|.*\\..*).*)',
+    '/((?!api|sso|signout|thank-you|college-dashboard|_next|_vercel|.*\\..*).*)',
   ],
 };

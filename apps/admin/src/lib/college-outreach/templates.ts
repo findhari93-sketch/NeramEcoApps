@@ -1,4 +1,4 @@
-import type { CollegeDetail } from '@/lib/college-hub/types';
+import type { CollegeOutreachRow } from './types';
 
 export type OutreachTemplateVariant = 'first_touch_v1';
 export type SubjectVariant = 1 | 2 | 3;
@@ -9,29 +9,31 @@ interface RenderResult {
   text: string;
 }
 
+type CollegeInput = Pick<
+  CollegeOutreachRow,
+  | 'name'
+  | 'slug'
+  | 'state_slug'
+  | 'city'
+  | 'established_year'
+  | 'naac_grade'
+  | 'total_barch_seats'
+  | 'annual_fee_approx'
+  | 'affiliated_university'
+  | 'highlights'
+  | 'data_completeness'
+>;
+
 interface RenderOpts {
   variant: OutreachTemplateVariant;
   subjectVariant?: SubjectVariant;
-  college: Pick<
-    CollegeDetail,
-    | 'name'
-    | 'slug'
-    | 'state_slug'
-    | 'city'
-    | 'established_year'
-    | 'naac_grade'
-    | 'total_barch_seats'
-    | 'annual_fee_approx'
-    | 'affiliated_university'
-    | 'highlights'
-    | 'data_completeness'
-  >;
+  college: CollegeInput;
   senderName: string;
 }
 
 const SITE_URL = 'https://neramclasses.com';
 
-export function getCollegePageUrl(college: Pick<CollegeDetail, 'state_slug' | 'slug'>): string {
+export function getCollegePageUrl(college: Pick<CollegeOutreachRow, 'state_slug' | 'slug'>): string {
   const state = college.state_slug ?? 'india';
   return `${SITE_URL}/en/colleges/${state}/${college.slug}`;
 }
@@ -42,7 +44,7 @@ function formatFeeInr(value: number | null | undefined): string | null {
   return `Rs ${Math.round(value / 1000)},000 per year`;
 }
 
-function buildHighlightsBullets(c: RenderOpts['college']): string[] {
+function buildHighlightsBullets(c: CollegeInput): string[] {
   const stored = (c.highlights ?? []).filter((h): h is string => typeof h === 'string' && h.trim().length > 0);
   if (stored.length >= 2) return stored.slice(0, 5);
 
@@ -157,7 +159,7 @@ export function renderOutreachEmail(opts: RenderOpts): RenderResult {
     'info@neramclasses.com',
     'https://neramclasses.com/colleges',
   ]
-    .filter((line, i, arr) => !(line === '' && arr[i - 1] === '')) // collapse double blanks when completenessLine is empty
+    .filter((line, i, arr) => !(line === '' && arr[i - 1] === ''))
     .join('\n');
 
   const name = escapeHtml(college.name);
@@ -228,8 +230,8 @@ Neram Classes<br>
 }
 
 export function getRecipientEmail(
-  college: Pick<CollegeDetail, 'admissions_email' | 'email'>,
-  override?: string | null
+  college: Pick<CollegeOutreachRow, 'admissions_email' | 'email'>,
+  override?: string | null,
 ): string | null {
   if (override && override.trim()) return override.trim();
   if (college.admissions_email && college.admissions_email.trim()) return college.admissions_email.trim();

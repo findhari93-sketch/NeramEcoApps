@@ -1,45 +1,49 @@
 # College Hub: Manual Testing Walkthrough
 
-This document walks you through testing the entire College Hub ecosystem on **staging** end-to-end. All testing should be done on staging. Never use production for testing, real users are on it.
+End-to-end manual test guide for the three user roles in the Neram College Hub. Always test on **staging**. Never use production for testing, real users are on it.
+
+## Three user roles and where they live
+
+| Role | Login URL | Auth | App |
+|---|---|---|---|
+| **Student (public)** | no login | Firebase optional | marketing (`neramclasses.com`) |
+| **College admin** | `/college-dashboard/login` | Supabase email + password | marketing |
+| **Neram staff** | `/login` (Microsoft Entra ID) | MSAL (Microsoft 365 account) | admin (`admin.neramclasses.com`) |
 
 ## Test environment URLs
 
 | Surface | URL |
 |---|---|
-| Public marketing + college pages | https://staging.neramclasses.com |
-| A specific college page (example) | https://staging.neramclasses.com/en/colleges/tamil-nadu/measi-academy-architecture |
-| College admin login | https://staging.neramclasses.com/college-dashboard/login |
-| Neram staff login (for outreach) | https://staging.neramclasses.com/admin/staff-login |
-| Neram staff colleges list | https://staging.neramclasses.com/admin/colleges |
+| Public marketing site | https://staging.neramclasses.com |
+| Specific college page (example) | https://staging.neramclasses.com/en/colleges/tamil-nadu/measi-academy-architecture |
+| College admin dashboard | https://staging.neramclasses.com/college-dashboard/login |
+| Neram staff admin app | https://staging-admin.neramclasses.com |
+| Neram staff college outreach page | https://staging-admin.neramclasses.com/college-outreach |
 
 ## Test accounts
 
 ### Neram staff (you)
 
-- Login URL: `/admin/staff-login`
-- Staff secret: the value of `NERAM_STAFF_ADMIN_SECRET` in Vercel marketing preview env (ask Hari)
-- Your name and email: whatever you want (this shows up as the sender in outreach emails and in the outreach log)
-- Cookie is 7 days
+Sign into `staging-admin.neramclasses.com` with your Microsoft 365 account (the same one you use for everything else internally). After login you land on the admin dashboard. Click **College Hub → Outreach** in the sidebar to open the outreach page.
 
-### Test college admin (pre-created on staging)
+### Test college admin (pre-seeded on staging)
 
 | Field | Value |
 |---|---|
-| Login URL | `/college-dashboard/login` |
+| Login URL | `https://staging.neramclasses.com/college-dashboard/login` |
 | Email | `testcollege@neram.test` |
 | Password | `MeasiTest2026!` |
-| Linked college | Measi Academy of Architecture (Chennai) |
-| Current tier | `free` (upgrade it to `gold` from `/admin/colleges` to test phone unmasking) |
+| Linked college | Measi Academy of Architecture (Chennai, free tier by default) |
 
 ### Test student
 
-Use any browser incognito window. No student account needed for the lead capture flow. The "I'm Interested" form is open to anyone.
+Use any browser incognito window. No student account needed for the lead capture flow.
 
-## The three roles, and how they connect
+## How the three roles connect
 
 ```
            STUDENT                    COLLEGE ADMIN                NERAM STAFF (you)
-  (public, no login needed)    (testcollege@neram.test)        (/admin/staff-login)
+  (public, no login needed)    (testcollege@neram.test)      (admin.neramclasses.com)
              |                           |                            |
              | 1. clicks "interested"    |                            |
              |    on a college page      |                            |
@@ -51,24 +55,23 @@ Use any browser incognito window. No student account needed for the lead capture
              |                           |                            |
              |                    3. opens /college-dashboard        |
              |                       sees new lead in table          |
-             |                       marks status as "contacted"     |
+             |                       marks status "contacted"        |
              |                           |                            |
-             |                           |                     4. logs into /admin/staff-login
-             |                           |                        sees all 32 TN colleges
+             |                           |                     4. opens admin app
+             |                           |                        /college-outreach
              |                           |                        picks a college
-             |                           |                        opens college page
-             |                           |                        clicks "Send outreach" FAB
-             |                           |                        college gets first-touch email
+             |                           |                        clicks "Outreach"
+             |                           |                        preview + send email
              |                           |                        contact_status = emailed_v1
              |                           |                            |
-             |                           |                     5. can upgrade college tier
-             |                           |                        from /admin/colleges
+             |                           |                     5. clicks "Tier"
+             |                           |                        upgrades college to gold
              |                           |                        (free -> gold unmasks phones)
 ```
 
 ---
 
-## Scenario 1: Student submits an "interest" lead (end to end)
+## Scenario 1: Student submits an "interest" lead
 
 **As a student (incognito browser):**
 
@@ -77,17 +80,15 @@ Use any browser incognito window. No student account needed for the lead capture
 3. Find and click the "I'm Interested" button
 4. In the modal:
    - Name: `Test Student`
-   - Phone: `9999999999` (use any valid-looking 10-digit number)
+   - Phone: `9999999999`
    - Email: your own gmail (optional)
    - NATA score: 120 (optional)
    - City: Chennai
    - Tick the consent checkbox
 5. Click Submit
-6. Expect: success message in the modal
+6. Expect: success message
 
-**Verify in Supabase (as Hari):**
-
-Run this in the staging SQL editor (or via MCP):
+**Verify in Supabase (via MCP or SQL editor):**
 
 ```sql
 SELECT id, name, phone, email, city, nata_score, status, created_at
@@ -97,34 +98,31 @@ ORDER BY created_at DESC
 LIMIT 3;
 ```
 
-You should see the lead you just submitted, status = `new`.
+Expect: one row with status = `new`.
 
-**Verify email notification (Gmail):**
+**Verify email notification:**
 
-Check the Measi admissions inbox (or whatever email you seeded). If the college has `admissions_email` set, that inbox gets a "New student interest" email with the student details. The phone is masked because Measi is currently on `free` tier.
+Check the Measi admissions inbox (admin@measiarch.in if seeded, or override). Phone should be masked (e.g. `99XXXXXX99`) because Measi is on free tier.
 
 ---
 
-## Scenario 2: College admin sees and manages leads
+## Scenario 2: College admin views + manages leads
 
-**Log in as the test college:**
+**Log in as test college (fresh incognito):**
 
-1. Open a fresh incognito or private window
-2. Go to https://staging.neramclasses.com/college-dashboard/login
-3. Email: `testcollege@neram.test`
-4. Password: `MeasiTest2026!`
-5. Click Sign in
+1. https://staging.neramclasses.com/college-dashboard/login
+2. Email: `testcollege@neram.test`
+3. Password: `MeasiTest2026!`
+4. Click Sign in
 
 **Verify:**
 
-- You land on the college dashboard home
-- Your college is "Measi Academy of Architecture"
-- Click "Leads" in the nav
-- You should see the lead from Scenario 1
-- Phone should be masked (e.g., `99XXXXXX99`) because Measi is on `free` tier
-- Change the status dropdown from "new" to "contacted"
+- Dashboard home shows "Measi Academy of Architecture"
+- Click **Leads** in the nav
+- The lead from Scenario 1 appears with masked phone (free tier)
+- Change status dropdown from "new" to "contacted"
 
-**Verify the status change:**
+**Verify in SQL:**
 
 ```sql
 SELECT status, updated_at FROM college_leads
@@ -136,40 +134,38 @@ Should show `contacted`.
 
 ---
 
-## Scenario 3: Neram staff sends outreach email to a college
+## Scenario 3: Neram staff sends outreach to a college
 
-**Log in as Neram staff (you):**
+**Log in as Neram staff:**
 
-1. Open another incognito window (or use your main browser)
-2. Go to https://staging.neramclasses.com/admin/staff-login
-3. Fill in:
-   - Your Name: `Hari`
-   - Your Email: `findhari93@gmail.com`
-   - Staff Secret: the value of `NERAM_STAFF_ADMIN_SECRET` from Vercel env
-4. Click Sign in
+1. Open https://staging-admin.neramclasses.com (no special secret, uses your MS 365 account)
+2. You land on the admin dashboard
+3. In the left sidebar, click **College Hub → Outreach**
 
-**Verify FAB visibility:**
+**Verify the outreach page:**
 
-1. Open https://staging.neramclasses.com/en/colleges/tamil-nadu/measi-academy-architecture
-2. You should see a dark floating button "Send outreach" in the bottom right
-3. In another incognito window (not logged in as staff), open the same URL
-4. The FAB should NOT appear
+1. Page title: "College Outreach"
+2. Stats chips at top show breakdown by status / tier
+3. Table rows for all 32 Tamil Nadu colleges
+4. Each row has two buttons: **Outreach** (blue, filled) and **Tier** (outlined)
 
 **Send an outreach email:**
 
-1. Click "Send outreach"
-2. Dialog opens with preview
-3. Override the recipient to your own email: `findhari93@gmail.com`
-4. Leave BCC checkbox ON
-5. Click "Send via Neram"
-6. Expect: toast at the bottom "Sent. Message id: ..."
+1. Find Measi Academy of Architecture in the table
+2. Click the **Outreach** button
+3. Dialog opens with preview (iframe showing the rendered email HTML)
+4. In the **Recipient email** field, replace with your own email (e.g. `findhari93@gmail.com`)
+5. Leave **BCC info@neramclasses.com** checked
+6. Click **Send via Neram**
+7. Expect: toast at bottom "Sent. Message id: ..."
+8. Dialog closes, table refreshes, Measi's contact status becomes "Emailed", outreach count becomes 1
 
-**Verify in your inbox:**
+**Verify email arrived:**
 
-- You should receive an email with subject like "Measi Academy of Architecture is featured on Neram College Hub..."
-- Check: bullets list (established year, NAAC, fees, seats) render correctly
-- Check: no literal `{{...}}` anywhere
-- Check: no em dashes or `--` in the text
+Check your inbox. You should receive a warm outreach email with Measi's details. Check:
+- No literal `{{...}}` anywhere
+- No em dashes (—) or double dashes (--)
+- Bullets list correctly populated (established year, NAAC if set, seats, fees)
 
 **Verify in Supabase:**
 
@@ -177,104 +173,99 @@ Should show `contacted`.
 SELECT contact_status, outreach_count, last_outreach_at
 FROM colleges WHERE slug = 'measi-academy-architecture';
 
-SELECT subject, sent_to, sent_bcc, status, resend_message_id, sent_by_email
+SELECT subject, sent_to, sent_bcc, status, resend_message_id, sent_by_name, sent_by_email
 FROM college_outreach_log
 ORDER BY sent_at DESC LIMIT 1;
 ```
 
-Should show: `contact_status = emailed_v1`, `outreach_count = 1`, log row with Resend id.
+Expect: `contact_status = emailed_v1`, `outreach_count = 1`, and a log row with Resend message id and your name/email as sender.
 
-**Verify duplicate-send guard:**
+**Duplicate-send guard:**
 
-1. Immediately click "Send outreach" again
-2. Click "Send via Neram"
-3. Expect: warning with "Send anyway" button (HTTP 409 internally)
-4. Click "Send anyway"
-5. Expect: second send succeeds, `outreach_count` becomes 2
+1. Click **Outreach** again immediately on the same college
+2. Click **Send via Neram**
+3. Expect: warning "Last outreach sent Xs ago. Pass force: true to override." with a "Send anyway" action
+4. Click **Send anyway**
+5. Second send succeeds, outreach_count becomes 2
 
 ---
 
-## Scenario 4: Neram staff upgrades a college from free to gold
+## Scenario 4: Upgrade a college tier (free -> gold)
 
-**As Neram staff:**
+**Still in admin app at /college-outreach:**
 
-1. Go to https://staging.neramclasses.com/admin/colleges
-2. Find Measi Academy in the table
-3. Current tier chip shows `free`
-4. Click the "Tier" button in the Actions column
-5. In the dialog, select "Gold (lead phone unmasked)"
-6. Leave amount blank
-7. Click Save
-8. Expect: table refreshes, tier chip now shows `gold`
+1. Find Measi Academy row
+2. Click the **Tier** button
+3. Dialog shows current tier
+4. Select **Gold (lead phone unmasked)**
+5. Leave amount blank
+6. Click **Save**
+7. Table refreshes, tier chip now shows `gold`
 
-**Verify phone unmasking for the college admin:**
+**Verify the college admin sees unmasked phones:**
 
-1. Switch back to the college-dashboard tab (still logged in as `testcollege@neram.test`)
+1. Switch back to college-dashboard tab (logged in as `testcollege@neram.test`)
 2. Refresh the Leads page
-3. The phone number for the Scenario 1 lead should now show fully (e.g., `9999999999` not `99XXXXXX99`)
-4. If a new lead comes in, the notification email will also include the full phone
+3. The lead phone from Scenario 1 should now show in full (`9999999999`, not masked)
 
-**Downgrade back to free (clean up):**
+**Downgrade back (cleanup):**
 
-Same dialog, choose Free, Save.
-
----
-
-## Scenario 5: Outlook mailto: fallback for outreach
-
-**As Neram staff:**
-
-1. Open a college page
-2. Click "Send outreach"
-3. Edit the recipient to your gmail
-4. In the dialog, instead of "Send via Neram", click "Open in Outlook"
-5. Expect: Outlook desktop opens (Windows) with subject and body pre-filled, BCC field set
-6. This path does NOT go through Resend, so no log row is created. Useful for one-off personal sends.
+Open the Tier dialog again, select **Free**, Save.
 
 ---
 
-## Quick QA checklist (go/no-go before promoting to prod)
+## Scenario 5: Outlook mailto fallback
 
-### Outreach feature
-- [ ] Staff login works at `/admin/staff-login`
-- [ ] FAB visible for staff on every college page
-- [ ] FAB hidden for non-staff visitors
-- [ ] Preview dialog shows rendered HTML and plain text
-- [ ] No literal `{{...}}` in rendered email
-- [ ] No em dashes or `--` in rendered text
-- [ ] Send via Resend delivers the email
-- [ ] `college_outreach_log` gets a row with `resend_message_id`
-- [ ] `colleges.contact_status` moves from `never_contacted` to `emailed_v1`
-- [ ] `outreach_count` increments by 1 on each send
+Instead of sending through our Resend account, send via your Outlook client manually. Useful when:
+- You want a more personal touch on a single send
+- Resend is down
+- You want the sent email to appear in your Outlook Sent folder
+
+1. Open the Outreach dialog for any college
+2. Edit recipient to your own email
+3. Click **Open in Outlook**
+4. Outlook desktop opens with subject and body pre-filled, BCC set
+5. This does NOT create a `college_outreach_log` row (no tracking). Use sparingly.
+
+---
+
+## Quick QA checklist
+
+### Outreach feature (admin app)
+- [ ] MS 365 login works at staging-admin.neramclasses.com
+- [ ] "College Hub → Outreach" link visible in sidebar
+- [ ] Table loads 32 TN colleges by default
+- [ ] Filters (state, tier, status, search) work
+- [ ] "Outreach" button opens preview dialog with rendered HTML
+- [ ] Preview has no `{{...}}` or em dashes
+- [ ] Send via Neram delivers email
+- [ ] `college_outreach_log` row created with Resend message id
+- [ ] `contact_status` moves from `never_contacted` to `emailed_v1`
+- [ ] `outreach_count` increments on each send
 - [ ] Duplicate-send within 30s returns 409, "Send anyway" works
-- [ ] Outlook mailto: opens Outlook with body pre-filled
-- [ ] BCC to info@neramclasses.com works when enabled
+- [ ] "Open in Outlook" opens mailto with body pre-filled
 
-### Lead capture feature
+### Tier management (admin app)
+- [ ] Tier dialog shows current tier
+- [ ] Changing tier updates table immediately
+- [ ] Downgrade back to free works
+- [ ] `tier_start_date` and `tier_end_date` set correctly in DB
+
+### Lead capture (marketing + college dashboard)
 - [ ] Student sees "I'm Interested" button on college pages
-- [ ] Modal form collects all fields with validation
 - [ ] Submitting creates a `college_leads` row
 - [ ] College admin sees the lead at `/college-dashboard/leads`
-- [ ] Phone is masked for free/silver tier colleges
-- [ ] Phone is fully visible for gold/platinum tier colleges
-- [ ] Lead status dropdown updates (new, contacted, qualified, dropped)
-- [ ] College receives an email notification about the new lead
+- [ ] Phone masked for free/silver tier, full for gold/platinum
+- [ ] Lead status dropdown updates
 
-### Staff admin feature
-- [ ] `/admin/colleges` lists all colleges (filterable by state, tier, status)
-- [ ] Stats chips at top update with filters
-- [ ] Tier button opens dialog, save updates `neram_tier`
-- [ ] Tier change reflects immediately in the table
-
-### Mobile (375px viewport)
-- [ ] College detail page usable on iPhone SE width (no horizontal scroll)
-- [ ] Outreach dialog renders as full-screen on mobile
-- [ ] Staff login form, buttons are at least 48px tall
-- [ ] Admin colleges table scrolls horizontally where needed but no page-level horizontal scroll
+### Marketing hygiene (public-facing)
+- [ ] No "Send outreach" button or any staff UI on college detail pages
+- [ ] No `/admin` routes exist on `neramclasses.com` or `staging.neramclasses.com`
+- [ ] `/college-dashboard/*` still works for college admins
 
 ---
 
-## How to create additional college admin accounts (for real colleges)
+## Creating additional college admin accounts
 
 When a real college wants dashboard access, run this on staging first (then production):
 
@@ -284,7 +275,7 @@ DECLARE
   new_user_id UUID := gen_random_uuid();
   target_college_id UUID;
 BEGIN
-  -- Change slug to match the target college
+  -- CHANGE this slug to match the target college
   SELECT id INTO target_college_id FROM colleges WHERE slug = 'measi-academy-architecture';
 
   INSERT INTO auth.users (
@@ -318,11 +309,11 @@ BEGIN
 END $$;
 ```
 
-Then email the college their email + temporary password, and tell them to log in at `/college-dashboard/login` and change the password from their profile.
+Then email the college their email + temporary password, and tell them to log in at `/college-dashboard/login`.
 
 ## If something breaks
 
-- Check Vercel logs for the marketing app (function logs show all API errors)
+- Check Vercel function logs for the admin app (at `admin.vercel.com`)
 - Check Resend dashboard for email delivery status (bounces, rejections)
 - Check `college_outreach_log.status` and `error_message` for failed sends
-- Check `supabase-staging` logs via the Supabase dashboard
+- Check Supabase staging logs via the Supabase dashboard

@@ -26,7 +26,6 @@ import TierGate from './TierGate';
 import ROICalculator from './ROICalculator';
 import LeadCaptureButton from './LeadCaptureButton';
 import CollegeYouTube from './CollegeYouTube';
-import SendOutreachButton from './admin/SendOutreachButton';
 import type { CollegeDetail, CollegeListItem, CollegeTier } from '@/lib/college-hub/types';
 
 const AintraChat = dynamic(() => import('./AintraChat'), { ssr: false });
@@ -428,9 +427,6 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
           </Box>
         )}
       </Container>
-
-      {/* Staff-only outreach button. Renders null for non-staff visitors. */}
-      <SendOutreachButton college={college} />
     </Box>
   );
 }

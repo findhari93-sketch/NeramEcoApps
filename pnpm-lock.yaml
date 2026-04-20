@@ -147,6 +147,9 @@ importers:
       recharts:
         specifier: ^3.8.1
         version: 3.8.1(@types/react@18.3.27)(react-dom@18.3.1)(react-is@19.2.3)(react@18.3.1)(redux@5.0.1)
+      resend:
+        specifier: ^2.1.0
+        version: 2.1.0
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
