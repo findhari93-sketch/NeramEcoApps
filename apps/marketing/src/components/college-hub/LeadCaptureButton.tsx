@@ -34,7 +34,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
   // so a parent submitting on a student's behalf can correct any values.
   useEffect(() => {
     if (!user) return;
-    if (user.displayName && !name) setName(user.displayName);
+    if (user.name && !name) setName(user.name);
     if (user.email && !email) setEmail(user.email);
     if (user.phone && !phone) {
       const digits = user.phone.replace(/\D/g, '');
@@ -63,7 +63,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
           nata_score: nataScore ? parseFloat(nataScore) : null,
           city: cityForSubmit,
           message: message || null,
-          firebase_uid: user?.uid ?? null,
+          firebase_uid: user?.id ?? null,
           consent_given: true,
         }),
       });
@@ -128,7 +128,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               onChange={(e) => setName(e.target.value)}
               fullWidth
               size="small"
-              autoFocus={!user?.displayName}
+              autoFocus={!user?.name}
             />
             <TextField
               label="Mobile number *"
@@ -138,7 +138,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               size="small"
               inputProps={{ inputMode: 'numeric' }}
               helperText="10-digit Indian mobile number"
-              autoFocus={Boolean(user?.displayName) && !phone}
+              autoFocus={Boolean(user?.name) && !phone}
             />
             <TextField
               label="Email (optional)"
@@ -192,7 +192,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
             />
             {user && (
               <Typography variant="caption" color="text.secondary">
-                Submitting as <strong>{user.email || user.displayName}</strong>. You can edit any field above.
+                Submitting as <strong>{user.email || user.name}</strong>. You can edit any field above.
               </Typography>
             )}
             {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
