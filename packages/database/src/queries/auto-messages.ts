@@ -76,6 +76,11 @@ export async function getPendingAutoMessages(
 
 /**
  * Get failed messages eligible for retry (retry_count < maxRetries, within 24h).
+ *
+ * Excludes rows whose `error_message` was tagged by `formatWhatsAppError()` as
+ * a permanent failure (WA_DEV_MODE, WA_TEMPLATE_PARAM_MISMATCH, WA_UNDELIVERABLE).
+ * Those won't fix themselves by retrying, so the cron skips them and waits for
+ * an admin to click Retry in the CRM after fixing the root cause.
  */
 export async function getFailedAutoMessages(
   maxRetries: number = 3,
@@ -93,6 +98,9 @@ export async function getFailedAutoMessages(
     .eq('delivery_status', 'failed')
     .lt('retry_count', maxRetries)
     .gte('created_at', oneDayAgo)
+    .not('error_message', 'ilike', 'WA_DEV_MODE%')
+    .not('error_message', 'ilike', 'WA_TEMPLATE_PARAM_MISMATCH%')
+    .not('error_message', 'ilike', 'WA_UNDELIVERABLE%')
     .order('created_at', { ascending: true })
     .limit(20);
 

@@ -10,7 +10,10 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import GalleryFeed from '@/components/drawings/GalleryFeed';
-import type { DrawingSubmissionWithDetails } from '@neram/database/types';
+import TagFilterBar from '@/components/drawings/TagFilterBar';
+import ViewModeToggle from '@/components/drawings/ViewModeToggle';
+import { useDrawingViewMode } from '@/hooks/useDrawingViewMode';
+import type { DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 
 const STATUS_TABS = [
   { value: 'submitted', label: 'Pending' },
@@ -35,6 +38,8 @@ export default function DrawingReviewsPage() {
   const [reviewedSubFilter, setReviewedSubFilter] = useState('all');
   const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [tagSlugs, setTagSlugs] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useDrawingViewMode();
 
   const handleDelete = async () => {
     if (!deleteDialogId) return;
@@ -65,7 +70,10 @@ export default function DrawingReviewsPage() {
       if (status === 'reviewed' && reviewedSubFilter === 'redo') fetchStatus = 'redo';
       else if (status === 'reviewed' && reviewedSubFilter === 'reviewed') fetchStatus = 'reviewed_only';
 
-      const res = await fetch(`/api/drawing/submissions/review-queue?status=${fetchStatus}`, {
+      const params = new URLSearchParams({ status: fetchStatus });
+      if (tagSlugs.length > 0) params.set('tags', tagSlugs.join(','));
+
+      const res = await fetch(`/api/drawing/submissions/review-queue?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -75,20 +83,23 @@ export default function DrawingReviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, status, reviewedSubFilter]);
+  }, [getToken, status, reviewedSubFilter, tagSlugs]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
+  const isCompact = viewMode === 'compact';
+
   return (
     <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, maxWidth: 900, mx: 'auto' }}>
-      <Typography variant="h6" fontWeight={700} gutterBottom>
-        Drawing Reviews
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+        <Typography variant="h6" fontWeight={700}>Drawing Reviews</Typography>
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      </Box>
 
       <Tabs
         value={status}
         onChange={(_, v) => { setStatus(v); setReviewedSubFilter('all'); }}
-        sx={{ mb: 2, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none' } }}
+        sx={{ mb: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none' } }}
       >
         {STATUS_TABS.map((t) => (
           <Tab key={t.value} value={t.value} label={t.label} />
@@ -97,7 +108,7 @@ export default function DrawingReviewsPage() {
 
       {/* Sub-filter chips for Reviewed tab */}
       {status === 'reviewed' && (
-        <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
           {REVIEWED_SUB_FILTERS.map((f) => (
             <Chip
               key={f.value}
@@ -112,9 +123,14 @@ export default function DrawingReviewsPage() {
         </Box>
       )}
 
+      {/* Tag filters apply to all tabs except Gallery (Gallery has its own filter bar inside GalleryFeed). */}
+      {status !== 'gallery' && (
+        <TagFilterBar selected={tagSlugs} onChange={setTagSlugs} />
+      )}
+
       {/* Gallery tab: render GalleryFeed in teacher mode */}
       {status === 'gallery' ? (
-        <GalleryFeed getToken={getToken} teacherMode={true} />
+        <GalleryFeed getToken={getToken} teacherMode={true} viewMode={viewMode} />
       ) : loading ? (
         Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={80} sx={{ mb: 1 }} />)
       ) : submissions.length === 0 ? (
@@ -124,67 +140,73 @@ export default function DrawingReviewsPage() {
           </Typography>
         </Box>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {submissions.map((s) => (
-            <Paper
-              key={s.id}
-              variant="outlined"
-              sx={{ p: 1.5, cursor: 'pointer', position: 'relative', '&:hover': { bgcolor: 'action.hover' } }}
-              onClick={() => router.push(`/teacher/drawing-reviews/${s.id}`)}
-            >
-              <IconButton
-                size="small"
-                color="error"
-                onClick={(e) => { e.stopPropagation(); setDeleteDialogId(s.id); }}
-                sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
-                aria-label="Delete submission"
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: isCompact ? 0.75 : 1.5 }}>
+          {submissions.map((s) => {
+            const thumbSize = isCompact ? 48 : 70;
+            const subTags = ((s as any).tags as DrawingTag[] | undefined) || [];
+            return (
+              <Paper
+                key={s.id}
+                variant="outlined"
+                sx={{ p: isCompact ? 1 : 1.5, cursor: 'pointer', position: 'relative', '&:hover': { bgcolor: 'action.hover' } }}
+                onClick={() => router.push(`/teacher/drawing-reviews/${s.id}`)}
               >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Box
-                  component="img"
-                  src={s.original_image_url}
-                  alt="Drawing"
-                  sx={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 1 }}
-                />
-                <Box sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                    <Avatar
-                      src={s.student?.avatar_url || undefined}
-                      sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
-                    >
-                      {s.student?.name?.charAt(0) || '?'}
-                    </Avatar>
-                    <Typography variant="body2" fontWeight={600}>{s.student?.name || 'Student'}</Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5, flexWrap: 'wrap' }}>
-                    {s.question && <CategoryBadge category={s.question.category} />}
-                    {(s as any).thread_info?.total_attempts > 1 && (
-                      <Chip
-                        label={`Attempt #${(s as any).attempt_number || (s as any).thread_info?.total_attempts}`}
-                        size="small"
-                        variant="outlined"
-                        sx={{ height: 20, fontSize: '0.65rem' }}
-                      />
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={(e) => { e.stopPropagation(); setDeleteDialogId(s.id); }}
+                  sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
+                  aria-label="Delete submission"
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+                <Box sx={{ display: 'flex', gap: isCompact ? 1 : 1.5 }}>
+                  <Box
+                    component="img"
+                    src={s.original_image_url}
+                    alt="Drawing"
+                    sx={{ width: thumbSize, height: thumbSize, objectFit: 'cover', borderRadius: 1, flexShrink: 0 }}
+                  />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                      <Avatar
+                        src={s.student?.avatar_url || undefined}
+                        sx={{ width: isCompact ? 20 : 24, height: isCompact ? 20 : 24, fontSize: '0.7rem' }}
+                      >
+                        {s.student?.name?.charAt(0) || '?'}
+                      </Avatar>
+                      <Typography variant="body2" fontWeight={600} noWrap>{s.student?.name || 'Student'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 0.5, mb: 0.25, flexWrap: 'wrap' }}>
+                      {!isCompact && s.question && <CategoryBadge category={s.question.category} />}
+                      {(s as any).thread_info?.total_attempts > 1 && (
+                        <Chip
+                          label={`Attempt #${(s as any).attempt_number || (s as any).thread_info?.total_attempts}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.65rem' }}
+                        />
+                      )}
+                      {s.tutor_rating && (
+                        <Chip label={`${'★'.repeat(s.tutor_rating)}`} size="small" color="success" sx={{ height: 20 }} />
+                      )}
+                      {!isCompact && subTags.slice(0, 3).map((t) => (
+                        <Chip key={t.id} label={t.label} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                      ))}
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: '0.8rem' }}>
+                      {s.question?.question_text || 'Free Practice'}
+                    </Typography>
+                    {!isCompact && (
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(s.submitted_at).toLocaleDateString()}
+                      </Typography>
                     )}
-                    {s.tutor_rating && (
-                      <Chip label={`${'★'.repeat(s.tutor_rating)}`} size="small" color="success" />
-                    )}
                   </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{
-                    display: '-webkit-box', WebkitLineClamp: 1,
-                    WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: '0.8rem',
-                  }}>
-                    {s.question?.question_text || 'Free Practice'}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(s.submitted_at).toLocaleDateString()}
-                  </Typography>
                 </Box>
-              </Box>
-            </Paper>
-          ))}
+              </Paper>
+            );
+          })}
         </Box>
       )}
 

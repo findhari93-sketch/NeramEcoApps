@@ -26,9 +26,16 @@ export async function GET(request: NextRequest) {
     if (rawStatus === 'reviewed') status = ['reviewed', 'redo'];
     else if (rawStatus === 'reviewed_only') status = 'reviewed';
     else status = rawStatus;
+
+    const tagsParam = params.get('tags');
+    const tagSlugs = tagsParam
+      ? tagsParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
     const filters = {
       status,
       category: params.get('category') || undefined,
+      tagSlugs,
       student_id: params.get('student_id') || undefined,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 50,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,

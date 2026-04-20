@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { saveDrawingReviewWithAction, recordGamificationEvent } from '@neram/database/queries/nexus';
+import { saveDrawingReviewWithAction, recordGamificationEvent, setSubmissionTags } from '@neram/database/queries/nexus';
 
 export async function PATCH(
   request: NextRequest,
@@ -31,7 +31,17 @@ export async function PATCH(
     const wasAlreadyReviewed = ['reviewed', 'redo', 'completed'].includes(currentSub?.status || '');
 
     const body = await request.json();
-    const { tutor_rating, tutor_feedback, reviewed_image_url, corrected_image_url, ai_overlay_annotations, tutor_resources, action } = body;
+    const {
+      tutor_rating,
+      tutor_feedback,
+      reviewed_image_url,
+      corrected_image_url,
+      ai_overlay_annotations,
+      tutor_resources,
+      action,
+      is_gallery_visible,
+      tag_labels,
+    } = body;
     const reviewAction = action || 'complete'; // backward compat
 
     // Draft: save fields without changing status or sending notifications
@@ -47,6 +57,10 @@ export async function PATCH(
           tutor_resources: tutor_resources || [],
         })
         .eq('id', id);
+      // Tags can be edited while drafting, persist them alongside
+      if (Array.isArray(tag_labels)) {
+        await setSubmissionTags(id, tag_labels, user.id);
+      }
       return NextResponse.json({ ok: true, draft: true });
     }
 
@@ -57,7 +71,12 @@ export async function PATCH(
       corrected_image_url: corrected_image_url || null,
       ai_overlay_annotations: ai_overlay_annotations || null,
       tutor_resources: tutor_resources || [],
+      is_gallery_visible: typeof is_gallery_visible === 'boolean' ? is_gallery_visible : undefined,
     }, reviewAction);
+
+    if (Array.isArray(tag_labels)) {
+      await setSubmissionTags(id, tag_labels, user.id);
+    }
 
     // Gamification: 10 points for completed (non-critical)
     if (reviewAction === 'complete') {

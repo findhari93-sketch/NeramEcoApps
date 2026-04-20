@@ -1,0 +1,217 @@
+-- ================================================================
+-- PAID CLIENTS: Gold-tier existing colleges, insert missing ones
+-- Source: paying customers list (architecture colleges, ~53 entries)
+-- Decisions captured in plan: gold tier uniform, autonomous->private,
+--   CIT==CIET, Ranganathan==Sri Sai Ranganathan, RVS-Padmavathy-Dindigul==Dindigul RVS,
+--   polytechnics with B.Arch added as private, Christ->Karnataka, MVIT->Puducherry
+-- Idempotent: re-runnable without dupes (uses ON CONFLICT for inserts).
+-- ================================================================
+
+-- ── Block A: Reclassify autonomous -> private (TN engineering colleges) ──
+UPDATE colleges SET type = 'private', updated_at = NOW()
+WHERE type = 'autonomous'
+  AND slug IN (
+    'adhiyamaan-architecture',
+    'kongu-architecture',
+    'mepco-schlenk-architecture',
+    'msec-ramanathapuram-architecture',
+    'sri-sai-ranganathan-architecture',
+    'tce-madurai-architecture'
+  );
+
+-- ── Block B: Gold-tier 25 existing TN colleges from paid-clients list ──
+UPDATE colleges
+SET
+  neram_tier      = 'gold',
+  tier_start_date = DATE '2026-04-18',
+  tier_end_date   = DATE '2027-04-18',
+  updated_at      = NOW()
+WHERE slug IN (
+  'aalim-muhammed-salegh-architecture',
+  'rajalakshmi-architecture',
+  'midas-chengalpattu',
+  'mnm-jain-architecture',
+  'msaj-academy-architecture',
+  'papni-architecture',
+  'caad-chennai-architecture',
+  'rathinam-architecture',
+  'tamilnadu-school-architecture',
+  'ciet-architecture',
+  'san-academy-architecture',
+  'sasi-creative-architecture',
+  'nehru-architecture',
+  'hindusthan-architecture',
+  'sri-sai-ranganathan-architecture',
+  'rvs-dindigul-architecture',
+  'kongu-architecture',
+  'adhiyamaan-architecture',
+  'sigma-architecture',
+  'tce-madurai-architecture',
+  'prime-architecture',
+  'excel-architecture',
+  'mcgans-ooty-architecture',
+  'mepco-schlenk-architecture',
+  'care-architecture'
+);
+
+-- ── Block C: Insert 12 new TN deemed universities (gold tier) ──
+INSERT INTO colleges (
+  name, short_name, slug, city, district, state, state_slug,
+  type, neram_tier, tier_start_date, tier_end_date,
+  coa_approved, accepted_exams, counseling_systems,
+  verified, data_completeness, data_source, is_active
+) VALUES
+  ('SRM Institute of Science and Technology', 'SRM', 'srm-architecture',
+    'Kattankullathur', 'Chengalpattu', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA','JEE_PAPER_2'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Sathyabama Institute of Science and Technology', 'Sathyabama', 'sathyabama-architecture',
+    'Chennai', 'Chennai', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA','JEE_PAPER_2'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Hindustan Institute of Technology and Science', 'HITS', 'hits-architecture',
+    'Padur', 'Chengalpattu', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA','JEE_PAPER_2'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('B.S. Abdur Rahman Crescent Institute of Science and Technology', 'Crescent', 'crescent-architecture',
+    'Vandalur', 'Chennai', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA','JEE_PAPER_2'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Saveetha College of Architecture and Design', 'SCAD', 'scad-saveetha-architecture',
+    'Chennai', 'Chennai', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Dr. M.G.R. Educational and Research Institute', 'Dr. MGR', 'dr-mgr-architecture',
+    'Chennai', 'Chennai', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Karpagam Academy of Higher Education', 'Karpagam', 'karpagam-architecture',
+    'Coimbatore', 'Coimbatore', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Vellore Institute of Technology', 'VIT', 'vit-vellore-architecture',
+    'Vellore', 'Vellore', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA','JEE_PAPER_2'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Kalasalingam Academy of Research and Education', 'Kalasalingam', 'kalasalingam-architecture',
+    'Krishnankoil', 'Virudhunagar', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Chettinad Academy of Research and Education', 'Chettinad', 'chettinad-architecture',
+    'Kelambakkam', 'Chengalpattu', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('Periyar Maniammai Institute of Science and Technology', 'PMIST', 'pmist-thanjavur-architecture',
+    'Thanjavur', 'Thanjavur', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true),
+  ('PRIST University', 'PRIST', 'prist-architecture',
+    'Thanjavur', 'Thanjavur', 'Tamil Nadu', 'tamil-nadu',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['JoSAA'],
+    false, 30, 'paid_client_seed', true)
+ON CONFLICT (slug) DO NOTHING;
+
+-- ── Block D: Insert 13 new TN private architecture schools (gold tier) ──
+INSERT INTO colleges (
+  name, short_name, slug, city, district, state, state_slug,
+  type, neram_tier, tier_start_date, tier_end_date,
+  coa_approved, accepted_exams, counseling_systems,
+  verified, data_completeness, data_source, is_active
+) VALUES
+  ('Jaya School of Architecture', 'Jaya', 'jaya-architecture',
+    'Chennai', 'Tiruvallur', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Kumaraguru College of Technology', 'Kumaraguru', 'kumaraguru-architecture',
+    'Coimbatore', 'Coimbatore', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('SVS School of Architecture', 'SVSSA', 'svs-architecture',
+    'Coimbatore', 'Coimbatore', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('R.V.S. School of Architecture, Coimbatore', 'RVS Coimbatore', 'rvs-coimbatore-architecture',
+    'Coimbatore', 'Coimbatore', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('KPR Institute of Engineering and Technology', 'KPR', 'kpr-architecture',
+    'Coimbatore', 'Coimbatore', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Mohamed Sathak Polytechnic College', 'MS Polytechnic', 'mohamed-sathak-polytechnic-keelakarai',
+    'Keelakarai', 'Ramanathapuram', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Periyar School of Architecture', 'Periyar Namakkal', 'periyar-namakkal-architecture',
+    'Namakkal', 'Namakkal', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Sona College of Technology', 'Sona', 'sona-architecture',
+    'Salem', 'Salem', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('M.A.M. School of Architecture', 'MAM', 'mam-architecture',
+    'Tiruchirappalli', 'Tiruchirappalli', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Dhanalakshmi Srinivasan College of Architecture', 'Dhanalakshmi Srinivasan', 'dhanalakshmi-srinivasan-architecture',
+    'Tiruchirappalli', 'Tiruchirappalli', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Prime Nest College of Architecture and Planning', 'Prime Nest', 'prime-nest-architecture',
+    'Tiruchirappalli', 'Tiruchirappalli', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Surya School of Architecture', 'Surya', 'surya-architecture',
+    'Villupuram', 'Villupuram', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true),
+  ('Ayyanadar Janakiammal Polytechnic College', 'AJ Polytechnic', 'ayyanadar-janakiammal-architecture',
+    'Sivakasi', 'Virudhunagar', 'Tamil Nadu', 'tamil-nadu',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['TNEA'],
+    false, 30, 'paid_client_seed', true)
+ON CONFLICT (slug) DO NOTHING;
+
+-- ── Block E: Karnataka & Puducherry (1 each, gold tier) ──
+INSERT INTO colleges (
+  name, short_name, slug, city, district, state, state_slug,
+  type, neram_tier, tier_start_date, tier_end_date,
+  coa_approved, accepted_exams, counseling_systems,
+  verified, data_completeness, data_source, is_active
+) VALUES
+  ('Christ University', 'Christ', 'christ-university-architecture',
+    'Bangalore', 'Bangalore Urban', 'Karnataka', 'karnataka',
+    'deemed', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['KCET'],
+    false, 30, 'paid_client_seed', true),
+  ('Manakula Vinayagar Institute of Technology', 'MVIT', 'manakula-vinayagar-architecture',
+    'Pondicherry', 'Puducherry', 'Puducherry', 'puducherry',
+    'private', 'gold', DATE '2026-04-18', DATE '2027-04-18',
+    true, ARRAY['NATA'], ARRAY['CENTAC'],
+    false, 30, 'paid_client_seed', true)
+ON CONFLICT (slug) DO NOTHING;

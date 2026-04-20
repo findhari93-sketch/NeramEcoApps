@@ -24,6 +24,8 @@ import DrawingQuestionCard from '@/components/drawings/DrawingQuestionCard';
 import FoundationChecklist from '@/components/drawings/FoundationChecklist';
 import ObjectLibrary from '@/components/drawings/ObjectLibrary';
 import GalleryFeed from '@/components/drawings/GalleryFeed';
+import ViewModeToggle from '@/components/drawings/ViewModeToggle';
+import { useDrawingViewMode } from '@/hooks/useDrawingViewMode';
 import HomeworkList from '@/components/drawings/HomeworkList';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import DifficultyChip from '@/components/drawings/DifficultyChip';
@@ -400,9 +402,7 @@ export default function StudentDrawingsPage() {
 
       {/* === Gallery Tab === */}
       {section === 'gallery' && (
-        <Box sx={{ px: isMobile ? 1 : 0 }}>
-          <GalleryFeed getToken={getToken} />
-        </Box>
+        <StudentGallerySection getToken={getToken} isMobile={isMobile} />
       )}
 
       {/* === Homework Tab === */}
@@ -411,6 +411,28 @@ export default function StudentDrawingsPage() {
           <HomeworkList getToken={getToken} />
         </Box>
       )}
+    </Box>
+  );
+}
+
+/**
+ * Student gallery section with its own view-mode toggle. Extracted so the
+ * localStorage-backed hook mounts only when this tab is active.
+ */
+function StudentGallerySection({
+  getToken,
+  isMobile,
+}: {
+  getToken: () => Promise<string | null>;
+  isMobile: boolean;
+}) {
+  const [viewMode, setViewMode] = useDrawingViewMode();
+  return (
+    <Box sx={{ px: isMobile ? 1 : 0 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+      </Box>
+      <GalleryFeed getToken={getToken} viewMode={viewMode} />
     </Box>
   );
 }

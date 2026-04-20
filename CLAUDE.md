@@ -387,15 +387,86 @@ If the answer to #1 or #2 is yes, use a Server Component or cached fetch. Only c
 
 ---
 
+## Platform Responsibilities (READ BEFORE BUILDING / DEPLOYING / CHANGING ENV)
+
+> Use this as the authoritative map of which platform owns what. When you are unsure where to make a change (build config, env var, DNS, migration), check here first. Do NOT assume Vercel auto-deploys from git, do NOT put env vars in Cloudflare, and do NOT run `next build` locally for deploy.
+
+### Who does what
+
+| Concern | Platform | Proof / Source of truth |
+|---|---|---|
+| **Source code + CI trigger** | GitHub | `.github/workflows/{ci,deploy,test,seo-automation}.yml` |
+| **Build** (runs `vercel build --prebuilt`) | **GitHub Actions runners** | `.github/workflows/deploy.yml` steps `vercel build` → `vercel deploy --prebuilt` |
+| **Hosting / serving** (runtime) | Vercel (4 projects) | `apps/*/vercel.json` + Vercel Project IDs below |
+| **Cron jobs** | Vercel | `apps/marketing/vercel.json`, `apps/nexus/vercel.json` → `crons` |
+| **DNS for `*.neramclasses.com`** | Cloudflare | Cloudflare zone (account `2ded5f54...`, zone `c8d99edf...`) |
+| **Proxy for Supabase only** | Cloudflare Workers | `cloudflare/supabase-proxy/wrangler.toml` |
+| **App traffic path** | User → Cloudflare DNS → **Vercel directly** (no Worker in front of apps) | `vercel.json` + Cloudflare DNS records |
+| **Database + Auth policies** | Supabase (2 projects: prod `zdnypksjqnhtiblwdaic`, staging `hgxjavrsrvpihqrpezdh`) | `packages/database/src/client.ts` |
+| **Supabase migrations** | Run by GHA during deploy (`pnpm supabase db push`) | `.github/workflows/deploy.yml` jobs `deploy-db-staging`, `deploy-db-production` |
+| **Auth (students)** | Firebase (`neram-ecosystem` prod, `neram-staging` staging) | `packages/auth/src/firebase.ts` |
+| **Auth (teachers / staff)** | Microsoft Entra ID | `packages/auth/src/microsoft.ts` |
+| **Email transactional** | Resend | `RESEND_API_KEY` |
+| **Payments** | Razorpay | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` |
+
+### Critical fact about deploys
+- All four `apps/*/vercel.json` have `"git": { "deploymentEnabled": false }`. **Vercel's native GitHub integration is DISABLED.** A `git push` alone does NOT trigger a Vercel deploy. GitHub Actions (`.github/workflows/deploy.yml`) is the sole trigger; it authenticates with `VERCEL_TOKEN` and calls `vercel build --prebuilt` + `vercel deploy --prebuilt`.
+- Consequence: if a GHA workflow is broken, nothing deploys. Checking "did it deploy?" means checking the GHA run, not Vercel dashboard.
+
+### Env vars: source of truth by category
+
+| Category | Stored in | How to update | Read at |
+|---|---|---|---|
+| Runtime env for each app (prod / preview) | **Vercel dashboard** (per project, per environment) | `cd apps/<app> && echo "<value>" \| vercel env add <KEY> production` (and `preview`) | Build + runtime on Vercel; pulled into GHA via `vercel pull` |
+| Local dev | `apps/<app>/.env.local` (gitignored) | Edit file directly, or `vercel pull` | `pnpm dev:<app>` |
+| Build-time env that must bust Turbo cache | `turbo.json` → `globalEnv` + `globalDependencies: [".env*"]` | Edit `turbo.json` when adding a new `NEXT_PUBLIC_*` var | Turbo during build |
+| CI / deploy secrets (tokens) | **GitHub repo Secrets** | GitHub UI → Settings → Secrets → Actions | `.github/workflows/*.yml` (`VERCEL_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_{STAGING,PRODUCTION}`, `SUPABASE_PROJECT_ID_{STAGING,PRODUCTION}`, `TURBO_TOKEN`, `TURBO_TEAM`) |
+| Cloudflare Worker config (Supabase proxy) | `cloudflare/supabase-proxy/wrangler.toml` (plaintext `vars`) + `wrangler secret` for secrets | Edit `wrangler.toml` or `wrangler secret put` | Worker runtime |
+| Firebase / Microsoft credentials | Vercel env vars (runtime) + Firebase Console / Azure portal (provider config) | Vercel CLI for env; provider consoles for auth config | Vercel runtime |
+| Supabase migrations | `packages/database/supabase/migrations/*.sql` in git | Write a new `.sql` file; GHA applies on deploy | GHA `supabase db push` |
+
+**Cloudflare does NOT hold any app env vars.** It only holds DNS records and the Supabase-proxy Worker's own config.
+
+### Picking the right CLI / MCP tool
+
+| Task | Tool to use |
+|---|---|
+| Trigger a deploy | `pnpm deploy:staging` / `pnpm deploy:prod` (pushes to branch → GHA builds & deploys). Never `vercel deploy` from local. |
+| Add / update runtime env var | `vercel env add <KEY> production` + `vercel env add <KEY> preview` (inside `apps/<app>`) |
+| Write a DB migration | Create `supabase/migrations/<timestamp>_name.sql`, commit, push (GHA applies). For ad-hoc/manual: `mcp__supabase-staging__apply_migration` then `mcp__supabase-prod__apply_migration` |
+| Query DB state | `mcp__supabase-staging__execute_sql` / `mcp__supabase-prod__execute_sql` |
+| Regenerate TS types from DB | `pnpm supabase:gen:types` |
+| Update DNS | Cloudflare dashboard (no CLI configured in repo) |
+| Update Supabase proxy logic | Edit `cloudflare/supabase-proxy/src/index.ts`, then `cd cloudflare/supabase-proxy && npx wrangler deploy --env production` |
+| Rotate a CI secret | GitHub repo Settings → Secrets → Actions |
+| Check whether a deploy ran | GitHub Actions run page (NOT Vercel dashboard) — since `deploymentEnabled: false` |
+
+### Traffic flow (mental diagram)
+```
+Browser (app.neramclasses.com)
+        │
+        ▼
+Cloudflare DNS (CNAME → Vercel)
+        │
+        ▼
+Vercel (serves Next.js app)
+        │
+        ├── Firebase / Microsoft (auth)
+        ├── db.neramclasses.com ──► Cloudflare Worker (supabase-proxy) ──► *.supabase.co
+        └── Resend / Razorpay (direct)
+```
+
+---
+
 ## Deployment Pipeline
 
 ### Environments
 
 | Environment | Branch | URLs | Supabase Ref | Deploy Trigger |
 |-------------|--------|------|-------------|----------------|
-| **Preview** | PR branches | `*.vercel.app` |, | Auto on PR |
-| **Staging** | `staging` | `staging.neramclasses.com` | `hgxjavrsrvpihqrpezdh` | Auto on merge to staging |
-| **Production** | `main` | `neramclasses.com` | `zdnypksjqnhtiblwdaic` | Auto on merge to main |
+| **Preview** | PR branches | `*.vercel.app` |, | GHA on PR (builds + deploys via `vercel deploy --prebuilt`) |
+| **Staging** | `staging` | `staging.neramclasses.com` | `hgxjavrsrvpihqrpezdh` | GHA on push to `staging` (Vercel's own Git integration is OFF) |
+| **Production** | `main` | `neramclasses.com` | `zdnypksjqnhtiblwdaic` | GHA on push to `main` (Vercel's own Git integration is OFF) |
 
 ### URLs
 

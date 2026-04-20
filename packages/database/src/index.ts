@@ -73,6 +73,9 @@ export {
   sendFirstTouchQuickQuestion,
   sendFirstTouchResultsVideo,
   sendFirstTouchEnglishIntro,
+  WA_ERROR_PREFIXES,
+  formatWhatsAppError,
+  isPermanentWhatsAppFailure,
 } from './services/whatsapp';
 
 // Services - Unified Notifications

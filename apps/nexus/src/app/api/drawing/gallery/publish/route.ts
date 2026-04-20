@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { publishToGallery } from '@neram/database/queries/nexus';
+import { setGalleryVisibility } from '@neram/database/queries/nexus';
 
+/**
+ * Toggle whether a submission appears in the unified gallery.
+ * Teacher-only. Does NOT change the submission's review status — a redo
+ * submission toggled visible stays a redo, it just appears in the gallery
+ * as learning material.
+ *
+ * Body: { submission_id: string, visible?: boolean, publish?: boolean }
+ * `publish` is accepted for backwards compatibility with older clients.
+ */
 export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
@@ -13,11 +22,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { submission_id, publish } = body;
+    const { submission_id } = body;
     if (!submission_id) return NextResponse.json({ error: 'Missing submission_id' }, { status: 400 });
 
-    await publishToGallery(submission_id, publish !== false);
-    return NextResponse.json({ success: true });
+    const visible = body.visible !== undefined ? !!body.visible : body.publish !== false;
+    await setGalleryVisibility(submission_id, visible);
+    return NextResponse.json({ success: true, visible });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
   }

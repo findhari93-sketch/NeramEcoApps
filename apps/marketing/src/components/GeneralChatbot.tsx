@@ -186,12 +186,21 @@ function generateSessionId() {
 }
 
 const FAB_BOTTOM = 24;
+const DISMISSED_KEY = 'aintra_dismissed';
 
 export default function GeneralChatbot() {
   const pathname = usePathname();
   const { user: firebaseUser } = useFirebaseAuth();
 
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.sessionStorage.getItem(DISMISSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -346,6 +355,16 @@ export default function GeneralChatbot() {
     }
   };
 
+  const handleDismiss = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      window.sessionStorage.setItem(DISMISSED_KEY, '1');
+    } catch {
+      // Ignore storage errors (private mode, etc.)
+    }
+    setDismissed(true);
+  };
+
   // On /contact page, show nothing — TawkToChat is loaded by ContactPageContent there
   if (pathname?.includes('/contact') || pathname?.includes('/enroll')) return null;
 
@@ -354,7 +373,7 @@ export default function GeneralChatbot() {
       {/* Initialize Tawk.to hidden — bubble only shows when user clicks Live Chat */}
       <TawkToChat hideByDefault />
       {/* FAB button */}
-      {!open && (
+      {!open && !dismissed && (
         <Box
           sx={{
             position: 'fixed',
@@ -384,6 +403,29 @@ export default function GeneralChatbot() {
             >
               <BotAvatar size={56} />
             </Fab>
+            {/* Dismiss (×) button */}
+            <IconButton
+              onClick={handleDismiss}
+              aria-label="Dismiss chat assistant"
+              size="small"
+              sx={{
+                position: 'absolute',
+                top: -6,
+                left: -6,
+                width: 24,
+                height: 24,
+                bgcolor: 'white',
+                color: 'grey.700',
+                border: '1px solid',
+                borderColor: 'grey.300',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                zIndex: 1201,
+                p: 0,
+                '&:hover': { bgcolor: 'grey.100' },
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 14 }} />
+            </IconButton>
             {/* Online dot */}
             <Box
               sx={{
