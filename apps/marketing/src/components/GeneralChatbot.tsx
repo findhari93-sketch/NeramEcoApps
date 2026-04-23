@@ -388,6 +388,7 @@ export default function GeneralChatbot() {
           <Box sx={{ position: 'relative', width: 56, height: 56 }}>
             <Fab
               onClick={() => setOpen(true)}
+              data-testid="aintra-opener"
               sx={{
                 width: 56,
                 height: 56,
@@ -603,6 +604,8 @@ export default function GeneralChatbot() {
           {messages.map((msg, i) => (
             <Box
               key={i}
+              data-role={msg.role}
+              data-testid={msg.role === 'model' ? 'aintra-assistant-message' : 'aintra-user-message'}
               sx={{
                 alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                 maxWidth: '90%',
@@ -799,7 +802,7 @@ export default function GeneralChatbot() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
-            inputProps={{ maxLength: 500, style: { fontSize: '0.9375rem' } }}
+            inputProps={{ maxLength: 500, style: { fontSize: '0.9375rem' }, 'data-testid': 'aintra-input' }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
           />
           <IconButton

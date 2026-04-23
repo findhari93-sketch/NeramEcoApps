@@ -170,7 +170,7 @@ type GeminiPart =
   | { functionCall: { name: string; args: Record<string, unknown> } }
   | { functionResponse: { name: string; response: Record<string, unknown> } };
 
-type GeminiContent = { role: 'user' | 'model' | 'function'; parts: GeminiPart[] };
+type GeminiContent = { role: 'user' | 'model'; parts: GeminiPart[] };
 
 interface ToolCallLog {
   name: string;
@@ -328,10 +328,11 @@ async function runGeminiLoop(
       })
     );
 
-    // Append each tool result as a functionResponse.
+    // Append each tool result as a functionResponse. Gemini REST v1beta expects
+    // functionResponse messages to carry role 'user' (not 'function').
     for (const { call, res } of executions) {
       contents.push({
-        role: 'function',
+        role: 'user',
         parts: [
           {
             functionResponse: {
