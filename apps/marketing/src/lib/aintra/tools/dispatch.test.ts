@@ -13,7 +13,9 @@ vi.mock('./compare-colleges', () => ({
 import { dispatchTool } from './dispatch';
 
 describe('dispatchTool', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('routes get_college', async () => {
     const r = await dispatchTool('get_college', { slug: 'x' });

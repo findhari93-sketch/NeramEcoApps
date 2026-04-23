@@ -2,10 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
+import { extractCollegeSlug } from '@/lib/aintra/slug';
+import { buildSystemPrompt } from '@/lib/aintra/primer';
+import { TOOL_DECLARATIONS } from '@/lib/aintra/tools/declarations';
+import { dispatchTool } from '@/lib/aintra/tools/dispatch';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MAX_TOOL_ITERATIONS = 3;
 
 const SYSTEM_PROMPT = `You are the Neram Classes Assistant — a friendly, helpful chatbot on neramclasses.com. You help prospective and current students with questions about Neram Classes courses, fees, timings, NATA exam, and related topics.
 
@@ -115,11 +120,11 @@ Yes, we offer free tools at app.neramclasses.com:
 - IMPORTANT: Always complete your answer. If a topic needs a long explanation, summarize the key points concisely rather than giving an incomplete detailed answer. Never end mid-sentence.`;
 
 // ============================================
-// AINTRA KNOWLEDGE BASE CACHE
+// KB CACHE
 // ============================================
 
 let kbCache: { text: string; fetchedAt: number } | null = null;
-const KB_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const KB_CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function getKBSection(): Promise<string> {
   const now = Date.now();
@@ -156,39 +161,64 @@ async function getKBSection(): Promise<string> {
   }
 }
 
+// ============================================
+// GEMINI CALL (tool-aware)
+// ============================================
+
+type GeminiPart =
+  | { text: string }
+  | { functionCall: { name: string; args: Record<string, unknown> } }
+  | { functionResponse: { name: string; response: Record<string, unknown> } };
+
+type GeminiContent = { role: 'user' | 'model' | 'function'; parts: GeminiPart[] };
+
+interface ToolCallLog {
+  name: string;
+  args: Record<string, unknown>;
+  latency_ms: number;
+  success: boolean;
+  error?: string;
+}
+
+interface GeminiResult {
+  reply: string;
+  model: string;
+  finishReason: string;
+  toolCalls: ToolCallLog[];
+}
+
 async function callGemini(
   model: string,
-  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+  contents: GeminiContent[],
   systemPrompt: string,
+  tools: unknown[] | null,
   errors: string[]
-): Promise<{ reply: string; model: string; finishReason: string } | null> {
+): Promise<{ candidate: any; model: string; finishReason: string } | null> {
   try {
     const url = `${GEMINI_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const body: Record<string, unknown> = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { temperature: 0.75, maxOutputTokens: 4096, topP: 0.9 },
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ],
+    };
+    if (tools && tools.length > 0) body.tools = tools;
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: {
-          temperature: 0.75,
-          maxOutputTokens: 4096,
-          topP: 0.9,
-        },
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
-          ],
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const status = response.status;
       const errorText = await response.text().catch(() => 'unknown');
-      const shortError = errorText.slice(0, 150);
-      const detail = `${model}:HTTP${status}(${shortError})`;
+      const detail = `${model}:HTTP${status}(${errorText.slice(0, 150)})`;
       errors.push(detail);
       console.error(`[GeneralChat] Gemini ${model} error: ${status}`, errorText);
       return null;
@@ -196,32 +226,146 @@ async function callGemini(
 
     const data = await response.json();
     const candidate = data?.candidates?.[0];
-    const reply = candidate?.content?.parts?.[0]?.text;
-    if (!reply) {
-      const blockReason = data?.promptFeedback?.blockReason || candidate?.finishReason || 'NO_CONTENT';
-      const detail = `${model}:${blockReason}`;
-      errors.push(detail);
-      console.error(`[GeneralChat] Gemini ${model}: no reply (${blockReason})`, JSON.stringify(data).slice(0, 200));
+    if (!candidate) {
+      const blockReason = data?.promptFeedback?.blockReason || 'NO_CONTENT';
+      errors.push(`${model}:${blockReason}`);
+      console.error(`[GeneralChat] Gemini ${model}: no candidate (${blockReason})`);
       return null;
     }
-
-    const finishReason: string = candidate?.finishReason || 'UNKNOWN';
-    let finalReply = reply;
-
-    if (finishReason === 'MAX_TOKENS') {
-      console.warn(`[GeneralChat] Gemini ${model}: response truncated (MAX_TOKENS)`);
-      finalReply = reply.trimEnd() +
-        '\n\n*For more details, please contact us at **+91 91761 37043** or visit **neramclasses.com**.*';
-    }
-
-    return { reply: finalReply, model, finishReason };
+    return { candidate, model, finishReason: candidate.finishReason || 'UNKNOWN' };
   } catch (err) {
-    const detail = `${model}:FETCH_ERROR(${err instanceof Error ? err.message : 'unknown'})`;
-    errors.push(detail);
+    errors.push(`${model}:FETCH_ERROR(${err instanceof Error ? err.message : 'unknown'})`);
     console.error(`[GeneralChat] Gemini ${model} fetch error:`, err);
     return null;
   }
 }
+
+function extractFunctionCalls(candidate: any): Array<{ name: string; args: Record<string, unknown> }> {
+  const parts = candidate?.content?.parts || [];
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  for (const p of parts) {
+    if (p.functionCall && p.functionCall.name) {
+      calls.push({ name: p.functionCall.name, args: p.functionCall.args || {} });
+    }
+  }
+  return calls;
+}
+
+function extractText(candidate: any): string {
+  const parts = candidate?.content?.parts || [];
+  const chunks: string[] = [];
+  for (const p of parts) {
+    if (typeof p.text === 'string' && p.text.length) chunks.push(p.text);
+  }
+  return chunks.join('\n').trim();
+}
+
+async function runGeminiLoop(
+  initialContents: GeminiContent[],
+  systemPrompt: string,
+  errors: string[]
+): Promise<GeminiResult | null> {
+  const contents: GeminiContent[] = [...initialContents];
+  const toolCalls: ToolCallLog[] = [];
+
+  // Tools include our DB function declarations + Gemini's native google_search.
+  const toolsWithGrounding: unknown[] = [
+    { functionDeclarations: TOOL_DECLARATIONS },
+    { google_search: {} },
+  ];
+
+  for (let iteration = 0; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
+    // On the final iteration, disable tools to force a text answer.
+    const tools = iteration < MAX_TOOL_ITERATIONS ? toolsWithGrounding : null;
+
+    let result: { candidate: any; model: string; finishReason: string } | null = null;
+    for (const model of GEMINI_MODELS) {
+      result = await callGemini(model, contents, systemPrompt, tools, errors);
+      if (result) break;
+    }
+    if (!result) return null;
+
+    const functionCalls = extractFunctionCalls(result.candidate);
+
+    if (functionCalls.length === 0) {
+      const reply = extractText(result.candidate);
+      if (!reply) {
+        errors.push(`${result.model}:EMPTY_TEXT`);
+        return null;
+      }
+      const finishReason: string = result.finishReason;
+      let finalReply = reply;
+      if (finishReason === 'MAX_TOKENS') {
+        finalReply =
+          reply.trimEnd() +
+          '\n\n*For more details, please contact us at **+91 91761 37043** or visit **neramclasses.com**.*';
+      }
+      return { reply: finalReply, model: result.model, finishReason, toolCalls };
+    }
+
+    // Append the model's function-call message so Gemini tracks what it asked.
+    contents.push({
+      role: 'model',
+      parts: functionCalls.map((c) => ({
+        functionCall: { name: c.name, args: c.args },
+      })),
+    });
+
+    // Execute all tool calls in parallel.
+    const executions = await Promise.all(
+      functionCalls.map(async (call) => {
+        const started = Date.now();
+        const res = await dispatchTool(call.name, call.args);
+        const latency = Date.now() - started;
+        toolCalls.push({
+          name: call.name,
+          args: call.args,
+          latency_ms: latency,
+          success: res.ok,
+          error: res.ok ? undefined : res.error,
+        });
+        return { call, res };
+      })
+    );
+
+    // Append each tool result as a functionResponse.
+    for (const { call, res } of executions) {
+      contents.push({
+        role: 'function',
+        parts: [
+          {
+            functionResponse: {
+              name: call.name,
+              response: res as unknown as Record<string, unknown>,
+            },
+          },
+        ],
+      });
+    }
+  }
+
+  // Hit the iteration cap; force one final text-only call without tools.
+  const finalResult = await callGemini(
+    GEMINI_MODELS[GEMINI_MODELS.length - 1],
+    contents,
+    systemPrompt,
+    null,
+    errors
+  );
+  if (!finalResult) return null;
+  const finalReply = extractText(finalResult.candidate);
+  if (!finalReply) return null;
+  return {
+    reply: finalReply,
+    model: finalResult.model,
+    finishReason: finalResult.finishReason,
+    toolCalls,
+  };
+}
+
+// ============================================
+// LOGGING
+// ============================================
 
 async function logConversation(params: {
   sessionId: string;
@@ -233,11 +377,11 @@ async function logConversation(params: {
   modelUsed?: string;
   responseTimeMs?: number;
   error?: string;
+  toolCalls?: ToolCallLog[];
 }) {
   try {
     const supabase = createAdminClient();
 
-    // Resolve Firebase UID to Supabase user UUID and fetch user name
     let resolvedUserId: string | null = null;
     let resolvedLeadName: string | null = params.userName || null;
     let resolvedLeadPhone: string | null = null;
@@ -267,19 +411,21 @@ async function logConversation(params: {
       response_time_ms: params.responseTimeMs || null,
       error: params.error || null,
       source: 'general_chatbot',
+      tool_calls: params.toolCalls && params.toolCalls.length ? params.toolCalls : null,
     });
   } catch (err) {
     console.error('Failed to log chatbot conversation:', err);
   }
 }
 
+// ============================================
+// POST HANDLER
+// ============================================
+
 export async function POST(request: NextRequest) {
   if (!GEMINI_API_KEY) {
     console.error('[GeneralChat] GEMINI_API_KEY is not set');
-    return NextResponse.json(
-      { error: 'Chat service not configured' },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: 'Chat service not configured' }, { status: 503 });
   }
 
   try {
@@ -289,12 +435,11 @@ export async function POST(request: NextRequest) {
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
-
     if (message.length > 500) {
       return NextResponse.json({ error: 'Message too long (max 500 characters)' }, { status: 400 });
     }
 
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+    const contents: GeminiContent[] = [];
     const recentHistory = Array.isArray(history) ? history.slice(-10) : [];
     for (const turn of recentHistory) {
       if (turn.role === 'user' || turn.role === 'model') {
@@ -304,42 +449,19 @@ export async function POST(request: NextRequest) {
     contents.push({ role: 'user', parts: [{ text: message }] });
 
     const startTime = Date.now();
-
-    // Build effective system prompt with admin-managed KB
     const kbSection = await getKBSection();
-    const effectivePrompt = SYSTEM_PROMPT + kbSection;
+    const currentCollegeSlug = extractCollegeSlug(pageUrl || null);
+    const effectivePrompt = buildSystemPrompt({
+      base: SYSTEM_PROMPT,
+      kb: kbSection,
+      currentCollegeSlug,
+    });
 
-    let result: { reply: string; model: string; finishReason: string } | null = null;
     const errors: string[] = [];
-
-    // First pass: try all models
-    for (const model of GEMINI_MODELS) {
-      result = await callGemini(model, contents, effectivePrompt, errors);
-      if (result) break;
-    }
-
-    // Retry with increasing delays if rate-limited
-    if (!result) {
-      await new Promise((r) => setTimeout(r, 3000));
-      errors.push('RETRY_1');
-      for (const model of GEMINI_MODELS) {
-        result = await callGemini(model, contents, effectivePrompt, errors);
-        if (result) break;
-      }
-    }
-
-    // Second retry with longer delay
-    if (!result) {
-      await new Promise((r) => setTimeout(r, 5000));
-      errors.push('RETRY_2');
-      // Only try the lite model on last retry (most available)
-      result = await callGemini(GEMINI_MODELS[GEMINI_MODELS.length - 1], contents, effectivePrompt, errors);
-    }
-
+    const result = await runGeminiLoop(contents, effectivePrompt, errors);
     const responseTimeMs = Date.now() - startTime;
 
     if (!result) {
-      const detailedError = errors.join(' | ');
       await logConversation({
         sessionId: sessionId || 'unknown',
         userMessage: message.trim(),
@@ -347,7 +469,7 @@ export async function POST(request: NextRequest) {
         userId,
         userName,
         pageUrl,
-        error: detailedError,
+        error: errors.join(' | '),
         responseTimeMs,
       });
       return NextResponse.json(
@@ -366,9 +488,14 @@ export async function POST(request: NextRequest) {
       modelUsed: result.model,
       responseTimeMs,
       error: result.finishReason === 'MAX_TOKENS' ? 'TRUNCATED_MAX_TOKENS' : undefined,
+      toolCalls: result.toolCalls,
     });
 
-    return NextResponse.json({ reply: result.reply, model: result.model, finishReason: result.finishReason });
+    return NextResponse.json({
+      reply: result.reply,
+      model: result.model,
+      finishReason: result.finishReason,
+    });
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
