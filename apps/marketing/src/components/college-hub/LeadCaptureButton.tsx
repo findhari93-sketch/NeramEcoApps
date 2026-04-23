@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Stack, Alert, CircularProgress, Typography, Checkbox,
-  FormControlLabel, Box,
+  Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions,
+  DialogContent, DialogTitle, FormControlLabel, Stack, TextField, Typography,
 } from '@mui/material';
 import SchoolIcon from '@mui/icons-material/School';
-import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
+import { useFirebaseAuth } from '@neram/auth';
+import PincodeField from './PincodeField';
 
 interface LeadCaptureButtonProps {
   collegeId: string;
@@ -15,42 +15,55 @@ interface LeadCaptureButtonProps {
 }
 
 export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptureButtonProps) {
-  const [windowActive, setWindowActive] = useState<boolean | null>(null); // null = loading
+  const { user } = useFirebaseAuth();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [nataScore, setNataScore] = useState('');
-  const [city, setCity] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [resolvedCity, setResolvedCity] = useState('');
+  const [manualCity, setManualCity] = useState('');
+  const [message, setMessage] = useState('');
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Prefill from Firebase profile when the user is signed in. Fields stay editable
+  // so a parent submitting on a student's behalf can correct any values.
   useEffect(() => {
-    fetch(`/api/colleges/lead-window-status?college_id=${collegeId}`)
-      .then((r) => r.json())
-      .then((j) => setWindowActive(j.active === true))
-      .catch(() => setWindowActive(false));
-  }, [collegeId]);
+    if (!user) return;
+    if (user.name && !name) setName(user.name);
+    if (user.email && !email) setEmail(user.email);
+    if (user.phone && !phone) {
+      const digits = user.phone.replace(/\D/g, '');
+      setPhone(digits.length > 10 ? digits.slice(-10) : digits);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handleSubmit = async () => {
-    if (!name || !phone || !consent) {
-      setError('Please fill in your name, phone number, and agree to share details.');
+    if (!name.trim() || !phone || phone.length !== 10 || !consent) {
+      setError('Please fill in your name, a valid 10-digit phone number, and agree to share details.');
       return;
     }
     setSubmitting(true);
     setError('');
     try {
+      const cityForSubmit = resolvedCity || manualCity || null;
       const res = await fetch('/api/colleges/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           college_id: collegeId,
-          name, phone,
+          name: name.trim(),
+          phone,
           email: email || null,
           nata_score: nataScore ? parseFloat(nataScore) : null,
-          city: city || null,
+          city: cityForSubmit,
+          message: message || null,
+          firebase_uid: user?.id ?? null,
           consent_given: true,
         }),
       });
@@ -64,46 +77,10 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
     }
   };
 
-  // Still loading — show skeleton placeholder
-  if (windowActive === null) {
-    return (
-      <Box
-        sx={{
-          height: 48, bgcolor: 'grey.100', borderRadius: 2,
-          animation: 'pulse 1.5s ease-in-out infinite',
-          '@keyframes pulse': {
-            '0%, 100%': { opacity: 1 },
-            '50%': { opacity: 0.4 },
-          },
-        }}
-      />
-    );
-  }
-
-  // Lead window not active — show informational notice instead
-  if (!windowActive) {
-    return (
-      <Box
-        sx={{
-          p: 2, border: '1px solid', borderColor: 'divider',
-          borderRadius: 2, bgcolor: 'grey.50', textAlign: 'center',
-        }}
-      >
-        <NotificationsOffIcon sx={{ fontSize: 28, color: 'text.disabled', mb: 0.5 }} />
-        <Typography variant="body2" color="text.secondary" fontWeight={600}>
-          Lead inquiries open during admission season
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          (June to September each year)
-        </Typography>
-      </Box>
-    );
-  }
-
   if (success) {
     return (
       <Alert severity="success" icon={<SchoolIcon />}>
-        Your interest has been registered. The college admissions team will contact you shortly.
+        Thanks for your interest in {collegeName}. The admissions team will be in touch soon.
       </Alert>
     );
   }
@@ -116,17 +93,29 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
         startIcon={<SchoolIcon />}
         onClick={() => setOpen(true)}
         sx={{
-          bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' },
-          borderRadius: 2, px: 3, fontWeight: 700,
+          bgcolor: '#16a34a',
+          '&:hover': { bgcolor: '#15803d' },
+          borderRadius: 2,
+          px: 3,
+          fontWeight: 700,
+          minHeight: 48,
         }}
         fullWidth
       >
-        I&apos;m Interested — Get Admission Info
+        I&apos;m Interested, Get Admission Info
       </Button>
 
-      <Dialog open={open} onClose={() => !submitting && setOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog
+        open={open}
+        onClose={() => !submitting && setOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        fullScreen={typeof window !== 'undefined' && window.innerWidth < 600}
+      >
         <DialogTitle>
-          <Typography variant="h6" fontWeight={700}>Apply to {collegeName}</Typography>
+          <Typography variant="h6" fontWeight={700} component="div">
+            Apply to {collegeName}
+          </Typography>
           <Typography variant="body2" color="text.secondary">
             Share your details and the college will contact you.
           </Typography>
@@ -134,20 +123,22 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
         <DialogContent>
           <Stack gap={2} sx={{ pt: 1 }}>
             <TextField
-              label="Your Name *"
+              label="Your name *"
               value={name}
               onChange={(e) => setName(e.target.value)}
               fullWidth
               size="small"
+              autoFocus={!user?.name}
             />
             <TextField
-              label="Mobile Number *"
+              label="Mobile number *"
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               fullWidth
               size="small"
               inputProps={{ inputMode: 'numeric' }}
               helperText="10-digit Indian mobile number"
+              autoFocus={Boolean(user?.name) && !phone}
             />
             <TextField
               label="Email (optional)"
@@ -158,7 +149,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               type="email"
             />
             <TextField
-              label="NATA Score (optional)"
+              label="NATA score (optional)"
               value={nataScore}
               onChange={(e) => setNataScore(e.target.value)}
               fullWidth
@@ -166,12 +157,24 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               inputProps={{ inputMode: 'decimal' }}
               helperText="Out of 200"
             />
+            <PincodeField
+              value={pincode}
+              onChange={setPincode}
+              onResolve={(resolved) => {
+                setResolvedCity(resolved ? resolved.city : '');
+              }}
+              manualCityFallback={manualCity}
+              onManualCityChange={setManualCity}
+            />
             <TextField
-              label="Your City (optional)"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
+              label="Anything to share? (optional)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
               fullWidth
               size="small"
+              multiline
+              minRows={2}
+              maxRows={4}
             />
             <FormControlLabel
               control={
@@ -187,6 +190,11 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
                 </Typography>
               }
             />
+            {user && (
+              <Typography variant="caption" color="text.secondary">
+                Submitting as <strong>{user.email || user.name}</strong>. You can edit any field above.
+              </Typography>
+            )}
             {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
           </Stack>
         </DialogContent>
@@ -196,9 +204,9 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
             variant="contained"
             onClick={handleSubmit}
             disabled={submitting || !consent}
-            sx={{ bgcolor: '#16a34a' }}
+            sx={{ bgcolor: '#16a34a', minHeight: 40, '&:hover': { bgcolor: '#15803d' } }}
           >
-            {submitting ? <CircularProgress size={16} /> : 'Submit'}
+            {submitting ? <CircularProgress size={16} color="inherit" /> : 'Submit'}
           </Button>
         </DialogActions>
       </Dialog>

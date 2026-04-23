@@ -60,6 +60,7 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
+import MarkEmailReadIcon from '@mui/icons-material/MarkEmailRead';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -163,6 +164,8 @@ const menuGroups: MenuGroup[] = [
       { text: 'Virtual Tour', icon: TourIcon, path: '/college-hub/virtual-tour' },
       { text: 'Partnership Pages', icon: HandshakeIcon, path: '/college-hub/partnership' },
       { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
+      { text: 'Outreach', icon: MarkEmailReadIcon, path: '/college-outreach' },
+      { text: 'Leads Review', icon: PeopleIcon, path: '/college-leads' },
     ],
   },
   {

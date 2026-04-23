@@ -4,6 +4,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 
+// Student submits "I'm Interested" on a college page. Lead is inserted with
+// admin_review_status='pending'. No email is sent to the college yet; the
+// Neram staff reviews each lead in the admin app and the approve action there
+// triggers the notification email.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -30,6 +34,8 @@ export async function POST(request: NextRequest) {
         lead_window_active: true,
         source: 'interested_button',
         status: 'new',
+        // Always land in admin queue. College won't see this until Neram staff approves.
+        admin_review_status: 'pending',
       })
       .select('id')
       .single();

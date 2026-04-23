@@ -25,10 +25,13 @@ export async function GET(request: NextRequest) {
     const tier = college?.neram_tier ?? 'free';
     const showFullPhone = tier === 'gold' || tier === 'platinum';
 
+    // Only show leads that Neram staff has approved. Pending/rejected/spam leads
+    // stay invisible to the college.
     const { data: leads, error } = await supabase
       .from('college_leads')
       .select('id, name, phone, email, city, nata_score, status, created_at')
       .eq('college_id', authUser.college_id)
+      .eq('admin_review_status', 'approved')
       .order('created_at', { ascending: false })
       .limit(200);
 
@@ -63,14 +66,15 @@ export async function PATCH(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Verify this lead belongs to the college admin's college
+    // Verify this lead belongs to the college admin's college AND is approved.
+    // Non-approved leads are invisible to the college, so they can't be updated either.
     const { data: lead } = await supabase
       .from('college_leads')
-      .select('college_id')
+      .select('college_id, admin_review_status')
       .eq('id', id)
       .single();
 
-    if (!lead || lead.college_id !== authUser.college_id) {
+    if (!lead || lead.college_id !== authUser.college_id || lead.admin_review_status !== 'approved') {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 

@@ -98,6 +98,10 @@ export interface College {
   nearest_airport: string | null;
   railway_distance_km: number | null;
   airport_distance_km: number | null;
+  // Outreach tracking (internal)
+  contact_status?: string | null;
+  last_outreach_at?: string | null;
+  outreach_count?: number | null;
   // Timestamps
   created_at: string | null;
   updated_at: string | null;

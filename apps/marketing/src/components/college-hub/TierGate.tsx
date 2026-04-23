@@ -10,11 +10,14 @@ export function hasTierAccess(collegeTier: CollegeTier, requiredTier: CollegeTie
   return (TIER_ORDER[collegeTier] ?? 0) >= (TIER_ORDER[requiredTier] ?? 0);
 }
 
+export type TierGateVisitorRole = 'student' | 'college_admin' | 'neram_staff';
+
 interface TierGateProps {
   requiredTier: CollegeTier;
   featureName: string;
   collegeTier: CollegeTier;
   isAdmin?: boolean;
+  visitorRole?: TierGateVisitorRole;
   children: React.ReactNode;
 }
 
@@ -23,12 +26,22 @@ export default function TierGate({
   featureName,
   collegeTier,
   isAdmin = false,
+  visitorRole = 'student',
   children,
 }: TierGateProps) {
-  if (isAdmin || hasTierAccess(collegeTier, requiredTier)) {
+  // Access granted: show the content.
+  if (isAdmin || visitorRole === 'neram_staff' || hasTierAccess(collegeTier, requiredTier)) {
     return <>{children}</>;
   }
 
+  // Public student view: hide the whole section. No lock, no CTA, no "coming soon"
+  // so students never see that Neram runs paid tiers.
+  if (visitorRole === 'student') {
+    return null;
+  }
+
+  // College admin view (viewing their own profile in college-dashboard):
+  // show the upgrade card and link to their partnership submission page.
   const config = TIER_CONFIG[requiredTier];
 
   return (
@@ -60,12 +73,11 @@ export default function TierGate({
           {featureName} is a {config.label} Feature
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 360 }}>
-          This college needs to upgrade to the {config.label} plan to unlock {featureName.toLowerCase()} on their
-          profile.
+          Upgrade to the {config.label} plan to unlock {featureName.toLowerCase()} on your profile.
         </Typography>
         <Button
           component={Link}
-          href="/contact"
+          href="/college-dashboard/partnership"
           variant="contained"
           size="small"
           sx={{
@@ -74,7 +86,7 @@ export default function TierGate({
             mt: 0.5,
           }}
         >
-          Are you from this college? Upgrade
+          Upgrade your plan
         </Button>
       </Stack>
     </Paper>
