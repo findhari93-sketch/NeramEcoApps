@@ -62,10 +62,19 @@ export default function BrowseAllSection({
               lineHeight: 1.2,
             }}
           >
-            Browse All Colleges
+            {filters.search ? `Results for "${filters.search}"` : 'Browse All Colleges'}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, fontSize: { xs: '0.8rem', sm: '0.85rem' } }}>
-            <strong style={{ color: '#1565C0' }}>{totalCount.toLocaleString()}</strong> colleges available. Use filters to narrow down.
+            {filters.search ? (
+              <>
+                <strong style={{ color: '#1565C0' }}>{totalCount.toLocaleString()}</strong>{' '}
+                {totalCount === 1 ? 'college matches' : 'colleges match'} your search. Refine with filters below.
+              </>
+            ) : (
+              <>
+                <strong style={{ color: '#1565C0' }}>{totalCount.toLocaleString()}</strong> colleges available. Use filters to narrow down.
+              </>
+            )}
           </Typography>
         </Box>
 
