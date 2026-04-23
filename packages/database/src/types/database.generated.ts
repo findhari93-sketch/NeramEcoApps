@@ -1060,6 +1060,7 @@ export type Database = {
           session_id: string
           source: string | null
           thumbs_up: boolean | null
+          tool_calls: Json | null
           user_id: string | null
           user_message: string
         }
@@ -1078,6 +1079,7 @@ export type Database = {
           session_id: string
           source?: string | null
           thumbs_up?: boolean | null
+          tool_calls?: Json | null
           user_id?: string | null
           user_message: string
         }
@@ -1096,6 +1098,7 @@ export type Database = {
           session_id?: string
           source?: string | null
           thumbs_up?: boolean | null
+          tool_calls?: Json | null
           user_id?: string | null
           user_message?: string
         }
