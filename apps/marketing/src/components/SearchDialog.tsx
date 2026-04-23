@@ -196,10 +196,31 @@ export default function SearchDialog({ open, onClose }: SearchDialogProps) {
   // Helper: keyboard selection flat index for a given grouped position
   let flatIndex = 0;
 
+  // Maps each search category to its listing page. Categories without a
+  // dedicated listing route are omitted, so the "+N more" link is hidden.
+  const CATEGORY_LISTING_PATH: Partial<Record<SearchCategory, string>> = {
+    college: '/colleges',
+    course: '/courses',
+    tool: '/tools',
+    nata: '/nata-2026',
+    coaching: '/coaching',
+    counseling: '/counseling',
+    blog: '/blog',
+  };
+
   const handleOverflowClick = (category: SearchCategory) => {
-    const path = category === 'college'
-      ? `/colleges?q=${encodeURIComponent(query)}`
-      : `/${category}`;
+    if (category === 'college') {
+      const path = `/colleges?q=${encodeURIComponent(query)}#browse`;
+      onClose();
+      router.push(path);
+      // Force scroll even when already on /colleges?q=<same> (router.push is a no-op then)
+      window.setTimeout(() => {
+        document.getElementById('browse')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+      return;
+    }
+    const path = CATEGORY_LISTING_PATH[category];
+    if (!path) return;
     onClose();
     router.push(path);
   };
@@ -420,6 +441,8 @@ export default function SearchDialog({ open, onClose }: SearchDialogProps) {
         {groupedResults.map((group) => {
           const config = CATEGORY_CONFIG[group.category];
           const overflow = group.totalCount - group.results.length;
+          const hasListingPage = group.category === 'college' || Boolean(CATEGORY_LISTING_PATH[group.category]);
+          const showOverflow = overflow > 0 && hasListingPage;
           const groupStartIndex = flatIndex;
           flatIndex += group.results.length;
 
@@ -447,7 +470,7 @@ export default function SearchDialog({ open, onClose }: SearchDialogProps) {
                 >
                   {config.label}
                 </Typography>
-                {overflow > 0 && (
+                {showOverflow && (
                   <Typography
                     variant="caption"
                     sx={{
@@ -459,7 +482,7 @@ export default function SearchDialog({ open, onClose }: SearchDialogProps) {
                     }}
                     onClick={() => handleOverflowClick(group.category)}
                   >
-                    +{overflow} more
+                    {group.category === 'college' ? `See all ${group.totalCount} results` : `+${overflow} more`}
                   </Typography>
                 )}
               </Box>
