@@ -23,21 +23,26 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error && error.code === 'PGRST116') {
-      // User not found by ms_oid — try email match before creating new user
-      // This links existing enrollment users (Firebase) to their Microsoft identity
+      // User not found by ms_oid. Try to link to an existing CRM user by email,
+      // matching either their primary email OR the linked_classroom_email the
+      // admin pre-set (handles students whose Gmail differs from their MS email).
       const { data: emailUser } = await supabase
         .from('users')
         .select('*')
-        .eq('email', msUser.email)
+        .or(`email.eq.${msUser.email},linked_classroom_email.eq.${msUser.email}`)
         .maybeSingle();
 
       if (emailUser) {
-        // Found existing user by email — link Microsoft identity to them
-        await supabase
-          .from('users')
-          .update({ ms_oid: msUser.oid })
-          .eq('id', emailUser.id);
-        user = { ...emailUser, ms_oid: msUser.oid };
+        // Link Microsoft identity to the existing user, and record the classroom
+        // email if it wasn't already set, so future logins (or admin tools)
+        // have an explicit link recorded.
+        const updates: Record<string, unknown> = { ms_oid: msUser.oid };
+        if (!emailUser.linked_classroom_email) {
+          updates.linked_classroom_email = msUser.email;
+          updates.linked_classroom_at = new Date().toISOString();
+        }
+        await supabase.from('users').update(updates).eq('id', emailUser.id);
+        user = { ...emailUser, ...updates };
       } else {
         // No match — auto-create as student (teachers are pre-set by admin)
         const { data: newUser, error: createError } = await supabase
