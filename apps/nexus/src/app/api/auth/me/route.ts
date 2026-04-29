@@ -23,13 +23,21 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (error && error.code === 'PGRST116') {
-      // User not found by ms_oid. Try to link to an existing CRM user by email,
-      // matching either their primary email OR the linked_classroom_email the
-      // admin pre-set (handles students whose Gmail differs from their MS email).
+      // User not found by ms_oid. Try to link to an existing CRM user by email.
+      // Matches either the primary email OR the linked_classroom_email the
+      // admin pre-set, and uses ILIKE so the lookup is case-insensitive
+      // (Azure UPN casing does not always match the case stored in DB, e.g.
+      // MS returns "Sanjeevraj_Ramesh@..." while DB has "sanjeevraj_ramesh@...").
+      // _ and % must be escaped because emails commonly contain underscores
+      // (e.g. firstname_lastname@neramclasses.com) which would otherwise act
+      // as single-char wildcards in ILIKE.
+      const safeEmail = msUser.email
+        .replace(/\\/g, '\\\\')
+        .replace(/[%_]/g, '\\$&');
       const { data: emailUser } = await supabase
         .from('users')
         .select('*')
-        .or(`email.eq.${msUser.email},linked_classroom_email.eq.${msUser.email}`)
+        .or(`email.ilike.${safeEmail},linked_classroom_email.ilike.${safeEmail}`)
         .maybeSingle();
 
       if (emailUser) {
