@@ -8,7 +8,7 @@ import {
   Paper,
   Breadcrumbs,
 } from '@mui/material';
-import { Link } from '@/i18n/routing';
+import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 
