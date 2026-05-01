@@ -7,7 +7,7 @@ import {
   Button,
   Paper,
   Breadcrumbs,
-} from '@neram/ui';
+} from '@mui/material';
 import { Link } from '@/i18n/routing';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
