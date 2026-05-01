@@ -125,7 +125,7 @@ interface NavColumn {
 
 interface NavGroup {
   key: string;
-  labelKey: 'colleges' | 'nataPrepNav' | 'counselingNav' | 'aboutNav';
+  labelKey: 'colleges' | 'examHubNav' | 'counselingNav' | 'aboutNav';
   icon: React.ReactNode;
   columns: NavColumn[];
 }
@@ -184,25 +184,48 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: 'nata',
-    labelKey: 'nataPrepNav',
+    key: 'examHub',
+    labelKey: 'examHubNav',
     icon: <MenuBookIcon fontSize="small" />,
     columns: [
       {
-        title: 'Courses',
+        title: 'NATA 2026',
         links: [
-          { label: 'NATA 2026', href: '/nata-2026', badge: 'NEW' },
-          { label: 'All Courses', href: '/courses' },
-          { label: 'Fees & Scholarships', href: '/fees' },
+          { label: 'NATA 2026 Hub', href: '/nata-2026' },
+          { label: 'Eligibility', href: '/nata-2026/eligibility' },
+          { label: 'Important Dates', href: '/nata-2026/important-dates' },
+          { label: 'Syllabus', href: '/nata-2026/syllabus' },
+          { label: 'Free Tools & Mocks', href: '/tools' },
         ],
       },
       {
-        title: 'Resources',
+        title: 'JEE Main Paper 2',
         links: [
-          { label: 'NATA Syllabus', href: '/nata-syllabus' },
-          { label: 'Previous Year Papers', href: '/previous-year-papers' },
-          { label: 'Best Books', href: '/best-books-nata-jee' },
-          { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
+          { label: 'JEE B.Arch Hub', href: '/jee-barch-hub' },
+          { label: 'Paper 2A: B.Arch', href: '/jee-barch-hub#paper-2a' },
+          { label: 'Paper 2B: B.Planning', href: '/jee-barch-hub#paper-2b' },
+          { label: 'NITs / SPAs / IIITs', href: '/colleges/josaa' },
+          { label: 'JEE Paper 2 Prep', href: '/jee-paper-2-preparation' },
+        ],
+      },
+      {
+        title: 'AAT 2026',
+        links: [
+          { label: 'AAT 2026 Hub', href: '/aat-2026', badge: 'NEW' },
+          { label: 'Eligibility', href: '/aat-2026#eligibility' },
+          { label: 'Schedule', href: '/aat-2026#schedule' },
+          { label: 'Syllabus (5 sections)', href: '/aat-2026#syllabus' },
+          { label: 'Drawing Kit', href: '/aat-2026#drawing-kit' },
+        ],
+      },
+      {
+        title: 'PGETA 2026',
+        links: [
+          { label: 'PGETA 2026 Hub', href: '/pgeta-2026', badge: 'NEW' },
+          { label: 'Eligibility', href: '/pgeta-2026#eligibility' },
+          { label: '3 Test Dates', href: '/pgeta-2026#schedule' },
+          { label: 'Syllabus (4 modules)', href: '/pgeta-2026#exam-pattern' },
+          { label: 'Fees + Scholarships', href: '/pgeta-2026#fees' },
         ],
       },
     ],

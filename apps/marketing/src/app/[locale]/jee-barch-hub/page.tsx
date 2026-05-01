@@ -61,8 +61,8 @@ export default async function JEEBArchHubPage({
           color="text.secondary"
           sx={{ maxWidth: 640, mx: 'auto', lineHeight: 1.7 }}
         >
-          JEE Main Paper 2B (Architecture) is the gateway to top government architecture colleges.
-          NIT Trichy, MNNIT Allahabad, SPA Delhi, and more. Compare cutoffs, fees, and placements.
+          JEE Main Paper 2 is the NTA-conducted gateway to top government architecture and planning colleges.
+          Paper 2A admits to B.Arch, Paper 2B to B.Planning, both via JoSAA. NIT Trichy, MNNIT Allahabad, SPA Delhi, and more.
         </Typography>
         <Stack direction="row" justifyContent="center" gap={2} sx={{ mt: 3, flexWrap: 'wrap' }}>
           <Button variant="contained" component={Link} href="/colleges/josaa" size="large">
@@ -72,6 +72,54 @@ export default async function JEEBArchHubPage({
             JEE Paper 2 Guide
           </Button>
         </Stack>
+      </Box>
+
+      {/* Paper 2A vs Paper 2B comparison */}
+      <Box sx={{ mb: 5 }}>
+        <Typography variant="h5" component="h2" fontWeight={800} sx={{ mb: 1 }}>
+          JEE Main Paper 2: which paper for which degree?
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, maxWidth: 760 }}>
+          NTA conducts JEE Main Paper 2 in two parts: Paper 2A for the 5-year B.Arch program, and Paper 2B for the 4-year B.Planning program. Both are 3 hours and run in the same session at the same centres, but the question paper differs.
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Paper id="paper-2a" variant="outlined" sx={{ p: 3, borderRadius: 2, height: '100%', borderTop: '4px solid', borderTopColor: 'secondary.main' }}>
+              <Chip label="Paper 2A" size="small" color="secondary" sx={{ fontWeight: 700, mb: 1 }} />
+              <Typography variant="h6" fontWeight={800} sx={{ mb: 0.5 }}>B.Arch (Architecture)</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Five-year professional Bachelor of Architecture, COA-registered. Routes you into NITs, SPAs, IIITs, and a few centrally funded institutes through JoSAA.
+              </Typography>
+              <Box component="ul" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.75, lineHeight: 1.7, fontSize: '0.95rem' } }}>
+                <li>Eligibility: 12th pass with Physics, Chemistry, Mathematics; aggregate norms apply.</li>
+                <li>Sections: Mathematics, Aptitude (MCQ), and Drawing (offline pen-and-paper).</li>
+                <li>Total marks: 400. Drawing is 100, Math is 100, Aptitude is 200.</li>
+                <li>Counselling: JoSAA, six rounds in June and July.</li>
+              </Box>
+              <Button component={Link} href="/jee-paper-2-preparation" size="small" sx={{ mt: 1.5, fontWeight: 600 }}>
+                Paper 2A prep guide
+              </Button>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Paper id="paper-2b" variant="outlined" sx={{ p: 3, borderRadius: 2, height: '100%', borderTop: '4px solid', borderTopColor: 'primary.main' }}>
+              <Chip label="Paper 2B" size="small" color="primary" sx={{ fontWeight: 700, mb: 1 }} />
+              <Typography variant="h6" fontWeight={800} sx={{ mb: 0.5 }}>B.Planning</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Four-year Bachelor of Planning, focused on urban and regional planning, GIS, transportation, and policy. Smaller seat pool, but a strong path into urban-design careers.
+              </Typography>
+              <Box component="ul" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.75, lineHeight: 1.7, fontSize: '0.95rem' } }}>
+                <li>Eligibility: 12th pass with Mathematics; aggregate norms apply.</li>
+                <li>Sections: Mathematics, Aptitude (MCQ), and Planning-Based Questions (MCQ).</li>
+                <li>Total marks: 400. All MCQ, no drawing test.</li>
+                <li>Counselling: JoSAA, alongside Paper 2A choices.</li>
+              </Box>
+              <Button component={Link} href="/colleges/josaa" size="small" sx={{ mt: 1.5, fontWeight: 600 }}>
+                B.Planning colleges via JoSAA
+              </Button>
+            </Paper>
+          </Grid>
+        </Grid>
       </Box>
 
       {/* Key Stats */}

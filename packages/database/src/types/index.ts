@@ -3590,6 +3590,95 @@ export interface CreateNataAssistanceRequestInput {
 }
 
 // ============================================
+// AAT 2026 / PGETA 2026 CONTENT TABLES
+// Schemas mirror nata_brochures / nata_faqs / nata_banners exactly so admin
+// tooling and query patterns can be shared. See migration
+// 20260501000000_aat_pgeta_content_tables.sql.
+// ============================================
+
+export interface AatBrochure extends Timestamps {
+  id: string;
+  version: string;
+  release_date: string;
+  year: number;
+  file_url: string;
+  file_size_bytes: number | null;
+  changelog: string | null;
+  is_current: boolean;
+  download_count: number;
+  is_active: boolean;
+  display_order: number;
+  uploaded_by: string | null;
+}
+
+export interface AatFaq extends Timestamps {
+  id: string;
+  question: Record<string, string>;
+  answer: Record<string, string>;
+  category: string;
+  page_slug: string | null;
+  year: number;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface AatBanner extends Timestamps {
+  id: string;
+  spot: string;
+  heading: Record<string, string>;
+  subtext: Record<string, string>;
+  image_url: string | null;
+  mobile_image_url: string | null;
+  cta_text: Record<string, string>;
+  cta_link: string | null;
+  is_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  display_order: number;
+}
+
+export interface PgetaBrochure extends Timestamps {
+  id: string;
+  version: string;
+  release_date: string;
+  year: number;
+  file_url: string;
+  file_size_bytes: number | null;
+  changelog: string | null;
+  is_current: boolean;
+  download_count: number;
+  is_active: boolean;
+  display_order: number;
+  uploaded_by: string | null;
+}
+
+export interface PgetaFaq extends Timestamps {
+  id: string;
+  question: Record<string, string>;
+  answer: Record<string, string>;
+  category: string;
+  page_slug: string | null;
+  year: number;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface PgetaBanner extends Timestamps {
+  id: string;
+  spot: string;
+  heading: Record<string, string>;
+  subtext: Record<string, string>;
+  image_url: string | null;
+  mobile_image_url: string | null;
+  cta_text: Record<string, string>;
+  cta_link: string | null;
+  is_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  display_order: number;
+}
+
+// ============================================
 // CHATBOT CONVERSATIONS
 // ============================================
 

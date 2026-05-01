@@ -33,6 +33,8 @@ export * from './direct-enrollment';
 export * from './post-enrollment-onboarding';
 export * from './support-tickets';
 export * from './nata';
+export * from './aat';
+export * from './pgeta';
 export * from './testimonials';
 export * from './social-proofs';
 export * from './nata-exam-centers';

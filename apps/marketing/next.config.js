@@ -128,6 +128,12 @@ const nextConfig = {
       { source: '/:locale/nata-2026/photo-signature', destination: '/:locale/nata-2026/photo-signature-requirements', permanent: true },
       { source: '/:locale/nata-2026/scoring', destination: '/:locale/nata-2026/scoring-and-results', permanent: true },
 
+      // PGEAT (common misspelling) -> PGETA canonical, preserve any trailing path.
+      { source: '/pgeat-2026', destination: '/pgeta-2026', permanent: true },
+      { source: '/pgeat-2026/:path*', destination: '/pgeta-2026/:path*', permanent: true },
+      { source: '/:locale/pgeat-2026', destination: '/:locale/pgeta-2026', permanent: true },
+      { source: '/:locale/pgeat-2026/:path*', destination: '/:locale/pgeta-2026/:path*', permanent: true },
+
       // Study guide pages (only redirects where source != destination)
       { source: '/nata-syllabus-subjects', destination: '/nata-syllabus', permanent: true },
 
