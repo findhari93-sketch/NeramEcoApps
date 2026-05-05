@@ -5,7 +5,7 @@ import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Try models in order: 2.5-flash (best quota), 2.0-flash, 2.0-flash-lite
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const NATA_SYSTEM_PROMPT = `You are Aintra, the friendly NATA Assistant by Neram Classes. You ONLY answer questions about NATA (National Aptitude Test in Architecture), B.Arch admissions, and architecture education. If a question is not related to these topics, politely decline and redirect to NATA topics.

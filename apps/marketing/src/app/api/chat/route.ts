@@ -8,7 +8,7 @@ import { TOOL_DECLARATIONS } from '@/lib/aintra/tools/declarations';
 import { dispatchTool } from '@/lib/aintra/tools/dispatch';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'];
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_TOOL_ITERATIONS = 3;
 
@@ -268,10 +268,10 @@ async function runGeminiLoop(
   const contents: GeminiContent[] = [...initialContents];
   const toolCalls: ToolCallLog[] = [];
 
-  // Tools include our DB function declarations + Gemini's native google_search.
+  // Gemini disallows combining built-in tools (google_search) with
+  // functionDeclarations in the same request, so we use only function calling.
   const toolsWithGrounding: unknown[] = [
     { functionDeclarations: TOOL_DECLARATIONS },
-    { google_search: {} },
   ];
 
   for (let iteration = 0; iteration <= MAX_TOOL_ITERATIONS; iteration++) {
