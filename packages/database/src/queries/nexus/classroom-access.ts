@@ -3,7 +3,14 @@ import type { ClassroomAccessRequest, ClassroomAccessRequestStatus } from '../..
 
 /**
  * Create a classroom access request.
- * If the user already has a pending request, returns the existing one.
+ *
+ * Returns the existing request if the user already has one in 'pending'
+ * or 'approved' state. An 'approved' request that didn't result in a
+ * classroom enrollment used to spawn a fresh request on every NoClassroomWelcome
+ * mount, flooding the admin queue. Re-using the approved row prevents that.
+ *
+ * 'rejected' requests still create a fresh row so the user can re-request
+ * after addressing the rejection reason.
  */
 export async function createClassroomAccessRequest(
   userId: string,
@@ -13,9 +20,8 @@ export async function createClassroomAccessRequest(
 ): Promise<ClassroomAccessRequest> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Check for existing pending request first
   const existing = await getClassroomAccessRequest(userId, client);
-  if (existing && existing.status === 'pending') {
+  if (existing && (existing.status === 'pending' || existing.status === 'approved')) {
     return existing;
   }
 

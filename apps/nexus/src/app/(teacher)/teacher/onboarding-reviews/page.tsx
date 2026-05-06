@@ -58,6 +58,15 @@ interface AccessRequest {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+  primary_email: string | null;
+  linked_classroom_email: string | null;
+  has_ms_oid: boolean;
+  avatar_url: string | null;
+}
+
+interface ClassroomOption {
+  id: string;
+  name: string;
 }
 
 export default function OnboardingReviewsPage() {
@@ -71,8 +80,31 @@ export default function OnboardingReviewsPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectAccessDialog, setRejectAccessDialog] = useState<{ requestId: string; name: string } | null>(null);
   const [rejectAccessNotes, setRejectAccessNotes] = useState('');
+  const [approveDialog, setApproveDialog] = useState<AccessRequest | null>(null);
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string>('');
+  const [classrooms, setClassrooms] = useState<ClassroomOption[]>([]);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchClassrooms = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/classrooms', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = (data.classrooms || []).map((c: any) => ({ id: c.id, name: c.name }));
+      setClassrooms(list);
+    } catch (err) {
+      console.error('Failed to fetch classrooms:', err);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    fetchClassrooms();
+  }, [fetchClassrooms]);
 
   const fetchAccessRequests = useCallback(async () => {
     try {
@@ -119,8 +151,9 @@ export default function OnboardingReviewsPage() {
     fetchReviews();
   }, [fetchReviews]);
 
-  const handleApproveAccess = async (requestId: string) => {
-    setActionLoading(requestId);
+  const handleApproveAccess = async () => {
+    if (!approveDialog || !selectedClassroomId) return;
+    setActionLoading(approveDialog.id);
     setError(null);
     try {
       const token = await getToken();
@@ -129,11 +162,21 @@ export default function OnboardingReviewsPage() {
       const res = await fetch('/api/classroom-access/requests', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_id: requestId, action: 'approve' }),
+        body: JSON.stringify({
+          request_id: approveDialog.id,
+          action: 'approve',
+          classroom_id: selectedClassroomId,
+        }),
       });
 
-      if (!res.ok) throw new Error('Failed to approve access request');
-      setSuccess('Access request approved. You can now add this student to a classroom from the Students page.');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to approve access request');
+      }
+      const classroomName = classrooms.find((c) => c.id === selectedClassroomId)?.name || 'classroom';
+      setSuccess(`${approveDialog.user_name} enrolled in ${classroomName}.`);
+      setApproveDialog(null);
+      setSelectedClassroomId('');
       fetchAccessRequests();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve');
@@ -302,7 +345,10 @@ export default function OnboardingReviewsPage() {
               <AccessRequestCard
                 key={req.id}
                 request={req}
-                onApprove={() => handleApproveAccess(req.id)}
+                onApprove={() => {
+                  setApproveDialog(req);
+                  setSelectedClassroomId('');
+                }}
                 onReject={() => setRejectAccessDialog({ requestId: req.id, name: req.user_name })}
                 isLoading={actionLoading === req.id}
               />
@@ -383,6 +429,84 @@ export default function OnboardingReviewsPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Approve access request dialog — admin must pick a classroom */}
+      <Dialog
+        open={!!approveDialog}
+        onClose={() => {
+          setApproveDialog(null);
+          setSelectedClassroomId('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Approve {approveDialog?.user_name}</DialogTitle>
+        <DialogContent>
+          {approveDialog && (
+            <>
+              <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  Identity
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {approveDialog.user_name}
+                </Typography>
+                {approveDialog.linked_classroom_email && (
+                  <Typography variant="caption" sx={{ display: 'block', color: 'success.main' }}>
+                    Microsoft: {approveDialog.linked_classroom_email}
+                  </Typography>
+                )}
+                {approveDialog.primary_email && (
+                  <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
+                    Login email: {approveDialog.primary_email}
+                  </Typography>
+                )}
+                {!approveDialog.has_ms_oid && (
+                  <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+                    No Microsoft account linked. Verify identity before approving.
+                  </Alert>
+                )}
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Select the classroom to enroll this student into:
+              </Typography>
+              <TextField
+                select
+                fullWidth
+                value={selectedClassroomId}
+                onChange={(e) => setSelectedClassroomId(e.target.value)}
+                SelectProps={{ native: true }}
+              >
+                <option value="">-- Choose classroom --</option>
+                {classrooms.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </TextField>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setApproveDialog(null);
+              setSelectedClassroomId('');
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="success"
+            disabled={!selectedClassroomId || !!actionLoading}
+            onClick={handleApproveAccess}
+            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
+          >
+            Approve & Enroll
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Reject access request dialog */}
       <Dialog open={!!rejectAccessDialog} onClose={() => setRejectAccessDialog(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Reject {rejectAccessDialog?.name}&apos;s Access Request</DialogTitle>
@@ -443,24 +567,46 @@ function AccessRequestCard({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-        <Avatar sx={{ width: 44, height: 44, bgcolor: 'primary.main' }}>
+        <Avatar src={request.avatar_url || undefined} sx={{ width: 44, height: 44, bgcolor: 'primary.main' }}>
           {request.user_name?.[0] || '?'}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             {request.user_name}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-            {request.user_email}
-          </Typography>
+          {request.linked_classroom_email ? (
+            <Typography
+              variant="caption"
+              sx={{ display: 'block', color: 'success.main', wordBreak: 'break-all', fontWeight: 600 }}
+            >
+              MS: {request.linked_classroom_email}
+            </Typography>
+          ) : (
+            <Typography
+              variant="caption"
+              sx={{ display: 'block', color: 'warning.dark', wordBreak: 'break-all', fontWeight: 600 }}
+            >
+              No MS classroom email linked
+            </Typography>
+          )}
+          {request.primary_email && request.primary_email !== request.linked_classroom_email && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-all' }}>
+              Login: {request.primary_email}
+            </Typography>
+          )}
         </Box>
-        <Chip
-          label={daysSinceRequest > 0 ? `${daysSinceRequest}d ago` : 'Today'}
-          color={daysSinceRequest > 3 ? 'warning' : 'default'}
-          size="small"
-          variant="outlined"
-          sx={{ fontWeight: 600 }}
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
+          <Chip
+            label={daysSinceRequest > 0 ? `${daysSinceRequest}d ago` : 'Today'}
+            color={daysSinceRequest > 3 ? 'warning' : 'default'}
+            size="small"
+            variant="outlined"
+            sx={{ fontWeight: 600 }}
+          />
+          {!request.has_ms_oid && (
+            <Chip label="No MS link" color="warning" size="small" sx={{ fontWeight: 600 }} />
+          )}
+        </Box>
       </Box>
 
       <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 2 }}>

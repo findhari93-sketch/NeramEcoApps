@@ -84,19 +84,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Sync name/email from Microsoft and update last login
+    // Sync name and update last login from Microsoft.
+    // Don't overwrite users.email — students often sign up via Firebase with
+    // a personal email first, then later log in with their @neramclasses.com
+    // Microsoft account. The primary email stays as the original signup
+    // identity; the MS classroom email is tracked separately in
+    // linked_classroom_email so admins can tell the two apart.
     const updates: Record<string, string> = { last_login_at: new Date().toISOString() };
     if (msUser.name && msUser.name !== user.name) updates.name = msUser.name;
-    if (msUser.email && msUser.email !== user.email) updates.email = msUser.email;
+    if (
+      msUser.email &&
+      msUser.email !== user.email &&
+      msUser.email !== user.linked_classroom_email
+    ) {
+      updates.linked_classroom_email = msUser.email;
+      if (!user.linked_classroom_at) {
+        updates.linked_classroom_at = new Date().toISOString();
+      }
+    }
 
     await supabase
       .from('users')
       .update(updates)
       .eq('id', user.id);
 
-    // Use latest values for response
     if (updates.name) user = { ...user, name: updates.name };
-    if (updates.email) user = { ...user, email: updates.email };
+    if (updates.linked_classroom_email) {
+      user = { ...user, linked_classroom_email: updates.linked_classroom_email };
+    }
 
     // Fetch enrolled classrooms with role
     const { data: enrollments } = await supabase
