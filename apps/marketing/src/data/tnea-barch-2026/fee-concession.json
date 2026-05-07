@@ -1,0 +1,47 @@
+{
+  "registration_fee": {
+    "oc_bc_bcm_mbc": 500,
+    "sc_sca_st": 250,
+    "payment_modes": ["Credit card", "Debit card", "Net banking", "UPI", "Demand Draft (favour of 'The Secretary, TNEA' payable at Chennai)"]
+  },
+  "concessions": [
+    {
+      "name": "7.5% Government School Quota Fee Waiver",
+      "description": "Counselling, tuition, and hostel fees fully waived for students admitted under the 7.5% reservation for government school students (G.O. 221, Higher Education J2, dated 15.11.2021).",
+      "eligibility": [
+        "Studied 6th to 12th standard in a government, corporation, municipal, Adi Dravidar & Tribal Welfare, Kallar Reclamation, or Forest Department school",
+        "Submit proof of school study from 6th to 12th standard"
+      ],
+      "benefit": "Full fee waiver (counselling + tuition + hostel)"
+    },
+    {
+      "name": "First Graduate Tuition Fee Concession",
+      "description": "Tuition fee concession for candidates who will be the first graduate in their family (G.O. 85, Higher Education J2, dated 16.04.2010).",
+      "eligibility": [
+        "First graduate in the family (no brother or sister has availed this concession before)",
+        "Certificate from Head Quarters Deputy Tahsildar in the prescribed G.O. format (electronic / digitally signed e-Certificate)",
+        "Joint declaration by candidate and parent or guardian"
+      ],
+      "benefit": "Full tuition fee concession during the B.Arch programme"
+    },
+    {
+      "name": "Post-Matric Scholarship (PMSS)",
+      "description": "Post-Matric Scholarship for SC, SCA, ST candidates and SC/SCA converted Christians whose parental annual income is below Rs.2,50,000.",
+      "eligibility": [
+        "SC / SCA / ST candidate, or SC/SCA converted Christian",
+        "Parental annual income less than Rs.2,50,000 from all sources",
+        "Income certificate from appropriate authority"
+      ],
+      "benefit": "Scholarship paid through the college after admission"
+    }
+  ],
+  "govt_school_categories": [
+    "Government Schools",
+    "Corporation Schools",
+    "Municipal Schools",
+    "Adi Dravida and Tribal Welfare Schools",
+    "Kallar Reclamation Schools",
+    "Forest Department Schools",
+    "Schools managed by Government Departments"
+  ]
+}

@@ -785,6 +785,89 @@ export function generateAggregateRatingSchema() {
   };
 }
 
+// ─── Event Schema (for dated milestones like exam dates, counselling rounds) ────
+
+export function generateEventSchema(event: {
+  name: string;
+  description?: string;
+  startDate: string; // ISO date
+  endDate?: string;
+  url?: string;
+  status?: 'EventScheduled' | 'EventPostponed' | 'EventRescheduled' | 'EventCancelled';
+  attendanceMode?: 'OnlineEventAttendanceMode' | 'OfflineEventAttendanceMode' | 'MixedEventAttendanceMode';
+  location?: { name: string; url?: string };
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: event.name,
+    ...(event.description && { description: event.description }),
+    startDate: event.startDate,
+    ...(event.endDate && { endDate: event.endDate }),
+    ...(event.url && { url: event.url }),
+    eventStatus: `https://schema.org/${event.status || 'EventScheduled'}`,
+    eventAttendanceMode: `https://schema.org/${event.attendanceMode || 'OnlineEventAttendanceMode'}`,
+    location: event.location
+      ? {
+          '@type': event.attendanceMode === 'OfflineEventAttendanceMode' ? 'Place' : 'VirtualLocation',
+          name: event.location.name,
+          ...(event.location.url && { url: event.location.url }),
+        }
+      : {
+          '@type': 'VirtualLocation',
+          name: 'TNEA Online Portal',
+          url: 'https://www.tneaonline.org',
+        },
+    organizer: {
+      '@type': 'Organization',
+      name: 'Directorate of Technical Education, Tamil Nadu',
+      url: 'https://www.dte.tn.gov.in',
+    },
+  };
+}
+
+// ─── Generic LocalBusiness Schema (for third-party places like TFCs) ────────────
+
+export function generateGenericLocalBusinessSchema(business: {
+  name: string;
+  url?: string;
+  telephone?: string;
+  streetAddress?: string;
+  addressLocality?: string;
+  addressRegion?: string;
+  postalCode?: string;
+  addressCountry?: string;
+  opens?: string;
+  closes?: string;
+  identifier?: string;
+}) {
+  const schema: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'GovernmentOffice',
+    name: business.name,
+    ...(business.url && { url: business.url }),
+    ...(business.telephone && { telephone: business.telephone }),
+    ...(business.identifier && { identifier: business.identifier }),
+    address: {
+      '@type': 'PostalAddress',
+      ...(business.streetAddress && { streetAddress: business.streetAddress }),
+      ...(business.addressLocality && { addressLocality: business.addressLocality }),
+      ...(business.addressRegion && { addressRegion: business.addressRegion || 'Tamil Nadu' }),
+      ...(business.postalCode && { postalCode: business.postalCode }),
+      addressCountry: business.addressCountry || 'IN',
+    },
+  };
+  if (business.opens && business.closes) {
+    schema.openingHoursSpecification = {
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      opens: business.opens,
+      closes: business.closes,
+    };
+  }
+  return schema;
+}
+
 // ─── Online Course Schema (NATA online coaching) ───────────────────────────────
 
 export function generateOnlineCourseSchema() {

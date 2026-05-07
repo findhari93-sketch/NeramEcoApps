@@ -1,0 +1,152 @@
+[
+  {
+    "id": "what_is_tnea_barch",
+    "question": "What is TNEA B.Arch Counselling?",
+    "answer": "TNEA B.Arch Counselling is the centralised admission process conducted by the Directorate of Technical Education, Tamil Nadu (through Anna University) for the 5-year Bachelor of Architecture programme in Anna University departments, government-aided engineering colleges, and seats surrendered by self-financing colleges in Tamil Nadu.",
+    "category": "general"
+  },
+  {
+    "id": "official_portal",
+    "question": "What is the official TNEA B.Arch portal?",
+    "answer": "The official portal is https://barch.tneaonline.org (or the parent site https://www.tneaonline.org and https://www.dte.tn.gov.in). All registration, certificate upload, and counselling happens online through this portal.",
+    "category": "general"
+  },
+  {
+    "id": "registration_dates",
+    "question": "When does TNEA B.Arch 2026 registration open and close?",
+    "answer": "Online registration tentatively opens on 03 May 2026 and closes on 20 June 2026. Certificate upload also closes on 20 June 2026. These dates are tentative until the official notification is issued.",
+    "category": "general"
+  },
+  {
+    "id": "academic_eligibility",
+    "question": "What is the academic eligibility for TNEA B.Arch?",
+    "answer": "You must have passed 10+2 (or equivalent) with Physics and Mathematics as compulsory subjects, plus one elective from Chemistry, Biology, Computer Science, IT, Engineering Graphics, Business Studies, or a Technical Vocational subject, scoring at least 45% aggregate. A 10+3 Diploma with Mathematics as a compulsory subject and 45% aggregate is also accepted.",
+    "category": "eligibility"
+  },
+  {
+    "id": "nata_or_jee",
+    "question": "Do I need NATA or JEE Paper 2 for TNEA B.Arch?",
+    "answer": "Yes, you need a qualifying score in NATA (conducted by the Council of Architecture) or JEE (Main) Paper-2 B.Arch (conducted by NTA). If you have both, the higher score is used in the merit calculation.",
+    "category": "nata_jee"
+  },
+  {
+    "id": "merit_formula",
+    "question": "How is the TNEA B.Arch merit score calculated?",
+    "answer": "Total = Board marks (out of 200) + NATA or JEE Paper-2 marks (out of 200) = 400. Board marks are scaled to 200 by (marks/max) x 200. The higher of NATA and JEE Paper-2 is used. Ties are broken by HSC aggregate, then date of birth (elder preferred), then random number assigned at registration.",
+    "category": "general"
+  },
+  {
+    "id": "best_nata",
+    "question": "Is the best NATA score considered if I take multiple attempts?",
+    "answer": "Yes. Per the Council of Architecture rules followed by TNEA, the best NATA score across attempts is considered. Valid NATA 2025 scores (for candidates who did not take admission in 2025-26) are also accepted, subject to COA conditions.",
+    "category": "nata_jee"
+  },
+  {
+    "id": "nativity_outside_tn",
+    "question": "I am a Tamil Nadu native but studied 12th outside Tamil Nadu. Am I eligible?",
+    "answer": "Yes. You must produce a Nativity Certificate in electronic form or digitally signed e-Certificate issued by the Government of Tamil Nadu. Without it, your application will not be considered for Tamil Nadu nativity-based seats.",
+    "category": "eligibility"
+  },
+  {
+    "id": "other_state",
+    "question": "I am from another state but studied 8th to 12th in Tamil Nadu. Am I eligible?",
+    "answer": "Yes. You do not need a Nativity Certificate. You will be considered under the Open Competition category.",
+    "category": "eligibility"
+  },
+  {
+    "id": "reservation_categories",
+    "question": "What are the reservation percentages in TNEA?",
+    "answer": "Open Competition 31%, Backward Class (BC) 26.5%, Backward Class Muslim (BCM) 3.5%, Most Backward Class & Denotified Communities (MBC & DNC) 20%, Scheduled Caste (SC) 15%, Scheduled Caste Arunthathiyars (SCA) 3%, Scheduled Tribe (ST) 1%. SC/SCA/ST/MBC/BC/BCM candidates can also compete for Open Competition seats in addition to their reserved quota.",
+    "category": "reservation"
+  },
+  {
+    "id": "govt_school_quota",
+    "question": "What is the 7.5% Government School quota?",
+    "answer": "7.5% of seats are reserved on a preferential basis for students who studied 6th to 12th standard in a Tamil Nadu Government, Corporation, Municipal, Adi Dravidar & Tribal Welfare, Kallar Reclamation, or Forest Department school. This applies on top of all categories including Open. Tuition, hostel, and counselling fees are fully waived for selected candidates.",
+    "category": "reservation"
+  },
+  {
+    "id": "first_graduate",
+    "question": "Who is eligible for the First Graduate fee concession?",
+    "answer": "Candidates who will be the first graduate in their family. You must produce a First Graduate Certificate from the Head Quarters Deputy Tahsildar in the prescribed format, plus a joint declaration by you and your parent. If a brother or sister has already availed this concession, you are not eligible.",
+    "category": "fees"
+  },
+  {
+    "id": "registration_fee",
+    "question": "What is the TNEA B.Arch registration fee?",
+    "answer": "Rs.500 for OC, BC, BCM, and MBC & DNC candidates. Rs.250 for SC, SCA, and ST candidates. Payment is accepted by Credit/Debit card, Net banking, UPI, or Demand Draft favouring 'The Secretary, TNEA' payable at Chennai.",
+    "category": "fees"
+  },
+  {
+    "id": "documents_required",
+    "question": "What documents do I need to upload?",
+    "answer": "Key documents: 10th and 12th (or Diploma) mark sheets, NATA/JEE Paper-2 score card, Transfer Certificate, Aadhaar card, Nativity Certificate (if applicable), Permanent Community Certificate (for reserved categories), First Graduate Certificate (if claiming concession), Government School study proof for 7.5% quota, and special reservation certificates if applicable.",
+    "category": "documents"
+  },
+  {
+    "id": "what_is_tfc",
+    "question": "What is a TFC and do I need to visit one?",
+    "answer": "A TFC (Tamil Nadu Engineering Admissions Facilitation Centre) is a designated centre, polytechnic, government college, or Anna University campus, that helps you with online registration, certificate upload, and counselling-related procedures. Registration can be done from anywhere online; visiting a TFC is optional, but it is helpful if you need assistance. There are 110+ TFCs across all 38 districts in Tamil Nadu.",
+    "category": "tfcs"
+  },
+  {
+    "id": "tfc_hours",
+    "question": "What are the working hours of TFCs?",
+    "answer": "All TFCs operate from 9:00 AM to 5:00 PM. Use our TFC Locator to find the nearest centre, with phone numbers and address.",
+    "category": "tfcs"
+  },
+  {
+    "id": "counselling_rounds",
+    "question": "How many counselling rounds are there?",
+    "answer": "There are 3 online counselling rounds. Each round has 4 stages: Choice Filling (3 days), Allotment, Confirmation of Allotment (2 days), and Reporting & Fee Payment (5 days). Special reservation rounds (Differently Abled, Ex-Servicemen wards, Sports Persons) happen first.",
+    "category": "counselling"
+  },
+  {
+    "id": "confirmation_options",
+    "question": "What options do I have when a seat is allotted?",
+    "answer": "Six options: (1) Accept and Join, (2) Accept and Upward, (3) Decline and Upward, (4) Decline and Move to Next Round, (5) Decline and Quit, (6) Upward or Move to Next Round (shown if no seat is allotted). Non-confirmation within 2 days cancels the allotment.",
+    "category": "counselling"
+  },
+  {
+    "id": "upward_movement",
+    "question": "What is upward movement?",
+    "answer": "Upward movement is the process where, after the main allotment, you can wait for a higher-priority choice from your preference list. You pay the necessary fee at a TFC to lock your current seat and remain in the queue for a better choice. If a better choice opens up, your previous seat is replaced; otherwise the previous seat is confirmed.",
+    "category": "counselling"
+  },
+  {
+    "id": "scholarship_no_fee",
+    "question": "Do scholarship holders need to pay fees during reporting?",
+    "answer": "No. Candidates eligible for the 7.5% Government School preferential quota, First Graduate scholarship, or Post-Matric Scholarship (PMSS) must report to the college or TFC but do not need to pay the fee at the time of reporting. The government / college handles the fee.",
+    "category": "fees"
+  },
+  {
+    "id": "pwd_eligibility",
+    "question": "Can persons with disabilities apply for B.Arch?",
+    "answer": "Yes. 5% horizontal reservation is available for Persons with Benchmark Disabilities. B.Arch is suitable for all 21 listed disabilities except 100% blindness. You need a certificate from a District Medical Board (minimum 3 doctors) in the prescribed format.",
+    "category": "special"
+  },
+  {
+    "id": "ex_servicemen",
+    "question": "How does the Ex-Servicemen wards quota work?",
+    "answer": "1 seat is reserved for sons/daughters of ex-servicemen (in Stand-alone Self Finance colleges only). You need a certificate from a Tamil Nadu Department of Ex-Servicemen Welfare officer (Assistant Director or above) plus the discharge certificate and Ex-Servicemen ID card of your parent.",
+    "category": "special"
+  },
+  {
+    "id": "sports_quota",
+    "question": "How does the Sports Persons quota work?",
+    "answer": "6 seats are reserved for Eminent Sports Persons (1 in University Department, 5 in Stand-alone Self Finance colleges). Selection is based on total marks for sports achievements per Annexure III. Sports candidates undergo in-person verification in Chennai (the only category with in-person verification).",
+    "category": "special"
+  },
+  {
+    "id": "non_reporting",
+    "question": "What happens if I do not report to the allotted college?",
+    "answer": "Your allotment will be cancelled and you will lose the seat. The vacant seat is pooled into the next round / upward movement. You will not be considered for further rounds in this counselling cycle.",
+    "category": "counselling"
+  },
+  {
+    "id": "how_many_colleges",
+    "question": "How many B.Arch colleges participate in TNEA?",
+    "answer": "Approximately 32 architecture colleges in Tamil Nadu participate, including Anna University's School of Architecture and Planning (SAP), government-aided colleges, and self-financing colleges that surrender seats to TNEA. Use our College Predictor to find colleges matching your score.",
+    "category": "general"
+  }
+]

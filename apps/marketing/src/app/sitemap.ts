@@ -110,6 +110,15 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/nata-2026/previous-year-papers', lastModified: '2026-03-13' },
   { path: '/nata-2026/best-books', lastModified: '2026-03-13' },
   { path: '/nata-2026/admit-card', lastModified: '2026-03-13' },
+  // TNEA B.Arch 2026 Information Hub (English-only content, en + ta planned for translation)
+  { path: '/counseling/tnea-barch', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/eligibility-documents', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/important-dates', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/counselling-procedure', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/reservation-fee-concession', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/tfc-list', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/how-to-apply', lastModified: '2026-05-07' },
+  { path: '/counseling/tnea-barch/faq', lastModified: '2026-05-07' },
 ];
 
 // Course slugs

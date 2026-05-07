@@ -1,0 +1,55 @@
+{
+  "general": [
+    { "code": "OC", "name": "Open Competition", "percent": 31.0, "description": "General merit, no community-based reservation. SC/SCA/ST/MBC/BC/BCM candidates are also eligible to compete here in addition to their reserved quota." },
+    { "code": "BC", "name": "Backward Class", "percent": 26.5, "description": "Reservation for backward classes recognised by the Government of Tamil Nadu. Permanent community certificate required." },
+    { "code": "BCM", "name": "Backward Class Muslim", "percent": 3.5, "description": "Reservation for Muslim communities classified as backward by the Government of Tamil Nadu." },
+    { "code": "MBC & DNC", "name": "Most Backward Class & Denotified Communities", "percent": 20.0, "description": "Reservation for MBC and DNC communities listed in the Tamil Nadu government schedule." },
+    { "code": "SC", "name": "Scheduled Caste", "percent": 15.0, "description": "Reservation for Scheduled Caste candidates with valid community certificate from Tahsildar of native taluk." },
+    { "code": "SCA", "name": "Scheduled Caste Arunthathiyars", "percent": 3.0, "description": "Sub-category within SC for Arunthathiyar community. Vacant SCA seats may be filled by SC in the SCA-to-SC round." },
+    { "code": "ST", "name": "Scheduled Tribe", "percent": 1.0, "description": "Reservation for Scheduled Tribe candidates with community certificate from RDO/Sub Collector of native place." }
+  ],
+  "special": [
+    {
+      "category": "Sons / Daughters of Ex-Servicemen",
+      "quota": "1 seat (Stand-alone Self Finance college only)",
+      "notes": "Certificate from an officer of the Tamil Nadu Department of Ex-Servicemen Welfare (not below Assistant Director rank). Discharge certificate and Ex-Servicemen ID card of parent also required."
+    },
+    {
+      "category": "Persons with Benchmark Disabilities",
+      "quota": "5% horizontal reservation",
+      "notes": "B.Arch is suitable for all 21 listed disabilities except 100% blindness. Medical Board certificate (minimum 3 doctors) of the district required, in the prescribed format."
+    },
+    {
+      "category": "Eminent Sports Persons",
+      "quota": "6 seats (1 in University Department, 5 in Stand-alone Self Finance colleges)",
+      "notes": "Selection based on total marks for sports achievements per Annexure III of the brochure. In-person verification at Chennai."
+    }
+  ],
+  "pwd_disability_list": [
+    "Blindness",
+    "Low-Vision",
+    "Leprosy Cured persons",
+    "Hearing Impairment (deaf and hard of hearing)",
+    "Locomotor Disability",
+    "Acid Attack Victim",
+    "Dwarfism",
+    "Intellectual Disability",
+    "Mental Illness",
+    "Autism Spectrum Disorder",
+    "Cerebral Palsy",
+    "Muscular Dystrophy",
+    "Chronic Neurological conditions",
+    "Specific Learning Disabilities",
+    "Multiple Sclerosis",
+    "Speech and Language disability",
+    "Thalassemia",
+    "Hemophilia",
+    "Sickle Cell disease",
+    "Multiple disabilities including deaf-blindness",
+    "Parkinson's disease"
+  ],
+  "govt_school_quota": {
+    "percent": 7.5,
+    "eligibility": "Students who have studied 6th to 12th standard continuously in Tamil Nadu Government, Corporation, Municipal, Adi Dravidar & Tribal Welfare, Kallar Reclamation, Forest Department, or any other Government-managed school. Applies on top of all other categories including OC."
+  }
+}

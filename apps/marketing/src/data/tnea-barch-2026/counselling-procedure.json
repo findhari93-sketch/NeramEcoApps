@@ -1,0 +1,69 @@
+{
+  "rounds_count": 3,
+  "stages_per_round": [
+    {
+      "name": "Choice Filling",
+      "duration": "3 days",
+      "description": "Candidates exercise their preferred choices of colleges and branches in priority order. Order matters; any number of choices can be added."
+    },
+    {
+      "name": "Allotment",
+      "duration": "1 day",
+      "description": "Seats are allotted based on rank, community, choice order, and seat availability."
+    },
+    {
+      "name": "Confirmation of Allotment",
+      "duration": "2 days",
+      "description": "Candidate must confirm the allotted seat by selecting one of six options. Non-confirmation leads to loss of seat and movement to the next round."
+    },
+    {
+      "name": "Reporting & Fee Payment",
+      "duration": "5 days",
+      "description": "Reporting to the allotted college (Accept and Join) or to the nearest TFC (Accept and Upward / Decline and Upward) and paying the necessary fees."
+    }
+  ],
+  "confirmation_options": [
+    {
+      "id": "accept_join",
+      "title": "Accept and Join",
+      "short": "Lock the allotted seat",
+      "description": "Satisfied with the allotment. Download the provisional allotment order and report to the college on or before the date specified for admission. Non-reporting or non-payment cancels the allotment."
+    },
+    {
+      "id": "accept_upward",
+      "title": "Accept and Upward",
+      "short": "Lock the seat, wait for a better choice",
+      "description": "Satisfied with the allotment but want to wait for a higher-priority choice in the upward movement. Report to the nearest TFC, pay fees, and the previous allotment is confirmed if no better choice opens up."
+    },
+    {
+      "id": "decline_upward",
+      "title": "Decline and Upward",
+      "short": "Drop this seat, wait for a higher choice",
+      "description": "Not satisfied with the allotment. Decline it, but wait for a higher-priority choice in upward movement. If none opens, you move to the next round."
+    },
+    {
+      "id": "decline_next",
+      "title": "Decline and Move to Next Round",
+      "short": "Drop this seat, try the next round",
+      "description": "Not satisfied with the allotment and not interested in upward movement either. Decline and participate in the next counselling round."
+    },
+    {
+      "id": "decline_quit",
+      "title": "Decline and Quit",
+      "short": "Drop this seat, exit counselling",
+      "description": "Not satisfied with the allotment and do not wish to continue in any subsequent round. You exit the counselling process."
+    },
+    {
+      "id": "upward_or_next",
+      "title": "Upward or Move to Next Round",
+      "short": "Try upward movement, then next round",
+      "description": "Shown when no seat is allotted based on your choices. Opt for upward movement; if a seat opens up it is allotted, otherwise you move to the next round."
+    }
+  ],
+  "notes": [
+    "Special reservation counselling (Differently Abled, Ex-Servicemen wards, Sports Persons) is conducted first, followed by general and 7.5% government-school counselling running simultaneously online.",
+    "Candidates eligible for 7.5% government-school quota, First Graduate scholarship, or PMSS must report to college / TFC but do not need to pay fees.",
+    "Seats of candidates who do not report to college (non-joined) and seats of candidates who do not pay at TFC (non-paid) are pooled as vacant seats for the next round and upward movement.",
+    "The residual seat matrix at the end of each round becomes the input for the next round."
+  ]
+}

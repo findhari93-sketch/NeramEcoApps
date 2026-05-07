@@ -1,0 +1,77 @@
+[
+  {
+    "name": "10th Standard Mark Sheet",
+    "required_for": "All candidates",
+    "format_notes": "Clear scan or PDF of original certificate. Name should match across all documents."
+  },
+  {
+    "name": "12th / HSC Mark Sheet",
+    "required_for": "All candidates (or 10+3 Diploma mark sheet)",
+    "format_notes": "All semester marks for diploma candidates."
+  },
+  {
+    "name": "NATA Score Card",
+    "required_for": "All candidates qualifying through NATA",
+    "format_notes": "All attempts. Best NATA score will be considered as per COA rules."
+  },
+  {
+    "name": "JEE (Main) Paper-2 B.Arch Score Card",
+    "required_for": "Candidates qualifying through JEE Paper 2 (alternative to NATA)",
+    "format_notes": "Higher of NATA or JEE Paper 2 will be used in the merit calculation."
+  },
+  {
+    "name": "Nativity Certificate",
+    "required_for": "Tamil Nadu native candidates who studied outside Tamil Nadu",
+    "format_notes": "Electronic form / digitally signed e-Certificate issued by the Government of Tamil Nadu only.",
+    "certificate_authority": "Government of Tamil Nadu"
+  },
+  {
+    "name": "Permanent Community Certificate",
+    "required_for": "BC / BCM / MBC & DNC / SC / SCA / ST candidates",
+    "format_notes": "Permanent card / electronic / digitally signed e-Certificate. Must be issued before the registration close date.",
+    "certificate_authority": "ST: RDO/Sub Collector. SC/SCA: Tahsildar of native taluk. BC/BCM/MBC/DNC: HQ Deputy Tahsildar / Zonal Deputy Tahsildar."
+  },
+  {
+    "name": "Transfer Certificate (TC)",
+    "required_for": "All candidates (school-leaving certificate)"
+  },
+  {
+    "name": "Aadhaar Card",
+    "required_for": "All candidates"
+  },
+  {
+    "name": "Parental Income Certificate",
+    "required_for": "Candidates applying for First Graduate concession or PMSS",
+    "certificate_authority": "Tahsildar"
+  },
+  {
+    "name": "First Graduate Certificate",
+    "required_for": "Candidates claiming First Graduate tuition fee concession",
+    "format_notes": "Includes father, mother, grandparents, brother, sister names. Joint declaration by candidate and parent.",
+    "certificate_authority": "Head Quarters Deputy Tahsildar"
+  },
+  {
+    "name": "Government School Study Proof (6th to 12th)",
+    "required_for": "Candidates claiming 7.5% Government School preferential quota"
+  },
+  {
+    "name": "Ex-Servicemen Certificate + Discharge Certificate",
+    "required_for": "Sons/Daughters of Ex-Servicemen quota",
+    "certificate_authority": "Tamil Nadu Dept of Ex-Servicemen Welfare (Asst. Director or above)"
+  },
+  {
+    "name": "Persons with Benchmark Disabilities Certificate",
+    "required_for": "PwBD 5% horizontal reservation",
+    "format_notes": "From a Medical Board (minimum 3 doctors) of the district, in the prescribed format. Certificates from individual doctors are not accepted.",
+    "certificate_authority": "District Medical Board"
+  },
+  {
+    "name": "Sports Achievement Certificates",
+    "required_for": "Eminent Sports Persons quota",
+    "format_notes": "Original sports certificates with the appropriate forms per Annexure III of the brochure."
+  },
+  {
+    "name": "Passport-Size Photograph",
+    "required_for": "All candidates"
+  }
+]

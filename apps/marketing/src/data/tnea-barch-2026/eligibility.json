@@ -1,0 +1,87 @@
+{
+  "academic": {
+    "qualification": "10+2 (Higher Secondary) or equivalent, or 10+3 Diploma with Mathematics as a compulsory subject.",
+    "required_subjects": ["Physics", "Mathematics"],
+    "elective_subjects": [
+      "Chemistry",
+      "Biology",
+      "Technical Vocational Subject",
+      "Computer Science",
+      "Information Technology",
+      "Informatics Practices",
+      "Engineering Graphics",
+      "Business Studies"
+    ],
+    "minimum_aggregate_percent": 45,
+    "diploma_alternative": "10+3 Diploma with Mathematics as a compulsory subject and minimum 45% aggregate is also accepted."
+  },
+  "aptitude": {
+    "accepted_exams": ["NATA (Council of Architecture)", "JEE (Main) Paper-2 B.Arch (NTA)"],
+    "nata_minimum": "Best NATA score is considered per COA rules. Valid NATA 2025 / NATA 2026 scores accepted (subject to COA conditions).",
+    "notes": [
+      "An aptitude test in architecture is mandatory; admission without NATA or JEE Paper-2 is not allowed.",
+      "If you have both NATA and JEE Paper-2 scores, the higher one is used in the merit calculation.",
+      "Holders of valid NATA 2025 score who did not take admission in 2025-26 can use that score (per COA conditions)."
+    ]
+  },
+  "nativity_rules": [
+    {
+      "id": "tn_school",
+      "category": "nativity",
+      "title": "Studied 8th to 12th in Tamil Nadu",
+      "description": "Tamil Nadu candidates who passed VIII, IX, X, XI, XII from schools located in Tamil Nadu. No nativity certificate required."
+    },
+    {
+      "id": "tn_native_outside",
+      "category": "nativity",
+      "title": "Tamil Nadu native, studied outside",
+      "description": "Tamil Nadu native candidates who studied any of VIII to XII outside Tamil Nadu. Must produce nativity certificate in electronic / digitally signed e-Certificate form from the Government of Tamil Nadu."
+    },
+    {
+      "id": "central_govt_employee",
+      "category": "nativity",
+      "title": "Children of Central Government employees",
+      "description": "Eligible irrespective of nativity, provided parents/guardians have served in Tamil Nadu continuously for the past five years. Employer certificate required. Considered under Open Competition."
+    },
+    {
+      "id": "psu_employee",
+      "category": "nativity",
+      "title": "Children of PSU / Government-recognised institution employees",
+      "description": "Parents must be permanently employed in Tamil Nadu continuously for the past five years (PF slips, IT returns as evidence). Considered under Open Competition."
+    },
+    {
+      "id": "ais_officer",
+      "category": "nativity",
+      "title": "Sons/daughters of All India Service Tamil Nadu cadre officers",
+      "description": "Eligible to apply with a self-declaration from the parent. Considered under Open Competition."
+    },
+    {
+      "id": "other_state_studied_tn",
+      "category": "nativity",
+      "title": "Other state candidates who studied 8th to 12th in Tamil Nadu",
+      "description": "Eligible without nativity certificate. Considered under Open Competition."
+    },
+    {
+      "id": "sri_lankan_refugee",
+      "category": "special",
+      "title": "Sri Lankan Tamil Refugee",
+      "description": "Considered under Open Competition. Identification certificate from Headquarters Tahsildar (or passport + visa + police-station letter for non-camp registered)."
+    },
+    {
+      "id": "oci_pio",
+      "category": "special",
+      "title": "OCI / PIO cardholders",
+      "description": "Native of Tamil Nadu OCI/PIO cardholders are eligible under Open Category from 2023-24 onwards. Not applicable to OCI/PIO born in a foreign country after 04.03.2021."
+    }
+  ],
+  "merit_formula": {
+    "board_component": 200,
+    "aptitude_component": 200,
+    "total": 400,
+    "tiebreaker": [
+      "Aggregate marks in Higher Secondary / Diploma (higher is better)",
+      "Date of birth (elder candidate gets preference)",
+      "Random number assigned at registration (preference to the larger number)"
+    ]
+  }
+}

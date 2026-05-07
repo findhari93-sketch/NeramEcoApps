@@ -1,0 +1,101 @@
+[
+  {
+    "id": "notification",
+    "label": "TNEA 2026 Notification Issued",
+    "description": "Official notification by Directorate of Technical Education, Chennai. Marks the start of the 2026 admission cycle.",
+    "iso_date": "2026-05-03",
+    "display_date": "03 May 2026",
+    "status": "tentative",
+    "category": "notification"
+  },
+  {
+    "id": "registration_open",
+    "label": "Online Registration Opens",
+    "description": "Candidates can register and start filling the application at tneaonline.org. Originals can be uploaded from this date.",
+    "iso_date": "2026-05-03",
+    "display_date": "03 May 2026",
+    "status": "tentative",
+    "category": "registration"
+  },
+  {
+    "id": "registration_close",
+    "label": "Last Date for Registration & Fee Payment",
+    "description": "Final day to submit the online application and pay the registration fee (Rs.500 for OC/BC/BCM/MBC, Rs.250 for SC/SCA/ST).",
+    "iso_date": "2026-06-20",
+    "display_date": "20 June 2026",
+    "status": "tentative",
+    "category": "registration"
+  },
+  {
+    "id": "certificate_upload_close",
+    "label": "Last Date for Certificate Upload",
+    "description": "Final day to upload all required original certificates (10th, HSC, NATA score, community, nativity, etc.).",
+    "iso_date": "2026-06-20",
+    "display_date": "20 June 2026",
+    "status": "tentative",
+    "category": "registration"
+  },
+  {
+    "id": "verification",
+    "label": "Online Certificate Verification",
+    "description": "Uploaded certificates are verified online at TFCs. Sports persons attend in-person verification at Chennai.",
+    "iso_date": null,
+    "display_date": "Dates to be announced",
+    "status": "tentative",
+    "category": "verification"
+  },
+  {
+    "id": "rank_list",
+    "label": "Publication of Rank List",
+    "description": "Combined merit list (board 200 + NATA/JEE 200 = 400) published on the TNEA portal.",
+    "iso_date": null,
+    "display_date": "Dates to be announced",
+    "status": "tentative",
+    "category": "rank"
+  },
+  {
+    "id": "grievance",
+    "label": "Grievance Redressal Window",
+    "description": "One week to file rank-list grievances in person at the Office of Secretary TNEA or nearby TFCs.",
+    "iso_date": null,
+    "display_date": "1 week after rank list",
+    "status": "tentative",
+    "category": "rank"
+  },
+  {
+    "id": "special_counselling",
+    "label": "Special Reservation Counselling (Online)",
+    "description": "Counselling for Differently Abled, Ex-Servicemen wards, and Eminent Sports Persons happens first.",
+    "iso_date": null,
+    "display_date": "Dates to be announced",
+    "status": "tentative",
+    "category": "special"
+  },
+  {
+    "id": "general_counselling",
+    "label": "General Counselling Begins (Online)",
+    "description": "Academic round and 7.5% Government School preferential round run simultaneously online.",
+    "iso_date": null,
+    "display_date": "Dates to be announced",
+    "status": "tentative",
+    "category": "counselling"
+  },
+  {
+    "id": "sca_to_sc",
+    "label": "SCA to SC Counselling (Online)",
+    "description": "Reallocation round where vacant SC seats may be filled from SCA category.",
+    "iso_date": null,
+    "display_date": "Dates to be announced",
+    "status": "tentative",
+    "category": "counselling"
+  },
+  {
+    "id": "end_counselling",
+    "label": "End of Counselling",
+    "description": "Final closure of all TNEA B.Arch 2026 counselling rounds.",
+    "iso_date": null,
+    "display_date": "Dates to be announced",
+    "status": "tentative",
+    "category": "closure"
+  }
+]
