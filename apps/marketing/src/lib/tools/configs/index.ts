@@ -8,6 +8,8 @@ export { examPlannerConfig } from './exam-planner';
 export { coaCheckerConfig } from './coa-checker';
 export { costCalculatorConfig } from './cost-calculator';
 export { counselingInsightsConfig } from './counseling-insights';
+export { imageResizerConfig } from './image-resizer';
+export { aiChatbotConfig } from './ai-chatbot';
 
 import { cutoffCalculatorConfig } from './cutoff-calculator';
 import { collegePredictorConfig } from './college-predictor';
@@ -19,6 +21,8 @@ import { examPlannerConfig } from './exam-planner';
 import { coaCheckerConfig } from './coa-checker';
 import { costCalculatorConfig } from './cost-calculator';
 import { counselingInsightsConfig } from './counseling-insights';
+import { imageResizerConfig } from './image-resizer';
+import { aiChatbotConfig } from './ai-chatbot';
 import type { ToolConfig, ToolCardData } from '../types';
 
 export const ALL_TOOLS: ToolConfig[] = [
@@ -32,6 +36,8 @@ export const ALL_TOOLS: ToolConfig[] = [
   coaCheckerConfig,
   costCalculatorConfig,
   counselingInsightsConfig,
+  imageResizerConfig,
+  aiChatbotConfig,
 ];
 
 export const TOOL_BY_SLUG: Record<string, ToolConfig> = Object.fromEntries(

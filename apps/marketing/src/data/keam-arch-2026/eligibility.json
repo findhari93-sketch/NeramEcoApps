@@ -1,0 +1,87 @@
+{
+  "academic": {
+    "qualification": "10+2 or equivalent examination passed",
+    "compulsory_subjects": ["Physics", "Mathematics"],
+    "elective_subjects": [
+      "Chemistry",
+      "Biology",
+      "Computer Science",
+      "Information Technology",
+      "Informatics Practices",
+      "Engineering Graphics",
+      "Business Studies",
+      "Technical Vocational subject"
+    ],
+    "minimum_aggregate_percent": 45,
+    "rounding_note": "No rounding off is permitted. Exactly 45% means 45 marks out of 100, or 135 out of 300, or 67.5 out of 150. (Clause 6.2.8)",
+    "diploma_alternative": "10+3 Diploma examination with Mathematics as a compulsory subject and at least 45% aggregate marks is also accepted. (Clause 6.2.3(a))"
+  },
+  "aptitude": {
+    "required_test": "National Aptitude Test in Architecture (NATA), conducted by the Council of Architecture (CoA)",
+    "accepted_years": ["NATA 2025", "NATA 2026"],
+    "relaxation_note": "There is no relaxation in the minimum NATA passing score for any category. (Council of Architecture letter No. CA/5/Academic-NATA dated 11.03.2008, cited in Clause 6.2.3(b))",
+    "no_keam_arch_exam_note": "KEAM does NOT conduct an entrance exam for Architecture. KEAM only handles centralised allotment (CAP). For B.Arch, your eligibility is decided by NATA and your 10+2 marks."
+  },
+  "age": {
+    "minimum_age": 17,
+    "age_reference_date": "31 December 2026",
+    "upper_age_limit": "There is no upper age limit for B.Arch admission. (Clause 6.3.1)"
+  },
+  "merit_formula": {
+    "nata_component": 200,
+    "qualifying_component": 200,
+    "total": 400,
+    "description": "Architecture rank = NATA score (out of 200) + qualifying exam marks (out of 200), totalling 400. (Clause 9.7.4(c))",
+    "tiebreaker": [
+      "Higher NATA score is placed higher",
+      "If still tied, higher Mathematics marks in the qualifying exam wins",
+      "If still tied, the older candidate is placed higher",
+      "If still tied, the decision of the Commissioner for Entrance Examinations is final"
+    ]
+  },
+  "no_lateral_entry": "There is no provision for lateral admission to the second year (or any later stage) of the 5-year B.Arch course. (Clause 6.2.3(c))",
+  "rules": [
+    {
+      "id": "academic",
+      "category": "academic",
+      "title": "10+2 with Physics + Mathematics + 45% aggregate",
+      "description": "Physics and Mathematics are compulsory. The third subject can be Chemistry, Biology, Computer Science, IT, Informatics Practices, Engineering Graphics, Business Studies, or a Technical Vocational subject. Minimum 45% aggregate marks (no rounding).",
+      "clause_ref": "Clause 6.2.3(a)"
+    },
+    {
+      "id": "diploma",
+      "category": "academic",
+      "title": "10+3 Diploma with Maths is also accepted",
+      "description": "Candidates who passed a 10+3 Diploma examination with Mathematics as a compulsory subject and at least 45% aggregate marks are also eligible.",
+      "clause_ref": "Clause 6.2.3(a)"
+    },
+    {
+      "id": "nata",
+      "category": "aptitude",
+      "title": "Valid NATA 2025 or NATA 2026 score",
+      "description": "You must score at least the minimum eligibility marks specified in the NATA Information Brochure. The minimum is set by the Council of Architecture; KEAM has no power to relax it for any category.",
+      "clause_ref": "Clause 6.2.3(b)"
+    },
+    {
+      "id": "age",
+      "category": "age",
+      "title": "Minimum age 17 by 31 December 2026",
+      "description": "Candidates must complete 17 years of age on or before 31.12.2026. There is no relaxation in minimum age, and no upper age limit.",
+      "clause_ref": "Clause 6.3.1"
+    },
+    {
+      "id": "nativity",
+      "category": "nativity",
+      "title": "Nativity for Keralite category",
+      "description": "Candidates claiming the Keralite category must produce nativity proof as defined in Clause 6.1. Non-Keralites can apply but compete for fewer reserved seats.",
+      "clause_ref": "Clause 6.1"
+    },
+    {
+      "id": "no-lateral",
+      "category": "other",
+      "title": "No lateral entry to year 2",
+      "description": "B.Arch is a 5-year integrated programme. There is no provision to enter at a later stage by lateral admission.",
+      "clause_ref": "Clause 6.2.3(c)"
+    }
+  ]
+}

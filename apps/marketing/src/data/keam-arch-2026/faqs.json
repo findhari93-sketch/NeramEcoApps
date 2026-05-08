@@ -1,0 +1,156 @@
+[
+  {
+    "id": "faq-keam-arch-exam",
+    "category": "general",
+    "question": "Does KEAM conduct an entrance exam for B.Arch?",
+    "answer": "No. KEAM conducts an Engineering Entrance Examination, but for B.Arch, KEAM does not have a separate test. Architecture admission uses your NATA score (out of 200) plus your 10+2 marks (out of 200) for a rank index of 400. KEAM only conducts the centralised allotment (CAP).",
+    "clause_ref": "Clauses 1.4(b), 6.2.3(b), 9.7.4(c)"
+  },
+  {
+    "id": "faq-merit-formula",
+    "category": "rank_list",
+    "question": "How is the KEAM B.Arch rank calculated?",
+    "answer": "The B.Arch rank gives equal weightage to your NATA score and your qualifying examination (10+2). NATA marks are scaled to 200, qualifying exam marks are scaled to 200, and the two are added to give a total out of 400. The rank list is published separately for B.Arch.",
+    "clause_ref": "Clause 9.7.4(c)"
+  },
+  {
+    "id": "faq-tiebreaker",
+    "category": "rank_list",
+    "question": "What if two candidates have the same KEAM B.Arch total?",
+    "answer": "Tie-breaking, in order: higher NATA score wins; then higher Mathematics marks in 10+2; then the older candidate is placed higher; if there is still a tie, the decision of the Commissioner for Entrance Examinations is final.",
+    "clause_ref": "Clause 9.7.4(g)(ii)"
+  },
+  {
+    "id": "faq-academic",
+    "category": "eligibility",
+    "question": "What are the academic requirements for KEAM B.Arch 2026?",
+    "answer": "You need 10+2 (or equivalent) with Physics and Mathematics as compulsory subjects, plus at least one of Chemistry, Biology, Computer Science, IT, Informatics Practices, Engineering Graphics, Business Studies, or a Technical Vocational subject. Minimum 45% aggregate marks (no rounding off). A 10+3 Diploma with Mathematics and 45% marks is also accepted.",
+    "clause_ref": "Clauses 6.2.3(a), 6.2.8"
+  },
+  {
+    "id": "faq-nata-validity",
+    "category": "nata",
+    "question": "Which NATA scores are accepted by KEAM 2026?",
+    "answer": "NATA 2025 or NATA 2026 scores are accepted. Both must meet the minimum eligibility marks set by the Council of Architecture in the NATA Information Brochure. There is no relaxation in the NATA passing score for any category, irrespective of reservation.",
+    "clause_ref": "Clause 6.2.3(b)"
+  },
+  {
+    "id": "faq-nata-2024",
+    "category": "nata",
+    "question": "Can I apply with my NATA 2024 score?",
+    "answer": "No. Only NATA 2025 or NATA 2026 scores are valid for KEAM B.Arch 2026 admission. Older NATA scores are not accepted.",
+    "clause_ref": "Clause 6.2.3(b)"
+  },
+  {
+    "id": "faq-age",
+    "category": "eligibility",
+    "question": "What is the age limit for KEAM B.Arch?",
+    "answer": "You must be at least 17 years old by 31 December 2026. There is no upper age limit and no relaxation in the minimum age.",
+    "clause_ref": "Clause 6.3.1"
+  },
+  {
+    "id": "faq-application-fee",
+    "category": "application",
+    "question": "What is the application fee for KEAM 2026?",
+    "answer": "Rs. 650 for general candidates, Rs. 260 for SC, and no fee for ST. If you choose UAE as your examination centre (relevant only if you are also writing the Engineering exam), you pay an additional Rs. 16,000.",
+    "clause_ref": "Clauses 7.2.1, 7.2.2"
+  },
+  {
+    "id": "faq-application-window",
+    "category": "application",
+    "question": "When does KEAM 2026 application open and close?",
+    "answer": "Online applications open on 5 January 2026 (Monday) and close on 31 January 2026, 5:00 PM (Saturday). Supporting documents, including your NATA score card, must be uploaded by 7 February 2026.",
+    "clause_ref": "Information at a Glance, Clause 9.7.5(iv)"
+  },
+  {
+    "id": "faq-online-only",
+    "category": "application",
+    "question": "Is the KEAM application fully online?",
+    "answer": "Yes. Application, fee payment, document upload, option registration, and allotment all happen at cee.kerala.gov.in. You only have to physically report at the allotted college after the allotment.",
+    "clause_ref": "Clauses 7.3.1, 7.4"
+  },
+  {
+    "id": "faq-akshaya",
+    "category": "application",
+    "question": "Where can I get help to fill the KEAM application offline?",
+    "answer": "If you need in-person help, you can visit a nearby Akshaya Centre (a Kerala Government e-service network present in every panchayat and municipality). Akshaya Centres typically help with application form filling, fee payment, and document upload. Find your nearest centre at akshaya.kerala.gov.in.",
+    "clause_ref": "Practice"
+  },
+  {
+    "id": "faq-state-merit",
+    "category": "reservation",
+    "question": "What is State Merit (SM) under KEAM?",
+    "answer": "State Merit is 50% of seats available for allotment from State rank lists. SM seats are filled on pure rank, irrespective of the candidate's category. So, all candidates - including SC, ST, SEBC, and EWS - compete on SM seats first.",
+    "clause_ref": "Clause 4.1.5"
+  },
+  {
+    "id": "faq-sebc",
+    "category": "reservation",
+    "question": "Which communities come under SEBC reservation in KEAM?",
+    "answer": "30% reservation is split across 9 SEBC sub-categories: Ezhava (9%), Muslim (8%), Other Backward Hindu (3%), Latin Catholic & Anglo Indian (3%), Dheevara (2%), Viswakarma (2%), Kusavan (1%), Other Backward Christian (1%), and Kudumbi (1%). All require a community certificate AND a Non-Creamy Layer certificate.",
+    "clause_ref": "Clause 4.1.5"
+  },
+  {
+    "id": "faq-pwd",
+    "category": "reservation",
+    "question": "How does the PD (Persons with Disabilities) quota work?",
+    "answer": "5% of the seats available for State allotment in Government, Aided, and Government Cost-Sharing colleges are reserved for candidates with benchmark disabilities. Generally, you need at least 40% disability and a UDID card or disability certificate from a competent authority.",
+    "clause_ref": "Clause 5.3"
+  },
+  {
+    "id": "faq-sports-ncc",
+    "category": "reservation",
+    "question": "Are there sports or NCC quotas for B.Arch in KEAM?",
+    "answer": "Yes, but for B.Arch they work as additive bonuses, not as separate quotas. Sports and NCC marks (out of 500 each) are added to the architecture rank index (computed out of 500), so a candidate can score up to 1000 on the index. Higher index means a higher rank.",
+    "clause_ref": "Clauses 5.2.16, 5.2.17"
+  },
+  {
+    "id": "faq-tuition-fee",
+    "category": "fees",
+    "question": "What is the tuition fee for KEAM B.Arch colleges?",
+    "answer": "The 2026 prospectus does not specify B.Arch tuition fees. CEE will publish the fee structure for Government, Government Cost-Sharing, and Self-financing colleges separately, before CAP-2026 begins. Watch cee.kerala.gov.in for the official notification.",
+    "clause_ref": "Clause 12.1"
+  },
+  {
+    "id": "faq-fee-concession",
+    "category": "fees",
+    "question": "Who can get a full fee waiver?",
+    "answer": "SC, ST, OEC, FM (Fishermen children), inmates of Sri Chitra / Nirbhaya / Juvenile Homes, and SEBC candidates with annual family income up to Rs. 6 lakhs (with NCL certificate) are fully exempt from fees. The Tuition Fee Waiver scheme covers candidates with annual income up to Rs. 8 lakhs but only waives the tuition component; other fees are payable.",
+    "clause_ref": "Clauses 12.1.1, 12.1.3, 12.1.4, 13.6"
+  },
+  {
+    "id": "faq-cap-rounds",
+    "category": "allotment",
+    "question": "How many counselling rounds does KEAM run?",
+    "answer": "KEAM Centralised Allotment Process (CAP) typically runs a Trial allotment, Phase 1, Phase 2, and a Mop-up or Spot allotment. Exact dates and the number of phases for B.Arch are notified by CEE separately, in conformity with Council of Architecture guidelines.",
+    "clause_ref": "Clauses 11.6, 11.6.8"
+  },
+  {
+    "id": "faq-option-registration",
+    "category": "allotment",
+    "question": "Do I have to register options before every phase?",
+    "answer": "Yes. Online option registration is mandatory before each phase of allotment unless CEE notifies otherwise. You will not be allotted a seat in any college and course combination that you did not opt for, even if vacancies exist there.",
+    "clause_ref": "Clauses 11.6.4, 11.6.7"
+  },
+  {
+    "id": "faq-skip-allotment",
+    "category": "allotment",
+    "question": "What happens if I do not pay the fee or report after an allotment?",
+    "answer": "If you do not remit the prescribed fee and report at the allotted college within the deadline, you lose that allotment AND all your remaining options in the stream. So, only register options for colleges where you genuinely want to study.",
+    "clause_ref": "Clause 11.6.2"
+  },
+  {
+    "id": "faq-colleges",
+    "category": "colleges",
+    "question": "How many B.Arch colleges are there under KEAM?",
+    "answer": "The 2026 prospectus lists 22 B.Arch colleges in Kerala (predominantly self-financing, affiliated to Calicut University, MG, KTU, CUSAT, and Kerala University), with a combined intake of about 1,200 seats. The list is tentative; the final list will be published before CAP-2026 begins.",
+    "clause_ref": "Clause 2.4, Annexure II(1)(a)"
+  },
+  {
+    "id": "faq-no-lateral",
+    "category": "general",
+    "question": "Is lateral entry allowed in KEAM B.Arch?",
+    "answer": "No. B.Arch is a 5-year (10-semester) integrated course, and there is no provision for lateral admission to the second year or any later stage.",
+    "clause_ref": "Clauses 2.4, 6.2.3(c)"
+  }
+]

@@ -1,0 +1,89 @@
+[
+  {
+    "name": "NATA 2025 or 2026 Score Card",
+    "required_for": "All B.Arch applicants",
+    "format_notes": "Original score card. Mark list submitted by other means or after the deadline is not considered for rank list preparation.",
+    "certificate_authority": "Council of Architecture (CoA)",
+    "mandatory": true,
+    "clause_ref": "Clause 9.7.5(iv)"
+  },
+  {
+    "name": "10+2 (HSE) or equivalent mark list",
+    "required_for": "All applicants",
+    "format_notes": "Provisional or original mark list with subject-wise marks. Required to compute the qualifying-exam component of the rank.",
+    "mandatory": true,
+    "clause_ref": "Clause 6.2.3(a)"
+  },
+  {
+    "name": "SSLC or equivalent (Class 10) certificate",
+    "required_for": "All applicants",
+    "format_notes": "Used as proof of date of birth and educational baseline.",
+    "mandatory": true,
+    "clause_ref": "Clause 7.6"
+  },
+  {
+    "name": "Date of birth proof",
+    "required_for": "All applicants",
+    "format_notes": "SSLC or birth certificate. Must show that the candidate is 17 years or older on 31 December 2026.",
+    "mandatory": true,
+    "clause_ref": "Clause 6.3.1"
+  },
+  {
+    "name": "Nativity certificate",
+    "required_for": "Candidates claiming Keralite or Non-Keralite I / II category",
+    "format_notes": "Must be in the proforma prescribed by the Government of Kerala. Issued by the Village Officer or competent revenue authority.",
+    "certificate_authority": "Village Officer / Revenue authority",
+    "mandatory": true,
+    "clause_ref": "Clause 6.1"
+  },
+  {
+    "name": "Community / caste certificate",
+    "required_for": "Candidates claiming SC, ST, SEBC, or OEC reservation",
+    "format_notes": "Issued by the Tahsildar or designated authority. Required for reservation claims and fee concessions.",
+    "certificate_authority": "Tahsildar / Revenue Divisional Officer",
+    "mandatory": false,
+    "clause_ref": "Clause 4.1.5"
+  },
+  {
+    "name": "Non-Creamy Layer certificate",
+    "required_for": "SEBC and OEC candidates",
+    "format_notes": "Required to claim SEBC reservation and SEBC-linked fee exemption (annual income up to Rs. 6 lakhs).",
+    "mandatory": false,
+    "clause_ref": "Clause 5.4.2(b)"
+  },
+  {
+    "name": "Income certificate",
+    "required_for": "Candidates claiming fee concession or Tuition Fee Waiver",
+    "format_notes": "In the prescribed proforma. Annual income limits: Rs. 6 lakhs for SEBC fee exemption, Rs. 8 lakhs for the Tuition Fee Waiver scheme.",
+    "mandatory": false,
+    "clause_ref": "Clauses 12.1.1(b), 13.6"
+  },
+  {
+    "name": "Disability certificate / UDID card",
+    "required_for": "Candidates claiming PD (Persons with Disabilities) reservation",
+    "format_notes": "Minimum 40% benchmark disability is generally required. UDID card is the preferred proof.",
+    "certificate_authority": "Notified medical authority under the Persons with Disabilities Act 2016",
+    "mandatory": false,
+    "clause_ref": "Clause 5.3"
+  },
+  {
+    "name": "Inter-caste marriage certificate",
+    "required_for": "Candidates claiming benefit of inter-caste marriage",
+    "format_notes": "Issued by the appropriate revenue or social-welfare authority.",
+    "mandatory": false
+  },
+  {
+    "name": "Sports / NCC proficiency certificate",
+    "required_for": "Candidates claiming Sports or NCC quota for B.Arch",
+    "format_notes": "For B.Arch, sports and NCC marks (out of 500 each) are added to the architecture index, taking the maximum to 1000. Submit certificates as per the proforma in the prospectus.",
+    "mandatory": false,
+    "clause_ref": "Clauses 5.2.16, 5.2.17"
+  },
+  {
+    "name": "Photograph and signature (digital)",
+    "required_for": "All applicants",
+    "format_notes": "JPEG/JPG only. 150x100 pixels, file size 1 to 100 KB. Required during the online application step.",
+    "mandatory": true,
+    "clause_ref": "Clause 7.4"
+  }
+]

@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
+import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateFAQSchema, generateFounderPersonSchema } from '@/lib/seo/schemas';
 import HomePageContent from '@/components/HomePageContent';
 
 
@@ -50,6 +50,7 @@ export default function HomePage({
     <>
       <JsonLd data={generateOrganizationSchema()} />
       <JsonLd data={generateWebSiteSchema()} />
+      <JsonLd data={generateFounderPersonSchema()} />
       <JsonLd
         data={generateBreadcrumbSchema([
           { name: 'Home', url: baseUrl },

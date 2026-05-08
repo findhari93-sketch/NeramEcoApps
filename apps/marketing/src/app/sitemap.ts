@@ -3,6 +3,7 @@ import { locales } from '@/i18n';
 import { getAllCenterSeoSlugs } from '@neram/database/queries';
 import { getSitemapLocations, getIndianStates } from '@neram/database';
 import { getAllCollegeSlugs, getActiveStates } from '@/lib/college-hub/queries';
+import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -73,6 +74,8 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/tools/coa-checker', lastModified: '2026-04-17' },
   { path: '/tools/cost-calculator', lastModified: '2026-04-17' },
   { path: '/tools/counseling-insights', lastModified: '2026-04-17' },
+  { path: '/tools/image-resizer', lastModified: '2026-05-08' },
+  { path: '/tools/ai-chatbot', lastModified: '2026-05-08' },
   { path: '/nata-app', lastModified: '2026-02-28' },
   { path: '/best-nata-coaching-online', lastModified: '2026-04-04' },
   { path: '/blog', lastModified: '2026-03-10' },
@@ -110,8 +113,9 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/nata-2026/previous-year-papers', lastModified: '2026-03-13' },
   { path: '/nata-2026/best-books', lastModified: '2026-03-13' },
   { path: '/nata-2026/admit-card', lastModified: '2026-03-13' },
-  // TNEA B.Arch 2026 Information Hub (English-only content, en + ta planned for translation)
-  { path: '/counseling/tnea-barch', lastModified: '2026-05-07' },
+  // Counselling master page (decision-tree hub, registry-driven)
+  { path: '/counseling', lastModified: '2026-05-08', i18n: true },
+  // TNEA B.Arch 2026 spoke pages (parent hub URL is generated from ROUTED_HUB_SLUGS below)
   { path: '/counseling/tnea-barch/eligibility-documents', lastModified: '2026-05-07' },
   { path: '/counseling/tnea-barch/important-dates', lastModified: '2026-05-07' },
   { path: '/counseling/tnea-barch/counselling-procedure', lastModified: '2026-05-07' },
@@ -119,6 +123,14 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/counseling/tnea-barch/tfc-list', lastModified: '2026-05-07' },
   { path: '/counseling/tnea-barch/how-to-apply', lastModified: '2026-05-07' },
   { path: '/counseling/tnea-barch/faq', lastModified: '2026-05-07' },
+  // KEAM B.Arch 2026 spoke pages (parent hub URL generated from ROUTED_HUB_SLUGS)
+  { path: '/counseling/keam-arch/eligibility-documents', lastModified: '2026-05-08' },
+  { path: '/counseling/keam-arch/important-dates', lastModified: '2026-05-08' },
+  { path: '/counseling/keam-arch/allotment-process', lastModified: '2026-05-08' },
+  { path: '/counseling/keam-arch/reservation-fee-concession', lastModified: '2026-05-08' },
+  { path: '/counseling/keam-arch/colleges-in-kerala', lastModified: '2026-05-08' },
+  { path: '/counseling/keam-arch/how-to-apply', lastModified: '2026-05-08' },
+  { path: '/counseling/keam-arch/faq', lastModified: '2026-05-08' },
 ];
 
 // Course slugs
@@ -317,6 +329,37 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${baseUrl}/colleges/fees/${range}`,
       lastModified: new Date('2026-04-13'),
       changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    });
+  }
+
+  // ─── Counselling Hub parent pages (registry-driven, English-only) ────────
+  // Parent hubs come from ROUTED_HUB_SLUGS so a new state hub auto-appears
+  // here once its route file is added and the slug is registered.
+  // Spoke pages (e.g. /counseling/tnea-barch/eligibility-documents) are listed
+  // explicitly in staticPages above because they are bespoke per-hub.
+  for (const slug of ROUTED_HUB_SLUGS) {
+    entries.push({
+      url: `${baseUrl}/counseling/${slug}`,
+      lastModified: new Date('2026-05-08'),
+      changeFrequency: 'weekly' as const,
+      priority: 0.85,
+    });
+  }
+
+  // ─── Counselling concept explainers (English-only) ──────────────────────
+  const COUNSELLING_CONCEPTS = [
+    'freeze-float-slide',
+    'josaa-vs-csab',
+    'aat-explained',
+    'nata-vs-jee-paper-2',
+    'eligibility-45-vs-50-rule',
+  ];
+  for (const slug of COUNSELLING_CONCEPTS) {
+    entries.push({
+      url: `${baseUrl}/counseling/concepts/${slug}`,
+      lastModified: new Date('2026-05-08'),
+      changeFrequency: 'monthly' as const,
       priority: 0.7,
     });
   }

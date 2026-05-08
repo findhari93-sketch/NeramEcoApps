@@ -1,0 +1,84 @@
+{
+  "application_fee": {
+    "general": 650,
+    "sc": 260,
+    "st": 0,
+    "uae_centre_extra": 16000,
+    "payment_modes": ["Credit card", "Debit card", "Internet banking"]
+  },
+  "tuition_fee": {
+    "to_be_notified": true,
+    "note": "B.Arch tuition fees for Government, Government Cost-Sharing, and Self-financing colleges are NOT specified in the 2026 prospectus. CEE will publish the fee structure separately before CAP-2026 begins. (Clause 12.1)",
+    "notification_url": "https://cee.kerala.gov.in/keam2026/"
+  },
+  "concessions": [
+    {
+      "name": "SC / ST fee exemption",
+      "description": "Candidates belonging to Scheduled Castes or Scheduled Tribes are fully exempted from payment of fees, whether allotted on merit or on reserved seats.",
+      "eligibility": ["Valid community certificate", "SC or ST status"],
+      "benefit": "Full fee exemption",
+      "clause_ref": "Clause 12.1.1(a)"
+    },
+    {
+      "name": "OEC fee exemption",
+      "description": "Other Eligible Communities (OEC) candidates listed in Annexure X(b) are exempted from fee payment under the same conditions as SC/ST.",
+      "eligibility": ["OEC community certificate", "Other conditions per Annexure X(b)"],
+      "benefit": "Full fee exemption",
+      "clause_ref": "Clause 12.1.1(b)"
+    },
+    {
+      "name": "SEBC fee exemption (income up to Rs. 6 lakhs)",
+      "description": "SEBC candidates listed in Annexure X(a) whose annual family income is up to Rs. 6 lakhs are exempted from payment of fees at the time of allotment.",
+      "eligibility": [
+        "Community certificate (SEBC)",
+        "Non-Creamy Layer certificate",
+        "Income certificate showing annual family income <= Rs. 6 lakhs"
+      ],
+      "benefit": "Full fee exemption",
+      "clause_ref": "Clauses 12.1.1(b), 5.4.2(b)"
+    },
+    {
+      "name": "Tuition Fee Waiver Scheme (income up to Rs. 8 lakhs)",
+      "description": "Children of parents whose annual income from all sources is up to Rs. 8 lakhs are eligible for the Tuition Fee Waiver. Only the tuition fee component is waived; all other fees are payable.",
+      "eligibility": ["Income certificate <= Rs. 8 lakhs annual"],
+      "benefit": "Tuition fee waiver only",
+      "clause_ref": "Clause 13.6"
+    },
+    {
+      "name": "Fishermen (FM) children fee exemption",
+      "description": "Children of registered fishermen, on production of the prescribed certificate, are exempted from payment of fees.",
+      "eligibility": ["Fishermen certificate (FM)"],
+      "benefit": "Full fee exemption",
+      "clause_ref": "Clause 12.1.3"
+    },
+    {
+      "name": "Inmates of Sri Chitra / Nirbhaya / Juvenile Homes",
+      "description": "Candidates who are inmates of Sri Chitra Home, Nirbhaya Home, or notified Juvenile Homes are fully exempted from payment of fees on production of the certificate from the institution.",
+      "eligibility": ["Certificate from the home"],
+      "benefit": "Full fee exemption",
+      "clause_ref": "Clause 12.1.4"
+    }
+  ],
+  "refund_rules": [
+    {
+      "title": "Withdrawal before classes start",
+      "description": "If a student withdraws before the start of classes, the entire fee already paid is refunded after deduction of a processing fee of not more than Rs. 1,000.",
+      "clause_ref": "Clause 12.2.2(a)(i)"
+    },
+    {
+      "title": "Withdrawal after joining (vacated seat is filled)",
+      "description": "If a student leaves after joining the course and the vacated seat is filled within the last date of admission, the institution refunds the fee after deducting Rs. 1,000 plus proportionate monthly fee and hostel rent.",
+      "clause_ref": "Clause 12.2.2(a)(ii)"
+    },
+    {
+      "title": "No fee for subsequent years on cancellation",
+      "description": "Institutions cannot demand fees for subsequent years from a candidate who cancels admission. The refund of fees and certificates must be completed within 7 days.",
+      "clause_ref": "Clause 12.2.2(a)(iii)"
+    },
+    {
+      "title": "Liquidated damages for unfilled options after final phase",
+      "description": "Candidates who file or retain unnecessary options but do not take admission after a final-phase allotment lose any fee already paid to CEE if the resulting vacancy stays unfilled.",
+      "clause_ref": "Clause 12.2.3(c)"
+    }
+  ]
+}

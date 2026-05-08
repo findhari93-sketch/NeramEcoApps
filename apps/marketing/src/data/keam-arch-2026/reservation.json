@@ -1,0 +1,75 @@
+{
+  "general": [
+    {
+      "code": "SM",
+      "name": "State Merit",
+      "percent": 50,
+      "description": "Open to all candidates on pure merit, irrespective of category. About half of all government and aided seats are filled this way."
+    },
+    {
+      "code": "SC",
+      "name": "Scheduled Castes",
+      "percent": 8,
+      "description": "Reserved for candidates belonging to Scheduled Castes notified for the State of Kerala."
+    },
+    {
+      "code": "ST",
+      "name": "Scheduled Tribes",
+      "percent": 2,
+      "description": "Reserved for candidates belonging to Scheduled Tribes notified for the State of Kerala."
+    },
+    {
+      "code": "SEBC",
+      "name": "Socially & Educationally Backward Classes",
+      "percent": 30,
+      "description": "Total SEBC reservation, split across 9 sub-categories. Candidates must produce a community certificate and a Non-Creamy Layer certificate."
+    }
+  ],
+  "sebc_sub_categories": [
+    { "code": "EZ", "name": "Ezhava", "percent": 9 },
+    { "code": "MU", "name": "Muslim", "percent": 8 },
+    { "code": "BH", "name": "Other Backward Hindu", "percent": 3 },
+    { "code": "LA", "name": "Latin Catholic & Anglo Indian", "percent": 3 },
+    { "code": "DV", "name": "Dheevara & related communities", "percent": 2 },
+    { "code": "VK", "name": "Viswakarma & related communities", "percent": 2 },
+    { "code": "KN", "name": "Kusavan & related communities", "percent": 1 },
+    { "code": "BX", "name": "Other Backward Christian", "percent": 1 },
+    { "code": "KU", "name": "Kudumbi", "percent": 1 }
+  ],
+  "special": [
+    {
+      "category": "Economically Weaker Section",
+      "quota": "EWS",
+      "notes": "Reservation for EWS in the General category as per G.O.(MS) No. 128/2020/HEDN dated 20.03.2020.",
+      "clause_ref": "Clause 4.3"
+    },
+    {
+      "category": "Sports proficiency",
+      "quota": "SP / PI / PT",
+      "notes": "For B.Arch, sports proficiency marks (out of 500) are added to the architecture rank index (out of 500), so the maximum index becomes 1000.",
+      "clause_ref": "Clause 5.2.16"
+    },
+    {
+      "category": "NCC proficiency",
+      "quota": "CC",
+      "notes": "For B.Arch, NCC proficiency marks (out of 500) are added to the architecture rank index (out of 500), giving a maximum index of 1000.",
+      "clause_ref": "Clause 5.2.17"
+    }
+  ],
+  "pwd": {
+    "percent": 5,
+    "minimum_disability_percent": 40,
+    "document": "Valid UDID card or disability certificate issued by a competent authority",
+    "clause_ref": "Clause 5.3"
+  },
+  "ews": {
+    "description": "Economically Weaker Sections reservation in the General category, applicable as per Government of Kerala G.O.(MS) No. 128/2020/HEDN dated 20.03.2020. Requires income and asset certificate in the prescribed proforma.",
+    "clause_ref": "Clause 4.3"
+  },
+  "sports_ncc_additive": {
+    "description": "For B.Arch only, sports and NCC marks are not a separate quota but add directly to the architecture rank index. Marks (out of 500 each) are added to the architecture rank computed out of 500, so a candidate can score up to 1000 on the index.",
+    "bonus_max": 500,
+    "final_index_max": 1000,
+    "clause_ref": "Clauses 5.2.16, 5.2.17"
+  }
+}

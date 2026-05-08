@@ -236,12 +236,47 @@ const NAV_GROUPS: NavGroup[] = [
     icon: <TrendingUpIcon fontSize="small" />,
     columns: [
       {
-        title: 'Admission Help',
+        title: 'JEE Main Paper 2 route',
         links: [
-          { label: 'Counseling Guide', href: '/counseling' },
+          { label: 'JoSAA (NIT/IIT/SPA)', href: '/counseling/josaa', badge: 'NEW' },
+          { label: 'CSAB Special', href: '/counseling/csab-special' },
+          { label: 'CSAB-NEUT (NE & UTs)', href: '/counseling/csab-neut' },
+          { label: 'JAC Delhi (IGDTUW)', href: '/counseling/jac-delhi-barch' },
+          { label: 'JAC Chandigarh (CCA)', href: '/counseling/jac-chandigarh-barch' },
+        ],
+      },
+      {
+        title: 'NATA-only',
+        links: [
+          { label: 'KEAM (Kerala)', href: '/counseling/keam-arch' },
+          { label: 'CEPT University', href: '/counseling/cept-university' },
+          { label: 'HSTES (Haryana)', href: '/counseling/hstes-barch' },
+          { label: 'DTE Goa (GCA Panaji)', href: '/counseling/dte-goa-barch' },
+        ],
+      },
+      {
+        title: 'NATA + JEE P2 accepted',
+        links: [
+          { label: 'TNEA (Tamil Nadu)', href: '/counseling/tnea-barch' },
+          { label: 'MHT-CET (Maharashtra)', href: '/counseling/mht-cet-barch', badge: 'NEW' },
+          { label: 'KEA (Karnataka)', href: '/counseling/kea-barch' },
+          { label: 'ACPC (Gujarat)', href: '/counseling/acpc-barch' },
+          { label: 'AP B.Arch', href: '/counseling/ap-barch' },
+          { label: 'TG B.Arch (Telangana)', href: '/counseling/tg-barch' },
+          { label: 'UPTAC (Uttar Pradesh)', href: '/counseling/uptac-barch' },
+          { label: 'All 28 counsellings', href: '/counseling' },
+        ],
+      },
+      {
+        title: 'Concepts & Tools',
+        links: [
+          { label: 'Freeze vs Float vs Slide', href: '/counseling/concepts/freeze-float-slide' },
+          { label: 'JoSAA vs CSAB', href: '/counseling/concepts/josaa-vs-csab' },
+          { label: 'AAT explained', href: '/counseling/concepts/aat-explained' },
+          { label: 'NATA vs JEE Paper 2', href: '/counseling/concepts/nata-vs-jee-paper-2' },
+          { label: '45% vs 50% PCM rule', href: '/counseling/concepts/eligibility-45-vs-50-rule' },
           { label: 'College Predictor', href: '/tools/college-predictor' },
-          { label: 'Rank Predictor', href: '/tools/rank-predictor' },
-          { label: 'COA Checker', href: '/tools/coa-checker' },
+          { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
         ],
       },
     ],

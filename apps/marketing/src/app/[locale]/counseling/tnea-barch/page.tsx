@@ -45,7 +45,21 @@ import {
   getNextUpcomingDate,
 } from '@/data/tnea-barch-2026';
 import AintraTopicChat from '@/components/aintra/AintraTopicChat';
-import CounsellingCallbackDrawer from '@/components/tnea-barch/CounsellingCallbackDrawer';
+import CallbackDrawer from '@/components/counselling/CallbackDrawer';
+
+const TNEA_CALLBACK_PROPS = {
+  context: 'TNEA B.Arch 2026',
+  queryType: 'b_arch_counselling',
+  courseInterest: 'nata',
+  ctaLabel: 'Get TNEA Counselling Guidance',
+  drawerTitle: 'Free TNEA Counselling Call',
+  drawerIntro:
+    'Talk to a TNEA B.Arch counsellor about eligibility, college choice, and counselling rounds. Free, no obligation.',
+  successMessage: 'Our TNEA B.Arch counsellor will call you back within 24 hours.',
+  cutoffCalculatorUrl: 'https://app.neramclasses.com/tools/nata/cutoff-calculator',
+  collegePredictorUrl:
+    'https://app.neramclasses.com/tools/counseling/college-predictor?system=TNEA_BARCH',
+} as const;
 
 const baseUrl = 'https://neramclasses.com';
 const HUB_PATH = '/counseling/tnea-barch';
@@ -518,7 +532,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
             A Neram Classes counsellor can guide you on cutoff scores, college choice, document checklist, and counselling round strategy. Free, no obligation.
           </Typography>
           <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-            <CounsellingCallbackDrawer variant="inline" />
+            <CallbackDrawer variant="inline" {...TNEA_CALLBACK_PROPS} />
           </Box>
           <Box sx={{ display: { xs: 'block', md: 'none' } }}>
             <Typography variant="caption" color="text.secondary">
@@ -534,7 +548,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
         </Paper>
       </Container>
 
-      <CounsellingCallbackDrawer variant="sticky" />
+      <CallbackDrawer variant="sticky" {...TNEA_CALLBACK_PROPS} />
 
       <AintraTopicChat
         topic="tnea_barch_2026"

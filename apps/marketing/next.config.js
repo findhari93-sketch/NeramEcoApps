@@ -134,6 +134,13 @@ const nextConfig = {
       { source: '/:locale/pgeat-2026', destination: '/:locale/pgeta-2026', permanent: true },
       { source: '/:locale/pgeat-2026/:path*', destination: '/:locale/pgeta-2026/:path*', permanent: true },
 
+      // ─── B.Arch Counselling slug redirects ──────────────────────────────
+      // Old `/counseling/josaa-arch` placeholder URL was replaced by `/counseling/josaa`
+      // when the JoSAA hub launched as a real route. Permanent redirect keeps any
+      // external links and old Google index entries valid.
+      { source: '/counseling/josaa-arch', destination: '/counseling/josaa', permanent: true },
+      { source: '/:locale/counseling/josaa-arch', destination: '/:locale/counseling/josaa', permanent: true },
+
       // Study guide pages (only redirects where source != destination)
       { source: '/nata-syllabus-subjects', destination: '/nata-syllabus', permanent: true },
 

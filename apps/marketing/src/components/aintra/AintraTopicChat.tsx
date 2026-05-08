@@ -39,6 +39,7 @@ export interface AintraTopicChatProps {
   bubbleBgAssistant?: string;
   iconBgAssistant?: string;
   storageKey?: string;
+  disclaimerSource?: string;
 }
 
 const DEFAULT_PRIMARY = '#1d4ed8';
@@ -58,6 +59,7 @@ export default function AintraTopicChat({
   bubbleBgAssistant = '#f8fafc',
   iconBgAssistant,
   storageKey,
+  disclaimerSource = 'tneaonline.org',
 }: AintraTopicChatProps) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -392,7 +394,7 @@ export default function AintraTopicChat({
                 color="text.disabled"
                 sx={{ fontSize: '0.625rem', lineHeight: 1.3 }}
               >
-                Aintra is an AI assistant. Always verify dates and rules at tneaonline.org.
+                Aintra is an AI assistant. Always verify dates and rules at {disclaimerSource}.
               </Typography>
             </Box>
           </Paper>

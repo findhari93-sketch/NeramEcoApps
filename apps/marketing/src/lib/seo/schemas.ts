@@ -796,7 +796,17 @@ export function generateEventSchema(event: {
   status?: 'EventScheduled' | 'EventPostponed' | 'EventRescheduled' | 'EventCancelled';
   attendanceMode?: 'OnlineEventAttendanceMode' | 'OfflineEventAttendanceMode' | 'MixedEventAttendanceMode';
   location?: { name: string; url?: string };
+  organizer?: { name: string; url?: string };
+  defaultPortal?: { name: string; url: string };
 }) {
+  const portal = event.defaultPortal ?? {
+    name: 'TNEA Online Portal',
+    url: 'https://www.tneaonline.org',
+  };
+  const organizer = event.organizer ?? {
+    name: 'Directorate of Technical Education, Tamil Nadu',
+    url: 'https://www.dte.tn.gov.in',
+  };
   return {
     '@context': 'https://schema.org',
     '@type': 'Event',
@@ -815,13 +825,13 @@ export function generateEventSchema(event: {
         }
       : {
           '@type': 'VirtualLocation',
-          name: 'TNEA Online Portal',
-          url: 'https://www.tneaonline.org',
+          name: portal.name,
+          url: portal.url,
         },
     organizer: {
       '@type': 'Organization',
-      name: 'Directorate of Technical Education, Tamil Nadu',
-      url: 'https://www.dte.tn.gov.in',
+      name: organizer.name,
+      ...(organizer.url && { url: organizer.url }),
     },
   };
 }
@@ -913,5 +923,48 @@ export function generateOnlineCourseSchema() {
       reviewCount: '2500',
       bestRating: '5',
     },
+  };
+}
+
+// ─── Founder Person Schema (E-E-A-T anchor) ────────────────────────────────
+
+export function generateFounderPersonSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    '@id': `${BASE_URL}/#founder`,
+    name: 'Pushparaj Manoharan',
+    jobTitle: 'Founder, Neram Classes',
+    description:
+      'B.Arch alumnus of NIT Trichy (2006), founder of Neram Classes. Architecture educator mentoring NATA and JEE Paper 2 aspirants since 2009. Mentored AIR 1 in JEE B.Arch 2024.',
+    alumniOf: {
+      '@type': 'CollegeOrUniversity',
+      name: 'National Institute of Technology, Tiruchirappalli',
+      sameAs: 'https://en.wikipedia.org/wiki/National_Institute_of_Technology,_Tiruchirappalli',
+    },
+    homeLocation: {
+      '@type': 'Place',
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Brisbane',
+        addressRegion: 'Queensland',
+        addressCountry: 'AU',
+      },
+    },
+    knowsAbout: [
+      'NATA Drawing and Composition',
+      'JEE Paper 2 Architecture',
+      'Architecture Pedagogy',
+      'B.Arch Admission Counselling',
+      'Architecture Education',
+    ],
+    knowsLanguage: ['English', 'Tamil'],
+    worksFor: {
+      '@id': `${BASE_URL}/#organization`,
+    },
+    award: [
+      'Mentored AIR 1 in JEE B.Arch 2024',
+      'Founded Neram Classes (2009), 10,000+ students trained',
+    ],
   };
 }

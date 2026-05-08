@@ -1,0 +1,32 @@
+{
+  "description": "Akshaya is the Government of Kerala's e-service network with thousands of centres in every panchayat and municipality. If you need in-person help filling the KEAM application form, paying the fee, or uploading documents, an Akshaya Centre is the closest, low-cost option in the state.",
+  "helpline_url": "https://akshaya.kerala.gov.in",
+  "finder_url": "https://akshaya.kerala.gov.in/akshaya-centre-search",
+  "representative_centres": [
+    {
+      "city": "Thiruvananthapuram",
+      "district": "Thiruvananthapuram",
+      "note": "City centre near the Secretariat, helpful for first-time applicants from southern Kerala."
+    },
+    {
+      "city": "Kochi",
+      "district": "Ernakulam",
+      "note": "Dense Akshaya network across Ernakulam district; useful for applicants in central Kerala."
+    },
+    {
+      "city": "Kozhikode",
+      "district": "Kozhikode",
+      "note": "Several Akshaya centres around Kozhikode city; widely used by Calicut-area applicants."
+    },
+    {
+      "city": "Kannur",
+      "district": "Kannur",
+      "note": "Akshaya centres serve North Kerala applicants for KEAM and other CEE applications."
+    },
+    {
+      "city": "Thrissur",
+      "district": "Thrissur",
+      "note": "Convenient for candidates in central Kerala and around the cultural-capital region."
+    }
+  ]
+}

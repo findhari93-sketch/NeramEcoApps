@@ -16,9 +16,17 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 
-interface CounsellingCallbackDrawerProps {
+export interface CallbackDrawerProps {
   ctaLabel?: string;
-  context?: string;
+  drawerTitle?: string;
+  drawerIntro?: string;
+  successHeading?: string;
+  successMessage?: string;
+  context: string;
+  queryType: string;
+  courseInterest?: string;
+  cutoffCalculatorUrl?: string;
+  collegePredictorUrl?: string;
   prefillNotes?: string;
   variant?: 'sticky' | 'inline';
 }
@@ -31,12 +39,20 @@ const PREFERRED_SLOTS = [
 
 const CLASS_OPTIONS = ['Class 11', 'Class 12', 'Repeater (12 done)', 'Diploma', 'Other'];
 
-export default function CounsellingCallbackDrawer({
-  ctaLabel = 'Get TNEA Counselling Guidance',
-  context = 'TNEA B.Arch 2026',
+export default function CallbackDrawer({
+  ctaLabel = 'Get Counselling Guidance',
+  drawerTitle = 'Free Counselling Call',
+  drawerIntro = 'Talk to a counsellor about eligibility, college choice, and counselling rounds. Free, no obligation.',
+  successHeading = 'Got it!',
+  successMessage = 'Our counsellor will call you back within 24 hours.',
+  context,
+  queryType,
+  courseInterest = 'nata',
+  cutoffCalculatorUrl = 'https://app.neramclasses.com/tools/nata/cutoff-calculator',
+  collegePredictorUrl = 'https://app.neramclasses.com/tools/counseling/college-predictor',
   prefillNotes,
   variant = 'sticky',
-}: CounsellingCallbackDrawerProps) {
+}: CallbackDrawerProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -93,8 +109,8 @@ export default function CounsellingCallbackDrawer({
           phone,
           email: email || undefined,
           preferred_slot: slot || undefined,
-          course_interest: 'nata',
-          query_type: 'b_arch_counselling',
+          course_interest: courseInterest,
+          query_type: queryType,
           notes: fullNotes,
         }),
       });
@@ -172,7 +188,7 @@ export default function CounsellingCallbackDrawer({
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
             <Typography variant="h6" fontWeight={800}>
-              {success ? 'Got it!' : 'Free TNEA Counselling Call'}
+              {success ? successHeading : drawerTitle}
             </Typography>
             <IconButton onClick={() => setOpen(false)} size="small" aria-label="Close">
               <CloseIcon />
@@ -182,7 +198,7 @@ export default function CounsellingCallbackDrawer({
           {success ? (
             <Stack spacing={2}>
               <Alert severity="success" sx={{ borderRadius: 2 }}>
-                Our TNEA B.Arch counsellor will call you back within 24 hours.
+                {successMessage}
               </Alert>
               <Typography variant="body2" color="text.secondary">
                 In the meantime, try our free tools to estimate your cutoff and find matching colleges.
@@ -191,7 +207,7 @@ export default function CounsellingCallbackDrawer({
                 <Button
                   fullWidth
                   variant="outlined"
-                  href="https://app.neramclasses.com/tools/nata/cutoff-calculator"
+                  href={cutoffCalculatorUrl}
                   target="_blank"
                   rel="noopener"
                 >
@@ -200,7 +216,7 @@ export default function CounsellingCallbackDrawer({
                 <Button
                   fullWidth
                   variant="outlined"
-                  href="https://app.neramclasses.com/tools/counseling/college-predictor?system=TNEA_BARCH"
+                  href={collegePredictorUrl}
                   target="_blank"
                   rel="noopener"
                 >
@@ -212,7 +228,7 @@ export default function CounsellingCallbackDrawer({
           ) : (
             <Stack component="form" onSubmit={handleSubmit} spacing={1.5}>
               <Typography variant="body2" color="text.secondary">
-                Talk to a TNEA B.Arch counsellor about eligibility, college choice, and counselling rounds. Free, no obligation.
+                {drawerIntro}
               </Typography>
               {error && <Alert severity="error">{error}</Alert>}
               <TextField

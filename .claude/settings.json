@@ -15,11 +15,12 @@
       "Bash(npm:*)",
       "Bash(git status)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
-    ],
-    "deny": [
+      "Bash(git log:*)",
       "Bash(rm -rf:*)",
       "Bash(git push:*)"
+    ],
+    "deny": [
+      
     ]
   }
 }

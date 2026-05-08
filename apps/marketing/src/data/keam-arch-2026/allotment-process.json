@@ -1,0 +1,54 @@
+{
+  "authority": "Office of the Commissioner for Entrance Examinations (CEE), Government of Kerala",
+  "governing_council": "Council of Architecture (CoA)",
+  "phases": [
+    {
+      "id": "trial",
+      "name": "Trial Allotment",
+      "status": "tentative",
+      "description": "A non-binding mock run that shows the seat you would get with your current options. Use this to fine-tune your option list before Phase 1 starts. No fee remittance and no reporting in this phase."
+    },
+    {
+      "id": "phase-1",
+      "name": "Phase 1 Allotment",
+      "status": "tentative",
+      "description": "First binding allotment based on your rank, category, and registered options. You must remit the prescribed fee online and report at the allotted college within the deadline, or you lose the seat and all subsequent options in this stream."
+    },
+    {
+      "id": "phase-2",
+      "name": "Phase 2 Allotment",
+      "status": "tentative",
+      "description": "Second allotment to fill vacant seats and process upward movement. You can edit your option list before Phase 2 starts. If your existing seat is upgraded, the upgrade is automatic; you cannot retain the lower-priority allotment."
+    },
+    {
+      "id": "mop-up",
+      "name": "Mop-up / Spot Allotment",
+      "status": "tentative",
+      "description": "Final round to fill any remaining seats. Spot allotment may be conducted college-wise. After this phase, candidates who hold options without taking admission are subject to liquidated damages on any fee already paid."
+    }
+  ],
+  "option_registration_note": "Online option registration is mandatory before each phase of allotment unless CEE notifies otherwise. You will not be allotted a seat in any college / course combination that you did not opt for. (Clause 11.6.4, Clause 11.6.7)",
+  "fee_remittance_note": "After every binding allotment, you must remit the fee shown on the Allotment Memo within the deadline. Failing to remit and report on time means you lose the allotment AND all your remaining options in the stream. (Clause 11.6.2)",
+  "reporting_documents": [
+    "Allotment Memo issued by CEE",
+    "Original NATA Score Card",
+    "Date of birth proof (SSLC / birth certificate)",
+    "Transfer Certificate and Conduct Certificate",
+    "Original mark list of qualifying examination",
+    "Eligibility certificate (if applicable)",
+    "Migration certificate (if applicable)",
+    "Physical Fitness Certificate in the proforma at Annexure XVII(b)",
+    "Hepatitis-B vaccination proof (per AICTE guidelines)",
+    "Receipt of fee remitted",
+    "Data sheet of KEAM 2026",
+    "Originals of all certificates uploaded with the application"
+  ],
+  "liquidated_damages_note": "Candidates who file or retain unnecessary options without taking admission on a final-phase allotment will lose any fee already paid to CEE if the resulting vacant seats stay unfilled. (Clause 12.2.3(c))",
+  "clause_refs": {
+    "authority": "Clause 11.6.8",
+    "options": "Clause 11.6",
+    "fee_remittance": "Clause 11.6.2",
+    "reporting": "Clause 11.7.1",
+    "physical_fitness": "Clause 13.6"
+  }
+}

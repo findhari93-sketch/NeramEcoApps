@@ -1,0 +1,92 @@
+[
+  {
+    "id": "application-open",
+    "label": "Online application opens",
+    "description": "Registration and application form go live on cee.kerala.gov.in. Pay the application fee in the same session.",
+    "iso_date": "2026-01-05",
+    "display_date": "Mon, 5 Jan 2026",
+    "status": "confirmed",
+    "category": "registration",
+    "clause_ref": "Information at a Glance"
+  },
+  {
+    "id": "application-close",
+    "label": "Last date for online application + fee",
+    "description": "Submission and fee payment close at 5:00 PM. Do not wait until the last day. The portal slows down near deadlines.",
+    "iso_date": "2026-01-31",
+    "display_date": "Sat, 31 Jan 2026, 5:00 PM",
+    "status": "confirmed",
+    "category": "closure",
+    "clause_ref": "Information at a Glance"
+  },
+  {
+    "id": "documents-upload-close",
+    "label": "Last date to upload supporting documents",
+    "description": "Upload qualifying mark list, NATA Score Card, nativity, community, income, and PD certificates as applicable. Late uploads are not considered for rank list preparation.",
+    "iso_date": "2026-02-07",
+    "display_date": "Sat, 7 Feb 2026",
+    "status": "confirmed",
+    "category": "verification",
+    "clause_ref": "Clause 9.7.5(iv)"
+  },
+  {
+    "id": "nata-score-window",
+    "label": "NATA score upload window",
+    "description": "Upload your NATA 2025 or NATA 2026 scorecard. CEE will publish a separate notification with the cut-off date for accepting NATA scores.",
+    "iso_date": null,
+    "display_date": "Per CEE notification (NATA 2025 or 2026 score required)",
+    "status": "tentative",
+    "category": "verification",
+    "clause_ref": "Clause 9.7.9"
+  },
+  {
+    "id": "rank-list",
+    "label": "Architecture rank list publication",
+    "description": "Separate B.Arch rank list, prepared by adding NATA marks (out of 200) to qualifying exam marks (out of 200), is published on cee.kerala.gov.in.",
+    "iso_date": null,
+    "display_date": "On or before 20 Jun 2026 (per CEE notification)",
+    "status": "tentative",
+    "category": "rank",
+    "clause_ref": "Clause 9.7.4(c)"
+  },
+  {
+    "id": "cap-trial",
+    "label": "Trial Allotment",
+    "description": "A non-binding mock allotment to help candidates fine-tune their option list before Phase 1.",
+    "iso_date": null,
+    "display_date": "Per CEE notification",
+    "status": "tentative",
+    "category": "counselling",
+    "clause_ref": "Clause 11.6"
+  },
+  {
+    "id": "cap-phase-1",
+    "label": "CAP Phase 1 Allotment",
+    "description": "First binding allotment based on rank, category, and registered options. Fee remittance and reporting follow within the deadline.",
+    "iso_date": null,
+    "display_date": "Per CEE notification",
+    "status": "tentative",
+    "category": "counselling",
+    "clause_ref": "Clause 11.6"
+  },
+  {
+    "id": "cap-phase-2",
+    "label": "CAP Phase 2 Allotment",
+    "description": "Second allotment to fill vacant seats and process upward movement. Re-arrange options before Phase 2 starts.",
+    "iso_date": null,
+    "display_date": "Per CEE notification",
+    "status": "tentative",
+    "category": "counselling",
+    "clause_ref": "Clause 11.6"
+  },
+  {
+    "id": "cap-mop-up",
+    "label": "Mop-up / Spot Allotment",
+    "description": "Final round to fill any remaining seats. Spot allotment may run college-wise. Final phase fee liability rules apply.",
+    "iso_date": null,
+    "display_date": "Per CEE notification",
+    "status": "tentative",
+    "category": "counselling",
+    "clause_ref": "Clause 12.2.3(c)"
+  }
+]

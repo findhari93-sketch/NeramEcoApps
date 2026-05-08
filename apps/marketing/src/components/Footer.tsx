@@ -69,6 +69,14 @@ const footerLinks = {
     { label: 'West Bengal', href: '/coaching/nata-coaching-in-west-bengal' },
     { label: 'Uttar Pradesh', href: '/coaching/nata-coaching-in-uttar-pradesh' },
   ],
+  counselling: [
+    { label: 'TNEA B.Arch (Tamil Nadu)', href: '/counseling/tnea-barch' },
+    { label: 'KEAM B.Arch (Kerala)', href: '/counseling/keam-arch' },
+    { label: 'JoSAA (NIT/IIT/SPA)', href: '/counseling/josaa' },
+    { label: 'CEPT University', href: '/counseling/cept-university' },
+    { label: 'MHT-CET (Maharashtra)', href: '/counseling/mht-cet-barch' },
+    { label: 'All 28 counsellings', href: '/counseling' },
+  ],
   legal: [
     { label: 'Privacy Policy', href: '/privacy' },
     { label: 'Terms & Conditions', href: '/terms' },
@@ -230,6 +238,27 @@ export default function Footer() {
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               {footerLinks.topStates.map((link) => (
+                <MuiLink
+                  key={link.href}
+                  component={Link}
+                  href={getLocalizedPath(link.href)}
+                  color="inherit"
+                  underline="hover"
+                  sx={linkStyle}
+                >
+                  {link.label}
+                </MuiLink>
+              ))}
+            </Box>
+          </Grid>
+
+          {/* B.Arch Counselling */}
+          <Grid item xs={6} sm={3} md={2}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
+              B.Arch Counselling
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {footerLinks.counselling.map((link) => (
                 <MuiLink
                   key={link.href}
                   component={Link}
