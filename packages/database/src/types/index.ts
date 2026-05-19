@@ -7313,3 +7313,44 @@ export interface UserAuthDiagnostics {
   events: UserFunnelEvent[];
   drop_off_reason: string | null;
 }
+
+// ============================================
+// ASK SENIORS EVENT
+// ============================================
+
+export interface AskSeniorsEvent {
+  id: string;
+  year: number;
+  title: string;
+  event_date: string | null;
+  event_time: string | null;
+  event_link: string | null;
+  status: 'upcoming' | 'active' | 'completed';
+  description: string | null;
+  created_at: string;
+}
+
+export interface AskSeniorsCollege {
+  id: string;
+  slug: string;
+  state_slug: string;
+  name: string;
+  short_name: string;
+  city: string;
+  logo_url: string | null;
+}
+
+export interface AskSeniorsRegistrationPayload {
+  event_id: string;
+  name: string;
+  phone: string;
+  email: string;
+  city?: string;
+  state?: string;
+  nata_attempts: 1 | 2;
+  nata_score_1: number;
+  nata_score_2?: number;
+  board_score: number;
+  final_cutoff: number;
+  college_preferences: string[];
+}
