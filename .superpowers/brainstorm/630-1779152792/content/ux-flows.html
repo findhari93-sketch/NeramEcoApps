@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AskSeniors — UX Flow Options</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0b0f1a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 32px 24px 60px;
+  }
+
+  h1 { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 36px; }
+
+  /* ─── Two columns ─── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin-bottom: 40px;
+  }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ─── Flow block ─── */
+  .flow-block {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .flow-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .flow-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .badge-gold { background: rgba(232,160,32,0.15); color: #e8a020; border: 1px solid rgba(232,160,32,0.3); }
+  .badge-blue { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+  .badge-green { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+
+  .flow-title { font-size: 15px; font-weight: 700; color: #fff; }
+
+  .flow-body { padding: 20px; }
+
+  /* ─── Step chain ─── */
+  .step-chain { display: flex; flex-direction: column; gap: 0; }
+
+  .step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    position: relative;
+  }
+
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 32px;
+    width: 2px;
+    height: calc(100% - 8px);
+    background: rgba(255,255,255,0.08);
+  }
+
+  .step-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .dot-gold { background: rgba(232,160,32,0.2); color: #e8a020; border: 1.5px solid rgba(232,160,32,0.4); }
+  .dot-blue { background: rgba(99,102,241,0.2); color: #818cf8; border: 1.5px solid rgba(99,102,241,0.4); }
+  .dot-green { background: rgba(34,197,94,0.2); color: #4ade80; border: 1.5px solid rgba(34,197,94,0.4); }
+  .dot-gray { background: rgba(255,255,255,0.07); color: #9ca3af; border: 1.5px solid rgba(255,255,255,0.1); }
+
+  .step-content { padding: 4px 0 20px; flex: 1; }
+  .step-label { font-size: 13px; font-weight: 600; color: #e5e7eb; margin-bottom: 4px; }
+  .step-desc { font-size: 12px; color: #6b7280; line-height: 1.5; }
+
+  /* ─── Screen mockup ─── */
+  .screen {
+    background: #111827;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .screen-bar {
+    background: #1f2937;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .screen-dots { display: flex; gap: 4px; }
+  .screen-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-r { background: #ef4444; }
+  .dot-y { background: #f59e0b; }
+  .dot-g { background: #22c55e; }
+
+  .screen-url {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    color: #6b7280;
+    flex: 1;
+    text-align: center;
+  }
+
+  .screen-body { padding: 12px 14px; }
+
+  /* ─── Vs divider ─── */
+  .vs-divider {
+    text-align: center;
+    color: #4b5563;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 4px 0 20px;
+  }
+
+  /* ─── See All Colleges options ─── */
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  @media (max-width: 700px) { .options-grid { grid-template-columns: 1fr; } }
+
+  .opt-card {
+    border: 2px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(255,255,255,0.02);
+  }
+
+  .opt-card:hover {
+    border-color: rgba(232,160,32,0.4);
+    background: rgba(232,160,32,0.04);
+  }
+
+  .opt-card.selected {
+    border-color: #e8a020;
+    background: rgba(232,160,32,0.07);
+  }
+
+  .opt-card h3 { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .opt-card p { font-size: 11px; color: #6b7280; line-height: 1.5; margin-bottom: 10px; }
+
+  .opt-preview {
+    background: #111827;
+    border-radius: 6px;
+    padding: 8px;
+    min-height: 80px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .mock-modal {
+    background: #1f2937;
+    border-radius: 6px;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .mock-modal-header {
+    font-size: 10px;
+    font-weight: 700;
+    color: #e5e7eb;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .mock-logo-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+
+  .mock-logo {
+    width: 100%;
+    aspect-ratio: 1;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+  }
+
+  .mock-expand {
+    background: rgba(232,160,32,0.1);
+    border: 1px dashed rgba(232,160,32,0.3);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+    font-size: 10px;
+    color: #e8a020;
+    margin-top: 4px;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mock-section {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+  }
+
+  .mock-college-card {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    padding: 6px;
+    text-align: center;
+  }
+
+  .mock-college-avatar {
+    width: 20px;
+    height: 20px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 50%;
+    margin: 0 auto 3px;
+  }
+
+  .mock-college-name {
+    font-size: 7px;
+    color: #9ca3af;
+    line-height: 1.2;
+  }
+
+  /* recommended tag */
+  .rec-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    background: rgba(232,160,32,0.2);
+    color: #e8a020;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-top: 4px;
+  }
+
+  .section-heading {
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 4px;
+    margin-top: 8px;
+  }
+
+  .section-sub {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+
+<h1>UX Flow: What Happens When Students Click</h1>
+<p class="subtitle">Two buttons, two different journeys. Here is the full flow for each.</p>
+
+<!-- ─── Register for Free ─── -->
+<p class="section-heading">Button 1: "Register for Free"</p>
+<p class="section-sub">This is the primary CTA. The flow below is the recommended approach.</p>
+
+<div class="two-col">
+
+  <!-- Flow A: Homepage → Dedicated Page → Form -->
+  <div class="flow-block">
+    <div class="flow-header">
+      <span class="flow-badge badge-gold">RECOMMENDED</span>
+      <span class="flow-title">Homepage teaser → Dedicated page</span>
+    </div>
+    <div class="flow-body">
+      <div class="step-chain">
+
+        <div class="step">
+          <div class="step-dot dot-gold">1</div>
+          <div class="step-content">
+            <div class="step-label">Student clicks "Register for Free" on homepage</div>
+            <div class="step-desc">The button on the scroll section takes them to <code style="color:#e8a020;font-size:11px;">/ask-seniors</code></div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-dot dot-gold">2</div>
+          <div class="step-content">
+            <div class="step-label">Dedicated /ask-seniors page loads</div>
+            <div class="step-desc">Full event details: what is AskSeniors, speaker profiles, college list, date/time, FAQs. Register button is prominent here.</div>
+            <div class="screen" style="margin-top:8px;">
+              <div class="screen-bar">
+                <div class="screen-dots"><div class="screen-dot dot-r"></div><div class="screen-dot dot-y"></div><div class="screen-dot dot-g"></div></div>
+                <div class="screen-url">neramclasses.com/ask-seniors</div>
+              </div>
+              <div class="screen-body">
+                <div style="font-size:11px;font-weight:800;color:#e8a020;margin-bottom:2px;">#AskSeniors — Free Event</div>
+                <div style="font-size:9px;color:#6b7280;margin-bottom:6px;">50+ colleges · Real students · Live Q&amp;A</div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+                  <div style="background:rgba(232,160,32,0.1);border-radius:4px;padding:2px 6px;font-size:8px;color:#9ca3af;">Event details</div>
+                  <div style="background:rgba(232,160,32,0.1);border-radius:4px;padding:2px 6px;font-size:8px;color:#9ca3af;">Speakers</div>
+                  <div style="background:rgba(232,160,32,0.1);border-radius:4px;padding:2px 6px;font-size:8px;color:#9ca3af;">All colleges</div>
+                  <div style="background:rgba(232,160,32,0.1);border-radius:4px;padding:2px 6px;font-size:8px;color:#9ca3af;">FAQs</div>
+                </div>
+                <div style="background:linear-gradient(135deg,#e8a020,#f59e0b);border-radius:5px;padding:6px;text-align:center;font-size:10px;font-weight:800;color:#000;">Register Now — It's Free →</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-dot dot-gold">3</div>
+          <div class="step-content">
+            <div class="step-label">Student clicks Register → Form appears</div>
+            <div class="step-desc">Multi-step form on the same page (below the fold or in a sticky bottom sheet on mobile). Collects NATA scores, board marks, college wishlist, phone, email.</div>
+            <div class="screen" style="margin-top:8px;">
+              <div class="screen-bar">
+                <div class="screen-dots"><div class="screen-dot dot-r"></div><div class="screen-dot dot-y"></div><div class="screen-dot dot-g"></div></div>
+                <div class="screen-url">neramclasses.com/ask-seniors#register</div>
+              </div>
+              <div class="screen-body">
+                <div style="font-size:9px;color:#6b7280;margin-bottom:6px;">Step 1 of 3: Your Scores</div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:5px 8px;font-size:9px;color:#9ca3af;margin-bottom:4px;">How many NATA attempts? ○ 1  ● 2</div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:5px 8px;font-size:9px;color:#9ca3af;margin-bottom:4px;">NATA Score — Attempt 1: ___</div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:5px 8px;font-size:9px;color:#9ca3af;margin-bottom:6px;">NATA Score — Attempt 2: ___</div>
+                <div style="background:rgba(99,102,241,0.2);border-radius:4px;padding:5px 8px;font-size:9px;color:#818cf8;">Auto-calculates your final cutoff score</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-dot dot-gold">4</div>
+          <div class="step-content">
+            <div class="step-label">Confirmation + WhatsApp/Email</div>
+            <div class="step-desc">Success screen shows registration number. Student gets event link via WhatsApp + email before the event day.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Flow B: Modal form directly -->
+  <div class="flow-block">
+    <div class="flow-header">
+      <span class="flow-badge badge-blue">ALTERNATE</span>
+      <span class="flow-title">Homepage modal form (no page nav)</span>
+    </div>
+    <div class="flow-body">
+      <div class="step-chain">
+
+        <div class="step">
+          <div class="step-dot dot-blue">1</div>
+          <div class="step-content">
+            <div class="step-label">Student clicks "Register for Free"</div>
+            <div class="step-desc">A bottom sheet (mobile) or modal (desktop) opens directly on the homepage. No navigation away.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-dot dot-blue">2</div>
+          <div class="step-content">
+            <div class="step-label">Form inside the modal</div>
+            <div class="step-desc">Same multi-step form but inside a modal. Less context for the student — they haven't seen event details yet. Risk: students abandon without understanding the event.</div>
+            <div class="screen" style="margin-top:8px;">
+              <div class="screen-bar">
+                <div class="screen-dots"><div class="screen-dot dot-r"></div><div class="screen-dot dot-y"></div><div class="screen-dot dot-g"></div></div>
+                <div class="screen-url">neramclasses.com (modal open)</div>
+              </div>
+              <div class="screen-body">
+                <div style="background:rgba(0,0,0,0.6);border-radius:4px;padding:8px;">
+                  <div style="font-size:10px;font-weight:700;color:#fff;margin-bottom:6px;">Register for #AskSeniors ✕</div>
+                  <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:5px 8px;font-size:9px;color:#9ca3af;margin-bottom:4px;">Your name</div>
+                  <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:5px 8px;font-size:9px;color:#9ca3af;margin-bottom:4px;">Phone number</div>
+                  <div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:5px 8px;font-size:9px;color:#9ca3af;margin-bottom:6px;">NATA Score</div>
+                  <div style="background:rgba(232,160,32,0.8);border-radius:4px;padding:4px;text-align:center;font-size:9px;font-weight:800;color:#000;">Submit</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-dot dot-blue">3</div>
+          <div class="step-content">
+            <div class="step-label">Confirmation in modal</div>
+            <div class="step-desc">Success message shown. Simpler, but student never discovers the dedicated page with full event info.</div>
+            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:8px;margin-top:8px;">
+              <div style="font-size:10px;color:#f87171;font-weight:600;">Why this is weaker:</div>
+              <div style="font-size:10px;color:#6b7280;margin-top:3px;line-height:1.5;">No SEO value. Students can't share the event link. No space for college listing, speaker profiles, or FAQs. Drop-off is higher when context is missing.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── See All Colleges ─── -->
+<p class="section-heading">Button 2: "See All Colleges"</p>
+<p class="section-sub">Three options for where this takes the student. Click your preference.</p>
+
+<div class="options-grid">
+
+  <div class="opt-card" onclick="selectOpt(this,'colleges-a')">
+    <h3>A: Opens a modal grid</h3>
+    <p>Clicking shows all 50+ colleges in a searchable logo grid overlay. Student never leaves the homepage.</p>
+    <div class="opt-preview">
+      <div class="mock-modal">
+        <div class="mock-modal-header">
+          <span>All Participating Colleges (21)</span>
+          <span style="color:#6b7280;">✕</span>
+        </div>
+        <div class="mock-logo-grid">
+          <div class="mock-logo"></div><div class="mock-logo"></div><div class="mock-logo"></div><div class="mock-logo"></div>
+          <div class="mock-logo"></div><div class="mock-logo"></div><div class="mock-logo"></div><div class="mock-logo"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="opt-card" onclick="selectOpt(this,'colleges-b')">
+    <h3>B: Navigates to /ask-seniors</h3>
+    <p>Takes the student to the dedicated page which has a full college section with logos, names and city. Best for SEO and shareability.</p>
+    <div class="opt-preview">
+      <div style="background:#111827;border-radius:6px;padding:8px;border:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px;color:#e8a020;margin-bottom:4px;">neramclasses.com/ask-seniors</div>
+        <div style="font-size:8px;color:#9ca3af;margin-bottom:5px;">↓ scrolls to colleges section</div>
+        <div class="mock-section">
+          <div class="mock-college-card"><div class="mock-college-avatar"></div><div class="mock-college-name">Anna Univ</div></div>
+          <div class="mock-college-card"><div class="mock-college-avatar"></div><div class="mock-college-name">NIT Trichy</div></div>
+          <div class="mock-college-card"><div class="mock-college-avatar"></div><div class="mock-college-name">PSG</div></div>
+        </div>
+      </div>
+    </div>
+    <span class="rec-tag">RECOMMENDED</span>
+  </div>
+
+  <div class="opt-card" onclick="selectOpt(this,'colleges-c')">
+    <h3>C: Inline expand below strip</h3>
+    <p>The college grid expands inline below the scroll strip on the homepage. No navigation, no modal.</p>
+    <div class="opt-preview">
+      <div class="mock-expand">↓ Expands college grid here<br><span style="font-size:9px;color:#6b7280;">stays on homepage</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function selectOpt(el, id) {
+  document.querySelectorAll('.opt-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  if (window.__companion) window.__companion.select(id);
+}
+</script>
+
+</body>
+</html>

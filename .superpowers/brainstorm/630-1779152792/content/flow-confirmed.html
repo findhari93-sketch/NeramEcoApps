@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AskSeniors — Design Locked</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0b0f1a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 32px 24px 60px;
+  }
+
+  .confirmed-banner {
+    background: linear-gradient(135deg, rgba(232,160,32,0.12), rgba(251,191,36,0.06));
+    border: 1px solid rgba(232,160,32,0.35);
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .check-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #e8a020, #f59e0b);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .confirmed-banner h2 { font-size: 16px; font-weight: 800; color: #fff; margin-bottom: 2px; }
+  .confirmed-banner p { font-size: 13px; color: #9ca3af; }
+
+  /* Architecture diagram */
+  .arch { display: flex; flex-direction: column; gap: 16px; }
+
+  .arch-row {
+    display: grid;
+    gap: 12px;
+  }
+  .arch-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .arch-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 640px) {
+    .arch-row.cols-3, .arch-row.cols-2 { grid-template-columns: 1fr; }
+  }
+
+  .arch-node {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .arch-node.gold { border-color: rgba(232,160,32,0.3); background: rgba(232,160,32,0.05); }
+  .arch-node.blue { border-color: rgba(99,102,241,0.3); background: rgba(99,102,241,0.05); }
+  .arch-node.green { border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.05); }
+  .arch-node.purple { border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.05); }
+
+  .node-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .gold .node-label { color: #e8a020; }
+  .blue .node-label { color: #818cf8; }
+  .green .node-label { color: #4ade80; }
+  .purple .node-label { color: #c084fc; }
+
+  .node-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .node-desc { font-size: 11px; color: #6b7280; line-height: 1.5; }
+
+  .node-url {
+    display: inline-block;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: #9ca3af;
+    font-family: monospace;
+    margin-top: 6px;
+  }
+
+  .arrow {
+    text-align: center;
+    color: #374151;
+    font-size: 20px;
+    line-height: 1;
+    margin: 0;
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-top: 5px;
+    margin-right: 4px;
+  }
+  .tag-new { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .tag-exists { background: rgba(99,102,241,0.15); color: #818cf8; }
+  .tag-db { background: rgba(168,85,247,0.15); color: #c084fc; }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b7280;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin: 24px 0 10px;
+  }
+
+  .college-note {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 12px;
+    color: #9ca3af;
+    line-height: 1.6;
+  }
+  .college-note strong { color: #e5e7eb; }
+</style>
+</head>
+<body>
+
+<div class="confirmed-banner">
+  <div class="check-icon">✓</div>
+  <div>
+    <h2>All recommendations confirmed — design locked</h2>
+    <p>Here is the full architecture for the AskSeniors feature across homepage and dedicated page.</p>
+  </div>
+</div>
+
+<p class="section-title">Surface 1: Homepage Teaser Section</p>
+<div class="arch">
+  <div class="arch-row cols-3">
+    <div class="arch-node gold">
+      <div class="node-label">Animation</div>
+      <div class="node-title">Dual-row infinite scroll</div>
+      <div class="node-desc">2 rows, opposite directions. Pauses on hover. Fade edges. Gold brand chips.</div>
+      <span class="tag tag-new">NEW</span>
+    </div>
+    <div class="arch-node gold">
+      <div class="node-label">College Chips</div>
+      <div class="node-title">Real logo avatars, clickable</div>
+      <div class="node-desc">Circular logo image + college name + city. Click → college hub page. All 21 logos from old repo copied to this repo.</div>
+      <span class="tag tag-new">NEW</span>
+    </div>
+    <div class="arch-node gold">
+      <div class="node-label">CTAs</div>
+      <div class="node-title">Two buttons</div>
+      <div class="node-desc">"Register Free" → <code style="color:#e8a020;font-size:10px;">/ask-seniors</code>. "See All Colleges" → <code style="color:#e8a020;font-size:10px;">/ask-seniors#colleges</code></div>
+      <span class="tag tag-new">NEW</span>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">↓</div>
+
+<p class="section-title">Surface 2: Dedicated /ask-seniors Page</p>
+<div class="arch">
+  <div class="arch-row cols-2">
+    <div class="arch-node blue">
+      <div class="node-label">Section 1</div>
+      <div class="node-title">Hero: Event intro</div>
+      <div class="node-desc">Event name, tagline, date/time (or TBD), free badge, stats (50+ colleges, X registrations). Primary "Register Now" CTA.</div>
+      <div class="node-url">/ask-seniors</div>
+      <span class="tag tag-new">NEW PAGE</span>
+    </div>
+    <div class="arch-node blue">
+      <div class="node-label">Section 2</div>
+      <div class="node-title">All Colleges Grid</div>
+      <div class="node-desc">All 21+ colleges in a searchable/filterable grid with logo, name, city. Each card links to its hub page <code style="color:#818cf8;font-size:10px;">/colleges/[state]/[slug]</code>.</div>
+      <div class="node-url">/ask-seniors#colleges</div>
+      <span class="tag tag-new">NEW</span>
+    </div>
+  </div>
+  <div class="arch-row cols-2">
+    <div class="arch-node blue">
+      <div class="node-label">Section 3</div>
+      <div class="node-title">Registration Form</div>
+      <div class="node-desc">3-step form: Scores → College wishlist → Contact. Auto-calculates NATA final cutoff. College preference picks from the 21 participating colleges.</div>
+      <div class="node-url">/ask-seniors#register</div>
+      <span class="tag tag-new">NEW</span>
+    </div>
+    <div class="arch-node blue">
+      <div class="node-label">Section 4</div>
+      <div class="node-title">FAQ + Social proof</div>
+      <div class="node-desc">Common questions (What is AskSeniors, who can join, is it free). Past event testimonials if available.</div>
+      <span class="tag tag-new">NEW</span>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">↓</div>
+
+<p class="section-title">Surface 3: College Hub Pages (linked from chips)</p>
+<div class="arch">
+  <div class="arch-row cols-3">
+    <div class="arch-node green">
+      <div class="node-label">Already exists</div>
+      <div class="node-title">3 colleges</div>
+      <div class="node-desc">SRM Chennai, VIT Vellore, Christ Bangalore already have Gold-tier hub pages.</div>
+      <span class="tag tag-exists">EXISTS</span>
+    </div>
+    <div class="arch-node green">
+      <div class="node-label">To be created</div>
+      <div class="node-title">18 colleges</div>
+      <div class="node-desc">NIT Trichy, Anna University, PSG, SPA Delhi, CEPT, MEASI, MS Ramaiah, DSU, SPA Bhopal, Thiagarajar + 8 more. Add to DB via migration.</div>
+      <span class="tag tag-new">NEW ROWS</span>
+      <span class="tag tag-db">DB MIGRATION</span>
+    </div>
+    <div class="arch-node green">
+      <div class="node-label">DB table</div>
+      <div class="node-title">colleges table</div>
+      <div class="node-desc">Existing schema supports all fields: name, slug, state_slug, city, logo_url, type, coa_approved, accepted_exams.</div>
+      <span class="tag tag-exists">EXISTS</span>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">↓</div>
+
+<p class="section-title">Data Layer: New DB Table</p>
+<div class="arch">
+  <div class="arch-row cols-2">
+    <div class="arch-node purple">
+      <div class="node-label">New table</div>
+      <div class="node-title">ask_seniors_registrations</div>
+      <div class="node-desc">
+        Stores event registrations. Key fields:<br>
+        <code style="color:#c084fc;font-size:10px;">name, phone, email, city, state</code><br>
+        <code style="color:#c084fc;font-size:10px;">nata_attempts (1|2)</code><br>
+        <code style="color:#c084fc;font-size:10px;">nata_score_1, nata_score_2</code><br>
+        <code style="color:#c084fc;font-size:10px;">board_score, final_cutoff (computed)</code><br>
+        <code style="color:#c084fc;font-size:10px;">college_preferences (college_id[])</code><br>
+        <code style="color:#c084fc;font-size:10px;">registered_at, event_id</code>
+      </div>
+      <span class="tag tag-new">NEW TABLE</span>
+    </div>
+    <div class="arch-node purple">
+      <div class="node-label">Image assets</div>
+      <div class="node-title">College logos copied to repo</div>
+      <div class="node-desc">All 21 .webp logos downloaded from old GitHub repo and stored at:<br><code style="color:#c084fc;font-size:10px;">apps/marketing/public/images/ask-seniors/colleges/</code><br>Used by both the scroll and the /ask-seniors page. Old repo can be deleted safely.</div>
+      <span class="tag tag-new">NEW ASSETS</span>
+    </div>
+  </div>
+</div>
+
+<div class="college-note" style="margin-top:20px;">
+  <strong>One question remaining before writing the spec:</strong> Is AskSeniors a <strong>recurring event</strong> (held every year / every few months) or a <strong>one-time event</strong>? This decides whether the DB needs an <code>events</code> table (multiple editions) or just a single registration table. Also — do you have a confirmed date, or is it TBD?
+</div>
+
+</body>
+</html>

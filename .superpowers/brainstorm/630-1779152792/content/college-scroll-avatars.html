@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AskSeniors — College Scroll with Avatars</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #080d18;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  /* ─── Section ─── */
+  .ask-seniors-section {
+    padding: 64px 0 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ask-seniors-section::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 700px; height: 320px;
+    background: radial-gradient(ellipse, rgba(232,160,32,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .section-label {
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 3px;
+    font-weight: 700;
+    color: #e8a020;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    text-align: center;
+    font-size: clamp(30px, 5vw, 50px);
+    font-weight: 900;
+    color: #fff;
+    margin-bottom: 10px;
+    line-height: 1.1;
+  }
+
+  .section-title span {
+    background: linear-gradient(90deg, #e8a020, #fbbf24, #e8a020);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .section-desc {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 15px;
+    max-width: 500px;
+    margin: 0 auto 40px;
+    line-height: 1.65;
+  }
+
+  .section-desc strong { color: #e5e7eb; }
+
+  /* ─── Stats ─── */
+  .stats-strip {
+    display: flex;
+    justify-content: center;
+    gap: 48px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+
+  .stat { text-align: center; }
+  .stat-number { font-size: 30px; font-weight: 900; color: #e8a020; line-height: 1; }
+  .stat-label { font-size: 12px; color: #6b7280; margin-top: 4px; }
+
+  /* ─── Scroll infrastructure ─── */
+  .scroll-wrapper {
+    position: relative;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 7%, black 93%, transparent 100%);
+  }
+
+  .scroll-track {
+    display: flex;
+    gap: 14px;
+    width: max-content;
+    animation: marquee-fwd 32s linear infinite;
+    padding: 8px 0;
+  }
+
+  .scroll-track.reverse {
+    animation: marquee-rev 38s linear infinite;
+    margin-top: 14px;
+  }
+
+  /* Pause entire row on hover */
+  .scroll-track:hover { animation-play-state: paused; }
+
+  @keyframes marquee-fwd {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  @keyframes marquee-rev {
+    from { transform: translateX(-50%); }
+    to   { transform: translateX(0); }
+  }
+
+  /* ─── College chip ─── */
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px 8px 8px;
+    border-radius: 50px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    cursor: default;
+    transition: border-color 0.25s, background 0.25s, transform 0.2s, box-shadow 0.25s;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .chip:hover {
+    border-color: rgba(232,160,32,0.55);
+    background: rgba(232,160,32,0.07);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 24px rgba(232,160,32,0.12);
+  }
+
+  /* Avatar circle */
+  .chip-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #ffffff;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid rgba(255,255,255,0.15);
+  }
+
+  .chip-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 3px;
+  }
+
+  /* Fallback initials when image fails */
+  .chip-avatar .initials {
+    font-size: 12px;
+    font-weight: 800;
+    color: #1f2937;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .chip-text { display: flex; flex-direction: column; gap: 1px; }
+
+  .chip-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e7eb;
+    transition: color 0.2s;
+  }
+
+  .chip:hover .chip-name { color: #e8a020; }
+
+  .chip-city {
+    font-size: 11px;
+    color: #6b7280;
+  }
+
+  /* ─── Hover hint ─── */
+  .hover-hint {
+    text-align: center;
+    font-size: 11px;
+    color: #374151;
+    margin-top: 18px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ─── CTA ─── */
+  .cta-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 44px;
+    flex-wrap: wrap;
+    padding: 0 20px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #e8a020, #f59e0b);
+    color: #000;
+    border: none;
+    padding: 14px 34px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.2s;
+    letter-spacing: 0.2px;
+  }
+  .btn-primary:hover { opacity: 0.88; transform: translateY(-2px); }
+
+  .btn-ghost {
+    background: transparent;
+    color: #e8a020;
+    border: 1px solid rgba(232,160,32,0.35);
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover { border-color: #e8a020; background: rgba(232,160,32,0.07); }
+
+  .free-badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #6b7280;
+    font-size: 13px;
+  }
+  .free-badge::before {
+    content: '';
+    width: 7px; height: 7px;
+    background: #22c55e;
+    border-radius: 50%;
+    animation: pulse-green 2s ease-in-out infinite;
+  }
+  @keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+</style>
+</head>
+<body>
+
+<section class="ask-seniors-section">
+
+  <p class="section-label">Free Online Event</p>
+  <h2 class="section-title">#<span>AskSeniors</span></h2>
+  <p class="section-desc">
+    Real answers from <strong>current students</strong> at Tamil Nadu's top architecture colleges.
+    Ask anything before counseling. Before you decide.
+  </p>
+
+  <div class="stats-strip">
+    <div class="stat"><div class="stat-number">50+</div><div class="stat-label">Colleges Participating</div></div>
+    <div class="stat"><div class="stat-number">Free</div><div class="stat-label">For All Students</div></div>
+    <div class="stat"><div class="stat-number">Live</div><div class="stat-label">Q&amp;A Session</div></div>
+  </div>
+
+  <!-- Row 1: forward -->
+  <div class="scroll-wrapper">
+    <div class="scroll-track">
+      <!-- SET 1 -->
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Anna_University_Logo.webp" alt="Anna University" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">AU</span></div>
+        <div class="chip-text"><span class="chip-name">Anna University</span><span class="chip-city">Chennai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/National_Institute_of_Technology_Trichy_Logo.webp" alt="NIT Trichy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">NIT</span></div>
+        <div class="chip-text"><span class="chip-name">NIT Trichy</span><span class="chip-city">Tiruchirappalli</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/PSG_IAP_coimbatore.webp" alt="PSG" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PSG</span></div>
+        <div class="chip-text"><span class="chip-name">PSG College</span><span class="chip-city">Coimbatore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/SPA_Delhi.webp" alt="SPA Delhi" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SPA</span></div>
+        <div class="chip-text"><span class="chip-name">SPA Delhi</span><span class="chip-city">New Delhi</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Cept_Ahmedaba.webp" alt="CEPT" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">CEPT</span></div>
+        <div class="chip-text"><span class="chip-name">CEPT University</span><span class="chip-city">Ahmedabad</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/SRM_CHENNAI.webp" alt="SRM" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SRM</span></div>
+        <div class="chip-text"><span class="chip-name">SRM Institute</span><span class="chip-city">Chennai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/VIT_Vellore.webp" alt="VIT" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">VIT</span></div>
+        <div class="chip-text"><span class="chip-name">VIT Vellore</span><span class="chip-city">Vellore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/MEASI_chennai.webp" alt="MEASI" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">MEA</span></div>
+        <div class="chip-text"><span class="chip-name">MEASI Academy</span><span class="chip-city">Chennai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/christ_bangalore.webp" alt="Christ" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">CU</span></div>
+        <div class="chip-text"><span class="chip-name">Christ University</span><span class="chip-city">Bangalore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/ms_Ramaiah_bangalore.webp" alt="MS Ramaiah" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">MSR</span></div>
+        <div class="chip-text"><span class="chip-name">M.S. Ramaiah</span><span class="chip-city">Bangalore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/DSU.webp" alt="DSU" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">DSU</span></div>
+        <div class="chip-text"><span class="chip-name">Dayananda Sagar</span><span class="chip-city">Bangalore</span></div>
+      </div>
+      <!-- SET 2 — exact duplicate for seamless loop -->
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Anna_University_Logo.webp" alt="Anna University" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">AU</span></div>
+        <div class="chip-text"><span class="chip-name">Anna University</span><span class="chip-city">Chennai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/National_Institute_of_Technology_Trichy_Logo.webp" alt="NIT Trichy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">NIT</span></div>
+        <div class="chip-text"><span class="chip-name">NIT Trichy</span><span class="chip-city">Tiruchirappalli</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/PSG_IAP_coimbatore.webp" alt="PSG" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PSG</span></div>
+        <div class="chip-text"><span class="chip-name">PSG College</span><span class="chip-city">Coimbatore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/SPA_Delhi.webp" alt="SPA Delhi" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SPA</span></div>
+        <div class="chip-text"><span class="chip-name">SPA Delhi</span><span class="chip-city">New Delhi</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Cept_Ahmedaba.webp" alt="CEPT" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">CEPT</span></div>
+        <div class="chip-text"><span class="chip-name">CEPT University</span><span class="chip-city">Ahmedabad</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/SRM_CHENNAI.webp" alt="SRM" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SRM</span></div>
+        <div class="chip-text"><span class="chip-name">SRM Institute</span><span class="chip-city">Chennai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/VIT_Vellore.webp" alt="VIT" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">VIT</span></div>
+        <div class="chip-text"><span class="chip-name">VIT Vellore</span><span class="chip-city">Vellore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/MEASI_chennai.webp" alt="MEASI" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">MEA</span></div>
+        <div class="chip-text"><span class="chip-name">MEASI Academy</span><span class="chip-city">Chennai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/christ_bangalore.webp" alt="Christ" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">CU</span></div>
+        <div class="chip-text"><span class="chip-name">Christ University</span><span class="chip-city">Bangalore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/ms_Ramaiah_bangalore.webp" alt="MS Ramaiah" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">MSR</span></div>
+        <div class="chip-text"><span class="chip-name">M.S. Ramaiah</span><span class="chip-city">Bangalore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/DSU.webp" alt="DSU" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">DSU</span></div>
+        <div class="chip-text"><span class="chip-name">Dayananda Sagar</span><span class="chip-city">Bangalore</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: reverse -->
+  <div class="scroll-wrapper">
+    <div class="scroll-track reverse">
+      <!-- SET 1 -->
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/SPA-Bhopal.webp" alt="SPA Bhopal" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SPB</span></div>
+        <div class="chip-text"><span class="chip-name">SPA Bhopal</span><span class="chip-city">Bhopal</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Thiagarajar_College_of_Engineering_logo_MADURAI.webp" alt="Thiagarajar" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">TCE</span></div>
+        <div class="chip-text"><span class="chip-name">Thiagarajar College</span><span class="chip-city">Madurai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Rathinam_coimbatore.webp" alt="Rathinam" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">RC</span></div>
+        <div class="chip-text"><span class="chip-name">Rathinam College</span><span class="chip-city">Coimbatore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/karpagamcollege_Coimbatore.webp" alt="Karpagam" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">KAC</span></div>
+        <div class="chip-text"><span class="chip-name">Karpagam Academy</span><span class="chip-city">Coimbatore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/VNIT_logo_NAGPUR.webp" alt="VNIT" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">VNIT</span></div>
+        <div class="chip-text"><span class="chip-name">VNIT Nagpur</span><span class="chip-city">Nagpur</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/School_of_Planning_and_Architecture%2C_Vijayawada_Logo.webp" alt="SPA Vijayawada" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SPV</span></div>
+        <div class="chip-text"><span class="chip-name">SPA Vijayawada</span><span class="chip-city">Vijayawada</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/McGAN%27S_ooty.webp" alt="McGANs" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">MCG</span></div>
+        <div class="chip-text"><span class="chip-name">McGAN'S Ooty</span><span class="chip-city">Ooty</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/PRIME_Nagapattinam.webp" alt="PRIME" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PRM</span></div>
+        <div class="chip-text"><span class="chip-name">PRIME College</span><span class="chip-city">Nagapattinam</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/periyar.webp" alt="Periyar" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PU</span></div>
+        <div class="chip-text"><span class="chip-name">Periyar University</span><span class="chip-city">Salem</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/papni.webp" alt="PAPNI" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PAP</span></div>
+        <div class="chip-text"><span class="chip-name">PAPNI</span><span class="chip-city">Tamil Nadu</span></div>
+      </div>
+      <!-- SET 2 — exact duplicate for seamless loop -->
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/SPA-Bhopal.webp" alt="SPA Bhopal" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SPB</span></div>
+        <div class="chip-text"><span class="chip-name">SPA Bhopal</span><span class="chip-city">Bhopal</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Thiagarajar_College_of_Engineering_logo_MADURAI.webp" alt="Thiagarajar" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">TCE</span></div>
+        <div class="chip-text"><span class="chip-name">Thiagarajar College</span><span class="chip-city">Madurai</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/Rathinam_coimbatore.webp" alt="Rathinam" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">RC</span></div>
+        <div class="chip-text"><span class="chip-name">Rathinam College</span><span class="chip-city">Coimbatore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/karpagamcollege_Coimbatore.webp" alt="Karpagam" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">KAC</span></div>
+        <div class="chip-text"><span class="chip-name">Karpagam Academy</span><span class="chip-city">Coimbatore</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/VNIT_logo_NAGPUR.webp" alt="VNIT" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">VNIT</span></div>
+        <div class="chip-text"><span class="chip-name">VNIT Nagpur</span><span class="chip-city">Nagpur</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/School_of_Planning_and_Architecture%2C_Vijayawada_Logo.webp" alt="SPA Vijayawada" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">SPV</span></div>
+        <div class="chip-text"><span class="chip-name">SPA Vijayawada</span><span class="chip-city">Vijayawada</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/McGAN%27S_ooty.webp" alt="McGANs" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">MCG</span></div>
+        <div class="chip-text"><span class="chip-name">McGAN'S Ooty</span><span class="chip-city">Ooty</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/PRIME_Nagapattinam.webp" alt="PRIME" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PRM</span></div>
+        <div class="chip-text"><span class="chip-name">PRIME College</span><span class="chip-city">Nagapattinam</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/periyar.webp" alt="Periyar" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PU</span></div>
+        <div class="chip-text"><span class="chip-name">Periyar University</span><span class="chip-city">Salem</span></div>
+      </div>
+      <div class="chip">
+        <div class="chip-avatar"><img src="https://raw.githubusercontent.com/findhari93-sketch/NeramNewApp/23b7a9dc9f81cf1ea339892c3a76e2c3d3b5db04/public/images/asksenior/colleges/papni.webp" alt="PAPNI" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="initials" style="display:none">PAP</span></div>
+        <div class="chip-text"><span class="chip-name">PAPNI</span><span class="chip-city">Tamil Nadu</span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="hover-hint">Hover over any row to pause</p>
+
+  <div class="cta-row">
+    <button class="btn-primary">Register for Free →</button>
+    <button class="btn-ghost">See All Colleges</button>
+    <span class="free-badge">Free for all students</span>
+  </div>
+
+</section>
+
+</body>
+</html>
