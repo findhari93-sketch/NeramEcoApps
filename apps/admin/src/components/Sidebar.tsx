@@ -101,6 +101,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
       { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
       { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes', hasBadge: 'demo_classes' },
+      { text: 'AskSeniors', icon: EmojiEventsIcon, path: '/ask-seniors' },
     ],
   },
   {

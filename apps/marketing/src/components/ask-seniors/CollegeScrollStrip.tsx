@@ -74,40 +74,41 @@ export default function CollegeScrollStrip({
                 display: 'flex',
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '10px',
                 flexShrink: 0,
                 textDecoration: 'none',
                 color: 'inherit',
-                px: '10px',
-                py: '6px',
-                borderRadius: '40px',
-                border: '1px solid rgba(255,255,255,0.08)',
-                bgcolor: 'transparent',
-                transition: 'border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease',
+                px: '12px',
+                py: '8px',
+                borderRadius: '50px',
+                border: '1px solid rgba(255,255,255,0.07)',
+                background: 'rgba(255,255,255,0.03)',
+                backdropFilter: 'blur(4px)',
+                transition: 'border-color 0.25s, background 0.25s, transform 0.2s, box-shadow 0.25s',
                 cursor: 'pointer',
                 '&:hover': {
-                  borderColor: 'rgba(232,160,32,0.55)',
-                  bgcolor: 'rgba(232,160,32,0.07)',
+                  borderColor: 'rgba(232,160,32,0.5)',
+                  background: 'rgba(232,160,32,0.08)',
                   transform: 'translateY(-3px)',
-                  '& .chip-name': {
-                    color: '#e8a020',
-                  },
+                  boxShadow: '0 8px 24px rgba(232,160,32,0.12)',
+                  '& .chip-name': { color: '#e8a020' },
                 },
               }}
             >
               {/* Logo avatar */}
               <Box
                 sx={{
-                  width: 36,
-                  height: 36,
+                  width: 34,
+                  height: 34,
                   borderRadius: '50%',
-                  bgcolor: 'white',
+                  bgcolor: '#fff',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
                   p: '3px',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
                 }}
               >
                 {college.logo_url ? (

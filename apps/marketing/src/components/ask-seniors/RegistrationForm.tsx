@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import {
   Box,
@@ -14,6 +14,7 @@ import {
   InputAdornment,
   CheckCircleIcon,
 } from '@neram/ui';
+import { useFirebaseAuth } from '@neram/auth';
 
 interface AskSeniorsEvent {
   id: string;
@@ -90,11 +91,13 @@ interface RegistrationFormProps {
   colleges: AskSeniorsCollege[];
 }
 
-export default function RegistrationForm({ event: _event, colleges }: RegistrationFormProps) {
+export default function RegistrationForm({ event, colleges }: RegistrationFormProps) {
+  const { user } = useFirebaseAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoFilled, setAutoFilled] = useState(false);
   const [form, setForm] = useState<FormData>({
     nata_attempts: 1,
     nata_score_1: '',
@@ -107,6 +110,21 @@ export default function RegistrationForm({ event: _event, colleges }: Registrati
     city: '',
     state: '',
   });
+
+  // Pre-fill contact details from Firebase auth when user is logged in
+  useEffect(() => {
+    if (!user) return;
+    setForm((prev) => {
+      const name = prev.name || user.name || '';
+      const email = prev.email || user.email || '';
+      // Strip +91 prefix from stored phone number if present
+      const rawPhone = user.phone || '';
+      const phone = prev.phone || rawPhone.replace(/^\+91/, '');
+      const didFill = Boolean(name || email || phone);
+      if (didFill) setAutoFilled(true);
+      return { ...prev, name, email, phone };
+    });
+  }, [user]);
 
   const finalCutoff =
     form.nata_attempts === 2
@@ -133,7 +151,7 @@ export default function RegistrationForm({ event: _event, colleges }: Registrati
       const res = await fetch('/api/ask-seniors/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, event_id: event.id }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -438,12 +456,30 @@ export default function RegistrationForm({ event: _event, colleges }: Registrati
       {/* Step 3: Personal Details */}
       {step === 3 && (
         <Box>
-          <Typography
-            variant="h6"
-            sx={{ fontWeight: 800, color: '#fff', mb: 3 }}
-          >
-            Your Details
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: '#fff' }}>
+              Your Details
+            </Typography>
+            {autoFilled && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 20,
+                  bgcolor: 'rgba(34,197,94,0.1)',
+                  border: '1px solid rgba(34,197,94,0.3)',
+                }}
+              >
+                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#22c55e' }} />
+                <Typography sx={{ color: '#4ade80', fontSize: 11, fontWeight: 600 }}>
+                  Auto-filled
+                </Typography>
+              </Box>
+            )}
+          </Box>
 
           <TextField
             fullWidth
