@@ -3,6 +3,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateFAQSchema, generateFounderPersonSchema } from '@/lib/seo/schemas';
 import HomePageContent from '@/components/HomePageContent';
+import { getActiveAskSeniorsEvent, getAskSeniorsColleges } from '@neram/database';
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -39,12 +40,17 @@ export async function generateMetadata({
   };
 }
 
-export default function HomePage({
+export default async function HomePage({
   params: { locale },
 }: {
   params: { locale: string };
 }) {
   setRequestLocale(locale);
+
+  const [askSeniorsEvent, askSeniorsColleges] = await Promise.all([
+    getActiveAskSeniorsEvent().catch(() => null),
+    getAskSeniorsColleges().catch(() => []),
+  ]);
 
   return (
     <>
@@ -94,7 +100,7 @@ export default function HomePage({
           answer: 'Neram offers two platforms. The free app (aiArchitek at app.neramclasses.com) gives everyone access to the NATA cutoff calculator, college predictor for 5,000+ colleges, exam center locator, and a question bank preview, with no login required. Nexus (nexus.neramclasses.com) is India\'s first NATA-exclusive learning platform, designed by architects and available only to enrolled Neram students. Nexus includes the complete question bank with papers from 2005 to 2026 individually written in English and regional languages, drawing evaluation by expert tutors, structured course plans with foundation chapters, a full video library with recorded classes, live class timetable, leaderboard, self-learning modules, mini-modules, an AI-powered study assistant, and a parent monitoring dashboard. Nexus is the only app in India with this depth of NATA-specific resources for self-learning, supported by Microsoft. Enroll at Neram Classes to unlock Nexus.',
         },
       ])} />
-      <HomePageContent />
+      <HomePageContent askSeniorsEvent={askSeniorsEvent} askSeniorsColleges={askSeniorsColleges} />
 
       {/* SEO Content — server-rendered for full crawler visibility */}
       <section style={{ backgroundColor: '#060d1f', color: '#ffffff', padding: '64px 0' }}>

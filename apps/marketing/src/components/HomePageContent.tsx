@@ -11,9 +11,14 @@ import CourseCard from '@/components/CourseCard';
 import SectionDivider from '@/components/SectionDivider';
 import { APP_URL } from '@/lib/seo/constants';
 import type { Testimonial } from '@/components/ui/testimonials-columns';
+import type { AskSeniorsEvent, AskSeniorsCollege } from '@neram/database';
 
 // Lazy-load below-fold components to reduce initial JS bundle
 const YouTubeSection = dynamic(() => import('@/components/YouTubeSection'), { ssr: false });
+const AskSeniorsSection = dynamic(
+  () => import('./ask-seniors/AskSeniorsSection'),
+  { ssr: false }
+);
 const AnnouncementsSection = dynamic(
   () => import('@/components/marketing-content').then((mod) => ({ default: mod.AnnouncementsSection })),
   { ssr: false }
@@ -160,7 +165,12 @@ function mapDbTestimonial(t: {
   };
 }
 
-export default function HomePageContent() {
+interface HomePageContentProps {
+  askSeniorsEvent?: AskSeniorsEvent | null;
+  askSeniorsColleges?: AskSeniorsCollege[];
+}
+
+export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }: HomePageContentProps) {
   const t = useTranslations('home');
 
   const [testimonials, setTestimonials] = useState<Testimonial[]>(fallbackTestimonials);
@@ -441,6 +451,14 @@ export default function HomePageContent() {
         <StudentResultsTeaser />
 
         <SectionDivider />
+
+        {/* ─── Ask Seniors (live event teaser, shown only when active) ─── */}
+        {askSeniorsEvent && askSeniorsColleges && askSeniorsColleges.length > 0 && (
+          <>
+            <AskSeniorsSection event={askSeniorsEvent} colleges={askSeniorsColleges} />
+            <SectionDivider />
+          </>
+        )}
 
         {/* ─── Social Proof (Audio, Video, Screenshots) ─── */}
         <SocialProofSection />
