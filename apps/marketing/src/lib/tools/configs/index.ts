@@ -10,6 +10,7 @@ export { costCalculatorConfig } from './cost-calculator';
 export { counselingInsightsConfig } from './counseling-insights';
 export { imageResizerConfig } from './image-resizer';
 export { aiChatbotConfig } from './ai-chatbot';
+export { josaaBarchPredictorConfig } from './josaa-barch-predictor';
 
 import { cutoffCalculatorConfig } from './cutoff-calculator';
 import { collegePredictorConfig } from './college-predictor';
@@ -23,6 +24,7 @@ import { costCalculatorConfig } from './cost-calculator';
 import { counselingInsightsConfig } from './counseling-insights';
 import { imageResizerConfig } from './image-resizer';
 import { aiChatbotConfig } from './ai-chatbot';
+import { josaaBarchPredictorConfig } from './josaa-barch-predictor';
 import type { ToolConfig, ToolCardData } from '../types';
 
 export const ALL_TOOLS: ToolConfig[] = [
@@ -33,6 +35,7 @@ export const ALL_TOOLS: ToolConfig[] = [
   eligibilityCheckerConfig,
   examPlannerConfig,
   collegePredictorConfig,
+  josaaBarchPredictorConfig,
   coaCheckerConfig,
   costCalculatorConfig,
   counselingInsightsConfig,

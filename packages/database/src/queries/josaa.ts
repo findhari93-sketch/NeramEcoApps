@@ -14,6 +14,8 @@ import type {
   JosaaInstitute,
   JosaaPrediction,
   JosaaTrendPoint,
+  JosaaRankType,
+  JosaaCategory,
 } from '../types';
 
 export type JosaaSeatType =
@@ -45,6 +47,7 @@ export interface PredictJosaaCollegesParams {
 
 /**
  * Run the predict_colleges RPC. Returns rows tagged safe/probable/reach.
+ * @deprecated Use predictJosaaCollegesV2 for new code. Kept for backward compat.
  */
 export async function predictJosaaColleges(
   params: PredictJosaaCollegesParams,
@@ -56,6 +59,42 @@ export async function predictJosaaColleges(
     p_seat_type: params.seatType ?? 'OPEN',
     p_gender: params.gender ?? 'Gender-Neutral',
     p_quota: params.quota ?? null,
+    p_year: params.year ?? null,
+    p_round_no: params.roundNo ?? null,
+  });
+  if (error) throw error;
+  return (data ?? []) as JosaaPrediction[];
+}
+
+export interface PredictJosaaCollegesV2Params {
+  rank: number;
+  rankType?: JosaaRankType;        // 'CRL' or 'CATEGORY' (default CRL)
+  category?: JosaaCategory;         // ignored when rankType='CRL' (forced to OPEN)
+  pwd?: boolean;                    // applies PwD seat-type variant
+  gender?: JosaaGender;
+  homeState?: string | null;        // null = "All India only" (AI seats only)
+  year?: number | null;
+  roundNo?: number | null;
+}
+
+/**
+ * Run the predict_colleges_v2 RPC. Smarter than v1:
+ *  - separates rank-type (CRL vs Category) from category enum
+ *  - infers per-row quota eligibility from the candidate's home state
+ *  - returns college_slug/state_slug/city_slug for deep-linking to marketing
+ */
+export async function predictJosaaCollegesV2(
+  params: PredictJosaaCollegesV2Params,
+  client?: TypedSupabaseClient,
+): Promise<JosaaPrediction[]> {
+  const supabase = client || getSupabaseBrowserClient();
+  const { data, error } = await supabase.rpc('predict_colleges_v2', {
+    p_rank: params.rank,
+    p_rank_type: params.rankType ?? 'CRL',
+    p_category: params.category ?? 'OPEN',
+    p_pwd: params.pwd ?? false,
+    p_gender: params.gender ?? 'Gender-Neutral',
+    p_home_state: params.homeState ?? null,
     p_year: params.year ?? null,
     p_round_no: params.roundNo ?? null,
   });

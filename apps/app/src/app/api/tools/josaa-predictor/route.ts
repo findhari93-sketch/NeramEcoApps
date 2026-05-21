@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  predictJosaaColleges,
+  predictJosaaCollegesV2,
   logToolUsage,
   getSupabaseBrowserClient,
 } from '@neram/database';
@@ -22,8 +22,19 @@ async function verifyUser(request: NextRequest): Promise<{ uid: string } | null>
 
 /**
  * POST /api/tools/josaa-predictor
- * Body: { rank, seatType?, gender?, quota?, year?, roundNo? }
- * Returns: { predictions: JosaaPrediction[], counts: { safe, probable, reach } }
+ * Body: {
+ *   rank: number,                                    // required
+ *   rankType?: 'CRL' | 'CATEGORY',                   // default 'CRL'
+ *   category?: 'OPEN'|'OBC-NCL'|'SC'|'ST'|'EWS',     // ignored when rankType='CRL'
+ *   pwd?: boolean,
+ *   gender?: string,
+ *   homeState?: string | null,                       // null = AI-only mode
+ *   year?: number | number[] | null,                 // single year OR array for compare mode
+ *   roundNo?: number | null
+ * }
+ * Returns:
+ *   single-year:    { predictions, counts, executionTime }
+ *   compare mode:   { byYear: { [year]: { predictions, counts } }, executionTime }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +47,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { rank, seatType, gender, quota, year, roundNo } = body || {};
+    const {
+      rank,
+      rankType,
+      category,
+      pwd,
+      gender,
+      homeState,
+      year,
+      roundNo,
+    } = body || {};
 
     if (typeof rank !== 'number' || !Number.isFinite(rank) || rank < 1 || rank > 1_500_000) {
       return NextResponse.json(
@@ -48,15 +68,54 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const supabase = getSupabaseBrowserClient();
 
-    const predictions = await predictJosaaColleges(
-      {
-        rank,
-        seatType: seatType || 'OPEN',
-        gender: gender || 'Gender-Neutral',
-        quota: quota || null,
-        year: year ?? null,
-        roundNo: roundNo ?? null,
-      },
+    const baseParams = {
+      rank,
+      rankType: (rankType === 'CATEGORY' ? 'CATEGORY' : 'CRL') as 'CRL' | 'CATEGORY',
+      category: category || 'OPEN',
+      pwd: !!pwd,
+      gender: gender || 'Gender-Neutral',
+      homeState: homeState || null,
+      roundNo: roundNo ?? null,
+    };
+
+    // Compare mode: client sends `year` as an array of numbers.
+    if (Array.isArray(year) && year.length > 0) {
+      const byYear: Record<number, { predictions: any[]; counts: { safe: number; probable: number; reach: number } }> = {};
+      await Promise.all(
+        year.map(async (y: number) => {
+          const predictions = await predictJosaaCollegesV2(
+            { ...baseParams, year: y },
+            supabase,
+          );
+          const counts = { safe: 0, probable: 0, reach: 0 };
+          for (const p of predictions) {
+            if (p.chance === 'safe') counts.safe++;
+            else if (p.chance === 'probable') counts.probable++;
+            else if (p.chance === 'reach') counts.reach++;
+          }
+          byYear[y] = { predictions, counts };
+        }),
+      );
+
+      const executionTime = Date.now() - startTime;
+      logToolUsage(
+        {
+          toolName: 'josaa_predictor',
+          userId: user.uid,
+          inputData: { rank, rankType, category, pwd, gender, homeState, year, roundNo, compare: true },
+          resultData: { years: year, totals: Object.fromEntries(Object.entries(byYear).map(([y, v]) => [y, v.predictions.length])) },
+          executionTimeMs: executionTime,
+          userAgent: request.headers.get('user-agent') || undefined,
+        },
+        supabase,
+      ).catch(() => {});
+
+      return NextResponse.json({ byYear, executionTime });
+    }
+
+    // Single-year path
+    const predictions = await predictJosaaCollegesV2(
+      { ...baseParams, year: year ?? null },
       supabase,
     );
 
@@ -68,12 +127,11 @@ export async function POST(request: NextRequest) {
     }
 
     const executionTime = Date.now() - startTime;
-
     logToolUsage(
       {
         toolName: 'josaa_predictor',
         userId: user.uid,
-        inputData: { rank, seatType, gender, quota, year, roundNo },
+        inputData: { rank, rankType, category, pwd, gender, homeState, year, roundNo },
         resultData: { total: predictions.length, ...counts },
         executionTimeMs: executionTime,
         userAgent: request.headers.get('user-agent') || undefined,

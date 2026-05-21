@@ -7484,7 +7484,14 @@ export interface JosaaPrediction {
   margin: number;
   chance: JosaaChance;
   nirf_rank: number | null;
+  /** Marketing-site college slug. Null if the JoSAA institute isn't in the colleges table. */
+  college_slug?: string | null;
+  state_slug?: string | null;
+  city_slug?: string | null;
 }
+
+export type JosaaRankType = 'CRL' | 'CATEGORY';
+export type JosaaCategory = 'OPEN' | 'OBC-NCL' | 'SC' | 'ST' | 'EWS';
 
 export interface JosaaTrendPoint {
   year: number;

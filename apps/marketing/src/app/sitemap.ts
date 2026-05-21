@@ -76,6 +76,7 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/tools/counseling-insights', lastModified: '2026-04-17' },
   { path: '/tools/image-resizer', lastModified: '2026-05-08' },
   { path: '/tools/ai-chatbot', lastModified: '2026-05-08' },
+  { path: '/tools/josaa-barch-predictor', lastModified: '2026-05-21' },
   { path: '/nata-app', lastModified: '2026-02-28' },
   { path: '/best-nata-coaching-online', lastModified: '2026-04-04' },
   { path: '/blog', lastModified: '2026-03-10' },

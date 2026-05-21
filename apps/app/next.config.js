@@ -28,6 +28,7 @@ const nextConfig = {
       { source: '/tools/cutoff-calculator', destination: '/tools/nata/cutoff-calculator', permanent: true },
       { source: '/tools/college-predictor', destination: '/tools/nata/college-predictor', permanent: true },
       { source: '/tools/exam-centers', destination: '/tools/nata/exam-centers', permanent: true },
+      { source: '/tools/josaa-predictor', destination: '/tools/counseling/josaa-predictor', permanent: true },
     ];
   },
   images: {
