@@ -1,0 +1,171 @@
+-- Migration: Add 22 Kerala KEAM architecture colleges (self-financing)
+-- Source: apps/marketing/src/data/keam-arch-2026/colleges.json (KEAM official list)
+-- All COA-approved. NIT Calicut and CET Trivandrum are in the pan_india migration.
+-- Idempotent: uses ON CONFLICT (slug) DO NOTHING
+
+INSERT INTO colleges (
+  name, slug, short_name,
+  state, state_slug, city, city_slug, district,
+  type, accepted_exams, courses_offered,
+  total_barch_seats, phone, coa_approved,
+  affiliated_university,
+  neram_tier, is_active, verified,
+  data_source, data_completeness,
+  contact_status, outreach_count
+) VALUES
+
+('ABATE Institute of Architecture', 'abate-kerala-architecture', 'ABATE',
+ 'Kerala', 'kerala', 'Perinthalmanna', 'perinthalmanna', 'Malappuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04933315200', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('SEED-APJ Abdul Kalam School of Environmental Design', 'seed-apj-kerala-architecture', 'SEED-APJ',
+ 'Kerala', 'kerala', 'Ernakulam', 'ernakulam', 'Ernakulam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, NULL, TRUE,
+ 'MG University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 64, 'never_contacted', 0),
+
+('Asian School of Architecture and Design Innovations', 'asian-school-kerala-architecture', 'ASADI',
+ 'Kerala', 'kerala', 'Vyttila, Kochi', 'kochi', 'Ernakulam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04842389940', TRUE,
+ 'MG University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Avani Institute of Design', 'avani-kerala-architecture', 'Avani',
+ 'Kerala', 'kerala', 'Kozhikode', 'kozhikode', 'Kozhikode',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, '04953100500', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Bishop Jerome Institute School of Architecture', 'bishop-jerome-kerala-architecture', 'BJI',
+ 'Kerala', 'kerala', 'Kollam', 'kollam', 'Kollam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 30, '04742764051', TRUE,
+ 'KTU',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('DC School of Architecture and Design Vagamon', 'dc-school-vagamon-kerala-architecture', 'DC Vagamon',
+ 'Kerala', 'kerala', 'Vagamon', 'vagamon', 'Idukki',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 60, '04869202510', TRUE,
+ 'MG University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Devaki Ammas Guruvayurappan College of Architecture', 'devaki-amma-kerala-architecture', 'DGCA',
+ 'Kerala', 'kerala', 'Chelambra', 'chelambra', 'Malappuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04832891330', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('DC School of Architecture and Design KINFRA', 'dc-school-kinfra-kerala-architecture', 'DC KINFRA',
+ 'Kerala', 'kerala', 'Kazhakoottam', 'kazhakoottam', 'Thiruvananthapuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04712982232', TRUE,
+ 'KTU',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Eranad Knowledge City College of Architecture', 'eranad-kerala-architecture', 'EKC',
+ 'Kerala', 'kerala', 'Manjeri', 'manjeri', 'Malappuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, '04833013666', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('IES College of Architecture', 'ies-kerala-architecture', 'IES',
+ 'Kerala', 'kerala', 'Chittilappilli', 'chittilappilli', 'Thrissur',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04872309708', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('KMEA College of Architecture', 'kmea-kerala-architecture', 'KMEA',
+ 'Kerala', 'kerala', 'Aluva', 'aluva', 'Ernakulam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, '04842411003', TRUE,
+ 'MG University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('KMCT College of Architecture Poolakode', 'kmct-poolakode-kerala-architecture', 'KMCT Poolakode',
+ 'Kerala', 'kerala', 'Poolakode', 'poolakode', 'Kozhikode',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04952291645', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Marian College of Architecture and Planning', 'marian-kerala-architecture', 'Marian',
+ 'Kerala', 'kerala', 'Kazhakuttom', 'kazhakuttom', 'Thiruvananthapuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, '04712707111', TRUE,
+ 'CUSAT',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('MES College of Architecture Kakkodi', 'mes-kakkodi-kerala-architecture', 'MES Kakkodi',
+ 'Kerala', 'kerala', 'Kakkodi', 'kakkodi', 'Kozhikode',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04952762080', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Mangalam School of Architecture', 'mangalam-kerala-architecture', 'Mangalam',
+ 'Kerala', 'kerala', 'Perumbaikad', 'perumbaikad', 'Kottayam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 60, '04812311964', TRUE,
+ 'MG University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('MES School of Architecture Kuttippuram', 'mes-kuttippuram-kerala-architecture', 'MES Kuttippuram',
+ 'Kerala', 'kerala', 'Kuttippuram', 'kuttippuram', 'Malappuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04943051234', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('KMCT College of Architecture Manassery', 'kmct-manassery-kerala-architecture', 'KMCT Manassery',
+ 'Kerala', 'kerala', 'Manassery', 'manassery', 'Kozhikode',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04952299288', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Nehru College of Architecture Lakkidi', 'nehru-kerala-architecture', 'Nehru Kerala',
+ 'Kerala', 'kerala', 'Lakkidi', 'lakkidi', 'Palakkad',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04662231383', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('College of Architecture Vellanad', 'vellanad-kerala-architecture', 'Vellanad',
+ 'Kerala', 'kerala', 'Vellanad', 'vellanad', 'Thiruvananthapuram',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 120, '04722888822', TRUE,
+ 'Kerala University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('SCMS School of Architecture', 'scms-kerala-architecture', 'SCMS',
+ 'Kerala', 'kerala', 'Karukutty', 'karukutty', 'Ernakulam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, '04842450330', TRUE,
+ 'MG University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('TKM School of Architecture', 'tkm-kerala-architecture', 'TKM',
+ 'Kerala', 'kerala', 'Ezhukone', 'ezhukone', 'Kollam',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 40, '04742165248', TRUE,
+ 'CUSAT',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0),
+
+('Thejus College of Architecture', 'thejus-kerala-architecture', 'Thejus',
+ 'Kerala', 'kerala', 'Erumappetty', 'erumappetty', 'Thrissur',
+ 'Private', ARRAY['KEAM','NATA'], ARRAY['B.Arch'],
+ 80, '0488267135', TRUE,
+ 'Calicut University',
+ 'free', TRUE, FALSE, 'keam_static_json_2026_05', 73, 'never_contacted', 0)
+
+ON CONFLICT (slug) DO NOTHING;
