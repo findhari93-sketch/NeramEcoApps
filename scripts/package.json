@@ -7,13 +7,21 @@
     "seo:schema": "tsx seo/generate-schema.ts",
     "seo:indexnow": "tsx seo/indexnow-submit.ts",
     "seo:cwv": "tsx seo/cwv-monitor.ts",
-    "seo:all": "npm run seo:schema && npm run seo:cwv"
+    "seo:all": "npm run seo:schema && npm run seo:cwv",
+    "nirf:scrape": "node scrape-nirf-architecture.mjs",
+    "nirf:import": "node import-nirf-architecture.mjs",
+    "josaa:import:staging": "node import-josaa-barch.mjs --env staging",
+    "josaa:import:prod": "node import-josaa-barch.mjs --env prod"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@supabase/supabase-js": "^2.39.0",
+    "cheerio": "^1.2.0",
+    "fastest-levenshtein": "^1.0.16",
     "googleapis": "^171.4.0",
     "open": "^11.0.0",
+    "p-retry": "^6.2.1",
+    "pdf-parse": "^1.1.1",
     "tsx": "^4.7.0",
     "youtube-transcript": "^1.3.0"
   },
