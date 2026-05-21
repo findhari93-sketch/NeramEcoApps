@@ -24,6 +24,9 @@ import type {
   SimilarStudent,
   SeatAwareCollegePrediction,
   SeatMatrix,
+  KeamPrediction,
+  KeamPredictionChance,
+  KeamPhase,
 } from '../types';
 
 // ============================================
@@ -1620,4 +1623,126 @@ export async function predictCollegesWithSeatAwareness(
     seatDataAvailable: hasSeatData,
     totalColleges: collegeDirectory.size,
   };
+}
+
+// ============================================
+// KEAM-SPECIFIC PREDICTOR
+// ============================================
+//
+// KEAM data lives in isolated keam_* tables (keam_allotments / keam_cutoffs view),
+// not in the unified allotment_list_entries. This is a deliberate schema choice;
+// the predictor branches here when systemCode === 'KEAM_BARCH'.
+
+/**
+ * Map of KEAM candidate category → eligible seat_type codes.
+ * Mirrors apps/app/Docs/Counselling_datas/KEAM/keam_predictor.ts CATEGORY_TO_SEAT_TYPES,
+ * but using the short codes used by counseling_systems.categories for KEAM_BARCH.
+ */
+const KEAM_CATEGORY_TO_SEAT_TYPES: Record<string, string[]> = {
+  SM: ['SM'],
+  EZ: ['SM', 'EZ', 'SM-EZ', 'FL-EZ'],
+  MU: ['SM', 'MU', 'SM-MU', 'FL-MU'],
+  LA: ['SM', 'LA', 'SM-LA', 'FL-LA'],
+  DV: ['SM', 'DV'],
+  VK: ['SM', 'VK', 'SM-VK', 'FL-VK'],
+  BH: ['SM', 'BH', 'SM-BH', 'FL-BH'],
+  BX: ['SM', 'BX'],
+  KN: ['SM', 'KN'],
+  KU: ['SM', 'KN'], // Kudumbi shares the KN seat pool per KEAM rules
+  SC: ['SM', 'SC'],
+  ST: ['SM', 'ST'],
+  // Legacy/alternate codes that may flow in from older UI selections
+  GEN: ['SM'],
+  GENERAL: ['SM'],
+  EW: ['SM', 'EW', 'SM-EW', 'FL-EW'],
+  EWS: ['SM', 'EW', 'SM-EW', 'FL-EW'],
+};
+
+function classifyKeamChance(
+  rank: number,
+  closing: number,
+  safetyBuffer: number,
+  borderlineBuffer: number,
+): KeamPredictionChance {
+  if (rank <= closing - safetyBuffer) return 'Safe';
+  if (rank <= closing) return 'Likely';
+  if (rank <= closing + borderlineBuffer) return 'Borderline';
+  return 'Unlikely';
+}
+
+/**
+ * KEAM B.Arch college predictor — queries the keam_cutoffs view.
+ *
+ * Strategy:
+ *  - Look up eligible seat_types for the user's category from KEAM_CATEGORY_TO_SEAT_TYPES.
+ *  - Pull all (college, seat_type) cutoffs from keam_cutoffs filtered by year + phase.
+ *  - For each row, classify the user's rank as Safe / Likely / Borderline / Unlikely.
+ *  - Mark each row as 'general' (SM-pool) or 'community' (own-community seats).
+ *
+ * Defaults to Phase 2 (final allotment) as the ground-truth dataset.
+ * Pass phase='Phase1' for provisional / "seat movement" analytics.
+ */
+export async function predictCollegesFromKeamCutoffs(
+  keamCategory: string,
+  predictedRank: number,
+  options?: {
+    year?: number;
+    phase?: KeamPhase;
+    safetyBuffer?: number;
+    borderlineBuffer?: number;
+  },
+  client?: TypedSupabaseClient,
+): Promise<KeamPrediction[]> {
+  const supabase = client || getSupabaseBrowserClient();
+  const year = options?.year ?? 2025;
+  const phase: KeamPhase = options?.phase ?? 'Phase2';
+  const safetyBuffer = options?.safetyBuffer ?? 50;
+  const borderlineBuffer = options?.borderlineBuffer ?? 100;
+
+  const eligibleSeatTypes =
+    KEAM_CATEGORY_TO_SEAT_TYPES[keamCategory] || KEAM_CATEGORY_TO_SEAT_TYPES.SM;
+
+  const { data, error } = await supabase
+    .from('keam_cutoffs')
+    .select(
+      'year, phase, course, college_code, college_name, town, district, college_type, seat_type, seat_type_meaning, seats_filled, opening_rank, closing_rank',
+    )
+    .eq('year', year)
+    .eq('phase', phase)
+    .eq('course', 'Architecture')
+    .in('seat_type', eligibleSeatTypes);
+
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  const predictions: KeamPrediction[] = data.map((r: any) => ({
+    collegeCode: r.college_code,
+    collegeName: r.college_name,
+    town: r.town,
+    district: r.district,
+    collegeType: r.college_type,
+    seatType: r.seat_type,
+    seatTypeMeaning: r.seat_type_meaning,
+    seatsFilled: r.seats_filled,
+    openingRank: r.opening_rank,
+    closingRank: r.closing_rank,
+    predictedRank,
+    chance: classifyKeamChance(predictedRank, r.closing_rank, safetyBuffer, borderlineBuffer),
+    matchCategory: r.seat_type === 'SM' ? 'general' : 'community',
+    phase,
+  }));
+
+  // Sort: Safe → Likely → Borderline → Unlikely, then by closing_rank ascending.
+  const chanceOrder: Record<KeamPredictionChance, number> = {
+    Safe: 0,
+    Likely: 1,
+    Borderline: 2,
+    Unlikely: 3,
+  };
+  predictions.sort(
+    (a, b) =>
+      chanceOrder[a.chance] - chanceOrder[b.chance] || a.closingRank - b.closingRank,
+  );
+
+  return predictions;
 }

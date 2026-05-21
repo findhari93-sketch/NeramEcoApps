@@ -8,6 +8,7 @@ import {
   predictCollegesFromRank,
   predictCollegesFromAllotment,
   predictCollegesWithSeatAwareness,
+  predictCollegesFromKeamCutoffs,
   getRequiredScoreForCollege,
   logToolUsage,
   getSupabaseBrowserClient,
@@ -85,6 +86,53 @@ export async function POST(request: NextRequest) {
       // Step 2: If we have a predicted rank, get colleges
       const predictedRank = rankPrediction?.predictedRankMin || 0;
       const effectiveRank = predictedRank || Math.round((1 - compositeScore / 400) * 1500);
+
+      // KEAM branch: KEAM data lives in isolated keam_* tables (keam_cutoffs view).
+      // The unified seat-aware/allotment predictors below query allotment_list_entries
+      // which has no KEAM data. Branch here when the user is predicting for KEAM_BARCH.
+      if (system.code === 'KEAM_BARCH') {
+        const keamPhase = body.keamPhase === 'Phase1' ? 'Phase1' : 'Phase2';
+        const keamPreds = await predictCollegesFromKeamCutoffs(
+          category || 'SM',
+          effectiveRank,
+          { year: targetYear, phase: keamPhase },
+          supabase
+        );
+
+        const generalPredictions = keamPreds.filter((p: any) => p.matchCategory === 'general');
+        const communityPredictions = keamPreds.filter((p: any) => p.matchCategory === 'community');
+        const totalColleges = new Set(keamPreds.map((p: any) => p.collegeCode)).size;
+
+        const executionTime = Date.now() - startTime;
+        logToolUsage(
+          {
+            toolName: 'college_predictor_counseling',
+            userId: user.uid,
+            inputData: { systemCode, compositeScore, category, year: targetYear, mode: 'forward', source: 'keam_cutoffs', keamPhase },
+            resultData: { count: keamPreds.length, totalColleges, predictedRank: effectiveRank },
+            executionTimeMs: executionTime,
+            userAgent: request.headers.get('user-agent') || undefined,
+          },
+          supabase
+        ).catch(() => {});
+
+        return NextResponse.json({
+          generalPredictions,
+          communityPredictions,
+          seatDataAvailable: true,
+          totalColleges,
+          // Legacy fields (empty, KEAM uses the keam-specific shapes above)
+          predictions: [],
+          allotmentPredictions: [],
+          // KEAM-specific raw payload for richer UI later
+          keamPredictions: keamPreds,
+          keamPhase,
+          rankPrediction,
+          system: { id: system.id, code: system.code, name: system.name },
+          year: targetYear,
+          executionTime,
+        });
+      }
 
       // Use seat-aware prediction by default
       const useSeatAware = seatAware !== false;

@@ -1,3 +1,6 @@
+// @ts-nocheck - Reference file under apps/app/Docs/. Not part of the build.
+// The active KEAM predictor lives in packages/database/src/queries/counseling.ts
+// as predictCollegesFromKeamCutoffs.
 /**
  * KEAM B.Arch college predictor — cutoff-based.
  *

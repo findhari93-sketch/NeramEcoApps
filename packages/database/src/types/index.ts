@@ -1605,6 +1605,31 @@ export interface SeatAwareCollegePrediction {
 }
 
 /**
+ * KEAM B.Arch college prediction row (from keam_cutoffs view).
+ * Used by predictCollegesFromKeamCutoffs to surface the user's chance at each
+ * (college, seat_type) combination they're eligible for.
+ */
+export type KeamPredictionChance = 'Safe' | 'Likely' | 'Borderline' | 'Unlikely';
+export type KeamPhase = 'Phase1' | 'Phase2';
+
+export interface KeamPrediction {
+  collegeCode: string;
+  collegeName: string;
+  town: string | null;
+  district: string | null;
+  collegeType: string | null;
+  seatType: string;
+  seatTypeMeaning: string;
+  seatsFilled: number;
+  openingRank: number;
+  closingRank: number;
+  predictedRank: number;
+  chance: KeamPredictionChance;
+  matchCategory: 'general' | 'community';
+  phase: KeamPhase;
+}
+
+/**
  * Exam centers for NATA/JEE
  */
 export interface ExamCenter extends Timestamps {
@@ -7353,4 +7378,117 @@ export interface AskSeniorsRegistrationPayload {
   board_score: number;
   final_cutoff: number;
   college_preferences: string[];
+}
+
+// ============================================
+// NIRF RANKINGS (multi-year history)
+// ============================================
+
+export type NIRFMatchStatus = 'pending' | 'matched' | 'unmatched' | 'manual' | 'ignored';
+export type NIRFCategory = 'architecture' | string;
+
+export interface NIRFRanking {
+  id: string;
+  college_id: string | null;
+  category: NIRFCategory;
+  year: number;
+  rank: number;
+  rank_band: string | null;
+  score: number | null;
+  tlr: number | null;
+  rpc: number | null;
+  go: number | null;
+  oi: number | null;
+  pr: number | null;
+  source_name: string;
+  source_city: string | null;
+  source_state: string | null;
+  source_url: string;
+  match_status: NIRFMatchStatus;
+  match_score: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NIRFRankingCollegeRef {
+  id: string;
+  slug: string;
+  name: string;
+  short_name: string | null;
+  city: string;
+  state: string;
+  state_slug: string | null;
+  type: CollegeType;
+  logo_url: string | null;
+  neram_tier: string | null;
+  naac_grade: string | null;
+}
+
+export interface NIRFRankingWithCollege extends NIRFRanking {
+  college: NIRFRankingCollegeRef | null;
+}
+
+// ============================================
+// JOSAA B.ARCH RANK PREDICTOR
+// ============================================
+
+export interface JosaaInstitute {
+  id: number;
+  name: string;
+  short_name: string | null;
+  institute_type: string;
+  state: string | null;
+  city: string | null;
+  nirf_rank: number | null;
+  established: number | null;
+  is_nirf_top20: boolean;
+  created_at?: string;
+}
+
+export interface JosaaProgram {
+  id: number;
+  name: string;
+  short_name: string | null;
+  duration_y: number | null;
+}
+
+export interface JosaaOrCr {
+  id: number;
+  year: number;
+  round_no: number;
+  institute_id: number;
+  program_id: number;
+  quota: string;
+  seat_type: string;
+  gender: string;
+  opening_rank: number | null;
+  closing_rank: number | null;
+  opening_rank_p: boolean;
+  closing_rank_p: boolean;
+  created_at?: string;
+}
+
+export type JosaaChance = 'safe' | 'probable' | 'reach';
+
+export interface JosaaPrediction {
+  institute: string;
+  institute_type: string;
+  state: string | null;
+  program: string;
+  quota: string;
+  seat_type: string;
+  gender: string;
+  opening_rank: number | null;
+  closing_rank: number | null;
+  margin: number;
+  chance: JosaaChance;
+  nirf_rank: number | null;
+}
+
+export interface JosaaTrendPoint {
+  year: number;
+  round_no: number;
+  opening_rank: number | null;
+  closing_rank: number | null;
 }
