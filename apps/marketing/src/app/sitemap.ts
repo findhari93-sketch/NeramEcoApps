@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
 import { getAllCenterSeoSlugs } from '@neram/database/queries';
 import { getSitemapLocations, getIndianStates } from '@neram/database';
-import { getAllCollegeSlugs, getActiveStates } from '@/lib/college-hub/queries';
+import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 
 const baseUrl = 'https://neramclasses.com';
@@ -317,6 +317,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   } catch (err) {
     console.error('Failed to fetch college slugs for sitemap:', err);
+  }
+
+  // ─── NIRF ranking per-college history pages ──────────────────────────────
+  try {
+    const nirfSlugs = await getNIRFRankedCollegeSlugs();
+    for (const slug of nirfSlugs) {
+      const path = `/colleges/rankings/nirf/${slug}`;
+      for (const locale of locales) {
+        entries.push({
+          url: localeUrl(locale, path),
+          lastModified: new Date('2026-05-20'),
+          changeFrequency: 'monthly' as const,
+          priority: 0.7,
+          alternates: {
+            languages: Object.fromEntries(locales.map((l) => [l, localeUrl(l, path)])),
+          },
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch NIRF college slugs for sitemap:', err);
   }
 
   // ─── Fee-based programmatic pages ────────────────────────────────────────

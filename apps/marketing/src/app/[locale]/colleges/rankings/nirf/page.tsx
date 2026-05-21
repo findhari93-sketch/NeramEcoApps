@@ -1,120 +1,231 @@
-import { Metadata } from 'next';
-import {
-  Container, Typography, Box, Table, TableHead, TableBody,
-  TableRow, TableCell, Paper, Chip, Button,
-} from '@mui/material';
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import Script from 'next/script';
+import {
+  Container,
+  Typography,
+  Box,
+  Chip,
+  Grid,
+  Stack,
+  Button,
+  Alert,
+} from '@mui/material';
 import { setRequestLocale } from 'next-intl/server';
-import { getNIRFRankedColleges } from '@/lib/college-hub/queries';
+import {
+  getNIRFRankings,
+  getAvailableNIRFYears,
+  getNIRFStatesAndCities,
+} from '@/lib/college-hub/queries';
+import {
+  parseNIRFFilters,
+  hasActiveFilters,
+} from '@/lib/college-hub/nirf-filters';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import NIRFFilterSidebar from '@/components/college-hub/NIRFFilterSidebar';
+import NIRFRankingTable from '@/components/college-hub/NIRFRankingTable';
+import NIRFRankingCard from '@/components/college-hub/NIRFRankingCard';
+import NIRFCompareTable from '@/components/college-hub/NIRFCompareTable';
 
 export const revalidate = 86400;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'NIRF Ranked B.Arch Colleges 2026 — Architecture Rankings | Neram',
-    description: 'NIRF 2025 Architecture ranking of B.Arch colleges in India. Compare NIRF ranked architecture colleges with fees, cutoffs, placements, and ArchIndex scores.',
+    title: 'NIRF Architecture Rankings 2020 to 2025: Top B.Arch Colleges in India | Neram',
+    description:
+      'Filter and compare NIRF Architecture rankings from 2020 to 2025 across IITs, NITs, SPAs, and private colleges. Search by state, city, score, and rank with full year-over-year history.',
+    alternates: {
+      canonical: '/colleges/rankings/nirf',
+    },
   };
 }
 
-export default async function NIRFRankingsPage({ params: { locale } }: { params: { locale: string } }) {
+interface PageProps {
+  params: { locale: string };
+  searchParams: Record<string, string | string[] | undefined>;
+}
+
+export default async function NIRFRankingsPage({ params: { locale }, searchParams }: PageProps) {
   setRequestLocale(locale);
-  const colleges = await getNIRFRankedColleges();
+  const filters = parseNIRFFilters(searchParams);
+
+  // For compare-years mode we ignore year filter and pull everything
+  const queryFilters = filters.compare
+    ? { ...filters, years: undefined, limit: 500 }
+    : { ...filters, years: filters.years.length ? filters.years : undefined, limit: 500 };
+
+  const [{ data, count }, availableYears, geo] = await Promise.all([
+    getNIRFRankings(queryFilters),
+    getAvailableNIRFYears(),
+    getNIRFStatesAndCities(),
+  ]);
+
+  const filtersActive = hasActiveFilters(filters);
+  const yearRange = availableYears.length
+    ? `${Math.min(...availableYears)}-${Math.max(...availableYears)}`
+    : '2020-2025';
+
+  // JSON-LD top-25 for SEO
+  const top25 = data.slice(0, 25);
+  const itemList = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `NIRF Architecture Rankings ${yearRange}`,
+    itemListElement: top25.map((r, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: r.college?.name ?? r.source_name,
+      url: r.college
+        ? `https://neramclasses.com/${locale}/colleges/rankings/nirf/${r.college.slug}`
+        : undefined,
+    })),
+  };
 
   return (
-    <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-      <Breadcrumbs items={[
-        { name: 'Colleges', href: '/colleges' },
-        { name: 'NIRF Architecture Rankings' },
-      ]} />
-      <Box sx={{ mb: 3 }}>
-        <Chip label="NIRF 2025" color="primary" sx={{ mb: 1, fontWeight: 700 }} />
-        <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>
-          NIRF Architecture Rankings 2026
+    <Container maxWidth="xl" sx={{ py: { xs: 2, sm: 4 } }}>
+      <Script
+        id="nirf-rankings-jsonld"
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemList) }}
+      />
+
+      <Breadcrumbs
+        items={[
+          { name: 'Colleges', href: `/${locale}/colleges` },
+          { name: 'NIRF Architecture Rankings' },
+        ]}
+      />
+
+      <Box sx={{ mb: { xs: 2, sm: 3 } }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Chip label={`NIRF ${yearRange}`} color="primary" sx={{ fontWeight: 700 }} />
+          <Chip label="Architecture" size="small" variant="outlined" />
+        </Stack>
+        <Typography
+          variant="h1"
+          sx={{
+            fontSize: { xs: '1.5rem', sm: '2rem', md: '2.25rem' },
+            fontWeight: 900,
+            mb: 1,
+          }}
+        >
+          NIRF Architecture Rankings, {yearRange}
         </Typography>
-        <Typography color="text.secondary" variant="body2">
-          National Institutional Ranking Framework (NIRF) rankings for B.Arch Architecture discipline.
-          Sorted by NIRF rank. {colleges.length} ranked colleges found.
+        <Typography color="text.secondary" variant="body2" sx={{ maxWidth: 720 }}>
+          National Institutional Ranking Framework rankings for B.Arch architecture
+          colleges across India. Filter by year, state, city, score, or rank. Click any
+          college to see its full year-over-year history.
         </Typography>
       </Box>
 
-      <Paper variant="outlined" sx={{ overflow: 'auto', borderRadius: 2 }}>
-        <Table size="small">
-          <TableHead sx={{ bgcolor: '#f8fafc' }}>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 700, width: 80 }}>NIRF Rank</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>College</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>City</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>ArchIndex</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Annual Fee</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {colleges.map((college) => (
-              <TableRow key={college.id} hover>
-                <TableCell>
-                  <Typography variant="body2" fontWeight={700} color="primary.main">
-                    #{college.nirf_rank_architecture}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" fontWeight={600}>{college.name}</Typography>
-                  {college.naac_grade && (
-                    <Chip
-                      label={`NAAC ${college.naac_grade}`}
-                      size="small"
-                      sx={{ mt: 0.25, height: 18, fontSize: '0.65rem' }}
-                    />
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2">{college.city}, {college.state}</Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="caption" color="text.secondary">{college.type}</Typography>
-                </TableCell>
-                <TableCell>
-                  {college.arch_index_score ? (
-                    <Chip
-                      label={`${college.arch_index_score}/100`}
-                      size="small"
-                      color="success"
-                      sx={{ fontWeight: 700 }}
-                    />
-                  ) : '—'}
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2">
-                    {college.annual_fee_approx
-                      ? `₹${(college.annual_fee_approx / 100000).toFixed(1)}L/yr`
-                      : 'N/A'}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    size="small"
-                    component={Link}
-                    href={`/colleges/${college.state_slug}/${college.slug}`}
-                    sx={{ fontSize: '0.7rem' }}
-                  >
-                    View
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Paper>
+      <Grid container spacing={{ xs: 0, md: 3 }}>
+        {/* Sidebar (desktop) + Fab (mobile) */}
+        <Grid item xs={12} md={3}>
+          <NIRFFilterSidebar
+            filters={filters}
+            totalCount={count}
+            availableYears={availableYears}
+            states={geo.states}
+            cities={geo.cities}
+          />
+        </Grid>
 
-      {colleges.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography color="text.secondary">
-            NIRF ranking data will be updated after the annual NIRF rankings release.
-          </Typography>
-        </Box>
-      )}
+        {/* Main pane */}
+        <Grid item xs={12} md={9}>
+          {/* Active filter summary + compare toggle */}
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent="space-between"
+            sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Showing {data.length.toLocaleString()} of {count.toLocaleString()} rankings
+              {filters.years.length === 1 && ` for NIRF ${filters.years[0]}`}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Button
+                component={Link}
+                href={
+                  filters.compare
+                    ? `/${locale}/colleges/rankings/nirf`
+                    : `/${locale}/colleges/rankings/nirf?compare=1`
+                }
+                size="small"
+                variant={filters.compare ? 'contained' : 'outlined'}
+                sx={{ minHeight: 36, display: { xs: 'none', md: 'inline-flex' } }}
+              >
+                {filters.compare ? 'Exit compare' : 'Compare years'}
+              </Button>
+            </Stack>
+          </Stack>
+
+          {/* Methodology note */}
+          {!filters.compare && (
+            <Alert severity="info" sx={{ mb: 2, fontSize: '0.8rem' }}>
+              NIRF parameter weights changed from 2023 onwards. Scores are comparable as
+              percentages but absolute values across versions should be read with care.
+            </Alert>
+          )}
+
+          {/* Empty state */}
+          {data.length === 0 && (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography color="text.secondary" sx={{ mb: 2 }}>
+                No NIRF rankings match these filters.
+              </Typography>
+              {filtersActive && (
+                <Button
+                  component={Link}
+                  href={`/${locale}/colleges/rankings/nirf`}
+                  variant="outlined"
+                >
+                  Clear all filters
+                </Button>
+              )}
+            </Box>
+          )}
+
+          {/* Compare-years pivot */}
+          {filters.compare && data.length > 0 && (
+            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+              <NIRFCompareTable rows={data} years={availableYears} locale={locale} />
+            </Box>
+          )}
+          {filters.compare && (
+            <Box sx={{ display: { xs: 'block', md: 'none' }, py: 4, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                Compare-years view is desktop only. Use single-year filtering on mobile.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Normal listing: table on desktop, cards on mobile */}
+          {!filters.compare && data.length > 0 && (
+            <>
+              <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                <NIRFRankingTable
+                  rows={data}
+                  showYear={filters.years.length !== 1}
+                  locale={locale}
+                />
+              </Box>
+              <Stack spacing={1.5} sx={{ display: { xs: 'flex', md: 'none' }, pb: 10 }}>
+                {data.map((r) => (
+                  <NIRFRankingCard
+                    key={r.id}
+                    row={r}
+                    locale={locale}
+                    showYear={filters.years.length !== 1}
+                  />
+                ))}
+              </Stack>
+            </>
+          )}
+        </Grid>
+      </Grid>
     </Container>
   );
 }

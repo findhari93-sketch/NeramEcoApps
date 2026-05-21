@@ -84,3 +84,17 @@ nul
 # Claude local settings (contains secrets)
 .claude/settings.local.json
 .worktrees/
+
+# Counselling raw data (too large for git; ingestion script outputs)
+apps/app/Docs/Counselling_datas/**/*.pdf
+apps/app/Docs/Counselling_datas/JOSAA/*.csv
+apps/app/Docs/Counselling_datas/JOSAA/*.json
+apps/app/Docs/Counselling_datas/KEAM/
+
+# Scraper output / intermediate data (regeneratable)
+scripts/data/nirf-architecture-*.json
+scripts/data/nirf-matched.json
+scripts/data/nirf-unmatched.csv
+
+# Stray markdown artifacts at repo doc level
+apps/app/Docs/compass_artifact_*.md

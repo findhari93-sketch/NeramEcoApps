@@ -1,0 +1,194 @@
+[
+  {
+    "short_name": "IIT Roorkee",
+    "state": "Uttarakhand",
+    "city": "Roorkee",
+    "nirf_rank": 1,
+    "is_nirf_top20": true,
+    "established": 1847
+  },
+  {
+    "short_name": "IIT Kharagpur",
+    "state": "West Bengal",
+    "city": "Kharagpur",
+    "nirf_rank": 2,
+    "is_nirf_top20": true,
+    "established": 1951
+  },
+  {
+    "short_name": "NIT Calicut",
+    "state": "Kerala",
+    "city": "Kozhikode",
+    "nirf_rank": 3,
+    "is_nirf_top20": true,
+    "established": 1961
+  },
+  {
+    "short_name": "IIEST Shibpur",
+    "state": "West Bengal",
+    "city": "Howrah",
+    "nirf_rank": 4,
+    "is_nirf_top20": true,
+    "established": 1856
+  },
+  {
+    "short_name": "SPA Delhi",
+    "state": "Delhi",
+    "city": "New Delhi",
+    "nirf_rank": 5,
+    "is_nirf_top20": true,
+    "established": 1941
+  },
+  {
+    "short_name": "Jamia Millia Islamia",
+    "state": "Delhi",
+    "city": "New Delhi",
+    "nirf_rank": 7,
+    "is_nirf_top20": true,
+    "established": 1920
+  },
+  {
+    "short_name": "NIT Trichy",
+    "state": "Tamil Nadu",
+    "city": "Tiruchirappalli",
+    "nirf_rank": 8,
+    "is_nirf_top20": true,
+    "established": 1964
+  },
+  {
+    "short_name": "NIT Rourkela",
+    "state": "Odisha",
+    "city": "Rourkela",
+    "nirf_rank": 9,
+    "is_nirf_top20": true,
+    "established": 1961
+  },
+  {
+    "short_name": "VNIT Nagpur",
+    "state": "Maharashtra",
+    "city": "Nagpur",
+    "nirf_rank": 10,
+    "is_nirf_top20": true,
+    "established": 1960
+  },
+  {
+    "short_name": "SPA Bhopal",
+    "state": "Madhya Pradesh",
+    "city": "Bhopal",
+    "nirf_rank": 12,
+    "is_nirf_top20": true,
+    "established": 2008
+  },
+  {
+    "short_name": "MNIT Jaipur",
+    "state": "Rajasthan",
+    "city": "Jaipur",
+    "nirf_rank": 15,
+    "is_nirf_top20": true,
+    "established": 1963
+  },
+  {
+    "short_name": "SPA Vijayawada",
+    "state": "Andhra Pradesh",
+    "city": "Vijayawada",
+    "nirf_rank": 16,
+    "is_nirf_top20": true,
+    "established": 2008
+  },
+  {
+    "short_name": "MANIT Bhopal",
+    "state": "Madhya Pradesh",
+    "city": "Bhopal",
+    "nirf_rank": 17,
+    "is_nirf_top20": true,
+    "established": 1960
+  },
+  {
+    "short_name": "BIT Mesra",
+    "state": "Jharkhand",
+    "city": "Ranchi",
+    "nirf_rank": 20,
+    "is_nirf_top20": true,
+    "established": 1955
+  },
+  {
+    "short_name": "NIT Hamirpur",
+    "state": "Himachal Pradesh",
+    "city": "Hamirpur",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1986
+  },
+  {
+    "short_name": "NIT Patna",
+    "state": "Bihar",
+    "city": "Patna",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1886
+  },
+  {
+    "short_name": "NIT Raipur",
+    "state": "Chhattisgarh",
+    "city": "Raipur",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1956
+  },
+  {
+    "short_name": "NIT Srinagar",
+    "state": "Jammu and Kashmir",
+    "city": "Srinagar",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1960
+  },
+  {
+    "short_name": "IIEST Shibpur",
+    "state": "West Bengal",
+    "city": "Howrah",
+    "nirf_rank": 4,
+    "is_nirf_top20": true,
+    "established": 1856
+  },
+  {
+    "short_name": "IIT BHU",
+    "state": "Uttar Pradesh",
+    "city": "Varanasi",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1919
+  },
+  {
+    "short_name": "NIT Kurukshetra",
+    "state": "Haryana",
+    "city": "Kurukshetra",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1963
+  },
+  {
+    "short_name": "Mizoram University",
+    "state": "Mizoram",
+    "city": "Aizawl",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 2001
+  },
+  {
+    "short_name": "SMVDU",
+    "state": "Jammu and Kashmir",
+    "city": "Katra",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 1999
+  },
+  {
+    "short_name": "IUST Kashmir",
+    "state": "Jammu and Kashmir",
+    "city": "Awantipora",
+    "nirf_rank": null,
+    "is_nirf_top20": false,
+    "established": 2005
+  }
+]

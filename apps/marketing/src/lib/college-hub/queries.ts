@@ -346,7 +346,7 @@ export const getActiveCounselingSystems = cache(
 
 // ─── Rankings ────────────────────────────────────────────────────────────────
 
-// ISR: NIRF ranked colleges
+// ISR: NIRF ranked colleges (legacy single-year view — kept for backwards compat)
 export const getNIRFRankedColleges = cache(async (): Promise<CollegeListItem[]> => {
   const supabase = createAdminClientISR(ISR_EXAM_HUB);
   const { data, error } = await supabase
@@ -357,6 +357,48 @@ export const getNIRFRankedColleges = cache(async (): Promise<CollegeListItem[]> 
     .limit(100);
   if (error) return [];
   return (data ?? []) as CollegeListItem[];
+});
+
+// ─── NIRF Rankings (multi-year) ──────────────────────────────────────────────
+import {
+  getNIRFRankings as getNIRFRankingsRaw,
+  getNIRFRankingByCollege as getNIRFRankingByCollegeRaw,
+  getAvailableNIRFYears as getAvailableNIRFYearsRaw,
+  getNIRFStatesAndCities as getNIRFStatesAndCitiesRaw,
+  getNIRFRankedCollegeSlugs as getNIRFRankedCollegeSlugsRaw,
+  type NIRFRankingsFilter,
+  type NIRFRankingWithCollege,
+} from '@neram/database';
+
+export const getNIRFRankings = cache(
+  async (opts: NIRFRankingsFilter = {}): Promise<{ data: NIRFRankingWithCollege[]; count: number }> => {
+    const supabase = createAdminClientISR(ISR_EXAM_HUB);
+    return getNIRFRankingsRaw(opts, supabase);
+  },
+);
+
+export const getNIRFRankingByCollege = cache(
+  async (collegeSlug: string): Promise<NIRFRankingWithCollege[]> => {
+    const supabase = createAdminClientISR(ISR_EXAM_HUB);
+    return getNIRFRankingByCollegeRaw(collegeSlug, supabase);
+  },
+);
+
+export const getAvailableNIRFYears = cache(async (): Promise<number[]> => {
+  const supabase = createAdminClientISR(ISR_EXAM_HUB);
+  return getAvailableNIRFYearsRaw(supabase);
+});
+
+export const getNIRFStatesAndCities = cache(
+  async (year?: number): Promise<{ states: { name: string; slug: string }[]; cities: { city: string; state: string }[] }> => {
+    const supabase = createAdminClientISR(ISR_EXAM_HUB);
+    return getNIRFStatesAndCitiesRaw(year, supabase);
+  },
+);
+
+export const getNIRFRankedCollegeSlugs = cache(async (): Promise<string[]> => {
+  const supabase = createAdminClientISR(ISR_EXAM_HUB);
+  return getNIRFRankedCollegeSlugsRaw(supabase);
 });
 
 // ISR: ArchIndex ranked colleges

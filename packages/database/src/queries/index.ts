@@ -65,3 +65,5 @@ export * from './student-results';
 export * from './funnel-events';
 export * from './message-replies';
 export * from './ask-seniors';
+export * from './nirf-rankings';
+export * from './josaa';
