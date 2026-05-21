@@ -204,6 +204,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       utm_medium: body.utm_medium || undefined,
       utm_campaign: body.utm_campaign || undefined,
       referral_code: body.referral_code || undefined,
+      gclid: body.gclid || undefined,
+      wbraid: body.wbraid || undefined,
       form_step_completed: body.form_step_completed ? Number(body.form_step_completed) : undefined,
       detected_location: body.detected_location || undefined,
     };

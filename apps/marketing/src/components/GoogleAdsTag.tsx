@@ -27,8 +27,21 @@ export default function GoogleAdsTag() {
           document.addEventListener('click', function(e) {
             var link = e.target.closest('a[href^="tel:"]');
             if (link) {
+              // Pull captured attribution (set by AttributionCapture) so the
+              // phone-call conversion includes the same gclid / utm_* the
+              // backend stores. Falls back gracefully if sessionStorage is empty.
+              var attribution = {};
+              try {
+                var raw = window.sessionStorage.getItem('neram_attribution');
+                if (raw) { attribution = JSON.parse(raw) || {}; }
+              } catch (e2) { /* sessionStorage blocked */ }
               gtag('event', 'conversion', {
-                'send_to': '${GA_ADS_ID}/${GA_ADS_CALL_LABEL}'
+                'send_to': '${GA_ADS_ID}/${GA_ADS_CALL_LABEL}',
+                'utm_source': attribution.utm_source,
+                'utm_medium': attribution.utm_medium,
+                'utm_campaign': attribution.utm_campaign,
+                'gclid': attribution.gclid,
+                'wbraid': attribution.wbraid
               });
             }
           });

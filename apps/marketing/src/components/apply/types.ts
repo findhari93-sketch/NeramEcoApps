@@ -133,6 +133,8 @@ export interface ApplicationFormData {
   utmMedium: string | null;
   utmCampaign: string | null;
   referralCode: string | null;
+  gclid: string | null;
+  wbraid: string | null;
 }
 
 /**
@@ -194,6 +196,8 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
   utmMedium: null,
   utmCampaign: null,
   referralCode: null,
+  gclid: null,
+  wbraid: null,
 };
 
 // ============================================

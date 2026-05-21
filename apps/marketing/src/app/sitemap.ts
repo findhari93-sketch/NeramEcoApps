@@ -78,11 +78,33 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/tools/ai-chatbot', lastModified: '2026-05-08' },
   { path: '/tools/josaa-barch-predictor', lastModified: '2026-05-21' },
   { path: '/nata-app', lastModified: '2026-02-28' },
-  { path: '/best-nata-coaching-online', lastModified: '2026-04-04' },
+  // Dedicated landing page for the top-converting Google Ads keyword "nata entrance exam".
+  // Highest priority (0.9, via isHighPriority below) to surface in indexing ahead of city pages.
+  { path: '/nata-entrance-exam-coaching', lastModified: '2026-05-21' },
+  // Canonical NATA online coaching landing page (consolidates 3 prior URLs that now 301 here).
+  { path: '/nata-online-coaching', lastModified: '2026-05-21' },
+  // Comparison page: high-intent decision-stage capture for "Neram vs BRDS vs SILICA" queries.
+  { path: '/nata-online-coaching/comparison', lastModified: '2026-05-21' },
+  // 10-year NATA cutoff trend analysis (link-bait for education portals).
+  { path: '/nata-cutoff-trends-2015-2025', lastModified: '2026-05-21' },
+  // Tamil Nadu city-specific NATA online coaching landing pages (Phase 2 TN-first cluster).
+  { path: '/nata-coaching/chennai', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/coimbatore', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/madurai', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/trichy', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/salem', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/vellore', lastModified: '2026-05-21' },
+  // Pan-India metro NATA online coaching landing pages (Phase 4 expansion brought forward).
+  { path: '/nata-coaching/bangalore', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/hyderabad', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/mumbai', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/delhi', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/pune', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/kolkata', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/kochi', lastModified: '2026-05-21' },
+  { path: '/nata-coaching/ahmedabad', lastModified: '2026-05-21' },
   { path: '/blog', lastModified: '2026-03-10' },
-  { path: '/coaching/nata-coaching', lastModified: '2026-02-25' },
   { path: '/coaching/nata-coaching-center', lastModified: '2026-03-30', i18n: true },
-  { path: '/coaching/best-nata-coaching-india', lastModified: '2026-03-24' },
   { path: '/coaching/best-nata-coaching-chennai', lastModified: '2026-03-25' },
   { path: '/nata-coaching-centers-in-chennai', lastModified: '2026-04-08' },
   { path: '/coaching/nata-coaching-chennai', lastModified: '2026-04-08' },
@@ -169,6 +191,13 @@ const blogSlugs = [
   { slug: 'best-nata-coaching-hyderabad', date: '2026-03-15', isCityGuide: true },
   { slug: 'best-nata-coaching-delhi', date: '2026-03-18', isCityGuide: true },
   { slug: 'best-nata-coaching-mumbai', date: '2026-03-22', isCityGuide: true },
+  // Phase 2.4 long-tail SEO capture posts
+  { slug: 'nata-exam-pattern-2026', date: '2026-05-21', isCityGuide: false },
+  { slug: 'nata-syllabus-2026-topic-wise-weightage', date: '2026-05-21', isCityGuide: false },
+  { slug: 'nata-mock-test-online-free-practice-strategy', date: '2026-05-21', isCityGuide: false },
+  { slug: 'nata-vs-jee-paper-2-architecture-aspirant-decision', date: '2026-05-21', isCityGuide: false },
+  { slug: 'nata-online-coaching-fees-cost-breakdown-2026', date: '2026-05-21', isCityGuide: false },
+  { slug: 'nata-result-2026-how-to-check-score-analysis', date: '2026-05-21', isCityGuide: false },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -205,6 +234,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           : {}),
       });
     }
+  }
+
+  // Native-script NATA online coaching landing pages.
+  // /nata-online-coaching in the static list above ships only English (default).
+  // Tamil and Hindi versions are dedicated native-content components (not
+  // hardcoded English), so they ARE indexable and need their own sitemap rows.
+  // Kannada and Malayalam variants are still noindex-headed and intentionally omitted.
+  const nataOnlineCoachingLangs = ['en', 'ta', 'hi'] as const;
+  const nataOnlineCoachingPath = '/nata-online-coaching';
+  for (const locale of nataOnlineCoachingLangs) {
+    const url = localeUrl(locale, nataOnlineCoachingPath);
+    // The English row was already pushed by the static-pages loop. Skip it here
+    // to avoid a duplicate entry but still register the ta/hi rows.
+    if (locale === 'en') continue;
+    entries.push({
+      url,
+      lastModified: new Date('2026-05-21'),
+      changeFrequency: 'weekly',
+      priority: 0.9,
+      alternates: {
+        languages: Object.fromEntries(
+          nataOnlineCoachingLangs.map((l) => [l, localeUrl(l, nataOnlineCoachingPath)])
+        ),
+      },
+    });
   }
 
   // Course pages: all locales (course pages use translations)

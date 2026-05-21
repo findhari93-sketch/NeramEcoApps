@@ -13,6 +13,7 @@ import dynamic from 'next/dynamic';
 const GeneralChatbot = dynamic(() => import('@/components/GeneralChatbot'), { ssr: false });
 const ComparisonTray = dynamic(() => import('@/components/college-hub/ComparisonTray'), { ssr: false });
 import GoogleAdsTag from '@/components/GoogleAdsTag';
+import AttributionCapture from '@/components/AttributionCapture';
 import '@/styles/globals.css';
 
 // Font loading - reduced to 2-3 fonts for faster FCP on 3G
@@ -161,6 +162,7 @@ export default async function RootLayout({
           }}
         />
         <GoogleAdsTag />
+        <AttributionCapture />
         <NextIntlClientProvider messages={messages}>
           <ThemeRegistry
             options={{ key: 'neram-mui' }}

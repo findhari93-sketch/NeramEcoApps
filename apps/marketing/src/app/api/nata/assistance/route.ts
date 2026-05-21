@@ -28,6 +28,12 @@ export async function POST(request: NextRequest) {
       district: district?.trim() || undefined,
       school_name: school_name?.trim() || undefined,
       category: category || 'general',
+      source: typeof body.source === 'string' ? body.source : undefined,
+      utm_source: typeof body.utm_source === 'string' ? body.utm_source : undefined,
+      utm_medium: typeof body.utm_medium === 'string' ? body.utm_medium : undefined,
+      utm_campaign: typeof body.utm_campaign === 'string' ? body.utm_campaign : undefined,
+      gclid: typeof body.gclid === 'string' ? body.gclid : undefined,
+      wbraid: typeof body.wbraid === 'string' ? body.wbraid : undefined,
     });
 
     return NextResponse.json({ success: true, id: result.id }, { status: 201 });

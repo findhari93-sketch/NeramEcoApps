@@ -331,13 +331,21 @@ function FormWizardInner() {
       const result = await response.json();
 
       if (result.success) {
-        // Fire Google Ads sign-up conversion
+        // Fire Google Ads sign-up conversion with attribution + transaction_id
+        // (transaction_id enables enhanced-conversion dedupe; utm_* + gclid let
+        // GA4 attribute the conversion correctly across campaigns).
         if (typeof window !== 'undefined' && (window as any).gtag) {
           const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
           const signupLabel = process.env.NEXT_PUBLIC_GOOGLE_ADS_SIGNUP_LABEL;
           if (adsId && signupLabel) {
             (window as any).gtag('event', 'conversion', {
               send_to: `${adsId}/${signupLabel}`,
+              transaction_id: result.data?.id || undefined,
+              utm_source: formData.utmSource || undefined,
+              utm_medium: formData.utmMedium || undefined,
+              utm_campaign: formData.utmCampaign || undefined,
+              gclid: formData.gclid || undefined,
+              wbraid: formData.wbraid || undefined,
             });
           }
         }

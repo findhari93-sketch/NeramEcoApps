@@ -60,6 +60,8 @@ export interface CreateApplicationInput {
   utm_medium?: string;
   utm_campaign?: string;
   referral_code?: string;
+  gclid?: string;
+  wbraid?: string;
   // Form progress
   form_step_completed?: number;
   // Detected location (from browser geolocation, separate from user-entered)
@@ -327,6 +329,13 @@ export interface CreateCallbackInput {
   course_interest?: CourseType;
   query_type?: string;
   notes?: string;
+  // Attribution
+  source?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  gclid?: string;
+  wbraid?: string;
 }
 
 /**

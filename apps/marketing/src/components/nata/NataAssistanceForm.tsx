@@ -11,9 +11,14 @@ import {
   MenuItem,
   Alert,
 } from '@neram/ui';
+import { getStoredAttribution } from '@/lib/attribution';
 
 interface NataAssistanceFormProps {
   locale: string;
+  /** Pre-fill the district field (e.g. on a city landing page). */
+  defaultDistrict?: string;
+  /** Identifies which page the form was submitted from (e.g. 'nata-coaching/chennai'). */
+  source?: string;
 }
 
 const categories = [
@@ -26,11 +31,11 @@ const categories = [
   { value: 'transgender', label: 'Transgender' },
 ];
 
-export function NataAssistanceForm({ locale }: NataAssistanceFormProps) {
+export function NataAssistanceForm({ locale, defaultDistrict, source }: NataAssistanceFormProps) {
   const [formData, setFormData] = useState({
     student_name: '',
     phone: '',
-    district: '',
+    district: defaultDistrict || '',
     school_name: '',
     category: 'general',
   });
@@ -58,10 +63,19 @@ export function NataAssistanceForm({ locale }: NataAssistanceFormProps) {
 
     setSubmitting(true);
     try {
+      const attribution = getStoredAttribution();
       const res = await fetch('/api/nata/assistance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          source: source || attribution.landing_page || 'nata_assistance_form',
+          utm_source: attribution.utm_source,
+          utm_medium: attribution.utm_medium,
+          utm_campaign: attribution.utm_campaign,
+          gclid: attribution.gclid,
+          wbraid: attribution.wbraid,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {

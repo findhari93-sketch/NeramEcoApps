@@ -5,6 +5,7 @@ import type { ApplicationFormData, FormStep, StepValidation, ValidationError } f
 import { DEFAULT_FORM_DATA, STEP_LABELS } from './types';
 import { useFirebaseAuth } from '@neram/auth';
 import { getCountryConfig } from './countryConfig';
+import { captureAttributionFromUrl } from '@/lib/attribution';
 
 // ============================================
 // LOCAL STORAGE PERSISTENCE
@@ -70,6 +71,8 @@ function buildDraftPayload(formData: ApplicationFormData, stepCompleted: number)
     utm_medium: formData.utmMedium || undefined,
     utm_campaign: formData.utmCampaign || undefined,
     referral_code: formData.referralCode || undefined,
+    gclid: formData.gclid || undefined,
+    wbraid: formData.wbraid || undefined,
   };
 
   // Step 0 data: Personal + Location
@@ -767,22 +770,31 @@ export function FormProvider({ children }: FormProviderProps) {
     }
   }, [authLoading, user]);
 
-  // Get UTM parameters, center selection, and learning mode from URL
+  // Get UTM + Google Ads click IDs, center selection, and learning mode from URL.
+  // captureAttributionFromUrl() also reads from sessionStorage so attribution
+  // set on a previous page (e.g. /nata-coaching/chennai?gclid=…) survives
+  // the hop to /apply where the form lives.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const utmSource = params.get('utm_source');
-      const utmMedium = params.get('utm_medium');
-      const utmCampaign = params.get('utm_campaign');
-      const referralCode = params.get('ref');
+      const attribution = captureAttributionFromUrl();
 
-      if (utmSource || utmMedium || utmCampaign || referralCode) {
+      const utmSource = attribution.utm_source || null;
+      const utmMedium = attribution.utm_medium || null;
+      const utmCampaign = attribution.utm_campaign || null;
+      const referralCode = attribution.referral_code || params.get('ref') || null;
+      const gclid = attribution.gclid || null;
+      const wbraid = attribution.wbraid || null;
+
+      if (utmSource || utmMedium || utmCampaign || referralCode || gclid || wbraid) {
         setFormData((prev) => ({
           ...prev,
           utmSource,
           utmMedium,
           utmCampaign,
           referralCode,
+          gclid,
+          wbraid,
         }));
       }
 

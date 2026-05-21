@@ -173,6 +173,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
       course_interest: body.course_interest,
       query_type: body.query_type,
       notes: body.notes?.trim(),
+      source: body.source || 'website_form',
+      utm_source: body.utm_source || undefined,
+      utm_medium: body.utm_medium || undefined,
+      utm_campaign: body.utm_campaign || undefined,
+      gclid: body.gclid || undefined,
+      wbraid: body.wbraid || undefined,
     };
 
     const callback = await createCallbackRequest(supabase, callbackData);

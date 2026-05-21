@@ -201,6 +201,12 @@ export async function submitNataAssistanceRequest(
       school_name: input.school_name || null,
       category: input.category || 'general',
       status: 'pending',
+      source: input.source || null,
+      utm_source: input.utm_source || null,
+      utm_medium: input.utm_medium || null,
+      utm_campaign: input.utm_campaign || null,
+      gclid: input.gclid || null,
+      wbraid: input.wbraid || null,
     })
     .select()
     .single();

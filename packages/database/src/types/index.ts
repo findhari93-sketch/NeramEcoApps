@@ -3604,6 +3604,12 @@ export interface NataAssistanceRequest extends Timestamps {
   status: NataAssistanceStatus;
   assigned_to: string | null;
   notes: string | null;
+  source: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  gclid: string | null;
+  wbraid: string | null;
 }
 
 export interface CreateNataAssistanceRequestInput {
@@ -3612,6 +3618,12 @@ export interface CreateNataAssistanceRequestInput {
   district?: string;
   school_name?: string;
   category?: string;
+  source?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  gclid?: string;
+  wbraid?: string;
 }
 
 // ============================================
