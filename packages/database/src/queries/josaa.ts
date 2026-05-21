@@ -169,20 +169,17 @@ export async function listJosaaInstitutes(
 
 /**
  * Return distinct years present in josaa_or_cr (descending).
+ *
+ * Note: Supabase JS SDK defaults to a 1000-row limit per query. josaa_or_cr
+ * has ~8k+ rows so a naive select would only return rows from the newest
+ * year. The DB-side RPC `josaa_distinct_years` returns just the distinct
+ * year list and bypasses the cap.
  */
 export async function getJosaaYears(client?: TypedSupabaseClient): Promise<number[]> {
   const supabase = client || getSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from('josaa_or_cr')
-    .select('year')
-    .order('year', { ascending: false });
+  const { data, error } = await supabase.rpc('josaa_distinct_years');
   if (error) throw error;
-  const seen = new Set<number>();
-  const years: number[] = [];
-  for (const r of data ?? []) {
-    if (!seen.has(r.year)) { seen.add(r.year); years.push(r.year); }
-  }
-  return years;
+  return (data ?? []).map((r: any) => r.year as number);
 }
 
 /**
