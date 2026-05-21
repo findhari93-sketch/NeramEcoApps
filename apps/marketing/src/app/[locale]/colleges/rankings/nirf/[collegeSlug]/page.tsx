@@ -21,17 +21,13 @@ import {
 import { setRequestLocale } from 'next-intl/server';
 import {
   getNIRFRankingByCollege,
-  getNIRFRankedCollegeSlugs,
 } from '@/lib/college-hub/queries';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 
+// Render on-demand with 24h ISR cache. We don't pre-generate every college
+// slug because the marketing build is close to Vercel's 15k-file deploy cap.
+// First request to /colleges/rankings/nirf/<slug> renders + caches for 24h.
 export const revalidate = 86400;
-export const dynamicParams = true;
-
-export async function generateStaticParams() {
-  const slugs = await getNIRFRankedCollegeSlugs();
-  return slugs.map((collegeSlug) => ({ collegeSlug }));
-}
 
 interface PageProps {
   params: { locale: string; collegeSlug: string };
