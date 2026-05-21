@@ -7,9 +7,9 @@
  * the Year dropdown + Compare-mode chips so new years (e.g. 2019/2020
  * after a scrape import) surface without a deploy.
  *
- * Edge runtime — single RPC pass-through. Cached 6h via ISR.
+ * Node runtime (default) — @neram/database isn't edge-compatible (uses
+ * crypto via Supabase SDK). Cached 6h via revalidate + s-maxage header.
  */
-export const runtime = 'edge';
 export const revalidate = 21600;
 
 import { NextResponse } from 'next/server';
