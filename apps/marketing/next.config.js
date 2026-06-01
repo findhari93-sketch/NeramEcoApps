@@ -71,14 +71,28 @@ const nextConfig = {
       // These pages have no real translations — Google sees them as duplicates of the
       // English version and reports "Duplicate, Google chose different canonical".
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online)/:path*',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)/:path*',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
       },
       // Also catch the root-level (non-nested) versions of these paths
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online)',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
+      // kn and ml versions of nata-online-coaching are still hardcoded English (the ta
+      // and hi variants ship as native script and are indexable; kn/ml ship later).
+      {
+        source: '/(kn|ml)/nata-online-coaching/:path*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
+      {
+        source: '/(kn|ml)/nata-online-coaching',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
@@ -115,6 +129,22 @@ const nextConfig = {
       // Old zombie page still indexed by Google
       { source: '/inner-page', destination: '/about', permanent: true },
 
+      // ─── NATA Online Coaching SEO consolidation ─────────────────────────
+      // Three competing URLs collapsed to a single canonical at /nata-online-coaching.
+      // Permanent 301 so link equity transfers. Must appear before the /coaching/:city
+      // catch-all below so the literal /coaching/nata-coaching and
+      // /coaching/best-nata-coaching-india matches are not consumed by it.
+      { source: '/best-nata-coaching-online', destination: '/nata-online-coaching', permanent: true },
+      { source: '/coaching/nata-coaching', destination: '/nata-online-coaching', permanent: true },
+      { source: '/coaching/best-nata-coaching-india', destination: '/nata-online-coaching', permanent: true },
+      // Parent /nata-coaching path has no index page; redirect to canonical so it does not 404.
+      { source: '/nata-coaching', destination: '/nata-online-coaching', permanent: true },
+      // Locale-prefixed variants (non-default locales served under /ta, /hi, /kn, /ml)
+      { source: '/:locale(ta|hi|kn|ml)/best-nata-coaching-online', destination: '/:locale/nata-online-coaching', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/nata-coaching', destination: '/:locale/nata-online-coaching', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/best-nata-coaching-india', destination: '/:locale/nata-online-coaching', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/nata-coaching', destination: '/:locale/nata-online-coaching', permanent: true },
+
       // City-specific coaching pages — MUST be first (more specific than /coaching)
       // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper
       // Exclude 'nata-coaching' to avoid catching the real page at /coaching/nata-coaching
@@ -148,8 +178,8 @@ const nextConfig = {
       { source: '/freebooks', destination: '/free-resources', permanent: true },
       { source: '/nata-cutoff-calculator', destination: '/tools/cutoff-calculator', permanent: true },
 
-      // Coaching program pages
-      { source: '/nata-coaching-online', destination: '/coaching/nata-coaching', permanent: true },
+      // Coaching program pages, point legacy slugs straight at the canonical to avoid redirect chains
+      { source: '/nata-coaching-online', destination: '/nata-online-coaching', permanent: true },
       { source: '/jee-paper-2-coaching', destination: '/courses/jee-paper-2-coaching', permanent: true },
 
       // Blog post year update: 2025 → 2026

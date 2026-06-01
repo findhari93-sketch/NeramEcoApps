@@ -690,7 +690,10 @@ export default function CounselingCollegePredictorPage() {
   // ─── Derived data ─────────────────────────────────────
 
   const categoryOptions = selectedSystem
-    ? selectedSystem.categories.map((c) => ({ value: c.code, label: c.code }))
+    ? selectedSystem.categories.map((c) => ({
+        value: c.code,
+        label: c.name ? `${c.code}: ${c.name}` : c.code,
+      }))
     : [];
 
   const availableCities = useMemo(() => {
@@ -813,23 +816,85 @@ export default function CounselingCollegePredictorPage() {
           <Paper elevation={0} sx={{ p: isMobile ? 2 : 2.5, mb: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}>
             {/* Row 1: System + Score */}
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}>
-              <FormControl size="small" sx={{ minWidth: 200, flex: 1 }}>
-                <InputLabel>Counseling System</InputLabel>
-                <Select
-                  value={selectedSystemCode}
-                  onChange={(e) => { setSelectedSystemCode(e.target.value); setCategory(''); setGeneralPredictions([]); setCommunityPredictions([]); }}
-                  label="Counseling System"
-                >
-                  {systems.map((sys) => (
-                    <MenuItem key={sys.code} value={sys.code} disabled={!sys.is_active}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                        <span>{sys.name}</span>
-                        {!sys.is_active && <Chip label="Soon" size="small" sx={{ height: 18, fontSize: '0.6rem', ml: 'auto' }} />}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Autocomplete
+                size="small"
+                sx={{ flex: 1, minWidth: { xs: '100%', sm: 240 } }}
+                options={[...systems].sort((a, b) => {
+                  const s = (a.state || '').localeCompare(b.state || '');
+                  return s !== 0 ? s : a.name.localeCompare(b.name);
+                })}
+                value={selectedSystem}
+                onChange={(_, nextSys) => {
+                  setSelectedSystemCode(nextSys?.code || '');
+                  setCategory(nextSys && nextSys.categories.length > 0 ? nextSys.categories[0].code : '');
+                  setGeneralPredictions([]);
+                  setCommunityPredictions([]);
+                }}
+                getOptionLabel={(sys) => (sys ? `${sys.state} — ${sys.name}` : '')}
+                getOptionDisabled={(sys) => !sys.is_active}
+                isOptionEqualToValue={(opt, val) => opt?.code === val?.code}
+                groupBy={(sys) => sys.state || 'Other'}
+                filterOptions={(opts, { inputValue }) => {
+                  const q = inputValue.trim().toLowerCase();
+                  if (!q) return opts;
+                  const tokens = q.split(/\s+/);
+                  const matched = opts.filter((sys) => {
+                    const hay = `${sys.state || ''} ${sys.name} ${sys.conducting_body || ''}`.toLowerCase();
+                    return tokens.every((t) => hay.includes(t));
+                  });
+                  return matched.sort((a, b) => {
+                    const aState = (a.state || '').toLowerCase().startsWith(q) ? 0 : 1;
+                    const bState = (b.state || '').toLowerCase().startsWith(q) ? 0 : 1;
+                    if (aState !== bState) return aState - bState;
+                    const aName = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+                    const bName = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+                    return aName - bName;
+                  });
+                }}
+                renderOption={(props, sys) => (
+                  <Box
+                    component="li"
+                    {...props}
+                    key={sys.code}
+                    sx={{ display: 'flex !important', alignItems: 'center', gap: 1, py: 1, minHeight: 48 }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.3 }}>
+                        {sys.state}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', lineHeight: 1.3 }}
+                      >
+                        {sys.name}
+                      </Typography>
+                    </Box>
+                    {!sys.is_active && (
+                      <Chip
+                        label="Soon"
+                        size="small"
+                        sx={{ height: 18, fontSize: '0.6rem', alignSelf: 'center' }}
+                      />
+                    )}
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Counseling System"
+                    placeholder="Search by state or counseling…"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <InputAdornment position="start" sx={{ ml: 0.5, mr: -0.5 }}>
+                          <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
+              />
               <TextField
                 size="small"
                 label={selectedSystem ? `Score (/${selectedSystem.merit_formula.total_marks})` : 'Composite Score'}

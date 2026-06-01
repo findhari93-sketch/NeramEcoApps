@@ -926,6 +926,39 @@ export function generateOnlineCourseSchema() {
   };
 }
 
+// ─── VideoObject Schema (for embedded YouTube intro / explainer videos) ───
+
+export function generateVideoObjectSchema(video: {
+  name: string;
+  description: string;
+  thumbnailUrl: string;
+  uploadDate: string; // ISO date e.g. '2026-05-21'
+  contentUrl?: string;
+  embedUrl?: string;
+  duration?: string; // ISO 8601 e.g. 'PT1M30S'
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'VideoObject',
+    name: video.name,
+    description: video.description,
+    thumbnailUrl: video.thumbnailUrl,
+    uploadDate: video.uploadDate,
+    ...(video.contentUrl && { contentUrl: video.contentUrl }),
+    ...(video.embedUrl && { embedUrl: video.embedUrl }),
+    ...(video.duration && { duration: video.duration }),
+    publisher: {
+      '@type': 'EducationalOrganization',
+      name: ORG_NAME,
+      url: BASE_URL,
+      logo: {
+        '@type': 'ImageObject',
+        url: ORG_LOGO,
+      },
+    },
+  };
+}
+
 // ─── Founder Person Schema (E-E-A-T anchor) ────────────────────────────────
 
 export function generateFounderPersonSchema() {

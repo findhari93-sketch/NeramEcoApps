@@ -1531,6 +1531,653 @@ Mumbai is India's financial capital and a major center for architecture educatio
     tags: ['NATA Coaching', 'Mumbai', 'Maharashtra', 'JJ School of Art', 'Best NATA Coaching', 'NATA 2026'],
     featured: false,
   },
+
+  // ─────────────────────────────────────────────
+  // PHASE 2.4: LONG-TAIL SEO CAPTURE POSTS
+  // ─────────────────────────────────────────────
+
+  'nata-exam-pattern-2026': {
+    slug: 'nata-exam-pattern-2026',
+    title: 'NATA Exam Pattern 2026: Section-Wise Breakdown with Marks and Time',
+    excerpt:
+      'Complete NATA 2026 exam pattern explained section by section. Total marks, question count, time allocation, and what each section actually tests.',
+    content: `
+## NATA 2026 at a glance
+
+The National Aptitude Test in Architecture (NATA) is the gateway exam for B.Arch admissions in India, conducted by the Council of Architecture (CoA). For 2026, the exam continues in the multi-phase format that has been stable since 2022, with online MCQ-style questions and online drawing assessment.
+
+| Aspect | Detail |
+|---|---|
+| Total marks | 200 |
+| Total questions | 125 |
+| Total duration | 3 hours |
+| Mode | Online, computer-based |
+| Phases | Up to 2 attempts in Phase 1, 1 attempt in Phase 2 |
+| Best score | Best of all attempts considered for admission |
+| Negative marking | No |
+
+## Section-wise breakdown
+
+NATA 2026 covers three broad areas, each with its own weight. The Council has gradually shifted away from raw drawing skill towards multi-modal aptitude, so a 2026 candidate cannot afford to over-prepare any single section.
+
+### 1. Diagrammatic Reasoning (around 50 marks)
+- Pattern recognition, mirror images, paper folding, embedded figures
+- Series completion, analogy, classification of 2D and 3D shapes
+- Tests spatial intelligence at the foundational level
+
+### 2. Numerical and Verbal Reasoning (around 50 marks)
+- Mathematics covering algebra, trigonometry, coordinate geometry, calculus basics, statistics
+- Logical reasoning: syllogisms, coding-decoding, blood relations, direction sense
+- Verbal ability: synonyms, antonyms, sentence completion, reading comprehension
+- General knowledge focused on architecture, famous buildings, architects, materials
+
+### 3. Inductive and Situational Reasoning (around 100 marks)
+- Drawing-based questions presented digitally (you draw and the answer is captured online)
+- Composition: combining given shapes into a meaningful 2D or 3D image
+- 3D rendering and shading
+- Architectural awareness: identify a building or architect from a partial image
+- Aesthetic sensitivity: pick the most well-composed image from a set
+
+## Question type mix
+
+NATA 2026 uses three question types blended across the paper:
+1. **MCQ** (Multiple Choice Question): one correct answer from four options
+2. **MSQ** (Multiple Select Question): one or more correct answers from four options
+3. **NAQ** (Numerical Answer Question): enter a numerical value, no options
+
+This mix punishes guessing on MSQ (you lose the mark if you miss any correct option) and rewards genuine calculation on NAQ.
+
+## Time strategy
+
+3 hours for 125 questions works out to roughly 1 minute 26 seconds per question on average. In practice, you should allocate:
+- 30 minutes for diagrammatic reasoning (about 35 questions)
+- 50 minutes for numerical and verbal reasoning (about 40 questions)
+- 90 minutes for inductive and situational reasoning, especially drawing-heavy ones (about 50 questions)
+- 10 minutes for review and flagged questions
+
+## Common 2026 changes versus 2025
+
+- The Council moved fully to online drawing input (digital tablet or mouse-based composition tools)
+- Aesthetic sensitivity questions now use higher-resolution image stimuli
+- General aptitude weightage has stabilised around 50 marks (down from 80 in earlier years)
+
+## How Neram covers each section
+
+Our [NATA online coaching](/nata-online-coaching) program runs section-specific modules:
+- Daily 2-hour drawing practice covering composition, 3D rendering, shading
+- Weekly mathematics and reasoning drills aligned with the latest NATA paper analysis
+- Monthly full-length mock tests on the exact NATA interface
+- One-on-one critique on every submitted drawing
+
+## Frequently asked questions
+
+**Is there negative marking in NATA 2026?**
+No. NATA 2026 has no negative marking, so attempt every question.
+
+**How many drawing questions appear in NATA 2026?**
+Approximately 15 to 20 questions in the inductive and situational reasoning section involve drawing input, with the remaining being MCQ-based on visual stimuli.
+
+**Can I attempt NATA more than once in 2026?**
+Yes. You can attempt up to 2 tests in Phase 1 (April to June) and 1 test in Phase 2 (August). Best score across attempts is considered.
+
+[Read the full NATA 2026 guide →](/nata-2026)
+[Use the free NATA cutoff calculator →](/tools/cutoff-calculator)
+[Join NATA online coaching →](/nata-online-coaching)
+    `,
+    category: 'Exam Pattern',
+    author: 'Neram Classes',
+    publishedAt: '2026-05-21',
+    readTime: '8 min read',
+    tags: ['NATA 2026', 'NATA Exam Pattern', 'NATA Sections', 'NATA Drawing', 'NATA Aptitude'],
+    featured: true,
+  },
+
+  'nata-syllabus-2026-topic-wise-weightage': {
+    slug: 'nata-syllabus-2026-topic-wise-weightage',
+    title: 'NATA Syllabus 2026: Topic-Wise Weightage and Smart Study Order',
+    excerpt:
+      'Every NATA 2026 topic ranked by weightage and how to sequence your study plan. Drawing, mathematics, aptitude, and architectural awareness covered.',
+    content: `
+## How to read this syllabus
+
+The Council of Architecture publishes the NATA syllabus as a flat list. That hides which topics actually carry marks in the paper. Based on the last 5 years of paper analysis (2021 to 2025), this guide ranks every topic by approximate weightage so you know where to spend study time.
+
+## High-weightage topics (60% of marks)
+
+These topics together account for roughly 120 of the 200 marks. Master them first.
+
+### 1. Composition and 3D Drawing (30 to 40 marks)
+- Combining given 2D shapes into a 3D scene
+- Light and shadow rendering on solids
+- Perspective drawing (1-point, 2-point, 3-point)
+- Free-hand sketching of objects from imagination
+
+### 2. Mathematics (25 to 30 marks)
+- Algebra: quadratic equations, sequences and series
+- Coordinate geometry: straight lines, conic sections, basic 3D coordinates
+- Trigonometry: identities, heights and distances
+- Calculus: differentiation and integration basics, application problems
+- Statistics: mean, median, mode, standard deviation
+
+### 3. General Aptitude and Logical Reasoning (25 to 30 marks)
+- Series completion (number, letter, mixed)
+- Coding and decoding
+- Blood relations and direction sense
+- Syllogism and analogy
+- Data interpretation: pie charts, bar graphs, tables
+
+### 4. Architectural Awareness (15 to 20 marks)
+- Famous buildings: Taj Mahal, Sagrada Familia, Burj Khalifa, Louvre, Sydney Opera House, Falling Water, Notre Dame, India Gate
+- Famous architects: Le Corbusier, Frank Lloyd Wright, Zaha Hadid, B.V. Doshi, Charles Correa, I.M. Pei
+- Building materials: concrete, steel, brick, glass, sustainable materials
+- Indian architectural styles: Dravidian, Indo-Saracenic, Mughal, Colonial, Modernist
+
+## Medium-weightage topics (30% of marks)
+
+These contribute around 60 marks. Cover them after the high-weightage topics.
+
+### 5. Visual Composition (15 to 20 marks)
+- Colour theory: primary, secondary, complementary, warm and cool palettes
+- Balance, symmetry, contrast in composition
+- Figure-ground relationship
+- Pattern, texture, rhythm
+
+### 6. Spatial Reasoning (10 to 15 marks)
+- Mirror images
+- Paper folding and cutting
+- Embedded figures
+- Block counting in stacks
+
+### 7. Verbal Ability (10 to 15 marks)
+- Reading comprehension passages on architecture, design, or urban planning
+- Synonyms and antonyms
+- Sentence completion
+
+### 8. General Knowledge (5 to 10 marks)
+- Current affairs related to construction, urban planning, sustainability
+- Recent architectural news (Pritzker Prize winners, major projects)
+
+## Lower-weightage topics (10% of marks)
+
+Around 20 marks total. Do not skip but do not over-invest either.
+
+### 9. Aesthetic Sensitivity (around 10 marks)
+- Picking the better-composed image from a set
+- Identifying the artistic style of a given image
+
+### 10. Sketching from Memory (around 5 marks)
+- Drawing a familiar object (chair, lamp, water bottle) without reference
+
+### 11. Environmental Awareness (around 5 marks)
+- Sustainable design principles
+- Environmental impact of construction
+- Climate-responsive architecture
+
+## Recommended study order
+
+1. **Weeks 1 to 4**: Composition and 3D drawing, mathematics (high weightage, foundation skills)
+2. **Weeks 5 to 8**: General aptitude, architectural awareness (high weightage, knowledge-heavy)
+3. **Weeks 9 to 12**: Visual composition, spatial reasoning, verbal ability (medium weightage)
+4. **Weeks 13 to 14**: Aesthetic sensitivity, environmental awareness, sketching from memory (lower weightage)
+5. **Weeks 15 to 16**: Full-length mock tests, weak-area focus, revision
+
+## Free resources
+
+- Download the official NATA syllabus PDF from the Council of Architecture portal
+- Use our [NATA cutoff calculator](/tools/cutoff-calculator) to set your target score
+- Practice with our [free NATA question bank](/tools/question-bank)
+- Read the [10-year NATA cutoff trend analysis](/nata-cutoff-trends-2015-2025) to set realistic 2026 targets
+
+## How Neram structures the syllabus
+
+Our [NATA online coaching](/nata-online-coaching) program covers every topic above in 3-month, 1-year, or 2-year formats. The 2-year program covers NATA and JEE Paper 2 syllabi together since both exams share around 70% of their content.
+
+[Book a free demo class →](/demo-class)
+[See all NATA online coaching programs →](/nata-online-coaching)
+    `,
+    category: 'Syllabus',
+    author: 'Neram Classes',
+    publishedAt: '2026-05-21',
+    readTime: '9 min read',
+    tags: ['NATA 2026', 'NATA Syllabus', 'NATA Weightage', 'NATA Study Plan'],
+    featured: true,
+  },
+
+  'nata-mock-test-online-free-practice-strategy': {
+    slug: 'nata-mock-test-online-free-practice-strategy',
+    title: 'NATA Mock Test Online: Free Practice Strategy That Adds 30 Marks',
+    excerpt:
+      'The right way to use NATA mock tests. Frequency, review process, common mistakes, and how to turn each mock into a 5-mark improvement.',
+    content: `
+## Mock tests work only if you use them correctly
+
+Most NATA aspirants take mock tests in the wrong order, at the wrong pace, and skip the review step. A poorly-used mock test reinforces wrong habits. A well-used one can lift your final score by 30 marks over 90 days. This guide walks through the right way.
+
+## Why mock tests matter for NATA 2026
+
+NATA 2026 has 125 questions in 3 hours across three sections. Three things only mock tests can train:
+1. Stamina for a 3-hour focused session
+2. Section-switching speed (drawing to maths to aptitude)
+3. Time pressure on drawing questions (the part most students freeze on)
+
+## The right mock test schedule
+
+| Stage | Frequency | Type |
+|---|---|---|
+| Foundation (months 1 to 3) | 1 mock per 2 weeks | Sectional mocks only (mathematics, drawing, aptitude separately) |
+| Intensive (months 4 to 5) | 1 full mock per week | Full-length 3-hour mocks |
+| Final (last 4 weeks) | 2 full mocks per week | Full-length, in exam conditions, morning slot |
+
+Taking 4 mocks in the last week is counter-productive. Save energy for the actual exam.
+
+## The 3-step review process
+
+This is the part most students skip. Without it, you are just running on a treadmill.
+
+### Step 1: Mark every wrong answer with a reason
+For every question you got wrong, label it with one of:
+- **C** (concept gap): I did not know the topic
+- **A** (application gap): I knew the concept but could not apply it
+- **T** (time pressure): I rushed and made a careless mistake
+- **S** (silly): I read the question wrong
+
+### Step 2: Tally by category
+- C errors more than 10%? Go back to the concept. Re-read the chapter, watch a tutorial, work through 20 examples.
+- A errors more than 10%? Solve 50 application problems on that topic in the next week.
+- T errors more than 5%? Practice solving 20 questions of that type in half the usual time.
+- S errors more than 3%? Slow down by 10% on your next mock and re-read every question before answering.
+
+### Step 3: Re-attempt all wrong questions 7 days later
+Without looking at the solution. If you get it right, the gap is closed. If not, repeat steps 1 and 2 for that question type.
+
+## Common mistakes to avoid
+
+1. **Taking the same mock twice within a week**: You memorise the questions, not the concept. Wait at least 14 days.
+2. **Skipping the drawing section because it is slow**: Mock drawing under time pressure is exactly what you need to practice. Skipping it sets you up to freeze in the real exam.
+3. **Comparing mock scores to friends**: Mock providers calibrate difficulty differently. Compare your own mocks across time, not across people.
+4. **Taking mocks in different time slots**: NATA 2026 will be scheduled at a specific time. Train your body for that slot. Always take mocks at the same time, ideally 9 AM to noon.
+5. **Reviewing only the wrong answers**: Also review the right answers you guessed. If your reasoning was wrong but you got lucky, that is a future mistake waiting to happen.
+
+## Free NATA mock test resources
+
+- Neram Classes free [NATA question bank](/tools/question-bank) with 2,000+ practice problems
+- Free [NATA cutoff calculator](/tools/cutoff-calculator) for benchmark targets
+- Council of Architecture sample papers (download from official NATA portal)
+- Previous year NATA papers (2018 to 2025) available in the Neram student dashboard for enrolled students
+
+## How Neram mock tests work
+
+Students enrolled in our [NATA online coaching](/nata-online-coaching) get 50 to 200 full-length mock tests (depending on program duration). Each mock includes:
+- Detailed performance report with sectional scoring
+- One-on-one review session with faculty for low-scoring sections
+- Comparative percentile against the current Neram cohort
+- Drawing submissions reviewed with handwritten annotations from architecture faculty
+
+## Sample 90-day mock plan
+
+| Week | Day | Activity |
+|---|---|---|
+| 1 | Sat | Sectional mock: Mathematics only |
+| 1 | Sun | Review wrong answers, label by category |
+| 2 | Sat | Sectional mock: Drawing only |
+| 2 | Sun | Re-attempt last week's mathematics mistakes |
+| 3 | Sat | Sectional mock: Aptitude only |
+| ... | ... | ... |
+| 12 | Sat AM | Full-length mock 1 (in exam conditions) |
+| 12 | Sun | Detailed review |
+
+[Try the free NATA question bank →](/tools/question-bank)
+[Join NATA online coaching with weekly mocks →](/nata-online-coaching)
+    `,
+    category: 'Mock Tests',
+    author: 'Neram Classes',
+    publishedAt: '2026-05-21',
+    readTime: '10 min read',
+    tags: ['NATA Mock Test', 'NATA 2026', 'NATA Practice', 'NATA Strategy'],
+    featured: false,
+  },
+
+  'nata-vs-jee-paper-2-architecture-aspirant-decision': {
+    slug: 'nata-vs-jee-paper-2-architecture-aspirant-decision',
+    title: 'NATA vs JEE Paper 2: Which One Should You Choose for B.Arch?',
+    excerpt:
+      'Both NATA and JEE Paper 2 lead to a B.Arch degree but at very different colleges. A side-by-side comparison plus a decision framework.',
+    content: `
+## Two exams, one degree
+
+If you want to study architecture in India, you have two main entrance exam options: NATA (National Aptitude Test in Architecture) or JEE Main Paper 2A (B.Arch). Most aspirants face a confusing situation where coaches, parents, and senior students all give different advice. This post breaks down the decision factually.
+
+## Side-by-side comparison
+
+| Aspect | NATA | JEE Paper 2A |
+|---|---|---|
+| Conducting body | Council of Architecture (CoA) | National Testing Agency (NTA) |
+| Frequency | 2 phases (April to June, August) | 2 sessions (January, April) |
+| Total marks | 200 | 400 |
+| Sections | Diagrammatic, numerical and verbal reasoning, inductive and situational reasoning | Mathematics, aptitude test, drawing test |
+| Mode | Online (with online drawing) | Online for MCQs, offline pen-and-paper for drawing |
+| Eligibility | 10+2 with PCM (50% aggregate from 2024 onward) | 10+2 with PCM (50% aggregate) |
+| Target colleges | State institutes, private colleges, deemed universities | NITs, IIITs, SPAs, GFTIs (premier government colleges) |
+| Score validity | 1 academic year | 1 academic year (best of 2 sessions) |
+
+## Where each exam takes you
+
+### NATA route opens
+- Anna University School of Architecture and Planning (Chennai)
+- JJ College of Architecture (Mumbai)
+- CEPT University (Ahmedabad, requires NATA + interview)
+- BMS College of Engineering (Bangalore)
+- MEASI Academy of Architecture (Chennai)
+- Most state engineering universities with a B.Arch department
+- Around 250 to 300 CoA-approved private architecture colleges
+
+### JEE Paper 2A route opens
+- National Institutes of Technology (NITs) with B.Arch programs: NIT Trichy, NIT Calicut, NIT Raipur, NIT Hamirpur
+- Schools of Planning and Architecture (SPAs): SPA Delhi, SPA Bhopal, SPA Vijayawada
+- Indian Institutes of Information Technology (IIITs) with architecture
+- Government Funded Technical Institutes (GFTIs)
+- IIT B.Arch programs (Roorkee, Kharagpur) require JEE Advanced + AAT after JEE Main
+
+## Which is harder?
+
+Difficulty is not directly comparable, but in practice:
+- JEE Paper 2A mathematics is significantly harder than NATA mathematics (JEE Main level vs school level)
+- NATA aptitude is broader and tests more dimensions (general knowledge, verbal, visual)
+- JEE Paper 2A drawing is shorter (2 questions in 30 minutes) but graded more strictly
+- NATA drawing has more questions over more time but with online input
+
+## Which should you take?
+
+### Take only NATA if:
+- You are weak in JEE-level mathematics
+- Your top colleges are state institutes, JJ Mumbai, CEPT, or strong private colleges
+- You started prep less than 12 months before the exam
+- You want maximum attempts (NATA gives 3 over two phases)
+
+### Take only JEE Paper 2A if:
+- You are strong in JEE-level mathematics
+- Your dream colleges are SPA Delhi, NIT Trichy, NIT Calicut, IIT B.Arch
+- You have 12+ months of preparation runway
+- You also plan to attempt JEE Advanced for IIT B.Arch
+
+### Take both (most common path):
+- You want NIT/SPA as backup with state institutes as safety
+- You can manage the combined syllabus (about 70% overlap)
+- You have at least 12 months of prep time
+- You have access to coaching that covers both
+
+## How combined prep works
+
+NATA and JEE Paper 2 share most of the syllabus: drawing, aptitude, architectural awareness, and general mathematics. The differences are:
+- JEE Paper 2 has harder mathematics (JEE Main level)
+- JEE Paper 2 has less aptitude variety than NATA
+- JEE drawing is offline, NATA drawing is online
+
+Our [2-year NATA program](/nata-online-coaching) covers both exams together because of this overlap. Students target NIT Trichy via JEE Paper 2 as their first choice, with state institutes via NATA as backup.
+
+## Cost comparison
+
+| Item | NATA prep | JEE Paper 2A prep | Both |
+|---|---|---|---|
+| Exam fee | ~Rs. 2,000 per attempt | ~Rs. 2,000 per attempt | ~Rs. 4,000 |
+| Coaching fee at Neram | Rs. 15,000 to Rs. 25,000 | Rs. 25,000 | Rs. 30,000 (combined 2-year) |
+| Study material | Rs. 3,000 | Rs. 5,000 | Rs. 5,000 (overlapping) |
+
+Combined prep is more economical and gives more admission options.
+
+## Common myths
+
+- **"JEE B.Arch is harder so the colleges are better."** Partially true. NITs and SPAs are top-tier, but a strong state institute (JJ Mumbai, CEPT, Anna University SAP) is also a great B.Arch destination.
+- **"You cannot prepare for both without losing focus."** False. The syllabi overlap heavily. Most NIT B.Arch students at our institute clear NATA as well.
+- **"NATA drawing is easier than JEE drawing."** Not quite. NATA has more drawing questions (longer total time but more frequent context switches). JEE drawing is shorter and stricter. Both need daily practice.
+
+## Final recommendation
+
+If you have 18+ months and clear NIT/SPA ambition, take both. If you have less than 12 months or weak JEE-level mathematics, focus on NATA and target state institutes. Either way, start drawing practice on day 1.
+
+[Compare top NATA institutes →](/nata-online-coaching/comparison)
+[See NATA cutoff trends 2015 to 2025 →](/nata-cutoff-trends-2015-2025)
+[Join 2-year combined NATA + JEE Paper 2 prep →](/nata-online-coaching)
+    `,
+    category: 'Exam Comparison',
+    author: 'Neram Classes',
+    publishedAt: '2026-05-21',
+    readTime: '11 min read',
+    tags: ['NATA vs JEE', 'JEE Paper 2', 'B.Arch Entrance', 'NATA 2026', 'NIT B.Arch'],
+    featured: true,
+  },
+
+  'nata-online-coaching-fees-cost-breakdown-2026': {
+    slug: 'nata-online-coaching-fees-cost-breakdown-2026',
+    title: 'NATA Online Coaching Fees 2026: What Rs. 15,000 vs Rs. 35,000 Actually Buys You',
+    excerpt:
+      'Honest cost breakdown of NATA online coaching in India. What you get at each price point and how to avoid hidden charges.',
+    content: `
+## Why fees vary so widely
+
+NATA online coaching in India ranges from Rs. 10,000 to Rs. 60,000 per program. The same words ("live classes", "drawing practice", "mock tests") appear on every institute's website, so the price difference seems unjustified. This guide breaks down what each price tier actually delivers, what hidden charges to watch for, and how to pick the right tier for your situation.
+
+## The 4 price tiers explained
+
+### Tier 1: Rs. 10,000 to Rs. 15,000 (Crash course, 2 to 3 months)
+**What you typically get:**
+- 100 to 150 hours of live classes
+- Around 30 to 50 mock tests
+- Basic study material (PDFs, not printed books)
+- WhatsApp group for doubts (response time varies)
+- Recorded class access for the course duration only
+
+**Best for:** Students with strong 11th class foundation, late starters preparing 90 days before the exam, students retaking NATA.
+
+**Watch out for:** "Limited drawing critique" (institute may not review individual drawings). Crash courses sometimes skip architectural awareness entirely.
+
+### Tier 2: Rs. 15,000 to Rs. 25,000 (1-year program)
+**What you typically get:**
+- 400 to 600 hours of live classes
+- 80 to 100 mock tests
+- Printed or shipped study material
+- Daily drawing practice with individual critique
+- Personal mentor assigned
+- Recorded classes for entire course + revision phase
+- 24/7 WhatsApp doubt support
+
+**Best for:** Class 12 students starting NATA prep 12 months out. The most common tier.
+
+**Watch out for:** Some institutes charge extra for printed books, mock test reports, or counselling support. Always confirm what is included.
+
+### Tier 3: Rs. 25,000 to Rs. 35,000 (2-year foundation, NATA + JEE Paper 2 combined)
+**What you typically get:**
+- 1,000+ hours of live classes spread over 2 years
+- 150 to 200 mock tests (both NATA and JEE Paper 2 formats)
+- Complete study material for both exams
+- 1-on-1 personal mentoring sessions
+- Drawing portfolio reviewed monthly
+- College admission counselling
+- Access to senior students and alumni network
+
+**Best for:** Class 11 students serious about NIT/SPA admission, or those targeting both NATA and JEE Paper 2A.
+
+**Watch out for:** Some institutes split this into "Year 1 fee" + "Year 2 fee" which adds up to more than a single 2-year payment. Always ask for the total.
+
+### Tier 4: Rs. 35,000+ (Premium, small-batch, 1-on-1)
+**What you typically get:**
+- Batch size of 5 to 10 students (sometimes 1-on-1)
+- Dedicated faculty time
+- Customised study plans
+- Daily 1-on-1 drawing critique
+- Bundled with admission counselling at top colleges
+
+**Best for:** Students who learn slowly in group settings, or those targeting the absolute top 5 colleges (SPA Delhi, NIT Trichy, CEPT, IIT B.Arch).
+
+**Watch out for:** Premium pricing does not always mean premium outcomes. A motivated student in a standard batch often outperforms a passive student in 1-on-1 coaching.
+
+## What you should always ask before paying
+
+1. **What is the total fee including all add-ons?** (Books, mock tests, counselling, admission help)
+2. **Is there an EMI or scholarship option?** Most reputed institutes offer both.
+3. **What is the refund policy if I drop out within 30 days?** Reputed institutes refund 70 to 90% in the first 30 days.
+4. **How many students per batch?** Above 30 means you will not get individual attention.
+5. **Will I get recorded class access after the course ends?** Important for revision before the actual exam.
+6. **Is drawing critique included or extra?** This is the most common hidden charge.
+7. **What is included in the study material?** Printed books, PDFs, mock tests, question bank: get this in writing.
+
+## Neram Classes fee structure
+
+We publish our [NATA online coaching](/nata-online-coaching) fees directly on the website to avoid the form-and-counsellor-call dance. As of 2026:
+
+| Program | Duration | Fee | Includes |
+|---|---|---|---|
+| NATA Crash Course | 3 months | Rs. 15,000 | 200 hours live, 50 mocks, daily drawing, WhatsApp support |
+| 1-Year NATA Program | 12 months | Rs. 25,000 | 600 hours live, 100 mocks, personal mentor, recorded lectures, doubt resolution |
+| 2-Year NATA + JEE Paper 2 | 24 months | Rs. 30,000 | NATA + JEE Paper 2 combined, 200 mocks, 1-on-1 mentoring |
+
+All fees include: study material, free AI study app (cutoff calculator, college predictor), mock test reviews, and admission counselling. No hidden charges.
+
+EMI options and need-based scholarships reduce fees by up to 40%.
+
+## How to negotiate
+
+NATA coaching fees are typically not negotiable on the headline price, but you can ask for:
+- Sibling discount (if a sibling enrols)
+- Early-bird discount (book the next batch slot before the cutoff date)
+- Performance-based scholarship (clear a small aptitude test for fee reduction)
+- Bundle discount (combine NATA coaching with a JEE Paper 2 coaching add-on)
+- Group enrolment (if you bring 5+ classmates)
+
+## Final framework
+
+| Your situation | Suggested fee tier |
+|---|---|
+| Class 12, NATA only, 12 months runway | Tier 2 (Rs. 15k to 25k) |
+| Class 12, last-minute prep, 3 months | Tier 1 (Rs. 10k to 15k) |
+| Class 11, targeting NIT/SPA via NATA + JEE | Tier 3 (Rs. 25k to 35k) |
+| Class 12, need very small batch / 1-on-1 | Tier 4 (Rs. 35k+) |
+
+[Compare Neram vs BRDS vs SILICA on fees →](/nata-online-coaching/comparison)
+[See Neram online coaching programs →](/nata-online-coaching)
+[Book a free demo class first →](/demo-class)
+    `,
+    category: 'Fees and Pricing',
+    author: 'Neram Classes',
+    publishedAt: '2026-05-21',
+    readTime: '9 min read',
+    tags: ['NATA Fees', 'NATA Coaching Cost', 'NATA 2026', 'NATA Pricing'],
+    featured: false,
+  },
+
+  'nata-result-2026-how-to-check-score-analysis': {
+    slug: 'nata-result-2026-how-to-check-score-analysis',
+    title: 'NATA Result 2026: How to Check, What Your Score Means, What to Do Next',
+    excerpt:
+      'Step-by-step guide to checking NATA 2026 results, interpreting your score, and next steps for B.Arch admission.',
+    content: `
+## When NATA 2026 results are declared
+
+The Council of Architecture publishes NATA results phase-by-phase, typically within 7 to 14 days of each test. For 2026, the expected timeline is:
+
+| Test date | Result date (expected) |
+|---|---|
+| Phase 1 Test 1 (April 2026) | Around 10 to 12 days after test |
+| Phase 1 Test 2 (May or June 2026) | Around 10 to 12 days after test |
+| Phase 2 (August 2026) | Around 10 to 12 days after test |
+
+Final consolidated result (best score across all attempts) is declared after Phase 2.
+
+## How to check NATA 2026 result
+
+1. Go to the official NATA portal at nata.in
+2. Click on "Result" or "Score Card" in the navigation
+3. Enter your NATA application number and date of birth
+4. The score card displays your section-wise score, total score, and percentile (Phase 1 only)
+5. Download the PDF and save it. You will need this for every B.Arch admission round.
+
+## Understanding your NATA score
+
+NATA 2026 reports two numbers:
+- **Raw marks** out of 200
+- **Percentile rank** (Phase 1 only, calculated based on multi-attempt normalisation)
+
+### What raw marks mean
+
+| Raw marks | Interpretation | Likely admission |
+|---|---|---|
+| 145+ | Top 5% of test-takers | SPA Delhi, NIT Trichy, NIT Calicut, CEPT, top private institutes |
+| 125 to 144 | Top 15% | SPA Bhopal, JJ Mumbai, Anna University SAP, premier state institutes |
+| 105 to 124 | Top 30% | State universities, BMS, RV, JNAFAU, MEASI, BSA Crescent |
+| 85 to 104 | Top 50% | Reputed private colleges, deemed universities |
+| 75 to 84 | NATA-qualified, lower percentile | Most CoA-approved private colleges |
+| Below 75 | Not qualified | Retake NATA or wait for next year |
+
+### What percentile means
+
+Percentile shows where you rank relative to other test-takers. A 95th percentile means you scored higher than 95% of candidates. Top institutes increasingly use percentile alongside raw marks for admission.
+
+## What to do based on your score
+
+### If you scored 140+ (top tier band)
+1. Apply to SPA Delhi, SPA Bhopal, SPA Vijayawada through their B.Arch entrance process
+2. Apply to NITs through JoSAA counselling (if you also have JEE Paper 2A score)
+3. Apply to top state institutes (JJ Mumbai, CEPT, Anna University SAP) through their specific portals
+4. Use our [free cutoff calculator](/tools/cutoff-calculator) to see your admission probability at 5,000+ colleges
+
+### If you scored 105 to 139 (mid band)
+1. Apply to state universities and premier private institutes
+2. Consider TNEA B.Arch (Tamil Nadu), KEAM Arch (Kerala), MHT-CET B.Arch (Maharashtra), or other state counselling
+3. Have backup options: 2 to 3 private colleges via direct admission
+4. Use the [college predictor](/tools/college-predictor) to shortlist 8 to 10 colleges based on your score
+
+### If you scored 75 to 104 (qualified but lower band)
+1. Apply to a wider range of CoA-approved private colleges
+2. Consider repeating NATA in Phase 2 (August) to improve your score
+3. Look into managed quota seats at private universities (subject to fee structure)
+4. Combine with state-level admission tests where available
+
+### If you scored below 75 (not qualified)
+1. Re-attempt NATA in the next phase (you have up to 2 attempts in Phase 1, 1 in Phase 2)
+2. Identify specific weak sections from your detailed score report
+3. Consider joining a focused [crash course](/nata-online-coaching) for the next attempt
+4. Alternative: pivot to B.Des or interior design programs (no NATA required at many colleges)
+
+## Common questions
+
+**Can I improve my score by retaking NATA in Phase 2?**
+Yes. Many students see a 15 to 25 mark improvement between attempts because they understand the actual exam interface and time pressure. Phase 2 is a separate test (not just a repeat), so prepare for slight format variations.
+
+**What is the validity of my NATA score?**
+NATA 2026 score is valid for the 2026 to 2027 academic year admission. NATA 2025 scores can also be used for 2026 to 2027 admissions per CoA rules.
+
+**Does NATA score guarantee admission?**
+No. NATA is one component. Most colleges also require Class 12 marks (PCM aggregate of 50% from 2024 onward) and may have additional rounds (portfolio, interview, written test).
+
+**Is there a re-evaluation process for NATA?**
+NATA does not currently offer raw-score re-evaluation since it is computer-evaluated. You can apply for verification of OMR or technical issues if you suspect a calculation error.
+
+## Next steps after NATA result
+
+1. Download your score card and save multiple copies
+2. Compile your Class 12 mark sheets (or expected marks if results pending)
+3. Research and shortlist 8 to 12 colleges using the [college predictor](/tools/college-predictor)
+4. Note application deadlines for each college (most open in May or June)
+5. Prepare a portfolio if applying to CEPT, Anna University SAP, or other portfolio-required institutes
+6. Apply for state counselling: TNEA, KEAM, MHT-CET, or relevant to your state
+
+## Resources
+
+- [10-year NATA cutoff trends 2015 to 2025](/nata-cutoff-trends-2015-2025) for setting realistic college targets
+- [Free NATA cutoff calculator](/tools/cutoff-calculator) for admission probability
+- [Free college predictor for 5,000+ colleges](/tools/college-predictor)
+- [Counselling guides for TNEA, KEAM, JoSAA and 25+ state counsellings](/counseling)
+- [NATA online coaching for 2027 aspirants](/nata-online-coaching)
+
+If you scored below your target and want to retake in Phase 2 or 2027, [book a free demo class](/demo-class) with Neram Classes. We have helped 10,000+ students lift their NATA scores since 2009.
+    `,
+    category: 'Results',
+    author: 'Neram Classes',
+    publishedAt: '2026-05-21',
+    readTime: '10 min read',
+    tags: ['NATA Result 2026', 'NATA Score', 'NATA Cutoff', 'B.Arch Admission', 'NATA 2026'],
+    featured: true,
+  },
 };
 
 /**

@@ -45,6 +45,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (typeof code === 'string' && code.startsWith('auth/')) {
+      return NextResponse.json({ error: code }, { status: 401 });
+    }
     console.error('Heartbeat error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

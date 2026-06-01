@@ -120,6 +120,16 @@ export default async function HomePage({
           </p>
 
           <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', lineHeight: 1.3 }}>
+            NATA Online Coaching: Live classes for aspirants in 150+ cities
+          </h3>
+          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
+            Our flagship <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'underline', fontWeight: 600 }}>NATA online coaching</a> program runs live interactive classes for architecture aspirants from across India and the Gulf. Faculty are NIT, IIT, and SPA alumni. Each batch is capped at 25 students for personalised drawing critique, with 100+ full-length mock tests and recorded lectures for unlimited revision. Programs start at ₹15,000 (3-month crash course) and scale up to a 2-year foundation track that covers NATA and JEE Paper 2 together. Compare us against <a href="/nata-online-coaching/comparison" style={{ color: '#e8a020', textDecoration: 'underline' }}>BRDS and SILICA</a> on a single page, or study the <a href="/nata-cutoff-trends-2015-2025" style={{ color: '#e8a020', textDecoration: 'underline' }}>10-year NATA cutoff trend</a> before you set your 2026 target.
+          </p>
+          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
+            City-specific NATA online coaching pages are live for Tamil Nadu (<a href="/nata-coaching/chennai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Chennai</a>, <a href="/nata-coaching/coimbatore" style={{ color: '#e8a020', textDecoration: 'underline' }}>Coimbatore</a>, <a href="/nata-coaching/madurai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Madurai</a>, <a href="/nata-coaching/trichy" style={{ color: '#e8a020', textDecoration: 'underline' }}>Trichy</a>, <a href="/nata-coaching/salem" style={{ color: '#e8a020', textDecoration: 'underline' }}>Salem</a>, <a href="/nata-coaching/vellore" style={{ color: '#e8a020', textDecoration: 'underline' }}>Vellore</a>) and pan-India metros (<a href="/nata-coaching/bangalore" style={{ color: '#e8a020', textDecoration: 'underline' }}>Bangalore</a>, <a href="/nata-coaching/hyderabad" style={{ color: '#e8a020', textDecoration: 'underline' }}>Hyderabad</a>, <a href="/nata-coaching/mumbai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Mumbai</a>, <a href="/nata-coaching/delhi" style={{ color: '#e8a020', textDecoration: 'underline' }}>Delhi NCR</a>, <a href="/nata-coaching/pune" style={{ color: '#e8a020', textDecoration: 'underline' }}>Pune</a>, <a href="/nata-coaching/kolkata" style={{ color: '#e8a020', textDecoration: 'underline' }}>Kolkata</a>, <a href="/nata-coaching/kochi" style={{ color: '#e8a020', textDecoration: 'underline' }}>Kochi</a>, <a href="/nata-coaching/ahmedabad" style={{ color: '#e8a020', textDecoration: 'underline' }}>Ahmedabad</a>). Each page lists local NATA exam centres, target architecture colleges, and served sub-areas.
+          </p>
+
+          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', lineHeight: 1.3 }}>
             Only NATA Coaching with a Free AI-Powered Study App
           </h3>
           <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
@@ -169,7 +179,7 @@ export default async function HomePage({
             <a href="/coaching/nata-coaching/nata-coaching-centers-in-mumbai" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Mumbai →</a>
             <a href="/coaching/nata-coaching/nata-coaching-centers-in-delhi" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Delhi →</a>
             <a href="/coaching/nata-coaching/nata-coaching-centers-in-kochi" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Kochi →</a>
-            <a href="/coaching/nata-coaching" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA online coaching: All 150+ cities →</a>
+            <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA online coaching: All 150+ cities →</a>
           </div>
 
           <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>
@@ -189,7 +199,7 @@ export default async function HomePage({
             <a href="/coaching/nata-coaching-in-rajasthan" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Rajasthan →</a>
             <a href="/coaching/nata-coaching-in-gujarat" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Gujarat →</a>
             <a href="/coaching/nata-coaching-in-west-bengal" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in West Bengal →</a>
-            <a href="/best-nata-coaching-online" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem', fontWeight: 600 }}>Best Online NATA Coaching: All India →</a>
+            <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem', fontWeight: 600 }}>NATA Online Coaching: Live classes from anywhere in India →</a>
           </div>
 
           <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>

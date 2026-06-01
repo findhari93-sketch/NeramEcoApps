@@ -191,6 +191,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         title: 'NATA 2026',
         links: [
+          { label: 'NATA Online Coaching', href: '/nata-online-coaching', badge: 'TOP' },
           { label: 'NATA 2026 Hub', href: '/nata-2026' },
           { label: 'Eligibility', href: '/nata-2026/eligibility' },
           { label: 'Important Dates', href: '/nata-2026/important-dates' },

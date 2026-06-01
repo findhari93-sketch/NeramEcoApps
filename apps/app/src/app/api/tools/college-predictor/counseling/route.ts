@@ -92,15 +92,56 @@ export async function POST(request: NextRequest) {
       // which has no KEAM data. Branch here when the user is predicting for KEAM_BARCH.
       if (system.code === 'KEAM_BARCH') {
         const keamPhase = body.keamPhase === 'Phase1' ? 'Phase1' : 'Phase2';
+        const keamCat = category || 'SM';
         const keamPreds = await predictCollegesFromKeamCutoffs(
-          category || 'SM',
+          keamCat,
           effectiveRank,
           { year: targetYear, phase: keamPhase },
           supabase
         );
 
-        const generalPredictions = keamPreds.filter((p: any) => p.matchCategory === 'general');
-        const communityPredictions = keamPreds.filter((p: any) => p.matchCategory === 'community');
+        // Map KEAM Safe/Likely/Borderline/Unlikely → SeatAware safe/moderate/reach tiers
+        // expected by the UI's TIER_CONFIG (avoids `Cannot read properties of undefined (reading 'color')`).
+        const chanceToTier: Record<string, 'safe' | 'moderate' | 'reach'> = {
+          Safe: 'safe',
+          Likely: 'safe',
+          Borderline: 'moderate',
+          Unlikely: 'reach',
+        };
+
+        // Transform KeamPrediction shape → SeatAwarePrediction shape consumed by the page.
+        // Each KEAM row represents one (college, seat_type), so we encode seat_type into
+        // collegeCode/collegeName to make multiple rows per college unambiguous and unique.
+        const transformKeam = (p: any) => ({
+          collegeCode: `${p.collegeCode}-${p.seatType}`,
+          collegeName: p.collegeName
+            ? `${p.collegeName} (${p.seatType})`
+            : `College ${p.collegeCode} (${p.seatType})`,
+          city: p.town || p.district || null,
+          tier: chanceToTier[p.chance] || 'reach',
+          totalSeats: null,
+          categorySeats: null,
+          seatsFilledByHigherRank: 0,
+          categoryFilledByHigherRank: 0,
+          estimatedRemainingSeats: null,
+          estimatedRemainingCategorySeats: null,
+          isFull: false,
+          isCategoryFull: false,
+          closingRank: p.closingRank,
+          closingMark: null,
+          predictedRank: p.predictedRank,
+          matchCategory: p.matchCategory,
+          studentCategory: keamCat,
+          coaInstitutionCode: p.seatTypeMeaning || null,
+          seatDataAvailable: false,
+        });
+
+        const generalPredictions = keamPreds
+          .filter((p: any) => p.matchCategory === 'general')
+          .map(transformKeam);
+        const communityPredictions = keamPreds
+          .filter((p: any) => p.matchCategory === 'community')
+          .map(transformKeam);
         const totalColleges = new Set(keamPreds.map((p: any) => p.collegeCode)).size;
 
         const executionTime = Date.now() - startTime;
@@ -119,12 +160,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           generalPredictions,
           communityPredictions,
-          seatDataAvailable: true,
+          // KEAM has cutoff (closing rank) data but no seat-matrix capacity yet,
+          // so the UI must not render "X/Y left" math. Leave seatDataAvailable false.
+          seatDataAvailable: false,
           totalColleges,
-          // Legacy fields (empty, KEAM uses the keam-specific shapes above)
           predictions: [],
           allotmentPredictions: [],
-          // KEAM-specific raw payload for richer UI later
           keamPredictions: keamPreds,
           keamPhase,
           rankPrediction,
