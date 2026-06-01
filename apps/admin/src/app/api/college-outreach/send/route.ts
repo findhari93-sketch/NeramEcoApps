@@ -7,7 +7,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
-import { renderOutreachEmail, getRecipientEmail, type SubjectVariant } from '@/lib/college-outreach/templates';
+import {
+  renderOutreachEmail,
+  getRecipientEmail,
+  type SubjectVariant,
+  type OutreachTemplateVariant,
+} from '@/lib/college-outreach/templates';
 import { sendOutreachEmail } from '@/lib/college-outreach/send';
 
 export const runtime = 'nodejs';
@@ -16,9 +21,21 @@ export const dynamic = 'force-dynamic';
 const DUPLICATE_SEND_WINDOW_SECONDS = 30;
 const DEFAULT_BCC = 'info@neramclasses.com';
 
+// Sequencing guardrail: which contact_status values a template is allowed to be
+// sent to. Stops staff sending the pitch before first-touch, or payment details
+// before a yes. `force: true` (the dialog's "Send anyway") overrides.
+const TEMPLATE_ALLOWED_STATUS: Record<string, string[]> = {
+  first_touch_v1: ['never_contacted', 'emailed_v1', 'bounced'],
+  first_touch_v2: ['never_contacted', 'emailed_v1', 'bounced'],
+  content_request_v1: ['replied', 'claimed', 'engaged'],
+  partnership_pitch_v1: ['engaged', 'replied', 'claimed'],
+  payment_details_v1: ['engaged', 'claimed', 'partner'],
+  onboarding_v1: ['partner', 'engaged', 'claimed'],
+};
+
 interface RequestBody {
   college_id?: string;
-  template_variant?: 'first_touch_v1';
+  template_variant?: OutreachTemplateVariant;
   subject_variant?: SubjectVariant;
   preview_only?: boolean;
   override_to_email?: string;
@@ -27,6 +44,12 @@ interface RequestBody {
   include_bcc?: boolean;
   staff_name?: string;
   staff_email?: string;
+  // Later-stage template context:
+  deal_tier?: string;
+  deal_amount_inr?: number;
+  deal_term?: string;
+  login_email?: string;
+  attachments?: Array<{ filename: string; content: string; contentType?: string }>;
 }
 
 export async function POST(req: NextRequest) {
@@ -44,7 +67,7 @@ export async function POST(req: NextRequest) {
   const senderName = (body.staff_name || req.headers.get('x-staff-name') || 'Neram Classes Team').trim();
   const senderEmail = (body.staff_email || req.headers.get('x-staff-email') || '').trim() || null;
 
-  const variant = body.template_variant ?? 'first_touch_v1';
+  const variant = body.template_variant ?? 'first_touch_v2';
   const subjectVariant = (body.subject_variant ?? 1) as SubjectVariant;
   const previewOnly = body.preview_only === true;
   const includeBcc = body.include_bcc !== false;
@@ -54,7 +77,7 @@ export async function POST(req: NextRequest) {
   const { data: college, error: collegeError } = await supabase
     .from('colleges')
     .select(
-      'id, name, slug, state_slug, city, established_year, naac_grade, total_barch_seats, annual_fee_approx, affiliated_university, highlights, data_completeness, email, admissions_email, contact_status, last_outreach_at, outreach_count',
+      'id, name, slug, state, state_slug, city, established_year, naac_grade, total_barch_seats, annual_fee_approx, affiliated_university, highlights, data_completeness, email, admissions_email, contact_status, last_outreach_at, outreach_count',
     )
     .eq('id', body.college_id)
     .single();
@@ -76,6 +99,10 @@ export async function POST(req: NextRequest) {
     subjectVariant,
     college: college as any,
     senderName,
+    dealTier: body.deal_tier,
+    dealAmountInr: body.deal_amount_inr,
+    dealTerm: body.deal_term,
+    loginEmail: body.login_email,
   });
 
   const subject = body.override_subject?.trim() || rendered.subject;
@@ -92,6 +119,20 @@ export async function POST(req: NextRequest) {
       outreach_count: (college as any).outreach_count,
       last_outreach_at: (college as any).last_outreach_at,
     });
+  }
+
+  // Sequencing guard: block a template that does not match the college's stage
+  const currentStatusForGuard = (college as any).contact_status as string;
+  const allowedStatuses = TEMPLATE_ALLOWED_STATUS[variant];
+  if (allowedStatuses && !allowedStatuses.includes(currentStatusForGuard) && !force) {
+    return NextResponse.json(
+      {
+        error: 'Sequencing guard triggered',
+        hint: `This college is "${currentStatusForGuard}". The ${variant} email is meant for stage: ${allowedStatuses.join(', ')}. Pass force: true to send anyway.`,
+        contact_status: currentStatusForGuard,
+      },
+      { status: 409 },
+    );
   }
 
   // Duplicate-send guard
@@ -116,6 +157,7 @@ export async function POST(req: NextRequest) {
     subject,
     html: rendered.html,
     text: rendered.text,
+    attachments: body.attachments,
   });
 
   const { data: logRow, error: logErr } = await supabase

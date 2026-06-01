@@ -11,6 +11,12 @@ function getResend(): Resend {
   return client;
 }
 
+export interface OutreachAttachment {
+  filename: string;
+  content: string; // base64-encoded file content
+  contentType?: string;
+}
+
 export interface SendOutreachArgs {
   to: string;
   bcc?: string | null;
@@ -19,6 +25,7 @@ export interface SendOutreachArgs {
   text: string;
   from?: string;
   replyTo?: string;
+  attachments?: OutreachAttachment[];
 }
 
 export interface SendOutreachResult {
@@ -32,6 +39,13 @@ const DEFAULT_FROM = 'Neram Classes <info@neramclasses.com>';
 export async function sendOutreachEmail(args: SendOutreachArgs): Promise<SendOutreachResult> {
   try {
     const resend = getResend();
+    const attachments = args.attachments?.length
+      ? args.attachments.map((a) => ({
+          filename: a.filename,
+          content: Buffer.from(a.content, 'base64'),
+          contentType: a.contentType,
+        }))
+      : undefined;
     const { data, error } = await resend.emails.send({
       from: args.from || DEFAULT_FROM,
       to: args.to,
@@ -40,6 +54,7 @@ export async function sendOutreachEmail(args: SendOutreachArgs): Promise<SendOut
       html: args.html,
       text: args.text,
       reply_to: args.replyTo,
+      attachments,
     });
     if (error) return { success: false, error: error.message };
     return { success: true, messageId: data?.id };

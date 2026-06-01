@@ -1,6 +1,12 @@
 import type { CollegeOutreachRow } from './types';
 
-export type OutreachTemplateVariant = 'first_touch_v1';
+export type OutreachTemplateVariant =
+  | 'first_touch_v1' // @deprecated, retained so historical college_outreach_log rows still render
+  | 'first_touch_v2'
+  | 'content_request_v1'
+  | 'partnership_pitch_v1'
+  | 'payment_details_v1'
+  | 'onboarding_v1';
 export type SubjectVariant = 1 | 2 | 3;
 
 interface RenderResult {
@@ -13,6 +19,7 @@ type CollegeInput = Pick<
   CollegeOutreachRow,
   | 'name'
   | 'slug'
+  | 'state'
   | 'state_slug'
   | 'city'
   | 'established_year'
@@ -29,9 +36,77 @@ interface RenderOpts {
   subjectVariant?: SubjectVariant;
   college: CollegeInput;
   senderName: string;
+  // Optional deal context, used only by the later-stage templates:
+  dealTier?: string; // e.g. "Gold"
+  dealAmountInr?: number; // e.g. 75000
+  dealTerm?: string; // e.g. "the 2026 admission cycle"
+  loginEmail?: string; // onboarding dashboard login
 }
 
+// ─── Single source of truth for the numbers we quote ──────────────────────────
+// Change a value here and it propagates through every template + the plain-text
+// and HTML renders. All numbers are verified from Google Search Console
+// (last 3 months) and must be defensible on a live call.
+export const PROOF = {
+  impressions: '315,000', // GSC search impressions, last 3 months
+  clicks: '5,400', // GSC clicks (visits from Google search)
+  avgPosition: '7.2', // average position => "first page of Google"
+  topQueries: ['nata college predictor', 'nata rank predictor'],
+  // Confirmed by founder: 2,000+ active students across India. Update in ONE place.
+  activeStudents: '2,000+',
+};
+
 const SITE_URL = 'https://neramclasses.com';
+const DASHBOARD_URL = `${SITE_URL}/college-dashboard`;
+const FOUNDER_NAME = 'Haribabu Manoharan';
+const FOUNDER_TITLE = 'Founder, Neram Classes';
+const FOUNDER_CREDENTIAL = 'B.Arch, NIT Tiruchirappalli';
+const INFO_EMAIL = 'info@neramclasses.com';
+
+// What a partnership adds on top of the free listing (used in the pitch email).
+// `state` is the college's state name so the regional-guide benefit reads naturally.
+function partnershipBenefits(state: string): string[] {
+  return [
+    "Priority placement in your region's college search results",
+    'Direct, opt-in student enquiries routed to your admissions team',
+    `A feature in our "Top architecture colleges in ${state}" guide, optimised for Google and for AI answers (ChatGPT, Gemini)`,
+    'A presenting slot at #AskSeniors, our annual event where aspirants meet current students',
+  ];
+}
+
+// Tier reference (names + one-line value). Pricing is per-deal and lives in the
+// payment email, not here. Kept as the single source for tier naming.
+export const TIERS = {
+  free: { name: 'Free', summary: 'A permanent free listing with a backlink to your official website.' },
+  silver: { name: 'Silver', summary: 'Free listing plus priority placement during the admission window.' },
+  gold: { name: 'Gold', summary: 'Silver plus direct student enquiries and a regional guide feature.' },
+  platinum: { name: 'Platinum', summary: 'Gold plus an #AskSeniors presenting slot and full profile management.' },
+} as const;
+
+// Bank details for the payment email. Fill these in before any payment_details
+// send (left blank on purpose so a half-finished email is obvious in preview).
+const BANK = {
+  accountName: '',
+  accountNumber: '',
+  ifsc: '',
+  bankName: '',
+  upi: '',
+};
+
+// Email-safe color tokens (Trust & Authority palette: navy ink, professional blue CTA)
+const C = {
+  ink: '#0f172a',
+  body: '#334155',
+  muted: '#64748b',
+  cta: '#0369a1',
+  cardBg: '#f8fafc',
+  cardBorder: '#e2e8f0',
+  hair: '#e8eef5',
+  page: '#eef2f7',
+  link: '#0369a1',
+};
+
+const FONT_STACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function getCollegePageUrl(college: Pick<CollegeOutreachRow, 'state_slug' | 'slug'>): string {
   const state = college.state_slug ?? 'india';
@@ -69,18 +144,6 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function subjectFor(variant: SubjectVariant, name: string): string {
-  switch (variant) {
-    case 2:
-      return `We showcased ${name} for NATA 2026 aspirants, a few minutes of your time?`;
-    case 3:
-      return `${name} profile on neramclasses.com, help us keep it accurate`;
-    case 1:
-    default:
-      return `${name} is featured on Neram College Hub, quick review request`;
-  }
-}
-
 function buildCompletenessLine(dc: number | null | undefined): string {
   if (typeof dc !== 'number' || dc >= 80) return '';
   return `Your profile is about ${dc}% complete on our side; we would love your help filling the rest.`;
@@ -93,22 +156,461 @@ function ensureNoUnresolvedTokens(s: string, label: string): void {
 }
 
 function ensureNoEmDashes(s: string, label: string): void {
-  if (s.includes('\u2014') || s.includes(' -- ') || s.includes('&mdash;')) {
+  if (s.includes('—') || s.includes(' -- ') || s.includes('&mdash;')) {
     throw new Error(`Outreach template ${label} contains em dash or double dash`);
   }
 }
 
-export function renderOutreachEmail(opts: RenderOpts): RenderResult {
-  if (opts.variant !== 'first_touch_v1') {
-    throw new Error(`Unknown outreach template variant: ${opts.variant}`);
-  }
+function finalize(subject: string, html: string, text: string): RenderResult {
+  ensureNoUnresolvedTokens(subject, 'subject');
+  ensureNoUnresolvedTokens(html, 'html');
+  ensureNoUnresolvedTokens(text, 'text');
+  ensureNoEmDashes(subject, 'subject');
+  ensureNoEmDashes(html, 'html');
+  ensureNoEmDashes(text, 'text');
+  return { subject, html, text };
+}
 
-  const { college, senderName } = opts;
-  const subjectVariant: SubjectVariant = opts.subjectVariant ?? 1;
+// ─── Shared HTML building blocks (email-client-safe: tables + inline CSS) ──────
+
+function emailShell(innerHtml: string, title: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="x-ua-compatible" content="ie=edge">
+<title>${escapeHtml(title)}</title>
+</head>
+<body style="margin:0;padding:0;background:${C.page};-webkit-text-size-adjust:100%">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.page};padding:24px 12px">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid ${C.cardBorder};border-radius:14px">
+<tr><td style="padding:30px 32px 34px">
+${innerHtml}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
+function headerBlock(): string {
+  return `<div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:${C.ink};text-transform:uppercase">Neram Classes</div>
+<div style="font-size:12px;color:${C.muted};margin-top:3px">College Hub</div>
+<div style="height:1px;line-height:1px;font-size:0;background:${C.hair};margin:18px 0 22px">&nbsp;</div>`;
+}
+
+function para(html: string): string {
+  return `<p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:${C.body}">${html}</p>`;
+}
+
+function ctaButton(href: string, label: string): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 22px"><tr>
+<td align="center" bgcolor="${C.cta}" style="border-radius:8px">
+<a href="${href}" target="_blank" style="display:inline-block;padding:13px 26px;font-family:${FONT_STACK};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px">${label}</a>
+</td></tr></table>`;
+}
+
+// `items` are already HTML-safe (callers escape any dynamic text before passing).
+function orderedList(items: string[]): string {
+  const lis = items.map((i) => `<li style="margin:8px 0">${i}</li>`).join('\n');
+  return `<ol style="margin:0 0 16px;padding-left:22px;font-size:15px;line-height:1.6;color:${C.body}">${lis}</ol>`;
+}
+
+function bulletList(items: string[]): string {
+  const lis = items.map((i) => `<li style="margin:8px 0">${i}</li>`).join('\n');
+  return `<ul style="margin:0 0 16px;padding-left:22px;font-size:15px;line-height:1.6;color:${C.body}">${lis}</ul>`;
+}
+
+function formatInr(value: number | null | undefined): string {
+  if (!value || value <= 0) return '(amount to be confirmed)';
+  return `Rs ${value.toLocaleString('en-IN')}`;
+}
+
+function statBand(): string {
+  const cells = [
+    { num: PROOF.impressions, label: 'Google search<br>impressions' },
+    { num: PROOF.clicks, label: 'student visits<br>from Google' },
+    { num: 'Page 1', label: `of Google<br>(avg position ${PROOF.avgPosition})` },
+  ];
+  const tds = cells
+    .map(
+      (c) => `<td width="33.33%" valign="top" style="padding:0 5px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.cardBg};border:1px solid ${C.cardBorder};border-radius:10px">
+<tr><td align="center" style="padding:16px 6px">
+<div style="font-size:23px;font-weight:700;line-height:1.1;color:${C.cta}">${c.num}</div>
+<div style="font-size:11.5px;line-height:1.45;color:${C.muted};margin-top:6px">${c.label}</div>
+</td></tr>
+</table>
+</td>`,
+    )
+    .join('\n');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 18px"><tr>${tds}</tr></table>`;
+}
+
+function signatureBlock(): string {
+  return `<div style="height:1px;line-height:1px;font-size:0;background:${C.hair};margin:24px 0 18px">&nbsp;</div>
+<p style="margin:0;font-size:15px;line-height:1.6;color:${C.body}">Warm regards,</p>
+<p style="margin:8px 0 0;font-size:15px;line-height:1.55;color:${C.body}">
+<strong style="color:${C.ink};font-size:16px">${escapeHtml(FOUNDER_NAME)}</strong><br>
+${escapeHtml(FOUNDER_TITLE)}<br>
+<span style="color:${C.muted}">${escapeHtml(FOUNDER_CREDENTIAL)}</span><br>
+<a href="mailto:${INFO_EMAIL}" style="color:${C.link};text-decoration:none">${INFO_EMAIL}</a>&nbsp; | &nbsp;<a href="${SITE_URL}/colleges" target="_blank" style="color:${C.link};text-decoration:none">neramclasses.com/colleges</a>
+</p>`;
+}
+
+// ─── first_touch_v2: the beautiful founder letter (one ask + stat band) ───────
+
+function subjectForV2(variant: SubjectVariant, name: string): string {
+  switch (variant) {
+    case 2:
+      return `Students are researching ${name} on our platform, a quick check`;
+    case 3:
+      return `We built a free profile for ${name}, please take a look`;
+    case 1:
+    default:
+      return `${name} now has a free page on Neram College Hub, is the info correct?`;
+  }
+}
+
+function renderFirstTouchV2(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
+  const collegeName = college.name;
+  const url = getCollegePageUrl(college);
+  const subject = subjectForV2(subjectVariant, collegeName);
+
+  const name = escapeHtml(collegeName);
+  const safeUrl = escapeHtml(url);
+  const topQText = PROOF.topQueries.map((q) => `"${q}"`).join(' and ');
+  const topQHtml = PROOF.topQueries.map((q) => `"${escapeHtml(q)}"`).join(' and ');
+
+  const text = [
+    `Dear ${collegeName} Admissions Team,`,
+    '',
+    `I am ${FOUNDER_NAME}, founder of Neram Classes and a B.Arch graduate of NIT Trichy.`,
+    '',
+    `We run a free B.Arch college discovery platform used by ${PROOF.activeStudents} architecture aspirants across India to research and compare colleges before they apply. ${collegeName} is one of the colleges they can find there, and we have already built a dedicated page for you:`,
+    '',
+    url,
+    '',
+    'To give you a sense of who sees it, here is our reach over the last three months:',
+    '',
+    `- ${PROOF.impressions} Google search impressions`,
+    `- ${PROOF.clicks} student visits from Google`,
+    `- First page of Google, average position ${PROOF.avgPosition}`,
+    '',
+    `The students driving this are searching for things like ${topQText}, in other words, people who are actively deciding where to apply for the 2026 cycle.`,
+    '',
+    `We built the page from publicly available information, so a few details may be approximate. Before we feature ${collegeName} more prominently, could you take a quick look and tell me one thing: is the basic information accurate?`,
+    '',
+    'That is the only ask in this email. The page is free, it carries a permanent backlink to your official website, and there is nothing for you to set up.',
+    '',
+    'If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.',
+    '',
+    'Warm regards,',
+    FOUNDER_NAME,
+    FOUNDER_TITLE,
+    FOUNDER_CREDENTIAL,
+    `${INFO_EMAIL} | neramclasses.com/colleges`,
+  ].join('\n');
+
+  const inner = `${headerBlock()}
+${para(`Dear ${name} Admissions Team,`)}
+${para(`I am <strong style="color:${C.ink}">${escapeHtml(FOUNDER_NAME)}</strong>, founder of Neram Classes and a B.Arch graduate of NIT Trichy.`)}
+${para(`We run a free B.Arch college discovery platform used by ${PROOF.activeStudents} architecture aspirants across India to research and compare colleges before they apply. ${name} is one of the colleges they can find there, and we have already built a dedicated page for you.`)}
+${ctaButton(safeUrl, 'Review your college page &rarr;')}
+${para('To give you a sense of who sees it, here is our reach over the last three months:')}
+${statBand()}
+${para(`The students driving this are searching for things like ${topQHtml}, in other words, people who are actively deciding where to apply for the 2026 cycle.`)}
+${para(`We built the page from publicly available information, so a few details may be approximate. Before we feature ${name} more prominently, could you take a quick look and tell me one thing: <strong style="color:${C.ink}">is the basic information accurate?</strong>`)}
+${para('That is the only ask in this email. The page is free, it carries a permanent backlink to your official website, and there is nothing for you to set up.')}
+${para('If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.')}
+${signatureBlock()}`;
+
+  const html = emailShell(inner, subject);
+  return finalize(subject, html, text);
+}
+
+// ─── content_request_v1: sent after a college replies / claims ────────────────
+
+function subjectForContentRequest(variant: SubjectVariant, name: string): string {
+  switch (variant) {
+    case 2:
+      return `A few things that would make ${name}'s page stand out`;
+    case 3:
+      return `${name}: a quick content checklist for your page`;
+    case 1:
+    default:
+      return `Thank you, here is how we can make ${name}'s page shine`;
+  }
+}
+
+function renderContentRequestV1(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
+  const subject = subjectForContentRequest(subjectVariant, college.name);
+  const name = escapeHtml(college.name);
+  const items = [
+    'Confirm the fee structure, seat intake, and NAAC grade are accurate.',
+    'Your latest brochure (we will make it downloadable on your page).',
+    'Three to five campus photos (studios, workshops, hostels).',
+    'Recent placement highlights, if available.',
+    'A short note from one or two current students.',
+    'Recent counselling or cutoff details, if you have them.',
+  ];
+
+  const text = [
+    `Dear ${college.name} Admissions Team,`,
+    '',
+    `Thank you for getting back to us. To present ${college.name} at its best to the students researching the 2026 cycle, could you share any of the following when convenient:`,
+    '',
+    ...items.map((it, i) => `${i + 1}. ${it}`),
+    '',
+    'Even two or three of these make a noticeable difference to how students engage with your page. Send whatever is easy, and we will handle the formatting.',
+    '',
+    'Warm regards,',
+    FOUNDER_NAME,
+    FOUNDER_TITLE,
+    FOUNDER_CREDENTIAL,
+    `${INFO_EMAIL} | neramclasses.com/colleges`,
+  ].join('\n');
+
+  const inner = `${headerBlock()}
+${para(`Dear ${name} Admissions Team,`)}
+${para(`Thank you for getting back to us. To present ${name} at its best to the students researching the 2026 cycle, could you share any of the following when convenient:`)}
+${orderedList(items.map(escapeHtml))}
+${para('Even two or three of these make a noticeable difference to how students engage with your page. Send whatever is easy, and we will handle the formatting.')}
+${signatureBlock()}`;
+
+  return finalize(subject, emailShell(inner, subject), text);
+}
+
+// ─── partnership_pitch_v1: the proof + tiers, for warm colleges only ──────────
+
+function subjectForPitch(variant: SubjectVariant, name: string): string {
+  switch (variant) {
+    case 2:
+      return 'Partnering with Neram for the 2026 admission window';
+    case 3:
+      return `${name}: priority reach and direct student enquiries`;
+    case 1:
+    default:
+      return `The reach behind ${name}'s page, and how to grow it`;
+  }
+}
+
+function renderPartnershipPitchV1(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
+  const subject = subjectForPitch(subjectVariant, college.name);
+  const name = escapeHtml(college.name);
+  const stateName = college.state || 'your state';
+  const benefits = partnershipBenefits(stateName);
+  const topQText = PROOF.topQueries.map((q) => `"${q}"`).join(' and ');
+  const topQHtml = PROOF.topQueries.map((q) => `"${escapeHtml(q)}"`).join(' and ');
+
+  const text = [
+    `Dear ${college.name} Admissions Team,`,
+    '',
+    'Thank you for engaging with your page on Neram College Hub. Here is a snapshot of the reach behind it.',
+    '',
+    `- ${PROOF.impressions} Google search impressions in the last 3 months`,
+    `- ${PROOF.clicks} student visits from Google`,
+    `- First page of Google, average position ${PROOF.avgPosition}, and growing month over month`,
+    '',
+    `Among the top searches on our platform are ${topQText}, students who are actively deciding where to apply.`,
+    '',
+    'Every college has a free listing. Colleges that want stronger reach during the admission window can opt into a partnership, which adds:',
+    '',
+    ...benefits.map((b) => `- ${b}`),
+    '',
+    'The #AskSeniors slot is the one thing a pure search listing cannot offer.',
+    '',
+    'If this is useful, I would be glad to walk your team through it on a short call. What time suits you this week?',
+    '',
+    'Warm regards,',
+    FOUNDER_NAME,
+    FOUNDER_TITLE,
+    FOUNDER_CREDENTIAL,
+    `${INFO_EMAIL} | neramclasses.com/colleges`,
+  ].join('\n');
+
+  const inner = `${headerBlock()}
+${para(`Dear ${name} Admissions Team,`)}
+${para('Thank you for engaging with your page on Neram College Hub. Here is a snapshot of the reach behind it.')}
+${statBand()}
+${para(`We rank on the first page of Google (average position ${PROOF.avgPosition}) for these searches, and traffic is growing month over month. Among the top searches on our platform are ${topQHtml}, students who are actively deciding where to apply.`)}
+${para('Every college has a free listing. Colleges that want stronger reach during the admission window can opt into a partnership, which adds:')}
+${bulletList(benefits.map(escapeHtml))}
+${para('The #AskSeniors slot is the one thing a pure search listing cannot offer.')}
+${para('If this is useful, I would be glad to walk your team through it on a short call. What time suits you this week?')}
+${signatureBlock()}`;
+
+  return finalize(subject, emailShell(inner, subject), text);
+}
+
+// ─── payment_details_v1: only after a verbal yes on the call ──────────────────
+
+function subjectForPayment(variant: SubjectVariant, name: string): string {
+  switch (variant) {
+    case 2:
+      return `Confirming your Neram partnership for ${name}`;
+    case 3:
+      return `${name}: invoice and account details`;
+    case 1:
+    default:
+      return `${name} and Neram: partnership details and next step`;
+  }
+}
+
+function renderPaymentDetailsV1(
+  college: CollegeInput,
+  subjectVariant: SubjectVariant,
+  opts: RenderOpts,
+): RenderResult {
+  const subject = subjectForPayment(subjectVariant, college.name);
+  const name = escapeHtml(college.name);
+  const tier = opts.dealTier || '(tier to be confirmed)';
+  const amount = formatInr(opts.dealAmountInr);
+  const term = opts.dealTerm || 'the agreed term';
+  const bankVal = (v: string): string => (v && v.trim() ? v.trim() : '(to be added)');
+  const bankRows: Array<[string, string]> = [
+    ['Account name', BANK.accountName],
+    ['Account number', BANK.accountNumber],
+    ['IFSC', BANK.ifsc],
+    ['Bank', BANK.bankName],
+    ['UPI', BANK.upi],
+  ];
+
+  const text = [
+    `Dear ${college.name} Admissions Team,`,
+    '',
+    `Thank you for the call and for choosing to partner with Neram Classes. As agreed, here are the details to confirm the ${tier} partnership for ${term}.`,
+    '',
+    'This is a service fee for your enhanced profile, priority reach, and opt-in student enquiries. We will raise a formal invoice against this payment. It is a commercial service, not a donation.',
+    '',
+    `Amount: ${amount}`,
+    `Tier: ${tier}`,
+    `Term: ${term}`,
+    '',
+    'Account details for the transfer:',
+    ...bankRows.map(([k, v]) => `${k}: ${bankVal(v)}`),
+    '',
+    'Once you initiate the transfer, reply with the reference number and your GST details, and we will send the invoice and begin upgrading your page the same day.',
+    '',
+    'Warm regards,',
+    FOUNDER_NAME,
+    FOUNDER_TITLE,
+    FOUNDER_CREDENTIAL,
+    `${INFO_EMAIL} | neramclasses.com/colleges`,
+  ].join('\n');
+
+  const dealHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;background:${C.cardBg};border:1px solid ${C.cardBorder};border-radius:10px">
+<tr><td style="padding:16px 18px;font-size:15px;line-height:1.75;color:${C.body}">
+<strong style="color:${C.ink}">Amount:</strong> ${escapeHtml(amount)}<br>
+<strong style="color:${C.ink}">Tier:</strong> ${escapeHtml(tier)}<br>
+<strong style="color:${C.ink}">Term:</strong> ${escapeHtml(term)}
+</td></tr></table>`;
+
+  const bankHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#ffffff;border:1px solid ${C.cardBorder};border-radius:10px">
+<tr><td style="padding:16px 18px;font-size:14px;line-height:1.85;color:${C.body}">
+${bankRows.map(([k, v]) => `<strong style="color:${C.ink}">${escapeHtml(k)}:</strong> ${escapeHtml(bankVal(v))}`).join('<br>')}
+</td></tr></table>`;
+
+  const inner = `${headerBlock()}
+${para(`Dear ${name} Admissions Team,`)}
+${para(`Thank you for the call and for choosing to partner with Neram Classes. As agreed, here are the details to confirm the <strong style="color:${C.ink}">${escapeHtml(tier)}</strong> partnership for ${escapeHtml(term)}.`)}
+${para('This is a service fee for your enhanced profile, priority reach, and opt-in student enquiries. We will raise a formal invoice against this payment. It is a commercial service, not a donation.')}
+${dealHtml}
+${para('Account details for the transfer:')}
+${bankHtml}
+${para('Once you initiate the transfer, reply with the reference number and your GST details, and we will send the invoice and begin upgrading your page the same day.')}
+${signatureBlock()}`;
+
+  return finalize(subject, emailShell(inner, subject), text);
+}
+
+// ─── onboarding_v1: partnership live ──────────────────────────────────────────
+
+function subjectForOnboarding(variant: SubjectVariant, name: string): string {
+  switch (variant) {
+    case 2:
+      return `Welcome aboard, ${name}'s partner page is live`;
+    case 3:
+      return `${name}: your page is live and your login is ready`;
+    case 1:
+    default:
+      return `${name}'s upgraded page is live on Neram College Hub`;
+  }
+}
+
+function renderOnboardingV1(
+  college: CollegeInput,
+  subjectVariant: SubjectVariant,
+  opts: RenderOpts,
+): RenderResult {
+  const subject = subjectForOnboarding(subjectVariant, college.name);
+  const name = escapeHtml(college.name);
+  const url = getCollegePageUrl(college);
+  const safeUrl = escapeHtml(url);
+  const loginEmail = opts.loginEmail && opts.loginEmail.trim() ? opts.loginEmail.trim() : 'your registered email';
+  const stateName = college.state || 'your region';
+  const doneItems = [
+    `Priority placement in ${stateName} results`,
+    'Direct student enquiries routed to your admissions inbox',
+    'Your brochure and photos featured on the page',
+  ];
+
+  const text = [
+    `Dear ${college.name} Admissions Team,`,
+    '',
+    `Your partnership is now live. ${college.name}'s page on Neram College Hub has been upgraded, and it is already visible to students researching the 2026 cycle.`,
+    '',
+    url,
+    '',
+    'What is done:',
+    ...doneItems.map((d) => `- ${d}`),
+    '',
+    `Your dashboard login: sign in at ${DASHBOARD_URL} using ${loginEmail}. From there you can edit details, see how many students viewed your page, and respond to enquiries.`,
+    '',
+    'If anything needs a change, just reply and we will take care of it.',
+    '',
+    'Warm regards,',
+    FOUNDER_NAME,
+    FOUNDER_TITLE,
+    FOUNDER_CREDENTIAL,
+    `${INFO_EMAIL} | neramclasses.com/colleges`,
+  ].join('\n');
+
+  const inner = `${headerBlock()}
+${para(`Dear ${name} Admissions Team,`)}
+${para(`Your partnership is now live. ${name}'s page on Neram College Hub has been upgraded, and it is already visible to students researching the 2026 cycle.`)}
+${ctaButton(safeUrl, 'View your live page &rarr;')}
+${para(`<strong style="color:${C.ink}">What is done</strong>`)}
+${bulletList(doneItems.map(escapeHtml))}
+${para(`<strong style="color:${C.ink}">Your dashboard login</strong><br>Sign in at <a href="${escapeHtml(DASHBOARD_URL)}" target="_blank" style="color:${C.link};text-decoration:none">${escapeHtml(DASHBOARD_URL)}</a> using <strong style="color:${C.ink}">${escapeHtml(loginEmail)}</strong>. From there you can edit details, see how many students viewed your page, and respond to enquiries.`)}
+${para('If anything needs a change, just reply and we will take care of it.')}
+${signatureBlock()}`;
+
+  return finalize(subject, emailShell(inner, subject), text);
+}
+
+// ─── first_touch_v1: legacy template, preserved verbatim for old log rows ─────
+
+function subjectForV1(variant: SubjectVariant, name: string): string {
+  switch (variant) {
+    case 2:
+      return `We showcased ${name} for NATA 2026 aspirants, a few minutes of your time?`;
+    case 3:
+      return `${name} profile on neramclasses.com, help us keep it accurate`;
+    case 1:
+    default:
+      return `${name} is featured on Neram College Hub, quick review request`;
+  }
+}
+
+function renderFirstTouchV1(college: CollegeInput, subjectVariant: SubjectVariant, senderName: string): RenderResult {
   const collegePageUrl = getCollegePageUrl(college);
   const bullets = buildHighlightsBullets(college);
   const completenessLine = buildCompletenessLine(college.data_completeness);
-  const subject = subjectFor(subjectVariant, college.name);
+  const subject = subjectForV1(subjectVariant, college.name);
 
   const bulletsTextLines = bullets.map((b) => `- ${b}`).join('\n');
   const bulletsHtmlItems = bullets.map((b) => `<li style="margin:4px 0">${escapeHtml(b)}</li>`).join('\n');
@@ -219,14 +721,29 @@ Neram Classes<br>
 </body>
 </html>`;
 
-  ensureNoUnresolvedTokens(subject, 'subject');
-  ensureNoUnresolvedTokens(html, 'html');
-  ensureNoUnresolvedTokens(text, 'text');
-  ensureNoEmDashes(subject, 'subject');
-  ensureNoEmDashes(html, 'html');
-  ensureNoEmDashes(text, 'text');
+  return finalize(subject, html, text);
+}
 
-  return { subject, html, text };
+// ─── Dispatch ─────────────────────────────────────────────────────────────────
+
+export function renderOutreachEmail(opts: RenderOpts): RenderResult {
+  const subjectVariant: SubjectVariant = opts.subjectVariant ?? 1;
+  switch (opts.variant) {
+    case 'first_touch_v1':
+      return renderFirstTouchV1(opts.college, subjectVariant, opts.senderName);
+    case 'first_touch_v2':
+      return renderFirstTouchV2(opts.college, subjectVariant);
+    case 'content_request_v1':
+      return renderContentRequestV1(opts.college, subjectVariant);
+    case 'partnership_pitch_v1':
+      return renderPartnershipPitchV1(opts.college, subjectVariant);
+    case 'payment_details_v1':
+      return renderPaymentDetailsV1(opts.college, subjectVariant, opts);
+    case 'onboarding_v1':
+      return renderOnboardingV1(opts.college, subjectVariant, opts);
+    default:
+      throw new Error(`Outreach template variant not implemented yet: ${opts.variant}`);
+  }
 }
 
 export function getRecipientEmail(

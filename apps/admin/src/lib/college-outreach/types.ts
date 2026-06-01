@@ -5,8 +5,12 @@ export type ContactStatus =
   | 'replied'
   | 'engaged'
   | 'claimed'
+  | 'partner'
   | 'bounced'
   | 'opted_out';
+
+// Public/emailable lifecycle gate. Added in 20260601 college_outreach_v2 migration.
+export type CollegeStatus = 'active' | 'duplicate' | 'defunct' | 'unverified';
 
 // Minimum set of college columns we need for outreach.
 // Intentionally NOT imported from @neram/marketing to keep admin decoupled.
@@ -29,9 +33,15 @@ export interface CollegeOutreachRow {
   data_completeness: number | null;
   email: string | null;
   admissions_email: string | null;
+  phone: string | null;
+  website: string | null;
   contact_status: ContactStatus | null;
   last_outreach_at: string | null;
   outreach_count: number | null;
   claimed: boolean | null;
   verified: boolean | null;
+  // Data-hygiene columns (20260601 college_outreach_v2 migration)
+  status: CollegeStatus | null;
+  email_source: string | null;
+  duplicate_of: string | null;
 }

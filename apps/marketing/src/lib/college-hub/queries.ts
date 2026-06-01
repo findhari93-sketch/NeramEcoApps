@@ -53,6 +53,9 @@ export async function getColleges(
     .from('colleges')
     .select(LISTING_SELECT, { count: 'exact' });
 
+  // Public site shows only active colleges (hide duplicate/defunct/unverified)
+  query = query.eq('status', 'active');
+
   if (state) query = query.eq('state_slug', state);
   if (type) query = query.eq('type', type);
   if (counselingSystem) query = query.contains('counseling_systems', [counselingSystem]);
@@ -89,6 +92,7 @@ export const getStateColleges = cache(async (stateSlug: string): Promise<College
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .eq('state_slug', stateSlug)
     .order('arch_index_score', { ascending: false, nullsFirst: false });
   if (error) throw error;
@@ -101,6 +105,7 @@ export const getTNEAColleges = cache(async (): Promise<CollegeListItem[]> => {
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .contains('counseling_systems', ['TNEA'])
     .order('nirf_rank_architecture', { ascending: true, nullsFirst: false });
   if (error) throw error;
@@ -113,6 +118,7 @@ export const getJoSAAColleges = cache(async (): Promise<CollegeListItem[]> => {
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .contains('counseling_systems', ['JoSAA'])
     .order('nirf_rank', { ascending: true, nullsFirst: false });
   if (error) throw error;
@@ -126,6 +132,7 @@ export const getCollegesByCounseling = cache(
     const { data } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
+      .eq('status', 'active')
       .contains('counseling_systems', [systemKey])
       .order('arch_index_score', { ascending: false, nullsFirst: false });
     return (data ?? []) as CollegeListItem[];
@@ -139,6 +146,7 @@ export const getCollegesByCity = cache(
     const { data } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
+      .eq('status', 'active')
       .eq('city_slug', citySlug)
       .order('arch_index_score', { ascending: false, nullsFirst: false });
     return (data ?? []) as CollegeListItem[];
@@ -152,6 +160,7 @@ export const getCollegesByType = cache(
     const { data } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
+      .eq('status', 'active')
       .ilike('type', type)
       .order('arch_index_score', { ascending: false, nullsFirst: false });
     return (data ?? []) as CollegeListItem[];
@@ -162,7 +171,7 @@ export const getCollegesByType = cache(
 export const getCollegesByAccreditation = cache(
   async (filter: string): Promise<CollegeListItem[]> => {
     const supabase = createAdminClientISR(3600);
-    let query = supabase.from('colleges').select(LISTING_SELECT);
+    let query = supabase.from('colleges').select(LISTING_SELECT).eq('status', 'active');
 
     if (filter === 'coa-approved') {
       query = query.eq('coa_approved', true);
@@ -185,6 +194,7 @@ export const getCollegeBySlug = cache(async (slug: string): Promise<CollegeDetai
   const { data: college, error: collegeError } = await supabase
     .from('colleges')
     .select('*')
+    .eq('status', 'active')
     .eq('slug', slug)
     .single();
 
@@ -222,6 +232,7 @@ export async function getAllCollegeSlugs(): Promise<
   const { data, error } = await supabase
     .from('colleges')
     .select('state_slug, slug')
+    .eq('status', 'active')
     .order('state_slug');
   if (error) throw error;
   return (data ?? []).map((r) => ({ state: r.state_slug ?? 'india', slug: r.slug }));
@@ -234,6 +245,7 @@ export async function getActiveStates(): Promise<
   const { data, error } = await supabase
     .from('colleges')
     .select('state_slug, state')
+    .eq('status', 'active')
     .not('state_slug', 'is', null);
   if (error) throw error;
 
@@ -352,6 +364,7 @@ export const getNIRFRankedColleges = cache(async (): Promise<CollegeListItem[]> 
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .not('nirf_rank_architecture', 'is', null)
     .order('nirf_rank_architecture', { ascending: true, nullsFirst: false })
     .limit(100);
@@ -407,6 +420,7 @@ export const getArchIndexRankedColleges = cache(async (): Promise<CollegeListIte
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .not('arch_index_score', 'is', null)
     .order('arch_index_score', { ascending: false, nullsFirst: false })
     .limit(100);
@@ -434,6 +448,7 @@ export const getCollegesByFeeRange = cache(async (rangeKey: FeeRangeKey): Promis
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .gte('annual_fee_approx', range.min)
     .lte('annual_fee_approx', range.max)
     .order('arch_index_score', { ascending: false, nullsFirst: false });
@@ -496,6 +511,7 @@ export const getFeaturedColleges = cache(async (): Promise<CollegeListItem[]> =>
   const { data, error } = await supabase
     .from('colleges')
     .select(LISTING_SELECT)
+    .eq('status', 'active')
     .order('name', { ascending: true })
     .limit(8);
   if (error) return [];
@@ -510,6 +526,7 @@ export const getSimilarColleges = cache(
     const { data, error } = await supabase
       .from('colleges')
       .select(LISTING_SELECT)
+      .eq('status', 'active')
       .eq('state_slug', college.state_slug ?? '')
       .neq('id', college.id)
       .limit(4)
