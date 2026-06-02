@@ -114,6 +114,7 @@ export default function CollegeOutreachPage() {
   const [subjectVariant, setSubjectVariant] = useState<1 | 2 | 3>(1);
   const [subjectOverride, setSubjectOverride] = useState('');
   const [includeBcc, setIncludeBcc] = useState(true);
+  const [plainTextOnly, setPlainTextOnly] = useState(false);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [sending, setSending] = useState(false);
@@ -304,6 +305,7 @@ export default function CollegeOutreachPage() {
     setSubjectVariant(1);
     setSubjectOverride('');
     setIncludeBcc(true);
+    setPlainTextOnly(false);
     setPreview(null);
     setDuplicateHint(null);
     setError(null);
@@ -361,6 +363,7 @@ export default function CollegeOutreachPage() {
           override_to_email: recipient,
           override_subject: subjectOverride || undefined,
           include_bcc: includeBcc,
+          plain_text_only: plainTextOnly,
           force,
           staff_name: staffName,
           staff_email: staffEmail,
@@ -702,6 +705,15 @@ export default function CollegeOutreachPage() {
               control={<Checkbox checked={includeBcc} onChange={(e) => setIncludeBcc(e.target.checked)} />}
               label="BCC info@neramclasses.com (archive in our inbox)"
             />
+            <Box>
+              <FormControlLabel
+                control={<Checkbox checked={plainTextOnly} onChange={(e) => setPlainTextOnly(e.target.checked)} />}
+                label="Send as plain text only (A/B test for Gmail Primary tab)"
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5 }}>
+                Transmits only the text version, no HTML. Can land in Primary more often but drops the designed layout. The preview below still shows the HTML version.
+              </Typography>
+            </Box>
             <Divider />
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>

@@ -10,6 +10,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import {
   renderOutreachEmail,
   getRecipientEmail,
+  getUnsubscribeUrl,
   type SubjectVariant,
   type OutreachTemplateVariant,
 } from '@/lib/college-outreach/templates';
@@ -42,6 +43,7 @@ interface RequestBody {
   override_subject?: string;
   force?: boolean;
   include_bcc?: boolean;
+  plain_text_only?: boolean; // A/B: transmit text-only (no HTML) to test Gmail Primary placement
   staff_name?: string;
   staff_email?: string;
   // Later-stage template context:
@@ -71,13 +73,14 @@ export async function POST(req: NextRequest) {
   const subjectVariant = (body.subject_variant ?? 1) as SubjectVariant;
   const previewOnly = body.preview_only === true;
   const includeBcc = body.include_bcc !== false;
+  const plainTextOnly = body.plain_text_only === true;
   const force = body.force === true;
 
   const supabase = getSupabaseAdminClient();
   const { data: college, error: collegeError } = await supabase
     .from('colleges')
     .select(
-      'id, name, slug, state, state_slug, city, established_year, naac_grade, total_barch_seats, annual_fee_approx, affiliated_university, highlights, data_completeness, email, admissions_email, contact_status, last_outreach_at, outreach_count',
+      'id, name, slug, state, state_slug, city, established_year, naac_grade, total_barch_seats, annual_fee_approx, affiliated_university, highlights, data_completeness, email, admissions_email, contact_status, last_outreach_at, outreach_count, unsubscribe_token',
     )
     .eq('id', body.college_id)
     .single();
@@ -94,6 +97,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const unsubscribeUrl = getUnsubscribeUrl((college as any).unsubscribe_token);
+
   const rendered = renderOutreachEmail({
     variant,
     subjectVariant,
@@ -103,6 +108,7 @@ export async function POST(req: NextRequest) {
     dealAmountInr: body.deal_amount_inr,
     dealTerm: body.deal_term,
     loginEmail: body.login_email,
+    unsubscribeUrl,
   });
 
   const subject = body.override_subject?.trim() || rendered.subject;
@@ -151,13 +157,42 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Suppression hard-block: never email an address that has unsubscribed or
+  // hard-bounced. This is NOT overridable by `force` (honouring opt-outs is a
+  // legal + deliverability requirement, not a sequencing nicety).
+  const recipientLower = recipient.toLowerCase();
+  const { data: suppressed } = await supabase
+    .from('email_suppression_list')
+    .select('email, reason, created_at')
+    .eq('email', recipientLower)
+    .maybeSingle();
+  if (suppressed) {
+    return NextResponse.json(
+      {
+        error: `${recipient} has opted out (${(suppressed as any).reason}) and cannot be emailed. Remove it from the suppression list first if this is intentional.`,
+        suppressed: true,
+      },
+      { status: 403 },
+    );
+  }
+
+  // One-click unsubscribe headers (Gmail/Yahoo bulk-sender requirement). The
+  // https URL is the same token link shown in the footer; the mailto is a fallback.
+  const unsubscribeHeaders = {
+    'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${DEFAULT_BCC}?subject=unsubscribe>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  };
+
   const sendResult = await sendOutreachEmail({
     to: recipient,
     bcc,
     subject,
-    html: rendered.html,
+    // Plain-text-only A/B: omit the HTML part entirely so Gmail sees a text email
+    // (more likely to land in Primary). The text body already carries raw URLs.
+    html: plainTextOnly ? undefined : rendered.html,
     text: rendered.text,
     attachments: body.attachments,
+    headers: unsubscribeHeaders,
   });
 
   const { data: logRow, error: logErr } = await supabase

@@ -41,6 +41,10 @@ interface RenderOpts {
   dealAmountInr?: number; // e.g. 75000
   dealTerm?: string; // e.g. "the 2026 admission cycle"
   loginEmail?: string; // onboarding dashboard login
+  // One-click unsubscribe URL for this college (built from its unsubscribe_token).
+  // Rendered in the compliance footer of every v2-era template; the send route
+  // also mirrors it into the List-Unsubscribe header.
+  unsubscribeUrl?: string;
 }
 
 // ─── Single source of truth for the numbers we quote ──────────────────────────
@@ -65,6 +69,12 @@ const DASHBOARD_URL = `${SITE_URL}/college-dashboard`;
 const SENDER_NAME = 'Ar. Tamilselvan';
 const SENDER_TITLE = 'Senior Strategic Manager, Neram Classes';
 const SENDER_EMAIL = 'TamilSelvan@neramclasses.com';
+
+// Physical postal address shown in the compliance footer of every outreach email.
+// A real mailing address is required for cold bulk email (CAN-SPAM and a big
+// signal for Gmail/Outlook spam scoring).
+const SENDER_POSTAL_ADDRESS =
+  'Neram Classes, Bharathi Park, 10/38, 5th Cross Rd, Saibaba Colony, Coimbatore, Tamil Nadu 641011';
 
 // What a partnership adds on top of the free listing (used in the pitch email).
 // `state` is the college's state name so the regional-guide benefit reads naturally.
@@ -114,6 +124,14 @@ const FONT_STACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica
 export function getCollegePageUrl(college: Pick<CollegeOutreachRow, 'state_slug' | 'slug'>): string {
   const state = college.state_slug ?? 'india';
   return `${SITE_URL}/en/colleges/${state}/${college.slug}`;
+}
+
+// Public one-click unsubscribe link for a college, keyed by its unsubscribe_token.
+// Resolved by the marketing app at neramclasses.com/unsubscribe. Falls back to the
+// tokenless page (manual reply path) when a token is somehow missing.
+export function getUnsubscribeUrl(token: string | null | undefined): string {
+  const base = `${SITE_URL}/unsubscribe`;
+  return token ? `${base}?c=${encodeURIComponent(token)}` : base;
 }
 
 function formatFeeInr(value: number | null | undefined): string | null {
@@ -278,6 +296,29 @@ ${escapeHtml(SENDER_TITLE)}<br>
 </p>`;
 }
 
+// CAN-SPAM / Gmail-bulk-sender compliance footer: why-received line (opt-in to
+// claim the page by replying), a one-click unsubscribe link, and a postal
+// address. Appended to every v2-era template after the signature.
+function complianceFooter(unsubscribeUrl: string, collegeName: string): string {
+  const name = escapeHtml(collegeName);
+  const unsub = escapeHtml(unsubscribeUrl);
+  return `<div style="height:1px;line-height:1px;font-size:0;background:${C.hair};margin:22px 0 14px">&nbsp;</div>
+<p style="margin:0;font-size:11.5px;line-height:1.65;color:${C.muted}">You are receiving this because ${name} is listed in our free public B.Arch college directory at <a href="${COLLEGE_HUB_URL}" target="_blank" style="color:${C.muted};text-decoration:underline">neramclasses.com</a>. To claim or manage your page, just reply to this email.</p>
+<p style="margin:9px 0 0;font-size:11.5px;line-height:1.65;color:${C.muted}">Prefer not to hear from us? <a href="${unsub}" target="_blank" style="color:${C.muted};text-decoration:underline">Unsubscribe here</a> and we will not email this address again.</p>
+<p style="margin:9px 0 0;font-size:11.5px;line-height:1.55;color:${C.muted}">${escapeHtml(SENDER_POSTAL_ADDRESS)}</p>`;
+}
+
+// Plain-text equivalent of the compliance footer.
+function complianceFooterText(unsubscribeUrl: string, collegeName: string): string[] {
+  return [
+    '',
+    '----',
+    `You are receiving this because ${collegeName} is listed in our free public B.Arch college directory at neramclasses.com. To claim or manage your page, just reply to this email.`,
+    `Prefer not to hear from us? Unsubscribe: ${unsubscribeUrl}`,
+    SENDER_POSTAL_ADDRESS,
+  ];
+}
+
 // ─── first_touch_v2: the beautiful founder letter (one ask + stat band) ───────
 
 function subjectForV2(variant: SubjectVariant, name: string): string {
@@ -285,63 +326,81 @@ function subjectForV2(variant: SubjectVariant, name: string): string {
     case 2:
       return `Students are researching ${name} on our platform, a quick check`;
     case 3:
-      return `We built a free profile for ${name}, please take a look`;
+      return `We built a profile for ${name}, please take a look`;
     case 1:
     default:
-      return `${name} now has a free page on Neram College Hub, is the info correct?`;
+      return `${name} now has a page on Neram College Hub, is the info correct?`;
   }
 }
 
-function renderFirstTouchV2(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
+// Deliberately plain and personal: no logo lockup, stat band, or button, so Gmail
+// reads this cold first-touch as a 1:1 message and files it under Primary rather
+// than Promotions. The designed blocks (headerBlock/statBand/ctaButton) are kept
+// for the warmer follow-up templates, where the recipient already expects us.
+function renderFirstTouchV2(
+  college: CollegeInput,
+  subjectVariant: SubjectVariant,
+  unsubscribeUrl: string,
+): RenderResult {
   const collegeName = college.name;
   const url = getCollegePageUrl(college);
   const subject = subjectForV2(subjectVariant, collegeName);
 
   const name = escapeHtml(collegeName);
   const safeUrl = escapeHtml(url);
-  const topQText = PROOF.topQueries.map((q) => `"${q}"`).join(' and ');
-  const topQHtml = PROOF.topQueries.map((q) => `"${escapeHtml(q)}"`).join(' and ');
+  const safeUnsub = escapeHtml(unsubscribeUrl);
+  const topQ = PROOF.topQueries[0];
 
   const text = [
-    `Dear Admissions Team,`,
+    'Dear Admissions Team,',
     '',
-    `neramClasses.com is India's first architecture college hub, a free platform used by ${PROOF.activeStudents} B.Arch aspirants across India to research and compare colleges before they apply. ${collegeName} is one of the colleges they can find there, and we have already built a dedicated page for you:`,
+    `We run neramClasses.com, India's first architecture college hub, where B.Arch aspirants research and compare colleges before they apply. ${collegeName} now has a page there, and I wanted to check the details with you.`,
     '',
-    url,
+    `Your page: ${url}`,
     '',
-    'To give you a sense of who sees it, here is our reach over the last three months:',
+    `Over the last three months that page reached ${PROOF.impressions} Google search impressions and ${PROOF.clicks} student visits, ranking on the first page of Google (average position ${PROOF.avgPosition}) for searches like "${topQ}".`,
     '',
-    `- ${PROOF.impressions} Google search impressions`,
-    `- ${PROOF.clicks} student visits from Google`,
-    `- First page of Google, average position ${PROOF.avgPosition}`,
-    '',
-    `The students driving this are searching for things like ${topQText}, in other words, people who are actively deciding where to apply for the 2026 cycle.`,
-    '',
-    `We built the page from publicly available information, so a few details may be approximate. Before we feature ${collegeName} more prominently, could you take a quick look and tell us one thing: is the basic information accurate?`,
-    '',
-    'That is the only ask in this email. The page is free, it carries a permanent backlink to your official website, and there is nothing for you to set up.',
+    'We built it from publicly available information, so a few details may be approximate. Could you take a quick look and let me know one thing: is the basic information accurate? That is the only ask in this email.',
     '',
     'If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.',
     '',
     'Warm regards,',
     SENDER_NAME,
     SENDER_TITLE,
-    `${SENDER_EMAIL} | neramclasses.com/colleges`,
+    SENDER_EMAIL,
+    '',
+    `You are receiving this because ${collegeName} is listed in our public architecture college directory at neramclasses.com.`,
+    `Unsubscribe: ${unsubscribeUrl}`,
+    SENDER_POSTAL_ADDRESS,
   ].join('\n');
 
-  const inner = `${headerBlock()}
-${para('Dear Admissions Team,')}
-${para(`<a href="${COLLEGE_HUB_URL}" target="_blank" style="color:${C.link};font-weight:600;text-decoration:none">neramClasses.com</a> is India's first architecture college hub, a free platform used by ${PROOF.activeStudents} B.Arch aspirants across India to research and compare colleges before they apply. ${name} is one of the colleges they can find there, and we have already built a dedicated page for you.`)}
-${ctaButton(safeUrl, 'Review your college page &rarr;')}
-${para('To give you a sense of who sees it, here is our reach over the last three months:')}
-${statBand()}
-${para(`The students driving this are searching for things like ${topQHtml}, in other words, people who are actively deciding where to apply for the 2026 cycle.`)}
-${para(`We built the page from publicly available information, so a few details may be approximate. Before we feature ${name} more prominently, could you take a quick look and tell us one thing: <strong style="color:${C.ink}">is the basic information accurate?</strong>`)}
-${para('That is the only ask in this email. The page is free, it carries a permanent backlink to your official website, and there is nothing for you to set up.')}
-${para('If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.')}
-${signatureBlock()}`;
+  const link = (href: string, label: string): string =>
+    `<a href="${href}" target="_blank" style="color:${C.link};text-decoration:underline">${label}</a>`;
+  const p = (innerHtml: string): string => `<p style="margin:0 0 14px">${innerHtml}</p>`;
 
-  const html = emailShell(inner, subject);
+  const body = `${p('Dear Admissions Team,')}
+${p(`We run ${link(COLLEGE_HUB_URL, 'neramClasses.com')}, India's first architecture college hub, where B.Arch aspirants research and compare colleges before they apply. ${name} now has a page there, and I wanted to check the details with you.`)}
+${p(`Your page: ${link(safeUrl, safeUrl)}`)}
+${p(`Over the last three months that page reached ${PROOF.impressions} Google search impressions and ${PROOF.clicks} student visits, ranking on the first page of Google (average position ${PROOF.avgPosition}) for searches like "${escapeHtml(topQ)}".`)}
+${p('We built it from publicly available information, so a few details may be approximate. Could you take a quick look and let me know one thing: is the basic information accurate? That is the only ask in this email.')}
+${p('If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.')}
+${p(`Warm regards,<br>${escapeHtml(SENDER_NAME)}<br>${escapeHtml(SENDER_TITLE)}<br>${link('mailto:' + SENDER_EMAIL, SENDER_EMAIL)}`)}
+<p style="margin:22px 0 0;font-size:11.5px;line-height:1.5;color:#999999">You are receiving this because ${name} is listed in our public architecture college directory at neramclasses.com. To stop receiving these emails, ${link(safeUnsub, 'unsubscribe')}.<br>${escapeHtml(SENDER_POSTAL_ADDRESS)}</p>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#ffffff">
+<div style="max-width:560px;margin:0 auto;padding:18px 20px;font-family:${FONT_STACK};font-size:15px;line-height:1.6;color:#1a1a1a">
+${body}
+</div>
+</body>
+</html>`;
+
   return finalize(subject, html, text);
 }
 
@@ -359,7 +418,11 @@ function subjectForContentRequest(variant: SubjectVariant, name: string): string
   }
 }
 
-function renderContentRequestV1(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
+function renderContentRequestV1(
+  college: CollegeInput,
+  subjectVariant: SubjectVariant,
+  unsubscribeUrl: string,
+): RenderResult {
   const subject = subjectForContentRequest(subjectVariant, college.name);
   const name = escapeHtml(college.name);
   const url = getCollegePageUrl(college);
@@ -390,6 +453,7 @@ function renderContentRequestV1(college: CollegeInput, subjectVariant: SubjectVa
     SENDER_NAME,
     SENDER_TITLE,
     `${SENDER_EMAIL} | neramclasses.com/colleges`,
+    ...complianceFooterText(unsubscribeUrl, college.name),
   ].join('\n');
 
   const inner = `${headerBlock()}
@@ -399,7 +463,8 @@ ${ctaButton(safeUrl, 'View your college page &rarr;')}
 ${para('To present it at its best to the students researching the 2026 cycle, could you share any of the following when convenient:')}
 ${orderedList(items.map(escapeHtml))}
 ${para('Even two or three of these make a noticeable difference to how students engage with your page. Send whatever is easy, and we will handle the formatting.')}
-${signatureBlock()}`;
+${signatureBlock()}
+${complianceFooter(unsubscribeUrl, college.name)}`;
 
   return finalize(subject, emailShell(inner, subject), text);
 }
@@ -418,7 +483,11 @@ function subjectForPitch(variant: SubjectVariant, name: string): string {
   }
 }
 
-function renderPartnershipPitchV1(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
+function renderPartnershipPitchV1(
+  college: CollegeInput,
+  subjectVariant: SubjectVariant,
+  unsubscribeUrl: string,
+): RenderResult {
   const subject = subjectForPitch(subjectVariant, college.name);
   const name = escapeHtml(college.name);
   const url = getCollegePageUrl(college);
@@ -453,6 +522,7 @@ function renderPartnershipPitchV1(college: CollegeInput, subjectVariant: Subject
     SENDER_NAME,
     SENDER_TITLE,
     `${SENDER_EMAIL} | neramclasses.com/colleges`,
+    ...complianceFooterText(unsubscribeUrl, college.name),
   ].join('\n');
 
   const inner = `${headerBlock()}
@@ -465,7 +535,8 @@ ${para('Every college has a free listing. Colleges that want stronger reach duri
 ${bulletList(benefits.map(escapeHtml))}
 ${para('The #AskSeniors slot is the one thing a pure search listing cannot offer.')}
 ${para('If this is useful, I would be glad to walk your team through it on a short call. What time suits you this week?')}
-${signatureBlock()}`;
+${signatureBlock()}
+${complianceFooter(unsubscribeUrl, college.name)}`;
 
   return finalize(subject, emailShell(inner, subject), text);
 }
@@ -488,6 +559,7 @@ function renderPaymentDetailsV1(
   college: CollegeInput,
   subjectVariant: SubjectVariant,
   opts: RenderOpts,
+  unsubscribeUrl: string,
 ): RenderResult {
   const subject = subjectForPayment(subjectVariant, college.name);
   const name = escapeHtml(college.name);
@@ -527,6 +599,7 @@ function renderPaymentDetailsV1(
     SENDER_NAME,
     SENDER_TITLE,
     `${SENDER_EMAIL} | neramclasses.com/colleges`,
+    ...complianceFooterText(unsubscribeUrl, college.name),
   ].join('\n');
 
   const dealHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;background:${C.cardBg};border:1px solid ${C.cardBorder};border-radius:10px">
@@ -551,7 +624,8 @@ ${bankHtml}
 ${para('Here is the page we will upgrade as soon as payment is confirmed:')}
 ${ctaButton(safeUrl, 'View your college page &rarr;')}
 ${para('Once you initiate the transfer, reply with the reference number and your GST details, and we will send the invoice and begin upgrading your page the same day.')}
-${signatureBlock()}`;
+${signatureBlock()}
+${complianceFooter(unsubscribeUrl, college.name)}`;
 
   return finalize(subject, emailShell(inner, subject), text);
 }
@@ -574,6 +648,7 @@ function renderOnboardingV1(
   college: CollegeInput,
   subjectVariant: SubjectVariant,
   opts: RenderOpts,
+  unsubscribeUrl: string,
 ): RenderResult {
   const subject = subjectForOnboarding(subjectVariant, college.name);
   const name = escapeHtml(college.name);
@@ -605,6 +680,7 @@ function renderOnboardingV1(
     SENDER_NAME,
     SENDER_TITLE,
     `${SENDER_EMAIL} | neramclasses.com/colleges`,
+    ...complianceFooterText(unsubscribeUrl, college.name),
   ].join('\n');
 
   const inner = `${headerBlock()}
@@ -615,7 +691,8 @@ ${para(`<strong style="color:${C.ink}">What is done</strong>`)}
 ${bulletList(doneItems.map(escapeHtml))}
 ${para(`<strong style="color:${C.ink}">Your dashboard login</strong><br>Sign in at <a href="${escapeHtml(DASHBOARD_URL)}" target="_blank" style="color:${C.link};text-decoration:none">${escapeHtml(DASHBOARD_URL)}</a> using <strong style="color:${C.ink}">${escapeHtml(loginEmail)}</strong>. From there you can edit details, see how many students viewed your page, and respond to enquiries.`)}
 ${para('If anything needs a change, just reply and we will take care of it.')}
-${signatureBlock()}`;
+${signatureBlock()}
+${complianceFooter(unsubscribeUrl, college.name)}`;
 
   return finalize(subject, emailShell(inner, subject), text);
 }
@@ -756,19 +833,22 @@ Neram Classes<br>
 
 export function renderOutreachEmail(opts: RenderOpts): RenderResult {
   const subjectVariant: SubjectVariant = opts.subjectVariant ?? 1;
+  // Falls back to the tokenless unsubscribe page if the caller did not pass a URL
+  // (e.g. an old code path); the send route always supplies the token-bearing URL.
+  const unsub = opts.unsubscribeUrl ?? getUnsubscribeUrl(null);
   switch (opts.variant) {
     case 'first_touch_v1':
       return renderFirstTouchV1(opts.college, subjectVariant, opts.senderName);
     case 'first_touch_v2':
-      return renderFirstTouchV2(opts.college, subjectVariant);
+      return renderFirstTouchV2(opts.college, subjectVariant, unsub);
     case 'content_request_v1':
-      return renderContentRequestV1(opts.college, subjectVariant);
+      return renderContentRequestV1(opts.college, subjectVariant, unsub);
     case 'partnership_pitch_v1':
-      return renderPartnershipPitchV1(opts.college, subjectVariant);
+      return renderPartnershipPitchV1(opts.college, subjectVariant, unsub);
     case 'payment_details_v1':
-      return renderPaymentDetailsV1(opts.college, subjectVariant, opts);
+      return renderPaymentDetailsV1(opts.college, subjectVariant, opts, unsub);
     case 'onboarding_v1':
-      return renderOnboardingV1(opts.college, subjectVariant, opts);
+      return renderOnboardingV1(opts.college, subjectVariant, opts, unsub);
     default:
       throw new Error(`Outreach template variant not implemented yet: ${opts.variant}`);
   }

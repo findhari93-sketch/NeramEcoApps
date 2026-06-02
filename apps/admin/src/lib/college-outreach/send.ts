@@ -21,11 +21,14 @@ export interface SendOutreachArgs {
   to: string;
   bcc?: string | null;
   subject: string;
-  html: string;
+  html?: string; // omit to send a text-only email (Primary-tab A/B test)
   text: string;
   from?: string;
   replyTo?: string;
   attachments?: OutreachAttachment[];
+  // Extra MIME headers, e.g. List-Unsubscribe / List-Unsubscribe-Post for
+  // one-click unsubscribe (required by Gmail/Yahoo bulk-sender rules).
+  headers?: Record<string, string>;
 }
 
 export interface SendOutreachResult {
@@ -55,6 +58,7 @@ export async function sendOutreachEmail(args: SendOutreachArgs): Promise<SendOut
       text: args.text,
       reply_to: args.replyTo,
       attachments,
+      headers: args.headers,
     });
     if (error) return { success: false, error: error.message };
     return { success: true, messageId: data?.id };
