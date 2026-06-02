@@ -57,11 +57,14 @@ export const PROOF = {
 };
 
 const SITE_URL = 'https://neramclasses.com';
+const COLLEGE_HUB_URL = `${SITE_URL}/colleges`; // the public College Hub landing
 const DASHBOARD_URL = `${SITE_URL}/college-dashboard`;
-const FOUNDER_NAME = 'Haribabu Manoharan';
-const FOUNDER_TITLE = 'Founder, Neram Classes';
-const FOUNDER_CREDENTIAL = 'B.Arch, NIT Tiruchirappalli';
-const INFO_EMAIL = 'info@neramclasses.com';
+// Sender identity shown in the signature of every v2-era template. `info@` stays
+// the generic inbox (used as the BCC archive in the send route); the signature
+// shows the direct, professionally-named address.
+const SENDER_NAME = 'Ar. Tamilselvan';
+const SENDER_TITLE = 'Senior Strategic Manager, Neram Classes';
+const SENDER_EMAIL = 'TamilSelvan@neramclasses.com';
 
 // What a partnership adds on top of the free listing (used in the pitch email).
 // `state` is the college's state name so the regional-guide benefit reads naturally.
@@ -196,9 +199,24 @@ ${innerHtml}
 </html>`;
 }
 
+// Brand wordmark lockup, recreated from the marketing site header in email-safe
+// HTML (tables + bgcolor, no images) so it renders even when image loading is
+// blocked. "neram" bold + "Classes" light, with the "Supported by Microsoft"
+// badge. The whole mark links to the College Hub.
 function headerBlock(): string {
-  return `<div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:${C.ink};text-transform:uppercase">Neram Classes</div>
-<div style="font-size:12px;color:${C.muted};margin-top:3px">College Hub</div>
+  const msSquares = `<table role="presentation" cellpadding="0" cellspacing="1" border="0" style="border-collapse:separate"><tr>
+<td width="5" height="5" bgcolor="#F25022" style="width:5px;height:5px;font-size:0;line-height:0">&nbsp;</td>
+<td width="5" height="5" bgcolor="#7FBA00" style="width:5px;height:5px;font-size:0;line-height:0">&nbsp;</td>
+</tr><tr>
+<td width="5" height="5" bgcolor="#00A4EF" style="width:5px;height:5px;font-size:0;line-height:0">&nbsp;</td>
+<td width="5" height="5" bgcolor="#FFB900" style="width:5px;height:5px;font-size:0;line-height:0">&nbsp;</td>
+</tr></table>`;
+  return `<a href="${COLLEGE_HUB_URL}" target="_blank" style="text-decoration:none;color:${C.ink}"><span style="font-family:${FONT_STACK};font-size:23px;line-height:1;color:${C.ink};font-weight:300"><span style="font-weight:700">neram</span>Classes</span></a>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:7px 0 0"><tr>
+<td valign="middle" style="font-family:${FONT_STACK};font-size:10px;font-style:italic;color:${C.muted};padding-right:5px">Supported by</td>
+<td valign="middle" style="padding-right:5px">${msSquares}</td>
+<td valign="middle" style="font-family:${FONT_STACK};font-size:11px;font-weight:700;color:${C.ink}">Microsoft</td>
+</tr></table>
 <div style="height:1px;line-height:1px;font-size:0;background:${C.hair};margin:18px 0 22px">&nbsp;</div>`;
 }
 
@@ -254,10 +272,9 @@ function signatureBlock(): string {
   return `<div style="height:1px;line-height:1px;font-size:0;background:${C.hair};margin:24px 0 18px">&nbsp;</div>
 <p style="margin:0;font-size:15px;line-height:1.6;color:${C.body}">Warm regards,</p>
 <p style="margin:8px 0 0;font-size:15px;line-height:1.55;color:${C.body}">
-<strong style="color:${C.ink};font-size:16px">${escapeHtml(FOUNDER_NAME)}</strong><br>
-${escapeHtml(FOUNDER_TITLE)}<br>
-<span style="color:${C.muted}">${escapeHtml(FOUNDER_CREDENTIAL)}</span><br>
-<a href="mailto:${INFO_EMAIL}" style="color:${C.link};text-decoration:none">${INFO_EMAIL}</a>&nbsp; | &nbsp;<a href="${SITE_URL}/colleges" target="_blank" style="color:${C.link};text-decoration:none">neramclasses.com/colleges</a>
+<strong style="color:${C.ink};font-size:16px">${escapeHtml(SENDER_NAME)}</strong><br>
+${escapeHtml(SENDER_TITLE)}<br>
+<a href="mailto:${SENDER_EMAIL}" style="color:${C.link};text-decoration:none">${SENDER_EMAIL}</a>&nbsp; | &nbsp;<a href="${SITE_URL}/colleges" target="_blank" style="color:${C.link};text-decoration:none">neramclasses.com/colleges</a>
 </p>`;
 }
 
@@ -286,11 +303,9 @@ function renderFirstTouchV2(college: CollegeInput, subjectVariant: SubjectVarian
   const topQHtml = PROOF.topQueries.map((q) => `"${escapeHtml(q)}"`).join(' and ');
 
   const text = [
-    `Dear ${collegeName} Admissions Team,`,
+    `Dear Admissions Team,`,
     '',
-    `I am ${FOUNDER_NAME}, founder of Neram Classes and a B.Arch graduate of NIT Trichy.`,
-    '',
-    `We run a free B.Arch college discovery platform used by ${PROOF.activeStudents} architecture aspirants across India to research and compare colleges before they apply. ${collegeName} is one of the colleges they can find there, and we have already built a dedicated page for you:`,
+    `neramClasses.com is India's first architecture college hub, a free platform used by ${PROOF.activeStudents} B.Arch aspirants across India to research and compare colleges before they apply. ${collegeName} is one of the colleges they can find there, and we have already built a dedicated page for you:`,
     '',
     url,
     '',
@@ -302,28 +317,26 @@ function renderFirstTouchV2(college: CollegeInput, subjectVariant: SubjectVarian
     '',
     `The students driving this are searching for things like ${topQText}, in other words, people who are actively deciding where to apply for the 2026 cycle.`,
     '',
-    `We built the page from publicly available information, so a few details may be approximate. Before we feature ${collegeName} more prominently, could you take a quick look and tell me one thing: is the basic information accurate?`,
+    `We built the page from publicly available information, so a few details may be approximate. Before we feature ${collegeName} more prominently, could you take a quick look and tell us one thing: is the basic information accurate?`,
     '',
     'That is the only ask in this email. The page is free, it carries a permanent backlink to your official website, and there is nothing for you to set up.',
     '',
     'If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.',
     '',
     'Warm regards,',
-    FOUNDER_NAME,
-    FOUNDER_TITLE,
-    FOUNDER_CREDENTIAL,
-    `${INFO_EMAIL} | neramclasses.com/colleges`,
+    SENDER_NAME,
+    SENDER_TITLE,
+    `${SENDER_EMAIL} | neramclasses.com/colleges`,
   ].join('\n');
 
   const inner = `${headerBlock()}
-${para(`Dear ${name} Admissions Team,`)}
-${para(`I am <strong style="color:${C.ink}">${escapeHtml(FOUNDER_NAME)}</strong>, founder of Neram Classes and a B.Arch graduate of NIT Trichy.`)}
-${para(`We run a free B.Arch college discovery platform used by ${PROOF.activeStudents} architecture aspirants across India to research and compare colleges before they apply. ${name} is one of the colleges they can find there, and we have already built a dedicated page for you.`)}
+${para('Dear Admissions Team,')}
+${para(`<a href="${COLLEGE_HUB_URL}" target="_blank" style="color:${C.link};font-weight:600;text-decoration:none">neramClasses.com</a> is India's first architecture college hub, a free platform used by ${PROOF.activeStudents} B.Arch aspirants across India to research and compare colleges before they apply. ${name} is one of the colleges they can find there, and we have already built a dedicated page for you.`)}
 ${ctaButton(safeUrl, 'Review your college page &rarr;')}
 ${para('To give you a sense of who sees it, here is our reach over the last three months:')}
 ${statBand()}
 ${para(`The students driving this are searching for things like ${topQHtml}, in other words, people who are actively deciding where to apply for the 2026 cycle.`)}
-${para(`We built the page from publicly available information, so a few details may be approximate. Before we feature ${name} more prominently, could you take a quick look and tell me one thing: <strong style="color:${C.ink}">is the basic information accurate?</strong>`)}
+${para(`We built the page from publicly available information, so a few details may be approximate. Before we feature ${name} more prominently, could you take a quick look and tell us one thing: <strong style="color:${C.ink}">is the basic information accurate?</strong>`)}
 ${para('That is the only ask in this email. The page is free, it carries a permanent backlink to your official website, and there is nothing for you to set up.')}
 ${para('If you would like to manage the page yourself, edit details, see how many students viewed it, and receive enquiries from interested students, just reply and we will set up a login for you.')}
 ${signatureBlock()}`;
@@ -349,6 +362,8 @@ function subjectForContentRequest(variant: SubjectVariant, name: string): string
 function renderContentRequestV1(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
   const subject = subjectForContentRequest(subjectVariant, college.name);
   const name = escapeHtml(college.name);
+  const url = getCollegePageUrl(college);
+  const safeUrl = escapeHtml(url);
   const items = [
     'Confirm the fee structure, seat intake, and NAAC grade are accurate.',
     'Your latest brochure (we will make it downloadable on your page).',
@@ -361,22 +376,27 @@ function renderContentRequestV1(college: CollegeInput, subjectVariant: SubjectVa
   const text = [
     `Dear ${college.name} Admissions Team,`,
     '',
-    `Thank you for getting back to us. To present ${college.name} at its best to the students researching the 2026 cycle, could you share any of the following when convenient:`,
+    `Thank you for getting back to us. Here is the page we have built for ${college.name}:`,
+    '',
+    url,
+    '',
+    `To present it at its best to the students researching the 2026 cycle, could you share any of the following when convenient:`,
     '',
     ...items.map((it, i) => `${i + 1}. ${it}`),
     '',
     'Even two or three of these make a noticeable difference to how students engage with your page. Send whatever is easy, and we will handle the formatting.',
     '',
     'Warm regards,',
-    FOUNDER_NAME,
-    FOUNDER_TITLE,
-    FOUNDER_CREDENTIAL,
-    `${INFO_EMAIL} | neramclasses.com/colleges`,
+    SENDER_NAME,
+    SENDER_TITLE,
+    `${SENDER_EMAIL} | neramclasses.com/colleges`,
   ].join('\n');
 
   const inner = `${headerBlock()}
 ${para(`Dear ${name} Admissions Team,`)}
-${para(`Thank you for getting back to us. To present ${name} at its best to the students researching the 2026 cycle, could you share any of the following when convenient:`)}
+${para(`Thank you for getting back to us. Here is the page we have built for ${name}:`)}
+${ctaButton(safeUrl, 'View your college page &rarr;')}
+${para('To present it at its best to the students researching the 2026 cycle, could you share any of the following when convenient:')}
 ${orderedList(items.map(escapeHtml))}
 ${para('Even two or three of these make a noticeable difference to how students engage with your page. Send whatever is easy, and we will handle the formatting.')}
 ${signatureBlock()}`;
@@ -401,6 +421,8 @@ function subjectForPitch(variant: SubjectVariant, name: string): string {
 function renderPartnershipPitchV1(college: CollegeInput, subjectVariant: SubjectVariant): RenderResult {
   const subject = subjectForPitch(subjectVariant, college.name);
   const name = escapeHtml(college.name);
+  const url = getCollegePageUrl(college);
+  const safeUrl = escapeHtml(url);
   const stateName = college.state || 'your state';
   const benefits = partnershipBenefits(stateName);
   const topQText = PROOF.topQueries.map((q) => `"${q}"`).join(' and ');
@@ -410,6 +432,8 @@ function renderPartnershipPitchV1(college: CollegeInput, subjectVariant: Subject
     `Dear ${college.name} Admissions Team,`,
     '',
     'Thank you for engaging with your page on Neram College Hub. Here is a snapshot of the reach behind it.',
+    '',
+    `Your page: ${url}`,
     '',
     `- ${PROOF.impressions} Google search impressions in the last 3 months`,
     `- ${PROOF.clicks} student visits from Google`,
@@ -426,15 +450,15 @@ function renderPartnershipPitchV1(college: CollegeInput, subjectVariant: Subject
     'If this is useful, I would be glad to walk your team through it on a short call. What time suits you this week?',
     '',
     'Warm regards,',
-    FOUNDER_NAME,
-    FOUNDER_TITLE,
-    FOUNDER_CREDENTIAL,
-    `${INFO_EMAIL} | neramclasses.com/colleges`,
+    SENDER_NAME,
+    SENDER_TITLE,
+    `${SENDER_EMAIL} | neramclasses.com/colleges`,
   ].join('\n');
 
   const inner = `${headerBlock()}
 ${para(`Dear ${name} Admissions Team,`)}
 ${para('Thank you for engaging with your page on Neram College Hub. Here is a snapshot of the reach behind it.')}
+${ctaButton(safeUrl, 'View your college page &rarr;')}
 ${statBand()}
 ${para(`We rank on the first page of Google (average position ${PROOF.avgPosition}) for these searches, and traffic is growing month over month. Among the top searches on our platform are ${topQHtml}, students who are actively deciding where to apply.`)}
 ${para('Every college has a free listing. Colleges that want stronger reach during the admission window can opt into a partnership, which adds:')}
@@ -467,6 +491,8 @@ function renderPaymentDetailsV1(
 ): RenderResult {
   const subject = subjectForPayment(subjectVariant, college.name);
   const name = escapeHtml(college.name);
+  const url = getCollegePageUrl(college);
+  const safeUrl = escapeHtml(url);
   const tier = opts.dealTier || '(tier to be confirmed)';
   const amount = formatInr(opts.dealAmountInr);
   const term = opts.dealTerm || 'the agreed term';
@@ -493,13 +519,14 @@ function renderPaymentDetailsV1(
     'Account details for the transfer:',
     ...bankRows.map(([k, v]) => `${k}: ${bankVal(v)}`),
     '',
+    `The page we will upgrade once payment is confirmed: ${url}`,
+    '',
     'Once you initiate the transfer, reply with the reference number and your GST details, and we will send the invoice and begin upgrading your page the same day.',
     '',
     'Warm regards,',
-    FOUNDER_NAME,
-    FOUNDER_TITLE,
-    FOUNDER_CREDENTIAL,
-    `${INFO_EMAIL} | neramclasses.com/colleges`,
+    SENDER_NAME,
+    SENDER_TITLE,
+    `${SENDER_EMAIL} | neramclasses.com/colleges`,
   ].join('\n');
 
   const dealHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;background:${C.cardBg};border:1px solid ${C.cardBorder};border-radius:10px">
@@ -521,6 +548,8 @@ ${para('This is a service fee for your enhanced profile, priority reach, and opt
 ${dealHtml}
 ${para('Account details for the transfer:')}
 ${bankHtml}
+${para('Here is the page we will upgrade as soon as payment is confirmed:')}
+${ctaButton(safeUrl, 'View your college page &rarr;')}
 ${para('Once you initiate the transfer, reply with the reference number and your GST details, and we will send the invoice and begin upgrading your page the same day.')}
 ${signatureBlock()}`;
 
@@ -573,10 +602,9 @@ function renderOnboardingV1(
     'If anything needs a change, just reply and we will take care of it.',
     '',
     'Warm regards,',
-    FOUNDER_NAME,
-    FOUNDER_TITLE,
-    FOUNDER_CREDENTIAL,
-    `${INFO_EMAIL} | neramclasses.com/colleges`,
+    SENDER_NAME,
+    SENDER_TITLE,
+    `${SENDER_EMAIL} | neramclasses.com/colleges`,
   ].join('\n');
 
   const inner = `${headerBlock()}
