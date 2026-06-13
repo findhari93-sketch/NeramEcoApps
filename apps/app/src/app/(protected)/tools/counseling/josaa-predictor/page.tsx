@@ -43,6 +43,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getFirebaseAuth, useFirebaseAuth } from '@neram/auth';
 import { AuthGate } from '@/components/AuthGate';
+import { partitionByIit, dedupeIitByInstitute } from '@/lib/josaa-zones';
 
 type Chance = 'safe' | 'probable' | 'reach';
 type Category = 'OPEN' | 'OBC-NCL' | 'SC' | 'ST' | 'EWS';
@@ -97,6 +98,9 @@ const MARKETING_BASE_URL =
   (typeof window !== 'undefined' && window.location.hostname.includes('staging')
     ? 'https://staging.neramclasses.com'
     : 'https://neramclasses.com');
+
+const IIT_AAT_GUIDE_URL = `${MARKETING_BASE_URL}/counseling/concepts/aat-explained`;
+const IIT_AAT_HUB_URL = `${MARKETING_BASE_URL}/aat-2026`;
 
 function collegeUrl(p: JosaaPrediction): string | null {
   if (!p.college_slug || !p.state_slug || !p.city_slug) return null;
@@ -244,11 +248,20 @@ function PredictorContent() {
 
   const grouped = useMemo(() => {
     if (!predictions) return null;
+    const { nonIit } = partitionByIit(predictions);
     return {
-      safe: predictions.filter((p) => p.chance === 'safe'),
-      probable: predictions.filter((p) => p.chance === 'probable'),
-      reach: predictions.filter((p) => p.chance === 'reach'),
+      safe: nonIit.filter((p) => p.chance === 'safe'),
+      probable: nonIit.filter((p) => p.chance === 'probable'),
+      reach: nonIit.filter((p) => p.chance === 'reach'),
     };
+  }, [predictions]);
+
+  // IIT rows for the separate AAT pathway zone (single-year path). One headline
+  // row per IIT, verdict stripped (it is invalid against a Paper-2A rank).
+  const iitReference = useMemo(() => {
+    if (!predictions) return null;
+    const { iit } = partitionByIit(predictions);
+    return dedupeIitByInstitute(iit);
   }, [predictions]);
 
   // For compare mode: union of institutes across years, ordered by best chance + nirf
@@ -516,6 +529,10 @@ function PredictorContent() {
             <FlatTableView predictions={predictions!} homeState={homeState} />
           )}
 
+          {iitReference && iitReference.length > 0 && (
+            <IITPathwayZone rows={iitReference} verdict={null} yearLabel={year || 'latest'} />
+          )}
+
           {predictions && predictions.length === 0 && (
             <Alert severity="info">
               No JoSAA seats match this rank + category. Try a different seat type or quota.
@@ -642,6 +659,92 @@ function FlatTableView({ predictions, homeState }: { predictions: JosaaPredictio
         </TableBody>
       </Table>
     </Paper>
+  );
+}
+
+function IITPathwayZone({
+  rows,
+  verdict,
+  yearLabel,
+}: {
+  rows: JosaaPrediction[];
+  verdict?: Record<string, JosaaPrediction> | null;
+  yearLabel?: string | number;
+}) {
+  return (
+    <Box>
+      <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 0.5 }}>
+        🏛️ IIT B.Arch, a separate exam pathway
+      </Typography>
+      <Alert severity="warning" icon={<InfoOutlinedIcon />} sx={{ mb: 1.5 }}>
+        IIT B.Arch (Kharagpur, Roorkee, BHU Varanasi) is <b>not</b> filled from your
+        JEE Main Paper 2A rank. Seats go by your <b>JEE Advanced rank</b>, and only
+        after you <b>Pass the AAT</b> (Architecture Aptitude Test, a Pass/Fail gate).
+        The closing ranks below are JEE Advanced ranks, shown for reference.
+      </Alert>
+
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
+        {['1. Qualify JEE Advanced', '2. Pass AAT (Pass/Fail)', '3. JoSAA seat by Advanced rank'].map((s) => (
+          <Chip key={s} label={s} size="small" variant="outlined" />
+        ))}
+      </Stack>
+
+      <Stack spacing={1.5}>
+        {rows.map((p) => {
+          const v = verdict ? verdict[p.institute] : null;
+          return (
+            <Card key={p.institute} variant="outlined">
+              <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+                <Stack direction="row" spacing={1} alignItems="flex-start" justifyContent="space-between">
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {p.institute}
+                    </Typography>
+                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                      <Chip label="IIT" size="small" variant="outlined" />
+                      {p.state && <Chip label={p.state} size="small" variant="outlined" />}
+                      {p.nirf_rank != null && (
+                        <Chip label={`NIRF ${p.nirf_rank}`} size="small" color="info" variant="outlined" />
+                      )}
+                    </Stack>
+                  </Box>
+                  {v ? (
+                    <ChanceChip chance={v.chance} />
+                  ) : (
+                    <Chip
+                      label="JEE Advanced + AAT"
+                      size="small"
+                      sx={{ bgcolor: '#ECEFF1', color: '#455A64', fontWeight: 600 }}
+                    />
+                  )}
+                </Stack>
+                <Divider sx={{ my: 1 }} />
+                <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center" flexWrap="wrap">
+                  <Typography variant="caption" color="text.secondary">
+                    JEE Advanced closing rank{yearLabel ? ` (${yearLabel})` : ''}: <b>{p.closing_rank ?? '—'}</b>
+                    {v && (
+                      <>
+                        {' · '}Your margin: <b>{v.margin > 0 ? `+${v.margin}` : v.margin}</b>
+                      </>
+                    )}
+                  </Typography>
+                  <CollegeLink p={p} />
+                </Stack>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </Stack>
+
+      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap">
+        <Button size="small" variant="outlined" href={IIT_AAT_GUIDE_URL} target="_blank" rel="noopener" endIcon={<OpenInNewIcon />}>
+          How AAT works
+        </Button>
+        <Button size="small" variant="text" href={IIT_AAT_HUB_URL} target="_blank" rel="noopener" endIcon={<OpenInNewIcon />}>
+          AAT 2026 guide
+        </Button>
+      </Stack>
+    </Box>
   );
 }
 
