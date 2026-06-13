@@ -127,6 +127,7 @@ function PredictorContent() {
   const [pwd, setPwd] = useState(false);
   const [rankType, setRankType] = useState<RankType>('CRL');
   const [rank, setRank] = useState('');
+  const [advancedRank, setAdvancedRank] = useState('');
   const [homeState, setHomeState] = useState('');
   const [gender, setGender] = useState('Gender-Neutral');
 
@@ -145,6 +146,7 @@ function PredictorContent() {
   const [predictions, setPredictions] = useState<JosaaPrediction[] | null>(null);
   const [counts, setCounts] = useState<{ safe: number; probable: number; reach: number } | null>(null);
   const [byYear, setByYear] = useState<Record<number, { predictions: JosaaPrediction[]; counts: any }> | null>(null);
+  const [iitVerdict, setIitVerdict] = useState<Record<string, JosaaPrediction> | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(isMobile ? 'cards' : 'table');
 
   // When category becomes 'OPEN', rank-type is forced to CRL.
@@ -182,6 +184,7 @@ function PredictorContent() {
     setPredictions(null);
     setCounts(null);
     setByYear(null);
+    setIitVerdict(null);
 
     const rankNum = parseInt(rank, 10);
     if (!Number.isFinite(rankNum) || rankNum < 1) {
@@ -233,13 +236,39 @@ function PredictorContent() {
       } else {
         setPredictions(json.predictions || []);
         setCounts(json.counts || { safe: 0, probable: 0, reach: 0 });
+
+        // Optional: second call with the JEE Advanced rank to predict IIT B.Arch.
+        const advNum = parseInt(advancedRank, 10);
+        if (Number.isFinite(advNum) && advNum >= 1) {
+          try {
+            const advRes = await fetch('/api/tools/josaa-predictor', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ ...body, rank: advNum }),
+            });
+            const advJson = await advRes.json();
+            if (advRes.ok && Array.isArray(advJson.predictions)) {
+              const map: Record<string, JosaaPrediction> = {};
+              for (const p of advJson.predictions as JosaaPrediction[]) {
+                if (p.institute_type !== 'IIT') continue;
+                const cur = map[p.institute];
+                if (!cur || (p.closing_rank ?? Infinity) < (cur.closing_rank ?? Infinity)) {
+                  map[p.institute] = p;
+                }
+              }
+              setIitVerdict(map);
+            }
+          } catch {
+            // Non-fatal: IIT zone simply stays in reference mode.
+          }
+        }
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to predict colleges.');
     } finally {
       setLoading(false);
     }
-  }, [rank, rankType, category, pwd, gender, homeState, year, roundNo, compareMode, compareYears, user]);
+  }, [rank, advancedRank, rankType, category, pwd, gender, homeState, year, roundNo, compareMode, compareYears, user]);
 
   // Re-run after sign-in
   useEffect(() => {
@@ -373,6 +402,25 @@ function PredictorContent() {
               <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mt: 0.25 }}>
                 <InfoOutlinedIcon sx={{ fontSize: 16, mt: 0.25 }} />
                 <Box component="span">{rankHelper}</Box>
+              </Stack>
+            }
+          />
+
+          {/* Optional JEE Advanced rank, powers the IIT B.Arch pathway prediction */}
+          <TextField
+            label="JEE Advanced rank (optional, for IIT B.Arch)"
+            placeholder="e.g. 14500"
+            type="number"
+            value={advancedRank}
+            onChange={(e) => setAdvancedRank(e.target.value)}
+            inputProps={{ min: 1, max: 250000, inputMode: 'numeric', pattern: '[0-9]*' }}
+            fullWidth
+            helperText={
+              <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ mt: 0.25 }}>
+                <InfoOutlinedIcon sx={{ fontSize: 16, mt: 0.25 }} />
+                <Box component="span">
+                  Only the 3 IITs (Kharagpur, Roorkee, BHU) use this. Leave blank if you did not sit JEE Advanced. IIT seats also require passing the AAT.
+                </Box>
               </Stack>
             }
           />
@@ -546,7 +594,7 @@ function PredictorContent() {
           )}
 
           {iitReference && iitReference.length > 0 && (
-            <IITPathwayZone rows={iitReference} verdict={null} yearLabel={year || 'latest'} />
+            <IITPathwayZone rows={iitReference} verdict={iitVerdict} yearLabel={year || 'latest'} />
           )}
 
           {predictions && predictions.length === 0 && (
