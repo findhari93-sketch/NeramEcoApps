@@ -138,9 +138,12 @@ export default function Page({ params: { locale } }: { params: { locale: string 
 
       <Typography component="h2">IITs that offer B.Arch through AAT</Typography>
       <Typography component="ul">
-        <Box component="li"><strong>IIT Roorkee:</strong> JEE Advanced AIR range 1,500 to 2,800 (Open)</Box>
-        <Box component="li"><strong>IIT Kharagpur:</strong> JEE Advanced AIR range 2,000 to 3,500 (Open)</Box>
-        <Box component="li"><strong>IIT BHU:</strong> Smaller intake, ranges vary</Box>
+        <Box component="li"><strong>IIT Roorkee:</strong> JEE Advanced AIR roughly 17,600 to 20,800 (Open, Gender-Neutral, 2023 to 2025)</Box>
+        <Box component="li"><strong>IIT Kharagpur:</strong> JEE Advanced AIR roughly 19,000 to 23,400 (Open, Gender-Neutral, 2023 to 2025)</Box>
+        <Box component="li"><strong>IIT (BHU) Varanasi:</strong> JEE Advanced AIR roughly 20,700 to 24,700 (Open, Gender-Neutral, 2023 to 2025)</Box>
+      </Typography>
+      <Typography component="p" sx={{ fontSize: 14, color: 'text.secondary' }}>
+        These are JEE Advanced ranks (not JEE Main Paper 2A ranks). Reserved-category closing ranks are lower. Check the live JoSAA B.Arch predictor for current cutoffs.
       </Typography>
 
       <Typography component="p">
