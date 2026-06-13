@@ -83,6 +83,7 @@ nul
 
 # Claude local settings (contains secrets)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 .worktrees/
 
 # Counselling raw data (too large for git; ingestion script outputs)

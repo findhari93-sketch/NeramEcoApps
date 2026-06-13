@@ -19,6 +19,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import ChatIcon from '@mui/icons-material/Chat';
+import HumanHelpBar from '@/components/aintra/HumanHelpBar';
+import VoiceInputButton from '@/components/aintra/VoiceInputButton';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -106,7 +108,9 @@ export default function AintraTopicChat({
           {
             role: 'assistant',
             content:
-              data.error || 'Sorry, I could not process your request. Please try again.',
+              (data.error ||
+                'Sorry, I could not process your request right now.') +
+              ' You can also reach our team directly on WhatsApp or Live Chat below.',
           },
         ]);
       } else {
@@ -117,7 +121,8 @@ export default function AintraTopicChat({
         ...prev,
         {
           role: 'assistant',
-          content: 'Connection error. Please check your internet and try again.',
+          content:
+            'Connection error. Please check your internet and try again, or reach our team on WhatsApp or Live Chat below.',
         },
       ]);
     } finally {
@@ -347,6 +352,9 @@ export default function AintraTopicChat({
 
             <Divider sx={{ mt: 1 }} />
 
+            {/* Human fallback (WhatsApp + Live Chat) */}
+            <HumanHelpBar />
+
             <Stack
               direction="row"
               alignItems="center"
@@ -369,6 +377,13 @@ export default function AintraTopicChat({
                     fontSize: '0.8125rem',
                   },
                 }}
+              />
+              <VoiceInputButton
+                value={input}
+                onChange={setInput}
+                disabled={loading}
+                color={primaryColor}
+                size={40}
               />
               <IconButton
                 onClick={() => sendMessage(input)}

@@ -19,6 +19,8 @@ import SendIcon from '@mui/icons-material/Send';
 import CloseIcon from '@mui/icons-material/Close';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
+import HumanHelpBar from '@/components/aintra/HumanHelpBar';
+import VoiceInputButton from '@/components/aintra/VoiceInputButton';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -88,7 +90,9 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
           {
             role: 'assistant',
             content:
-              data.error || 'Sorry, I could not process your request. Please try again.',
+              (data.error ||
+                'Sorry, I could not process your request right now.') +
+              ' You can also reach our team directly on WhatsApp or Live Chat below.',
           },
         ]);
       } else {
@@ -102,7 +106,8 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
         ...prev,
         {
           role: 'assistant',
-          content: 'Connection error. Please check your internet and try again.',
+          content:
+            'Connection error. Please check your internet and try again, or reach our team on WhatsApp or Live Chat below.',
         },
       ]);
     } finally {
@@ -335,6 +340,9 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
 
             <Divider sx={{ mt: 1 }} />
 
+            {/* Human fallback (WhatsApp + Live Chat) */}
+            <HumanHelpBar />
+
             {/* Input row */}
             <Stack
               direction="row"
@@ -358,6 +366,13 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                     fontSize: '0.8125rem',
                   },
                 }}
+              />
+              <VoiceInputButton
+                value={input}
+                onChange={setInput}
+                disabled={loading}
+                color="#be185d"
+                size={40}
               />
               <IconButton
                 onClick={() => sendMessage(input)}

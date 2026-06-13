@@ -24,6 +24,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import Image from 'next/image';
+import VoiceInputButton from './aintra/VoiceInputButton';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant2.jpg';
 
@@ -804,6 +805,13 @@ export default function GeneralChatbot() {
             disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
             inputProps={{ maxLength: 500, style: { fontSize: '0.9375rem' }, 'data-testid': 'aintra-input' }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+          />
+          <VoiceInputButton
+            value={input}
+            onChange={setInput}
+            disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
+            color="#1976d2"
+            size={40}
           />
           <IconButton
             color="primary"

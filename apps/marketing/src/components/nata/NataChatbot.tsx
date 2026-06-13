@@ -15,6 +15,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import Image from 'next/image';
+import VoiceInputButton from '../aintra/VoiceInputButton';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
 
@@ -610,6 +611,13 @@ export default function NataChatbot() {
             disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
             inputProps={{ maxLength: 500, style: { fontSize: '0.9375rem' } }}
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+          />
+          <VoiceInputButton
+            value={input}
+            onChange={setInput}
+            disabled={loading || questionCount >= MAX_QUESTIONS_PER_SESSION}
+            color="#1976d2"
+            size={40}
           />
           <IconButton
             color="primary"
