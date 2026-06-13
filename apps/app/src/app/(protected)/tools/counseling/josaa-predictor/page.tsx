@@ -293,6 +293,12 @@ function PredictorContent() {
     return dedupeIitByInstitute(iit);
   }, [predictions]);
 
+  // Non-IIT rows (NIT/SPA/GFTI) for the table view and empty-state logic.
+  const nonIitPredictions = useMemo(() => {
+    if (!predictions) return null;
+    return partitionByIit(predictions).nonIit;
+  }, [predictions]);
+
   // For compare mode: union of institutes across years, ordered by best chance + nirf.
   // IITs are pulled out into a separate reference list (different admission pathway).
   const compareRows = useMemo(() => {
@@ -590,16 +596,19 @@ function PredictorContent() {
             <GroupedCardsView grouped={grouped} homeState={homeState} />
           )}
           {grouped && viewMode === 'table' && (
-            <FlatTableView predictions={predictions!} homeState={homeState} />
+            <FlatTableView predictions={nonIitPredictions || []} homeState={homeState} />
           )}
 
           {iitReference && iitReference.length > 0 && (
             <IITPathwayZone rows={iitReference} verdict={iitVerdict} yearLabel={year || 'latest'} />
           )}
 
-          {predictions && predictions.length === 0 && (
+          {predictions && nonIitPredictions && nonIitPredictions.length === 0 && (
             <Alert severity="info">
-              No JoSAA seats match this rank + category. Try a different seat type or quota.
+              No NIT, SPA or GFTI seats match this rank and category.
+              {iitReference && iitReference.length > 0
+                ? ' See the IIT B.Arch pathway below.'
+                : ' Try a different seat type or quota.'}
             </Alert>
           )}
         </Stack>
@@ -785,7 +794,7 @@ function IITPathwayZone({
                 <Divider sx={{ my: 1 }} />
                 <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center" flexWrap="wrap">
                   <Typography variant="caption" color="text.secondary">
-                    JEE Advanced closing rank{yearLabel ? ` (${yearLabel})` : ''}: <b>{p.closing_rank ?? '—'}</b>
+                    JEE Advanced closing rank{yearLabel ? ` (${yearLabel})` : ''}: <b>{p.closing_rank ?? 'N/A'}</b>
                     {v && (
                       <>
                         {' · '}Your margin: <b>{v.margin > 0 ? `+${v.margin}` : v.margin}</b>
