@@ -264,13 +264,22 @@ function PredictorContent() {
     return dedupeIitByInstitute(iit);
   }, [predictions]);
 
-  // For compare mode: union of institutes across years, ordered by best chance + nirf
+  // For compare mode: union of institutes across years, ordered by best chance + nirf.
+  // IITs are pulled out into a separate reference list (different admission pathway).
   const compareRows = useMemo(() => {
     if (!byYear) return null;
     const years = Object.keys(byYear).map((y) => parseInt(y, 10)).sort((a, b) => b - a);
     const byInstitute = new Map<string, { institute: string; institute_type: string; state: string | null; nirf_rank: number | null; college_slug: string | null; state_slug: string | null; city_slug: string | null; perYear: Record<number, JosaaPrediction | null> }>();
+    const iitByInstitute = new Map<string, JosaaPrediction>();
     for (const y of years) {
       for (const p of byYear[y].predictions) {
+        if (p.institute_type === 'IIT') {
+          const cur = iitByInstitute.get(p.institute);
+          const pr = p.closing_rank ?? Number.POSITIVE_INFINITY;
+          const cr = cur?.closing_rank ?? Number.POSITIVE_INFINITY;
+          if (!cur || pr < cr) iitByInstitute.set(p.institute, p);
+          continue;
+        }
         const key = p.institute;
         if (!byInstitute.has(key)) {
           byInstitute.set(key, {
@@ -288,7 +297,11 @@ function PredictorContent() {
         if (!row.perYear[y]) row.perYear[y] = p; // keep first (best) chance row per year
       }
     }
-    return { years, rows: Array.from(byInstitute.values()).sort((a, b) => (a.nirf_rank ?? 999) - (b.nirf_rank ?? 999)) };
+    return {
+      years,
+      rows: Array.from(byInstitute.values()).sort((a, b) => (a.nirf_rank ?? 999) - (b.nirf_rank ?? 999)),
+      iitRows: dedupeIitByInstitute(Array.from(iitByInstitute.values())),
+    };
   }, [byYear]);
 
   return (
@@ -520,6 +533,9 @@ function PredictorContent() {
 
           {/* Compare-mode results */}
           {compareRows && <CompareResultsTable rows={compareRows.rows} years={compareRows.years} homeState={homeState} />}
+          {compareRows && compareRows.iitRows.length > 0 && (
+            <IITPathwayZone rows={compareRows.iitRows} verdict={null} yearLabel={compareRows.years[0]} />
+          )}
 
           {/* Single-year results */}
           {grouped && viewMode === 'cards' && (
