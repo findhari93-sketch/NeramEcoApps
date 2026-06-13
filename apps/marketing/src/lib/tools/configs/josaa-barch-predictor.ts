@@ -5,7 +5,7 @@ export const josaaBarchPredictorConfig: ToolConfig = {
   slug: 'josaa-barch-predictor',
   title: 'JoSAA B.Arch College Predictor 2026',
   subtitle:
-    'Enter your JEE Main Paper 2A rank to see which JoSAA-participating institutes accept you for B.Arch admission. We use 4,200+ real closing-rank rows from JoSAA 2023, 2024 and 2025, covering all 21 institutes that allocate seats through JoSAA: IITs (Kharagpur, Roorkee, BHU), NITs (Trichy, Calicut, MNIT Jaipur, MANIT Bhopal, VNIT Nagpur, Hamirpur, Patna, Raipur, Rourkela, Kurukshetra), Schools of Planning & Architecture (Delhi, Bhopal, Vijayawada), and GFTIs (IIEST Shibpur, BIT Mesra, SMVDU, Mizoram University). The predictor handles CRL vs category rank disambiguation, applies your home-state quota correctly to NIT seats, and groups results into Safe / Probable / Reach so you know where to spend your JoSAA preferences.',
+    'Enter your JEE Main Paper 2A rank to see which JoSAA-participating institutes accept you for B.Arch admission. We use 4,200+ real closing-rank rows from JoSAA 2023, 2024 and 2025, covering all 21 institutes that allocate seats through JoSAA: IITs (Kharagpur, Roorkee, BHU), NITs (Trichy, Calicut, MNIT Jaipur, MANIT Bhopal, VNIT Nagpur, Hamirpur, Patna, Raipur, Rourkela, Kurukshetra), Schools of Planning & Architecture (Delhi, Bhopal, Vijayawada), and GFTIs (IIEST Shibpur, BIT Mesra, SMVDU, Mizoram University). The predictor handles CRL vs category rank disambiguation, applies your home-state quota correctly to NIT seats, and groups NIT, SPA and GFTI results into Safe / Probable / Reach. The 3 IITs (Kharagpur, Roorkee, BHU) are shown in a separate section, because they admit through your JEE Advanced rank plus a Pass in the AAT, not your JEE Main Paper 2A rank.',
   category: 'counseling',
   appUrl: 'https://app.neramclasses.com/tools/counseling/josaa-predictor',
   metaTitle: 'JoSAA B.Arch Predictor 2026: IITs, NITs, SPAs & GFTIs',
@@ -101,7 +101,7 @@ export const josaaBarchPredictorConfig: ToolConfig = {
     {
       question: 'How are Safe, Probable, and Reach calculated?',
       answer:
-        'Each institute\'s seat is tagged based on how far your rank is from its closing rank. Safe = your rank gives you at least 20% margin below closing rank. Probable = you\'re within the closing rank but margin under 20%. Reach = your rank is above the closing rank by up to 30% — still worth filling as a stretch preference.',
+        'Each NIT, SPA or GFTI seat is tagged based on how far your JEE Main Paper 2A rank is from its closing rank. Safe means your rank gives you at least 20% margin below the closing rank. Probable means you are within the closing rank but margin under 20%. Reach means your rank is above the closing rank by up to 30%, still worth filling as a stretch preference. The 3 IITs are not tagged this way: they admit on JEE Advanced rank plus an AAT Pass, so they appear in a separate IIT B.Arch section with their JEE Advanced closing ranks for reference.',
     },
     {
       question: 'How accurate is this predictor?',
