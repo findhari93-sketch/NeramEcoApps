@@ -30,9 +30,11 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import ForumIcon from '@mui/icons-material/Forum';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import PersonIcon from '@mui/icons-material/Person';
 import ClearIcon from '@mui/icons-material/Clear';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import DownloadIcon from '@mui/icons-material/Download';
 import DataTable from '@/components/DataTable';
 
 interface Conversation {
@@ -48,6 +50,19 @@ interface Conversation {
   promoted_to_kb: boolean;
   created_at: string;
 }
+
+interface AiReviewResult {
+  verdict: string;
+  reasoning: string;
+  suggestedCorrection: string;
+}
+
+const VERDICT_META: Record<string, { label: string; severity: 'success' | 'warning' | 'error' | 'info' }> = {
+  correct: { label: 'Looks correct', severity: 'success' },
+  needs_fix: { label: 'Needs a fix', severity: 'warning' },
+  wrong: { label: 'Likely wrong', severity: 'error' },
+  uncertain: { label: 'Uncertain, verify the facts', severity: 'info' },
+};
 
 export default function ChatHistoryPage() {
   const [rows, setRows] = useState<Conversation[]>([]);
@@ -66,6 +81,10 @@ export default function ChatHistoryPage() {
   const [saving, setSaving] = useState(false);
   const [refining, setRefining] = useState(false);
   const [promotingKb, setPromotingKb] = useState(false);
+  const [aiReview, setAiReview] = useState<AiReviewResult | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewingRowId, setReviewingRowId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success',
   });
@@ -148,7 +167,45 @@ export default function ChatHistoryPage() {
   const openCorrection = (row: Conversation) => {
     setSelected(row);
     setCorrectionText(row.admin_correction || '');
+    setAiReview(null);
+    setRefinedText('');
     setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setAiReview(null);
+    setRefinedText('');
+  };
+
+  // Ask Gemini to grade Aintra's answer and suggest a correction. When launched
+  // from the table (prefill=true) we open the dialog with the suggestion ready to edit.
+  const runAiReview = async (row: Conversation, prefill: boolean) => {
+    setReviewingRowId(row.id);
+    setReviewing(true);
+    try {
+      const res = await fetch(`/api/chatbot-logs/${row.id}/ai-review`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'AI review failed');
+      const result: AiReviewResult = {
+        verdict: json.verdict,
+        reasoning: json.reasoning,
+        suggestedCorrection: json.suggestedCorrection,
+      };
+      setAiReview(result);
+      if (prefill) {
+        setSelected(row);
+        setCorrectionText(row.admin_correction || result.suggestedCorrection || '');
+        setRefinedText('');
+        setDialogOpen(true);
+      }
+      showSnackbar(`AI review: ${VERDICT_META[result.verdict]?.label || result.verdict}`, 'success');
+    } catch (e) {
+      showSnackbar(e instanceof Error ? e.message : 'AI review failed', 'error');
+    } finally {
+      setReviewing(false);
+      setReviewingRowId(null);
+    }
   };
 
   const handleSaveCorrection = async () => {
@@ -230,6 +287,36 @@ export default function ChatHistoryPage() {
       showSnackbar('Failed to add to KB', 'error');
     } finally {
       setPromotingKb(false);
+    }
+  };
+
+  const handleDownloadMarkdown = async () => {
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({
+        ...(search ? { search } : {}),
+        ...(sourceFilter ? { source: sourceFilter } : {}),
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
+      });
+      const res = await fetch(`/api/chatbot-logs/export?${params}`);
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/);
+      link.download = match ? match[1] : 'aintra-chat-history.md';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showSnackbar('Markdown export downloaded', 'success');
+    } catch {
+      showSnackbar('Failed to download export', 'error');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -350,6 +437,28 @@ export default function ChatHistoryPage() {
       ),
     },
     {
+      field: 'ai_review',
+      headerName: 'AI Review',
+      width: 90,
+      sortable: false,
+      renderCell: (params: any) => (
+        <Tooltip title="Let AI grade this answer and suggest a correction" arrow>
+          <span>
+            <IconButton
+              size="small"
+              disabled={reviewing}
+              aria-label="AI review this answer"
+              onClick={() => runAiReview(params.row, true)}
+            >
+              {reviewingRowId === params.row.id
+                ? <CircularProgress size={16} />
+                : <AutoAwesomeIcon fontSize="small" sx={{ color: 'secondary.main' }} />}
+            </IconButton>
+          </span>
+        </Tooltip>
+      ),
+    },
+    {
       field: 'admin_correction',
       headerName: 'Correction',
       width: 110,
@@ -384,17 +493,39 @@ export default function ChatHistoryPage() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, gap: 2, flexWrap: 'wrap' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <ForumIcon color="primary" />
           <Box>
             <Typography variant="h5" fontWeight={700}>Chat History</Typography>
             <Typography variant="body2" color="text.secondary">
-              All user conversations with Aintra — rate, correct, and train.
+              All user conversations with Aintra: rate, correct, and train.
             </Typography>
           </Box>
         </Box>
-        <Typography variant="body2" color="text.secondary">{total} conversations</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Typography variant="body2" color="text.secondary">{total} conversations</Typography>
+          <Tooltip
+            title={
+              dateFrom || dateTo
+                ? 'Download conversations in the selected date range as Markdown'
+                : 'Download all conversations as Markdown (set From / To to limit the range)'
+            }
+            arrow
+          >
+            <span>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+                onClick={handleDownloadMarkdown}
+                disabled={downloading || loading}
+              >
+                {downloading ? 'Preparing…' : 'Download .md'}
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Filters */}
@@ -463,7 +594,7 @@ export default function ChatHistoryPage() {
       />
 
       {/* Correction Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={dialogOpen} onClose={closeDialog} maxWidth="md" fullWidth>
         <DialogTitle>Answer Correction</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
           {selected && (
@@ -479,6 +610,38 @@ export default function ChatHistoryPage() {
                     {selected.ai_response}
                   </Typography>
                 </Box>
+              )}
+              {aiReview && (
+                <Alert
+                  severity={VERDICT_META[aiReview.verdict]?.severity || 'info'}
+                  icon={<AutoAwesomeIcon fontSize="small" />}
+                >
+                  <Typography variant="body2" fontWeight={700}>
+                    AI verdict: {VERDICT_META[aiReview.verdict]?.label || aiReview.verdict}
+                  </Typography>
+                  {aiReview.reasoning && (
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                      {aiReview.reasoning}
+                    </Typography>
+                  )}
+                  {aiReview.suggestedCorrection && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                        SUGGESTED ANSWER
+                      </Typography>
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.5 }}>
+                        {aiReview.suggestedCorrection}
+                      </Typography>
+                      <Button
+                        size="small"
+                        sx={{ mt: 1 }}
+                        onClick={() => setCorrectionText(aiReview.suggestedCorrection)}
+                      >
+                        Use this answer
+                      </Button>
+                    </Box>
+                  )}
+                </Alert>
               )}
               <TextField
                 label="Better / Corrected Answer"
@@ -501,7 +664,17 @@ export default function ChatHistoryPage() {
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-          <Button onClick={() => setDialogOpen(false)} disabled={saving || promotingKb || refining}>Close</Button>
+          <Button onClick={closeDialog} disabled={saving || promotingKb || refining || reviewing}>Close</Button>
+          <Button
+            variant="text"
+            color="secondary"
+            onClick={() => selected && runAiReview(selected, false)}
+            disabled={reviewing || saving || promotingKb || refining}
+            startIcon={reviewing ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+            sx={{ mr: 'auto' }}
+          >
+            {reviewing ? 'Reviewing…' : 'AI Review'}
+          </Button>
           <Button variant="outlined" onClick={handleSaveCorrection} disabled={saving || promotingKb || refining || !correctionText.trim()}>
             {saving ? 'Saving…' : 'Save Correction'}
           </Button>
