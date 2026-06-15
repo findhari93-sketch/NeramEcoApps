@@ -22,6 +22,7 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import { useMicrosoftAuth } from '@neram/auth';
 import type { CollegeOutreachRow, CollegeTier, ContactStatus, CollegeStatus } from '@/lib/college-outreach/types';
 import type { OutreachTemplateVariant } from '@/lib/college-outreach/templates';
+import { parseRecipientList } from '@/lib/college-outreach/templates';
 
 const TIER_COLORS: Record<CollegeTier, 'default' | 'info' | 'warning' | 'success'> = {
   free: 'default',
@@ -348,7 +349,11 @@ export default function CollegeOutreachPage() {
   }
 
   async function handleSend(force = false) {
-    if (!outreachTarget || !recipient) { setError('Recipient required'); return; }
+    if (!outreachTarget) return;
+    if (parseRecipientList(recipient).length === 0) {
+      setError('Enter at least one valid recipient email.');
+      return;
+    }
     setSending(true);
     setDuplicateHint(null);
     setError(null);
@@ -375,7 +380,16 @@ export default function CollegeOutreachPage() {
         return;
       }
       if (!res.ok) { setError(data.error || 'Send failed'); return; }
-      setToast(`Sent. Message id: ${data.message_id}`);
+      const count = data.sent_count ?? 1;
+      const extras: string[] = [];
+      if (Array.isArray(data.skipped) && data.skipped.length) {
+        extras.push(`${data.skipped.length} skipped (opted out)`);
+      }
+      if (Array.isArray(data.failed) && data.failed.length) {
+        extras.push(`${data.failed.length} failed`);
+      }
+      const suffix = extras.length ? ` (${extras.join(', ')})` : '';
+      setToast(`Sent to ${count} contact${count === 1 ? '' : 's'}${suffix}.`);
       setOutreachDialogOpen(false);
       fetchColleges();
     } catch (e) {
@@ -386,15 +400,26 @@ export default function CollegeOutreachPage() {
   }
 
   function handleOutlookMailto() {
-    if (!preview || !recipient || !outreachTarget) return;
+    if (!preview || !outreachTarget) return;
+    const recipients = parseRecipientList(recipient);
+    if (recipients.length === 0) return;
     const pageUrl = `https://neramclasses.com/en/colleges/${outreachTarget.state_slug ?? 'india'}/${outreachTarget.slug}`;
     const body = truncateForMailto(preview.text, pageUrl);
     const params = new URLSearchParams({
       subject: subjectOverride || preview.subject,
       body,
     });
-    if (includeBcc && preview.bcc) params.set('bcc', preview.bcc);
-    window.location.href = `mailto:${encodeURIComponent(recipient)}?${params.toString()}`;
+    let to: string;
+    if (recipients.length > 1) {
+      // Keep contacts hidden from each other: address the archive box, BCC the
+      // real recipients. Mirrors the private-copy behaviour of "Send via Neram".
+      to = preview.bcc || 'info@neramclasses.com';
+      params.set('bcc', recipients.join(','));
+    } else {
+      to = recipients[0];
+      if (includeBcc && preview.bcc) params.set('bcc', preview.bcc);
+    }
+    window.location.href = `mailto:${encodeURIComponent(to)}?${params.toString()}`;
   }
 
   const stats = useMemo(() => {
@@ -663,8 +688,9 @@ export default function CollegeOutreachPage() {
         </DialogTitle>
         <DialogContent dividers>
           <Stack gap={2}>
-            <TextField label="Recipient email" value={recipient}
+            <TextField label="Recipient email(s)" value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
+              helperText="Separate multiple contacts at this college with commas. Each gets a private copy."
               fullWidth size="medium" required />
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>
               <Box sx={{ minWidth: 240 }}>
@@ -750,12 +776,12 @@ export default function CollegeOutreachPage() {
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1, flexWrap: 'wrap' }}>
           <Button onClick={() => setOutreachDialogOpen(false)} disabled={sending}>Cancel</Button>
-          <Button onClick={handleOutlookMailto} variant="outlined" startIcon={<LaunchIcon />} disabled={!preview || !recipient}>
+          <Button onClick={handleOutlookMailto} variant="outlined" startIcon={<LaunchIcon />} disabled={!preview || parseRecipientList(recipient).length === 0}>
             Open in Outlook
           </Button>
           <Button onClick={() => handleSend(false)} variant="contained"
             startIcon={sending ? <CircularProgress size={16} color="inherit" /> : <SendIcon />}
-            disabled={!preview || !recipient || sending} sx={{ minWidth: 180 }}>
+            disabled={!preview || parseRecipientList(recipient).length === 0 || sending} sx={{ minWidth: 180 }}>
             {sending ? 'Sending...' : 'Send via Neram'}
           </Button>
         </DialogActions>

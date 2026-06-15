@@ -11,6 +11,7 @@ import {
   renderOutreachEmail,
   getRecipientEmail,
   getUnsubscribeUrl,
+  parseRecipientList,
   type SubjectVariant,
   type OutreachTemplateVariant,
 } from '@/lib/college-outreach/templates';
@@ -21,6 +22,9 @@ export const dynamic = 'force-dynamic';
 
 const DUPLICATE_SEND_WINDOW_SECONDS = 30;
 const DEFAULT_BCC = 'info@neramclasses.com';
+// One outreach can go to several contacts at the SAME college (info@, admissions@,
+// principal@, ...). Each gets a private copy. Cap to avoid an accidental blast.
+const MAX_RECIPIENTS = 10;
 
 // Sequencing guardrail: which contact_status values a template is allowed to be
 // sent to. Stops staff sending the pitch before first-touch, or payment details
@@ -89,13 +93,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'College not found' }, { status: 404 });
   }
 
-  const recipient = getRecipientEmail(college as any, body.override_to_email);
-  if (!recipient) {
+  // Resolve one or more recipients. The dialog lets staff type several contacts
+  // for the same college, separated by commas (Gmail style). Fall back to the
+  // college's own email when the override is blank.
+  const recipientSource = (body.override_to_email && body.override_to_email.trim())
+    ? body.override_to_email
+    : getRecipientEmail(college as any);
+  const recipients = parseRecipientList(recipientSource);
+  if (recipients.length === 0) {
     return NextResponse.json(
-      { error: 'No recipient email available. Provide override_to_email or set admissions_email on the college.' },
+      { error: 'No valid recipient email. Provide override_to_email or set admissions_email on the college.' },
       { status: 422 },
     );
   }
+  if (recipients.length > MAX_RECIPIENTS) {
+    return NextResponse.json(
+      { error: `Too many recipients (${recipients.length}). Maximum is ${MAX_RECIPIENTS} contacts per college send.` },
+      { status: 422 },
+    );
+  }
+  // First recipient is used for preview display and single-recipient code paths.
+  const recipient = recipients[0];
 
   const unsubscribeUrl = getUnsubscribeUrl((college as any).unsubscribe_token);
 
@@ -157,20 +175,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Suppression hard-block: never email an address that has unsubscribed or
-  // hard-bounced. This is NOT overridable by `force` (honouring opt-outs is a
-  // legal + deliverability requirement, not a sequencing nicety).
-  const recipientLower = recipient.toLowerCase();
-  const { data: suppressed } = await supabase
+  // Suppression: never email an address that has unsubscribed or hard-bounced.
+  // This is NOT overridable by `force` (honouring opt-outs is a legal +
+  // deliverability requirement, not a sequencing nicety). With several
+  // recipients we skip the opted-out ones and still send to the rest; only a
+  // fully-suppressed batch hard-fails.
+  const lowerToOriginal = new Map(recipients.map((e) => [e.toLowerCase(), e]));
+  const { data: suppressedRows } = await supabase
     .from('email_suppression_list')
-    .select('email, reason, created_at')
-    .eq('email', recipientLower)
-    .maybeSingle();
-  if (suppressed) {
+    .select('email, reason')
+    .in('email', Array.from(lowerToOriginal.keys()));
+  const suppressedReasonByLower = new Map(
+    (suppressedRows ?? []).map((r: any) => [String(r.email).toLowerCase(), r.reason as string]),
+  );
+  const skipped: Array<{ email: string; reason: string }> = [];
+  const toSend: string[] = [];
+  for (const email of recipients) {
+    const reason = suppressedReasonByLower.get(email.toLowerCase());
+    if (reason) skipped.push({ email, reason });
+    else toSend.push(email);
+  }
+  if (toSend.length === 0) {
     return NextResponse.json(
       {
-        error: `${recipient} has opted out (${(suppressed as any).reason}) and cannot be emailed. Remove it from the suppression list first if this is intentional.`,
+        error: `All ${recipients.length} recipient(s) have opted out and cannot be emailed. Remove them from the suppression list first if this is intentional.`,
         suppressed: true,
+        skipped,
       },
       { status: 403 },
     );
@@ -183,49 +213,69 @@ export async function POST(req: NextRequest) {
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   };
 
-  const sendResult = await sendOutreachEmail({
-    to: recipient,
-    bcc,
-    subject,
-    // Plain-text-only A/B: omit the HTML part entirely so Gmail sees a text email
-    // (more likely to land in Primary). The text body already carries raw URLs.
-    html: plainTextOnly ? undefined : rendered.html,
-    text: rendered.text,
-    attachments: body.attachments,
-    headers: unsubscribeHeaders,
-  });
+  // Send a private copy per recipient so contacts never see each other's address.
+  const sendResults = await Promise.all(
+    toSend.map(async (email) => {
+      const r = await sendOutreachEmail({
+        to: email,
+        bcc,
+        subject,
+        // Plain-text-only A/B: omit the HTML part entirely so Gmail sees a text
+        // email (more likely to land in Primary). The text body carries raw URLs.
+        html: plainTextOnly ? undefined : rendered.html,
+        text: rendered.text,
+        attachments: body.attachments,
+        headers: unsubscribeHeaders,
+      });
+      return { email, success: r.success, messageId: r.messageId, error: r.error };
+    }),
+  );
+
+  const sent = sendResults.filter((r) => r.success);
+  const failed = sendResults.filter((r) => !r.success);
+
+  const sentToText = sent.map((r) => r.email).join(', ') || toSend.join(', ');
+  const messageIds = sent.map((r) => r.messageId).filter(Boolean).join(', ');
+  const failureNote = failed.length
+    ? `Failed for ${failed.map((r) => `${r.email}: ${r.error}`).join('; ')}`
+    : null;
 
   const { data: logRow, error: logErr } = await supabase
     .from('college_outreach_log')
     .insert({
       college_id: (college as any).id,
       template_variant: variant,
-      sent_to: recipient,
+      sent_to: sentToText,
       sent_bcc: bcc,
       subject,
       body_html: rendered.html,
       body_text: rendered.text,
       channel: 'resend',
-      resend_message_id: sendResult.messageId ?? null,
-      status: sendResult.success ? 'sent' : 'failed',
-      error_message: sendResult.error ?? null,
+      resend_message_id: messageIds || null,
+      status: sent.length ? 'sent' : 'failed',
+      error_message: failureNote,
       sent_by_name: senderName,
       sent_by_email: senderEmail,
     })
     .select('id')
     .single();
 
-  if (!sendResult.success) {
+  if (logErr) console.error('[college-outreach] failed to insert outreach log row:', logErr);
+
+  // Every recipient failed to send: surface the errors, do not advance the college.
+  if (sent.length === 0) {
     return NextResponse.json(
       {
         success: false,
-        error: sendResult.error,
+        error: failed.map((r) => `${r.email}: ${r.error}`).join('; ') || 'Send failed',
         outreach_log_id: logRow?.id ?? null,
+        failed,
       },
       { status: 502 },
     );
   }
 
+  // Advance the college once per outreach action (one touch, not per recipient).
   const currentStatus = (college as any).contact_status as string;
   const nextStatus = currentStatus === 'never_contacted' ? 'emailed_v1' : currentStatus;
   const nextOutreachCount = ((college as any).outreach_count ?? 0) + 1;
@@ -244,11 +294,13 @@ export async function POST(req: NextRequest) {
   const newContactStatus = refreshed?.contact_status ?? nextStatus;
   const newOutreachCount = refreshed?.outreach_count ?? nextOutreachCount;
 
-  if (logErr) console.error('[college-outreach] failed to insert outreach log row:', logErr);
-
   return NextResponse.json({
     success: true,
-    message_id: sendResult.messageId,
+    message_id: sent[0]?.messageId,
+    sent_to: sent.map((r) => r.email),
+    sent_count: sent.length,
+    skipped,
+    failed,
     outreach_log_id: logRow?.id ?? null,
     new_contact_status: newContactStatus,
     new_outreach_count: newOutreachCount,

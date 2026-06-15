@@ -863,3 +863,28 @@ export function getRecipientEmail(
   if (college.email && college.email.trim()) return college.email.trim();
   return null;
 }
+
+// Basic email shape check (not RFC-perfect, just enough to drop obvious junk).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Parse a free-text recipient field into a clean list of email addresses.
+ * Accepts Gmail-style input: addresses separated by commas, semicolons,
+ * whitespace or newlines. Drops empties and anything that does not look like an
+ * email, and de-duplicates case-insensitively (keeping the first-seen casing).
+ * Used for sending one outreach to several contacts at the SAME college.
+ */
+export function parseRecipientList(input: string | null | undefined): string[] {
+  if (!input) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input.split(/[\s,;]+/)) {
+    const candidate = raw.trim();
+    if (!candidate || !EMAIL_RE.test(candidate)) continue;
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(candidate);
+  }
+  return out;
+}
