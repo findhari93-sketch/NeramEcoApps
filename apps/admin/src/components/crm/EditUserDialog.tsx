@@ -90,6 +90,7 @@ export default function EditUserDialog({
   const [phone, setPhone] = useState('');
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState('');
+  const [academicYear, setAcademicYear] = useState('');
 
   // Lead fields - personal
   const [fatherName, setFatherName] = useState('');
@@ -132,6 +133,7 @@ export default function EditUserDialog({
       setPhone(user.phone || '');
       setDob(user.date_of_birth || '');
       setGender(user.gender || '');
+      setAcademicYear(user.academic_year || '');
 
       // Lead fields — always reset (prevents stale data from previous user)
       setFatherName(leadProfile?.father_name || '');
@@ -169,6 +171,12 @@ export default function EditUserDialog({
       if (phone !== (user.phone || '')) userUpdates.phone = phone || null;
       if (dob !== (user.date_of_birth || '')) userUpdates.date_of_birth = dob || null;
       if (gender !== (user.gender || '')) userUpdates.gender = gender || null;
+      if (academicYear !== (user.academic_year || '')) {
+        if (academicYear && !/^[0-9]{4}-[0-9]{2}$/.test(academicYear)) {
+          throw new Error('Academic Year must be in YYYY-YY format, e.g. 2026-27');
+        }
+        userUpdates.academic_year = academicYear || null;
+      }
 
       const leadUpdates: Record<string, unknown> = leadProfile ? { profileId: leadProfile.id } : {};
       if (leadProfile) {
@@ -293,6 +301,14 @@ export default function EditUserDialog({
               <MenuItem value="other">Other</MenuItem>
             </TextField>
           </Box>
+          <TextField
+            fullWidth size="small" label="Academic Year (Cohort)"
+            value={academicYear}
+            onChange={(e) => setAcademicYear(e.target.value)}
+            placeholder="2026-27"
+            helperText="Format YYYY-YY. Update when a past-batch student re-attempts next year."
+            sx={{ mb: 2 }}
+          />
           {leadProfile && (
             <TextField fullWidth size="small" label="Father's Name" value={fatherName} onChange={(e) => setFatherName(e.target.value)} />
           )}

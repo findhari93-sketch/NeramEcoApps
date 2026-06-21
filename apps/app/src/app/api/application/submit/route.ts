@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, deriveAcademicYearFromExamYear, currentAcademicYear } from '@neram/database';
 import { createApplication, updateApplication, submitApplication } from '@neram/database/queries';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
@@ -94,6 +94,19 @@ export async function POST(request: NextRequest) {
       await (supabase.from('users') as any)
         .update({ first_name: body.first_name })
         .eq('id', userId);
+    }
+
+    // Stamp the academic-year cohort (from target exam year, else current year)
+    // only when not already set, so the CRM can segment old vs current batch.
+    try {
+      const examYear = body.target_exam_year ? Number(body.target_exam_year) : null;
+      const cohort = deriveAcademicYearFromExamYear(examYear) || currentAcademicYear();
+      await (supabase.from('users') as any)
+        .update({ academic_year: cohort })
+        .eq('id', userId)
+        .is('academic_year', null);
+    } catch (cohortErr) {
+      console.error('[App submit] academic_year stamp failed:', cohortErr);
     }
 
     // Build the application input

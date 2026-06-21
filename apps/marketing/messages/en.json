@@ -28,15 +28,21 @@
     "title": "About Us",
     "pageTitle": "About Neram Classes",
     "heroSubtitle": "Empowering students with quality education and personalized guidance since 2009",
+    "story": {
+      "title": "Our Story",
+      "paragraph1": "For bigger exams like JEE and NEET, students have countless platforms, apps, and tools. Architecture entrance preparation had almost none. The field was too niche for anyone to build proper digital infrastructure for it, so we built it ourselves.",
+      "paragraph2": "We are architects first. We studied at IITs, NITs, and Schools of Planning and Architecture, and we design buildings and spaces in the real world. We are also software architects. We combined both crafts to build a digital ecosystem for NATA preparation that no other classroom in India has.",
+      "paragraph3": "At the heart of it is Nexus, our virtual learning assistant. It is a pocket tutor that helps students learn for the exam anytime, anywhere. Built entirely around the student experience, it makes Neram the only AI-enabled learning platform created for architecture entrance preparation."
+    },
     "mission": {
       "title": "Our Mission",
-      "paragraph1": "To provide world-class education that nurtures academic excellence, critical thinking, and holistic development. We are committed to making quality education accessible to all students, regardless of their background.",
-      "paragraph2": "Our comprehensive teaching methodology combines traditional wisdom with modern pedagogical techniques to ensure every student reaches their full potential."
+      "paragraph1": "Architecture is a unique path, and most students who dream of it have no one around them who has walked it. They struggle alone to understand the field, crack the entrance exam, and reach a good college. Neram Classes exists to remove that struggle. We give every aspiring architect a clear path, a guiding hand, and a community of seniors and peers who stand by them like family.",
+      "paragraph2": "We support students end to end: from understanding what architecture really is, to scoring well in the entrance exam, to securing admission in a top college. Our goal is simple: build a strong foundation for every student who wants to become an architect."
     },
     "vision": {
       "title": "Our Vision",
-      "paragraph1": "To be the most trusted and preferred educational institution, recognized for producing successful professionals who contribute positively to society.",
-      "paragraph2": "We envision a future where every student has access to personalized learning experiences that prepare them not just for exams, but for life's challenges."
+      "paragraph1": "We see a future where any student who dreams of becoming an architect can crack the exam with a strong score, get into a great college, and build a bright career, no matter which town they come from or who they know.",
+      "paragraph2": "We would rather not talk about our vision ourselves. When our students achieve their goals, the world will speak about us."
     },
     "impact": {
       "title": "Our Impact",
@@ -46,8 +52,8 @@
       "expertFaculty": "Expert Faculty"
     },
     "team": {
-      "title": "Meet Our Leadership",
-      "subtitle": "Experienced educators dedicated to your success"
+      "title": "The Architects Behind Neram",
+      "subtitle": "A team of architects from IITs, NITs, and Schools of Planning and Architecture, building the future of architecture education."
     },
     "values": {
       "title": "Our Core Values",
@@ -567,7 +573,7 @@
       },
       "exceptions": {
         "title": "10. Exceptions and Special Cases",
-        "content": "The following are NOT eligible for refund: (a) Payments made more than 24 hours ago — after 24 hours, digital platform subscriptions and learning tool licenses have already been purchased and activated for the student, making refunds impossible; (b) Second installment payments; (c) Payments where the student has already accessed course materials or attended classes; (d) Payments made using promotional offers or 100% scholarship waivers; (e) Cases where the student has violated the Terms and Conditions. In exceptional circumstances (such as medical emergencies or bereavement), the administration may consider requests outside the standard policy at their sole discretion. Such requests must be supported by valid documentation."
+        "content": "The following are NOT eligible for refund: (a) Payments made more than 24 hours ago: after 24 hours, digital platform subscriptions and learning tool licenses have already been purchased and activated for the student, making refunds impossible; (b) Second installment payments; (c) Payments where the student has already accessed course materials or attended classes; (d) Payments made using promotional offers or 100% scholarship waivers; (e) Cases where the student has violated the Terms and Conditions. In exceptional circumstances (such as medical emergencies or bereavement), the administration may consider requests outside the standard policy at their sole discretion. Such requests must be supported by valid documentation."
       },
       "contact": {
         "title": "11. Contact Us",
@@ -576,7 +582,7 @@
     }
   },
   "NATA2026": {
-    "hubTitle": "NATA 2026 — Complete Exam Guide",
+    "hubTitle": "NATA 2026: Complete Exam Guide",
     "hubSubtitle": "Everything you need to know about the National Aptitude Test in Architecture",
     "whatIsNata": "What is NATA?",
     "atAGlance": "NATA 2026 at a Glance",
@@ -673,12 +679,12 @@
     },
     "listing": {
       "title": "B.Arch Colleges in India",
-      "subtitle": "Compare {count} colleges — fees, NATA cutoffs, rankings, and placements",
+      "subtitle": "Compare {count} colleges: fees, NATA cutoffs, rankings, and placements",
       "noResults": "No colleges match your filters.",
       "noResultsHint": "Try removing some filters to see more results.",
       "showing": "Showing {shown} of {total} colleges",
       "stateTitle": "Best B.Arch Colleges in {state}",
-      "stateSubtitle": "{count} colleges — compare fees, TNEA cutoffs, NAAC grades, and placements"
+      "stateSubtitle": "{count} colleges: compare fees, TNEA cutoffs, NAAC grades, and placements"
     },
     "filters": {
       "title": "Filters",
@@ -716,7 +722,7 @@
       "annualFee": "Annual Fee",
       "acceptedExams": "Accepted Exams",
       "applyCtaTitle": "Preparing for NATA 2026?",
-      "applyCtaBody": "Join Neram Classes — Tamil Nadu's most trusted B.Arch entrance coaching.",
+      "applyCtaBody": "Join Neram Classes, Tamil Nadu's most trusted B.Arch entrance coaching.",
       "applyCtaButton": "Apply to Neram"
     },
     "archIndex": {
@@ -771,7 +777,7 @@
       "info": "TNEA (Tamil Nadu Engineering Admissions) allots B.Arch seats in Tamil Nadu government and aided colleges based on NATA scores and 12th marks. Cutoff ranks are updated after each counseling round."
     },
     "josaa": {
-      "title": "JoSAA B.Arch Colleges 2026 — NITs and IITs",
+      "title": "JoSAA B.Arch Colleges 2026: NITs and IITs",
       "subtitle": "{count} NIT and IIT programs admitting through JoSAA counseling (JEE Paper 2)",
       "info": "JoSAA (Joint Seat Allocation Authority) handles admissions to B.Arch programs at NITs, IITs, and other centrally funded institutions. Eligibility requires JEE Paper 2 and a valid NATA score.",
       "noData": "JoSAA college data will be updated soon."

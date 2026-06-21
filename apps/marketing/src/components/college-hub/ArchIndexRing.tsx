@@ -24,7 +24,7 @@ export default function ArchIndexRing({
 
   return (
     <Tooltip
-      title={`ArchIndex: ${score}/100 — ${label}. Neram's proprietary rating based on studio quality, faculty, placements, infrastructure, student satisfaction, and alumni strength.`}
+      title={`ArchIndex: ${score}/100, ${label}. Neram's proprietary rating based on studio quality, faculty, placements, infrastructure, student satisfaction, and alumni strength.`}
       arrow
     >
       <Box

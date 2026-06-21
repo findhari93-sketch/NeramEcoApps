@@ -140,7 +140,23 @@ export interface User extends Timestamps {
   // Metadata
   last_login_at: string | null;
   metadata: Record<string, unknown> | null;
+
+  // Lifecycle focus (reversible archive) + academic-year cohort + exam status
+  // (migration 20260622). Archiving de-prioritizes a user in the CRM without
+  // deleting them and WITHOUT disabling their login.
+  lifecycle_status: LifecycleStatus;
+  archived_at: string | null;
+  archived_by: string | null;
+  archived_reason: string | null;
+  academic_year: string | null;   // 'YYYY-YY' e.g. '2026-27'
+  exam_status: ExamStatus | null;
 }
+
+/** Reversible focus state on a user. 'archived' hides them from the default CRM view. */
+export type LifecycleStatus = 'active' | 'archived';
+
+/** Recorded answer to the "are you writing the exam?" outreach. */
+export type ExamStatus = 'writing_exam_this_year' | 'completed_exam' | 'not_sure' | 'not_writing';
 
 /**
  * User profile history - tracks all profile changes for admin visibility
@@ -2956,6 +2972,15 @@ export interface UserJourney {
   linked_classroom_email: string | null;
   is_disabled: boolean;
 
+  // Lifecycle focus + academic-year cohort (migration 20260622)
+  lifecycle_status: LifecycleStatus;
+  archived_at: string | null;
+  archived_by: string | null;
+  archived_reason: string | null;
+  academic_year: string | null;   // 'YYYY-YY' e.g. '2026-27'
+  exam_status: ExamStatus | null;
+  target_exam_year: number | null; // from the latest lead profile
+
   // Computed pipeline stage
   pipeline_stage: PipelineStage;
 
@@ -3038,6 +3063,11 @@ export interface UserJourneyListOptions {
   isDeadLead?: boolean;
   isIrrelevant?: boolean;
   excludeLinkedToClassroom?: boolean;
+  // Lifecycle focus filters (migration 20260622)
+  lifecycleStatus?: LifecycleStatus;     // explicit active/archived filter
+  excludeArchived?: boolean;             // default true; hides archived from the list
+  academicYear?: string;                 // 'YYYY-YY' cohort filter
+  candidateSegment?: CandidateSegment;   // suggestion-only smart segments
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -3045,6 +3075,12 @@ export interface UserJourneyListOptions {
   orderBy?: string;
   orderDirection?: 'asc' | 'desc';
 }
+
+/**
+ * Suggestion-only "needs review" segments surfaced in the CRM Candidates view.
+ * These never auto-act; an admin reviews the list and archives manually.
+ */
+export type CandidateSegment = 'no_phone_dormant' | 'old_cohort';
 
 /**
  * Counts per pipeline stage for the funnel component

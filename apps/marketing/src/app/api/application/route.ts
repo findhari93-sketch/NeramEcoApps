@@ -1,7 +1,13 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, sendTemplateEmail, notifyNewApplication } from '@neram/database';
+import {
+  createAdminClient,
+  sendTemplateEmail,
+  notifyNewApplication,
+  deriveAcademicYearFromExamYear,
+  currentAcademicYear,
+} from '@neram/database';
 import {
   createApplication,
   getApplicationsByUserId,
@@ -356,6 +362,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
     // Update user's first_name if provided
     if (body.first_name) {
       await (supabase.from('users') as any).update({ first_name: body.first_name }).eq('id', auth.userId);
+    }
+
+    // Stamp the academic-year cohort from the target exam year (fallback to the
+    // current academic year). Only set when not already populated so an admin
+    // override is never clobbered. Used by the CRM to segment old vs current batch.
+    try {
+      const examYear = body.target_exam_year ? Number(body.target_exam_year) : null;
+      const cohort = deriveAcademicYearFromExamYear(examYear) || currentAcademicYear();
+      await (supabase.from('users') as any)
+        .update({ academic_year: cohort })
+        .eq('id', auth.userId)
+        .is('academic_year', null);
+    } catch (cohortErr) {
+      console.error('[Application API] academic_year stamp failed:', cohortErr);
     }
 
     // Send confirmation emails and dispatch notifications if submitting

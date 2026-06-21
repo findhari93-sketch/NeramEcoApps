@@ -1,4 +1,4 @@
-// College Hub — SEO metadata generators
+// College Hub: SEO metadata generators
 // Uses existing buildAlternates() and buildOgImage() from @/lib/seo/metadata
 
 import type { Metadata } from 'next';
@@ -40,7 +40,7 @@ export function generateStateListingMetadata(
   stateName: string,
   collegeCount: number
 ): Metadata {
-  const title = `Best B.Arch Colleges in ${stateName} 2026 — Fees, Cutoffs, NATA`;
+  const title = `Best B.Arch Colleges in ${stateName} 2026: Fees, Cutoffs, NATA`;
   const description = `${collegeCount} B.Arch colleges in ${stateName}. Compare fees, TNEA/JoSAA cutoffs, NAAC grades, placements and infrastructure. Shortlist the right college.`;
 
   return {
@@ -71,7 +71,7 @@ export function generateCollegeDetailMetadata(
   const naacStr = college.naac_grade ? `, NAAC ${college.naac_grade}` : '';
   const seatsStr = college.total_barch_seats ? `, ${college.total_barch_seats} B.Arch seats` : '';
 
-  const title = `${college.name} — B.Arch Admission, Fees, Cutoffs 2026`;
+  const title = `${college.name}: B.Arch Admission, Fees, Cutoffs 2026`;
   const description =
     college.about ??
     `${college.name} in ${college.city}, ${college.state}${naacStr}. ${feeStr}${seatsStr}. Check NATA cutoffs, fee structure, placements, faculty, and infrastructure.`;
@@ -98,7 +98,7 @@ export function generateCollegeDetailMetadata(
 // ─── TNEA hub page ───────────────────────────────────────────────────────────
 
 export function generateTNEAMetadata(locale: string, collegeCount: number): Metadata {
-  const title = `TNEA B.Arch Colleges 2026 — Cutoffs, Fees, Rankings`;
+  const title = `TNEA B.Arch Colleges 2026: Cutoffs, Fees, Rankings`;
   const description = `${collegeCount} B.Arch colleges accepting TNEA counseling. Compare TNEA cutoff ranks, fees, and placements. Updated for TNEA 2026.`;
 
   return {
@@ -120,7 +120,7 @@ export function generateTNEAMetadata(locale: string, collegeCount: number): Meta
 // ─── JoSAA hub page ─────────────────────────────────────────────────────────
 
 export function generateJoSAAMetadata(locale: string, collegeCount: number): Metadata {
-  const title = `JoSAA B.Arch Colleges 2026 — NITs, IITs, Cutoffs, Fees`;
+  const title = `JoSAA B.Arch Colleges 2026: NITs, IITs, Cutoffs, Fees`;
   const description = `${collegeCount} NIT and IIT B.Arch programs accepting JoSAA counseling. Compare JoSAA cutoff ranks, opening/closing ranks, and fees. Updated for JoSAA 2026.`;
 
   return {
@@ -164,7 +164,7 @@ export function generateCounselingMetadata(locale: string, systemKey: string, co
 // ─── City listing page ──────────────────────────────────────────────────────
 
 export function generateCityMetadata(locale: string, cityName: string, collegeCount: number): Metadata {
-  const title = `Architecture Colleges in ${cityName} 2026 — Fees, Rankings | Neram`;
+  const title = `Architecture Colleges in ${cityName} 2026: Fees, Rankings | Neram`;
   const description = `${collegeCount} B.Arch colleges in ${cityName}. Compare fees, NATA cutoffs, placements, and rankings. Find the best architecture college in ${cityName}.`;
   const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
   const path = `/colleges/city/${citySlug}`;

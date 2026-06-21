@@ -66,10 +66,27 @@ export function initFirebase(): FirebaseApp {
 
 let persistenceSet = false;
 
+/**
+ * True only in a non-production E2E test build. When on, Firebase phone auth
+ * skips reCAPTCHA (auth.settings.appVerificationDisabledForTesting) so Playwright
+ * can drive the real sign-in flow with a registered test phone number. The
+ * NODE_ENV guard keeps this OFF in production even if the flag leaks into an env.
+ */
+function isE2ETestMode(): boolean {
+  return (
+    process.env.NEXT_PUBLIC_E2E_TEST_MODE === 'true' &&
+    process.env.NODE_ENV !== 'production'
+  );
+}
+
 export function getFirebaseAuth(): Auth {
   if (!firebaseAuth) {
     initFirebase();
     firebaseAuth = getAuth(firebaseApp!);
+    if (isE2ETestMode()) {
+      // Bypass reCAPTCHA for automated tests; only applies to registered test numbers.
+      firebaseAuth.settings.appVerificationDisabledForTesting = true;
+    }
   }
   return firebaseAuth;
 }
@@ -197,6 +214,11 @@ export function initRecaptcha(
   }
 ): RecaptchaVerifier {
   const auth = getFirebaseAuth();
+
+  // Defensive: ensure the test bypass is on even if auth was created elsewhere first.
+  if (isE2ETestMode()) {
+    auth.settings.appVerificationDisabledForTesting = true;
+  }
 
   if (recaptchaVerifier) {
     try {

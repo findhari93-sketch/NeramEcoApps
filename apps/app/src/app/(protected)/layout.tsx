@@ -17,6 +17,11 @@ import { trackFunnelEvent, trackFunnelEventImmediate, setFunnelTrackerToken } fr
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
+// Set when a user defers phone verification via the modal's "Skip for now".
+// Lives in sessionStorage so it clears at session end and re-prompts next visit,
+// while the DB keeps phone_verified=false (the captured lead is retained).
+const PHONE_SKIP_KEY = 'phone_verification_skipped';
+
 import type { AccountTier } from '@neram/database';
 
 // Supabase user type from API response
@@ -43,6 +48,7 @@ function ProtectedLayoutInner({
   const router = useRouter();
   const pathname = usePathname();
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [phoneSkipped, setPhoneSkipped] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [checkingUser, setCheckingUser] = useState(true);
@@ -70,6 +76,16 @@ function ProtectedLayoutInner({
       router.push('/login');
     }
   }, [user, loading, router, sso.processing, sso.error]);
+
+  // Honor a same-session "Skip for now" so a user who deferred phone verification
+  // is not re-blocked on every navigation within the session.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(PHONE_SKIP_KEY) === '1') setPhoneSkipped(true);
+    } catch {
+      // sessionStorage unavailable (e.g. privacy mode): just keep prompting.
+    }
+  }, []);
 
   // Register/check user in Supabase when Firebase user is available
   useEffect(() => {
@@ -232,8 +248,10 @@ function ProtectedLayoutInner({
   };
 
   const handlePhoneVerified = async () => {
-    setPhoneVerified(true);
-
+    // Trust the DB, not an optimistic flag: re-fetch the user with a refreshed
+    // token (now carrying the phone claim) and derive phoneVerified from the
+    // authoritative response. This prevents a UI-vs-DB desync when the
+    // verify-phone write fails silently.
     try {
       const auth = getFirebaseAuth();
       const currentUser = auth.currentUser;
@@ -249,9 +267,22 @@ function ProtectedLayoutInner({
       if (response.ok) {
         const { user: dbUser } = await response.json();
         setSupabaseUser(dbUser);
+        setPhoneVerified(dbUser.phone_verified);
+        setOnboardingCompleted(dbUser.onboarding_completed ?? false);
+        setIdToken(idToken);
+        if (!dbUser.phone_verified) {
+          // OTP linked in Firebase but the DB write did not stick. Keep the
+          // modal open and surface a recoverable error rather than letting the
+          // user through with a false-positive verified state.
+          setRegistrationError(true);
+        }
+      } else {
+        console.error('Refresh after phone verification failed:', response.status);
+        setRegistrationError(true);
       }
     } catch (error) {
       console.error('Error refreshing user data after phone verification:', error);
+      setRegistrationError(true);
     }
   };
 
@@ -374,13 +405,27 @@ function ProtectedLayoutInner({
       </AppShell>
 
       {/* Phone Verification Modal */}
-      {!phoneVerified && (
+      {!phoneVerified && !phoneSkipped && (
         <LoginModal
-          open={!phoneVerified}
+          open={!phoneVerified && !phoneSkipped}
           allowClose={false}
           onAuthenticated={handlePhoneVerified}
           apiBaseUrl=""
           phoneOnly={true}
+          allowEscapeHatch
+          maxAttemptsBeforeEscape={2}
+          onGetHelp={() =>
+            trackFunnelEventImmediate({ funnel: 'auth', event: 'phone_help_opened', status: 'started' })
+          }
+          onSkip={() => {
+            try {
+              sessionStorage.setItem(PHONE_SKIP_KEY, '1');
+            } catch {
+              // ignore storage failure; skip still applies for this render
+            }
+            setPhoneSkipped(true);
+            trackFunnelEventImmediate({ funnel: 'auth', event: 'phone_verification_skipped', status: 'skipped' });
+          }}
           onFunnelEvent={(evt) => {
             trackFunnelEvent(evt);
             if (evt.status === 'failed' || evt.status === 'completed') {

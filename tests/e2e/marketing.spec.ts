@@ -164,6 +164,40 @@ test.describe('Error-Free Loading', () => {
   });
 });
 
+test.describe('About Page', () => {
+  const teamMembers = ['TamilSelvan', 'Sudharshini Arjun', 'Sivaram', 'Shanthi Manoharan'];
+
+  test('shows the Our Story section and architecture team', async ({ page }) => {
+    await page.goto('/about');
+    await expect(page.locator('main')).toBeVisible();
+
+    // New "Our Story" narrative section
+    await expect(page.getByRole('heading', { name: /our story/i })).toBeVisible();
+
+    // Revamped team heading + the four real architects
+    await expect(page.getByRole('heading', { name: /architects behind neram/i })).toBeVisible();
+    for (const name of teamMembers) {
+      await expect(page.getByText(name, { exact: false }).first()).toBeVisible();
+    }
+  });
+
+  test('renders Tamil story copy on /ta/about', async ({ page }) => {
+    await page.goto('/ta/about');
+    await expect(page.locator('main')).toBeVisible();
+    // Tamil "Our Story" heading (எங்கள் கதை)
+    await expect(page.getByRole('heading', { name: 'எங்கள் கதை' })).toBeVisible();
+  });
+
+  test('no horizontal overflow on mobile', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/about');
+    await page.waitForLoadState('networkidle');
+
+    const overflow = await page.evaluate(() => document.body.scrollWidth > window.innerWidth);
+    expect(overflow).toBe(false);
+  });
+});
+
 test.describe('Key Pages Render', () => {
   const pages = ['/', '/courses', '/about', '/apply'];
 

@@ -21,13 +21,19 @@ import type {
   UserJourney,
   PipelineStageCounts,
   PipelineStage,
+  ExamStatus,
+  CandidateSegment,
 } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 import type { MRT_PaginationState, MRT_SortingState } from 'material-react-table';
 import PipelineFunnel from '../../../components/crm/PipelineFunnel';
 import UsersTable from '../../../components/crm/UsersTable';
 import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
+import ArchiveDialog from '../../../components/crm/ArchiveDialog';
+import VerifyStatusDialog from '../../../components/crm/VerifyStatusDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+
+type LifecycleView = 'active' | 'archived' | 'candidates';
 
 export default function CRMPage() {
   const router = useRouter();
@@ -52,6 +58,12 @@ export default function CRMPage() {
   const [showIrrelevant, setShowIrrelevant] = useState(
     searchParams.get('irrelevant') === 'true'
   );
+  const [lifecycleView, setLifecycleView] = useState<LifecycleView>(
+    (searchParams.get('lifecycle') as LifecycleView) || 'active'
+  );
+  const [candidateSegment, setCandidateSegment] = useState<CandidateSegment>(
+    (searchParams.get('candidate') as CandidateSegment) || 'no_phone_dormant'
+  );
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -66,6 +78,12 @@ export default function CRMPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [usersToDelete, setUsersToDelete] = useState<UserJourney[]>([]);
 
+  // Archive + verify dialog state
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [usersToArchive, setUsersToArchive] = useState<UserJourney[]>([]);
+  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
+  const [userToVerify, setUserToVerify] = useState<UserJourney | null>(null);
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -79,6 +97,13 @@ export default function CRMPage() {
       if (showDeadLeads) params.set('is_dead_lead', 'true');
       if (showIrrelevant) params.set('is_irrelevant', 'true');
       if (globalFilter) params.set('search', globalFilter);
+
+      // Lifecycle focus view
+      if (lifecycleView === 'archived') {
+        params.set('lifecycle_status', 'archived');
+      } else if (lifecycleView === 'candidates') {
+        params.set('candidate', candidateSegment);
+      }
 
       if (sorting.length > 0) {
         params.set('order_by', sorting[0].id);
@@ -97,7 +122,7 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant]);
+  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, lifecycleView, candidateSegment]);
 
   useEffect(() => {
     fetchUsers();
@@ -246,6 +271,110 @@ export default function CRMPage() {
     await fetchUsers();
   };
 
+  // ─── Lifecycle: archive / restore / verify ───────────────────────────
+  const handleLifecycleViewChange = (view: LifecycleView) => {
+    setLifecycleView(view);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+    const params = new URLSearchParams(window.location.search);
+    if (view === 'active') {
+      params.delete('lifecycle');
+      params.delete('candidate');
+    } else {
+      params.set('lifecycle', view);
+      if (view === 'candidates') params.set('candidate', candidateSegment);
+      else params.delete('candidate');
+    }
+    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    window.history.replaceState(null, '', newUrl);
+  };
+
+  const handleCandidateSegmentChange = (segment: CandidateSegment) => {
+    setCandidateSegment(segment);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    const params = new URLSearchParams(window.location.search);
+    params.set('lifecycle', 'candidates');
+    params.set('candidate', segment);
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', newUrl);
+  };
+
+  const handleArchiveRequest = (selectedUsers: UserJourney[]) => {
+    setUsersToArchive(selectedUsers);
+    setArchiveDialogOpen(true);
+  };
+
+  const handleArchiveConfirm = async (userIds: string[], reason: string) => {
+    if (!supabaseUserId) throw new Error('Admin user ID not found. Please refresh and try again.');
+
+    if (userIds.length === 1) {
+      const res = await fetch(`/api/crm/users/${userIds[0]}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminId: supabaseUserId, reason }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error || 'Failed to archive user');
+      }
+    } else {
+      const res = await fetch('/api/crm/users/bulk-archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds, adminId: supabaseUserId, reason }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error || 'Failed to archive users');
+      }
+    }
+
+    setArchiveDialogOpen(false);
+    setUsersToArchive([]);
+    await fetchUsers();
+  };
+
+  const handleRestore = async (user: UserJourney) => {
+    if (!supabaseUserId) return;
+    try {
+      const res = await fetch(`/api/crm/users/${user.id}/archive`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminId: supabaseUserId }),
+      });
+      if (!res.ok) throw new Error('Failed to restore user');
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleVerifyRequest = (user: UserJourney) => {
+    setUserToVerify(user);
+    setVerifyDialogOpen(true);
+  };
+
+  const handleVerifyConfirm = async (payload: {
+    examStatus: ExamStatus;
+    academicYear?: string;
+    archive: boolean;
+    reason?: string;
+  }) => {
+    if (!supabaseUserId || !userToVerify) throw new Error('Admin user ID not found.');
+    const res = await fetch(`/api/crm/users/${userToVerify.id}/verify-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminId: supabaseUserId, ...payload }),
+    });
+    if (!res.ok) {
+      const e = await res.json();
+      throw new Error(e.error || 'Failed to record exam status');
+    }
+    setVerifyDialogOpen(false);
+    setUserToVerify(null);
+    await fetchUsers();
+  };
+
   const activeStageConfig = activeStage ? PIPELINE_STAGE_CONFIG[activeStage] : null;
 
   return (
@@ -286,13 +415,82 @@ export default function CRMPage() {
               User Management
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 12, md: 14 } }}>
-              {pipelineCounts
-                ? `${pipelineCounts.total} users across all stages`
-                : 'Loading...'}
+              {!pipelineCounts
+                ? 'Loading...'
+                : lifecycleView === 'archived'
+                ? `${totalCount} archived ${totalCount === 1 ? 'user' : 'users'} (hidden from the active view)`
+                : lifecycleView === 'candidates'
+                ? `${totalCount} suggested for review, archive the ones who are done`
+                : `${pipelineCounts.total} active users across all stages`}
             </Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          {/* Lifecycle focus segmented control */}
+          <Box
+            sx={{
+              display: 'inline-flex',
+              p: 0.375,
+              gap: 0.375,
+              borderRadius: 1.25,
+              bgcolor: 'grey.100',
+            }}
+          >
+            {([
+              { key: 'active', label: 'Active' },
+              { key: 'archived', label: 'Archived' },
+              { key: 'candidates', label: 'Candidates' },
+            ] as { key: LifecycleView; label: string }[]).map((seg) => {
+              const selected = lifecycleView === seg.key;
+              return (
+                <Box
+                  key={seg.key}
+                  component="button"
+                  onClick={() => handleLifecycleViewChange(seg.key)}
+                  sx={{
+                    border: 'none',
+                    cursor: 'pointer',
+                    px: 1.25,
+                    py: 0.5,
+                    borderRadius: 1,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                    bgcolor: selected ? 'background.paper' : 'transparent',
+                    color: selected ? 'primary.main' : 'text.secondary',
+                    boxShadow: selected ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
+                    transition: 'all 0.15s',
+                    '&:hover': { color: selected ? 'primary.main' : 'text.primary' },
+                  }}
+                >
+                  {seg.label}
+                </Box>
+              );
+            })}
+          </Box>
+
+          {/* Candidate sub-segments (suggestions only) */}
+          {lifecycleView === 'candidates' && (
+            <>
+              <Chip
+                label="No phone + dormant"
+                onClick={() => handleCandidateSegmentChange('no_phone_dormant')}
+                variant={candidateSegment === 'no_phone_dormant' ? 'filled' : 'outlined'}
+                size="small"
+                color={candidateSegment === 'no_phone_dormant' ? 'primary' : 'default'}
+                sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
+              />
+              <Chip
+                label="Old cohort"
+                onClick={() => handleCandidateSegmentChange('old_cohort')}
+                variant={candidateSegment === 'old_cohort' ? 'filled' : 'outlined'}
+                size="small"
+                color={candidateSegment === 'old_cohort' ? 'primary' : 'default'}
+                sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
+              />
+            </>
+          )}
+
           <Chip
             label="Dead Leads"
             onClick={handleToggleDeadLeads}
@@ -435,6 +633,10 @@ export default function CRMPage() {
           onMarkDeadLead={handleMarkDeadLead}
           onMarkIrrelevant={handleMarkIrrelevant}
           onDisableToggle={handleDisableToggle}
+          onArchiveRequest={handleArchiveRequest}
+          onBulkArchiveRequest={handleArchiveRequest}
+          onRestore={handleRestore}
+          onVerifyStatus={handleVerifyRequest}
           isFullscreen={isFullscreen}
         />
       </Paper>
@@ -448,6 +650,28 @@ export default function CRMPage() {
         }}
         users={usersToDelete}
         onConfirm={handleBulkDelete}
+      />
+
+      {/* Archive (reversible) confirmation dialog */}
+      <ArchiveDialog
+        open={archiveDialogOpen}
+        onClose={() => {
+          setArchiveDialogOpen(false);
+          setUsersToArchive([]);
+        }}
+        users={usersToArchive}
+        onConfirm={handleArchiveConfirm}
+      />
+
+      {/* Verify exam status outreach dialog */}
+      <VerifyStatusDialog
+        open={verifyDialogOpen}
+        onClose={() => {
+          setVerifyDialogOpen(false);
+          setUserToVerify(null);
+        }}
+        user={userToVerify}
+        onConfirm={handleVerifyConfirm}
       />
     </Box>
   );

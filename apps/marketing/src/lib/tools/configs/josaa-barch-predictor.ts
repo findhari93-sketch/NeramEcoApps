@@ -28,7 +28,7 @@ export const josaaBarchPredictorConfig: ToolConfig = {
   steps: [
     {
       title: 'Pick your category and PwD status',
-      desc: 'Choose from General, OBC-NCL, SC, ST, or EWS. Check the PwD box if you have a benchmark disability — the predictor uses your category-specific PwD seats.',
+      desc: 'Choose from General, OBC-NCL, SC, ST, or EWS. Check the PwD box if you have a benchmark disability. The predictor uses your category-specific PwD seats.',
     },
     {
       title: 'Choose CRL or category rank',
@@ -66,7 +66,7 @@ export const josaaBarchPredictorConfig: ToolConfig = {
     },
     {
       title: 'Direct college deep-links',
-      desc: 'Every result card links to the institute\'s detailed Neram profile with NIRF history, fees, COA approval, placements, and reviews — for the 14 of 21 institutes covered in our College Hub.',
+      desc: 'Every result card links to the institute\'s detailed Neram profile with NIRF history, fees, COA approval, placements, and reviews (for the 14 of 21 institutes covered in our College Hub).',
     },
   ],
   screenshots: {
@@ -79,14 +79,14 @@ export const josaaBarchPredictorConfig: ToolConfig = {
   contextContent: `<p>The Joint Seat Allocation Authority (JoSAA) conducts centralised counselling for B.Arch admissions across 21 institutes: 3 IITs that admit through JEE Advanced (Kharagpur, Roorkee, BHU), 10 NITs that admit through JEE Main Paper 2A, 3 Schools of Planning &amp; Architecture (Delhi, Bhopal, Vijayawada), and 5 GFTIs including IIEST Shibpur and BIT Mesra. Counselling typically runs from June to August across 6 rounds, with final allotment by mid-August.</p><p>Two ranks matter for reserved-category candidates. Your <strong>Common Rank List (CRL)</strong> is your position among all B.Arch test-takers. Your <strong>category rank</strong> is your position within your specific reservation category. NIT seats reserved for OBC-NCL, SC, ST, EWS or PwD candidates use the category rank as the closing rank, while OPEN seats use CRL. Mixing these up is the single most common reason students fill the wrong preference order.</p><p>NIT seats are further split into <strong>quotas</strong>: Home State (HS) for students whose JEE State of Eligibility matches the NIT\'s state, Other State (OS) for everyone else, and All India (AI) at IITs and SPAs. Roughly 50% of NIT B.Arch seats are HS-only, so your home state can be the difference between a Safe seat and a Reach.</p><p>Round-wise closing ranks shift sharply between Round 1 and the final round as students upgrade or withdraw. The Neram predictor defaults to the latest available round (most accurate for "what would I get today") but you can switch to earlier rounds via the Advanced panel.</p>`,
   faqs: [
     {
-      question: 'Which rank should I enter — CRL or category rank?',
+      question: 'Which rank should I enter, CRL or category rank?',
       answer:
         'Both work, but they predict different seats. CRL is matched against OPEN seats only (the unreserved pool). Category rank (OBC-NCL, SC, ST, EWS) is matched against your category\'s reserved seats. If you\'re reserved-category, try both: your category rank will usually open more options at NITs, while CRL might be needed for IITs where category seats are highly competitive.',
     },
     {
       question: 'Does Home State affect my chances at IITs?',
       answer:
-        'No. IITs and Schools of Planning &amp; Architecture (SPAs) only have an All India (AI) quota — there is no Home State preference at IIT Kharagpur, IIT Roorkee, IIT BHU, SPA Delhi, SPA Bhopal, or SPA Vijayawada. Home State applies only at the 10 NITs and a few GFTIs.',
+        'No. IITs and Schools of Planning &amp; Architecture (SPAs) only have an All India (AI) quota. There is no Home State preference at IIT Kharagpur, IIT Roorkee, IIT BHU, SPA Delhi, SPA Bhopal, or SPA Vijayawada. Home State applies only at the 10 NITs and a few GFTIs.',
     },
     {
       question: 'How many institutes does the predictor cover?',
@@ -96,7 +96,7 @@ export const josaaBarchPredictorConfig: ToolConfig = {
     {
       question: 'Why are some institutes labeled "No profile yet"?',
       answer:
-        '14 of the 21 JoSAA institutes have detailed Neram college profiles with fees, NIRF history, placements, and reviews. The other 7 (mainly smaller GFTIs) are being added to our College Hub progressively. Until then their predictor row simply doesn\'t link out — the prediction itself works for all 21.',
+        '14 of the 21 JoSAA institutes have detailed Neram college profiles with fees, NIRF history, placements, and reviews. The other 7 (mainly smaller GFTIs) are being added to our College Hub progressively. Until then their predictor row simply doesn\'t link out. The prediction itself works for all 21.',
     },
     {
       question: 'How are Safe, Probable, and Reach calculated?',

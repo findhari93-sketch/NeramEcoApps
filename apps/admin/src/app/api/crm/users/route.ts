@@ -2,11 +2,25 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { listUserJourneys, getPipelineStageCounts } from '@neram/database';
-import type { UserJourneyListOptions, PipelineStage } from '@neram/database';
+import type {
+  UserJourneyListOptions,
+  PipelineStage,
+  LifecycleStatus,
+  CandidateSegment,
+} from '@neram/database';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+
+    // Lifecycle focus: default the list to active users only; an explicit
+    // lifecycle_status (active|archived) or a candidate segment overrides.
+    const lifecycleStatus = (searchParams.get('lifecycle_status') as LifecycleStatus) || undefined;
+    const candidateSegment = (searchParams.get('candidate') as CandidateSegment) || undefined;
+    // Candidate segments and explicit archived view should still include
+    // archived rows when asked; otherwise default to active-only.
+    const includeArchived =
+      lifecycleStatus === 'archived' || searchParams.get('include_archived') === 'true';
 
     const options: UserJourneyListOptions = {
       search: searchParams.get('search') || undefined,
@@ -20,6 +34,10 @@ export async function GET(request: NextRequest) {
         : undefined,
       isDeadLead: searchParams.get('is_dead_lead') === 'true' || undefined,
       isIrrelevant: searchParams.get('is_irrelevant') === 'true' || undefined,
+      lifecycleStatus,
+      excludeArchived: includeArchived ? false : undefined,
+      academicYear: searchParams.get('academic_year') || undefined,
+      candidateSegment,
       dateFrom: searchParams.get('date_from') || undefined,
       dateTo: searchParams.get('date_to') || undefined,
       limit: parseInt(searchParams.get('limit') || '25', 10),
@@ -28,10 +46,11 @@ export async function GET(request: NextRequest) {
       orderDirection: (searchParams.get('order_dir') as 'asc' | 'desc') || 'desc',
     };
 
-    // Fetch users and pipeline counts in parallel
+    // Fetch users and pipeline counts in parallel. The funnel always reflects
+    // the active subset (the focus), regardless of which lifecycle view is open.
     const [usersResult, pipelineCounts] = await Promise.all([
       listUserJourneys(options),
-      getPipelineStageCounts(),
+      getPipelineStageCounts({ excludeArchived: true }),
     ]);
 
     return NextResponse.json({

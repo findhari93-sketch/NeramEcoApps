@@ -7,7 +7,7 @@ import AskSeniorsPageContent from '@/components/ask-seniors/AskSeniorsPageConten
 export const revalidate = 3600
 
 export const metadata: Metadata = {
-  title: '#AskSeniors 2026 — Free B.Arch College Q&A Event | Neram Classes',
+  title: '#AskSeniors 2026: Free B.Arch College Q&A Event | Neram Classes',
   description:
     'Join AskSeniors, a free annual online event where current B.Arch students from 50+ colleges answer your counselling questions before TNEA. Register now.',
   openGraph: {

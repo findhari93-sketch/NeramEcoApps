@@ -40,6 +40,9 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import TroubleshootIcon from '@mui/icons-material/Troubleshoot';
 import LockPersonIcon from '@mui/icons-material/LockPerson';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import type { UserJourney, PipelineStage } from '@neram/database';
 import { PIPELINE_STAGE_CONFIG } from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
@@ -61,6 +64,10 @@ interface UsersTableProps {
   onMarkIrrelevant?: (user: UserJourney) => void;
   onDiagnosticsClick?: (user: UserJourney) => void;
   onDisableToggle?: (user: UserJourney) => void;
+  onArchiveRequest?: (users: UserJourney[]) => void;
+  onRestore?: (user: UserJourney) => void;
+  onBulkArchiveRequest?: (users: UserJourney[]) => void;
+  onVerifyStatus?: (user: UserJourney) => void;
   isFullscreen?: boolean;
 }
 
@@ -155,7 +162,8 @@ function handleExportCsv(rows: UserJourney[]) {
 function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => void }) {
   const stage = user.pipeline_stage;
   const config = PIPELINE_STAGE_CONFIG[stage];
-  const isDimmed = user.contacted_status === 'dead_lead' || user.contacted_status === 'irrelevant';
+  const isArchived = user.lifecycle_status === 'archived';
+  const isDimmed = user.contacted_status === 'dead_lead' || user.contacted_status === 'irrelevant' || isArchived;
   const isEnrolled = stage === 'enrolled' || user.linked_classroom_email;
 
   const courseLabels: Record<string, string> = {
@@ -327,11 +335,17 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
               {formatCurrency(user.total_paid)}
             </Typography>
           )}
+          {user.academic_year && (
+            <Chip label={user.academic_year} size="small" sx={{ height: 20, fontSize: 9, fontFamily: 'monospace', bgcolor: 'grey.100', color: 'text.secondary', borderRadius: 0.75 }} />
+          )}
           {user.contacted_status === 'dead_lead' && (
             <Chip label="Dead" size="small" sx={{ height: 20, fontSize: 9, bgcolor: '#9E9E9E14', color: '#757575', borderRadius: 0.75 }} />
           )}
           {user.contacted_status === 'irrelevant' && (
             <Chip label="Irrelevant" size="small" sx={{ height: 20, fontSize: 9, bgcolor: '#FF980014', color: '#E65100', borderRadius: 0.75 }} />
+          )}
+          {isArchived && (
+            <Chip label="Archived" size="small" sx={{ height: 20, fontSize: 9, bgcolor: '#5E35B114', color: '#4527A0', borderRadius: 0.75 }} />
           )}
         </Box>
       </Box>
@@ -460,6 +474,10 @@ export default function UsersTable(props: UsersTableProps) {
     onMarkIrrelevant,
     onDiagnosticsClick,
     onDisableToggle,
+    onArchiveRequest,
+    onRestore,
+    onBulkArchiveRequest,
+    onVerifyStatus,
     isFullscreen,
   } = props;
 
@@ -594,9 +612,56 @@ export default function UsersTable(props: UsersTableProps) {
                   }}
                 />
               )}
+              {row.original.lifecycle_status === 'archived' && (
+                <Chip
+                  label="Archived"
+                  size="small"
+                  icon={<Inventory2OutlinedIcon sx={{ fontSize: '10px !important' }} />}
+                  sx={{
+                    height: 18,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    bgcolor: '#5E35B114',
+                    color: '#4527A0',
+                    borderRadius: 0.75,
+                    mt: 0.25,
+                  }}
+                />
+              )}
             </Box>
           </Box>
         ),
+      },
+      {
+        accessorKey: 'academic_year',
+        header: 'Cohort',
+        size: 100,
+        enableSorting: true,
+        Cell: ({ row }) => {
+          const year = row.original.academic_year;
+          if (!year) {
+            return (
+              <Typography variant="caption" color="text.disabled">
+                --
+              </Typography>
+            );
+          }
+          return (
+            <Chip
+              label={year}
+              size="small"
+              sx={{
+                height: 22,
+                fontSize: 11,
+                fontWeight: 600,
+                bgcolor: 'grey.100',
+                color: 'text.secondary',
+                borderRadius: 0.75,
+                fontFamily: 'monospace',
+              }}
+            />
+          );
+        },
       },
       {
         accessorKey: 'phone',
@@ -969,6 +1034,20 @@ export default function UsersTable(props: UsersTableProps) {
 
           <Button
             variant="outlined"
+            size="small"
+            startIcon={<Inventory2OutlinedIcon sx={{ fontSize: 18 }} />}
+            onClick={() => {
+              if (onBulkArchiveRequest) {
+                onBulkArchiveRequest(selectedRows.map((r) => r.original));
+              }
+            }}
+            sx={{ textTransform: 'none', borderRadius: 0.75, fontSize: 13 }}
+          >
+            Archive
+          </Button>
+
+          <Button
+            variant="outlined"
             color="error"
             size="small"
             startIcon={<DeleteOutlineIcon sx={{ fontSize: 18 }} />}
@@ -1065,8 +1144,9 @@ export default function UsersTable(props: UsersTableProps) {
     muiTableBodyRowProps: ({ row }) => {
       const isDeadLead = row.original.contacted_status === 'dead_lead';
       const isIrrelevant = row.original.contacted_status === 'irrelevant';
+      const isArchived = row.original.lifecycle_status === 'archived';
       const isDisabled = row.original.is_disabled;
-      const isDimmed = isDeadLead || isIrrelevant;
+      const isDimmed = isDeadLead || isIrrelevant || isArchived;
       return {
         onClick: (e: React.MouseEvent) => {
           const target = e.target as HTMLElement;
@@ -1220,6 +1300,50 @@ export default function UsersTable(props: UsersTableProps) {
           </ListItemIcon>
           <ListItemText>Mark as irrelevant</ListItemText>
         </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem
+          onClick={() => {
+            if (actionMenuUser && onVerifyStatus) onVerifyStatus(actionMenuUser);
+            setActionMenuAnchor(null);
+            setActionMenuUser(null);
+          }}
+          sx={{ fontSize: 14, py: 1 }}
+        >
+          <ListItemIcon>
+            <FactCheckOutlinedIcon fontSize="small" sx={{ color: 'primary.main' }} />
+          </ListItemIcon>
+          <ListItemText>Verify exam status</ListItemText>
+        </MenuItem>
+        {actionMenuUser?.lifecycle_status === 'archived' ? (
+          <MenuItem
+            onClick={() => {
+              if (actionMenuUser && onRestore) onRestore(actionMenuUser);
+              setActionMenuAnchor(null);
+              setActionMenuUser(null);
+            }}
+            sx={{ fontSize: 14, py: 1 }}
+          >
+            <ListItemIcon>
+              <UnarchiveOutlinedIcon fontSize="small" sx={{ color: 'success.main' }} />
+            </ListItemIcon>
+            <ListItemText sx={{ color: 'success.main' }}>Restore to active</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem
+            onClick={() => {
+              if (actionMenuUser && onArchiveRequest) onArchiveRequest([actionMenuUser]);
+              setActionMenuAnchor(null);
+              setActionMenuUser(null);
+            }}
+            sx={{ fontSize: 14, py: 1 }}
+          >
+            <ListItemIcon>
+              <Inventory2OutlinedIcon fontSize="small" sx={{ color: '#5E35B1' }} />
+            </ListItemIcon>
+            <ListItemText>Archive (de-prioritize)</ListItemText>
+          </MenuItem>
+        )}
+        <Divider sx={{ my: 0.5 }} />
         <MenuItem
           onClick={() => {
             if (actionMenuUser && onDisableToggle) onDisableToggle(actionMenuUser);

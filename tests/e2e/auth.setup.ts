@@ -23,47 +23,39 @@ export const TEACHER_STORAGE_STATE_PATH = path.join(__dirname, '../.auth/teacher
  * The session is saved and reused by all tests.
  */
 setup('authenticate as student', async ({ page }) => {
-  const testEmail = process.env.E2E_TEST_STUDENT_EMAIL;
-  const testPassword = process.env.E2E_TEST_STUDENT_PASSWORD;
+  // Prefer a Firebase email/password user for the Tools App (Google popup can't be
+  // automated). Falls back to the legacy student vars if app-specific ones are unset.
+  const testEmail = process.env.E2E_TEST_APP_EMAIL || process.env.E2E_TEST_STUDENT_EMAIL;
+  const testPassword = process.env.E2E_TEST_APP_PASSWORD || process.env.E2E_TEST_STUDENT_PASSWORD;
 
   if (!testEmail || !testPassword) {
-    console.log('⚠️  No test credentials found. Skipping authentication setup.');
-    console.log('   Set E2E_TEST_STUDENT_EMAIL and E2E_TEST_STUDENT_PASSWORD in .env.local');
-    console.log('   Tests requiring auth will be skipped.');
+    console.log('⚠️  No app Firebase test credentials (E2E_TEST_APP_EMAIL/PASSWORD).');
+    console.log('   Saving empty student state; phone-auth specs self-authenticate and override it.');
+    await page.context().storageState({ path: STORAGE_STATE_PATH });
     return;
   }
 
-  console.log(`🔐 Authenticating as student: ${testEmail}`);
+  console.log(`🔐 Authenticating as student (Firebase email/password): ${testEmail}`);
 
   // Go to the student app login page
   await page.goto('http://localhost:3011/login');
+  await page.waitForLoadState('domcontentloaded');
 
-  // Wait for Firebase to load
-  await page.waitForLoadState('networkidle');
+  try {
+    await page.getByLabel('Email', { exact: true }).fill(testEmail);
+    await page.getByLabel('Password', { exact: true }).fill(testPassword);
+    await page.getByRole('button', { name: /sign in with email/i }).click();
 
-  // Check if there's an email/password login form (for testing)
-  // You may need to enable Email/Password auth in Firebase Console for staging
-  const emailInput = page.locator('input[type="email"], input[name="email"]');
-  const passwordInput = page.locator('input[type="password"], input[name="password"]');
-
-  if (await emailInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-    // Email/Password login available
-    await emailInput.fill(testEmail);
-    await passwordInput.fill(testPassword);
-
-    // Click login button
-    await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign in")');
-
-    // Wait for redirect to dashboard or home
-    await page.waitForURL(/\/(dashboard|home|$)/, { timeout: 30000 });
-
+    // Authenticated once we either land on the dashboard or hit the phone-verify
+    // modal (a fresh user is signed in but phone-unverified).
+    await Promise.race([
+      page.waitForURL(/\/(dashboard|home)\b/, { timeout: 30000 }),
+      page.getByText('Verify Your Phone').waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
     console.log('✅ Student authentication successful');
-  } else {
-    // If no email/password form, try to authenticate via API
-    // This requires a test endpoint or Firebase custom token
-    console.log('⚠️  No email/password login form found.');
-    console.log('   Consider enabling Email/Password auth in Firebase Console for testing.');
-    console.log('   Or implement a /api/auth/test-login endpoint for E2E tests.');
+  } catch (err) {
+    console.log('⚠️  Student email/password sign-in did not complete:', (err as Error).message);
+    console.log('   Ensure the Firebase email/password user exists in the staging project.');
   }
 
   // Save authentication state

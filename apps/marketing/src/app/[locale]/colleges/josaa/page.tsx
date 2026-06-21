@@ -38,7 +38,7 @@ export default async function JoSAACollegesPage({ params: { locale } }: Props) {
         ]} />
         <Box sx={{ mb: 3 }}>
           <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
-            JoSAA B.Arch Colleges 2026 — NITs and IITs
+            JoSAA B.Arch Colleges 2026: NITs and IITs
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
             {colleges.length} NIT and IIT programs admitting through JoSAA counseling (JEE Paper 2)

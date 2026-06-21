@@ -167,7 +167,7 @@ export default function HeroSection({ college }: HeroSectionProps) {
           <Box sx={{ display: { xs: 'flex', sm: 'none' }, mt: 2, alignItems: 'center', gap: 2 }}>
             <ArchIndexRing score={college.arch_index_score} size={72} />
             <Typography variant="caption" color="text.secondary">
-              Neram ArchIndex — composite rating based on studio, faculty, placements, and more.
+              Neram ArchIndex: composite rating based on studio, faculty, placements, and more.
             </Typography>
           </Box>
         )}

@@ -395,7 +395,7 @@ export default function CollegePageTemplate({ college, similarColleges }: Colleg
                   Preparing for NATA 2026?
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.85, mb: 2 }}>
-                  Join Neram Classes — Tamil Nadu's most trusted B.Arch entrance coaching.
+                  Join Neram Classes, Tamil Nadu's most trusted B.Arch entrance coaching.
                 </Typography>
                 <Box
                   component="a"

@@ -1,33 +1,39 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Box, Container, Typography, Grid, Card, CardContent, Avatar } from '@neram/ui';
+import { Box, Container, Typography, Grid, Card, CardContent, Avatar, Chip } from '@neram/ui';
 
 // Team members (could be moved to CMS/database later)
+// NOTE: institute / role / bio for some members are pending real details from the founders.
+// Cards degrade gracefully (initials avatar, no chip) until those fields are filled in.
 const teamMembers = [
   {
-    name: 'Ar. Ramesh Kumar',
-    role: 'Founder & Director',
-    bio: 'B.Arch from IIT Kharagpur, 20+ years in architecture education',
-    image: '/images/team/director.jpg',
+    name: 'TamilSelvan',
+    role: 'Strategy',
+    institute: '',
+    bio: '',
+    image: '/images/team/tamilselvan.jpg',
   },
   {
-    name: 'Ar. Anjali Menon',
-    role: 'Academic Head',
-    bio: 'B.Arch from NIT Trichy, NATA & JEE Paper 2 Expert',
-    image: '/images/team/academic-head.jpg',
+    name: 'Sudharshini Arjun',
+    role: '', // TODO: confirm role with founder
+    institute: '',
+    bio: '',
+    image: '/images/team/sudharshini-arjun.jpg',
   },
   {
-    name: 'Mr. Vikram Singh',
-    role: 'Drawing & Design Head',
-    bio: 'M.Arch, 15+ years coaching experience in architectural aptitude',
-    image: '/images/team/design-head.jpg',
+    name: 'Sivaram',
+    role: '', // TODO: confirm role with founder
+    institute: '',
+    bio: '',
+    image: '/images/team/sivaram.jpg',
   },
   {
-    name: 'Ms. Priya Sharma',
-    role: 'Software Training Head',
-    bio: 'Autodesk Certified Professional, Revit & AutoCAD Expert',
-    image: '/images/team/software-head.jpg',
+    name: 'Shanthi Manoharan',
+    role: '', // TODO: confirm role with founder
+    institute: '',
+    bio: '',
+    image: '/images/team/shanthi-manoharan.jpg',
   },
 ];
 
@@ -39,8 +45,29 @@ const stats = [
   { key: 'expertFaculty', value: '50+' },
 ];
 
+// Story paragraphs (rendered in order)
+const storyParagraphs = ['story.paragraph1', 'story.paragraph2', 'story.paragraph3'] as const;
+
 // Core values
 const coreValues = ['excellence', 'integrity', 'innovation', 'inclusivity'] as const;
+
+// Deterministic initials + avatar color so missing photos degrade to a clean, branded fallback.
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const AVATAR_COLORS = ['#1565C0', '#00897B', '#5E35B1', '#AD1457', '#EF6C00', '#283593'];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 export default function AboutPageContent() {
   const t = useTranslations('about');
@@ -70,8 +97,38 @@ export default function AboutPageContent() {
         </Container>
       </Box>
 
-      {/* Mission & Vision Section */}
+      {/* Our Story Section */}
       <Box sx={{ py: { xs: 6, md: 10 } }}>
+        <Container maxWidth="lg">
+          <Typography
+            variant="h3"
+            align="center"
+            gutterBottom
+            sx={{ mb: { xs: 4, md: 6 }, fontWeight: 700 }}
+          >
+            {t('story.title')}
+          </Typography>
+          <Box sx={{ maxWidth: 760, mx: 'auto' }}>
+            {storyParagraphs.map((key, index) => (
+              <Typography
+                key={key}
+                variant="body1"
+                color="text.secondary"
+                sx={{
+                  fontSize: { xs: '1rem', md: '1.125rem' },
+                  lineHeight: 1.8,
+                  mb: index === storyParagraphs.length - 1 ? 0 : 3,
+                }}
+              >
+                {t(key)}
+              </Typography>
+            ))}
+          </Box>
+        </Container>
+      </Box>
+
+      {/* Mission & Vision Section */}
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
         <Container maxWidth="lg">
           <Grid container spacing={6}>
             <Grid item xs={12} md={6}>
@@ -101,7 +158,7 @@ export default function AboutPageContent() {
       </Box>
 
       {/* Statistics Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography
             variant="h3"
@@ -133,7 +190,7 @@ export default function AboutPageContent() {
       </Box>
 
       {/* Team Section */}
-      <Box sx={{ py: { xs: 6, md: 10 } }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
         <Container maxWidth="lg">
           <Typography
             variant="h3"
@@ -147,49 +204,80 @@ export default function AboutPageContent() {
             variant="h6"
             align="center"
             color="text.secondary"
-            sx={{ mb: 6 }}
+            sx={{ mb: 6, maxWidth: 720, mx: 'auto' }}
           >
             {t('team.subtitle')}
           </Typography>
-          <Grid container spacing={4}>
+          <Grid container spacing={4} justifyContent="center">
             {teamMembers.map((member, index) => (
               <Grid item xs={12} sm={6} md={3} key={index}>
                 <Card
                   sx={{
                     height: '100%',
                     textAlign: 'center',
-                    transition: 'transform 0.2s',
+                    borderRadius: 3,
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                     '&:hover': {
-                      transform: 'translateY(-8px)',
-                      boxShadow: 4,
+                      transform: 'translateY(-6px)',
+                      boxShadow: 6,
+                    },
+                    '@media (prefers-reduced-motion: reduce)': {
+                      transition: 'none',
+                      '&:hover': { transform: 'none' },
                     },
                   }}
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Avatar
-                      src={member.image}
+                      src={member.image || undefined}
                       alt={member.name}
                       sx={{
-                        width: 120,
-                        height: 120,
+                        width: 112,
+                        height: 112,
                         mx: 'auto',
                         mb: 2,
+                        fontSize: '1.75rem',
+                        fontWeight: 700,
+                        bgcolor: getAvatarColor(member.name),
+                        color: '#fff',
+                        border: '3px solid',
+                        borderColor: 'background.paper',
+                        boxShadow: 2,
                       }}
-                    />
+                    >
+                      {getInitials(member.name)}
+                    </Avatar>
                     <Typography variant="h6" gutterBottom>
                       {member.name}
                     </Typography>
-                    <Typography
-                      variant="body2"
-                      color="primary"
-                      gutterBottom
-                      sx={{ fontWeight: 600 }}
-                    >
-                      {member.role}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {member.bio}
-                    </Typography>
+                    {member.role && (
+                      <Typography
+                        variant="body2"
+                        color="primary"
+                        gutterBottom
+                        sx={{ fontWeight: 600 }}
+                      >
+                        {member.role}
+                      </Typography>
+                    )}
+                    {member.institute && (
+                      <Chip
+                        label={member.institute}
+                        size="small"
+                        sx={{
+                          mt: 0.5,
+                          mb: 1,
+                          fontWeight: 600,
+                          bgcolor: 'rgba(21, 101, 192, 0.10)',
+                          color: 'primary.main',
+                        }}
+                      />
+                    )}
+                    {member.bio && (
+                      <Typography variant="body2" color="text.secondary">
+                        {member.bio}
+                      </Typography>
+                    )}
                   </CardContent>
                 </Card>
               </Grid>
@@ -199,7 +287,7 @@ export default function AboutPageContent() {
       </Box>
 
       {/* Values Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography
             variant="h3"

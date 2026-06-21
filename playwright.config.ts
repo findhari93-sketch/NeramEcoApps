@@ -185,6 +185,14 @@ export default defineConfig({
       url: 'http://localhost:3011',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
+      // Enable the phone-auth E2E bypass (disables reCAPTCHA for registered test
+      // numbers). Only affects non-production builds; see packages/auth/firebase.ts.
+      // Playwright merges this over process.env. NOTE: if a dev:app server is already
+      // running, Playwright reuses it and this env is NOT applied; start that server
+      // with the flag or stop it first.
+      env: {
+        NEXT_PUBLIC_E2E_TEST_MODE: process.env.NEXT_PUBLIC_E2E_TEST_MODE || 'true',
+      },
     },
     {
       command: 'pnpm dev:nexus',

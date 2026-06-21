@@ -15,11 +15,14 @@ import {
   Divider,
   Slide,
   IconButton,
+  Portal,
+  Collapse,
 } from '@mui/material';
 import { useMediaQuery, useTheme } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import React from 'react';
 import type { TransitionProps } from '@mui/material/transitions';
+import { ConnectToOffice } from '../ChatWidget/ConnectToOffice';
 
 // ============================================
 // TYPES
@@ -51,6 +54,14 @@ export interface LoginModalProps {
   initialPhone?: string;
   /** Optional callback for funnel event tracking */
   onFunnelEvent?: (event: FunnelEventData) => void;
+  /** Show "Get help" + "Skip for now" affordances after repeated failures. Default: false */
+  allowEscapeHatch?: boolean;
+  /** Number of failed OTP/reCAPTCHA attempts before the escape hatch appears. Default: 2 */
+  maxAttemptsBeforeEscape?: number;
+  /** Called when the user chooses "Skip for now" (only meaningful with allowEscapeHatch). */
+  onSkip?: () => void;
+  /** Called when the user opens the "Get help" panel (analytics hook). */
+  onGetHelp?: () => void;
 }
 
 type ModalStep = 'login' | 'phone' | 'otp';
@@ -120,6 +131,10 @@ export default function LoginModal({
   phoneOnly = false,
   initialPhone = '',
   onFunnelEvent,
+  allowEscapeHatch = false,
+  maxAttemptsBeforeEscape = 2,
+  onSkip,
+  onGetHelp,
 }: LoginModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -140,7 +155,12 @@ export default function LoginModal({
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
   const recaptchaInitialized = useRef(false);
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const showEscapeHatch = allowEscapeHatch && failedAttempts >= maxAttemptsBeforeEscape;
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -154,13 +174,32 @@ export default function LoginModal({
       setOtp('');
       setIsSignUp(false);
       setResendTimer(0);
+      setFailedAttempts(0);
+      setShowHelp(false);
     }
   }, [open, phoneOnly, initialPhone]);
 
-  // Initialize reCAPTCHA when entering phone step
+  // Reinitialize the reCAPTCHA verifier. Firebase consumes the verifier on every
+  // signInWithPhoneNumber call, so we recreate it before each send. The container
+  // lives in a stable portal that is always in the DOM, so no DOM-readiness wait
+  // is needed.
+  const reinitRecaptcha = useCallback(async () => {
+    const { clearRecaptcha, initRecaptcha } = await import('@neram/auth');
+    clearRecaptcha();
+    initRecaptcha('recaptcha-container-login-modal');
+    recaptchaInitialized.current = true;
+  }, []);
+
+  // Initialize reCAPTCHA once the (portaled) container is mounted and we reach the
+  // phone step. Presence-based instead of a timer so it never races the mount.
   useEffect(() => {
-    if (open && (step === 'phone') && !recaptchaInitialized.current) {
-      const timer = setTimeout(async () => {
+    if (
+      open &&
+      step === 'phone' &&
+      !recaptchaInitialized.current &&
+      recaptchaContainerRef.current
+    ) {
+      (async () => {
         try {
           const { initRecaptcha } = await import('@neram/auth');
           initRecaptcha('recaptcha-container-login-modal');
@@ -168,8 +207,7 @@ export default function LoginModal({
         } catch (err) {
           console.error('Failed to initialize reCAPTCHA:', err);
         }
-      }, 500);
-      return () => clearTimeout(timer);
+      })();
     }
   }, [open, step]);
 
@@ -305,7 +343,7 @@ export default function LoginModal({
     setPhoneError('');
     setPhoneLoading(true);
     try {
-      const { sendPhoneOTP, initRecaptcha, clearRecaptcha, getFirebaseAuth } = await import('@neram/auth');
+      const { sendPhoneOTP, getFirebaseAuth } = await import('@neram/auth');
 
       // Capture phone number as lead BEFORE sending OTP so it's never lost
       // even if OTP fails or user drops off
@@ -324,13 +362,9 @@ export default function LoginModal({
         // Non-critical: don't block OTP send if capture fails
       }
 
-      // Always reinitialize reCAPTCHA before each OTP attempt.
-      // Firebase consumes the verifier on each signInWithPhoneNumber call,
-      // so reusing a stale verifier causes silent failures.
-      clearRecaptcha();
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      initRecaptcha('recaptcha-container-login-modal');
-      recaptchaInitialized.current = true;
+      // Always reinitialize reCAPTCHA before each OTP attempt: Firebase consumes
+      // the verifier on each signInWithPhoneNumber call.
+      await reinitRecaptcha();
 
       await sendPhoneOTP(phoneNumber);
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed' });
@@ -345,12 +379,8 @@ export default function LoginModal({
         || err?.code === 'auth/internal-error';
       if (isRetryable) {
         try {
-          const { clearRecaptcha, initRecaptcha, sendPhoneOTP } = await import('@neram/auth');
-          clearRecaptcha();
-          recaptchaInitialized.current = false;
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          initRecaptcha('recaptcha-container-login-modal');
-          recaptchaInitialized.current = true;
+          const { sendPhoneOTP } = await import('@neram/auth');
+          await reinitRecaptcha();
           await sendPhoneOTP(phoneNumber);
           onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed', metadata: { retry: true } });
           setStep('otp');
@@ -358,10 +388,12 @@ export default function LoginModal({
           return;
         } catch (retryErr: any) {
           setPhoneError(getFirebaseErrorMessage(retryErr));
+          setFailedAttempts((n) => n + 1);
           return;
         }
       }
       setPhoneError(errMsg);
+      setFailedAttempts((n) => n + 1);
     } finally {
       setPhoneLoading(false);
     }
@@ -408,20 +440,14 @@ export default function LoginModal({
         setOtp('');
         // Re-initialize reCAPTCHA since it was consumed during OTP send
         try {
-          const { clearRecaptcha, initRecaptcha } = await import('@neram/auth');
-          clearRecaptcha();
-          recaptchaInitialized.current = false;
-          // Wait for DOM to update after step change, then reinitialize
-          setTimeout(() => {
-            initRecaptcha('recaptcha-container-login-modal');
-            recaptchaInitialized.current = true;
-          }, 500);
+          await reinitRecaptcha();
         } catch (recaptchaErr) {
           console.error('Failed to reinitialize reCAPTCHA:', recaptchaErr);
         }
       } else {
         onFunnelEvent?.({ funnel: 'auth', event: 'otp_failed', status: 'failed', error_message: getFirebaseErrorMessage(err), error_code: err?.code });
         setPhoneError(getFirebaseErrorMessage(err));
+        setFailedAttempts((n) => n + 1);
       }
     } finally {
       setPhoneLoading(false);
@@ -434,13 +460,7 @@ export default function LoginModal({
     setPhoneError('');
     // Re-initialize reCAPTCHA since it was consumed during OTP send
     try {
-      const { clearRecaptcha, initRecaptcha } = await import('@neram/auth');
-      clearRecaptcha();
-      recaptchaInitialized.current = false;
-      setTimeout(() => {
-        initRecaptcha('recaptcha-container-login-modal');
-        recaptchaInitialized.current = true;
-      }, 500);
+      await reinitRecaptcha();
     } catch (recaptchaErr) {
       console.error('Failed to reinitialize reCAPTCHA:', recaptchaErr);
     }
@@ -452,19 +472,13 @@ export default function LoginModal({
     setPhoneError('');
     setPhoneLoading(true);
     try {
-      const { clearRecaptcha, initRecaptcha, sendPhoneOTP } = await import('@neram/auth');
-      clearRecaptcha();
-      recaptchaInitialized.current = false;
-
-      // Wait for DOM to update after clearing, then reinitialize
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      initRecaptcha('recaptcha-container-login-modal');
-      recaptchaInitialized.current = true;
-
+      const { sendPhoneOTP } = await import('@neram/auth');
+      await reinitRecaptcha();
       await sendPhoneOTP(phoneNumber);
       setResendTimer(60);
     } catch (err: any) {
       setPhoneError(getFirebaseErrorMessage(err));
+      setFailedAttempts((n) => n + 1);
     } finally {
       setPhoneLoading(false);
     }
@@ -474,7 +488,42 @@ export default function LoginModal({
 
   const handleClose = allowClose ? onClose : undefined;
 
+  // Shown after repeated reCAPTCHA/OTP failures so a Google-authenticated user is
+  // never permanently trapped behind a broken phone-verification step.
+  const escapeHatch = showEscapeHatch ? (
+    <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+      <Button
+        variant="text"
+        size="small"
+        onClick={() => {
+          setShowHelp((v) => !v);
+          if (!showHelp) onGetHelp?.();
+        }}
+        sx={{ textTransform: 'none', fontWeight: 600 }}
+      >
+        {showHelp ? 'Hide help' : 'Having trouble? Get help'}
+      </Button>
+      <Collapse in={showHelp}>
+        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, mt: 1 }}>
+          <ConnectToOffice />
+        </Box>
+      </Collapse>
+      {onSkip && (
+        <Button
+          variant="text"
+          size="small"
+          fullWidth
+          onClick={onSkip}
+          sx={{ textTransform: 'none', mt: 1.5, color: 'text.secondary' }}
+        >
+          Skip for now and verify later
+        </Button>
+      )}
+    </Box>
+  ) : null;
+
   return (
+    <>
     <Dialog
       open={open}
       onClose={handleClose}
@@ -482,6 +531,8 @@ export default function LoginModal({
       fullWidth
       fullScreen={isMobile}
       disableEscapeKeyDown={!allowClose}
+      disableEnforceFocus
+      disableScrollLock
       TransitionComponent={isMobile ? SlideTransition : undefined}
       sx={{
         '& .MuiDialog-paper': {
@@ -669,8 +720,7 @@ export default function LoginModal({
                 </Alert>
               )}
 
-              {/* reCAPTCHA container - invisible */}
-              <div id="recaptcha-container-login-modal"></div>
+              {escapeHatch}
             </Box>
           )}
 
@@ -739,8 +789,7 @@ export default function LoginModal({
                 </Alert>
               )}
 
-              {/* reCAPTCHA container for resend */}
-              <div id="recaptcha-container-login-modal"></div>
+              {escapeHatch}
             </Box>
           )}
         </Box>
@@ -774,5 +823,21 @@ export default function LoginModal({
         )}
       </DialogActions>
     </Dialog>
+    {/*
+      reCAPTCHA mounts here, in a portal at document.body OUTSIDE the Dialog.
+      Firebase's visible image challenge is appended to document.body, and the
+      Dialog runs with disableEnforceFocus so the challenge stays clickable.
+      Keeping a single container (not one per step) avoids duplicate-id bugs.
+    */}
+    {open && (
+      <Portal>
+        <div
+          ref={recaptchaContainerRef}
+          id="recaptcha-container-login-modal"
+          style={{ position: 'fixed', bottom: 0, left: 0, zIndex: 2147483647 }}
+        />
+      </Portal>
+    )}
+    </>
   );
 }

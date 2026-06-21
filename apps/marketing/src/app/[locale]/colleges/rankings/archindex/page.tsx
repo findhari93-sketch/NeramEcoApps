@@ -14,7 +14,7 @@ export const revalidate = 86400;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'Neram ArchIndex — Best B.Arch Colleges Ranking 2026 | Neram',
+    title: 'Neram ArchIndex: Best B.Arch Colleges Ranking 2026 | Neram',
     description: 'Neram ArchIndex is a composite 0-100 score rating B.Arch colleges on studio quality, faculty strength, placements, infrastructure, and alumni outcomes.',
   };
 }
@@ -32,7 +32,7 @@ export default async function ArchIndexRankingsPage({ params: { locale } }: { pa
       <Box sx={{ mb: 3 }}>
         <Chip label="Neram Exclusive" color="secondary" sx={{ mb: 1, fontWeight: 700 }} />
         <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>
-          ArchIndex Rankings — Best B.Arch Colleges
+          ArchIndex Rankings: Best B.Arch Colleges
         </Typography>
         <Typography color="text.secondary" variant="body2" sx={{ maxWidth: 600 }}>
           ArchIndex is Neram&apos;s proprietary 0-100 score for B.Arch colleges, combining studio quality (25%),

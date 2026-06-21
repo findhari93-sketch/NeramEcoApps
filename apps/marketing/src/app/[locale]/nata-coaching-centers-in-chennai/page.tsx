@@ -240,7 +240,7 @@ export default function NataCoachingCentersChennai({
           '@context': 'https://schema.org',
           '@type': 'LocalBusiness',
           '@id': `${BASE_URL}/nata-coaching-centers-in-chennai`,
-          name: `${ORG_NAME} Chennai — NATA Coaching Network`,
+          name: `${ORG_NAME} Chennai: NATA Coaching Network`,
           url: `${BASE_URL}/nata-coaching-centers-in-chennai`,
           image: `${BASE_URL}/logo.png`,
           telephone: '+91-9176137043',

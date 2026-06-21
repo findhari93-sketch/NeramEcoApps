@@ -19,7 +19,40 @@ import type {
   CallbackRequest,
   CallbackAttempt,
   CallbackOutcome,
+  LifecycleStatus,
+  ExamStatus,
 } from '../types';
+
+// ============================================
+// ACADEMIC YEAR HELPERS
+// ============================================
+
+/**
+ * Academic year runs April -> March in India. Returns the cohort string
+ * 'YYYY-YY' for a given date (defaults to now). April 2026 -> '2026-27',
+ * March 2026 -> '2025-26'.
+ */
+export function currentAcademicYear(date: Date = new Date()): string {
+  const month = date.getMonth(); // 0 = Jan
+  const year = date.getFullYear();
+  const startYear = month >= 3 ? year : year - 1; // April (index 3) starts the year
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+}
+
+/**
+ * Map a target exam year (e.g. 2026, the year the exam is written) to the
+ * academic-year cohort that prepares for it. Exam in 2026 -> '2025-26'.
+ * Returns null for invalid input.
+ */
+export function deriveAcademicYearFromExamYear(examYear?: number | null): string | null {
+  if (!examYear || !Number.isInteger(examYear) || examYear < 2000 || examYear > 2100) {
+    return null;
+  }
+  const startYear = examYear - 1;
+  return `${startYear}-${String(examYear % 100).padStart(2, '0')}`;
+}
+
+const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
 
 // ============================================
 // LIST USER JOURNEYS (CRM main table)
@@ -46,6 +79,10 @@ export async function listUserJourneys(
     isDeadLead,
     isIrrelevant,
     excludeLinkedToClassroom,
+    lifecycleStatus,
+    excludeArchived = true,
+    academicYear,
+    candidateSegment,
     dateFrom,
     dateTo,
     limit = 25,
@@ -111,6 +148,27 @@ export async function listUserJourneys(
     query = query.is('linked_classroom_email', null);
   }
 
+  // Lifecycle focus: an explicit lifecycleStatus wins; otherwise the default
+  // CRM list shows active users only so the focus stays on current cohorts.
+  if (lifecycleStatus) {
+    query = query.eq('lifecycle_status', lifecycleStatus);
+  } else if (excludeArchived) {
+    query = query.eq('lifecycle_status', 'active');
+  }
+
+  if (academicYear) {
+    query = query.eq('academic_year', academicYear);
+  }
+
+  // Suggestion-only candidate segments (admin reviews, never auto-acts)
+  if (candidateSegment === 'no_phone_dormant') {
+    query = query.or('phone.is.null,phone.eq.');
+  } else if (candidateSegment === 'old_cohort') {
+    query = query
+      .not('academic_year', 'is', null)
+      .neq('academic_year', currentAcademicYear());
+  }
+
   if (dateFrom) {
     query = query.gte('created_at', dateFrom);
   }
@@ -167,9 +225,45 @@ export async function listUserJourneys(
  * Get counts of users in each pipeline stage
  */
 export async function getPipelineStageCounts(
+  options: { excludeArchived?: boolean } = {},
   client?: TypedSupabaseClient
 ): Promise<PipelineStageCounts> {
   const supabase = client || getSupabaseAdminClient();
+  const { excludeArchived = true } = options;
+
+  // When excluding archived (the default), the RPC (which counts every row)
+  // would be wrong, so count client-side over the active subset. The dataset
+  // is small enough (~thousands) for this to be fine.
+  if (excludeArchived) {
+    const { data: rows, error } = await supabase
+      .from('user_journey_view')
+      .select('pipeline_stage')
+      .eq('lifecycle_status', 'active');
+
+    if (error) throw error;
+
+    const counts: PipelineStageCounts = {
+      new_lead: 0,
+      demo_requested: 0,
+      demo_attended: 0,
+      phone_verified: 0,
+      application_submitted: 0,
+      admin_approved: 0,
+      payment_complete: 0,
+      enrolled: 0,
+      total: 0,
+    };
+
+    if (rows) {
+      for (const row of rows) {
+        const stage = row.pipeline_stage as PipelineStage;
+        if (stage in counts) counts[stage]++;
+        counts.total++;
+      }
+    }
+
+    return counts;
+  }
 
   // Use SQL aggregation instead of fetching all rows
   const { data, error } = await (supabase as any).rpc('get_pipeline_stage_counts');
@@ -1032,6 +1126,201 @@ export async function markUserAsIrrelevant(
     })
     .eq('user_id', userId)
     .in('status', ['pending', 'scheduled', 'attempted']);
+}
+
+// ============================================
+// LIFECYCLE: REVERSIBLE ARCHIVE + COHORT + EXAM STATUS (migration 20260622)
+// ============================================
+
+/**
+ * Append a user_profile_history row (best-effort audit, mirrors adminUpdateUserProfile).
+ */
+async function recordUserHistory(
+  supabase: any,
+  userId: string,
+  fieldName: string,
+  oldValue: unknown,
+  newValue: unknown,
+  adminId: string
+): Promise<void> {
+  try {
+    await supabase.from('user_profile_history').insert({
+      user_id: userId,
+      field_name: fieldName,
+      old_value: oldValue != null ? JSON.stringify(oldValue) : null,
+      new_value: newValue != null ? JSON.stringify(newValue) : null,
+      changed_by: adminId,
+      change_source: 'admin' as ProfileChangeSource,
+    });
+  } catch {
+    // History is non-critical; never block the primary action on it.
+  }
+}
+
+/**
+ * Archive a user: de-prioritize them in the CRM (hidden from the default view)
+ * WITHOUT deleting them and WITHOUT disabling their login. Fully reversible.
+ * Never touches is_disabled, so a returning old-batch student can still sign in.
+ */
+export async function archiveUser(
+  userId: string,
+  adminId: string,
+  reason?: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { error } = await (supabase as any)
+    .from('users')
+    .update({
+      lifecycle_status: 'archived',
+      archived_at: new Date().toISOString(),
+      archived_by: adminId,
+      archived_reason: reason || 'Archived from CRM',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
+  if (error) throw error;
+
+  await recordUserHistory(supabase, userId, 'lifecycle_status', 'active', 'archived', adminId);
+}
+
+/**
+ * Restore an archived user back to the active focus view. Reversible.
+ */
+export async function restoreUser(
+  userId: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { error } = await (supabase as any)
+    .from('users')
+    .update({
+      lifecycle_status: 'active',
+      archived_at: null,
+      archived_by: null,
+      archived_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
+  if (error) throw error;
+
+  await recordUserHistory(supabase, userId, 'lifecycle_status', 'archived', 'active', adminId);
+}
+
+/**
+ * Archive many users in one statement. Returns the number archived.
+ */
+export async function bulkArchiveUsers(
+  userIds: string[],
+  adminId: string,
+  reason?: string,
+  client?: TypedSupabaseClient
+): Promise<{ archived: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  if (!userIds.length) return { archived: 0 };
+
+  const { data, error } = await (supabase as any)
+    .from('users')
+    .update({
+      lifecycle_status: 'archived',
+      archived_at: new Date().toISOString(),
+      archived_by: adminId,
+      archived_reason: reason || 'Archived from CRM (bulk)',
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', userIds)
+    .select('id');
+
+  if (error) throw error;
+  return { archived: (data || []).length };
+}
+
+/**
+ * Set / update a user's academic-year cohort. Validates the 'YYYY-YY' format.
+ * Updatable so a returning student can move from e.g. '2025-26' to '2026-27'.
+ */
+export async function setUserAcademicYear(
+  userId: string,
+  academicYear: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+
+  if (!ACADEMIC_YEAR_REGEX.test(academicYear)) {
+    throw new Error(`Invalid academic year "${academicYear}". Expected format YYYY-YY, e.g. 2026-27.`);
+  }
+
+  // Fetch current value for the history record
+  const { data: current } = await (supabase as any)
+    .from('users')
+    .select('academic_year')
+    .eq('id', userId)
+    .single();
+
+  const { error } = await (supabase as any)
+    .from('users')
+    .update({ academic_year: academicYear, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  if (error) throw error;
+
+  await recordUserHistory(
+    supabase,
+    userId,
+    'academic_year',
+    current?.academic_year ?? null,
+    academicYear,
+    adminId
+  );
+}
+
+/**
+ * Record the student's answer to the "are you writing the exam?" outreach.
+ * Optionally update their cohort and/or archive them in the same call.
+ */
+export async function recordExamStatus(
+  userId: string,
+  examStatus: ExamStatus,
+  adminId: string,
+  opts: { academicYear?: string; archive?: boolean; reason?: string } = {},
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { academicYear, archive, reason } = opts;
+
+  if (academicYear && !ACADEMIC_YEAR_REGEX.test(academicYear)) {
+    throw new Error(`Invalid academic year "${academicYear}". Expected format YYYY-YY, e.g. 2026-27.`);
+  }
+
+  const update: Record<string, unknown> = {
+    exam_status: examStatus,
+    updated_at: new Date().toISOString(),
+  };
+  if (academicYear) update.academic_year = academicYear;
+  if (archive) {
+    update.lifecycle_status = 'archived';
+    update.archived_at = new Date().toISOString();
+    update.archived_by = adminId;
+    update.archived_reason = reason || `Verified exam status: ${examStatus}`;
+  }
+
+  const { error } = await (supabase as any)
+    .from('users')
+    .update(update)
+    .eq('id', userId);
+
+  if (error) throw error;
+
+  await recordUserHistory(supabase, userId, 'exam_status', null, examStatus, adminId);
+  if (archive) {
+    await recordUserHistory(supabase, userId, 'lifecycle_status', 'active', 'archived', adminId);
+  }
 }
 
 /**
