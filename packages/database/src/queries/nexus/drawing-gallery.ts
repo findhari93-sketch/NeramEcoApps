@@ -6,12 +6,21 @@ import type { GalleryPost, GalleryReactionType, DrawingHomework, DrawingHomework
 // Gallery Feed
 // ============================================================
 
+/**
+ * Audience of the gallery feed:
+ * - 'current' (default): only current students' work (alumni excluded).
+ * - 'alumni': only graduated students' work (the "Hall of Fame"), featured first.
+ * - 'all': everyone.
+ */
+export type GalleryAudience = 'current' | 'alumni' | 'all';
+
 export async function getGalleryFeed(
   userId: string,
-  filters?: { tagSlugs?: string[]; limit?: number; offset?: number },
+  filters?: { tagSlugs?: string[]; limit?: number; offset?: number; audience?: GalleryAudience },
   client?: TypedSupabaseClient
 ): Promise<GalleryPost[]> {
   const supabase = client || getSupabaseAdminClient();
+  const audience: GalleryAudience = filters?.audience || 'current';
 
   // If tags are requested, resolve them first so we can restrict submission_ids.
   let tagRestrictedIds: string[] | null = null;
@@ -31,13 +40,29 @@ export async function getGalleryFeed(
     if (tagRestrictedIds.length === 0) return [];
   }
 
+  // When filtering by alumni status we need an INNER join on the student so the
+  // .eq('student.is_alumni', ...) filter restricts the submission rows.
+  const studentJoin =
+    audience === 'all'
+      ? 'student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url, is_alumni, academic_year)'
+      : 'student:users!drawing_submissions_student_id_fkey!inner(id, name, email, avatar_url, is_alumni, academic_year)';
+
   let query = supabase
     .from('drawing_submissions' as any)
-    .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
+    .select(`*, question:drawing_questions(*), ${studentJoin}`)
     .eq('is_gallery_visible', true)
     .not('tutor_feedback', 'is', null)
-    .not('tutor_rating', 'is', null)
-    .order('reviewed_at', { ascending: false });
+    .not('tutor_rating', 'is', null);
+
+  if (audience === 'current') {
+    query = query.eq('student.is_alumni', false);
+  } else if (audience === 'alumni') {
+    query = query.eq('student.is_alumni', true);
+    // Curator-pinned ("Hall of Fame") work surfaces first.
+    query = query.order('alumni_featured', { ascending: false });
+  }
+
+  query = query.order('reviewed_at', { ascending: false });
 
   if (tagRestrictedIds) {
     query = query.in('id', tagRestrictedIds);
@@ -167,6 +192,22 @@ export async function setGalleryVisibility(
 
 // Backwards-compatible alias; kept so no caller breaks during the rollout.
 export const publishToGallery = setGalleryVisibility;
+
+/**
+ * Pin / unpin an alumnus's submission in the Alumni Hall of Fame. Independent of
+ * is_gallery_visible (which still controls whether the work shows at all).
+ */
+export async function setAlumniFeatured(
+  submissionId: string,
+  featured: boolean,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  await supabase
+    .from('drawing_submissions' as any)
+    .update({ alumni_featured: featured })
+    .eq('id', submissionId);
+}
 
 // ============================================================
 // Drawing Homework

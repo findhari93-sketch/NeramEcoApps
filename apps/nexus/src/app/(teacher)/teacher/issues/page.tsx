@@ -53,6 +53,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import type {
   NexusFoundationIssueWithDetails,
   FoundationIssueStatus,
@@ -575,14 +576,14 @@ export default function TeacherIssuesPage() {
       </Box>
 
       {/* Student info */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
         <Avatar
           src={selectedIssue.student_avatar || undefined}
           sx={{ width: 36, height: 36, fontSize: '0.85rem' }}
         >
           {selectedIssue.student_name?.charAt(0) || 'S'}
         </Avatar>
-        <Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {selectedIssue.student_name}
           </Typography>
@@ -590,6 +591,18 @@ export default function TeacherIssuesPage() {
             Reported {formatDate(selectedIssue.created_at)}
           </Typography>
         </Box>
+      </Box>
+
+      {/* Reproduce the issue exactly as the student sees it */}
+      <Box sx={{ mb: 2 }}>
+        <ViewAsStudentButton
+          studentId={selectedIssue.student_id}
+          reason={`Ticket ${selectedIssue.ticket_number}`}
+          ticketId={selectedIssue.id}
+          variant="contained"
+          fullWidth
+          label="View as this student"
+        />
       </Box>
 
       {/* Assigned to */}

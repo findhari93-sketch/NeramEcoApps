@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/ms-verify';
+import { isImpersonationToken, verifyImpersonationToken } from '@/lib/impersonation-token';
+import { getAppOnlyToken } from '@neram/auth';
 
 const PROFILE_FIELDS = [
   'displayName',
@@ -37,13 +39,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Provide oid or self=true' }, { status: 400 });
   }
 
-  const graphUrl = self
-    ? `https://graph.microsoft.com/v1.0/me?$select=${PROFILE_FIELDS}`
-    : `https://graph.microsoft.com/v1.0/users/${oid}?$select=${PROFILE_FIELDS}`;
+  // Under impersonation the bearer is not a real Graph token; resolve the
+  // target oid and call Graph with an app-only token instead.
+  let graphUrl: string;
+  let graphToken = token;
+
+  if (isImpersonationToken(token)) {
+    const payload = verifyImpersonationToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: 'Invalid impersonation token' }, { status: 401 });
+    }
+    const effectiveOid = self ? payload.targetMsOid : oid;
+    if (!effectiveOid) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    try {
+      graphToken = await getAppOnlyToken();
+    } catch (err) {
+      console.error('App-only token error (profile):', err);
+      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 502 });
+    }
+    graphUrl = `https://graph.microsoft.com/v1.0/users/${effectiveOid}?$select=${PROFILE_FIELDS}`;
+  } else {
+    graphUrl = self
+      ? `https://graph.microsoft.com/v1.0/me?$select=${PROFILE_FIELDS}`
+      : `https://graph.microsoft.com/v1.0/users/${oid}?$select=${PROFILE_FIELDS}`;
+  }
 
   try {
     const response = await fetch(graphUrl, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${graphToken}` },
     });
 
     if (response.status === 401) {

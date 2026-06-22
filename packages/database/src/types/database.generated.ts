@@ -15308,6 +15308,8 @@ export type Database = {
           google_id: string | null
           has_password: boolean | null
           id: string
+          is_alumni: boolean
+          alumni_since: string | null
           last_login_at: string | null
           last_name: string | null
           linked_classroom_at: string | null
@@ -15344,6 +15346,8 @@ export type Database = {
           google_id?: string | null
           has_password?: boolean | null
           id?: string
+          is_alumni?: boolean
+          alumni_since?: string | null
           last_login_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
@@ -15380,6 +15384,8 @@ export type Database = {
           google_id?: string | null
           has_password?: boolean | null
           id?: string
+          is_alumni?: boolean
+          alumni_since?: string | null
           last_login_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null

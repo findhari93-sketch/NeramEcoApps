@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/ms-verify';
+import { isImpersonationToken } from '@/lib/impersonation-token';
 
 /**
  * POST /api/graph/presence
@@ -12,6 +13,12 @@ export async function POST(request: NextRequest) {
   const token = extractBearerToken(request.headers.get('Authorization'));
   if (!token) {
     return NextResponse.json({ error: 'Missing authorization' }, { status: 401 });
+  }
+
+  // Presence is a delegated-only Graph scope, so it can't be fetched with an
+  // app-only token while impersonating. Return empty gracefully (no dots).
+  if (isImpersonationToken(token)) {
+    return NextResponse.json({ presences: [] });
   }
 
   let body: { ids?: string[] };

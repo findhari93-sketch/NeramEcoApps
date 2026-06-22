@@ -4,6 +4,8 @@ import { Box, Typography, Paper, Avatar, Rating, IconButton, Chip } from '@neram
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 import CommentSection from './CommentSection';
 import GalleryImageViewer from './GalleryImageViewer';
 import type { GalleryPost, GalleryReactionType, DrawingTag } from '@neram/database/types';
@@ -38,6 +40,8 @@ interface GalleryCardProps {
   teacherMode?: boolean;
   /** Teacher-only: hide this submission from the gallery (keeps the submission, just flips visibility). */
   onHide?: (submissionId: string) => void;
+  /** Teacher-only: pin/unpin this alumnus work in the Hall of Fame. */
+  onFeature?: (submissionId: string, featured: boolean) => void;
   viewMode?: DrawingViewMode;
 }
 
@@ -49,6 +53,7 @@ export default function GalleryCard({
   getToken,
   teacherMode,
   onHide,
+  onFeature,
   viewMode = 'comfortable',
 }: GalleryCardProps) {
   const totalReactions = Object.values(post.reactions).reduce((sum, v) => sum + v, 0);
@@ -56,9 +61,32 @@ export default function GalleryCard({
   const isCompact = viewMode === 'compact';
   const tags = (post.tags as DrawingTag[] | undefined) || [];
   const imageHeight = isCompact ? 200 : 280;
+  const isAlumni = !!post.student?.is_alumni;
+  const cohortYear = post.student?.academic_year || null;
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', position: 'relative' }}>
+      {/* Hall of Fame "Featured" ribbon for pinned alumni work */}
+      {isAlumni && post.alumni_featured && (
+        <Chip
+          icon={<StarIcon sx={{ fontSize: '0.85rem !important' }} />}
+          label="Featured"
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: 3,
+            height: 22,
+            bgcolor: 'rgba(217,119,6,0.95)',
+            color: '#fff',
+            fontSize: '0.65rem',
+            fontWeight: 700,
+            '& .MuiChip-icon': { color: '#fff' },
+          }}
+        />
+      )}
+
       {/* Learning badge for redo-origin cards */}
       {isRedoOrigin && (
         <Chip
@@ -89,9 +117,25 @@ export default function GalleryCard({
           {post.student?.name?.charAt(0) || '?'}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={600} noWrap>
-            {post.student?.name}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap>
+              {post.student?.name}
+            </Typography>
+            {isAlumni && cohortYear && (
+              <Chip
+                label={`Alumni ${cohortYear}`}
+                size="small"
+                sx={{
+                  height: 18,
+                  fontSize: '0.6rem',
+                  fontWeight: 700,
+                  bgcolor: 'rgba(217,119,6,0.12)',
+                  color: '#B45309',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+          </Box>
           <Typography variant="caption" color="text.secondary">
             {getTimeAgo(post.reviewed_at || post.submitted_at)}
           </Typography>
@@ -191,6 +235,24 @@ export default function GalleryCard({
                 variant="outlined"
                 sx={{ height: 22, fontSize: '0.65rem' }}
               />
+            )}
+            {isAlumni && onFeature && (
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFeature(post.id, !post.alumni_featured);
+                }}
+                title={post.alumni_featured ? 'Unfeature from Hall of Fame' : 'Feature in Hall of Fame'}
+                aria-label={post.alumni_featured ? 'Unfeature from Hall of Fame' : 'Feature in Hall of Fame'}
+                sx={{ color: post.alumni_featured ? '#D97706' : 'text.disabled' }}
+              >
+                {post.alumni_featured ? (
+                  <StarIcon sx={{ fontSize: 20 }} />
+                ) : (
+                  <StarBorderIcon sx={{ fontSize: 20 }} />
+                )}
+              </IconButton>
             )}
             <IconButton
               size="small"

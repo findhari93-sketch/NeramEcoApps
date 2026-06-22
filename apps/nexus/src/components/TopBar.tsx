@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
+import ViewAsStudentDialog from '@/components/ViewAsStudentDialog';
 import {
   AppBar,
   Toolbar,
@@ -32,6 +34,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import { usePanelContext } from '@/components/PanelProvider';
+import { IMPERSONATION_BANNER_HEIGHT } from '@/components/ImpersonationBanner';
 
 /* Role → color mapping for the ring & badge */
 const ROLE_COLORS: Record<string, string> = {
@@ -52,17 +55,20 @@ export default function TopBar() {
   const {
     user,
     nexusRole,
+    isTeacher,
     activeClassroom,
     classrooms,
     setActiveClassroom,
     signOut,
     getToken,
+    impersonation,
   } = useNexusAuthContext();
 
   const { sidebarState, expand } = useSidebarContext();
   const { activePanel, setActivePanel, availablePanels } = usePanelContext();
   const pathname = usePathname();
   const [reportIssueOpen, setReportIssueOpen] = useState(false);
+  const [viewAsOpen, setViewAsOpen] = useState(false);
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const [classroomAnchor, setClassroomAnchor] = useState<null | HTMLElement>(null);
 
@@ -89,6 +95,8 @@ export default function TopBar() {
       position="sticky"
       elevation={0}
       sx={{
+        // Park below the impersonation banner when viewing as a student.
+        top: impersonation.active ? `${IMPERSONATION_BANNER_HEIGHT}px` : 0,
         bgcolor: alpha(theme.palette.background.paper, 0.92),
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
@@ -526,6 +534,35 @@ export default function TopBar() {
             />
           </MenuItem>
 
+          {/* View as student — teachers/admins only, not while already impersonating */}
+          {isTeacher && !impersonation.active && (
+            <MenuItem
+              onClick={() => {
+                setProfileAnchor(null);
+                setViewAsOpen(true);
+              }}
+              sx={{
+                py: 1,
+                px: 2.5,
+                mx: 1,
+                borderRadius: 2,
+                gap: 1.5,
+                minHeight: 42,
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.warning.main, 0.06),
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, color: 'warning.main' }}>
+                <VisibilityOutlinedIcon sx={{ fontSize: '1.2rem' }} />
+              </ListItemIcon>
+              <ListItemText
+                primary="View as student"
+                primaryTypographyProps={{ variant: 'body2' }}
+              />
+            </MenuItem>
+          )}
+
           {/* Report Issue — students only */}
           {nexusRole === 'student' && (
             <MenuItem
@@ -661,6 +698,10 @@ export default function TopBar() {
             getToken={getToken}
             pageUrl={pathname}
           />
+        )}
+        {/* View as Student picker — teachers/admins */}
+        {isTeacher && (
+          <ViewAsStudentDialog open={viewAsOpen} onClose={() => setViewAsOpen(false)} />
         )}
       </Toolbar>
     </AppBar>

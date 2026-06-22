@@ -84,13 +84,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Alumni gate: graduated students are fully locked out of Nexus. This is the
+    // single chokepoint the whole UI depends on, so blocking here is enough (and
+    // their Nexus enrollments are deactivated at graduation, so data routes are
+    // empty too). A teacher/admin using "View as Student" is allowed through so
+    // they can still inspect an alumnus's account for support.
+    if (user.is_alumni && !msUser.impersonatorUserId) {
+      return NextResponse.json(
+        {
+          error: 'alumni',
+          message:
+            "You've completed the program and are now a Neram alumnus. Your Nexus access has ended. Thank you, and all the best!",
+        },
+        { status: 403 }
+      );
+    }
+
     // Sync name and update last login from Microsoft.
     // Don't overwrite users.email — students often sign up via Firebase with
     // a personal email first, then later log in with their @neramclasses.com
     // Microsoft account. The primary email stays as the original signup
     // identity; the MS classroom email is tracked separately in
     // linked_classroom_email so admins can tell the two apart.
-    const updates: Record<string, string> = { last_login_at: new Date().toISOString() };
+    // When impersonating ("View as Student"), don't bump the student's
+    // last_login_at — the teacher/admin is viewing, not the student logging in.
+    const updates: Record<string, string> = msUser.impersonatorUserId
+      ? {}
+      : { last_login_at: new Date().toISOString() };
     if (msUser.name && msUser.name !== user.name) updates.name = msUser.name;
     if (
       msUser.email &&
@@ -103,10 +123,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', user.id);
+    if (Object.keys(updates).length > 0) {
+      await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', user.id);
+    }
 
     if (updates.name) user = { ...user, name: updates.name };
     if (updates.linked_classroom_email) {

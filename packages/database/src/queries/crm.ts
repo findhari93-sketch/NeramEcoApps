@@ -1448,3 +1448,145 @@ export async function getLeadProfileByPaymentToken(
     users: { phone: string | null; email: string | null; name: string | null; firebase_uid: string | null };
   };
 }
+
+// ============================================
+// ALUMNI GRADUATION (migration 20260622100000)
+// ============================================
+
+/**
+ * Graduate a batch of students to "alumni". Unlike CRM archive, this REVOKES
+ * Nexus access (is_alumni gates /api/auth/me) and deactivates their Nexus
+ * enrollments. It also archives them in the CRM (lifecycle_status) for tidiness
+ * and stamps the cohort year. Their data and drawing submissions are preserved.
+ * Fully reversible via restoreAlumniToActive.
+ *
+ * @returns counts of graduated users and deactivated enrollments.
+ */
+export async function graduateStudentsToAlumni(
+  userIds: string[],
+  adminId: string,
+  opts: { academicYear: string; reason?: string },
+  client?: TypedSupabaseClient
+): Promise<{ graduated: number; enrollmentsDeactivated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { academicYear, reason } = opts;
+
+  if (!ACADEMIC_YEAR_REGEX.test(academicYear)) {
+    throw new Error(`Invalid academic year "${academicYear}". Expected format YYYY-YY, e.g. 2025-26.`);
+  }
+  if (!userIds.length) return { graduated: 0, enrollmentsDeactivated: 0 };
+
+  const now = new Date().toISOString();
+
+  // 1. Flip users to alumni (gate) + archive in CRM + stamp cohort.
+  const { data: graduatedRows, error: userErr } = await supabase
+    .from('users')
+    .update({
+      is_alumni: true,
+      alumni_since: now,
+      academic_year: academicYear,
+      lifecycle_status: 'archived',
+      archived_at: now,
+      archived_by: adminId,
+      archived_reason: reason || `Graduated to alumni (${academicYear})`,
+      updated_at: now,
+    })
+    .in('id', userIds)
+    .select('id');
+
+  if (userErr) throw userErr;
+
+  // 2. Deactivate their Nexus enrollments so classroom-scoped data is empty.
+  const { data: deactivated, error: enrErr } = await supabase
+    .from('nexus_enrollments')
+    .update({
+      is_active: false,
+      removed_at: now,
+      removal_reason_category: 'graduated',
+      removal_notes: reason || `Graduated to alumni (${academicYear})`,
+      removed_by: adminId,
+    })
+    .in('user_id', userIds)
+    .eq('is_active', true)
+    .select('id');
+
+  if (enrErr) throw enrErr;
+
+  // 3. Best-effort audit trail per user.
+  for (const row of graduatedRows || []) {
+    await recordUserHistory(supabase, row.id, 'is_alumni', false, true, adminId);
+  }
+
+  return {
+    graduated: (graduatedRows || []).length,
+    enrollmentsDeactivated: (deactivated || []).length,
+  };
+}
+
+/**
+ * Reverse graduation: bring alumni back to active (clears the Nexus gate and the
+ * CRM archive). Re-enrolling them into classrooms stays a deliberate manual step.
+ */
+export async function restoreAlumniToActive(
+  userIds: string[],
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<{ restored: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  if (!userIds.length) return { restored: 0 };
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({
+      is_alumni: false,
+      alumni_since: null,
+      lifecycle_status: 'active',
+      archived_at: null,
+      archived_by: null,
+      archived_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', userIds)
+    .select('id');
+
+  if (error) throw error;
+
+  for (const row of data || []) {
+    await recordUserHistory(supabase, row.id, 'is_alumni', true, false, adminId);
+  }
+
+  return { restored: (data || []).length };
+}
+
+/**
+ * List alumni directly from the users table (NOT user_journey_view, which filters
+ * firebase_uid IS NOT NULL and would miss MS-only Nexus students). Grouped/sorted
+ * by cohort year then name.
+ */
+export async function listAlumni(
+  options: { academicYear?: string; search?: string; limit?: number; offset?: number } = {},
+  client?: TypedSupabaseClient
+): Promise<{ alumni: Array<Pick<User, 'id' | 'name' | 'email' | 'avatar_url' | 'academic_year' | 'alumni_since'>>; total: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { academicYear, search, limit = 50, offset = 0 } = options;
+
+  let query = supabase
+    .from('users')
+    .select('id, name, email, avatar_url, academic_year, alumni_since', { count: 'exact' })
+    .eq('is_alumni', true);
+
+  if (academicYear) query = query.eq('academic_year', academicYear);
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+  }
+
+  query = query
+    .order('academic_year', { ascending: false, nullsFirst: false })
+    .order('name', { ascending: true })
+    .range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return { alumni: (data || []) as any, total: count || 0 };
+}

@@ -6,9 +6,8 @@ import {
   generateCourseSchema,
 } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
-import CourseDetailContent, {
-  coursesData,
-} from '@/components/CourseDetailContent';
+import CourseDetailContent from '@/components/CourseDetailContent';
+import { coursesData } from '@/data/courses';
 
 
 const baseUrl = 'https://neramclasses.com';

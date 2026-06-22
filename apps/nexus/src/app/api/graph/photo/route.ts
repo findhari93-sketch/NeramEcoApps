@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/ms-verify';
+import { isImpersonationToken, verifyImpersonationToken } from '@/lib/impersonation-token';
+import { getAppOnlyToken } from '@neram/auth';
 
 const VALID_SIZES = ['48x48', '64x64', '96x96', '120x120', '240x240', '360x360', '432x432', '504x504', '648x648'];
 
@@ -26,14 +28,38 @@ export async function GET(request: NextRequest) {
 
   const photoSize = VALID_SIZES.includes(size) ? size : '120x120';
 
-  // Build Graph URL
-  const graphBase = self
-    ? `https://graph.microsoft.com/v1.0/me/photos/${photoSize}/$value`
-    : `https://graph.microsoft.com/v1.0/users/${oid}/photos/${photoSize}/$value`;
+  // Build Graph URL + the token to call it with. An impersonation token is not
+  // a real Graph token, so resolve the target oid (the impersonated student for
+  // self=true, otherwise the requested oid) and call Graph with an app-only
+  // token instead. This keeps avatars authentic while viewing as a student.
+  let graphBase: string;
+  let graphToken = token;
+
+  if (isImpersonationToken(token)) {
+    const payload = verifyImpersonationToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: 'Invalid impersonation token' }, { status: 401 });
+    }
+    const effectiveOid = self ? payload.targetMsOid : oid;
+    if (!effectiveOid) {
+      return NextResponse.json({ fallback: true }, { status: 404 });
+    }
+    try {
+      graphToken = await getAppOnlyToken();
+    } catch (err) {
+      console.error('App-only token error (photo):', err);
+      return NextResponse.json({ fallback: true }, { status: 404 });
+    }
+    graphBase = `https://graph.microsoft.com/v1.0/users/${effectiveOid}/photos/${photoSize}/$value`;
+  } else {
+    graphBase = self
+      ? `https://graph.microsoft.com/v1.0/me/photos/${photoSize}/$value`
+      : `https://graph.microsoft.com/v1.0/users/${oid}/photos/${photoSize}/$value`;
+  }
 
   try {
     const response = await fetch(graphBase, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${graphToken}` },
     });
 
     if (response.status === 404) {

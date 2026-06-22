@@ -61,6 +61,7 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 import MarkEmailReadIcon from '@mui/icons-material/MarkEmailRead';
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -102,6 +103,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
       { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes', hasBadge: 'demo_classes' },
       { text: 'AskSeniors', icon: EmojiEventsIcon, path: '/ask-seniors' },
+      { text: 'Alumni', icon: HistoryEduIcon, path: '/alumni' },
     ],
   },
   {

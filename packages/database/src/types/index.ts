@@ -150,6 +150,12 @@ export interface User extends Timestamps {
   archived_reason: string | null;
   academic_year: string | null;   // 'YYYY-YY' e.g. '2026-27'
   exam_status: ExamStatus | null;
+
+  // Alumni graduation (migration 20260622100000). When a cohort finishes its
+  // exam cycle an admin "graduates" the students: is_alumni=true fully blocks
+  // their Nexus access (cohort year stays in academic_year). Reversible.
+  is_alumni: boolean;
+  alumni_since: string | null;
 }
 
 /** Reversible focus state on a user. 'archived' hides them from the default CRM view. */
@@ -5312,6 +5318,20 @@ export interface NexusFoundationReactionCounts {
   dislike_count: number;
 }
 
+// Nexus "View as Student" (impersonation) audit log.
+// One row per impersonation session a teacher/admin starts to view/use a real
+// student's account. See migration 20260622000000_nexus_impersonation_sessions.sql.
+export interface NexusImpersonationSession {
+  id: string;
+  impersonator_id: string;
+  student_id: string;
+  reason: string | null;
+  ticket_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+}
+
 // Foundation transcript types
 export interface TranscriptEntry {
   start: number;
@@ -7126,6 +7146,8 @@ export interface DrawingSubmission {
   thread_id: string | null;
   attempt_number: number;
   is_gallery_visible: boolean;
+  /** Curator pin: highlight this alumnus work in the Alumni Hall of Fame gallery. */
+  alumni_featured: boolean;
   submitted_at: string;
   reviewed_at: string | null;
   ai_overlay_annotations: Array<{
@@ -7159,7 +7181,15 @@ export interface DrawingSubmissionWithQuestion extends DrawingSubmission {
 
 export interface DrawingSubmissionWithDetails extends DrawingSubmission {
   question: DrawingQuestion | null;
-  student: { id: string; name: string; email: string; avatar_url: string | null };
+  student: {
+    id: string;
+    name: string;
+    email: string;
+    avatar_url: string | null;
+    /** Present in the Alumni Hall of Fame feed so cards can show a batch-year badge. */
+    is_alumni?: boolean;
+    academic_year?: string | null;
+  };
   tags?: DrawingTag[];
 }
 

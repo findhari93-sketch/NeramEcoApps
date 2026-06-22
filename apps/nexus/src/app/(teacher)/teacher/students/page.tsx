@@ -22,6 +22,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import GraphAvatar from '@/components/GraphAvatar';
+import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
 
@@ -275,6 +276,13 @@ export default function TeacherStudents() {
                       </IconButton>
                     </Tooltip>
                   )}
+
+                  {/* View as this student (teacher/admin only) */}
+                  <ViewAsStudentButton
+                    studentId={student.id}
+                    reason={`Student list: ${student.name}`}
+                    iconOnly
+                  />
                 </Box>
 
                 {/* Bottom row: Stats */}

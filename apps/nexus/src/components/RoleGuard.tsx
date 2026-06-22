@@ -123,14 +123,18 @@ export default function RoleGuard({
 }
 
 function getRoleDashboard(role: string): string {
+  // Return canonical landing routes that actually exist (matching the root
+  // page.tsx redirects). The bare /teacher, /student, /parent paths have no
+  // index page and would 404 — this surfaced when impersonation flips the role
+  // mid-session and the guard redirects.
   switch (role) {
     case 'admin':
     case 'teacher':
-      return '/teacher';
+      return '/teacher/dashboard';
     case 'student':
-      return '/student';
+      return '/student/dashboard';
     case 'parent':
-      return '/parent';
+      return '/parent/dashboard';
     default:
       return '/login';
   }

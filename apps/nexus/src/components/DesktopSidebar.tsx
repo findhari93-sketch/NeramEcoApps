@@ -23,6 +23,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { IMPERSONATION_BANNER_HEIGHT } from './ImpersonationBanner';
 import { useSidebarContext, SIDEBAR_EXPANDED, SIDEBAR_ICONS } from './SidebarProvider';
 import { usePanelContext } from './PanelProvider';
 import { useNavBadges } from './NavBadgeProvider';
@@ -56,7 +57,7 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
   const pathname = usePathname();
   const router = useRouter();
   const theme = useTheme();
-  const { user, nexusRole } = useNexusAuthContext();
+  const { user, nexusRole, impersonation } = useNexusAuthContext();
   const { sidebarState, cycle, toggle, expand } = useSidebarContext();
   const { currentPanelTitle } = usePanelContext();
   const { getBadgeCount } = useNavBadges();
@@ -262,9 +263,13 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           display: { xs: 'none', md: 'flex' },
           flexDirection: 'column',
           width: currentWidth,
-          height: '100vh',
+          // While impersonating, drop below the full-width "View as Student" banner
+          // so it never overlaps the sidebar brand.
+          height: impersonation.active
+            ? `calc(100vh - ${IMPERSONATION_BANNER_HEIGHT}px)`
+            : '100vh',
           position: 'fixed',
-          top: 0,
+          top: impersonation.active ? IMPERSONATION_BANNER_HEIGHT : 0,
           left: 0,
           zIndex: theme.zIndex.drawer,
           background: `linear-gradient(180deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 50%, ${theme.palette.primary.dark} 100%)`,

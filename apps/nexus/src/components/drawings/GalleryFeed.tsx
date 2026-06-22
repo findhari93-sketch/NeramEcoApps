@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Skeleton, Button, CircularProgress,
+  Box, Typography, Skeleton, Button, CircularProgress, ToggleButton, ToggleButtonGroup,
 } from '@neram/ui';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import GalleryCard from './GalleryCard';
 import TagFilterBar from './TagFilterBar';
 import type { GalleryPost, GalleryReactionType } from '@neram/database/types';
 import type { DrawingViewMode } from '@/hooks/useDrawingViewMode';
 
 const PAGE_SIZE = 12;
+
+type GalleryAudience = 'current' | 'alumni';
 
 interface GalleryFeedProps {
   getToken: () => Promise<string | null>;
@@ -33,6 +36,7 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [audience, setAudience] = useState<GalleryAudience>('current');
 
   const fetchFeed = useCallback(
     async (fetchOffset: number, append: boolean) => {
@@ -43,6 +47,7 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
         const token = await getToken();
         const params = new URLSearchParams();
         if (tagSlugs.length > 0) params.set('tags', tagSlugs.join(','));
+        params.set('audience', audience);
         params.set('limit', String(PAGE_SIZE));
         params.set('offset', String(fetchOffset));
 
@@ -63,7 +68,7 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
         setLoadingMore(false);
       }
     },
-    [getToken, tagSlugs],
+    [getToken, tagSlugs, audience],
   );
 
   useEffect(() => {
@@ -134,8 +139,49 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
     }
   };
 
+  /** Teacher-only: pin/unpin alumnus work in the Hall of Fame. */
+  const handleFeature = async (submissionId: string, featured: boolean) => {
+    // Optimistic flip.
+    setPosts((prev) => prev.map((p) => (p.id === submissionId ? { ...p, alumni_featured: featured } : p)));
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/gallery/${submissionId}/feature`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ featured }),
+      });
+      if (!res.ok) {
+        // Revert on failure.
+        setPosts((prev) => prev.map((p) => (p.id === submissionId ? { ...p, alumni_featured: !featured } : p)));
+      }
+    } catch {
+      setPosts((prev) => prev.map((p) => (p.id === submissionId ? { ...p, alumni_featured: !featured } : p)));
+    }
+  };
+
   return (
     <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+        <ToggleButtonGroup
+          value={audience}
+          exclusive
+          size="small"
+          onChange={(_, val) => {
+            if (val) setAudience(val);
+          }}
+          aria-label="Gallery audience"
+          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 2, minHeight: 40 } }}
+        >
+          <ToggleButton value="current" aria-label="Current students">
+            Current students
+          </ToggleButton>
+          <ToggleButton value="alumni" aria-label="Alumni Hall of Fame">
+            <EmojiEventsOutlinedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+            Hall of Fame
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
       <TagFilterBar selected={tagSlugs} onChange={setTagSlugs} />
 
       {loading ? (
@@ -146,8 +192,15 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
         </Box>
       ) : posts.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 6 }}>
+          {audience === 'alumni' && (
+            <EmojiEventsOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          )}
           <Typography color="text.secondary">
-            {tagSlugs.length > 0 ? 'No drawings match these tags' : 'No drawings in the gallery yet'}
+            {tagSlugs.length > 0
+              ? 'No drawings match these tags'
+              : audience === 'alumni'
+                ? 'No alumni work in the Hall of Fame yet'
+                : 'No drawings in the gallery yet'}
           </Typography>
         </Box>
       ) : (
@@ -171,6 +224,7 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
               getToken={getToken}
               teacherMode={teacherMode}
               onHide={handleHide}
+              onFeature={handleFeature}
               viewMode={viewMode}
             />
           ))}

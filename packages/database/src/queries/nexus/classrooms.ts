@@ -163,3 +163,74 @@ export async function bulkUpdateEnrollmentBatch(
   if (error) throw error;
   return data;
 }
+
+/**
+ * List classrooms with their active student counts, for the admin "Graduate
+ * Batch to Alumni" picker. A classroom's name (e.g. "NATA 2026") is the most
+ * reliable batch signal in production, since most students have no academic_year.
+ */
+export async function getClassroomsWithStudentCounts(
+  client?: TypedSupabaseClient
+): Promise<Array<{ id: string; name: string; type: string; is_active: boolean; active_students: number }>> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+
+  const { data: classrooms, error } = await supabase
+    .from('nexus_classrooms')
+    .select('id, name, type, is_active')
+    .order('name', { ascending: true });
+  if (error) throw error;
+
+  const { data: enrollments, error: enrErr } = await supabase
+    .from('nexus_enrollments')
+    .select('classroom_id')
+    .eq('role', 'student')
+    .eq('is_active', true);
+  if (enrErr) throw enrErr;
+
+  const counts: Record<string, number> = {};
+  for (const e of enrollments || []) {
+    counts[e.classroom_id] = (counts[e.classroom_id] || 0) + 1;
+  }
+
+  return (classrooms || []).map((c: any) => ({
+    ...c,
+    active_students: counts[c.id] || 0,
+  }));
+}
+
+/**
+ * Active students enrolled in a classroom, with their alumni state, for the
+ * graduation preview. Returns one row per student (deduped across enrollments).
+ */
+export async function getClassroomStudentsForGraduation(
+  classroomId: string,
+  client?: TypedSupabaseClient
+): Promise<Array<{ id: string; name: string; email: string | null; avatar_url: string | null; is_alumni: boolean; academic_year: string | null }>> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+
+  const { data, error } = await supabase
+    .from('nexus_enrollments')
+    .select('user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni, academic_year, user_type)')
+    .eq('classroom_id', classroomId)
+    .eq('role', 'student')
+    .eq('is_active', true);
+  if (error) throw error;
+
+  const seen = new Set<string>();
+  const students: any[] = [];
+  for (const row of data || []) {
+    const u = row.user;
+    // Only real students (defensive: never graduate a teacher/admin enrolled as student).
+    if (!u || u.user_type !== 'student' || seen.has(u.id)) continue;
+    seen.add(u.id);
+    students.push({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      avatar_url: u.avatar_url,
+      is_alumni: !!u.is_alumni,
+      academic_year: u.academic_year ?? null,
+    });
+  }
+  return students.sort((a, b) => a.name.localeCompare(b.name));
+}

@@ -16,8 +16,14 @@ export async function GET(request: NextRequest) {
       ? tagsParam.split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
 
+    // 'current' (default) excludes alumni; 'alumni' is the Hall of Fame; 'all' is both.
+    const audienceParam = params.get('audience');
+    const audience =
+      audienceParam === 'alumni' || audienceParam === 'all' ? audienceParam : 'current';
+
     const posts = await getGalleryFeed(user.id, {
       tagSlugs,
+      audience,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 12,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,
     });

@@ -16183,6 +16183,8 @@ export type Database = {
           google_id: string | null
           has_password: boolean | null
           id: string
+          is_alumni: boolean
+          alumni_since: string | null
           is_disabled: boolean
           last_login_at: string | null
           last_name: string | null
@@ -16222,6 +16224,8 @@ export type Database = {
           google_id?: string | null
           has_password?: boolean | null
           id?: string
+          is_alumni?: boolean
+          alumni_since?: string | null
           is_disabled?: boolean
           last_login_at?: string | null
           last_name?: string | null
@@ -16261,6 +16265,8 @@ export type Database = {
           google_id?: string | null
           has_password?: boolean | null
           id?: string
+          is_alumni?: boolean
+          alumni_since?: string | null
           is_disabled?: boolean
           last_login_at?: string | null
           last_name?: string | null

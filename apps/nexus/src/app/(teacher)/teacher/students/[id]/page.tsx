@@ -13,6 +13,7 @@ import {
   Divider,
 } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 
 interface StudentDetail {
   id: string;
@@ -176,6 +177,13 @@ export default function StudentDetailPage() {
             Enrolled: {formatDate(student.enrollment_date)}
           </Typography>
         )}
+        <Box sx={{ mt: 2 }}>
+          <ViewAsStudentButton
+            studentId={student.id}
+            reason={`Student detail: ${student.name}`}
+            variant="contained"
+          />
+        </Box>
       </Paper>
 
       {/* Attendance Summary */}
