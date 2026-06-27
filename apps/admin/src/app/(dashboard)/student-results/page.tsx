@@ -20,6 +20,7 @@ import {
   Tabs,
   Tab,
   Avatar,
+  UserAvatar,
   CircularProgress,
   Paper,
   Table,
@@ -611,13 +612,7 @@ export default function StudentResultsPage() {
                     sx={{ '&:last-child td': { borderBottom: 0 } }}
                   >
                     <TableCell>
-                      <Avatar
-                        src={row.photo_url || undefined}
-                        alt={row.student_name}
-                        sx={{ width: 40, height: 40 }}
-                      >
-                        {row.student_name.charAt(0).toUpperCase()}
-                      </Avatar>
+                      <UserAvatar src={row.photo_url} name={row.student_name} size={40} />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight={600}>

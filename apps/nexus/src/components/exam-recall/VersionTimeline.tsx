@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Box,
-  Avatar,
+  UserAvatar,
   Typography,
   Stack,
   Chip,
@@ -116,13 +116,11 @@ function VersionCard({
             minWidth: 32,
           }}
         />
-        <Avatar
-          src={version.author.avatar_url || undefined}
-          alt={version.author.name || 'User'}
-          sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
-        >
-          {version.author.name?.[0] || '?'}
-        </Avatar>
+        <UserAvatar
+          src={version.author.avatar_url}
+          name={version.author.name}
+          size={28}
+        />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction="row" spacing={0.5} alignItems="center">
             <Typography variant="body2" fontWeight={600} noWrap>

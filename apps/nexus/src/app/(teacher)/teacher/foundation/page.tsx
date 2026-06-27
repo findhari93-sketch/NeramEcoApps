@@ -11,7 +11,7 @@ import {
   Chip,
   alpha,
   useTheme,
-  Avatar,
+  UserAvatar,
   LinearProgress,
 } from '@neram/ui';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -203,19 +203,15 @@ export default function TeacherFoundationDashboard() {
                   }}
                 >
                   {/* Avatar */}
-                  <Avatar
-                    src={sp.student.avatar_url || undefined}
+                  <UserAvatar
+                    src={sp.student.avatar_url}
+                    name={sp.student.name}
+                    size={40}
                     sx={{
-                      width: 40,
-                      height: 40,
-                      bgcolor: alpha(statusColor, 0.15),
                       color: statusColor,
                       fontWeight: 700,
-                      fontSize: '0.85rem',
                     }}
-                  >
-                    {sp.student.name?.charAt(0)?.toUpperCase() || '?'}
-                  </Avatar>
+                  />
 
                   {/* Info */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>

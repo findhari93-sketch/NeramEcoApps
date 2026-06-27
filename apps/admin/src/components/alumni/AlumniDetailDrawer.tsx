@@ -6,7 +6,7 @@ import {
   Drawer,
   Box,
   Typography,
-  Avatar,
+  UserAvatar,
   Chip,
   IconButton,
   Button,
@@ -28,7 +28,8 @@ import LanguageIcon from '@mui/icons-material/Language';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import AlumniEditDialog from './AlumniEditDialog';
 import AlumniMsSection from './AlumniMsSection';
-import { ACCENT, ACCENT_SOFT, INK, MUTED, LINE, avatarColor, yearOfStudyLabel, isGraduateArchitect } from './theme';
+import StudentWorksPanel from './StudentWorksPanel';
+import { ACCENT, ACCENT_SOFT, INK, MUTED, LINE, yearOfStudyLabel, isGraduateArchitect } from './theme';
 
 interface AlumniDetailDrawerProps {
   open: boolean;
@@ -107,9 +108,7 @@ export default function AlumniDetailDrawer({ open, userId, adminId, onClose, onC
             </Box>
           ) : (
             <>
-              <Avatar src={user.avatar_url || undefined} sx={{ width: 52, height: 52, fontSize: 20, bgcolor: avatarColor(user.name) }}>
-                {user.name?.charAt(0)?.toUpperCase() || '?'}
-              </Avatar>
+              <UserAvatar src={user.avatar_url} name={user.name} size={52} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="h6" fontWeight={800} color={INK} noWrap>
                   {user.name || 'Unnamed'}
@@ -187,6 +186,14 @@ export default function AlumniDetailDrawer({ open, userId, adminId, onClose, onC
               <Stat label="Drawings" value={activity?.submissionCount ?? 0} />
               <Stat label="Classes attended" value={`${activity?.attendance?.attended ?? 0}/${activity?.attendance?.total ?? 0}`} />
             </Box>
+
+            {/* Works (the Vault): every drawing this student submitted, read-only */}
+            {userId && (
+              <Box sx={{ mb: 2 }}>
+                <SectionTitle text="Works" />
+                <StudentWorksPanel userId={userId} studentName={user.name} compact />
+              </Box>
+            )}
 
             {/* Microsoft */}
             {userId && (

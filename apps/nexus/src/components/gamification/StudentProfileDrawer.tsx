@@ -6,7 +6,7 @@ import {
   Box,
   Typography,
   IconButton,
-  Avatar,
+  UserAvatar,
   Skeleton,
   Divider,
   alpha,
@@ -184,21 +184,16 @@ function StudentProfileHeader({
         pb: 2,
       }}
     >
-      <Avatar
-        src={profile.avatar_url || undefined}
-        alt={profile.student_name}
+      <UserAvatar
+        src={profile.avatar_url}
+        name={profile.student_name}
+        size={96}
         sx={{
-          width: 96,
-          height: 96,
-          fontSize: '2rem',
           fontFamily: neramFontFamilies.serif,
-          bgcolor: alpha(neramTokens.gold[500], 0.15),
           color: neramTokens.gold[500],
           border: `3px solid ${alpha(neramTokens.gold[500], 0.3)}`,
         }}
-      >
-        {profile.student_name?.charAt(0)?.toUpperCase() || '?'}
-      </Avatar>
+      />
 
       <Typography
         sx={{

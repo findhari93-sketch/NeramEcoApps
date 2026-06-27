@@ -15,7 +15,7 @@ import {
   AlertTitle,
   CircularProgress,
   Chip,
-  Avatar,
+  UserAvatar,
   Divider,
   Checkbox,
   FormControlLabel,
@@ -53,18 +53,44 @@ const STEP_LABELS: Record<string, string> = {
   readd_license: 're-add license',
 };
 
-/** Collapse identical per-user failures into "N students: <message>" rows. */
+/** Collapse identical per-user failures into "N students: <message>" rows, keeping
+ *  the affected names so the admin knows exactly who to correct manually. */
 function dedupeFailures(
-  failures: Array<{ step: string; code: string; message: string; fix?: string }>,
-): Array<{ count: number; step: string; message: string; fix?: string }> {
-  const map = new Map<string, { count: number; step: string; message: string; fix?: string }>();
+  failures: Array<{ user?: string; step: string; code: string; message: string; fix?: string }>,
+): Array<{ count: number; step: string; message: string; fix?: string; users: string[] }> {
+  const map = new Map<string, { count: number; step: string; message: string; fix?: string; users: string[] }>();
   for (const f of failures) {
     const key = `${f.step}|${f.code}`;
     const cur = map.get(key);
-    if (cur) cur.count += 1;
-    else map.set(key, { count: 1, step: f.step, message: f.message, fix: f.fix });
+    if (cur) {
+      cur.count += 1;
+      if (f.user) cur.users.push(f.user);
+    } else {
+      map.set(key, { count: 1, step: f.step, message: f.message, fix: f.fix, users: f.user ? [f.user] : [] });
+    }
   }
   return [...map.values()];
+}
+
+/** A compact, always-visible list of the specific accounts in a category, so the
+ *  admin can act on them (e.g. fix a stale Microsoft link) without digging. */
+function NameList({ title, names, hint }: { title: string; names: string[]; hint?: string }) {
+  if (!names || names.length === 0) return null;
+  return (
+    <Box sx={{ mt: 1, p: 1, borderRadius: 0.75, bgcolor: 'grey.50', border: '1px solid', borderColor: 'grey.200' }}>
+      <Typography variant="caption" fontWeight={700} display="block" sx={{ color: 'text.primary' }}>
+        {title}
+      </Typography>
+      {hint && (
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+          {hint}
+        </Typography>
+      )}
+      <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
+        {names.join(', ')}
+      </Typography>
+    </Box>
+  );
 }
 
 /** Native collapsible "technical details" block (no extra React state). */
@@ -110,6 +136,9 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
   }, [open, defaultYear]);
 
   const yearValid = ACADEMIC_YEAR_REGEX.test(academicYear);
+  // Smart default reason for the common case (a cohort finishing its exam cycle).
+  // Shown as ghost placeholder; Tab fills it into the field (see onKeyDown below).
+  const reasonSuggestion = yearValid ? `Completed ${academicYear} exam cycle` : '';
   const canConfirm = students.length > 0 && yearValid && !submitting;
 
   const handleConfirm = async () => {
@@ -182,7 +211,19 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
                     <Typography variant="body2" color="text.secondary">
                       Disabled sign-in: {ms.disabled}. Licenses removed: {ms.licensesRemoved}.
                       {ms.noMsAccount ? ` No Microsoft account: ${ms.noMsAccount}.` : ''}
+                      {ms.accountGone ? ` Already removed from Microsoft: ${ms.accountGone}.` : ''}
                     </Typography>
+                    {/* Who, specifically, in each category, so the admin can act on them. */}
+                    <NameList
+                      title={`No Microsoft account (${ms.noMsAccountUsers?.length || 0})`}
+                      names={ms.noMsAccountUsers || []}
+                      hint="Never had a Microsoft account, nothing to revoke. Check if one should be created."
+                    />
+                    <NameList
+                      title={`Already removed from Microsoft (${ms.accountGoneUsers?.length || 0})`}
+                      names={ms.accountGoneUsers || []}
+                      hint="Their Microsoft account was already deleted, so there was nothing left to revoke."
+                    />
                     {ms.groupAssigned?.length > 0 && (
                       <Alert severity="warning" sx={{ mt: 1 }}>
                         {ms.groupAssigned.length} student(s) have group-assigned licenses that cannot be freed per user.
@@ -195,11 +236,18 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
                           {ms.failures.length} Microsoft step{ms.failures.length === 1 ? '' : 's'} failed
                         </AlertTitle>
                         {dedupeFailures(ms.failures).map((g, i) => (
-                          <Typography key={i} variant="body2" sx={{ mb: 0.25 }}>
-                            {g.count} {g.count === 1 ? 'student' : 'students'} · {STEP_LABELS[g.step] || g.step}:{' '}
-                            {g.message}
-                            {g.fix ? ` ${g.fix}` : ''}
-                          </Typography>
+                          <Box key={i} sx={{ mb: 0.75 }}>
+                            <Typography variant="body2" sx={{ mb: 0.25 }}>
+                              {g.count} {g.count === 1 ? 'student' : 'students'} · {STEP_LABELS[g.step] || g.step}:{' '}
+                              {g.message}
+                              {g.fix ? ` ${g.fix}` : ''}
+                            </Typography>
+                            {g.users.length > 0 && (
+                              <Typography variant="caption" sx={{ display: 'block', wordBreak: 'break-word', color: 'inherit', opacity: 0.85 }}>
+                                {g.users.join(', ')}
+                              </Typography>
+                            )}
+                          </Box>
                         ))}
                         <RawDetails lines={ms.failures.slice(0, 10).map((f: any) => `${f.user}: ${f.step} — ${f.raw || f.message}`)} />
                       </Alert>
@@ -250,9 +298,7 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
                     borderColor: 'grey.100',
                   }}
                 >
-                  <Avatar src={s.avatar_url || undefined} sx={{ width: 28, height: 28, fontSize: 12 }}>
-                    {s.name?.charAt(0)?.toUpperCase() || '?'}
-                  </Avatar>
+                  <UserAvatar src={s.avatar_url} name={s.name} size={28} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={500} noWrap>
                       {s.name}
@@ -322,10 +368,19 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
             <TextField
               fullWidth
               size="small"
-              placeholder="e.g. Completed 2025-26 NATA exam cycle"
+              placeholder={reasonSuggestion || 'e.g. Completed 2025-26 exam cycle'}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => {
+                // Tab on the empty field accepts the suggested reason and keeps
+                // focus here; a second Tab then moves on normally.
+                if (e.key === 'Tab' && !e.shiftKey && reason.length === 0 && reasonSuggestion) {
+                  e.preventDefault();
+                  setReason(reasonSuggestion);
+                }
+              }}
               disabled={submitting}
+              helperText={reason.length === 0 && reasonSuggestion ? 'Press Tab to accept the suggestion' : undefined}
             />
           </>
         )}

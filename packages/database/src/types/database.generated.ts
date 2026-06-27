@@ -14584,6 +14584,7 @@ export type Database = {
       }
       user_avatars: {
         Row: {
+          content_hash: string | null
           created_at: string | null
           crop_data: Json | null
           file_name: string | null
@@ -14592,11 +14593,13 @@ export type Database = {
           id: string
           is_current: boolean | null
           mime_type: string | null
+          source: string
           storage_path: string
           user_id: string
           width: number | null
         }
         Insert: {
+          content_hash?: string | null
           created_at?: string | null
           crop_data?: Json | null
           file_name?: string | null
@@ -14605,11 +14608,13 @@ export type Database = {
           id?: string
           is_current?: boolean | null
           mime_type?: string | null
+          source?: string
           storage_path: string
           user_id: string
           width?: number | null
         }
         Update: {
+          content_hash?: string | null
           created_at?: string | null
           crop_data?: Json | null
           file_name?: string | null
@@ -14618,6 +14623,7 @@ export type Database = {
           id?: string
           is_current?: boolean | null
           mime_type?: string | null
+          source?: string
           storage_path?: string
           user_id?: string
           width?: number | null

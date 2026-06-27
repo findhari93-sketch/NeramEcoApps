@@ -247,6 +247,47 @@ export async function getAlumniProfileDetail(userId: string, client?: TypedSupab
   };
 }
 
+/**
+ * The admin "Vault": every drawing one student ever submitted, read-only.
+ * Powers the Works panel on the alumni drawer and profile. Returns published
+ * and hidden works alike so staff see the complete record. No impersonation;
+ * this is a plain read through the admin client.
+ */
+export async function getStudentSubmissions(userId: string, client?: TypedSupabaseClient) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('drawing_submissions')
+    .select(
+      'id, original_image_url, corrected_image_url, reviewed_image_url, status, tutor_rating, tutor_feedback, is_gallery_visible, alumni_featured, submitted_at, reviewed_at, source_type',
+    )
+    .eq('student_id', userId)
+    .order('submitted_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Distinct colleges where graduated students actually studied. Powers the Hall
+ * of Fame college filter so the picker only lists colleges that have seniors
+ * (no all-India dead ends). Reuses the canonical `colleges` table.
+ */
+export async function getAlumniColleges(client?: TypedSupabaseClient) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: profiles } = await supabase
+    .from('alumni_profiles')
+    .select('college_id')
+    .not('college_id', 'is', null);
+  const ids = [...new Set((profiles || []).map((p: any) => p.college_id).filter(Boolean))];
+  if (ids.length === 0) return [];
+  const { data: colleges, error } = await supabase
+    .from('colleges')
+    .select('id, name, short_name, city, state')
+    .in('id', ids)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return colleges || [];
+}
+
 // ============================================
 // MUTATIONS
 // ============================================

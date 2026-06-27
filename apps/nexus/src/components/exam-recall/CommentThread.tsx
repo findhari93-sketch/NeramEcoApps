@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import {
   Box,
-  Avatar,
+  UserAvatar,
   Typography,
   Stack,
   TextField,
@@ -53,13 +53,12 @@ function CommentItem({
   return (
     <Box sx={{ pl: depth > 0 ? { xs: 2, md: 3 } : 0 }}>
       <Stack direction="row" spacing={1} sx={{ mb: 0.5 }}>
-        <Avatar
-          src={comment.user.avatar_url || undefined}
-          alt={comment.user.name || 'User'}
-          sx={{ width: 28, height: 28, fontSize: '0.75rem', mt: 0.25 }}
-        >
-          {comment.user.name?.[0] || '?'}
-        </Avatar>
+        <UserAvatar
+          src={comment.user.avatar_url}
+          name={comment.user.name}
+          size={28}
+          sx={{ mt: 0.25 }}
+        />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction="row" spacing={0.5} alignItems="center">
             <Typography variant="body2" fontWeight={600} noWrap>

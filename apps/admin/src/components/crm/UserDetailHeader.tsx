@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Avatar, Box, Button, Chip, Paper, Typography, TextField, CircularProgress, Alert } from '@neram/ui';
+import { UserAvatar, Box, Button, Chip, Paper, Typography, TextField, CircularProgress, Alert } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
@@ -178,36 +178,18 @@ export default function UserDetailHeader({
                       justifyContent: 'center',
                     }}
                   >
-                    <Avatar
-                      src={user.avatar_url || undefined}
-                      sx={{
-                        width: 64,
-                        height: 64,
-                        fontSize: 26,
-                        fontWeight: 700,
-                        bgcolor: user.avatar_url ? 'transparent' : 'primary.main',
-                        color: 'primary.contrastText',
-                      }}
-                    >
-                      {user.name?.charAt(0)?.toUpperCase() || '?'}
-                    </Avatar>
+                    <UserAvatar src={user.avatar_url} name={user.name} size={64} />
                   </Box>
                 </Box>
               ) : (
-                <Avatar
-                  src={user.avatar_url || undefined}
+                <UserAvatar
+                  src={user.avatar_url}
+                  name={user.name}
+                  size={64}
                   sx={{
-                    width: 64,
-                    height: 64,
-                    fontSize: 26,
-                    fontWeight: 700,
-                    bgcolor: user.avatar_url ? 'transparent' : 'primary.main',
-                    color: 'primary.contrastText',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
                   }}
-                >
-                  {user.name?.charAt(0)?.toUpperCase() || '?'}
-                </Avatar>
+                />
               )}
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>

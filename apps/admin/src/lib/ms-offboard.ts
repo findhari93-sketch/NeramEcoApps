@@ -36,6 +36,23 @@ async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) =>
 const MS_HOST_RE = /(graph\.microsoft\.com|login\.microsoftonline|sharepoint|office365|outlook)/i;
 
 /**
+ * Record that a user's stored ms_oid points at a Microsoft account that no longer
+ * exists (Graph 404). Keeps ms_oid for history but stamps metadata so the UI can
+ * render "already removed" cleanly and ms-status can skip the dead Graph call.
+ */
+async function markMsAccountMissing(supabase: any, user: { id: string }): Promise<void> {
+  try {
+    const { data: cur } = await supabase.from('users').select('metadata').eq('id', user.id).maybeSingle();
+    const metadata = cur && cur.metadata && typeof cur.metadata === 'object' ? { ...cur.metadata } : {};
+    metadata.microsoft_account_missing = true;
+    metadata.microsoft_offboarded_at = metadata.microsoft_offboarded_at || new Date().toISOString();
+    await supabase.from('users').update({ metadata }).eq('id', user.id);
+  } catch {
+    // best-effort; never block the batch on a bookkeeping write.
+  }
+}
+
+/**
  * Capture a student's Microsoft profile photo + details into our own storage/DB
  * BEFORE the license/sign-in is removed (after which they can become unreachable).
  * Photo -> public `documents` bucket; snapshot -> users.metadata. Avatar is set
@@ -101,6 +118,9 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
     disabled: 0,
     licensesRemoved: 0,
     noMsAccount: 0,
+    noMsAccountUsers: [] as string[],
+    accountGone: 0,
+    accountGoneUsers: [] as string[],
     photosCaptured: 0,
     detailsCaptured: 0,
     groupAssigned: [] as string[],
@@ -126,6 +146,7 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
   await mapWithConcurrency(users || [], 6, async (u: any) => {
     if (!u.ms_oid) {
       summary.noMsAccount++;
+      summary.noMsAccountUsers.push(label(u));
       return;
     }
 
@@ -141,13 +162,24 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
         await supabase.from('users').update({ alumni_removed_ms_licenses: lic.removedSkuIds }).eq('id', u.id);
       }
       if (lic.groupSkuIds.length > 0) summary.groupAssigned.push(label(u));
+    } else if (classifyGraphError(lic.reason).code === 'account_not_found') {
+      // Stored ms_oid points at a deleted Microsoft account: nothing to revoke.
+      // Record it and skip the disable call (it would 404 the same way).
+      summary.accountGone++;
+      summary.accountGoneUsers.push(label(u));
+      await markMsAccountMissing(supabase, u);
+      return;
     } else {
       pushFailure(u, 'remove_license', lic.reason);
     }
 
     const dis = await setAccountEnabled(u.ms_oid, false);
     if (dis.success) summary.disabled++;
-    else pushFailure(u, 'disable', dis.reason);
+    else if (classifyGraphError(dis.reason).code === 'account_not_found') {
+      summary.accountGone++;
+      summary.accountGoneUsers.push(label(u));
+      await markMsAccountMissing(supabase, u);
+    } else pushFailure(u, 'disable', dis.reason);
   });
 
   return summary;
@@ -161,6 +193,8 @@ export async function reinstateMicrosoftAccounts(userIds: string[]) {
   const summary = {
     enabled: 0,
     licensesReadded: 0,
+    accountGone: 0,
+    accountGoneUsers: [] as string[],
     failures: [] as Array<{ user: string; step: string; code: string; message: string; fix?: string; raw?: string }>,
     configError: null as null | { code: string; message: string; fix?: string; raw?: string },
   };
@@ -188,7 +222,15 @@ export async function reinstateMicrosoftAccounts(userIds: string[]) {
 
     const en = await setAccountEnabled(u.ms_oid, true);
     if (en.success) summary.enabled++;
-    else pushFailure(u, 'enable', en.reason);
+    else if (classifyGraphError(en.reason).code === 'account_not_found') {
+      // Account is gone; nothing to reinstate. Clear the stored licenses so the
+      // column does not keep pointing at SKUs that can never be re-added.
+      summary.accountGone++;
+      summary.accountGoneUsers.push(label(u));
+      await markMsAccountMissing(supabase, u);
+      await supabase.from('users').update({ alumni_removed_ms_licenses: null }).eq('id', u.id);
+      return;
+    } else pushFailure(u, 'enable', en.reason);
 
     const skus = Array.isArray(u.alumni_removed_ms_licenses) ? u.alumni_removed_ms_licenses : [];
     if (skus.length > 0) {

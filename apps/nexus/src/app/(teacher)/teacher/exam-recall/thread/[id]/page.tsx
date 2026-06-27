@@ -15,7 +15,7 @@ import {
   MenuItem,
   TextField,
   Divider,
-  Avatar,
+  UserAvatar,
   AvatarGroup,
   Dialog,
   DialogTitle,
@@ -597,13 +597,11 @@ export default function ThreadModerationPage() {
                           size="small"
                           sx={{ bgcolor: 'grey.800', color: '#fff', fontWeight: 700, fontSize: '0.7rem', height: 22 }}
                         />
-                        <Avatar
-                          src={version.author.avatar_url || undefined}
-                          alt={version.author.name || 'User'}
-                          sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
-                        >
-                          {version.author.name?.[0] || '?'}
-                        </Avatar>
+                        <UserAvatar
+                          src={version.author.avatar_url}
+                          name={version.author.name}
+                          size={28}
+                        />
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Stack direction="row" spacing={0.5} alignItems="center">
                             <Typography variant="body2" fontWeight={600} noWrap>
@@ -809,13 +807,11 @@ export default function ThreadModerationPage() {
             ) : (
               thread.confirms.map((confirm) => (
                 <Stack key={confirm.id} direction="row" spacing={1.5} alignItems="center" sx={{ py: 0.5 }}>
-                  <Avatar
-                    src={confirm.user.avatar_url || undefined}
-                    alt={confirm.user.name || 'User'}
-                    sx={{ width: 32, height: 32, fontSize: '0.8rem' }}
-                  >
-                    {confirm.user.name?.[0] || '?'}
-                  </Avatar>
+                  <UserAvatar
+                    src={confirm.user.avatar_url}
+                    name={confirm.user.name}
+                    size={32}
+                  />
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="body2" fontWeight={500}>
                       {confirm.user.name || 'Unknown'}

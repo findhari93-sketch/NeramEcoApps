@@ -17,7 +17,7 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
-  Avatar,
+  UserAvatar,
   IconButton,
   Tooltip,
   Paper,
@@ -398,12 +398,7 @@ export default function TestimonialsPage() {
                     sx={{ cursor: 'pointer' }}
                   >
                     <TableCell>
-                      <Avatar
-                        src={t.student_photo || undefined}
-                        sx={{ width: 32, height: 32, fontSize: 14 }}
-                      >
-                        {t.student_name.charAt(0)}
-                      </Avatar>
+                      <UserAvatar src={t.student_photo} name={t.student_name} size={32} />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight={500} noWrap>

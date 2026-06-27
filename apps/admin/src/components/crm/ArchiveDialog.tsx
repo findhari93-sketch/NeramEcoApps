@@ -14,7 +14,7 @@ import {
   CircularProgress,
   Chip,
   Divider,
-  Avatar,
+  UserAvatar,
 } from '@neram/ui';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import type { UserJourney } from '@neram/database';
@@ -133,12 +133,7 @@ export default function ArchiveDialog({
                   borderColor: 'grey.100',
                 }}
               >
-                <Avatar
-                  src={user.avatar_url || undefined}
-                  sx={{ width: 32, height: 32, fontSize: 13 }}
-                >
-                  {user.name?.charAt(0)?.toUpperCase() || '?'}
-                </Avatar>
+                <UserAvatar src={user.avatar_url} name={user.name} size={32} />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={500} noWrap>
                     {user.name || 'Unnamed User'}

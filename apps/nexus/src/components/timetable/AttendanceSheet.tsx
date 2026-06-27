@@ -5,7 +5,7 @@ import {
   Box,
   Typography,
   Button,
-  Avatar,
+  UserAvatar,
   Chip,
   Skeleton,
   Switch,
@@ -236,12 +236,11 @@ export default function AttendanceSheet({
                   bgcolor: record.attended ? 'success.50' : 'error.50',
                 }}
               >
-                <Avatar
-                  src={record.student?.avatar_url || undefined}
-                  sx={{ width: 32, height: 32, fontSize: '0.8rem' }}
-                >
-                  {record.student?.name?.[0] || '?'}
-                </Avatar>
+                <UserAvatar
+                  src={record.student?.avatar_url}
+                  name={record.student?.name}
+                  size={32}
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
                     {record.student?.name || 'Unknown'}

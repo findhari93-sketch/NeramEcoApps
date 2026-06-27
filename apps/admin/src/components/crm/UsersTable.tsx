@@ -10,7 +10,7 @@ import {
   useMaterialReactTable,
 } from 'material-react-table';
 import {
-  Avatar,
+  UserAvatar,
   Box,
   Button,
   Chip,
@@ -86,12 +86,6 @@ function getDisplayName(user: { name: string; first_name: string | null; last_na
   if (fullName) return fullName;
   if (user.phone) return user.phone;
   return 'Unnamed User';
-}
-
-function getInitial(user: { name: string; first_name: string | null; last_name: string | null; phone: string | null }): string {
-  const displayName = getDisplayName(user);
-  if (displayName.startsWith('+')) return '#';
-  return displayName.charAt(0).toUpperCase() || '?';
 }
 
 function formatCurrency(amount: number): string {
@@ -204,36 +198,18 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
             mt: 0.25,
           }}
         >
-          <Avatar
-            src={user.avatar_url || undefined}
-            sx={{
-              width: 36,
-              height: 36,
-              fontSize: 14,
-              fontWeight: 600,
-              bgcolor: user.avatar_url ? 'transparent' : 'primary.light',
-              color: 'primary.contrastText',
-            }}
-          >
-            {getInitial(user)}
-          </Avatar>
+          <UserAvatar src={user.avatar_url} name={getDisplayName(user)} size={36} />
         </Box>
       ) : (
-        <Avatar
-          src={user.avatar_url || undefined}
+        <UserAvatar
+          src={user.avatar_url}
+          name={getDisplayName(user)}
+          size={40}
           sx={{
-            width: 40,
-            height: 40,
-            fontSize: 14,
-            fontWeight: 600,
-            bgcolor: user.avatar_url ? 'transparent' : 'primary.light',
-            color: 'primary.contrastText',
             flexShrink: 0,
             mt: 0.25,
           }}
-        >
-          {getInitial(user)}
-        </Avatar>
+        />
       )}
 
       {/* Content */}
@@ -521,35 +497,11 @@ export default function UsersTable(props: UsersTableProps) {
                     justifyContent: 'center',
                   }}
                 >
-                  <Avatar
-                    src={row.original.avatar_url || undefined}
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      bgcolor: row.original.avatar_url ? 'transparent' : 'primary.light',
-                      color: 'primary.contrastText',
-                    }}
-                  >
-                    {getInitial(row.original)}
-                  </Avatar>
+                  <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} />
                 </Box>
               </Box>
             ) : (
-              <Avatar
-                src={row.original.avatar_url || undefined}
-                sx={{
-                  width: 28,
-                  height: 28,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  bgcolor: row.original.avatar_url ? 'transparent' : 'primary.light',
-                  color: 'primary.contrastText',
-                }}
-              >
-                {getInitial(row.original)}
-              </Avatar>
+              <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} />
             )}
             <Box sx={{ minWidth: 0 }}>
               <Typography

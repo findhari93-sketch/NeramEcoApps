@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient();
-    const { data: user } = await supabase.from('users').select('id').eq('ms_oid', msUser.oid).single();
+    const { data: user } = await supabase.from('users').select('id, user_type').eq('ms_oid', msUser.oid).single();
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const params = request.nextUrl.searchParams;
@@ -21,9 +21,24 @@ export async function GET(request: NextRequest) {
     const audience =
       audienceParam === 'alumni' || audienceParam === 'all' ? audienceParam : 'current';
 
+    // Moderation: only teachers/admins may request hidden works. Students are
+    // always forced to 'visible', so a hidden submission can never reach them.
+    const isStaff = user.user_type === 'teacher' || user.user_type === 'admin';
+    const visibilityParam = params.get('visibility');
+    const visibility =
+      isStaff && (visibilityParam === 'hidden' || visibilityParam === 'all') ? visibilityParam : 'visible';
+
+    const category = params.get('category') || undefined;
+    const academicYear = params.get('academicYear') || undefined;
+    const collegeId = params.get('collegeId') || undefined;
+
     const posts = await getGalleryFeed(user.id, {
       tagSlugs,
       audience,
+      visibility,
+      category,
+      academicYear,
+      collegeId,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 12,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,
     });

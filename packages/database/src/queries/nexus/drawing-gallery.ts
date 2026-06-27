@@ -14,13 +14,34 @@ import type { GalleryPost, GalleryReactionType, DrawingHomework, DrawingHomework
  */
 export type GalleryAudience = 'current' | 'alumni' | 'all';
 
+/**
+ * Visibility scope of the feed:
+ * - 'visible' (default): only works showing in the student gallery (is_gallery_visible=true).
+ * - 'hidden': only works a teacher/admin pulled from the gallery (is_gallery_visible=false).
+ *   Staff-only — the API route forces students to 'visible' so a hidden work never reaches them.
+ * - 'all': both, for an admin audit.
+ */
+export type GalleryVisibility = 'visible' | 'hidden' | 'all';
+
 export async function getGalleryFeed(
   userId: string,
-  filters?: { tagSlugs?: string[]; limit?: number; offset?: number; audience?: GalleryAudience; academicYear?: string },
+  filters?: {
+    tagSlugs?: string[];
+    limit?: number;
+    offset?: number;
+    audience?: GalleryAudience;
+    academicYear?: string;
+    visibility?: GalleryVisibility;
+    /** Drawing category (e.g. '2d_composition'); resolved via drawing_questions. */
+    category?: string;
+    /** Alumni-only: restrict to graduates who studied at this college. */
+    collegeId?: string;
+  },
   client?: TypedSupabaseClient
 ): Promise<GalleryPost[]> {
   const supabase = client || getSupabaseAdminClient();
   const audience: GalleryAudience = filters?.audience || 'current';
+  const visibility: GalleryVisibility = filters?.visibility || 'visible';
 
   // If tags are requested, resolve them first so we can restrict submission_ids.
   let tagRestrictedIds: string[] | null = null;
@@ -40,6 +61,30 @@ export async function getGalleryFeed(
     if (tagRestrictedIds.length === 0) return [];
   }
 
+  // Category lives on drawing_questions, so resolve matching question ids and
+  // restrict submissions to them. (Free-practice works have no question, so a
+  // category filter naturally excludes them.)
+  let categoryQuestionIds: string[] | null = null;
+  if (filters?.category) {
+    const { data: qRows } = await supabase
+      .from('drawing_questions' as any)
+      .select('id')
+      .eq('category', filters.category);
+    categoryQuestionIds = (qRows || []).map((q: any) => q.id);
+    if (categoryQuestionIds.length === 0) return [];
+  }
+
+  // Alumni college filter: resolve graduate user ids for the college.
+  let collegeUserIds: string[] | null = null;
+  if (audience === 'alumni' && filters?.collegeId) {
+    const { data: pRows } = await supabase
+      .from('alumni_profiles' as any)
+      .select('user_id')
+      .eq('college_id', filters.collegeId);
+    collegeUserIds = [...new Set((pRows || []).map((p: any) => p.user_id))];
+    if (collegeUserIds.length === 0) return [];
+  }
+
   // When filtering by alumni status we need an INNER join on the student so the
   // .eq('student.is_alumni', ...) filter restricts the submission rows.
   const studentJoin =
@@ -50,26 +95,40 @@ export async function getGalleryFeed(
   let query = supabase
     .from('drawing_submissions' as any)
     .select(`*, question:drawing_questions(*), ${studentJoin}`)
-    .eq('is_gallery_visible', true)
     .not('tutor_feedback', 'is', null)
     .not('tutor_rating', 'is', null);
+
+  // Visibility scope. 'all' applies no filter (admin audit).
+  if (visibility === 'visible') {
+    query = query.eq('is_gallery_visible', true);
+  } else if (visibility === 'hidden') {
+    query = query.eq('is_gallery_visible', false);
+  }
 
   if (audience === 'current') {
     query = query.eq('student.is_alumni', false);
   } else if (audience === 'alumni') {
     query = query.eq('student.is_alumni', true);
-    // Optionally narrow the Hall of Fame to one graduating cohort (e.g. '2025-26').
-    if (filters?.academicYear) {
-      query = query.eq('student.academic_year', filters.academicYear);
-    }
     // Curator-pinned ("Hall of Fame") work surfaces first.
     query = query.order('alumni_featured', { ascending: false });
+  }
+
+  // Cohort-year filter. Valid for 'current' and 'alumni' (both inner-join the
+  // student); skipped for 'all', whose left join would drop null-year rows.
+  if (filters?.academicYear && audience !== 'all') {
+    query = query.eq('student.academic_year', filters.academicYear);
   }
 
   query = query.order('reviewed_at', { ascending: false });
 
   if (tagRestrictedIds) {
     query = query.in('id', tagRestrictedIds);
+  }
+  if (categoryQuestionIds) {
+    query = query.in('question_id', categoryQuestionIds);
+  }
+  if (collegeUserIds) {
+    query = query.in('student_id', collegeUserIds);
   }
 
   const limit = filters?.limit || 20;

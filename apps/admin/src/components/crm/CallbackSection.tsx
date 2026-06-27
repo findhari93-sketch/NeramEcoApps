@@ -20,7 +20,7 @@ import {
   Alert,
   Divider,
   CircularProgress,
-  Avatar,
+  UserAvatar,
 } from '@neram/ui';
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
 import ScheduleIcon from '@mui/icons-material/Schedule';
@@ -480,18 +480,7 @@ export default function CallbackSection({
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar
-                        sx={{
-                          width: 22,
-                          height: 22,
-                          fontSize: 9,
-                          fontWeight: 700,
-                          bgcolor: 'primary.main',
-                          color: 'primary.contrastText',
-                        }}
-                      >
-                        {attempt.admin_name?.charAt(0) || 'A'}
-                      </Avatar>
+                      <UserAvatar name={attempt.admin_name || 'A'} size={22} />
                       <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 12 }}>
                         {attempt.admin_name}
                       </Typography>

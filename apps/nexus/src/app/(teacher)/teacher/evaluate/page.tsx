@@ -9,6 +9,7 @@ import {
   Skeleton,
   Button,
   Avatar,
+  UserAvatar,
   TextField,
   ToggleButtonGroup,
   ToggleButton,
@@ -253,9 +254,7 @@ export default function TeacherEvaluate() {
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Avatar src={selected.student.avatar_url || undefined} sx={{ width: 36, height: 36 }}>
-                {selected.student.name?.charAt(0)}
-              </Avatar>
+              <UserAvatar src={selected.student.avatar_url} name={selected.student.name} size={36} />
               <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" fontWeight={600}>{selected.student.name}</Typography>
                 <Typography variant="caption" color="text.secondary">

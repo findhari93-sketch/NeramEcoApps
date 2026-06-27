@@ -7,7 +7,7 @@ import {
   Typography,
   Paper,
   Skeleton,
-  Avatar,
+  UserAvatar,
   Button,
   LinearProgress,
   Divider,
@@ -98,15 +98,6 @@ export default function StudentDetailPage() {
     fetchStudent();
   }, [activeClassroom, studentId, getToken]);
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-IN', {
       year: 'numeric',
@@ -158,12 +149,12 @@ export default function StudentDetailPage() {
 
       {/* Student Header */}
       <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 2, textAlign: 'center' }}>
-        <Avatar
-          src={student.avatar_url || undefined}
-          sx={{ width: 80, height: 80, mx: 'auto', mb: 1.5, fontSize: '2rem' }}
-        >
-          {getInitials(student.name)}
-        </Avatar>
+        <UserAvatar
+          src={student.avatar_url}
+          name={student.name}
+          size={80}
+          sx={{ mx: 'auto', mb: 1.5 }}
+        />
         <Typography variant="h6" sx={{ fontWeight: 700 }}>
           {student.name}
         </Typography>

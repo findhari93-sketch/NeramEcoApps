@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Box, IconButton, Skeleton, Typography, Avatar, Chip, Paper,
+  Box, IconButton, Skeleton, Typography, UserAvatar, Chip, Paper,
   Button, useMediaQuery, useTheme, Switch, Snackbar,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@neram/ui';
@@ -380,12 +380,11 @@ export default function DrawingReviewDetailPage() {
             <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small" sx={{ p: 0.5 }}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
-            <Avatar
-              src={sub.student?.avatar_url || undefined}
-              sx={{ width: 28, height: 28, bgcolor: 'primary.main', fontSize: '0.75rem' }}
-            >
-              {sub.student?.name?.charAt(0) || '?'}
-            </Avatar>
+            <UserAvatar
+              src={sub.student?.avatar_url}
+              name={sub.student?.name}
+              size={28}
+            />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.82rem' }}>
@@ -547,12 +546,11 @@ export default function DrawingReviewDetailPage() {
           <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
             <ArrowBackIcon />
           </IconButton>
-          <Avatar
-            src={sub.student?.avatar_url || undefined}
-            sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: '0.9rem' }}
-          >
-            {sub.student?.name?.charAt(0) || '?'}
-          </Avatar>
+          <UserAvatar
+            src={sub.student?.avatar_url}
+            name={sub.student?.name}
+            size={36}
+          />
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="body2" fontWeight={600} noWrap>{sub.student?.name || 'Student'}</Typography>

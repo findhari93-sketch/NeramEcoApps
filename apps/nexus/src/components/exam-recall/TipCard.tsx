@@ -6,7 +6,7 @@ import {
   Typography,
   Stack,
   Chip,
-  Avatar,
+  UserAvatar,
   Box,
   IconButton,
   Tooltip,
@@ -70,13 +70,11 @@ export default function TipCard({ tip, onUpvote }: TipCardProps) {
       <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
         {/* Author row */}
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-          <Avatar
-            src={tip.user.avatar_url || undefined}
-            alt={tip.user.name || 'User'}
-            sx={{ width: 32, height: 32, fontSize: '0.8rem' }}
-          >
-            {tip.user.name?.[0] || '?'}
-          </Avatar>
+          <UserAvatar
+            src={tip.user.avatar_url}
+            name={tip.user.name}
+            size={32}
+          />
           <Box sx={{ flex: 1 }}>
             <Typography variant="body2" fontWeight={600}>
               {tip.user.name || 'Anonymous'}

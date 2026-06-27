@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Avatar, TextField, IconButton, Paper, Chip,
+  Box, Typography, UserAvatar, TextField, IconButton, Paper, Chip,
   CircularProgress,
 } from '@neram/ui';
 import SendIcon from '@mui/icons-material/Send';
@@ -87,12 +87,12 @@ export default function CommentSection({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: canComment ? 1.5 : 0 }}>
         {comments.map((c) => (
           <Box key={c.id} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <Avatar
-              src={c.author?.avatar_url || undefined}
-              sx={{ width: 28, height: 28, fontSize: '0.7rem', mt: 0.25, bgcolor: c.author_role === 'teacher' ? 'primary.main' : 'grey.400' }}
-            >
-              {c.author?.name?.charAt(0) || '?'}
-            </Avatar>
+            <UserAvatar
+              src={c.author?.avatar_url}
+              name={c.author?.name}
+              size={28}
+              sx={{ mt: 0.25 }}
+            />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Typography variant="caption" fontWeight={600}>

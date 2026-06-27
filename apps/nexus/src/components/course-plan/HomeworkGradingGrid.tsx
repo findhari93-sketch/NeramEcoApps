@@ -10,7 +10,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Avatar,
+  UserAvatar,
   Tooltip,
   useMediaQuery,
   useTheme,
@@ -288,12 +288,11 @@ export default function HomeworkGradingGrid({
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Avatar
-                    src={student.avatar_url || undefined}
-                    sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
-                  >
-                    {getInitials(student.name)}
-                  </Avatar>
+                  <UserAvatar
+                    src={student.avatar_url}
+                    name={student.name}
+                    size={28}
+                  />
                   <Typography
                     variant="body2"
                     sx={{

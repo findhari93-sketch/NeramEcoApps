@@ -6,7 +6,7 @@ import {
   Typography,
   Paper,
   Button,
-  Avatar,
+  UserAvatar,
   Chip,
   TextField,
   Dialog,
@@ -567,9 +567,7 @@ function AccessRequestCard({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-        <Avatar src={request.avatar_url || undefined} sx={{ width: 44, height: 44, bgcolor: 'primary.main' }}>
-          {request.user_name?.[0] || '?'}
-        </Avatar>
+        <UserAvatar src={request.avatar_url} name={request.user_name} size={44} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             {request.user_name}
@@ -674,12 +672,11 @@ function ReviewCard({
     >
       {/* Student info */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-        <Avatar
-          src={review.student.avatar_url || undefined}
-          sx={{ width: 44, height: 44, bgcolor: 'primary.main' }}
-        >
-          {review.student.name?.[0] || '?'}
-        </Avatar>
+        <UserAvatar
+          src={review.student.avatar_url}
+          name={review.student.name}
+          size={44}
+        />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             {review.student.name}

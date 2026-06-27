@@ -7,7 +7,7 @@ import {
   Typography,
   Paper,
   Skeleton,
-  Avatar,
+  UserAvatar,
   Chip,
   IconButton,
   LinearProgress,
@@ -162,12 +162,11 @@ export default function StudentEngagementDetailPage() {
         <IconButton onClick={() => router.back()} size="small">
           <ArrowBackIcon />
         </IconButton>
-        <Avatar
-          src={student.avatar_url || undefined}
-          sx={{ width: 40, height: 40 }}
-        >
-          {student.first_name?.[0]}{student.last_name?.[0]}
-        </Avatar>
+        <UserAvatar
+          src={student.avatar_url}
+          name={`${student.first_name} ${student.last_name}`}
+          size={40}
+        />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>

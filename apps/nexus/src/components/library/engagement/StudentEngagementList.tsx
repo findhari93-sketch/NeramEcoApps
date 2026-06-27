@@ -16,7 +16,7 @@ import {
   TableRow,
   TableSortLabel,
   Paper,
-  Avatar,
+  UserAvatar,
   InputAdornment,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
@@ -247,12 +247,11 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar
-                          src={student.avatar_url || undefined}
-                          sx={{ width: 28, height: 28, fontSize: '0.7rem' }}
-                        >
-                          {student.first_name?.[0]}{student.last_name?.[0]}
-                        </Avatar>
+                        <UserAvatar
+                          src={student.avatar_url}
+                          name={`${student.first_name} ${student.last_name}`}
+                          size={28}
+                        />
                         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
                           {student.first_name} {student.last_name}
                         </Typography>

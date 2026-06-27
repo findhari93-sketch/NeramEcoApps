@@ -9,7 +9,7 @@ import {
   Button,
   Box,
   Typography,
-  Avatar,
+  UserAvatar,
   FormControl,
   InputLabel,
   Select,
@@ -60,9 +60,6 @@ export default function RemoveStudentDialog({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const getInitials = (name: string) =>
-    name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
 
   const canSubmit =
     reasonCategory !== '' &&
@@ -141,9 +138,7 @@ export default function RemoveStudentDialog({
           {students.map((student) => (
             <ListItem key={student.enrollmentId} sx={{ minHeight: 48 }}>
               <ListItemAvatar>
-                <Avatar src={student.avatar_url || undefined} sx={{ width: 36, height: 36 }}>
-                  {getInitials(student.name)}
-                </Avatar>
+                <UserAvatar src={student.avatar_url} name={student.name} size={36} />
               </ListItemAvatar>
               <ListItemText
                 primary={student.name}

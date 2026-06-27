@@ -10,6 +10,7 @@ import {
   Button,
   TextField,
   Avatar,
+  UserAvatar,
   alpha,
   useTheme,
   Tabs,
@@ -577,12 +578,11 @@ export default function TeacherIssuesPage() {
 
       {/* Student info */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-        <Avatar
-          src={selectedIssue.student_avatar || undefined}
-          sx={{ width: 36, height: 36, fontSize: '0.85rem' }}
-        >
-          {selectedIssue.student_name?.charAt(0) || 'S'}
-        </Avatar>
+        <UserAvatar
+          src={selectedIssue.student_avatar}
+          name={selectedIssue.student_name}
+          size={36}
+        />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {selectedIssue.student_name}

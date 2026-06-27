@@ -13,7 +13,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   CircularProgress,
-  Avatar,
+  UserAvatar,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
@@ -235,12 +235,11 @@ export default function ClassCompletionDialog({
               </Typography>
               {teacherName && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Avatar
-                    src={session.teacher?.avatar_url || undefined}
-                    sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
-                  >
-                    {teacherName[0]}
-                  </Avatar>
+                  <UserAvatar
+                    src={session.teacher?.avatar_url}
+                    name={teacherName}
+                    size={24}
+                  />
                   <Typography variant="body2" color="text.secondary">
                     {teacherName}
                   </Typography>

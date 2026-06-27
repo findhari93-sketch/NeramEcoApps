@@ -13,7 +13,7 @@ import {
   Divider,
   Alert,
   CircularProgress,
-  Avatar,
+  UserAvatar,
   Breadcrumbs,
   Link as MuiLink,
   Tooltip,
@@ -831,12 +831,7 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
               }
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                <Avatar
-                  src={payment.student_avatar || undefined}
-                  sx={{ width: 48, height: 48, bgcolor: '#1565C0' }}
-                >
-                  {payment.student_name.charAt(0).toUpperCase()}
-                </Avatar>
+                <UserAvatar src={payment.student_avatar} name={payment.student_name} size={48} />
                 <Box>
                   <Typography variant="body1" fontWeight={600}>
                     {payment.student_name}

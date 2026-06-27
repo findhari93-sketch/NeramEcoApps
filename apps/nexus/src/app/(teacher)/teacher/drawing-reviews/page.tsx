@@ -10,6 +10,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import GalleryFeed from '@/components/drawings/GalleryFeed';
+import ReferenceLibrary from '@/components/drawings/ReferenceLibrary';
 import TagFilterBar from '@/components/drawings/TagFilterBar';
 import ViewModeToggle from '@/components/drawings/ViewModeToggle';
 import { useDrawingViewMode } from '@/hooks/useDrawingViewMode';
@@ -20,6 +21,7 @@ const STATUS_TABS = [
   { value: 'reviewed', label: 'Reviewed' },
   { value: 'completed', label: 'Completed' },
   { value: 'gallery', label: 'Gallery' },
+  { value: 'reference', label: 'Reference' },
 ];
 
 // Sub-filters shown under the Reviewed tab
@@ -61,7 +63,7 @@ export default function DrawingReviewsPage() {
   };
 
   const fetchQueue = useCallback(async () => {
-    if (status === 'gallery') return; // Gallery tab uses GalleryFeed component
+    if (status === 'gallery' || status === 'reference') return; // these tabs use their own components
     setLoading(true);
     try {
       const token = await getToken();
@@ -123,14 +125,16 @@ export default function DrawingReviewsPage() {
         </Box>
       )}
 
-      {/* Tag filters apply to all tabs except Gallery (Gallery has its own filter bar inside GalleryFeed). */}
-      {status !== 'gallery' && (
+      {/* Tag filters apply to the review queues only (Gallery and Reference have their own filters). */}
+      {status !== 'gallery' && status !== 'reference' && (
         <TagFilterBar selected={tagSlugs} onChange={setTagSlugs} />
       )}
 
       {/* Gallery tab: render GalleryFeed in teacher mode */}
       {status === 'gallery' ? (
         <GalleryFeed getToken={getToken} teacherMode={true} viewMode={viewMode} />
+      ) : status === 'reference' ? (
+        <ReferenceLibrary getToken={getToken} teacherMode />
       ) : loading ? (
         Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={80} sx={{ mb: 1 }} />)
       ) : submissions.length === 0 ? (

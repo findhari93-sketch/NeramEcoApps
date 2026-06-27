@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
-  Avatar,
+  UserAvatar,
   Chip,
   Paper,
   TextField,
@@ -141,9 +141,6 @@ export default function HistoricalStudentsTab({
     }
   };
 
-  const getInitials = (name: string) =>
-    name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
-
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -228,9 +225,7 @@ export default function HistoricalStudentsTab({
             expandIcon={<ExpandMoreIcon />}
             sx={{ minHeight: 64, '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1.5 } }}
           >
-            <Avatar src={student.user.avatar_url || undefined} sx={{ width: 40, height: 40 }}>
-              {getInitials(student.user.name)}
-            </Avatar>
+            <UserAvatar src={student.user.avatar_url} name={student.user.name} size={40} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" fontWeight={600} noWrap>
                 {student.user.name}

@@ -10,7 +10,7 @@ import {
   Chip,
   IconButton,
   Skeleton,
-  Avatar,
+  UserAvatar,
   Snackbar,
   Alert,
   LinearProgress,
@@ -243,10 +243,6 @@ export default function CampaignDetailPage() {
   };
   const completionPct = total > 0 ? Math.round((stats.completed / total) * 100) : 0;
 
-  function getInitials(name: string) {
-    return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
-  }
-
   if (loading && !campaign) {
     return (
       <Box>
@@ -432,19 +428,15 @@ export default function CampaignDetailPage() {
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Avatar
-                  src={s.student_avatar || undefined}
+                <UserAvatar
+                  src={s.student_avatar}
+                  name={s.student_name}
+                  size={36}
                   sx={{
-                    width: 36,
-                    height: 36,
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
                     color: 'primary.main',
-                    fontSize: '0.75rem',
                     fontWeight: 700,
                   }}
-                >
-                  {getInitials(s.student_name)}
-                </Avatar>
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>

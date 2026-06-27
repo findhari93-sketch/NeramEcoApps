@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Typography, Chip, Avatar, alpha, useTheme } from '@neram/ui';
+import { Box, Typography, Chip, UserAvatar, alpha, useTheme } from '@neram/ui';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import WbTwilightOutlinedIcon from '@mui/icons-material/WbTwilightOutlined';
 import type { StudentOnDate } from '@/types/exam-schedule';
@@ -48,17 +48,13 @@ export default function StudentChip({ student, isMe }: StudentChipProps) {
         },
       }}
     >
-      <Avatar
+      <UserAvatar
+        name={student.name}
+        size={28}
         sx={{
-          width: 28,
-          height: 28,
-          fontSize: '0.7rem',
           fontWeight: 700,
-          bgcolor: getAvatarColor(student.name),
         }}
-      >
-        {getInitials(student.name)}
-      </Avatar>
+      />
 
       <Typography
         variant="body2"

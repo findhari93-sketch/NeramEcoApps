@@ -50,6 +50,19 @@ describe('classifyGraphError', () => {
     expect(info.code).toBe('not_configured');
   });
 
+  it('maps a 404 Request_ResourceNotFound to account_not_found (deleted MS account)', () => {
+    const raw =
+      'Graph getUserAssignedLicenses 404: {"error":{"code":"Request_ResourceNotFound","message":"Resource \'25b751a7-e31e-49eb-90fa-6573cfaa8b0f\' does not exist or one of its queried reference-property objects are not present."}}';
+    const info = classifyGraphError(raw);
+    expect(info.code).toBe('account_not_found');
+    expect(info.message).toMatch(/already removed|no active microsoft account/i);
+  });
+
+  it('does not confuse a 403 permission error with account_not_found', () => {
+    const info = classifyGraphError('Graph API error: 403 {"error":{"code":"Authorization_RequestDenied"}}');
+    expect(info.code).toBe('insufficient_permission');
+  });
+
   it('falls back to unknown for unrecognised errors', () => {
     expect(classifyGraphError('some random network blip').code).toBe('unknown');
     expect(classifyGraphError('').code).toBe('unknown');

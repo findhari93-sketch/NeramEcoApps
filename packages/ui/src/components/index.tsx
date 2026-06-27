@@ -475,6 +475,12 @@ export { ConnectToOffice } from './ChatWidget/ConnectToOffice';
 export { LoginModal } from './LoginModal';
 export type { LoginModalProps } from './LoginModal';
 
+// User avatar (photo-or-initials, click-to-enlarge) + image viewer
+export { UserAvatar } from './UserAvatar';
+export type { UserAvatarProps } from './UserAvatar';
+export { ImageViewerDialog } from './ImageViewerDialog';
+export type { ImageViewerDialogProps } from './ImageViewerDialog';
+
 /**
  * Status badge component
  */

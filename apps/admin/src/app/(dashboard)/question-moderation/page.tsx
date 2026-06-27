@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Button, Chip, Stack, Paper, Avatar,
+  Box, Typography, Button, Chip, Stack, Paper, UserAvatar,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   CircularProgress, Alert, Tabs, Tab, ToggleButton, ToggleButtonGroup,
   IconButton, EditIcon,
@@ -375,12 +375,7 @@ export default function QuestionModerationPage() {
                   {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                      <Avatar
-                        src={item.author?.avatar_url || undefined}
-                        sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
-                      >
-                        {(item.author?.name || 'U')[0]}
-                      </Avatar>
+                      <UserAvatar src={item.author?.avatar_url} name={item.author?.name} size={24} />
                       <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
                         {item.author?.name || 'Anonymous'}
                       </Typography>
@@ -522,12 +517,7 @@ export default function QuestionModerationPage() {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     {/* Author + metadata row */}
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }} flexWrap="wrap" useFlexGap>
-                      <Avatar
-                        src={cr.author?.avatar_url || undefined}
-                        sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
-                      >
-                        {(cr.author?.name || 'U')[0]}
-                      </Avatar>
+                      <UserAvatar src={cr.author?.avatar_url} name={cr.author?.name} size={24} />
                       <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
                         {cr.author?.name || 'Anonymous'}
                       </Typography>
@@ -721,9 +711,7 @@ export default function QuestionModerationPage() {
             </DialogTitle>
             <DialogContent dividers>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <Avatar src={viewQuestion.author?.avatar_url || undefined} sx={{ width: 28, height: 28 }}>
-                  {(viewQuestion.author?.name || 'U')[0]}
-                </Avatar>
+                <UserAvatar src={viewQuestion.author?.avatar_url} name={viewQuestion.author?.name} size={28} />
                 <Typography variant="body2">{viewQuestion.author?.name || 'Anonymous'}</Typography>
                 <Typography variant="body2" color="text.disabled">{timeAgo(viewQuestion.created_at)}</Typography>
               </Stack>

@@ -5,7 +5,7 @@ import {
   Box,
   Card,
   Typography,
-  Avatar,
+  UserAvatar,
   Skeleton,
   alpha,
 } from '@neram/ui';
@@ -221,21 +221,16 @@ export default function DashboardHallOfFame({
                   </Typography>
 
                   {/* Avatar */}
-                  <Avatar
-                    src={performer.avatar_url || undefined}
-                    alt={performer.student_name}
+                  <UserAvatar
+                    src={performer.avatar_url}
+                    name={performer.student_name}
+                    size={36}
                     sx={{
-                      width: 36,
-                      height: 36,
-                      fontSize: '0.85rem',
                       fontFamily: neramFontFamilies.body,
-                      bgcolor: alpha(medalColor, 0.15),
                       color: medalColor,
                       border: `2px solid ${alpha(medalColor, 0.3)}`,
                     }}
-                  >
-                    {performer.student_name?.charAt(0)?.toUpperCase() || '?'}
-                  </Avatar>
+                  />
 
                   {/* Name */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>

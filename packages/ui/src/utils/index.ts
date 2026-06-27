@@ -340,10 +340,51 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } | nul
 export function getContrastColor(hexColor: string): 'black' | 'white' {
   const rgb = hexToRgb(hexColor);
   if (!rgb) return 'black';
-  
+
   // Calculate luminance
   const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
   return luminance > 0.5 ? 'black' : 'white';
+}
+
+// ============================================
+// AVATAR UTILITIES
+// ============================================
+
+/**
+ * Professional palette for avatar fallback backgrounds (deterministic by name).
+ * Shared by UserAvatar and GraphAvatar so initials look identical everywhere.
+ */
+export const AVATAR_COLORS = [
+  '#6366f1', // indigo
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#f97316', // orange
+  '#0ea5e9', // sky
+  '#10b981', // emerald
+  '#e11d48', // rose
+];
+
+/**
+ * Pick a stable avatar background color for a given name.
+ */
+export function getAvatarColor(name: string | undefined | null): string {
+  if (!name) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+/**
+ * Initials for an avatar: first + last for multi-word names, else first letter.
+ */
+export function getAvatarInitials(name: string | undefined | null): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 // ============================================

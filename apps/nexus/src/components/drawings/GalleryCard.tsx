@@ -1,8 +1,9 @@
 'use client';
 
-import { Box, Typography, Paper, Avatar, Rating, IconButton, Chip } from '@neram/ui';
+import { Box, Typography, Paper, UserAvatar, Rating, IconButton, Chip } from '@neram/ui';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
@@ -38,8 +39,12 @@ interface GalleryCardProps {
   commentsExpanded: boolean;
   getToken: () => Promise<string | null>;
   teacherMode?: boolean;
+  /** Teacher-only: when true this card is shown in the Hidden (moderation) view. */
+  isHiddenView?: boolean;
   /** Teacher-only: hide this submission from the gallery (keeps the submission, just flips visibility). */
   onHide?: (submissionId: string) => void;
+  /** Teacher-only: return a hidden submission to the student gallery. */
+  onRestore?: (submissionId: string) => void;
   /** Teacher-only: pin/unpin this alumnus work in the Hall of Fame. */
   onFeature?: (submissionId: string, featured: boolean) => void;
   viewMode?: DrawingViewMode;
@@ -52,7 +57,9 @@ export default function GalleryCard({
   commentsExpanded,
   getToken,
   teacherMode,
+  isHiddenView,
   onHide,
+  onRestore,
   onFeature,
   viewMode = 'comfortable',
 }: GalleryCardProps) {
@@ -66,6 +73,26 @@ export default function GalleryCard({
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', position: 'relative' }}>
+      {/* Moderation banner: only teachers/admins ever see this card in the Hidden view. */}
+      {teacherMode && isHiddenView && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            px: 1.5,
+            py: 0.5,
+            bgcolor: 'rgba(245,158,11,0.12)',
+            color: '#B45309',
+          }}
+        >
+          <VisibilityOffIcon sx={{ fontSize: 14 }} />
+          <Typography variant="caption" fontWeight={700}>
+            Hidden from students
+          </Typography>
+        </Box>
+      )}
+
       {/* Hall of Fame "Featured" ribbon for pinned alumni work */}
       {isAlumni && post.alumni_featured && (
         <Chip
@@ -110,12 +137,11 @@ export default function GalleryCard({
 
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1 }}>
-        <Avatar
-          src={post.student?.avatar_url || undefined}
-          sx={{ width: isCompact ? 26 : 32, height: isCompact ? 26 : 32, fontSize: '0.85rem' }}
-        >
-          {post.student?.name?.charAt(0) || '?'}
-        </Avatar>
+        <UserAvatar
+          src={post.student?.avatar_url}
+          name={post.student?.name}
+          sx={{ width: isCompact ? 26 : 32, height: isCompact ? 26 : 32 }}
+        />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
             <Typography variant="body2" fontWeight={600} noWrap>
@@ -254,17 +280,33 @@ export default function GalleryCard({
                 )}
               </IconButton>
             )}
-            <IconButton
-              size="small"
-              color="warning"
-              onClick={(e) => {
-                e.stopPropagation();
-                onHide?.(post.id);
-              }}
-              title="Hide from gallery"
-            >
-              <VisibilityOffIcon sx={{ fontSize: 18 }} />
-            </IconButton>
+            {isHiddenView ? (
+              <IconButton
+                size="small"
+                color="success"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRestore?.(post.id);
+                }}
+                title="Restore to student gallery"
+                aria-label="Restore to student gallery"
+              >
+                <VisibilityIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            ) : (
+              <IconButton
+                size="small"
+                color="warning"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onHide?.(post.id);
+                }}
+                title="Hide from students"
+                aria-label="Hide from students"
+              >
+                <VisibilityOffIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            )}
           </>
         )}
 

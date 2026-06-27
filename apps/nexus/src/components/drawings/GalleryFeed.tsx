@@ -2,17 +2,40 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Skeleton, Button, CircularProgress, ToggleButton, ToggleButtonGroup,
+  Box, Typography, Skeleton, Button, CircularProgress, ToggleButton, ToggleButtonGroup, Alert,
+  TextField, MenuItem,
 } from '@neram/ui';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import GalleryCard from './GalleryCard';
 import TagFilterBar from './TagFilterBar';
+import AlumniCollegeFilter from './AlumniCollegeFilter';
 import type { GalleryPost, GalleryReactionType } from '@neram/database/types';
 import type { DrawingViewMode } from '@/hooks/useDrawingViewMode';
 
 const PAGE_SIZE = 12;
 
 type GalleryAudience = 'current' | 'alumni';
+
+const CATEGORY_OPTIONS = [
+  { value: '', label: 'All' },
+  { value: '2d_composition', label: '2D' },
+  { value: '3d_composition', label: '3D' },
+  { value: 'kit_sculpture', label: 'Kit' },
+];
+
+/** Recent academic years in 'YYYY-YY' form (the Indian academic year flips ~June). */
+function academicYearChoices(count = 6): string[] {
+  const now = new Date();
+  const startYear = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
+  const years: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const y = startYear - i;
+    years.push(`${y}-${String((y + 1) % 100).padStart(2, '0')}`);
+  }
+  return years;
+}
 
 interface GalleryFeedProps {
   getToken: () => Promise<string | null>;
@@ -37,6 +60,13 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
   const [hasMore, setHasMore] = useState(true);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [audience, setAudience] = useState<GalleryAudience>('current');
+  const [category, setCategory] = useState('');
+  const [academicYear, setAcademicYear] = useState('');
+  const [collegeId, setCollegeId] = useState('');
+  // Teacher/admin-only moderation scope. Students never see this control and the
+  // API forces them to 'visible' regardless.
+  const [visibility, setVisibility] = useState<'visible' | 'hidden'>('visible');
+  const [notice, setNotice] = useState<string | null>(null);
 
   const fetchFeed = useCallback(
     async (fetchOffset: number, append: boolean) => {
@@ -48,6 +78,10 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
         const params = new URLSearchParams();
         if (tagSlugs.length > 0) params.set('tags', tagSlugs.join(','));
         params.set('audience', audience);
+        if (category) params.set('category', category);
+        if (academicYear) params.set('academicYear', academicYear);
+        if (audience === 'alumni' && collegeId) params.set('collegeId', collegeId);
+        if (teacherMode && visibility === 'hidden') params.set('visibility', 'hidden');
         params.set('limit', String(PAGE_SIZE));
         params.set('offset', String(fetchOffset));
 
@@ -68,7 +102,7 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
         setLoadingMore(false);
       }
     },
-    [getToken, tagSlugs, audience],
+    [getToken, tagSlugs, audience, category, academicYear, collegeId, teacherMode, visibility],
   );
 
   useEffect(() => {
@@ -122,7 +156,8 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
     });
   };
 
-  /** Teacher-only: flip the gallery-visibility boolean for a submission. */
+  /** Teacher-only: hide a work from the student gallery. It leaves the Visible
+   *  list but is recoverable from the Hidden view (see handleRestore). */
   const handleHide = async (submissionId: string) => {
     try {
       const token = await getToken();
@@ -133,6 +168,25 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
       });
       if (res.ok) {
         setPosts((prev) => prev.filter((p) => p.id !== submissionId));
+        setNotice('Hidden from students. Switch to Hidden to review or restore it.');
+      }
+    } catch {
+      /* silent */
+    }
+  };
+
+  /** Teacher-only: return a hidden work to the student gallery. */
+  const handleRestore = async (submissionId: string) => {
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/drawing/gallery/publish', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submission_id: submissionId, visible: true }),
+      });
+      if (res.ok) {
+        setPosts((prev) => prev.filter((p) => p.id !== submissionId));
+        setNotice('Restored to the student gallery.');
       }
     } catch {
       /* silent */
@@ -167,7 +221,10 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
           exclusive
           size="small"
           onChange={(_, val) => {
-            if (val) setAudience(val);
+            if (val) {
+              setAudience(val);
+              if (val !== 'alumni') setCollegeId('');
+            }
           }}
           aria-label="Gallery audience"
           sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 2, minHeight: 40 } }}
@@ -181,6 +238,80 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>
+
+      {/* Teacher/admin moderation scope. Students never render this. */}
+      {teacherMode && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+          <ToggleButtonGroup
+            value={visibility}
+            exclusive
+            size="small"
+            onChange={(_, val) => {
+              if (val) {
+                setVisibility(val);
+                setNotice(null);
+              }
+            }}
+            aria-label="Moderation scope"
+            sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 2, minHeight: 40 } }}
+          >
+            <ToggleButton value="visible" aria-label="Visible to students">
+              <VisibilityOutlinedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+              Visible
+            </ToggleButton>
+            <ToggleButton value="hidden" aria-label="Hidden from students">
+              <VisibilityOffOutlinedIcon sx={{ fontSize: 18, mr: 0.75 }} />
+              Hidden
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      )}
+
+      {notice && (
+        <Alert severity="info" onClose={() => setNotice(null)} sx={{ mb: 2, maxWidth: 600, mx: 'auto' }}>
+          {notice}
+        </Alert>
+      )}
+
+      {/* Category + cohort-year filters. Wraps on small screens (no overflow). */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 1.5 }}>
+        <ToggleButtonGroup
+          value={category}
+          exclusive
+          size="small"
+          onChange={(_, val) => setCategory(val ?? '')}
+          aria-label="Drawing category"
+          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', px: 1.75, minHeight: 40 } }}
+        >
+          {CATEGORY_OPTIONS.map((c) => (
+            <ToggleButton key={c.value || 'all'} value={c.value} aria-label={c.label}>
+              {c.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        <TextField
+          select
+          size="small"
+          label="Year"
+          value={academicYear}
+          onChange={(e) => setAcademicYear(e.target.value)}
+          sx={{ minWidth: 130 }}
+        >
+          <MenuItem value="">All years</MenuItem>
+          {academicYearChoices().map((y) => (
+            <MenuItem key={y} value={y}>
+              {y}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+
+      {/* College filter: only on the Hall of Fame (seniors' works). */}
+      {audience === 'alumni' && (
+        <Box sx={{ mb: 1.5 }}>
+          <AlumniCollegeFilter getToken={getToken} value={collegeId} onChange={setCollegeId} />
+        </Box>
+      )}
 
       <TagFilterBar selected={tagSlugs} onChange={setTagSlugs} />
 
@@ -196,11 +327,13 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
             <EmojiEventsOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
           )}
           <Typography color="text.secondary">
-            {tagSlugs.length > 0
-              ? 'No drawings match these tags'
-              : audience === 'alumni'
-                ? 'No alumni work in the Hall of Fame yet'
-                : 'No drawings in the gallery yet'}
+            {teacherMode && visibility === 'hidden'
+              ? 'No works are hidden from students'
+              : tagSlugs.length > 0 || category || academicYear
+                ? 'No drawings match these filters'
+                : audience === 'alumni'
+                  ? 'No alumni work in the Hall of Fame yet'
+                  : 'No drawings in the gallery yet'}
           </Typography>
         </Box>
       ) : (
@@ -223,7 +356,9 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
               commentsExpanded={expandedComments.has(post.id)}
               getToken={getToken}
               teacherMode={teacherMode}
+              isHiddenView={visibility === 'hidden'}
               onHide={handleHide}
+              onRestore={handleRestore}
               onFeature={handleFeature}
               viewMode={viewMode}
             />

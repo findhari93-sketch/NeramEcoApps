@@ -12,7 +12,6 @@ import {
   DialogContent,
   IconButton,
   Chip,
-  Avatar,
   Divider,
   Badge,
   Button,
@@ -27,6 +26,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import { UserAvatar } from '@neram/ui';
 import DevicesIcon from '@mui/icons-material/Devices';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
@@ -183,9 +183,7 @@ function StudentDetailDialog({
           <Box>
             {/* Student info */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-              <Avatar src={detail.user_avatar || undefined} sx={{ width: 48, height: 48 }}>
-                {detail.user_name?.[0]}
-              </Avatar>
+              <UserAvatar src={detail.user_avatar} name={detail.user_name} size={48} />
               <Box>
                 <Typography variant="subtitle1" fontWeight={600}>
                   {detail.user_name}
@@ -338,12 +336,7 @@ function SwapRequestsSection({ isMobile }: { isMobile?: boolean }) {
             {requests.map((req) => (
               <Paper key={req.id} variant="outlined" sx={{ p: 1.25, borderRadius: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                  <Avatar
-                    src={req.user_avatar || undefined}
-                    sx={{ width: 24, height: 24, fontSize: 11 }}
-                  >
-                    {req.user_name?.[0]?.toUpperCase()}
-                  </Avatar>
+                  <UserAvatar src={req.user_avatar} name={req.user_name} size={24} />
                   <Typography sx={{ fontSize: 13, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {req.user_name}
                   </Typography>
@@ -409,12 +402,7 @@ function SwapRequestsSection({ isMobile }: { isMobile?: boolean }) {
                   <TableRow key={req.id}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar
-                          src={req.user_avatar || undefined}
-                          sx={{ width: 32, height: 32, fontSize: 14 }}
-                        >
-                          {req.user_name?.[0]?.toUpperCase()}
-                        </Avatar>
+                        <UserAvatar src={req.user_avatar} name={req.user_name} size={32} />
                         <Box>
                           <Typography variant="body2" fontWeight={600}>
                             {req.user_name}

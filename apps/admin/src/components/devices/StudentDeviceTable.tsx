@@ -9,7 +9,6 @@ import {
   TableRow,
   Paper,
   Chip,
-  Avatar,
   Box,
   Typography,
   TextField,
@@ -20,6 +19,7 @@ import {
   Skeleton,
   Pagination,
 } from '@mui/material';
+import { UserAvatar } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
 import LaptopIcon from '@mui/icons-material/Laptop';
 import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
@@ -172,12 +172,12 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
                     gap: 1,
                   }}
                 >
-                  <Avatar
-                    src={student.user_avatar || undefined}
-                    sx={{ width: 28, height: 28, fontSize: 11, mt: 0.25, flexShrink: 0 }}
-                  >
-                    {student.user_name?.[0]?.toUpperCase()}
-                  </Avatar>
+                  <UserAvatar
+                    src={student.user_avatar}
+                    name={student.user_name}
+                    size={28}
+                    sx={{ mt: 0.25, flexShrink: 0 }}
+                  />
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     {/* Row 1: Name + Last Active */}
@@ -346,12 +346,7 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
                 <TableRow key={student.user_id} hover>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Avatar
-                        src={student.user_avatar || undefined}
-                        sx={{ width: 32, height: 32, fontSize: 14 }}
-                      >
-                        {student.user_name?.[0]?.toUpperCase()}
-                      </Avatar>
+                      <UserAvatar src={student.user_avatar} name={student.user_name} size={32} />
                       <Box>
                         <Typography variant="body2" fontWeight={600}>
                           {student.user_name}

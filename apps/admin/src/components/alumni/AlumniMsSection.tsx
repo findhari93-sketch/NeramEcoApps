@@ -83,10 +83,15 @@ export default function AlumniMsSection({ userId, onChanged, compact }: AlumniMs
     }
   };
 
-  if (!loading && status && status.hasMsAccount === false) {
+  // The stored ms_oid points at a Microsoft account that no longer exists, or the
+  // student never had one. Either way there is nothing to offboard, so render a
+  // neutral note instead of the alarming "status unavailable" warning.
+  const accountRemoved = status?.accountRemoved === true || status?.error?.code === 'account_not_found';
+
+  if (!loading && status && (status.hasMsAccount === false || accountRemoved)) {
     return (
       <Typography variant="body2" sx={{ color: MUTED }}>
-        No Microsoft account linked.
+        {accountRemoved ? 'Microsoft account already removed (nothing to revoke).' : 'No Microsoft account linked.'}
       </Typography>
     );
   }
@@ -176,12 +181,18 @@ export default function AlumniMsSection({ userId, onChanged, compact }: AlumniMs
             <Alert severity="error">{String(ms.error)}</Alert>
           ) : (
             <Alert severity={ms.failures?.length ? 'warning' : 'success'}>
-              Disabled sign-in: {ms.disabled}. Licenses removed: {ms.licensesRemoved}.
-              {ms.photosCaptured || ms.detailsCaptured
-                ? ` Captured ${[ms.photosCaptured && 'photo', ms.detailsCaptured && 'details'].filter(Boolean).join(' + ')} from Microsoft.`
-                : ''}
-              {ms.groupAssigned?.length ? ` Group-assigned (manual): ${ms.groupAssigned.join(', ')}.` : ''}
-              {ms.failures?.length ? ` ${ms.failures.length} step(s) failed: ${ms.failures[0]?.message || ''}` : ''}
+              {ms.accountGone ? (
+                'No active Microsoft account (it was already removed), so there was nothing to revoke.'
+              ) : (
+                <>
+                  Disabled sign-in: {ms.disabled}. Licenses removed: {ms.licensesRemoved}.
+                  {ms.photosCaptured || ms.detailsCaptured
+                    ? ` Captured ${[ms.photosCaptured && 'photo', ms.detailsCaptured && 'details'].filter(Boolean).join(' + ')} from Microsoft.`
+                    : ''}
+                  {ms.groupAssigned?.length ? ` Group-assigned (manual): ${ms.groupAssigned.join(', ')}.` : ''}
+                  {ms.failures?.length ? ` ${ms.failures.length} step(s) failed: ${ms.failures[0]?.message || ''}` : ''}
+                </>
+              )}
             </Alert>
           )}
         </Box>

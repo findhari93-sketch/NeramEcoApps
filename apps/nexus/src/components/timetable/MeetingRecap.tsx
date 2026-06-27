@@ -7,7 +7,7 @@ import {
   Button,
   LinearProgress,
   Rating,
-  Avatar,
+  UserAvatar,
   List,
   ListItem,
   ListItemAvatar,
@@ -181,12 +181,11 @@ export default function MeetingRecap({ classId, classroomId, getToken, role }: M
               <ListItem key={idx} sx={{ px: 0, alignItems: 'flex-start' }}>
                 {review.student && (
                   <ListItemAvatar sx={{ minWidth: 36 }}>
-                    <Avatar
-                      src={review.student.avatar_url || undefined}
-                      sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
-                    >
-                      {review.student.name?.[0]}
-                    </Avatar>
+                    <UserAvatar
+                      src={review.student.avatar_url}
+                      name={review.student.name}
+                      size={28}
+                    />
                   </ListItemAvatar>
                 )}
                 <ListItemText

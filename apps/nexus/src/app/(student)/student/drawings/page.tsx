@@ -12,6 +12,7 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
+import PhotoLibraryOutlinedIcon from '@mui/icons-material/PhotoLibraryOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -24,6 +25,7 @@ import DrawingQuestionCard from '@/components/drawings/DrawingQuestionCard';
 import FoundationChecklist from '@/components/drawings/FoundationChecklist';
 import ObjectLibrary from '@/components/drawings/ObjectLibrary';
 import GalleryFeed from '@/components/drawings/GalleryFeed';
+import ReferenceLibrary from '@/components/drawings/ReferenceLibrary';
 import ViewModeToggle from '@/components/drawings/ViewModeToggle';
 import { useDrawingViewMode } from '@/hooks/useDrawingViewMode';
 import HomeworkList from '@/components/drawings/HomeworkList';
@@ -43,7 +45,7 @@ const DIFFICULTIES = ['easy', 'medium', 'hard'];
 export default function StudentDrawingsPage() {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
-  const [section, setSection] = useState<'questions' | 'foundation' | 'objects' | 'gallery' | 'homework'>('questions');
+  const [section, setSection] = useState<'questions' | 'foundation' | 'objects' | 'gallery' | 'reference' | 'homework'>('questions');
 
   const [questions, setQuestions] = useState<DrawingQuestionEnriched[]>([]);
   const [total, setTotal] = useState(0);
@@ -206,6 +208,7 @@ export default function StudentDrawingsPage() {
         <Tab value="questions" label="Questions" {...(!isMobile && { icon: <QuizOutlinedIcon sx={{ fontSize: 16 }} />, iconPosition: 'start' as const })} />
         <Tab value="foundation" label="Foundation" {...(!isMobile && { icon: <ChecklistOutlinedIcon sx={{ fontSize: 16 }} />, iconPosition: 'start' as const })} />
         <Tab value="gallery" label="Gallery" {...(!isMobile && { icon: <CollectionsOutlinedIcon sx={{ fontSize: 16 }} />, iconPosition: 'start' as const })} />
+        <Tab value="reference" label="Reference" {...(!isMobile && { icon: <PhotoLibraryOutlinedIcon sx={{ fontSize: 16 }} />, iconPosition: 'start' as const })} />
         <Tab value="homework" label="Homework" {...(!isMobile && { icon: <AssignmentOutlinedIcon sx={{ fontSize: 16 }} />, iconPosition: 'start' as const })} />
         <Tab value="objects" label="Objects" {...(!isMobile && { icon: <CategoryOutlinedIcon sx={{ fontSize: 16 }} />, iconPosition: 'start' as const })} />
       </Tabs>
@@ -403,6 +406,13 @@ export default function StudentDrawingsPage() {
       {/* === Gallery Tab === */}
       {section === 'gallery' && (
         <StudentGallerySection getToken={getToken} isMobile={isMobile} />
+      )}
+
+      {/* === Reference Tab === */}
+      {section === 'reference' && (
+        <Box sx={{ px: isMobile ? 1 : 0 }}>
+          <ReferenceLibrary getToken={getToken} />
+        </Box>
       )}
 
       {/* === Homework Tab === */}

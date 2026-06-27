@@ -12,6 +12,7 @@ import {
   ListItemText,
   Typography,
   Avatar,
+  UserAvatar,
   Tooltip,
   IconButton,
   Badge,
@@ -428,17 +429,7 @@ export default function Sidebar() {
         {!showCollapsed ? (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
-              <Avatar
-                sx={{
-                  width: 28,
-                  height: 28,
-                  fontSize: 12,
-                  bgcolor: '#E5E7EB',
-                  color: '#374151',
-                }}
-              >
-                {user?.name?.charAt(0) || 'A'}
-              </Avatar>
+              <UserAvatar name={user?.name || 'Admin'} size={28} />
               <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
                 {user?.name || 'Admin'}
               </Typography>

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
-  Avatar,
+  UserAvatar,
   Chip,
   Button,
   IconButton,
@@ -15,7 +15,6 @@ import {
   Tooltip,
   Link,
   Alert,
-  Rating,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -31,6 +30,7 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AlumniEditDialog from '../../../../components/alumni/AlumniEditDialog';
 import AlumniMsSection from '../../../../components/alumni/AlumniMsSection';
+import StudentWorksPanel from '../../../../components/alumni/StudentWorksPanel';
 import {
   ACCENT,
   ACCENT_SOFT,
@@ -38,7 +38,6 @@ import {
   MUTED,
   LINE,
   HEAD_BG,
-  avatarColor,
   yearOfStudyLabel,
   isGraduateArchitect,
 } from '../../../../components/alumni/theme';
@@ -212,9 +211,7 @@ export default function AlumniProfilePage() {
 
       {/* Header */}
       <Paper variant="outlined" sx={{ borderRadius: 2, borderColor: LINE, p: { xs: 2, md: 3 }, mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Avatar src={user.avatar_url || undefined} sx={{ width: 72, height: 72, fontSize: 28, bgcolor: avatarColor(user.name) }}>
-          {user.name?.charAt(0)?.toUpperCase() || '?'}
-        </Avatar>
+        <UserAvatar src={user.avatar_url} name={user.name} size={72} />
         <Box sx={{ flex: 1, minWidth: 200 }}>
           <Typography variant="h5" fontWeight={800} color={INK}>
             {user.name || 'Unnamed'}
@@ -273,7 +270,7 @@ export default function AlumniProfilePage() {
 
       {/* Activity */}
       <SectionCard title="Activity at Neram">
-        <Box sx={{ display: 'flex', gap: 4, mb: activity?.recentDrawings?.length ? 2 : 0, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 4, mb: 2, flexWrap: 'wrap' }}>
           <Box>
             <Typography variant="h5" fontWeight={800} color={INK} sx={{ fontVariantNumeric: 'tabular-nums' }}>{activity?.submissionCount ?? 0}</Typography>
             <Typography sx={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>DRAWINGS SUBMITTED</Typography>
@@ -285,21 +282,8 @@ export default function AlumniProfilePage() {
             <Typography sx={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>CLASSES ATTENDED</Typography>
           </Box>
         </Box>
-        {activity?.recentDrawings?.length > 0 && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(6, 1fr)' }, gap: 1 }}>
-            {activity.recentDrawings.map((d: any) => (
-              <Box key={d.id} sx={{ position: 'relative', borderRadius: 1.5, overflow: 'hidden', border: '1px solid', borderColor: LINE }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={d.original_image_url} alt="Drawing" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block', background: '#f3f4f6' }} />
-                {d.tutor_rating ? (
-                  <Box sx={{ position: 'absolute', bottom: 2, left: 2, bgcolor: 'rgba(255,255,255,0.9)', borderRadius: 1, px: 0.5 }}>
-                    <Rating value={d.tutor_rating} readOnly size="small" sx={{ fontSize: '0.7rem' }} />
-                  </Box>
-                ) : null}
-              </Box>
-            ))}
-          </Box>
-        )}
+        {/* The Vault: every drawing this student submitted, published and hidden */}
+        <StudentWorksPanel userId={userId} studentName={user.name} />
       </SectionCard>
 
       {/* Microsoft */}

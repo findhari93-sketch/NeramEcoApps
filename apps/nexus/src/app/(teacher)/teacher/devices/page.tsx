@@ -8,6 +8,7 @@ import {
   CardContent,
   Chip,
   Avatar,
+  UserAvatar,
   Skeleton,
   TextField,
   InputAdornment,
@@ -218,9 +219,7 @@ function StudentDetailSheet({
         ) : detail ? (
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-              <Avatar src={detail.user_avatar || undefined} sx={{ width: 48, height: 48 }}>
-                {detail.user_name?.[0]}
-              </Avatar>
+              <UserAvatar src={detail.user_avatar} name={detail.user_name} size={48} />
               <Box>
                 <Typography variant="subtitle1" fontWeight={600}>{detail.user_name}</Typography>
                 <Typography variant="caption" color="text.secondary">{detail.user_email}</Typography>

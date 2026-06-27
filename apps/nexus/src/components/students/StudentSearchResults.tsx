@@ -5,13 +5,12 @@ import {
   Box,
   Typography,
   Paper,
-  Avatar,
+  UserAvatar,
   Chip,
   IconButton,
   Skeleton,
   Snackbar,
   Tooltip,
-  alpha,
   useTheme,
 } from '@neram/ui';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -94,19 +93,14 @@ export default function StudentSearchResults({
             <Box sx={{ display: 'flex', gap: 2, alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' } }}>
               {/* Avatar + Name */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
-                <Avatar
-                  src={student.avatar_url || undefined}
+                <UserAvatar
+                  src={student.avatar_url}
+                  name={student.name}
+                  size={40}
                   sx={{
-                    width: 40,
-                    height: 40,
-                    bgcolor: alpha(theme.palette.primary.main, 0.15),
-                    color: 'primary.main',
                     fontWeight: 700,
-                    fontSize: 16,
                   }}
-                >
-                  {student.name?.charAt(0)?.toUpperCase()}
-                </Avatar>
+                />
                 <Box sx={{ minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>

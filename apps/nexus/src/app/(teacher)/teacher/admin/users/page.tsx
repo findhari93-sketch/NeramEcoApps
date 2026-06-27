@@ -9,7 +9,7 @@ import {
   Select,
   MenuItem,
   Chip,
-  Avatar,
+  UserAvatar,
   IconButton,
   Pagination,
   Skeleton,
@@ -214,19 +214,15 @@ export default function AdminUsersPage() {
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-                  <Avatar
-                    src={user.avatar_url || undefined}
+                  <UserAvatar
+                    src={user.avatar_url}
+                    name={user.name}
+                    size={40}
                     sx={{
-                      width: 40,
-                      height: 40,
-                      bgcolor: alpha(theme.palette.primary.main, 0.12),
                       color: 'primary.main',
-                      fontSize: '0.9rem',
                       fontWeight: 600,
                     }}
-                  >
-                    {user.name?.charAt(0)?.toUpperCase() || '?'}
-                  </Avatar>
+                  />
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>

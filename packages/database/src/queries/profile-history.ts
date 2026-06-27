@@ -200,10 +200,13 @@ export async function createUserAvatar(
       zoom?: number;
       rotation?: number;
     };
+    source?: 'upload' | 'microsoft';
+    content_hash?: string;
   },
   client?: TypedSupabaseClient
 ): Promise<UserAvatar> {
   const supabase = client || getSupabaseAdminClient();
+  const source = avatarData.source || 'upload';
 
   // First, unset any current avatars
   await supabase
@@ -218,6 +221,7 @@ export async function createUserAvatar(
     .insert({
       user_id: userId,
       ...avatarData,
+      source,
       is_current: true,
     })
     .select()
@@ -242,10 +246,33 @@ export async function createUserAvatar(
     field_name: 'avatar_url',
     old_value: null, // Could fetch old value if needed
     new_value: avatarData.storage_path,
-    change_source: 'user',
+    change_source: source === 'microsoft' ? 'system' : 'user',
   });
 
   return data;
+}
+
+/**
+ * Latest Microsoft-synced avatar hash for a user, or null if none stored yet.
+ * Used to skip re-uploading an unchanged Microsoft photo on re-sync.
+ */
+export async function getLatestMsAvatarHash(
+  userId: string,
+  client?: TypedSupabaseClient
+): Promise<string | null> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from('user_avatars')
+    .select('content_hash')
+    .eq('user_id', userId)
+    .eq('source', 'microsoft')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  return data?.content_hash ?? null;
 }
 
 /**

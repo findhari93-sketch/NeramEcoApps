@@ -6,7 +6,7 @@ import {
   Typography,
   Paper,
   Skeleton,
-  Avatar,
+  UserAvatar,
   alpha,
   useTheme,
   Grid,
@@ -109,20 +109,16 @@ export default function ParentDashboard() {
           },
         }}
       >
-        <Avatar
-          src={data?.child?.avatar_url || undefined}
+        <UserAvatar
+          src={data?.child?.avatar_url}
+          name={data?.child?.name}
+          size={56}
           sx={{
-            width: 56,
-            height: 56,
-            bgcolor: alpha('#fff', 0.2),
             color: '#fff',
-            fontSize: '1.5rem',
             fontWeight: 700,
             border: `3px solid ${alpha('#fff', 0.3)}`,
           }}
-        >
-          {data?.child?.name?.[0] || 'S'}
-        </Avatar>
+        />
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {data?.child?.name || 'Your Child'}

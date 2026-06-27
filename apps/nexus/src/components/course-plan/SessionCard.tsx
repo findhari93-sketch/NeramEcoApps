@@ -8,7 +8,7 @@ import {
   Chip,
   Box,
   IconButton,
-  Avatar,
+  UserAvatar,
   Tooltip,
 } from '@neram/ui';
 import EditIcon from '@mui/icons-material/Edit';
@@ -238,12 +238,11 @@ export default function SessionCard({ session, onEdit, onPush, onComplete }: Ses
             {/* Teacher display — from session.teacher or extracted from notes */}
             {teacherDisplay && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                <Avatar
-                  src={teacherDisplay.avatar || undefined}
-                  sx={{ width: 24, height: 24, fontSize: '0.7rem' }}
-                >
-                  {teacherDisplay.name[0]}
-                </Avatar>
+                <UserAvatar
+                  src={teacherDisplay.avatar}
+                  name={teacherDisplay.name}
+                  size={24}
+                />
                 <Typography variant="caption" color="text.secondary">
                   {teacherDisplay.name}
                 </Typography>

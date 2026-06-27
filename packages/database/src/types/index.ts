@@ -212,7 +212,13 @@ export interface UserAvatar extends Timestamps {
 
   // Status
   is_current: boolean;
+
+  // Origin: 'upload' (user) or 'microsoft' (Graph sync)
+  source: AvatarSource;
+  content_hash: string | null;     // sha256 of the image bytes (Microsoft dedupe)
 }
+
+export type AvatarSource = 'upload' | 'microsoft';
 
 /**
  * Input type for updating user profile
@@ -7065,6 +7071,23 @@ export interface DrawingTag {
   label: string;
   is_seed: boolean;
   created_by: string | null;
+  created_at: string;
+}
+
+/**
+ * Teacher-uploaded reference / practice image. Separate from student-work
+ * submissions: this is study material teachers curate for students to practise
+ * from. Browsable by category and tags in the Reference Library.
+ */
+export interface DrawingReferenceImage {
+  id: string;
+  title: string;
+  category: DrawingCategory | null;
+  tags: string[];
+  image_url: string;
+  notes: string | null;
+  uploaded_by: string | null;
+  is_active: boolean;
   created_at: string;
 }
 

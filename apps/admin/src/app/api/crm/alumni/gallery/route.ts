@@ -26,10 +26,18 @@ export async function GET(request: NextRequest) {
       : undefined;
     const academicYear = params.get('academicYear') || undefined;
 
+    // Admin is staff, so the Hidden audit view is always allowed here.
+    const visibilityParam = params.get('visibility');
+    const visibility =
+      visibilityParam === 'hidden' || visibilityParam === 'all' ? visibilityParam : 'visible';
+    const collegeId = params.get('collegeId') || undefined;
+
     const posts = await getGalleryFeed(adminId, {
       audience: 'alumni',
       tagSlugs,
       academicYear,
+      visibility,
+      collegeId,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 24,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,
     });

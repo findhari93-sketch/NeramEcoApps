@@ -114,7 +114,13 @@ export async function addMemberToTeam(
 // the assignLicense action). Reading assignedLicenses is covered by User.Read.All.
 
 export interface GraphErrorInfo {
-  code: 'secret_expired' | 'invalid_client' | 'insufficient_permission' | 'not_configured' | 'unknown';
+  code:
+    | 'secret_expired'
+    | 'invalid_client'
+    | 'insufficient_permission'
+    | 'not_configured'
+    | 'account_not_found'
+    | 'unknown';
   /** Short, plain-language summary. */
   message: string;
   /** What the admin should do to fix it (when known). */
@@ -145,6 +151,22 @@ export function classifyGraphError(raw: string | null | undefined): GraphErrorIn
       code: 'not_configured',
       message: 'Microsoft credentials are not configured on the server.',
       fix: 'Set AZ_CLIENT_ID, AZ_CLIENT_SECRET and AZ_TENANT_ID in the environment, then retry.',
+      raw: trimmed,
+    };
+  }
+  // A 404 Request_ResourceNotFound means the Microsoft account that this student's
+  // stored ms_oid pointed at no longer exists (deleted, or never persisted). For
+  // offboarding this is a benign terminal state: there is no account left to
+  // disable or unlicense, so it must NOT be reported as a hard failure.
+  if (
+    t.includes('request_resourcenotfound') ||
+    t.includes('resourcenotfound') ||
+    (t.includes('does not exist') && /\b404\b/.test(text))
+  ) {
+    return {
+      code: 'account_not_found',
+      message: 'No active Microsoft account (it was already removed).',
+      fix: 'Nothing to do: this student has no Microsoft account, so there is no license or sign-in to revoke.',
       raw: trimmed,
     };
   }

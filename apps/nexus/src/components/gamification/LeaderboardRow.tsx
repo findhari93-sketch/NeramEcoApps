@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Typography, Avatar } from '@neram/ui';
+import { Box, Typography, UserAvatar } from '@neram/ui';
 import { neramTokens, neramFontFamilies } from '@neram/ui';
 import type { LeaderboardEntry } from '@neram/database/types';
 import StreakFlame from './StreakFlame';
@@ -78,22 +78,17 @@ export default function LeaderboardRow({ entry, onClick }: LeaderboardRowProps) 
       </Typography>
 
       {/* Avatar */}
-      <Avatar
-        src={entry.avatar_url || undefined}
-        alt={entry.student_name}
+      <UserAvatar
+        src={entry.avatar_url}
+        name={entry.student_name}
+        size={32}
         sx={{
-          width: 32,
-          height: 32,
-          fontSize: '0.8rem',
           fontFamily: neramFontFamilies.serif,
           fontWeight: 700,
-          bgcolor: neramTokens.navy[600],
           color: neramTokens.cream[100],
           flexShrink: 0,
         }}
-      >
-        {entry.student_name?.charAt(0)?.toUpperCase() || '?'}
-      </Avatar>
+      />
 
       {/* Name + batch */}
       <Box sx={{ flex: 1, minWidth: 0 }}>

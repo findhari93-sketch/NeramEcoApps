@@ -9,12 +9,14 @@ import {
   IconButton,
   Tooltip,
   Paper,
+  CircularProgress,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import AddAPhotoIcon from '@mui/icons-material/AddAPhoto';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import type {
@@ -47,6 +49,8 @@ export default function CRMPage() {
   const [pipelineCounts, setPipelineCounts] = useState<PipelineStageCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [syncingPhotos, setSyncingPhotos] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [activeStage, setActiveStage] = useState<PipelineStage | null>(
@@ -187,6 +191,35 @@ export default function CRMPage() {
 
   const handleRowClick = (userId: string) => {
     router.push(`/crm/${userId}`);
+  };
+
+  // Pull Microsoft Graph profile photos into our DB for every user with an MS
+  // account, then refresh so the new avatars show. Stored once, served from
+  // avatar_url everywhere (no per-render Graph calls).
+  const handleSyncMsPhotos = async () => {
+    setSyncingPhotos(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await fetch('/api/crm/sync-ms-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.configError?.message || data.error || 'Failed to sync Microsoft photos');
+      }
+      const failed = data.failures?.length ? `, ${data.failures.length} failed` : '';
+      setNotice(
+        `Microsoft photos synced: ${data.synced} updated, ${data.unchanged} unchanged, ${data.noPhoto} without a photo${failed}.`
+      );
+      await fetchUsers();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSyncingPhotos(false);
+    }
   };
 
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -535,6 +568,17 @@ export default function CRMPage() {
               sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
             />
           )}
+          <Tooltip title="Sync Microsoft profile photos for all staff & students">
+            <span>
+              <IconButton size="small" onClick={handleSyncMsPhotos} disabled={syncingPhotos}>
+                {syncingPhotos ? (
+                  <CircularProgress size={16} thickness={5} />
+                ) : (
+                  <AddAPhotoIcon fontSize="small" />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
           <Tooltip title="Refresh data">
             <span>
               <IconButton size="small" onClick={fetchUsers} disabled={loading}>
@@ -560,6 +604,13 @@ export default function CRMPage() {
       {error && (
         <Alert severity="error" sx={{ mb: { xs: 1.5, md: 2 }, borderRadius: 1 }}>
           {error}
+        </Alert>
+      )}
+
+      {/* Photo-sync result */}
+      {notice && (
+        <Alert severity="success" onClose={() => setNotice('')} sx={{ mb: { xs: 1.5, md: 2 }, borderRadius: 1 }}>
+          {notice}
         </Alert>
       )}
 

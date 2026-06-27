@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Avatar,
+  UserAvatar,
   Chip,
   LinearProgress,
   Accordion,
@@ -80,9 +80,7 @@ function StudentList({ students, color }: { students: StudentInfo[]; color: 'suc
       {students.map((s) => (
         <ListItem key={s.id} sx={{ px: 0 }}>
           <ListItemAvatar sx={{ minWidth: 36 }}>
-            <Avatar src={s.avatar_url || undefined} sx={{ width: 28, height: 28, fontSize: '0.75rem' }}>
-              {s.name?.[0]}
-            </Avatar>
+            <UserAvatar src={s.avatar_url} name={s.name} size={28} />
           </ListItemAvatar>
           <ListItemText
             primary={s.name}

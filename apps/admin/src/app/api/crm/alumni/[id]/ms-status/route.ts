@@ -19,9 +19,14 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: 'Invalid alumnus id.' }, { status: 400 });
     }
     const supabase = getSupabaseAdminClient();
-    const { data: user } = await supabase.from('users').select('ms_oid').eq('id', params.id).maybeSingle();
+    const { data: user } = await supabase.from('users').select('ms_oid, metadata').eq('id', params.id).maybeSingle();
     if (!user?.ms_oid) {
       return NextResponse.json({ hasMsAccount: false });
+    }
+    // Known to be gone (Graph previously returned 404): skip the dead call and
+    // report it cleanly so the UI shows "already removed" without a Graph round-trip.
+    if (user.metadata && user.metadata.microsoft_account_missing) {
+      return NextResponse.json({ hasMsAccount: true, accountRemoved: true });
     }
     try {
       const status = await getUserMsStatus(user.ms_oid);

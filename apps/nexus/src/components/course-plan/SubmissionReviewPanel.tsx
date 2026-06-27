@@ -5,7 +5,7 @@ import {
   Box,
   Typography,
   Drawer,
-  Avatar,
+  UserAvatar,
   Chip,
   TextField,
   Button,
@@ -166,12 +166,11 @@ export default function SubmissionReviewPanel({
         {/* Student info */}
         {student && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Avatar
-              src={student.avatar_url || undefined}
-              sx={{ width: 40, height: 40 }}
-            >
-              {getInitials(student.name)}
-            </Avatar>
+            <UserAvatar
+              src={student.avatar_url}
+              name={student.name}
+              size={40}
+            />
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                 {student.name}

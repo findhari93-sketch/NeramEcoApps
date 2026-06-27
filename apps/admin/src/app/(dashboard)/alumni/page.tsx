@@ -9,7 +9,7 @@ import {
   TextField,
   MenuItem,
   InputAdornment,
-  Avatar,
+  UserAvatar,
   Chip,
   Paper,
   Card,
@@ -107,13 +107,6 @@ const colHeadSx = {
 
 const STUDENT_GRID = '44px 1fr 132px 150px 120px';
 const ALUMNI_GRID = '44px 1fr 132px 150px 72px';
-
-function avatarColor(name: string | null): string {
-  const palette = ['#475569', '#0E7490', '#B45309', '#4F46E5', '#9D174D', '#0F766E'];
-  let h = 0;
-  for (const c of name || '?') h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return palette[h % palette.length];
-}
 
 function yearLabel(v: string): string {
   return v === 'all' ? 'All years' : v === 'none' ? 'No year set' : v;
@@ -261,7 +254,7 @@ export default function AlumniPage() {
   const loadStudents = useCallback(async () => {
     setStudentsLoading(true);
     try {
-      const res = await fetch('/api/crm/alumni/students');
+      const res = await fetch('/api/crm/alumni/students', { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load students');
       setAllStudents(data.students || []);
@@ -276,7 +269,7 @@ export default function AlumniPage() {
   const loadAlumni = useCallback(async () => {
     setAlumniLoading(true);
     try {
-      const res = await fetch('/api/crm/alumni');
+      const res = await fetch('/api/crm/alumni', { cache: 'no-store' });
       const data = await res.json();
       setAlumni(data.alumni || []);
     } catch {
@@ -365,16 +358,24 @@ export default function AlumniPage() {
   const handleGraduate = useCallback(
     async (opts: { academicYear: string; reason: string; offboardMicrosoft: boolean }) => {
       if (!supabaseUserId) throw new Error('Admin session not ready, try again in a moment.');
+      const graduatedIds = [...selection];
       const res = await fetch('/api/crm/alumni/graduate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds: [...selection], adminId: supabaseUserId, ...opts }),
+        body: JSON.stringify({ userIds: graduatedIds, adminId: supabaseUserId, ...opts }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to graduate students');
+      // They are alumni now, drop them from the active list immediately (the list
+      // behind the dialog is already correct before close) and refresh the alumni
+      // tab so they appear there. A full reload still happens on close.
+      const graduated = new Set(graduatedIds);
+      setAllStudents((prev) => prev.filter((s) => !graduated.has(s.id)));
+      setSelection(new Set());
+      loadAlumni();
       return data;
     },
-    [supabaseUserId, selection],
+    [supabaseUserId, selection, loadAlumni],
   );
 
   const closeGraduate = useCallback(() => {
@@ -639,9 +640,7 @@ export default function AlumniPage() {
                   >
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
                       <Checkbox size="small" checked={checked} sx={{ p: 0.25, mt: -0.25 }} />
-                      <Avatar src={s.avatar_url || undefined} sx={{ width: 40, height: 40, fontSize: 15, bgcolor: avatarColor(s.name) }}>
-                        {s.name?.charAt(0)?.toUpperCase() || '?'}
-                      </Avatar>
+                      <UserAvatar src={s.avatar_url} name={s.name} size={40} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>
                           {s.name || 'Unnamed'}
@@ -702,9 +701,7 @@ export default function AlumniPage() {
                   >
                     <Checkbox size="small" checked={checked} sx={{ p: 0.5, ml: '-3px' }} />
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, pr: 1 }}>
-                      <Avatar src={s.avatar_url || undefined} sx={{ width: 34, height: 34, fontSize: 14, bgcolor: avatarColor(s.name) }}>
-                        {s.name?.charAt(0)?.toUpperCase() || '?'}
-                      </Avatar>
+                      <UserAvatar src={s.avatar_url} name={s.name} size={34} />
                       <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={600} color={INK} noWrap>
                           {s.name || 'Unnamed'}
@@ -830,9 +827,7 @@ export default function AlumniPage() {
                   }}
                 >
                   <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                    <Avatar src={a.avatar_url || undefined} sx={{ width: 44, height: 44, fontSize: 17, bgcolor: avatarColor(a.name) }}>
-                      {a.name?.charAt(0)?.toUpperCase() || '?'}
-                    </Avatar>
+                    <UserAvatar src={a.avatar_url} name={a.name} size={44} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>

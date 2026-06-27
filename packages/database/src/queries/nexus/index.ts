@@ -28,3 +28,4 @@ export * from './course-plan-homework';
 export * from './course-plan-drill';
 export * from './drawing-checklist';
 export * from './drawing-gallery';
+export * from './drawing-references';

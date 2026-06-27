@@ -87,6 +87,15 @@ export async function POST(
               .from('users')
               .update({ ms_oid: msUser.id })
               .eq('id', id);
+
+            // Best-effort: pull their Microsoft profile photo into our DB so it
+            // shows on avatars everywhere (no-op if they have not set one yet).
+            try {
+              const { syncUserMsPhoto } = await import('@/lib/ms-photo-sync');
+              await syncUserMsPhoto(supabase, { id, ms_oid: msUser.id });
+            } catch (photoErr) {
+              console.warn('[Credentials] MS photo sync failed:', photoErr);
+            }
           }
         }
       } catch (msErr) {

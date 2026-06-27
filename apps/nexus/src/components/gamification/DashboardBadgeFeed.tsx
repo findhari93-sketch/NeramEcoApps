@@ -5,7 +5,7 @@ import {
   Box,
   Card,
   Typography,
-  Avatar,
+  UserAvatar,
   Skeleton,
   alpha,
 } from '@neram/ui';
@@ -226,20 +226,15 @@ export default function DashboardBadgeFeed({
                   }}
                 >
                   {/* Student avatar */}
-                  <Avatar
-                    src={item.avatar_url || undefined}
-                    alt={item.student_name}
+                  <UserAvatar
+                    src={item.avatar_url}
+                    name={item.student_name}
+                    size={32}
                     sx={{
-                      width: 32,
-                      height: 32,
-                      fontSize: '0.75rem',
                       fontFamily: neramFontFamilies.body,
-                      bgcolor: alpha(neramTokens.cream[100], 0.08),
                       color: alpha(neramTokens.cream[100], 0.6),
                     }}
-                  >
-                    {item.student_name?.charAt(0)?.toUpperCase() || '?'}
-                  </Avatar>
+                  />
 
                   {/* Text */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>

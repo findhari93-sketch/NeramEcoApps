@@ -15,7 +15,7 @@ import {
   useTheme,
   useMediaQuery,
   alpha,
-  Avatar,
+  UserAvatar,
   Button,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -100,15 +100,6 @@ export default function CityStudentsPage() {
     });
   }, []);
 
-  function getInitials(name: string) {
-    return name
-      .split(' ')
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  }
-
   return (
     <Box>
       {/* Header */}
@@ -173,19 +164,16 @@ export default function CityStudentsPage() {
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 {/* Avatar */}
-                <Avatar
-                  src={student.avatar_url || undefined}
+                <UserAvatar
+                  src={student.avatar_url}
+                  name={student.name}
                   sx={{
                     width: isMobile ? 44 : 48,
                     height: isMobile ? 44 : 48,
-                    bgcolor: alpha(theme.palette.primary.main, 0.12),
                     color: 'primary.main',
                     fontWeight: 700,
-                    fontSize: '0.85rem',
                   }}
-                >
-                  {getInitials(student.name)}
-                </Avatar>
+                />
 
                 {/* Info */}
                 <Box sx={{ flex: 1, minWidth: 0 }}>

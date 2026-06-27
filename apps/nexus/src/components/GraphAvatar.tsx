@@ -1,7 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Avatar, Badge, type SxProps, type Theme } from '@neram/ui';
+import {
+  Avatar,
+  Badge,
+  ImageViewerDialog,
+  getAvatarColor,
+  getAvatarInitials,
+  type SxProps,
+  type Theme,
+} from '@neram/ui';
 import { useNexusAuth } from '@/hooks/useNexusAuth';
 
 // Module-level cache for blob URLs to avoid refetching across re-renders
@@ -22,34 +30,6 @@ function getGraphPhotoSize(size: number): string {
   return '648x648';
 }
 
-function getInitials(name: string | undefined | null): string {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-}
-
-// Professional color palette for avatar backgrounds (deterministic by name)
-const AVATAR_COLORS = [
-  '#6366f1', // indigo
-  '#8b5cf6', // violet
-  '#ec4899', // pink
-  '#14b8a6', // teal
-  '#f97316', // orange
-  '#0ea5e9', // sky
-  '#10b981', // emerald
-  '#e11d48', // rose
-];
-
-function getAvatarColor(name: string | undefined | null): string {
-  if (!name) return AVATAR_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
 // Presence color mapping
 const presenceColors: Record<string, string> = {
   Available: '#107c10',
@@ -68,6 +48,8 @@ interface GraphAvatarProps {
   size?: number;
   sx?: SxProps<Theme>;
   presenceStatus?: string | null;
+  /** Allow click-to-enlarge when a photo is loaded. Default true. */
+  clickable?: boolean;
 }
 
 export default function GraphAvatar({
@@ -77,10 +59,12 @@ export default function GraphAvatar({
   size = 40,
   sx,
   presenceStatus,
+  clickable = true,
 }: GraphAvatarProps) {
   const { getToken } = useNexusAuth();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -168,12 +152,22 @@ export default function GraphAvatar({
     };
   }, []);
 
-  const initials = getInitials(name);
+  const initials = getAvatarInitials(name);
   const initialsCount = initials.length;
+  const shownPhoto = !photoError && photoUrl ? photoUrl : null;
+  const canOpen = clickable && !!shownPhoto;
 
   const avatar = (
     <Avatar
-      src={!photoError && photoUrl ? photoUrl : undefined}
+      src={shownPhoto || undefined}
+      onClick={
+        canOpen
+          ? (e) => {
+              e.stopPropagation();
+              setViewerOpen(true);
+            }
+          : undefined
+      }
       sx={{
         width: size,
         height: size,
@@ -182,6 +176,7 @@ export default function GraphAvatar({
         bgcolor: getAvatarColor(name),
         color: '#fff',
         letterSpacing: initialsCount > 1 ? '-0.5px' : 0,
+        cursor: canOpen ? 'pointer' : undefined,
         ...((sx as object) || {}),
       }}
     >
@@ -189,29 +184,46 @@ export default function GraphAvatar({
     </Avatar>
   );
 
+  const viewer = canOpen ? (
+    <ImageViewerDialog
+      open={viewerOpen}
+      onClose={() => setViewerOpen(false)}
+      src={shownPhoto || ''}
+      name={name}
+    />
+  ) : null;
+
   if (presenceStatus) {
     const color = presenceColors[presenceStatus] || presenceColors.PresenceUnknown;
     return (
-      <Badge
-        overlap="circular"
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        badgeContent={
-          <span
-            style={{
-              width: Math.max(10, size * 0.25),
-              height: Math.max(10, size * 0.25),
-              borderRadius: '50%',
-              backgroundColor: color,
-              border: '2px solid white',
-              display: 'block',
-            }}
-          />
-        }
-      >
-        {avatar}
-      </Badge>
+      <>
+        <Badge
+          overlap="circular"
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          badgeContent={
+            <span
+              style={{
+                width: Math.max(10, size * 0.25),
+                height: Math.max(10, size * 0.25),
+                borderRadius: '50%',
+                backgroundColor: color,
+                border: '2px solid white',
+                display: 'block',
+              }}
+            />
+          }
+        >
+          {avatar}
+        </Badge>
+        {viewer}
+      </>
     );
   }
 
-  return avatar;
+  return (
+    <>
+      {avatar}
+      {viewer}
+    </>
+  );
 }
