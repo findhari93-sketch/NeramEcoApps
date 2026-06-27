@@ -69,7 +69,17 @@ export {
   getAppOnlyToken,
   addMemberToTeam,
   addMemberToGroupChat,
+  getUserAssignedLicenses,
+  getUserMsStatus,
+  getUserProfile,
+  getUserPhoto,
+  removeAllLicenses,
+  addLicenses,
+  setAccountEnabled,
+  classifyGraphError,
+  checkGraphConnection,
 } from './graph';
+export type { UserLicenseInfo, GraphErrorInfo } from './graph';
 
 // Hooks
 export {

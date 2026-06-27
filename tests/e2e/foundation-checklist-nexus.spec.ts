@@ -482,7 +482,7 @@ test.describe('Full Foundation-Checklist Lifecycle', () => {
   test.describe.configure({ mode: 'serial' });
   test.use({ baseURL: BASE_URL });
 
-  const lifecycleEmail = `e2e-full-lifecycle-${Date.now()}@neramclasses.com`;
+  const lifecycleEmail = 'e2e-full-lifecycle@neramclasses.com';
   let lcTeacherToken: string;
   let lcStudentToken: string;
   let lcClassroomId: string;
@@ -496,7 +496,7 @@ test.describe('Full Foundation-Checklist Lifecycle', () => {
   test('lifecycle setup: create teacher, student, module, checklist', async ({ request }) => {
     // Teacher
     const teacherRes = await request.post('/api/auth/test-login', {
-      data: { email: `e2e-lc-teacher-${Date.now()}@neramclasses.com`, role: 'teacher' },
+      data: { email: 'e2e-lc-teacher@neramclasses.com', role: 'teacher', reset: true },
     });
     const teacherBody = await teacherRes.json();
     lcTeacherToken = teacherBody.testToken;
@@ -505,7 +505,7 @@ test.describe('Full Foundation-Checklist Lifecycle', () => {
 
     // Student
     const studentRes = await request.post('/api/auth/test-login', {
-      data: { email: lifecycleEmail, role: 'student' },
+      data: { email: lifecycleEmail, role: 'student', reset: true },
     });
     const studentBody = await studentRes.json();
     lcStudentToken = studentBody.testToken;
@@ -665,13 +665,13 @@ test.describe('Foundation Chapters in Checklist Context', () => {
   test.describe.configure({ mode: 'serial' });
   test.use({ baseURL: BASE_URL });
 
-  const fcStudentEmail = `e2e-fc-student-${Date.now()}@neramclasses.com`;
+  const fcStudentEmail = 'e2e-fc-student@neramclasses.com';
   let fcStudentToken: string;
   let fcClassroomId: string;
 
   test('setup: create student', async ({ request }) => {
     const res = await request.post('/api/auth/test-login', {
-      data: { email: fcStudentEmail, role: 'student' },
+      data: { email: fcStudentEmail, role: 'student', reset: true },
     });
     const body = await res.json();
     fcStudentToken = body.testToken;

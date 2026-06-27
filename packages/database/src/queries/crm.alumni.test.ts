@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { graduateStudentsToAlumni, restoreAlumniToActive } from './crm';
+import { graduateStudentsToAlumni, restoreAlumniToActive, bulkSetAcademicYear } from './crm';
 
 /**
  * Minimal chainable Supabase mock. update()/in()/eq()/select() return the same
@@ -90,6 +90,31 @@ describe('graduateStudentsToAlumni', () => {
       removal_reason_category: 'course_completed',
       removed_by: ADMIN_ID,
     });
+  });
+});
+
+describe('bulkSetAcademicYear', () => {
+  it('rejects an invalid academic year format', async () => {
+    const { client } = makeMockClient({});
+    await expect(
+      bulkSetAcademicYear(['u1'], '2025', ADMIN_ID, client),
+    ).rejects.toThrow(/YYYY-YY/);
+  });
+
+  it('returns zero for an empty list without touching the DB', async () => {
+    const { client } = makeMockClient({});
+    expect(await bulkSetAcademicYear([], '2025-26', ADMIN_ID, client)).toEqual({ updated: 0 });
+  });
+
+  it('stamps the cohort year on the selected students', async () => {
+    const { client, updates } = makeMockClient({
+      users: { data: [{ id: 'u1' }, { id: 'u2' }], error: null },
+    });
+
+    const result = await bulkSetAcademicYear(['u1', 'u2'], '2025-26', ADMIN_ID, client);
+
+    expect(result).toEqual({ updated: 2 });
+    expect(updates.users).toMatchObject({ academic_year: '2025-26' });
   });
 });
 

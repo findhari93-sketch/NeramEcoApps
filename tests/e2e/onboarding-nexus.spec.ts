@@ -26,9 +26,9 @@ test.describe('Nexus Onboarding API', () => {
   // =========================================
 
   test('setup: create test student', async ({ request }) => {
-    const email = `e2e-onboard-student-${Date.now()}@neramclasses.com`;
+    const email = 'e2e-onboard-student@neramclasses.com';
     const res = await request.post('/api/auth/test-login', {
-      data: { email, role: 'student' },
+      data: { email, role: 'student', reset: true },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -40,9 +40,9 @@ test.describe('Nexus Onboarding API', () => {
   });
 
   test('setup: create test teacher', async ({ request }) => {
-    const email = `e2e-onboard-teacher-${Date.now()}@neramclasses.com`;
+    const email = 'e2e-onboard-teacher@neramclasses.com';
     const res = await request.post('/api/auth/test-login', {
-      data: { email, role: 'teacher' },
+      data: { email, role: 'teacher', reset: true },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -295,9 +295,9 @@ test.describe('Nexus Onboarding API', () => {
   test('POST /api/onboarding/review reject without classroom_id', async ({ request }) => {
     // First, set status back to submitted for rejection test
     // We need to create a second student for this
-    const email2 = `e2e-reject-student-${Date.now()}@neramclasses.com`;
+    const email2 = 'e2e-reject-student@neramclasses.com';
     const loginRes = await request.post('/api/auth/test-login', {
-      data: { email: email2, role: 'student' },
+      data: { email: email2, role: 'student', reset: true },
     });
     const { testToken: token2, user: user2 } = await loginRes.json();
 
@@ -351,9 +351,9 @@ test.describe('Nexus Onboarding API', () => {
 
   test('POST /api/onboarding/nudge without classroom_id', async ({ request }) => {
     // Create a student with submitted status for nudge test
-    const email3 = `e2e-nudge-student-${Date.now()}@neramclasses.com`;
+    const email3 = 'e2e-nudge-student@neramclasses.com';
     const loginRes = await request.post('/api/auth/test-login', {
-      data: { email: email3, role: 'student' },
+      data: { email: email3, role: 'student', reset: true },
     });
     const { testToken: token3 } = await loginRes.json();
 
@@ -380,9 +380,9 @@ test.describe('Nexus Onboarding API', () => {
 
   test('POST /api/onboarding/nudge respects 24h cooldown', async ({ request }) => {
     // Create a fresh student for cooldown test
-    const email4 = `e2e-nudge-cooldown-${Date.now()}@neramclasses.com`;
+    const email4 = 'e2e-nudge-cooldown@neramclasses.com';
     const loginRes = await request.post('/api/auth/test-login', {
-      data: { email: email4, role: 'student' },
+      data: { email: email4, role: 'student', reset: true },
     });
     const { testToken: token4 } = await loginRes.json();
 
@@ -541,18 +541,18 @@ test.describe('Profile Completion Gate', () => {
 
   test('setup: create legacy student with approved onboarding but no profile', async ({ request }) => {
     // Create student
-    const email = `e2e-legacy-${Date.now()}@neramclasses.com`;
+    const email = 'e2e-legacy@neramclasses.com';
     const loginRes = await request.post('/api/auth/test-login', {
-      data: { email, role: 'student' },
+      data: { email, role: 'student', reset: true },
     });
     const loginBody = await loginRes.json();
     legacyToken = loginBody.testToken;
     legacyId = loginBody.user.id;
 
     // Create teacher
-    const teacherEmail = `e2e-legacy-teacher-${Date.now()}@neramclasses.com`;
+    const teacherEmail = 'e2e-legacy-teacher@neramclasses.com';
     const teacherRes = await request.post('/api/auth/test-login', {
-      data: { email: teacherEmail, role: 'teacher' },
+      data: { email: teacherEmail, role: 'teacher', reset: true },
     });
     const teacherBody = await teacherRes.json();
     teacherToken = teacherBody.testToken;
@@ -637,9 +637,9 @@ test.describe('Per-Student Onboarding Uniqueness', () => {
   test.use({ baseURL: 'http://localhost:3012' });
 
   test('same student starting onboarding twice returns same record', async ({ request }) => {
-    const email = `e2e-unique-${Date.now()}@neramclasses.com`;
+    const email = 'e2e-unique@neramclasses.com';
     const loginRes = await request.post('/api/auth/test-login', {
-      data: { email, role: 'student' },
+      data: { email, role: 'student', reset: true },
     });
     const { testToken } = await loginRes.json();
 

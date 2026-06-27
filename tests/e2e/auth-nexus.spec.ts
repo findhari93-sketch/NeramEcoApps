@@ -79,9 +79,9 @@ test.describe('Nexus Auth API', () => {
   });
 
   test('POST /api/auth/test-login should auto-create classroom for new user', async ({ request }) => {
-    const uniqueEmail = `e2e-new-${Date.now()}@neramclasses.com`;
+    const uniqueEmail = 'e2e-new@neramclasses.com';
     const response = await request.post('/api/auth/test-login', {
-      data: { email: uniqueEmail, role: 'teacher' },
+      data: { email: uniqueEmail, role: 'teacher', reset: true },
     });
     expect(response.status()).toBe(200);
 

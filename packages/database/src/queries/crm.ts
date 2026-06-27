@@ -1578,6 +1578,11 @@ export async function listAlumni(
     .select('id, name, email, avatar_url, academic_year, alumni_since', { count: 'exact' })
     .eq('is_alumni', true);
 
+  // Hide synthetic E2E test accounts (e2e-<purpose>@…, incl. timestamped leftovers)
+  // from the human admin views. Anchored on the dash so the canonical e2etesting*
+  // Microsoft accounts (asserted on by alumni-graduate-admin.spec.ts) stay visible.
+  query = query.or('email.is.null,email.not.ilike.e2e-*');
+
   if (academicYear) query = query.eq('academic_year', academicYear);
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
@@ -1592,4 +1597,132 @@ export async function listAlumni(
   if (error) throw error;
 
   return { alumni: (data || []) as any, total: count || 0 };
+}
+
+/**
+ * One active (non-alumni) Nexus student in the admin graduation workspace, with
+ * their cohort year and an activity signal (drawing-submission count).
+ */
+export interface ActiveNexusStudent {
+  id: string;
+  name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  ms_oid: string | null;
+  academic_year: string | null;
+  last_login_at: string | null;
+  submission_count: number;
+}
+
+/**
+ * List active (non-alumni) Nexus students for the admin "Students" tab: a flat,
+ * searchable list NOT scoped to a classroom (students belong to many classrooms,
+ * so the organising concept is the academic year, not the room).
+ *
+ * Filters:
+ * - search: name / email (ilike)
+ * - academicYear: a 'YYYY-YY' year, 'none' for students with no year set, or
+ *   undefined / 'all' for everyone. (Backfilling the year is the point of the
+ *   "no year" filter + bulkSetAcademicYear.)
+ * - activity: 'inactive' keeps only students with zero drawing submissions.
+ *
+ * The full filtered set is returned (capped) and paginated client-side in the
+ * admin DataGrid; the student population is small (a few hundred) so this avoids
+ * the aggregate/pagination mismatch of filtering activity after a DB page.
+ */
+export async function listActiveNexusStudents(
+  options: {
+    search?: string;
+    academicYear?: string;
+    activity?: 'all' | 'inactive';
+  } = {},
+  client?: TypedSupabaseClient
+): Promise<{ students: ActiveNexusStudent[]; total: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { search, academicYear, activity = 'all' } = options;
+
+  let query = supabase
+    .from('users')
+    .select('id, name, email, avatar_url, ms_oid, academic_year, last_login_at')
+    .eq('is_alumni', false)
+    .eq('user_type', 'student');
+
+  // Hide synthetic E2E test accounts (e2e-<purpose>@…, incl. timestamped leftovers)
+  // from the human admin views. Anchored on the dash so the canonical e2etesting*
+  // Microsoft accounts (asserted on by alumni-graduate-admin.spec.ts) stay visible.
+  query = query.or('email.is.null,email.not.ilike.e2e-*');
+
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+  }
+  if (academicYear === 'none') {
+    query = query.is('academic_year', null);
+  } else if (academicYear && academicYear !== 'all') {
+    query = query.eq('academic_year', academicYear);
+  }
+
+  query = query.order('name', { ascending: true }).limit(5000);
+
+  const { data: rows, error } = await query;
+  if (error) throw error;
+
+  const students = rows || [];
+  const ids = students.map((s: any) => s.id);
+
+  // Submission counts from the pre-aggregated activity view (LEFT-join semantics:
+  // a student with no submissions simply has no row -> 0).
+  const countsById: Record<string, number> = {};
+  if (ids.length) {
+    const { data: activityRows } = await supabase
+      .from('admin_student_activity')
+      .select('student_id, submission_count')
+      .in('student_id', ids);
+    for (const a of activityRows || []) {
+      countsById[(a as any).student_id] = Number((a as any).submission_count) || 0;
+    }
+  }
+
+  let result: ActiveNexusStudent[] = students.map((s: any) => ({
+    ...s,
+    submission_count: countsById[s.id] || 0,
+  }));
+
+  if (activity === 'inactive') {
+    result = result.filter((s) => s.submission_count === 0);
+  }
+
+  return { students: result, total: result.length };
+}
+
+/**
+ * Backfill / bulk-set the academic-year cohort on a set of students. Validates
+ * the 'YYYY-YY' format. Used by the admin "Set academic year" action so every
+ * student ends up year-tagged and can then be selected by year for graduation.
+ */
+export async function bulkSetAcademicYear(
+  userIds: string[],
+  academicYear: string,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<{ updated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  if (!ACADEMIC_YEAR_REGEX.test(academicYear)) {
+    throw new Error(`Invalid academic year "${academicYear}". Expected format YYYY-YY, e.g. 2025-26.`);
+  }
+  if (!userIds.length) return { updated: 0 };
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ academic_year: academicYear, updated_at: new Date().toISOString() })
+    .in('id', userIds)
+    .select('id');
+
+  if (error) throw error;
+
+  for (const row of data || []) {
+    await recordUserHistory(supabase, row.id, 'academic_year', null, academicYear, adminId);
+  }
+
+  return { updated: (data || []).length };
 }

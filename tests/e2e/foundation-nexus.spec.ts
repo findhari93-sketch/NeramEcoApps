@@ -163,7 +163,7 @@ test.describe('Foundation Chapter List API', () => {
   test('Chapter 2+ are locked initially for fresh student', async ({ request }) => {
     // Create a completely fresh student to test initial lock state
     const freshRes = await request.post('/api/auth/test-login', {
-      data: { email: `e2e-foundation-fresh-${Date.now()}@neramclasses.com`, role: 'student' },
+      data: { email: 'e2e-foundation-fresh@neramclasses.com', role: 'student', reset: true },
     });
     expect(freshRes.status()).toBe(200);
     const freshBody = await freshRes.json();
@@ -392,11 +392,11 @@ test.describe('Sequential Chapter Unlock', () => {
   test.use({ baseURL: BASE_URL });
 
   // Use a dedicated student for this suite to avoid state pollution
-  const unlockStudentEmail = `e2e-unlock-${Date.now()}@neramclasses.com`;
+  const unlockStudentEmail = 'e2e-unlock@neramclasses.com';
 
   test('setup: create fresh student', async ({ request }) => {
     const res = await request.post('/api/auth/test-login', {
-      data: { email: unlockStudentEmail, role: 'student' },
+      data: { email: unlockStudentEmail, role: 'student', reset: true },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -711,13 +711,13 @@ test.describe('Full Foundation Lifecycle', () => {
   test.describe.configure({ mode: 'serial' });
   test.use({ baseURL: BASE_URL });
 
-  const lifecycleEmail = `e2e-lifecycle-${Date.now()}@neramclasses.com`;
+  const lifecycleEmail = 'e2e-lifecycle@neramclasses.com';
   let lifecycleToken: string;
   let allChapters: any[];
 
   test('setup: create fresh student', async ({ request }) => {
     const res = await request.post('/api/auth/test-login', {
-      data: { email: lifecycleEmail, role: 'student' },
+      data: { email: lifecycleEmail, role: 'student', reset: true },
     });
     expect(res.status()).toBe(200);
     const body = await res.json();

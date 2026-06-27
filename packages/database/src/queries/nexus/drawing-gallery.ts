@@ -16,7 +16,7 @@ export type GalleryAudience = 'current' | 'alumni' | 'all';
 
 export async function getGalleryFeed(
   userId: string,
-  filters?: { tagSlugs?: string[]; limit?: number; offset?: number; audience?: GalleryAudience },
+  filters?: { tagSlugs?: string[]; limit?: number; offset?: number; audience?: GalleryAudience; academicYear?: string },
   client?: TypedSupabaseClient
 ): Promise<GalleryPost[]> {
   const supabase = client || getSupabaseAdminClient();
@@ -58,6 +58,10 @@ export async function getGalleryFeed(
     query = query.eq('student.is_alumni', false);
   } else if (audience === 'alumni') {
     query = query.eq('student.is_alumni', true);
+    // Optionally narrow the Hall of Fame to one graduating cohort (e.g. '2025-26').
+    if (filters?.academicYear) {
+      query = query.eq('student.academic_year', filters.academicYear);
+    }
     // Curator-pinned ("Hall of Fame") work surfaces first.
     query = query.order('alumni_featured', { ascending: false });
   }

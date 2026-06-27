@@ -14,6 +14,8 @@ import {
   Rating,
   IconButton,
   Tooltip,
+  TextField,
+  MenuItem,
 } from '@neram/ui';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import StarIcon from '@mui/icons-material/Star';
@@ -21,6 +23,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import { academicYearOptions } from '../../../../components/crm/academic-years';
 
 interface GalleryItem {
   id: string;
@@ -37,12 +40,15 @@ export default function AlumniGalleryPage() {
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [yearFilter, setYearFilter] = useState('');
 
   const load = useCallback(async () => {
     if (!supabaseUserId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/crm/alumni/gallery?adminId=${supabaseUserId}&limit=60`);
+      const params = new URLSearchParams({ adminId: supabaseUserId, limit: '60' });
+      if (yearFilter) params.set('academicYear', yearFilter);
+      const res = await fetch(`/api/crm/alumni/gallery?${params}`);
       const data = await res.json();
       setItems(data.posts || []);
     } catch {
@@ -50,7 +56,7 @@ export default function AlumniGalleryPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabaseUserId]);
+  }, [supabaseUserId, yearFilter]);
 
   useEffect(() => {
     load();
@@ -95,7 +101,7 @@ export default function AlumniGalleryPage() {
           <ArrowBackIcon />
         </IconButton>
         <EmojiEventsOutlinedIcon sx={{ color: '#B45309', fontSize: 30 }} />
-        <Box>
+        <Box sx={{ flex: 1 }}>
           <Typography variant="h5" fontWeight={800}>
             Alumni Hall of Fame
           </Typography>
@@ -103,6 +109,21 @@ export default function AlumniGalleryPage() {
             Curate past students&apos; best work. Star to feature, hide to remove.
           </Typography>
         </Box>
+        <TextField
+          select
+          size="small"
+          label="Cohort year"
+          value={yearFilter}
+          onChange={(e) => setYearFilter(e.target.value)}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All years</MenuItem>
+          {academicYearOptions().map((y) => (
+            <MenuItem key={y} value={y}>
+              {y}
+            </MenuItem>
+          ))}
+        </TextField>
       </Box>
 
       {banner && (

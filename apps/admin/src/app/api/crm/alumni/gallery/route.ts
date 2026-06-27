@@ -24,10 +24,12 @@ export async function GET(request: NextRequest) {
     const tagSlugs = tagsParam
       ? tagsParam.split(',').map((s) => s.trim()).filter(Boolean)
       : undefined;
+    const academicYear = params.get('academicYear') || undefined;
 
     const posts = await getGalleryFeed(adminId, {
       audience: 'alumni',
       tagSlugs,
+      academicYear,
       limit: params.get('limit') ? parseInt(params.get('limit')!) : 24,
       offset: params.get('offset') ? parseInt(params.get('offset')!) : 0,
     });
