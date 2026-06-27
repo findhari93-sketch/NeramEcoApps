@@ -83,10 +83,11 @@ describe('graduateStudentsToAlumni', () => {
     });
     expect(updates.users.alumni_since).toBeTruthy();
 
-    // The enrollment update deactivates and records the removal.
+    // The enrollment update deactivates and records the removal (the category is
+    // constrained to a fixed set; graduation uses 'course_completed').
     expect(updates.nexus_enrollments).toMatchObject({
       is_active: false,
-      removal_reason_category: 'graduated',
+      removal_reason_category: 'course_completed',
       removed_by: ADMIN_ID,
     });
   });

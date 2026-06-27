@@ -1478,7 +1478,26 @@ export async function graduateStudentsToAlumni(
 
   const now = new Date().toISOString();
 
-  // 1. Flip users to alumni (gate) + archive in CRM + stamp cohort.
+  // 1. Deactivate their Nexus enrollments FIRST, so a failure here (e.g. a
+  // constraint) can't leave a user flipped to alumni but still enrolled.
+  // removal_reason_category is constrained to a fixed set; 'course_completed' is
+  // the closest fit for graduation (the descriptive text goes in removal_notes).
+  const { data: deactivated, error: enrErr } = await supabase
+    .from('nexus_enrollments')
+    .update({
+      is_active: false,
+      removed_at: now,
+      removal_reason_category: 'course_completed',
+      removal_notes: reason || `Graduated to alumni (${academicYear})`,
+      removed_by: adminId,
+    })
+    .in('user_id', userIds)
+    .eq('is_active', true)
+    .select('id');
+
+  if (enrErr) throw enrErr;
+
+  // 2. Flip users to alumni (gate) + archive in CRM + stamp cohort.
   const { data: graduatedRows, error: userErr } = await supabase
     .from('users')
     .update({
@@ -1495,22 +1514,6 @@ export async function graduateStudentsToAlumni(
     .select('id');
 
   if (userErr) throw userErr;
-
-  // 2. Deactivate their Nexus enrollments so classroom-scoped data is empty.
-  const { data: deactivated, error: enrErr } = await supabase
-    .from('nexus_enrollments')
-    .update({
-      is_active: false,
-      removed_at: now,
-      removal_reason_category: 'graduated',
-      removal_notes: reason || `Graduated to alumni (${academicYear})`,
-      removed_by: adminId,
-    })
-    .in('user_id', userIds)
-    .eq('is_active', true)
-    .select('id');
-
-  if (enrErr) throw enrErr;
 
   // 3. Best-effort audit trail per user.
   for (const row of graduatedRows || []) {
