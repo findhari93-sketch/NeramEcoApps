@@ -57,6 +57,7 @@ import CommentIcon from '@mui/icons-material/Comment';
 import TourIcon from '@mui/icons-material/Tour';
 import HandshakeIcon from '@mui/icons-material/Handshake';
 import DevicesIcon from '@mui/icons-material/Devices';
+import LaptopMacIcon from '@mui/icons-material/LaptopMac';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
@@ -105,6 +106,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes', hasBadge: 'demo_classes' },
       { text: 'AskSeniors', icon: EmojiEventsIcon, path: '/ask-seniors' },
       { text: 'Alumni', icon: HistoryEduIcon, path: '/alumni' },
+      { text: 'Software course', icon: LaptopMacIcon, path: '/software' },
     ],
   },
   {

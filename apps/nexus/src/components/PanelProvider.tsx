@@ -28,6 +28,7 @@ import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
@@ -135,11 +136,13 @@ const PANELS: PanelConfig[] = [
     defaultPath: '/teacher/admin/users',
     sidebarItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
+      { label: 'Access', path: '/teacher/admin/access', icon: <LockOpenOutlinedIcon /> },
       { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
     bottomNavItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
+      { label: 'Access', path: '/teacher/admin/access', icon: <LockOpenOutlinedIcon /> },
       { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],

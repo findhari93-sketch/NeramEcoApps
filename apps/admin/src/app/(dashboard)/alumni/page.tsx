@@ -38,6 +38,7 @@ import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
+import LaptopMacIcon from '@mui/icons-material/LaptopMac';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GraduateDialog from '../../../components/crm/GraduateDialog';
 import SetAcademicYearDialog from '../../../components/crm/SetAcademicYearDialog';
@@ -381,6 +382,37 @@ export default function AlumniPage() {
     [supabaseUserId, selection, loadStudents],
   );
 
+  // Move the selected students into the Software course program. They leave the
+  // architecture Students list (and its counts) and show up on the /software page,
+  // and their Nexus access is kept off. Mirrors the graduate flow: drop the moved
+  // rows immediately so the list behind the action is already correct.
+  const moveToSoftware = useCallback(
+    async (ids: string[]) => {
+      if (!ids.length) return;
+      if (!supabaseUserId) {
+        setBanner({ type: 'error', text: 'Admin session not ready, try again in a moment.' });
+        return;
+      }
+      try {
+        const res = await fetch('/api/crm/alumni/set-program', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIds: ids, program: 'software', adminId: supabaseUserId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to move students');
+        const moved = new Set(ids);
+        setAllStudents((prev) => prev.filter((s) => !moved.has(s.id)));
+        setSelection(new Set());
+        setStudentDrawer(null);
+        setBanner({ type: 'success', text: `Moved ${data.updated} student(s) to Software course.` });
+      } catch (err: any) {
+        setBanner({ type: 'error', text: err?.message || 'Failed to move students' });
+      }
+    },
+    [supabaseUserId],
+  );
+
   const handleGraduate = useCallback(
     async (opts: { academicYear: string; reason: string; offboardMicrosoft: boolean }) => {
       if (!supabaseUserId) throw new Error('Admin session not ready, try again in a moment.');
@@ -622,6 +654,11 @@ export default function AlumniPage() {
                 <Button size="small" startIcon={<EventIcon />} variant="outlined" onClick={() => setSetYearOpen(true)} sx={{ textTransform: 'none', borderRadius: 2, borderColor: LINE, color: INK, bgcolor: 'background.paper' }}>
                   Set year
                 </Button>
+                <Tooltip title="These students are in the software course, not architecture exam prep. Move them to the Software page and out of Nexus.">
+                  <Button size="small" startIcon={<LaptopMacIcon />} variant="outlined" onClick={() => moveToSoftware([...selection])} sx={{ textTransform: 'none', borderRadius: 2, borderColor: LINE, color: INK, bgcolor: 'background.paper' }}>
+                    Move to Software course
+                  </Button>
+                </Tooltip>
                 <Button size="small" startIcon={<HistoryEduIcon />} variant="contained" onClick={() => setGraduateOpen(true)} sx={{ textTransform: 'none', borderRadius: 2, bgcolor: ACCENT, '&:hover': { bgcolor: '#92400E' } }}>
                   Graduate
                 </Button>
@@ -929,6 +966,7 @@ export default function AlumniPage() {
         adminId={supabaseUserId}
         onClose={() => setStudentDrawer(null)}
         onGraduate={graduateSingle}
+        moveAction={{ label: 'Move to Software course', icon: <LaptopMacIcon />, onClick: (id) => moveToSoftware([id]) }}
       />
 
       <AlumniManualAddDialog

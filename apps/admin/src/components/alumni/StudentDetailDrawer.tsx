@@ -39,8 +39,10 @@ interface StudentDetailDrawerProps {
   student: StudentLite | null;
   adminId?: string | null;
   onClose: () => void;
-  /** Graduate just this one student (parent opens the GraduateDialog pre-selected). */
-  onGraduate: (studentId: string) => void;
+  /** Graduate just this one student (parent opens the GraduateDialog pre-selected). Omit to hide the Graduate button (e.g. on the /software page). */
+  onGraduate?: (studentId: string) => void;
+  /** Optional extra footer action, e.g. "Move to Software course" / "Move back to students". */
+  moveAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
 }
 
 const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', color: ACCENT, fontWeight: 700 } as const;
@@ -52,7 +54,7 @@ const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', c
  * published/hidden split that answers "how many reached the gallery"), onboarding
  * documents, and a one-click path to graduate or to the full CRM profile.
  */
-export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate }: StudentDetailDrawerProps) {
+export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction }: StudentDetailDrawerProps) {
   const router = useRouter();
   const userId = student?.id || null;
   const [detail, setDetail] = useState<any>(null);
@@ -190,15 +192,28 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
           >
             Full CRM profile
           </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<HistoryEduIcon />}
-            onClick={() => userId && onGraduate(userId)}
-            sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
-          >
-            Graduate
-          </Button>
+          {moveAction && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={moveAction.icon}
+              onClick={() => userId && moveAction.onClick(userId)}
+              sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
+            >
+              {moveAction.label}
+            </Button>
+          )}
+          {onGraduate && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<HistoryEduIcon />}
+              onClick={() => userId && onGraduate(userId)}
+              sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
+            >
+              Graduate
+            </Button>
+          )}
         </Box>
       )}
     </Drawer>

@@ -157,7 +157,21 @@ export interface User extends Timestamps {
   // their Nexus access (cohort year stays in academic_year). Reversible.
   is_alumni: boolean;
   alumni_since: string | null;
+
+  // Nexus student access gate (migration 20260628150000). During the 2026-27
+  // rebuild Nexus is closed to all students by default; admins flip this true
+  // to admit students one by one. Only gates students, not teachers/admins.
+  nexus_access_enabled: boolean;
+
+  // Which Neram program the student belongs to (migration 20260628160000).
+  // 'architecture' = NATA/JEE exam aspirants (the core admin Students list);
+  // 'software' = the separate software course (college/working architects),
+  // shown on the admin /software page and kept out of Nexus. Reversible.
+  student_program: StudentProgram;
 }
+
+/** Neram program a student is enrolled in. See users.student_program. */
+export type StudentProgram = 'architecture' | 'software';
 
 /** Reversible focus state on a user. 'archived' hides them from the default CRM view. */
 export type LifecycleStatus = 'active' | 'archived';

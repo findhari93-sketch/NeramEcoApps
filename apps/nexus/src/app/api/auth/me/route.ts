@@ -151,6 +151,26 @@ export async function GET(request: NextRequest) {
           ? 'teacher'
           : 'student';
 
+    // Student access gate: during the 2026-27 rebuild Nexus is opened to
+    // students one by one. A student who hasn't been granted access yet sees a
+    // friendly "preparing your classroom" screen instead of the app. Mirrors
+    // the alumni gate above. Teachers/admins always pass; a teacher/admin using
+    // "View as Student" passes too, so they can preview the student experience.
+    if (
+      nexusRole === 'student' &&
+      !user.nexus_access_enabled &&
+      !msUser.impersonatorUserId
+    ) {
+      return NextResponse.json(
+        {
+          error: 'nexus_closed',
+          message:
+            "We're getting your Nexus classroom ready. You'll get access very soon. Thank you for your patience!",
+        },
+        { status: 403 }
+      );
+    }
+
     // Check onboarding status — single record per student
     let onboardingStatus: string | null = null;
     let profileComplete = true;

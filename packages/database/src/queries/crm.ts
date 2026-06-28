@@ -21,6 +21,7 @@ import type {
   CallbackOutcome,
   LifecycleStatus,
   ExamStatus,
+  StudentProgram,
 } from '../types';
 
 // ============================================
@@ -1635,17 +1636,24 @@ export async function listActiveNexusStudents(
     search?: string;
     academicYear?: string;
     activity?: 'all' | 'inactive';
+    /**
+     * Which program list to return. Defaults to 'architecture' so the core admin
+     * Students tab never shows software-course students; the /software page passes
+     * 'software' to get the separated list.
+     */
+    program?: StudentProgram;
   } = {},
   client?: TypedSupabaseClient
 ): Promise<{ students: ActiveNexusStudent[]; total: number }> {
   const supabase = client || getSupabaseAdminClient();
-  const { search, academicYear, activity = 'all' } = options;
+  const { search, academicYear, activity = 'all', program = 'architecture' } = options;
 
   let query = supabase
     .from('users')
     .select('id, name, email, avatar_url, ms_oid, academic_year, last_login_at')
     .eq('is_alumni', false)
-    .eq('user_type', 'student');
+    .eq('user_type', 'student')
+    .eq('student_program', program);
 
   // Hide synthetic E2E test accounts (e2e-<purpose>@…, incl. timestamped leftovers)
   // from the human admin views. Anchored on the dash so the canonical e2etesting*
@@ -1722,6 +1730,61 @@ export async function bulkSetAcademicYear(
 
   for (const row of data || []) {
     await recordUserHistory(supabase, row.id, 'academic_year', null, academicYear, adminId);
+  }
+
+  return { updated: (data || []).length };
+}
+
+/**
+ * Move a set of students between the architecture and software programs. This is
+ * what the admin "Move to Software course" / "Move back to architecture students"
+ * actions call: it just retags users.student_program so the student appears on the
+ * right list (/alumni vs /software).
+ *
+ * Moving to 'software' also tries to re-assert nexus_access_enabled = false so the
+ * student is locked out of Nexus (they are already closed by the rebuild gate by
+ * default; this guarantees it even if they had been admitted). That access flip is
+ * best-effort: the nexus_access_enabled column ships with the separate "Nexus rebuild
+ * gate" feature and may not exist in every environment yet, so a failure there must
+ * not block the re-tag. Reversible: moving back to 'architecture' leaves the access
+ * flag alone (architecture students are still admitted one-by-one via the existing
+ * student-access tool).
+ */
+export async function bulkSetStudentProgram(
+  userIds: string[],
+  program: StudentProgram,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<{ updated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  if (program !== 'architecture' && program !== 'software') {
+    throw new Error(`Invalid student program "${program}". Expected 'architecture' or 'software'.`);
+  }
+  if (!userIds.length) return { updated: 0 };
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ student_program: program, updated_at: new Date().toISOString() })
+    .in('id', userIds)
+    .select('id');
+
+  if (error) throw error;
+
+  // Software students stay out of Nexus during the rebuild. Best-effort: the column
+  // is owned by the separate rebuild-gate feature and may not be applied on this env.
+  if (program === 'software') {
+    const { error: accessError } = await supabase
+      .from('users')
+      .update({ nexus_access_enabled: false })
+      .in('id', userIds);
+    if (accessError) {
+      console.warn('bulkSetStudentProgram: could not set nexus_access_enabled (column may not exist yet):', accessError.message);
+    }
+  }
+
+  for (const row of data || []) {
+    await recordUserHistory(supabase, row.id, 'student_program', null, program, adminId);
   }
 
   return { updated: (data || []).length };

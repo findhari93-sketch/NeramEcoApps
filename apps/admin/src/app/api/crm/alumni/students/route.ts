@@ -13,6 +13,8 @@ import { listActiveNexusStudents } from '@neram/database';
  *  - search: name / email
  *  - academicYear: 'YYYY-YY' | 'none' (no year set) | 'all'
  *  - activity: 'all' | 'inactive' (zero drawing submissions)
+ *  - program: 'architecture' (default) | 'software' — the /software page passes
+ *    'software' to get the separated software-course list.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -20,8 +22,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || undefined;
     const academicYear = searchParams.get('academicYear') || undefined;
     const activity = (searchParams.get('activity') as 'all' | 'inactive') || 'all';
+    const program = searchParams.get('program') === 'software' ? 'software' : 'architecture';
 
-    const result = await listActiveNexusStudents({ search, academicYear, activity });
+    const result = await listActiveNexusStudents({ search, academicYear, activity, program });
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('CRM alumni students error:', error);

@@ -261,15 +261,23 @@ export function useNexusAuth(): NexusAuthState {
             return;
           }
           const data = await response.json().catch(() => ({}));
-          // Alumni lockout: the student has graduated. Surface a dedicated state
-          // so the UI shows a warm "you've graduated" screen instead of an error.
-          if (response.status === 403 && data?.error === 'alumni') {
+          // Full-screen lockouts: the /api/auth/me gate returns 403 with a
+          // reason. 'alumni' = the student graduated (warm "you've graduated"
+          // screen); 'nexus_closed' = Nexus is closed to this student during the
+          // 2026-27 rebuild ("preparing your classroom" screen). Both surface a
+          // dedicated state so the UI shows a friendly screen, not an error.
+          if (
+            response.status === 403 &&
+            (data?.error === 'alumni' || data?.error === 'nexus_closed')
+          ) {
             if (!cancelled) {
               setAccessEnded({
-                reason: 'alumni',
+                reason: data.error,
                 message:
                   data.message ||
-                  "You've completed the program and are now a Neram alumnus. Your Nexus access has ended.",
+                  (data.error === 'nexus_closed'
+                    ? "We're getting your Nexus classroom ready. You'll get access very soon."
+                    : "You've completed the program and are now a Neram alumnus. Your Nexus access has ended."),
               });
               setUser(null);
               setNexusRole(null);

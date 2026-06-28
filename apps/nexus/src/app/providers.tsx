@@ -3,14 +3,14 @@
 import { NexusAuthProvider } from '@/hooks/useNexusAuth';
 import SidebarProvider from '@/components/SidebarProvider';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
-import AlumniGate from '@/components/AlumniGate';
+import AccessGate from '@/components/AccessGate';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <NexusAuthProvider>
       <SidebarProvider>
         <ImpersonationBanner />
-        <AlumniGate>{children}</AlumniGate>
+        <AccessGate>{children}</AccessGate>
       </SidebarProvider>
     </NexusAuthProvider>
   );

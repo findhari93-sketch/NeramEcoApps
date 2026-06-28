@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     // Get student enrollments with user info and batch
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, ms_oid), batch:nexus_batches(id, name)')
+      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, ms_oid, nexus_access_enabled), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student');
 
@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
         email: string;
         avatar_url: string | null;
         ms_oid: string | null;
+        nexus_access_enabled: boolean | null;
       };
       const attendance = attendanceByStudent[userId] || { attended: 0, total: 0 };
 
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest) {
         email: user.email,
         avatar_url: user.avatar_url,
         ms_oid: user.ms_oid,
+        nexus_access_enabled: user.nexus_access_enabled ?? false,
         enrolled_at: enrollment.enrolled_at,
         batch: batch ? { id: batch.id, name: batch.name } : null,
         attendance: {
