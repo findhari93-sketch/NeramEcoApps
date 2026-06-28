@@ -4,14 +4,17 @@
  * ImageViewerDialog
  *
  * A lightweight lightbox for viewing a person's photo at full size. Used by
- * UserAvatar (and GraphAvatar) so any avatar can be clicked to enlarge.
- * Full-screen on mobile, centered card on larger screens.
+ * UserAvatar (and GraphAvatar) so any avatar can be opened to enlarge.
+ * On mobile it fills the screen with the photo centered (no black bands); on
+ * larger screens it is a centered rounded card.
  */
 
+import { useEffect, useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
@@ -27,6 +30,12 @@ export interface ImageViewerDialogProps {
 export function ImageViewerDialog({ open, onClose, src, name, alt }: ImageViewerDialogProps): JSX.Element | null {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const [loaded, setLoaded] = useState(false);
+
+  // Reset the loading state whenever a new image is shown.
+  useEffect(() => {
+    if (open) setLoaded(false);
+  }, [open, src]);
 
   if (!src) return null;
 
@@ -45,10 +54,21 @@ export function ImageViewerDialog({ open, onClose, src, name, alt }: ImageViewer
           overflow: 'hidden',
           bgcolor: '#000',
           m: fullScreen ? 0 : 2,
+          ...(fullScreen ? { width: '100%', height: '100%', maxHeight: '100%' } : {}),
         },
       }}
     >
-      <Box sx={{ position: 'relative', display: 'flex', bgcolor: '#000' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: '#000',
+          width: '100%',
+          minHeight: fullScreen ? '100dvh' : 240,
+        }}
+      >
         <IconButton
           onClick={onClose}
           aria-label="Close photo"
@@ -65,15 +85,29 @@ export function ImageViewerDialog({ open, onClose, src, name, alt }: ImageViewer
           <CloseIcon />
         </IconButton>
 
+        {!loaded && (
+          <CircularProgress
+            size={36}
+            sx={{ position: 'absolute', color: 'rgba(255,255,255,0.7)' }}
+          />
+        )}
+
         <Box
           component="img"
           src={src}
           alt={alt || name || 'Profile photo'}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
           sx={{
-            width: '100%',
-            maxHeight: fullScreen ? '100vh' : '80vh',
+            maxWidth: '100%',
+            maxHeight: fullScreen ? '100dvh' : '85vh',
+            width: 'auto',
+            height: 'auto',
             objectFit: 'contain',
             display: 'block',
+            margin: 'auto',
+            opacity: loaded ? 1 : 0,
+            transition: 'opacity 200ms ease',
           }}
         />
 
@@ -89,6 +123,7 @@ export function ImageViewerDialog({ open, onClose, src, name, alt }: ImageViewer
               py: 1.25,
               color: '#fff',
               fontWeight: 600,
+              userSelect: 'none',
               background: 'linear-gradient(to top, rgba(0,0,0,0.72), transparent)',
             }}
           >

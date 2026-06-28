@@ -17,6 +17,8 @@ import {
   classifyGraphError,
   getUserProfile,
   getUserPhoto,
+  userExists,
+  findUserOidByEmail,
 } from '@neram/auth';
 
 /** Run an async fn over items with a bounded concurrency. */
@@ -49,6 +51,39 @@ async function markMsAccountMissing(supabase: any, user: { id: string }): Promis
     await supabase.from('users').update({ metadata }).eq('id', user.id);
   } catch {
     // best-effort; never block the batch on a bookkeeping write.
+  }
+}
+
+/**
+ * Resolve the Microsoft account to act on for a user record. Microsoft is the
+ * authority on email -> account, so a stored ms_oid that is null, stale (404), or
+ * sitting on a duplicate record must not stop us: we verify the stored oid and, if
+ * it does not resolve, fall back to the user's email/UPN. Returns the usable oid
+ * and how it was found.
+ */
+async function resolveOid(u: any): Promise<{ oid: string | null; source: 'stored' | 'email' | 'none' }> {
+  if (u.ms_oid && (await userExists(u.ms_oid))) {
+    return { oid: u.ms_oid, source: 'stored' };
+  }
+  const byEmail = await findUserOidByEmail(u.email);
+  if (byEmail) return { oid: byEmail, source: 'email' };
+  return { oid: null, source: 'none' };
+}
+
+/**
+ * Persist an email-resolved oid onto the record, but ONLY when no other record
+ * already owns it. Many students have duplicate records (a Google signup + an MS
+ * onboarding row) and the oid often lives on the other one, writing it here would
+ * create two rows with the same ms_oid, so we skip the heal in that case and leave
+ * the duplicate for manual cleanup.
+ */
+async function healOid(supabase: any, userId: string, oid: string): Promise<void> {
+  try {
+    const { data: others } = await supabase.from('users').select('id').eq('ms_oid', oid).neq('id', userId).limit(1);
+    if (others && others.length) return; // another record owns it; do not create a conflict
+    await supabase.from('users').update({ ms_oid: oid }).eq('id', userId);
+  } catch {
+    // best-effort
   }
 }
 
@@ -121,6 +156,8 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
     noMsAccountUsers: [] as string[],
     accountGone: 0,
     accountGoneUsers: [] as string[],
+    resolvedByEmail: 0,
+    resolvedByEmailUsers: [] as string[],
     photosCaptured: 0,
     detailsCaptured: 0,
     groupAssigned: [] as string[],
@@ -144,18 +181,27 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
   };
 
   await mapWithConcurrency(users || [], 6, async (u: any) => {
-    if (!u.ms_oid) {
+    // Find the real account by stored oid OR email/UPN, so a null/stale oid (or one
+    // stuck on a duplicate record) does not let an active account slip through.
+    const resolved = await resolveOid(u);
+    if (!resolved.oid) {
       summary.noMsAccount++;
       summary.noMsAccountUsers.push(label(u));
       return;
     }
+    const oid = resolved.oid;
+    if (resolved.source === 'email') {
+      summary.resolvedByEmail++;
+      summary.resolvedByEmailUsers.push(label(u));
+      await healOid(supabase, u.id, oid);
+    }
 
     // Capture photo + details FIRST, before the account is offboarded.
-    const cap = await captureMicrosoftProfile(supabase, u);
+    const cap = await captureMicrosoftProfile(supabase, { id: u.id, ms_oid: oid });
     if (cap.photoCaptured) summary.photosCaptured++;
     if (cap.detailsCaptured) summary.detailsCaptured++;
 
-    const lic = await removeAllLicenses(u.ms_oid);
+    const lic = await removeAllLicenses(oid);
     if (lic.success) {
       if (lic.removedSkuIds.length > 0) {
         summary.licensesRemoved++;
@@ -163,7 +209,7 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
       }
       if (lic.groupSkuIds.length > 0) summary.groupAssigned.push(label(u));
     } else if (classifyGraphError(lic.reason).code === 'account_not_found') {
-      // Stored ms_oid points at a deleted Microsoft account: nothing to revoke.
+      // Resolved oid points at a deleted Microsoft account: nothing to revoke.
       // Record it and skip the disable call (it would 404 the same way).
       summary.accountGone++;
       summary.accountGoneUsers.push(label(u));
@@ -173,7 +219,7 @@ export async function offboardMicrosoftAccounts(userIds: string[]) {
       pushFailure(u, 'remove_license', lic.reason);
     }
 
-    const dis = await setAccountEnabled(u.ms_oid, false);
+    const dis = await setAccountEnabled(oid, false);
     if (dis.success) summary.disabled++;
     else if (classifyGraphError(dis.reason).code === 'account_not_found') {
       summary.accountGone++;
@@ -195,6 +241,8 @@ export async function reinstateMicrosoftAccounts(userIds: string[]) {
     licensesReadded: 0,
     accountGone: 0,
     accountGoneUsers: [] as string[],
+    resolvedByEmail: 0,
+    resolvedByEmailUsers: [] as string[],
     failures: [] as Array<{ user: string; step: string; code: string; message: string; fix?: string; raw?: string }>,
     configError: null as null | { code: string; message: string; fix?: string; raw?: string },
   };
@@ -218,9 +266,16 @@ export async function reinstateMicrosoftAccounts(userIds: string[]) {
   };
 
   await mapWithConcurrency(users || [], 6, async (u: any) => {
-    if (!u.ms_oid) return;
+    const resolved = await resolveOid(u);
+    if (!resolved.oid) return;
+    const oid = resolved.oid;
+    if (resolved.source === 'email') {
+      summary.resolvedByEmail++;
+      summary.resolvedByEmailUsers.push(label(u));
+      await healOid(supabase, u.id, oid);
+    }
 
-    const en = await setAccountEnabled(u.ms_oid, true);
+    const en = await setAccountEnabled(oid, true);
     if (en.success) summary.enabled++;
     else if (classifyGraphError(en.reason).code === 'account_not_found') {
       // Account is gone; nothing to reinstate. Clear the stored licenses so the
@@ -234,7 +289,7 @@ export async function reinstateMicrosoftAccounts(userIds: string[]) {
 
     const skus = Array.isArray(u.alumni_removed_ms_licenses) ? u.alumni_removed_ms_licenses : [];
     if (skus.length > 0) {
-      const add = await addLicenses(u.ms_oid, skus);
+      const add = await addLicenses(oid, skus);
       if (add.success) {
         summary.licensesReadded++;
         await supabase.from('users').update({ alumni_removed_ms_licenses: null }).eq('id', u.id);

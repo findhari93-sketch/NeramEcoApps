@@ -78,6 +78,8 @@ export {
   setAccountEnabled,
   classifyGraphError,
   checkGraphConnection,
+  userExists,
+  findUserOidByEmail,
 } from './graph';
 export type { UserLicenseInfo, GraphErrorInfo } from './graph';
 

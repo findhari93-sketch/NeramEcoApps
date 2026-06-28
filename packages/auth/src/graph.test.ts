@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { setAccountEnabled, removeAllLicenses, addLicenses, classifyGraphError, getUserMsStatus, getUserProfile, getUserPhoto } from './graph';
+import { setAccountEnabled, removeAllLicenses, addLicenses, classifyGraphError, getUserMsStatus, getUserProfile, getUserPhoto, userExists, findUserOidByEmail } from './graph';
 
 // These tests mock global.fetch so no real Microsoft Graph call is made. The
 // app-only token endpoint is mocked alongside the Graph endpoints.
@@ -153,6 +153,55 @@ describe('getUserMsStatus', () => {
     expect(s.accountEnabled).toBe(false);
     expect(s.directSkuIds).toEqual(['A']);
     expect(s.groupSkuIds).toEqual(['B']);
+  });
+});
+
+describe('userExists', () => {
+  it('returns true when Graph returns 200', async () => {
+    mockGraph(() => new Response(JSON.stringify({ id: 'oid-1' }), { status: 200 }));
+    expect(await userExists('oid-1')).toBe(true);
+  });
+  it('returns false when Graph returns 404', async () => {
+    mockGraph(() => new Response('not found', { status: 404 }));
+    expect(await userExists('oid-1')).toBe(false);
+  });
+  it('returns false for an empty id without calling Graph', async () => {
+    expect(await userExists('')).toBe(false);
+  });
+});
+
+describe('findUserOidByEmail', () => {
+  it('resolves via a direct UPN lookup', async () => {
+    mockGraph((url) => {
+      if (!url.includes('$filter')) return new Response(JSON.stringify({ id: 'oid-direct' }), { status: 200 });
+      return new Response(JSON.stringify({ value: [] }), { status: 200 });
+    });
+    expect(await findUserOidByEmail('jane@neramclasses.com')).toBe('oid-direct');
+  });
+
+  it('falls back to a mail filter when the direct lookup 404s', async () => {
+    mockGraph((url) => {
+      if (!url.includes('$filter')) return new Response('no', { status: 404 });
+      if (url.includes('mail%20eq') || url.includes('mail eq')) {
+        return new Response(JSON.stringify({ value: [{ id: 'oid-bymail' }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ value: [] }), { status: 200 });
+    });
+    expect(await findUserOidByEmail('jane@neramclasses.com')).toBe('oid-bymail');
+  });
+
+  it('returns null when no account matches', async () => {
+    mockGraph((url) => {
+      if (!url.includes('$filter')) return new Response('no', { status: 404 });
+      return new Response(JSON.stringify({ value: [] }), { status: 200 });
+    });
+    expect(await findUserOidByEmail('ghost@neramclasses.com')).toBeNull();
+  });
+
+  it('returns null for a blank or non-email string without calling Graph', async () => {
+    expect(await findUserOidByEmail('')).toBeNull();
+    expect(await findUserOidByEmail('not-an-email')).toBeNull();
+    expect(await findUserOidByEmail(null)).toBeNull();
   });
 });
 

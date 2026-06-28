@@ -495,3 +495,14 @@ export function useKeyboardShortcut(
 
 export { useUserNotifications } from './useUserNotifications';
 export type { UseUserNotificationsOptions, UseUserNotificationsReturn, UserNotificationItem } from './useUserNotifications';
+
+// ============================================
+// PHOTO VIEWER GESTURE HOOK
+// ============================================
+
+export { usePhotoViewerGesture } from './usePhotoViewerGesture';
+export type {
+  UsePhotoViewerGestureOptions,
+  UsePhotoViewerGestureReturn,
+  PhotoViewerGestureHandlers,
+} from './usePhotoViewerGesture';

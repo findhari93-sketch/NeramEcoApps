@@ -237,6 +237,66 @@ export interface UserLicenseInfo {
 }
 
 /**
+ * Does an Entra user object exist for this id/UPN? Used to detect a stale stored
+ * ms_oid (404) before falling back to an email lookup. Never throws.
+ */
+export async function userExists(idOrUpn: string): Promise<boolean> {
+  if (!idOrUpn) return false;
+  try {
+    const res = await graphFetch(`/users/${encodeURIComponent(idOrUpn)}?$select=id`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find a user's Entra object id (ms_oid) from their email/UPN. Microsoft is the
+ * authority on email -> account, so this recovers the right account even when our
+ * stored ms_oid is null, stale, or sitting on a duplicate record. Tries UPN, then
+ * the primary `mail`, then any proxy address. Returns null if no match. Never throws.
+ */
+export async function findUserOidByEmail(email: string | null | undefined): Promise<string | null> {
+  const e = (email || '').trim();
+  if (!e || !e.includes('@')) return null;
+  const esc = e.replace(/'/g, "''");
+  // 1) Direct lookup (works when email === userPrincipalName).
+  try {
+    const r = await graphFetch(`/users/${encodeURIComponent(e)}?$select=id`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.id) return d.id as string;
+    }
+  } catch {
+    /* fall through */
+  }
+  // 2) Filter by primary mail.
+  try {
+    const r = await graphFetch(`/users?$filter=mail eq '${esc}'&$select=id`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.value?.[0]?.id) return d.value[0].id as string;
+    }
+  } catch {
+    /* fall through */
+  }
+  // 3) Match any proxy/alias address (needs the eventual-consistency header).
+  try {
+    const r = await graphFetch(
+      `/users?$filter=proxyAddresses/any(p:p eq 'smtp:${esc}')&$select=id&$count=true`,
+      { headers: { ConsistencyLevel: 'eventual' } },
+    );
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.value?.[0]?.id) return d.value[0].id as string;
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+/**
  * Read which M365 license SKUs a user has, split into direct vs group-assigned.
  * Group-assigned licenses cannot be freed by assignLicense (they require removing
  * the user from the licensing group), so we surface them separately.

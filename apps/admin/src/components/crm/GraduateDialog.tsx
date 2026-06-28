@@ -224,6 +224,11 @@ export default function GraduateDialog({ open, students, defaultYear, onClose, o
                       names={ms.accountGoneUsers || []}
                       hint="Their Microsoft account was already deleted, so there was nothing left to revoke."
                     />
+                    <NameList
+                      title={`Recovered by email (${ms.resolvedByEmailUsers?.length || 0})`}
+                      names={ms.resolvedByEmailUsers || []}
+                      hint="Their stored Microsoft link was missing or wrong; we matched the account by email and offboarded it."
+                    />
                     {ms.groupAssigned?.length > 0 && (
                       <Alert severity="warning" sx={{ mt: 1 }}>
                         {ms.groupAssigned.length} student(s) have group-assigned licenses that cannot be freed per user.
