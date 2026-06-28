@@ -42,6 +42,7 @@ import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GraduateDialog from '../../../components/crm/GraduateDialog';
 import SetAcademicYearDialog from '../../../components/crm/SetAcademicYearDialog';
 import AlumniDetailDrawer from '../../../components/alumni/AlumniDetailDrawer';
+import StudentDetailDrawer from '../../../components/alumni/StudentDetailDrawer';
 import AlumniManualAddDialog from '../../../components/alumni/AlumniManualAddDialog';
 import { academicYearOptions, currentAcademicYear, formatDate } from '../../../components/crm/academic-years';
 
@@ -228,6 +229,9 @@ export default function AlumniPage() {
 
   const [tab, setTab] = useState(0);
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Alumni headcount for the tab badge, fetched cheaply on mount so it is correct on
+  // first paint while the full directory stays lazy (loaded only when the tab opens).
+  const [alumniCount, setAlumniCount] = useState(0);
 
   // ---- Students (active) tab ----
   const [allStudents, setAllStudents] = useState<StudentRow[]>([]);
@@ -239,6 +243,7 @@ export default function AlumniPage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [setYearOpen, setSetYearOpen] = useState(false);
+  const [studentDrawer, setStudentDrawer] = useState<StudentRow | null>(null);
 
   // ---- Alumni tab (directory) ----
   const [alumni, setAlumni] = useState<AlumniRow[]>([]);
@@ -271,7 +276,9 @@ export default function AlumniPage() {
     try {
       const res = await fetch('/api/crm/alumni', { cache: 'no-store' });
       const data = await res.json();
-      setAlumni(data.alumni || []);
+      const list = data.alumni || [];
+      setAlumni(list);
+      setAlumniCount(list.length);
     } catch {
       setBanner({ type: 'error', text: 'Failed to load alumni' });
     } finally {
@@ -283,6 +290,25 @@ export default function AlumniPage() {
     if (tab === 0) loadStudents();
     else loadAlumni();
   }, [tab, loadStudents, loadAlumni]);
+
+  // Cheap headcount on mount so the Alumni tab badge is right from the start without
+  // pulling the whole directory. The lazy list (loadAlumni) still owns the count once
+  // the tab is opened; this only seeds the badge before that.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/crm/alumni/counts', { cache: 'no-store' });
+        const data = await res.json();
+        if (active && typeof data.alumni === 'number') setAlumniCount(data.alumni);
+      } catch {
+        /* badge falls back to the loaded list length */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -383,6 +409,14 @@ export default function AlumniPage() {
     loadStudents();
   }, [loadStudents]);
 
+  // Graduate a single student straight from their detail drawer: pre-select just
+  // them and reuse the same GraduateDialog + handleGraduate flow as the batch path.
+  const graduateSingle = useCallback((id: string) => {
+    setStudentDrawer(null);
+    setSelection(new Set([id]));
+    setGraduateOpen(true);
+  }, []);
+
   const filteredAlumni = useMemo(() => {
     let r = alumni;
     const q = aSearch.trim().toLowerCase();
@@ -478,7 +512,7 @@ export default function AlumniPage() {
         }}
       >
         <Tab label={<Box sx={{ display: 'flex', alignItems: 'center' }}>Students{tabCount(stats.total)}</Box>} />
-        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center' }}>Alumni{tabCount(alumni.length)}</Box>} />
+        <Tab label={<Box sx={{ display: 'flex', alignItems: 'center' }}>Alumni{tabCount(alumni.length || alumniCount)}</Box>} />
       </Tabs>
 
       {/* ============ STUDENTS TAB ============ */}
@@ -628,7 +662,7 @@ export default function AlumniPage() {
                   <Card
                     key={s.id}
                     variant="outlined"
-                    onClick={() => toggleStudent(s.id)}
+                    onClick={() => setStudentDrawer(s)}
                     sx={{
                       p: 1.5,
                       borderRadius: 2,
@@ -639,7 +673,13 @@ export default function AlumniPage() {
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-                      <Checkbox size="small" checked={checked} sx={{ p: 0.25, mt: -0.25 }} />
+                      <Checkbox
+                        size="small"
+                        checked={checked}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleStudent(s.id)}
+                        sx={{ p: 0.25, mt: -0.25 }}
+                      />
                       <UserAvatar src={s.avatar_url} name={s.name} size={40} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>
@@ -680,7 +720,7 @@ export default function AlumniPage() {
                 return (
                   <Box
                     key={s.id}
-                    onClick={() => toggleStudent(s.id)}
+                    onClick={() => setStudentDrawer(s)}
                     sx={{
                       display: 'grid',
                       gridTemplateColumns: STUDENT_GRID,
@@ -699,7 +739,13 @@ export default function AlumniPage() {
                       '&:last-of-type': { borderBottom: 'none' },
                     }}
                   >
-                    <Checkbox size="small" checked={checked} sx={{ p: 0.5, ml: '-3px' }} />
+                    <Checkbox
+                      size="small"
+                      checked={checked}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleStudent(s.id)}
+                      sx={{ p: 0.5, ml: '-3px' }}
+                    />
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, pr: 1 }}>
                       <UserAvatar src={s.avatar_url} name={s.name} size={34} />
                       <Box sx={{ minWidth: 0 }}>
@@ -875,6 +921,13 @@ export default function AlumniPage() {
         adminId={supabaseUserId}
         onClose={() => setDrawerUserId(null)}
         onChanged={loadAlumni}
+      />
+
+      <StudentDetailDrawer
+        open={!!studentDrawer}
+        student={studentDrawer}
+        onClose={() => setStudentDrawer(null)}
+        onGraduate={graduateSingle}
       />
 
       <AlumniManualAddDialog

@@ -20,7 +20,8 @@ import {
 } from '@neram/ui';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
-import { COURSE_OPTIONS, INK, MUTED } from './theme';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import { COURSE_OPTIONS, INK, MUTED, ACCENT } from './theme';
 
 interface CollegeOption {
   id: string;
@@ -42,6 +43,10 @@ interface AlumniProfileShape {
   portfolio_url?: string | null;
   bio?: string | null;
   is_verified?: boolean;
+  is_hall_of_fame?: boolean;
+  exam_name?: string | null;
+  exam_result?: string | null;
+  achievement_note?: string | null;
 }
 
 interface AlumniEditDialogProps {
@@ -77,6 +82,10 @@ export default function AlumniEditDialog({
   const [portfolio, setPortfolio] = useState('');
   const [bio, setBio] = useState('');
   const [verified, setVerified] = useState(false);
+  const [hallOfFame, setHallOfFame] = useState(false);
+  const [examName, setExamName] = useState('');
+  const [examResult, setExamResult] = useState('');
+  const [achievementNote, setAchievementNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -93,6 +102,10 @@ export default function AlumniEditDialog({
     setPortfolio(profile?.portfolio_url || '');
     setBio(profile?.bio || '');
     setVerified(!!profile?.is_verified);
+    setHallOfFame(!!profile?.is_hall_of_fame);
+    setExamName(profile?.exam_name || '');
+    setExamResult(profile?.exam_result || '');
+    setAchievementNote(profile?.achievement_note || '');
     setError('');
   }, [open, profile, initialCollege]);
 
@@ -139,6 +152,10 @@ export default function AlumniEditDialog({
       portfolio_url: portfolio.trim() || null,
       bio: bio.trim() || null,
       is_verified: verified,
+      is_hall_of_fame: hallOfFame,
+      exam_name: examName.trim() || null,
+      exam_result: examResult.trim() || null,
+      achievement_note: achievementNote.trim() || null,
     };
 
     try {
@@ -255,6 +272,49 @@ export default function AlumniEditDialog({
         <FormControlLabel
           control={<Switch checked={verified} onChange={(e) => setVerified(e.target.checked)} />}
           label={<Typography variant="body2">Verified details</Typography>}
+        />
+
+        {/* Hall of Fame: showcase this senior to current students in Nexus. */}
+        <Divider sx={{ my: 2 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <EmojiEventsOutlinedIcon sx={{ color: ACCENT, fontSize: 20 }} />
+          <Typography variant="body2" fontWeight={600}>
+            Hall of Fame
+          </Typography>
+        </Box>
+        <Typography variant="caption" sx={{ color: MUTED, display: 'block', mb: 1 }}>
+          Showcase this senior to current students in Nexus for inspiration. The achievement is optional, a senior can inspire on results or on great drawings alone.
+        </Typography>
+        <FormControlLabel
+          control={<Switch checked={hallOfFame} onChange={(e) => setHallOfFame(e.target.checked)} />}
+          label={<Typography variant="body2">Show in student Hall of Fame</Typography>}
+          sx={{ mb: 1 }}
+        />
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
+          <TextField
+            size="small"
+            label="Exam"
+            placeholder="e.g. NATA 2025"
+            value={examName}
+            onChange={(e) => setExamName(e.target.value)}
+          />
+          <TextField
+            size="small"
+            label="Result"
+            placeholder="e.g. AIR 142, or 98.2 percentile"
+            value={examResult}
+            onChange={(e) => setExamResult(e.target.value)}
+          />
+        </Box>
+        <TextField
+          size="small"
+          fullWidth
+          multiline
+          minRows={2}
+          label="Achievement note"
+          placeholder="A short line that inspires juniors"
+          value={achievementNote}
+          onChange={(e) => setAchievementNote(e.target.value)}
         />
       </DialogContent>
       <Divider />

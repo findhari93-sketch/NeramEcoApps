@@ -11,6 +11,7 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import GalleryCard from './GalleryCard';
 import TagFilterBar from './TagFilterBar';
 import AlumniCollegeFilter from './AlumniCollegeFilter';
+import FeaturedSeniors from './FeaturedSeniors';
 import type { GalleryPost, GalleryReactionType } from '@neram/database/types';
 import type { DrawingViewMode } from '@/hooks/useDrawingViewMode';
 
@@ -314,6 +315,11 @@ export default function GalleryFeed({ getToken, teacherMode, viewMode = 'comfort
       )}
 
       <TagFilterBar selected={tagSlugs} onChange={setTagSlugs} />
+
+      {/* Inspiration strip: seniors admins showcased, above the works feed. */}
+      {audience === 'alumni' && (
+        <FeaturedSeniors getToken={getToken} academicYear={academicYear} collegeId={collegeId} />
+      )}
 
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, py: 2 }}>

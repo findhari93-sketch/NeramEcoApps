@@ -27,6 +27,11 @@ export interface AlumniProfile {
   other_links: Record<string, string> | null;
   bio: string | null;
   is_verified: boolean;
+  // Hall of Fame (showcase to current students). All optional; independent of drawings.
+  is_hall_of_fame: boolean;
+  exam_name: string | null;
+  exam_result: string | null;
+  achievement_note: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -49,6 +54,10 @@ export interface AlumniDirectoryEntry {
   instagram_url: string | null;
   portfolio_url: string | null;
   is_verified: boolean;
+  is_hall_of_fame: boolean;
+  exam_name: string | null;
+  exam_result: string | null;
+  achievement_note: string | null;
   college_start_year: number | null;
   expected_graduation_year: number | null;
 }
@@ -168,6 +177,10 @@ export async function getAlumniDirectory(
       instagram_url: p?.instagram_url || null,
       portfolio_url: p?.portfolio_url || null,
       is_verified: p?.is_verified || false,
+      is_hall_of_fame: p?.is_hall_of_fame || false,
+      exam_name: p?.exam_name || null,
+      exam_result: p?.exam_result || null,
+      achievement_note: p?.achievement_note || null,
       college_start_year: p?.college_start_year ?? null,
       expected_graduation_year: p?.expected_graduation_year ?? null,
     };
@@ -178,6 +191,21 @@ export async function getAlumniDirectory(
   if (verified !== undefined) entries = entries.filter((e) => e.is_verified === verified);
 
   return { alumni: entries, total: entries.length };
+}
+
+/**
+ * Just the alumni headcount (users where is_alumni). A head/count-only query so the
+ * Alumni tab badge can show the right number on first paint without loading the
+ * whole directory (the full list stays lazy, fetched only when the tab opens).
+ */
+export async function getAlumniCount(client?: TypedSupabaseClient): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  const { count, error } = await supabase
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_alumni', true);
+  if (error) throw error;
+  return count || 0;
 }
 
 // ============================================
@@ -289,6 +317,120 @@ export async function getAlumniColleges(client?: TypedSupabaseClient) {
 }
 
 // ============================================
+// HALL OF FAME (student-facing showcase data)
+// ============================================
+
+export interface HallOfFameWork {
+  id: string;
+  original_image_url: string;
+  tutor_rating: number | null;
+}
+
+export interface HallOfFameSenior {
+  user_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  academic_year: string | null;
+  college_name: string | null;
+  course_branch: string | null;
+  exam_name: string | null;
+  exam_result: string | null;
+  achievement_note: string | null;
+  linkedin_url: string | null;
+  instagram_url: string | null;
+  portfolio_url: string | null;
+  works: HallOfFameWork[];
+}
+
+/**
+ * Seniors admins chose to showcase (is_hall_of_fame) for the Nexus Hall of Fame,
+ * each with their achievement and a strip of their featured, visible drawings (which
+ * may be empty: a senior can inspire on results alone). Most recent cohort first.
+ */
+export async function getHallOfFameSeniors(
+  options: { academicYear?: string; collegeId?: string; limit?: number } = {},
+  client?: TypedSupabaseClient,
+): Promise<HallOfFameSenior[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { academicYear, collegeId, limit = 60 } = options;
+
+  let pq = supabase
+    .from('alumni_profiles')
+    .select(
+      'user_id, college_id, college_name, course_branch, exam_name, exam_result, achievement_note, linkedin_url, instagram_url, portfolio_url',
+    )
+    .eq('is_hall_of_fame', true);
+  if (collegeId) pq = pq.eq('college_id', collegeId);
+  const { data: profiles, error } = await pq;
+  if (error) throw error;
+  if (!profiles || profiles.length === 0) return [];
+
+  const userIds = profiles.map((p: any) => p.user_id);
+
+  // Identity + cohort. Re-assert is_alumni and apply the optional cohort filter here.
+  let uq = supabase.from('users').select('id, name, avatar_url, academic_year').in('id', userIds).eq('is_alumni', true);
+  if (academicYear) uq = uq.eq('academic_year', academicYear);
+  const { data: users } = await uq;
+  const userById: Record<string, any> = {};
+  for (const u of users || []) userById[u.id] = u;
+
+  const collegeIds = [...new Set(profiles.map((p: any) => p.college_id).filter(Boolean))];
+  const collegeById: Record<string, any> = {};
+  if (collegeIds.length) {
+    const { data: colleges } = await supabase.from('colleges').select('id, name, short_name').in('id', collegeIds);
+    for (const c of colleges || []) collegeById[c.id] = c;
+  }
+
+  // Each senior's featured, visible works (the thumbnail strip under their card).
+  const presentUserIds = (users || []).map((u: any) => u.id);
+  const worksByUser: Record<string, HallOfFameWork[]> = {};
+  if (presentUserIds.length) {
+    const { data: works } = await supabase
+      .from('drawing_submissions')
+      .select('id, student_id, original_image_url, tutor_rating, reviewed_at')
+      .in('student_id', presentUserIds)
+      .eq('alumni_featured', true)
+      .eq('is_gallery_visible', true)
+      .order('reviewed_at', { ascending: false });
+    for (const w of works || []) {
+      (worksByUser[w.student_id] ||= []).push({
+        id: w.id,
+        original_image_url: w.original_image_url,
+        tutor_rating: w.tutor_rating,
+      });
+    }
+  }
+
+  const seniors: HallOfFameSenior[] = [];
+  for (const p of profiles as any[]) {
+    const u = userById[p.user_id];
+    if (!u) continue; // filtered out by the cohort filter, or no longer an alumnus
+    const college = p.college_id ? collegeById[p.college_id] : null;
+    seniors.push({
+      user_id: p.user_id,
+      name: u.name,
+      avatar_url: u.avatar_url,
+      academic_year: u.academic_year,
+      college_name: college?.name || college?.short_name || p.college_name || null,
+      course_branch: p.course_branch || null,
+      exam_name: p.exam_name || null,
+      exam_result: p.exam_result || null,
+      achievement_note: p.achievement_note || null,
+      linkedin_url: p.linkedin_url || null,
+      instagram_url: p.instagram_url || null,
+      portfolio_url: p.portfolio_url || null,
+      works: worksByUser[p.user_id] || [],
+    });
+  }
+
+  seniors.sort(
+    (a, b) =>
+      (b.academic_year || '').localeCompare(a.academic_year || '') || (a.name || '').localeCompare(b.name || ''),
+  );
+  return seniors.slice(0, limit);
+}
+
+// ============================================
 // MUTATIONS
 // ============================================
 
@@ -305,6 +447,10 @@ const ALUMNI_PROFILE_FIELDS = [
   'other_links',
   'bio',
   'is_verified',
+  'is_hall_of_fame',
+  'exam_name',
+  'exam_result',
+  'achievement_note',
 ];
 
 /** Insert or update an alumnus's directory profile (1:1 with the user). */
@@ -347,6 +493,19 @@ export async function upsertAlumniProfile(
     .single();
   if (error) throw error;
   return data as AlumniProfile;
+}
+
+/**
+ * Toggle whether an alumnus is showcased in the student Hall of Fame. Upserts the
+ * profile so a senior with no other details can still be showcased on results alone.
+ */
+export async function setAlumniHallOfFame(
+  userId: string,
+  value: boolean,
+  adminId: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  await upsertAlumniProfile(userId, { is_hall_of_fame: value }, adminId, client);
 }
 
 // ============================================
