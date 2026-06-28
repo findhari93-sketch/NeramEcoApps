@@ -20,6 +20,7 @@ export * from './fee-structures';
 export * from './notifications';
 export * from './crm';
 export * from './alumni';
+export * from './user-merge';
 export * from './scholarship';
 export * from './user-notifications';
 export * from './refund-requests';

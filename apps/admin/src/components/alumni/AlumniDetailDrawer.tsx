@@ -22,13 +22,17 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import LanguageIcon from '@mui/icons-material/Language';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import AlumniEditDialog from './AlumniEditDialog';
+import AlumniExamRecords from './AlumniExamRecords';
 import AlumniMsSection from './AlumniMsSection';
 import StudentWorksPanel from './StudentWorksPanel';
+import MergeDuplicatePanel from './MergeDuplicatePanel';
+import PersonalDetailsPanel from './PersonalDetailsPanel';
 import { ACCENT, ACCENT_SOFT, INK, MUTED, LINE, yearOfStudyLabel, isGraduateArchitect } from './theme';
 
 interface AlumniDetailDrawerProps {
@@ -137,6 +141,10 @@ export default function AlumniDetailDrawer({ open, userId, adminId, onClose, onC
         {/* Body */}
         {user && (
           <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+            {/* Duplicate detection + personal details */}
+            {userId && <MergeDuplicatePanel userId={userId} adminId={adminId} onMerged={() => { load(); onChanged(); }} />}
+            {userId && <PersonalDetailsPanel user={user} leadProfile={detail?.leadProfile} userId={userId} adminId={adminId} onSaved={load} />}
+
             {/* College + course */}
             <SectionTitle icon={<SchoolOutlinedIcon fontSize="small" />} text="College & course" />
             {collegeLabel ? (
@@ -200,6 +208,20 @@ export default function AlumniDetailDrawer({ open, userId, adminId, onClose, onC
               <Box sx={{ mb: 2 }}>
                 <SectionTitle text="Microsoft" />
                 <AlumniMsSection userId={userId} onChanged={load} compact />
+              </Box>
+            )}
+
+            {/* Exam records (read-only summary; full editor lives on the profile page) */}
+            {userId && (
+              <Box sx={{ mb: 2 }}>
+                <SectionTitle icon={<AssignmentOutlinedIcon fontSize="small" />} text="Exam records" />
+                <AlumniExamRecords
+                  userId={userId}
+                  adminId={adminId}
+                  profile={profile}
+                  documents={detail?.studentDocuments}
+                  variant="summary"
+                />
               </Box>
             )}
 

@@ -237,10 +237,12 @@ export default function TopBar() {
             },
           }}
         >
-          {/* Avatar with role-colored ring */}
+          {/* Avatar with role-colored ring. tapToView=false so a tap opens the
+              profile / panel-switch menu; long-press still views the photo. */}
           <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <GraphAvatar
               self
+              tapToView={false}
               name={user?.name}
               size={36}
               sx={{

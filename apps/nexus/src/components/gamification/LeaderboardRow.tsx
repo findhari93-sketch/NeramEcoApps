@@ -82,6 +82,7 @@ export default function LeaderboardRow({ entry, onClick }: LeaderboardRowProps) 
         src={entry.avatar_url}
         name={entry.student_name}
         size={32}
+        tapToView={false}
         sx={{
           fontFamily: neramFontFamilies.serif,
           fontWeight: 700,

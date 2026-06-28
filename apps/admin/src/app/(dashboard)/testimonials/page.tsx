@@ -398,7 +398,7 @@ export default function TestimonialsPage() {
                     sx={{ cursor: 'pointer' }}
                   >
                     <TableCell>
-                      <UserAvatar src={t.student_photo} name={t.student_name} size={32} />
+                      <UserAvatar src={t.student_photo} name={t.student_name} size={32} tapToView={false} />
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontWeight={500} noWrap>

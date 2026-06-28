@@ -176,6 +176,7 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
                     src={student.user_avatar}
                     name={student.user_name}
                     size={28}
+                    tapToView={false}
                     sx={{ mt: 0.25, flexShrink: 0 }}
                   />
 

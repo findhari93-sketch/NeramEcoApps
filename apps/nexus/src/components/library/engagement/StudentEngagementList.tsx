@@ -251,6 +251,7 @@ export default function StudentEngagementList({ students }: StudentEngagementLis
                           src={student.avatar_url}
                           name={`${student.first_name} ${student.last_name}`}
                           size={28}
+                          tapToView={false}
                         />
                         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
                           {student.first_name} {student.last_name}

@@ -198,13 +198,14 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
             mt: 0.25,
           }}
         >
-          <UserAvatar src={user.avatar_url} name={getDisplayName(user)} size={36} />
+          <UserAvatar src={user.avatar_url} name={getDisplayName(user)} size={36} tapToView={false} />
         </Box>
       ) : (
         <UserAvatar
           src={user.avatar_url}
           name={getDisplayName(user)}
           size={40}
+          tapToView={false}
           sx={{
             flexShrink: 0,
             mt: 0.25,
@@ -497,11 +498,11 @@ export default function UsersTable(props: UsersTableProps) {
                     justifyContent: 'center',
                   }}
                 >
-                  <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} />
+                  <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} tapToView={false} />
                 </Box>
               </Box>
             ) : (
-              <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} />
+              <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} tapToView={false} />
             )}
             <Box sx={{ minWidth: 0 }}>
               <Typography

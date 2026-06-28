@@ -7,6 +7,7 @@ import {
   ImageViewerDialog,
   getAvatarColor,
   getAvatarInitials,
+  usePhotoViewerGesture,
   type SxProps,
   type Theme,
 } from '@neram/ui';
@@ -30,6 +31,9 @@ function getGraphPhotoSize(size: number): string {
   return '648x648';
 }
 
+/** Highest resolution Graph serves, used for the enlarged viewer. */
+const HI_RES_SIZE = '648x648';
+
 // Presence color mapping
 const presenceColors: Record<string, string> = {
   Available: '#107c10',
@@ -48,8 +52,10 @@ interface GraphAvatarProps {
   size?: number;
   sx?: SxProps<Theme>;
   presenceStatus?: string | null;
-  /** Allow click-to-enlarge when a photo is loaded. Default true. */
+  /** Allow opening the enlarged view (via any gesture) when a photo is loaded. Default true. */
   clickable?: boolean;
+  /** Does a plain tap open the viewer? Set false when the avatar has a primary action. Default true. */
+  tapToView?: boolean;
 }
 
 export default function GraphAvatar({
@@ -60,12 +66,15 @@ export default function GraphAvatar({
   sx,
   presenceStatus,
   clickable = true,
+  tapToView = true,
 }: GraphAvatarProps) {
   const { getToken } = useNexusAuth();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState(false);
-  const [viewerOpen, setViewerOpen] = useState(false);
+  const [largeUrl, setLargeUrl] = useState<string | null>(null);
+  const [largeError, setLargeError] = useState(false);
   const blobUrlRef = useRef<string | null>(null);
+  const largeBlobRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!self && !msOid) {
@@ -149,6 +158,8 @@ export default function GraphAvatar({
           URL.revokeObjectURL(url);
         }
       }
+      const large = largeBlobRef.current;
+      if (large) URL.revokeObjectURL(large);
     };
   }, []);
 
@@ -157,17 +168,63 @@ export default function GraphAvatar({
   const shownPhoto = !photoError && photoUrl ? photoUrl : null;
   const canOpen = clickable && !!shownPhoto;
 
+  const { open: viewerOpen, setOpen: setViewerOpen, handlers } = usePhotoViewerGesture({
+    canOpen,
+    tapToView,
+  });
+
+  // The little avatar only loads a small thumbnail. When the viewer opens, fetch
+  // the full-resolution photo once (on demand, so no per-render cost) and swap it
+  // into the dialog.
+  const needsHiRes = getGraphPhotoSize(size) !== HI_RES_SIZE;
+  useEffect(() => {
+    if (!viewerOpen || !needsHiRes) return;
+    if (largeUrl || largeError) return;
+    if (!self && !msOid) return;
+
+    let cancelled = false;
+
+    async function fetchLarge() {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+
+        const params = new URLSearchParams({ size: HI_RES_SIZE });
+        if (self) {
+          params.set('self', 'true');
+        } else if (msOid) {
+          params.set('oid', msOid);
+        }
+
+        const response = await fetch(`/api/graph/photo?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok || cancelled) {
+          if (!cancelled) setLargeError(true);
+          return;
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        largeBlobRef.current = url;
+        setLargeUrl(url);
+      } catch {
+        if (!cancelled) setLargeError(true);
+      }
+    }
+
+    fetchLarge();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [viewerOpen, needsHiRes, largeUrl, largeError, self, msOid, getToken]);
+
   const avatar = (
     <Avatar
       src={shownPhoto || undefined}
-      onClick={
-        canOpen
-          ? (e) => {
-              e.stopPropagation();
-              setViewerOpen(true);
-            }
-          : undefined
-      }
+      {...(canOpen ? handlers : {})}
       sx={{
         width: size,
         height: size,
@@ -177,6 +234,9 @@ export default function GraphAvatar({
         color: '#fff',
         letterSpacing: initialsCount > 1 ? '-0.5px' : 0,
         cursor: canOpen ? 'pointer' : undefined,
+        ...(canOpen
+          ? { touchAction: 'manipulation', userSelect: 'none', WebkitTouchCallout: 'none' }
+          : {}),
         ...((sx as object) || {}),
       }}
     >
@@ -188,7 +248,7 @@ export default function GraphAvatar({
     <ImageViewerDialog
       open={viewerOpen}
       onClose={() => setViewerOpen(false)}
-      src={shownPhoto || ''}
+      src={largeUrl || shownPhoto || ''}
       name={name}
     />
   ) : null;

@@ -18,8 +18,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import StudentWorksPanel from './StudentWorksPanel';
+import MergeDuplicatePanel from './MergeDuplicatePanel';
+import PersonalDetailsPanel from './PersonalDetailsPanel';
 import { ACCENT, INK, MUTED, LINE } from './theme';
 import { formatDate } from '../crm/academic-years';
 
@@ -36,6 +37,7 @@ interface StudentLite {
 interface StudentDetailDrawerProps {
   open: boolean;
   student: StudentLite | null;
+  adminId?: string | null;
   onClose: () => void;
   /** Graduate just this one student (parent opens the GraduateDialog pre-selected). */
   onGraduate: (studentId: string) => void;
@@ -50,7 +52,7 @@ const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', c
  * published/hidden split that answers "how many reached the gallery"), onboarding
  * documents, and a one-click path to graduate or to the full CRM profile.
  */
-export default function StudentDetailDrawer({ open, student, onClose, onGraduate }: StudentDetailDrawerProps) {
+export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate }: StudentDetailDrawerProps) {
   const router = useRouter();
   const userId = student?.id || null;
   const [detail, setDetail] = useState<any>(null);
@@ -78,7 +80,6 @@ export default function StudentDetailDrawer({ open, student, onClose, onGraduate
   const activity = detail?.activity;
   const docs: any[] = detail?.nexusDocuments || [];
   const lead = detail?.leadProfile;
-  const schoolLine = [lead?.school_college, lead?.city].filter(Boolean).join(', ');
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: 480, maxWidth: '100vw' } }}>
@@ -117,15 +118,9 @@ export default function StudentDetailDrawer({ open, student, onClose, onGraduate
       {/* Body */}
       {student && (
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-          {/* School (entrance students; present once onboarding captured it) */}
-          {schoolLine && (
-            <>
-              <SectionTitle icon={<SchoolOutlinedIcon fontSize="small" />} text="School / College" />
-              <Typography variant="body2" sx={{ color: INK, mb: 2 }}>
-                {schoolLine}
-              </Typography>
-            </>
-          )}
+          {/* Duplicate detection + editable personal details */}
+          {userId && <MergeDuplicatePanel userId={userId} adminId={adminId ?? null} onMerged={load} />}
+          {userId && <PersonalDetailsPanel user={detail?.user} leadProfile={lead} userId={userId} adminId={adminId ?? null} onSaved={load} />}
 
           {/* Activity */}
           <SectionTitle text="Activity" />

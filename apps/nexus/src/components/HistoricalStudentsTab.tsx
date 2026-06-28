@@ -225,7 +225,7 @@ export default function HistoricalStudentsTab({
             expandIcon={<ExpandMoreIcon />}
             sx={{ minHeight: 64, '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1.5 } }}
           >
-            <UserAvatar src={student.user.avatar_url} name={student.user.name} size={40} />
+            <UserAvatar src={student.user.avatar_url} name={student.user.name} size={40} tapToView={false} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" fontWeight={600} noWrap>
                 {student.user.name}

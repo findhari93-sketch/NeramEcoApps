@@ -115,6 +115,7 @@ export interface User extends Timestamps {
   firebase_uid: string | null;      // From Firebase (app.neramclasses.com)
   ms_oid: string | null;            // Microsoft Object ID (nexus & admin)
   google_id: string | null;         // Google account ID
+  personal_email: string | null;    // Personal Gmail kept as a personal detail after a merge
 
   // Status
   user_type: UserType;

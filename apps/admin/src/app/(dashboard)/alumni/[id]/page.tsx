@@ -29,8 +29,13 @@ import LanguageIcon from '@mui/icons-material/Language';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AlumniEditDialog from '../../../../components/alumni/AlumniEditDialog';
+import AlumniExamRecords from '../../../../components/alumni/AlumniExamRecords';
 import AlumniMsSection from '../../../../components/alumni/AlumniMsSection';
 import StudentWorksPanel from '../../../../components/alumni/StudentWorksPanel';
+import MergeDuplicatePanel from '../../../../components/alumni/MergeDuplicatePanel';
+import PersonalDetailsPanel from '../../../../components/alumni/PersonalDetailsPanel';
+import { Field, SectionCard } from '../../../../components/alumni/uiPrimitives';
+import { isExamCategory } from '@/lib/examDocuments';
 import {
   ACCENT,
   ACCENT_SOFT,
@@ -46,27 +51,6 @@ const yearChipSx = { height: 24, fontSize: 12, bgcolor: ACCENT_SOFT, color: ACCE
 
 function titleCase(s?: string | null): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-}
-
-function SectionCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <Paper variant="outlined" sx={{ borderRadius: 2, borderColor: LINE, mb: 2, overflow: 'hidden' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.25, bgcolor: HEAD_BG, borderBottom: '1px solid', borderColor: LINE }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: MUTED }}>{title.toUpperCase()}</Typography>
-        {action}
-      </Box>
-      <Box sx={{ p: 2 }}>{children}</Box>
-    </Paper>
-  );
-}
-
-function Field({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <Box sx={{ mb: 1.5 }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: MUTED }}>{label.toUpperCase()}</Typography>
-      <Typography variant="body2" color={INK}>{value || <span style={{ color: '#94A3B8' }}>Not set</span>}</Typography>
-    </Box>
-  );
 }
 
 function SocialLink({ href, icon, label, color }: { href?: string | null; icon: ReactNode; label: string; color: string }) {
@@ -178,6 +162,9 @@ export default function AlumniProfilePage() {
   const activity = detail.activity;
   const docs: any[] = detail.nexusDocuments || [];
   const adminDocs: any[] = detail.studentDocuments || [];
+  // Exam admit cards / scorecards / custom docs are managed in the Exam records card below, so
+  // keep them out of the generic Documents list to avoid showing each file twice.
+  const genericAdminDocs: any[] = adminDocs.filter((d: any) => !isExamCategory(d.category));
   const msSnap = user.metadata?.microsoft_profile_snapshot;
   const msArchivedAt = user.metadata?.microsoft_offboarded_at;
 
@@ -233,6 +220,9 @@ export default function AlumniProfilePage() {
           </Box>
         </Box>
       </Paper>
+
+      <MergeDuplicatePanel userId={userId} adminId={supabaseUserId} onMerged={load} />
+      <PersonalDetailsPanel user={user} leadProfile={detail.leadProfile} userId={userId} adminId={supabaseUserId} onSaved={load} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
         {/* College & course */}
@@ -311,9 +301,21 @@ export default function AlumniProfilePage() {
         </SectionCard>
       )}
 
+      {/* Exam records: attempted exams + admit cards / scorecards / custom documents */}
+      <SectionCard title="Exam records">
+        <AlumniExamRecords
+          userId={userId}
+          adminId={supabaseUserId}
+          profile={profile}
+          documents={adminDocs}
+          variant="full"
+          onChanged={load}
+        />
+      </SectionCard>
+
       {/* Documents */}
       <SectionCard
-        title={`Documents (${docs.length + adminDocs.length})`}
+        title={`Documents (${docs.length + genericAdminDocs.length})`}
         action={
           <Button
             component="label"
@@ -335,14 +337,14 @@ export default function AlumniProfilePage() {
           </Button>
         }
       >
-        {docs.length === 0 && adminDocs.length === 0 ? (
+        {docs.length === 0 && genericAdminDocs.length === 0 ? (
           <Typography variant="body2" sx={{ color: MUTED }}>
             No documents yet. Use Upload to add one (e.g. a missing onboarding document).
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             {[
-              ...adminDocs.map((d: any) => ({ ...d, _url: d.file_url, _meta: [titleCase(d.category), 'Uploaded by staff'].filter(Boolean).join(' · ') })),
+              ...genericAdminDocs.map((d: any) => ({ ...d, _url: d.file_url, _meta: [titleCase(d.category), 'Uploaded by staff'].filter(Boolean).join(' · ') })),
               ...docs.map((d: any) => ({ ...d, _url: d.sharepoint_web_url || d.file_url, _meta: [titleCase(d.category), 'Collected at onboarding'].filter(Boolean).join(' · ') })),
             ].map((d: any, i: number, arr: any[]) => (
               <Box key={d.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1, borderBottom: i < arr.length - 1 ? '1px solid' : 'none', borderColor: '#F1F5F9' }}>

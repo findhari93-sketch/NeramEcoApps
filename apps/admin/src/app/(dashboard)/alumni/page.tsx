@@ -680,7 +680,7 @@ export default function AlumniPage() {
                         onChange={() => toggleStudent(s.id)}
                         sx={{ p: 0.25, mt: -0.25 }}
                       />
-                      <UserAvatar src={s.avatar_url} name={s.name} size={40} />
+                      <UserAvatar src={s.avatar_url} name={s.name} size={40} tapToView={false} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>
                           {s.name || 'Unnamed'}
@@ -747,7 +747,7 @@ export default function AlumniPage() {
                       sx={{ p: 0.5, ml: '-3px' }}
                     />
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, pr: 1 }}>
-                      <UserAvatar src={s.avatar_url} name={s.name} size={34} />
+                      <UserAvatar src={s.avatar_url} name={s.name} size={34} tapToView={false} />
                       <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={600} color={INK} noWrap>
                           {s.name || 'Unnamed'}
@@ -873,7 +873,7 @@ export default function AlumniPage() {
                   }}
                 >
                   <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                    <UserAvatar src={a.avatar_url} name={a.name} size={44} />
+                    <UserAvatar src={a.avatar_url} name={a.name} size={44} tapToView={false} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Typography variant="body2" fontWeight={700} color={INK} noWrap>
@@ -926,6 +926,7 @@ export default function AlumniPage() {
       <StudentDetailDrawer
         open={!!studentDrawer}
         student={studentDrawer}
+        adminId={supabaseUserId}
         onClose={() => setStudentDrawer(null)}
         onGraduate={graduateSingle}
       />

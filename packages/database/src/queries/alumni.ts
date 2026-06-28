@@ -32,6 +32,12 @@ export interface AlumniProfile {
   exam_name: string | null;
   exam_result: string | null;
   achievement_note: string | null;
+  // Exam records: which entrance exams the alumnus attempted, and how many times. The matching
+  // admit-card / scorecard files live in student_documents, tagged by an exam category slug.
+  attempted_nata: boolean;
+  attempted_jee: boolean;
+  nata_attempt_count: number;
+  jee_attempt_count: number;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -451,6 +457,10 @@ const ALUMNI_PROFILE_FIELDS = [
   'exam_name',
   'exam_result',
   'achievement_note',
+  'attempted_nata',
+  'attempted_jee',
+  'nata_attempt_count',
+  'jee_attempt_count',
 ];
 
 /** Insert or update an alumnus's directory profile (1:1 with the user). */
@@ -544,6 +554,26 @@ export async function addStudentDocument(
     .single();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Delete an admin-uploaded document row and return its storage path so the caller can remove the
+ * underlying file from the bucket (best-effort). Returns null if the row did not exist.
+ */
+export async function deleteStudentDocument(
+  docId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ file_path: string | null } | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: existing } = await supabase
+    .from('student_documents')
+    .select('id, file_path')
+    .eq('id', docId)
+    .maybeSingle();
+  if (!existing) return null;
+  const { error } = await supabase.from('student_documents').delete().eq('id', docId);
+  if (error) throw error;
+  return { file_path: existing.file_path || null };
 }
 
 // ============================================

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, addStudentDocument, listStudentDocuments } from '@neram/database';
+import { getSupabaseAdminClient, addStudentDocument, listStudentDocuments, deleteStudentDocument } from '@neram/database';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BUCKET = 'documents';
@@ -71,5 +71,40 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   } catch (error: any) {
     console.error('CRM alumni documents upload error:', error);
     return NextResponse.json({ error: error.message || 'Failed to upload document' }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/crm/alumni/[id]/documents?docId=<uuid>
+ * Remove an admin-uploaded document: delete the row, then best-effort remove the bucket file.
+ */
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    if (!UUID_REGEX.test(params.id)) {
+      return NextResponse.json({ error: 'Invalid id.' }, { status: 400 });
+    }
+    const docId = request.nextUrl.searchParams.get('docId') || '';
+    if (!UUID_REGEX.test(docId)) {
+      return NextResponse.json({ error: 'docId must be a valid UUID.' }, { status: 400 });
+    }
+
+    const removed = await deleteStudentDocument(docId);
+    if (!removed) {
+      return NextResponse.json({ error: 'Document not found.' }, { status: 404 });
+    }
+
+    if (removed.file_path) {
+      try {
+        await getSupabaseAdminClient().storage.from(BUCKET).remove([removed.file_path]);
+      } catch (storageErr) {
+        // The row is gone; a stranded file is acceptable and must not fail the request.
+        console.warn('CRM alumni document storage cleanup failed:', storageErr);
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('CRM alumni documents delete error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to delete document' }, { status: 500 });
   }
 }
