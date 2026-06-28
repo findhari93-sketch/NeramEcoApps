@@ -43,10 +43,20 @@ export async function GET() {
     // to a configurable app_settings entry (e.g., 'entra_staff_email_patterns') so that
     // new staff accounts don't require a code change to be excluded from student sync.
     const staffPatterns = ['admin', 'teacher', 'hari', 'info@neramclasses.com', 'shanthi', 'paramesh', 'tamil'];
+    // Shared/service mailboxes (noreply@, support@, etc.) live in the same tenant but
+    // are not people. Matched on the local part (before @) so they are never surfaced
+    // as students to enroll. See the noreply@/support@ cleanup, 2026-06-28.
+    const serviceLocalParts = new Set([
+      'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'support', 'info', 'contact',
+      'hello', 'office', 'accounts', 'billing', 'help', 'mail', 'team', 'postmaster',
+      'webmaster', 'hr', 'careers', 'jobs', 'enquiry', 'enquiries', 'noreply-neram',
+    ]);
     const studentAccounts = allAdUsers.filter((u: any) => {
       if (!u.accountEnabled) return false;
       const email = (u.userPrincipalName || '').toLowerCase();
-      // Exclude service accounts and staff
+      // Exclude service/shared mailboxes by their local part
+      if (serviceLocalParts.has(email.split('@')[0])) return false;
+      // Exclude staff
       if (staffPatterns.some((p) => email.includes(p.toLowerCase()))) return false;
       // Include neramclasses.com, nerasmclasses.onmicrosoft.com, neram.co.in accounts
       if (email.includes('neramclasses') || email.includes('nerasmclasses') || email.includes('neram.co.in')) return true;

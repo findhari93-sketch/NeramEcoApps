@@ -43,6 +43,8 @@ interface StudentDetailDrawerProps {
   onGraduate?: (studentId: string) => void;
   /** Optional extra footer action, e.g. "Move to Software course" / "Move back to students". */
   moveAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
+  /** Optional "Mark as staff" action: reclassify a mis-tagged student as a teacher/admin. */
+  staffAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
 }
 
 const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', color: ACCENT, fontWeight: 700 } as const;
@@ -54,7 +56,7 @@ const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', c
  * published/hidden split that answers "how many reached the gallery"), onboarding
  * documents, and a one-click path to graduate or to the full CRM profile.
  */
-export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction }: StudentDetailDrawerProps) {
+export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction, staffAction }: StudentDetailDrawerProps) {
   const router = useRouter();
   const userId = student?.id || null;
   const [detail, setDetail] = useState<any>(null);
@@ -182,7 +184,7 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
 
       {/* Footer actions */}
       {student && (
-        <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: LINE, display: 'flex', gap: 1 }}>
+        <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: LINE, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button
             size="small"
             variant="contained"
@@ -201,6 +203,17 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
               sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
             >
               {moveAction.label}
+            </Button>
+          )}
+          {staffAction && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={staffAction.icon}
+              onClick={() => userId && staffAction.onClick(userId)}
+              sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
+            >
+              {staffAction.label}
             </Button>
           )}
           {onGraduate && (

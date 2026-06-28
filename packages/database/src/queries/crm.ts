@@ -1789,3 +1789,47 @@ export async function bulkSetStudentProgram(
 
   return { updated: (data || []).length };
 }
+
+/** A staff role a user can be reclassified to via "Mark as staff". */
+export type StaffRole = 'teacher' | 'admin';
+
+/**
+ * Reclassify users to a staff role. Used by the admin "Mark as staff" action when
+ * someone who is actually a staff member was created/imported as a student, e.g. the
+ * Entra sync (apps/admin/.../students/sync-entra) defaults every tenant account it
+ * imports to user_type='student', so teachers/admins can land in the Students list.
+ *
+ * Flipping user_type to 'teacher'/'admin' removes them from the Students list (which
+ * filters user_type='student') AND gives the correct Nexus role: the Nexus auth route
+ * derives nexusRole from user_type ('admin'->admin, 'teacher'->teacher) and only gates
+ * user_type='student', so staff are never caught by the "closed for renovation" gate.
+ * 'admin' additionally unlocks the admin dashboard (AdminGuard requires user_type='admin').
+ * Mirrors bulkSetStudentProgram, incl. recordUserHistory audit.
+ */
+export async function bulkSetUserRole(
+  userIds: string[],
+  role: StaffRole,
+  adminId: string,
+  client?: TypedSupabaseClient
+): Promise<{ updated: number }> {
+  const supabase = client || getSupabaseAdminClient();
+
+  if (role !== 'teacher' && role !== 'admin') {
+    throw new Error(`Invalid staff role "${role}". Expected 'teacher' or 'admin'.`);
+  }
+  if (!userIds.length) return { updated: 0 };
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ user_type: role, updated_at: new Date().toISOString() })
+    .in('id', userIds)
+    .select('id');
+
+  if (error) throw error;
+
+  for (const row of data || []) {
+    await recordUserHistory(supabase, row.id, 'user_type', null, role, adminId);
+  }
+
+  return { updated: (data || []).length };
+}

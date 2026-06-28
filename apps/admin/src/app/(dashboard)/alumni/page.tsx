@@ -39,11 +39,13 @@ import InstagramIcon from '@mui/icons-material/Instagram';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import LaptopMacIcon from '@mui/icons-material/LaptopMac';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GraduateDialog from '../../../components/crm/GraduateDialog';
 import SetAcademicYearDialog from '../../../components/crm/SetAcademicYearDialog';
 import AlumniDetailDrawer from '../../../components/alumni/AlumniDetailDrawer';
 import StudentDetailDrawer from '../../../components/alumni/StudentDetailDrawer';
+import MarkStaffDialog from '../../../components/alumni/MarkStaffDialog';
 import AlumniManualAddDialog from '../../../components/alumni/AlumniManualAddDialog';
 import { academicYearOptions, currentAcademicYear, formatDate } from '../../../components/crm/academic-years';
 
@@ -245,6 +247,8 @@ export default function AlumniPage() {
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [setYearOpen, setSetYearOpen] = useState(false);
   const [studentDrawer, setStudentDrawer] = useState<StudentRow | null>(null);
+  // People queued for the "Mark as staff" dialog (bulk selection or a single drawer row).
+  const [markStaff, setMarkStaff] = useState<StudentRow[] | null>(null);
 
   // ---- Alumni tab (directory) ----
   const [alumni, setAlumni] = useState<AlumniRow[]>([]);
@@ -448,6 +452,42 @@ export default function AlumniPage() {
     setSelection(new Set([id]));
     setGraduateOpen(true);
   }, []);
+
+  // "Mark as staff": someone tagged as a student is actually a staff member (e.g.
+  // swept in by the Entra sync, which defaults imports to user_type='student').
+  // Open the confirm dialog pre-loaded with the selection or a single drawer row.
+  const markStaffSingle = useCallback(
+    (id: string) => {
+      const row = allStudents.find((s) => s.id === id);
+      if (row) setMarkStaff([row]);
+    },
+    [allStudents],
+  );
+
+  // Confirm handler for MarkStaffDialog: set the chosen staff role, then drop the
+  // moved rows from the Students list (they no longer match user_type='student').
+  // Throws on failure so the dialog surfaces the error inline.
+  const markAsStaff = useCallback(
+    async (role: 'teacher' | 'admin') => {
+      const ids = (markStaff || []).map((s) => s.id);
+      if (!ids.length) return;
+      if (!supabaseUserId) throw new Error('Admin session not ready, try again in a moment.');
+      const res = await fetch('/api/crm/alumni/set-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: ids, role, adminId: supabaseUserId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update role');
+      const moved = new Set(ids);
+      setAllStudents((prev) => prev.filter((s) => !moved.has(s.id)));
+      setSelection(new Set());
+      setStudentDrawer(null);
+      const noun = data.updated === 1 ? 'person' : 'people';
+      setBanner({ type: 'success', text: `Marked ${data.updated} ${noun} as ${role === 'admin' ? 'admin' : 'staff'}.` });
+    },
+    [markStaff, supabaseUserId],
+  );
 
   const filteredAlumni = useMemo(() => {
     let r = alumni;
@@ -657,6 +697,11 @@ export default function AlumniPage() {
                 <Tooltip title="These students are in the software course, not architecture exam prep. Move them to the Software page and out of Nexus.">
                   <Button size="small" startIcon={<LaptopMacIcon />} variant="outlined" onClick={() => moveToSoftware([...selection])} sx={{ textTransform: 'none', borderRadius: 2, borderColor: LINE, color: INK, bgcolor: 'background.paper' }}>
                     Move to Software course
+                  </Button>
+                </Tooltip>
+                <Tooltip title="These are staff (teachers/admins), not students. Mark them as staff to remove them from this list and give them the right Nexus access.">
+                  <Button size="small" startIcon={<BadgeOutlinedIcon />} variant="outlined" onClick={() => setMarkStaff(selectedStudents)} sx={{ textTransform: 'none', borderRadius: 2, borderColor: LINE, color: INK, bgcolor: 'background.paper' }}>
+                    Mark as staff
                   </Button>
                 </Tooltip>
                 <Button size="small" startIcon={<HistoryEduIcon />} variant="contained" onClick={() => setGraduateOpen(true)} sx={{ textTransform: 'none', borderRadius: 2, bgcolor: ACCENT, '&:hover': { bgcolor: '#92400E' } }}>
@@ -967,6 +1012,7 @@ export default function AlumniPage() {
         onClose={() => setStudentDrawer(null)}
         onGraduate={graduateSingle}
         moveAction={{ label: 'Move to Software course', icon: <LaptopMacIcon />, onClick: (id) => moveToSoftware([id]) }}
+        staffAction={{ label: 'Mark as staff', icon: <BadgeOutlinedIcon />, onClick: markStaffSingle }}
       />
 
       <AlumniManualAddDialog
@@ -995,6 +1041,13 @@ export default function AlumniPage() {
         defaultYear={graduateDefaultYear}
         onClose={closeGraduate}
         onConfirm={handleGraduate}
+      />
+
+      <MarkStaffDialog
+        open={!!markStaff}
+        people={markStaff || []}
+        onClose={() => setMarkStaff(null)}
+        onConfirm={markAsStaff}
       />
     </Box>
   );
