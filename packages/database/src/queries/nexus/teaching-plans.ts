@@ -133,6 +133,17 @@ export async function updateTeachingPlan(
   return data as NexusTeachingPlan;
 }
 
+/** Hard-delete a plan. Cascade removes entries, audit log, day items, catch-up;
+ *  scheduled classes survive (plan_entry_id is SET NULL). */
+export async function deleteTeachingPlan(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.from(PLANS).delete().eq('id', id);
+  if (error) throw error;
+}
+
 /** Lightweight plan row (id, classroom, title, status) for API-layer checks. */
 export async function getPlanMeta(
   planId: string,

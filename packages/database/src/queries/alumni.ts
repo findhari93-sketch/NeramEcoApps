@@ -9,6 +9,7 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
 import { getUserJourneyDetail } from './crm';
+import { listColleges } from './colleges';
 
 const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
 
@@ -631,4 +632,173 @@ export async function createManualAlumnus(
   await upsertAlumniProfile(user.id, profileFields, adminId, supabase);
 
   return { userId: user.id };
+}
+
+// ============================================
+// BULK HISTORICAL ALUMNI (CSV / Excel import)
+// ============================================
+
+export interface BulkAlumnusRow {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  academicYear?: string | null;
+  college_id?: string | null;
+  college_name?: string | null;
+  course_branch?: string | null;
+  linkedin_url?: string | null;
+  instagram_url?: string | null;
+}
+
+export interface BulkAlumniResult {
+  successful: number;
+  total: number;
+  results: { index: number; success: boolean; userId?: string; error?: string }[];
+}
+
+/**
+ * Create many historical alumni in one call. Each row runs through the same
+ * createManualAlumnus path, so behaviour is identical to a single add. There is
+ * no cross-row transaction: a row that fails is reported and the rest continue.
+ */
+export async function bulkCreateManualAlumni(
+  rows: BulkAlumnusRow[],
+  adminId: string,
+  client?: TypedSupabaseClient,
+): Promise<BulkAlumniResult> {
+  const supabase = client || getSupabaseAdminClient();
+  const results: BulkAlumniResult['results'] = [];
+  let successful = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || ({} as BulkAlumnusRow);
+    try {
+      const { userId } = await createManualAlumnus(row, adminId, supabase);
+      results.push({ index: i, success: true, userId });
+      successful++;
+    } catch (err: any) {
+      results.push({ index: i, success: false, error: err?.message || 'Failed to add row' });
+    }
+  }
+
+  return { successful, total: rows.length, results };
+}
+
+function normEmail(v?: string | null): string {
+  return (v || '').trim().toLowerCase();
+}
+function normPhone(v?: string | null): string {
+  const digits = (v || '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+function normName(v?: string | null): string {
+  return (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export interface DuplicateCandidate {
+  index: number;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+export interface DuplicateMatch {
+  userId: string;
+  name: string | null;
+  matchedOn: 'email' | 'phone' | 'name';
+  isAlumni: boolean;
+}
+
+/**
+ * For each candidate row, find an existing user that looks like the same person
+ * (same email, same last-10-digit phone, or exact case-insensitive name). Used by
+ * the bulk-import dry run to flag likely duplicates before writing anything.
+ */
+export async function findAlumniDuplicates(
+  candidates: DuplicateCandidate[],
+  client?: TypedSupabaseClient,
+): Promise<Record<number, DuplicateMatch>> {
+  const supabase = client || getSupabaseAdminClient();
+  const out: Record<number, DuplicateMatch> = {};
+  if (!candidates.length) return out;
+
+  const { data: users } = await supabase
+    .from('users')
+    .select('id, name, email, phone, is_alumni')
+    .range(0, 49999);
+
+  const byEmail = new Map<string, any>();
+  const byPhone = new Map<string, any>();
+  const byName = new Map<string, any>();
+  for (const u of users || []) {
+    const e = normEmail(u.email);
+    const p = normPhone(u.phone);
+    const n = normName(u.name);
+    if (e && !byEmail.has(e)) byEmail.set(e, u);
+    if (p && p.length === 10 && !byPhone.has(p)) byPhone.set(p, u);
+    if (n && !byName.has(n)) byName.set(n, u);
+  }
+
+  for (const c of candidates) {
+    const e = normEmail(c.email);
+    const p = normPhone(c.phone);
+    const n = normName(c.name);
+    let hit: any = null;
+    let matchedOn: DuplicateMatch['matchedOn'] | null = null;
+    if (e && byEmail.has(e)) {
+      hit = byEmail.get(e);
+      matchedOn = 'email';
+    } else if (p && p.length === 10 && byPhone.has(p)) {
+      hit = byPhone.get(p);
+      matchedOn = 'phone';
+    } else if (n && byName.has(n)) {
+      hit = byName.get(n);
+      matchedOn = 'name';
+    }
+    if (hit && matchedOn) {
+      out[c.index] = { userId: hit.id, name: hit.name, matchedOn, isAlumni: !!hit.is_alumni };
+    }
+  }
+
+  return out;
+}
+
+export interface CollegeMatch {
+  id: string;
+  name: string;
+  city: string | null;
+}
+
+/**
+ * Resolve a set of free-text college names to catalog colleges. Dedupes names,
+ * runs one search per unique name, and prefers an exact case-insensitive name
+ * match over the top-ranked search result. Returns a name -> match|null map
+ * keyed by the lowercased trimmed input.
+ */
+export async function matchCollegesByNames(
+  names: string[],
+  client?: TypedSupabaseClient,
+): Promise<Record<string, CollegeMatch | null>> {
+  const supabase = client || getSupabaseAdminClient();
+  const out: Record<string, CollegeMatch | null> = {};
+  const unique = Array.from(
+    new Set(names.map((n) => (n || '').trim()).filter((n) => n.length >= 2)),
+  );
+
+  for (const name of unique) {
+    const key = name.toLowerCase();
+    try {
+      const { colleges } = await listColleges({ search: name, limit: 5 }, supabase);
+      if (!colleges.length) {
+        out[key] = null;
+        continue;
+      }
+      const exact = colleges.find((c: any) => (c.name || '').trim().toLowerCase() === key);
+      const pick = exact || colleges[0];
+      out[key] = { id: pick.id, name: pick.name, city: pick.city ?? null };
+    } catch {
+      out[key] = null;
+    }
+  }
+
+  return out;
 }

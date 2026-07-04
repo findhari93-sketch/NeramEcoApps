@@ -28,10 +28,15 @@ import {
   FormControlLabel,
   EmptyState,
   Avatar,
+  Collapse,
   alpha,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
+import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { addDays, isClassDay, istToday } from '@/lib/plan-flow';
@@ -91,6 +96,8 @@ export default function CoursePlansPage() {
   const [plans, setPlans] = useState<PlanCard[] | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [confirm, setConfirm] = useState<{ kind: 'archive' | 'delete'; plan: PlanCard } | null>(null);
 
   const [dialog, setDialog] = useState(false);
   const [pTitle, setPTitle] = useState('');
@@ -148,6 +155,56 @@ export default function CoursePlansPage() {
       router.push(`/teacher/course-plans/${data.plan.id}`);
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Failed to create plan', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Move a plan to the archived section (soft delete). Recoverable via restore.
+  const archivePlan = async (p: PlanCard) => {
+    setBusy(true);
+    try {
+      await authFetch(`/api/teaching-plans/${p.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'archived' }),
+      });
+      setConfirm(null);
+      await load();
+      setSnack({ msg: 'Plan archived', sev: 'success' });
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed to archive plan', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Bring an archived plan back into the working list as a Draft.
+  const restorePlan = async (p: PlanCard) => {
+    setBusy(true);
+    try {
+      await authFetch(`/api/teaching-plans/${p.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'draft' }),
+      });
+      await load();
+      setSnack({ msg: 'Plan restored', sev: 'success' });
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed to restore plan', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Permanently remove an archived plan (cascade). Not reversible.
+  const deletePlan = async (p: PlanCard) => {
+    setBusy(true);
+    try {
+      await authFetch(`/api/teaching-plans/${p.id}`, { method: 'DELETE' });
+      setConfirm(null);
+      await load();
+      setSnack({ msg: 'Plan deleted', sev: 'success' });
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed to delete plan', sev: 'error' });
     } finally {
       setBusy(false);
     }
@@ -216,9 +273,17 @@ export default function CoursePlansPage() {
           </Typography>
           <Stack direction="row" spacing={0.75} sx={{ ml: 'auto' }} flexWrap="wrap" useFlexGap>
             {isArchived ? (
-              <Button size="small" startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 15 }} />} onClick={() => openDialog(p)} sx={{ minHeight: 36, fontWeight: 700 }}>
-                Duplicate as template
-              </Button>
+              <>
+                <Button size="small" startIcon={<ContentCopyOutlinedIcon sx={{ fontSize: 15 }} />} onClick={() => openDialog(p)} sx={{ minHeight: 36, fontWeight: 700 }}>
+                  Duplicate as template
+                </Button>
+                <Button size="small" startIcon={<UnarchiveOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => restorePlan(p)} disabled={busy} sx={{ minHeight: 36, fontWeight: 700 }}>
+                  Restore
+                </Button>
+                <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={() => setConfirm({ kind: 'delete', plan: p })} sx={{ minHeight: 36, fontWeight: 700 }}>
+                  Delete
+                </Button>
+              </>
             ) : (
               <>
                 <Button size="small" variant="contained" onClick={() => router.push(`/teacher/course-plans/${p.id}`)} sx={{ minHeight: 36 }}>
@@ -229,6 +294,9 @@ export default function CoursePlansPage() {
                 </Button>
                 <Button size="small" variant="outlined" onClick={() => router.push(`/teacher/course-plans/${p.id}/health`)} sx={{ minHeight: 36 }}>
                   Health
+                </Button>
+                <Button size="small" color="inherit" startIcon={<Inventory2OutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setConfirm({ kind: 'archive', plan: p })} sx={{ minHeight: 36, color: 'text.secondary' }}>
+                  Archive
                 </Button>
               </>
             )}
@@ -322,9 +390,26 @@ export default function CoursePlansPage() {
           {activeOrDraft.map((p) => (
             <PlanRow key={p.id} p={p} />
           ))}
-          {archived.map((p) => (
-            <PlanRow key={p.id} p={p} />
-          ))}
+          {archived.length > 0 && (
+            <>
+              <Button
+                onClick={() => setShowArchived((v) => !v)}
+                startIcon={
+                  <ExpandMoreIcon sx={{ transform: showArchived ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                }
+                sx={{ alignSelf: 'flex-start', color: 'text.secondary', fontWeight: 700, minHeight: 40 }}
+              >
+                {showArchived ? 'Hide archived' : `Show archived (${archived.length})`}
+              </Button>
+              <Collapse in={showArchived} unmountOnExit>
+                <Stack spacing={1.5}>
+                  {archived.map((p) => (
+                    <PlanRow key={p.id} p={p} />
+                  ))}
+                </Stack>
+              </Collapse>
+            </>
+          )}
         </Stack>
       )}
 
@@ -371,6 +456,49 @@ export default function CoursePlansPage() {
             {duplicateFrom ? 'Duplicate plan' : 'Create plan'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!confirm} onClose={() => !busy && setConfirm(null)} maxWidth="xs" fullWidth>
+        {confirm?.kind === 'archive' ? (
+          <>
+            <DialogTitle>Archive “{confirm.plan.title}”?</DialogTitle>
+            <DialogContent>
+              <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+                {confirm.plan.status === 'active' && (
+                  <Alert severity="warning">
+                    This is the <strong>active</strong> plan driving a live batch. Archiving stops it from showing in your working list.
+                  </Alert>
+                )}
+                <Typography variant="body2" color="text.secondary">
+                  It moves to the archived section, hidden from your working list. You can restore it any time, or delete it permanently later.
+                </Typography>
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setConfirm(null)} disabled={busy}>Cancel</Button>
+              <Button variant="contained" color="warning" onClick={() => archivePlan(confirm.plan)} disabled={busy}>
+                {confirm.plan.status === 'active' ? 'Yes, archive the active plan' : 'Archive plan'}
+              </Button>
+            </DialogActions>
+          </>
+        ) : confirm?.kind === 'delete' ? (
+          <>
+            <DialogTitle>Delete “{confirm.plan.title}” permanently?</DialogTitle>
+            <DialogContent>
+              <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+                <Alert severity="error">
+                  This cannot be undone. The plan and all its topics, tests and history are removed. Scheduled classes are kept, they just unlink from this plan.
+                </Alert>
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setConfirm(null)} disabled={busy}>Cancel</Button>
+              <Button variant="contained" color="error" onClick={() => deletePlan(confirm.plan)} disabled={busy}>
+                Delete permanently
+              </Button>
+            </DialogActions>
+          </>
+        ) : null}
       </Dialog>
 
       <Snackbar open={!!snack} autoHideDuration={3500} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

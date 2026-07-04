@@ -153,6 +153,9 @@ importers:
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
+      xlsx:
+        specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+        version: '@cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz'
     devDependencies:
       '@types/node':
         specifier: ^20.10.0
@@ -16298,4 +16301,12 @@ packages:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
+    dev: false
+
+  '@cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz':
+    resolution: {tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}
+    name: xlsx
+    version: 0.20.3
+    engines: {node: '>=0.8'}
+    hasBin: true
     dev: false

@@ -31,7 +31,8 @@
     "react-easy-crop": "^5.5.6",
     "recharts": "^3.8.1",
     "resend": "^2.1.0",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

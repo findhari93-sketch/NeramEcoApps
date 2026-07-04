@@ -3,6 +3,7 @@ import {
   getSupabaseAdminClient,
   getTeachingPlanWithEntries,
   updateTeachingPlan,
+  deleteTeachingPlan,
   addPlanEntries,
   updatePlanEntry,
   removePlanEntry,
@@ -116,12 +117,41 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             ? 'made the plan Active'
             : updates.status === 'completed'
               ? 'marked the plan Completed'
-              : 'edited the plan details',
+              : updates.status === 'archived'
+                ? 'archived the plan'
+                : updates.status === 'draft'
+                  ? 'restored the plan'
+                  : 'edited the plan details',
       },
     });
     return NextResponse.json({ plan });
   } catch (err) {
     return errorResponse(err, 'Failed to update plan');
+  }
+}
+
+/**
+ * DELETE /api/teaching-plans/[id]  (staff) — permanently removes a plan.
+ * Guarded: only archived plans can be hard-deleted (active/draft/completed
+ * must be archived first). Cascade removes entries, audit log, day items and
+ * catch-up; scheduled classes survive (plan_entry_id is set null).
+ */
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await getRequestUser(request.headers.get('Authorization'));
+    assertStaff(user);
+    const meta = await getPlanMeta(params.id);
+    if (!meta) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+    if (meta.status !== 'archived') {
+      return NextResponse.json(
+        { error: 'Only archived plans can be deleted. Archive it first.' },
+        { status: 400 },
+      );
+    }
+    await deleteTeachingPlan(params.id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return errorResponse(err, 'Failed to delete plan');
   }
 }
 

@@ -46,7 +46,7 @@ import SetAcademicYearDialog from '../../../components/crm/SetAcademicYearDialog
 import AlumniDetailDrawer from '../../../components/alumni/AlumniDetailDrawer';
 import StudentDetailDrawer from '../../../components/alumni/StudentDetailDrawer';
 import MarkStaffDialog from '../../../components/alumni/MarkStaffDialog';
-import AlumniManualAddDialog from '../../../components/alumni/AlumniManualAddDialog';
+import AlumniAddDrawer from '../../../components/alumni/AlumniAddDrawer';
 import { academicYearOptions, currentAcademicYear, formatDate } from '../../../components/crm/academic-years';
 import { useBatches } from '@/contexts/BatchContext';
 
@@ -1026,7 +1026,7 @@ export default function AlumniPage() {
         staffAction={{ label: 'Mark as staff', icon: <BadgeOutlinedIcon />, onClick: markStaffSingle }}
       />
 
-      <AlumniManualAddDialog
+      <AlumniAddDrawer
         open={manualAddOpen}
         adminId={supabaseUserId}
         onClose={() => setManualAddOpen(false)}
@@ -1035,6 +1035,10 @@ export default function AlumniPage() {
           setTab(1);
           loadAlumni();
           setDrawerUserId(newId);
+        }}
+        onBulkAdded={() => {
+          setTab(1);
+          loadAlumni();
         }}
       />
 
