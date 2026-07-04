@@ -33,8 +33,10 @@ export interface StudentRow {
   first_name: string;
   last_name: string;
   avatar_url: string | null;
+  email: string;
   classroom_email: string | null;
   personal_email: string | null;
+  ms_teams_email: string | null;
   phone: string;
   interest_course: string | null;
   source: string | null;
@@ -42,10 +44,15 @@ export interface StudentRow {
   total_fee: number;
   fee_paid: number;
   fee_due: number;
+  final_fee: number | null;
+  full_payment_discount: number | null;
+  discount_amount: number | null;
   academic_year: string | null;
   is_alumni: boolean;
   enrollment_date: string | null;
+  last_login_at: string | null;
   student_profile_id: string | null;
+  application_number: string | null;
   application_complete: boolean;
   application_status: string | null;
   application_missing: 'no_application' | 'incomplete' | null;

@@ -1,6 +1,40 @@
 {
   "extends": "next/core-web-vitals",
+  "plugins": ["@typescript-eslint"],
   "rules": {
     "react/no-unescaped-entities": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/app/**/page.tsx"],
+      "rules": {
+        "@typescript-eslint/ban-ts-comment": ["error", { "ts-nocheck": true }]
+      }
+    },
+    {
+      "files": [
+        "src/app/(dashboard)/counseling/allotment-lists/page.tsx",
+        "src/app/(dashboard)/counseling/audit-log/page.tsx",
+        "src/app/(dashboard)/counseling/cutoffs/page.tsx",
+        "src/app/(dashboard)/counseling/page.tsx",
+        "src/app/(dashboard)/counseling/rank-lists/page.tsx",
+        "src/app/(dashboard)/courses/page.tsx",
+        "src/app/(dashboard)/direct-enrollment/page.tsx",
+        "src/app/(dashboard)/exam-batches/page.tsx",
+        "src/app/(dashboard)/expenses/page.tsx",
+        "src/app/(dashboard)/feedback/page.tsx",
+        "src/app/(dashboard)/financial-dashboard/page.tsx",
+        "src/app/(dashboard)/messages/page.tsx",
+        "src/app/(dashboard)/payments/page.tsx",
+        "src/app/(dashboard)/payments/*/page.tsx",
+        "src/app/(dashboard)/staff-assignments/page.tsx",
+        "src/app/(dashboard)/staff-assignments/*/page.tsx",
+        "src/app/(dashboard)/student-onboarding/page.tsx",
+        "src/app/(dashboard)/support-tickets/page.tsx"
+      ],
+      "rules": {
+        "@typescript-eslint/ban-ts-comment": "off"
+      }
+    }
+  ]
 }

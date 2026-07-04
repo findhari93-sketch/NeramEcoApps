@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -33,7 +32,7 @@ import LaptopMacIcon from '@mui/icons-material/LaptopMac';
 import InsightsIcon from '@mui/icons-material/Insights';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import StudentHubTable from '@/components/students/StudentHubTable';
+import StudentHubTable, { type StudentRow } from '@/components/students/StudentHubTable';
 import StudentDetailDrawer from '@/components/alumni/StudentDetailDrawer';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GraduateDialog from '@/components/crm/GraduateDialog';
@@ -42,39 +41,8 @@ import MarkStaffDialog from '@/components/alumni/MarkStaffDialog';
 import { useBatches } from '@/contexts/BatchContext';
 import { currentAcademicYear } from '@/components/crm/academic-years';
 
-// Types for the student data
-interface StudentRow {
-  id: string;
-  user_id: string;
-  first_name: string;
-  last_name: string;
-  name?: string | null;
-  email: string;
-  classroom_email: string | null;
-  personal_email: string | null;
-  phone: string;
-  avatar_url: string | null;
-  academic_year: string | null;
-  is_alumni: boolean;
-  last_login_at: string | null;
-  enrollment_date: string;
-  payment_status: string;
-  total_fee: number;
-  fee_paid: number;
-  fee_due: number;
-  interest_course: string | null;
-  student_id: string | null;
-  student_profile_id: string | null;
-  application_number: string | null;
-  final_fee: number | null;
-  full_payment_discount: number | null;
-  discount_amount: number | null;
-  source: string | null;
-  ms_teams_email: string | null;
-  application_complete: boolean;
-  application_status: string | null;
-  application_missing: 'no_application' | 'incomplete' | null;
-}
+// StudentRow is defined once in StudentHubTable (the table consumer) and imported
+// here so the page state, the table, and its row-click callbacks all share one type.
 
 interface Stats {
   totalStudents: number;
@@ -276,7 +244,6 @@ function RevenueOverview({
 }
 
 export default function StudentsPage() {
-  const router = useRouter();
   const { supabaseUserId } = useAdminProfile();
 
   const [students, setStudents] = useState<StudentRow[]>([]);
