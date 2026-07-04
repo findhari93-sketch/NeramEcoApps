@@ -110,6 +110,18 @@ export async function POST(request: NextRequest) {
       joinUrl = result.joinUrl;
       extras.attendeeCount = result.attendeeCount;
 
+      // Enable auto-record on the linked online meeting (best-effort, non-blocking).
+      // The group calendar event does not take recordAutomatically directly, so we
+      // resolve the online meeting by its join URL and PATCH the flag.
+      if (joinUrl) {
+        try {
+          await enableAutoRecord(token, joinUrl);
+          extras.autoRecord = true;
+        } catch (err) {
+          console.error('Auto-record enable failed (non-blocking):', err);
+        }
+      }
+
       // Post to Teams channel (best-effort, non-blocking)
       try {
         await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl });
@@ -185,6 +197,9 @@ async function createStandaloneMeeting(
       subject: scheduledClass.title,
       startDateTime,
       endDateTime,
+      // Auto-record so the class becomes a gated catch-up recap with no manual
+      // step (only takes effect if the organizer's Teams policy allows it).
+      recordAutomatically: true,
       lobbyBypassSettings: {
         scope: (scheduledClass.lobby_bypass as string) || 'organization',
       },
@@ -198,6 +213,34 @@ async function createStandaloneMeeting(
   }
 
   return await res.json();
+}
+
+/**
+ * Best-effort: turn on auto-recording for the online meeting behind a join URL.
+ * Resolves the meeting via the organizer's /me/onlineMeetings (delegated token)
+ * then PATCHes recordAutomatically. Only effective if the organizer's Teams
+ * meeting policy permits auto-recording; throws are caught by the caller.
+ */
+async function enableAutoRecord(token: string, joinUrl: string): Promise<void> {
+  const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
+  const lookupRes = await fetch(
+    `https://graph.microsoft.com/v1.0/me/onlineMeetings?$filter=${encodeURIComponent(filter)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!lookupRes.ok) return;
+
+  const lookup = await lookupRes.json();
+  const meetingId = lookup.value?.[0]?.id as string | undefined;
+  if (!meetingId) return;
+
+  await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ recordAutomatically: true }),
+  });
 }
 
 /**

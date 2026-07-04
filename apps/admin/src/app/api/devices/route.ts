@@ -16,6 +16,7 @@ import {
   getDeviceDistributionStats,
   getStudentDeviceSummaries,
   getStudentDeviceDetail,
+  getCurrentBatch,
 } from '@neram/database';
 
 export async function GET(req: NextRequest) {
@@ -23,8 +24,19 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type') || 'stats';
 
+    // Global exam-batch scope. Resolve 'current' to the registry current code once.
+    const batch = searchParams.get('batch') || undefined;
+    let currentBatchCode: string | undefined;
+    if (batch === 'current') {
+      try {
+        currentBatchCode = (await getCurrentBatch()).code;
+      } catch {
+        /* leave undefined; the query then shows all for 'current' */
+      }
+    }
+
     if (type === 'stats') {
-      const stats = await getDeviceDistributionStats();
+      const stats = await getDeviceDistributionStats({ batch, currentBatchCode });
       return NextResponse.json(stats);
     }
 
@@ -33,7 +45,7 @@ export async function GET(req: NextRequest) {
       const offset = parseInt(searchParams.get('offset') || '0');
       const search = searchParams.get('search') || undefined;
 
-      const result = await getStudentDeviceSummaries({ limit, offset, search });
+      const result = await getStudentDeviceSummaries({ limit, offset, search, batch, currentBatchCode });
       return NextResponse.json(result);
     }
 

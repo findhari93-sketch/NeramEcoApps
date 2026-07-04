@@ -48,7 +48,10 @@ const HEAD_BG = '#F8FAFC';
 const SEL_BG = '#FFF8F1';
 const numSx = { fontVariantNumeric: 'tabular-nums' } as const;
 const colHeadSx = { fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: MUTED } as const;
-const GRID = '44px 1fr 150px';
+// Software students are non-aspirants; most have no exam batch, so this page shows
+// a batch column for visibility but does NOT apply the global batch filter (which
+// would empty the list). The full small set is always shown.
+const GRID = '44px 1fr 110px 150px';
 
 export default function SoftwarePage() {
   const { supabaseUserId } = useAdminProfile();
@@ -279,6 +282,7 @@ export default function SoftwarePage() {
                       {s.email || 'No email'}
                     </Typography>
                     <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                      {s.academic_year ? `Batch ${s.academic_year} · ` : ''}
                       {s.last_login_at ? `Last login ${formatDate(s.last_login_at)}` : 'Never logged in'}
                     </Typography>
                   </Box>
@@ -293,6 +297,7 @@ export default function SoftwarePage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', px: 1.5, py: 1, bgcolor: HEAD_BG, borderBottom: '1px solid', borderColor: LINE }}>
             <Checkbox size="small" checked={allFilteredSelected} indeterminate={!allFilteredSelected && someFilteredSelected} onChange={toggleAll} sx={{ p: 0.5 }} />
             <Typography sx={colHeadSx}>STUDENT</Typography>
+            <Typography sx={colHeadSx}>EXAM BATCH</Typography>
             <Typography sx={colHeadSx}>LAST LOGIN</Typography>
           </Box>
           {filtered.map((s) => {
@@ -331,6 +336,9 @@ export default function SoftwarePage() {
                     </Typography>
                   </Box>
                 </Box>
+                <Typography variant="body2" sx={{ color: s.academic_year ? INK : '#94A3B8', ...numSx }}>
+                  {s.academic_year || '--'}
+                </Typography>
                 <Typography variant="body2" sx={{ color: MUTED, ...numSx }}>
                   {s.last_login_at ? formatDate(s.last_login_at) : 'Never'}
                 </Typography>

@@ -19,6 +19,7 @@ export * from './onboarding';
 export * from './fee-structures';
 export * from './notifications';
 export * from './crm';
+export * from './academicBatches';
 export * from './alumni';
 export * from './user-merge';
 export * from './scholarship';

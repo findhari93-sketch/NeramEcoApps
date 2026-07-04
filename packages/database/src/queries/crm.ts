@@ -83,6 +83,7 @@ export async function listUserJourneys(
     lifecycleStatus,
     excludeArchived = true,
     academicYear,
+    currentBatchCode,
     candidateSegment,
     dateFrom,
     dateTo,
@@ -157,7 +158,16 @@ export async function listUserJourneys(
     query = query.eq('lifecycle_status', 'active');
   }
 
-  if (academicYear) {
+  // Batch (exam-year cohort) axis. 'current' shows the current batch OR untagged
+  // users, so the many null-batch leads still surface for triage; 'none' shows
+  // only untagged; a 'YYYY-YY' code shows exactly that batch; 'all' skips the filter.
+  // currentBatchCode is the registry current (not the April-March helper) when provided.
+  if (academicYear === 'none') {
+    query = query.is('academic_year', null);
+  } else if (academicYear === 'current') {
+    const cy = currentBatchCode || currentAcademicYear();
+    query = query.or(`academic_year.eq.${cy},academic_year.is.null`);
+  } else if (academicYear && academicYear !== 'all') {
     query = query.eq('academic_year', academicYear);
   }
 
@@ -167,7 +177,7 @@ export async function listUserJourneys(
   } else if (candidateSegment === 'old_cohort') {
     query = query
       .not('academic_year', 'is', null)
-      .neq('academic_year', currentAcademicYear());
+      .neq('academic_year', currentBatchCode || currentAcademicYear());
   }
 
   if (dateFrom) {
@@ -1700,6 +1710,208 @@ export async function listActiveNexusStudents(
   }
 
   return { students: result, total: result.length };
+}
+
+// ============================================
+// STUDENTS-BY-YEAR HUB (admin /students working hub)
+// ============================================
+
+/**
+ * A row in the /students working hub: the enrolled student (a users row) with
+ * their fee snapshot left-joined from student_profiles. Unlike the legacy
+ * /students query this is users-based, so it includes active students who have
+ * no student_profiles row yet AND past-year graduated students (is_alumni=true),
+ * which the year buckets need.
+ */
+export interface HubStudent {
+  id: string; // users.id (also the user_id the per-student routes key off)
+  name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  personal_email: string | null; // personal Gmail (kept separate from the classroom account)
+  linked_classroom_email: string | null; // admin-linked @neramclasses.com classroom account
+  phone: string | null;
+  avatar_url: string | null;
+  academic_year: string | null;
+  is_alumni: boolean;
+  last_login_at: string | null;
+  ms_oid: string | null;
+  // Fees (0 / null when the student has no profile row yet)
+  student_profile_id: string | null;
+  student_id: string | null;
+  enrollment_date: string | null;
+  total_fee: number;
+  fee_paid: number;
+  fee_due: number;
+  payment_status: string | null;
+  ms_teams_email: string | null;
+}
+
+export type StudentLifecycle = 'active' | 'graduated' | 'all';
+
+/**
+ * List students for the admin /students hub, organised by academic year.
+ *
+ * year:
+ *   'current' -> the current cohort: active students whose academic_year is the
+ *                current year OR not set yet. New enrolments are not auto-stamped,
+ *                so untagged-but-active students are current and must stay in the
+ *                daily view (the admin then "Set year" to bucket the older ones).
+ *   'none'    -> only students with no academic_year set.
+ *   'all'     -> every year.
+ *   'YYYY-YY' -> that cohort (active + graduated, so a finished batch shows whole).
+ * status: optionally narrow to active (is_alumni=false) or graduated (is_alumni=true).
+ */
+export async function listStudentsByYear(
+  options: {
+    search?: string;
+    year?: 'current' | 'none' | 'all' | string;
+    status?: StudentLifecycle;
+    program?: StudentProgram;
+    paymentStatus?: string;
+    currentBatchCode?: string; // registry current-batch code; falls back to the April-March helper
+  } = {},
+  client?: TypedSupabaseClient
+): Promise<{ students: HubStudent[]; total: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { search, year = 'current', status, program = 'architecture', paymentStatus, currentBatchCode } = options;
+
+  let query = supabase
+    .from('users')
+    .select(
+      `
+      id, name, first_name, last_name, email, personal_email, linked_classroom_email,
+      phone, avatar_url, academic_year, is_alumni, last_login_at, ms_oid,
+      student_profiles!student_profiles_user_id_fkey (
+        id, student_id, enrollment_date, total_fee, fee_paid, fee_due,
+        payment_status, ms_teams_email
+      )
+    `
+    )
+    .eq('user_type', 'student')
+    .eq('student_program', program);
+
+  // Hide synthetic E2E accounts (same guard as listActiveNexusStudents).
+  query = query.or('email.is.null,email.not.ilike.e2e-*');
+
+  // Lifecycle filter (an explicit status wins over the year-derived default).
+  if (status === 'active') query = query.eq('is_alumni', false);
+  else if (status === 'graduated') query = query.eq('is_alumni', true);
+
+  // Year axis. Multiple .or() calls are AND-combined by PostgREST, which is what
+  // we want (e.g. the e2e guard AND the year group AND the search group).
+  if (year === 'current') {
+    if (status === undefined) query = query.eq('is_alumni', false);
+    const cy = currentBatchCode || currentAcademicYear();
+    query = query.or(`academic_year.eq.${cy},academic_year.is.null`);
+  } else if (year === 'none') {
+    query = query.is('academic_year', null);
+  } else if (year && year !== 'all') {
+    query = query.eq('academic_year', year);
+  }
+
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+  }
+
+  query = query.order('name', { ascending: true }).limit(5000);
+
+  const { data: rows, error } = await query;
+  if (error) throw error;
+
+  let students: HubStudent[] = (rows || []).map((u: any) => {
+    const sp = Array.isArray(u.student_profiles) ? u.student_profiles[0] : u.student_profiles;
+    return {
+      id: u.id,
+      name: u.name || [u.first_name, u.last_name].filter(Boolean).join(' ') || null,
+      first_name: u.first_name || null,
+      last_name: u.last_name || null,
+      email: u.email || null,
+      personal_email: u.personal_email || null,
+      linked_classroom_email: u.linked_classroom_email || null,
+      phone: u.phone || null,
+      avatar_url: u.avatar_url || null,
+      academic_year: u.academic_year || null,
+      is_alumni: !!u.is_alumni,
+      last_login_at: u.last_login_at || null,
+      ms_oid: u.ms_oid || null,
+      student_profile_id: sp?.id || null,
+      student_id: sp?.student_id || null,
+      enrollment_date: sp?.enrollment_date || null,
+      total_fee: Number(sp?.total_fee) || 0,
+      fee_paid: Number(sp?.fee_paid) || 0,
+      fee_due: Number(sp?.fee_due) || 0,
+      payment_status: sp?.payment_status || null,
+      ms_teams_email: sp?.ms_teams_email || null,
+    };
+  });
+
+  // The payment-status filter lives on the joined child; apply it in JS (the
+  // dataset is a few hundred rows, matching the page's existing client filtering).
+  if (paymentStatus) {
+    students = students.filter((s) => s.payment_status === paymentStatus);
+  }
+
+  return { students, total: students.length };
+}
+
+export interface YearRevenue {
+  year: string | null; // null bucket = students with no academic_year set
+  studentCount: number;
+  totalFee: number;
+  collected: number; // Σ fee_paid
+  pending: number; // Σ fee_due
+  fullyPaidCount: number;
+  partialCount: number;
+}
+
+/**
+ * Per-academic-year revenue rollup for the /students hub. Sums the denormalised
+ * fee snapshot on student_profiles, grouped by users.academic_year. This reflects
+ * the enrolment records, not a live payments-table sum (payments carry no year).
+ * Sorted with the unstamped (null) bucket first, then years descending.
+ */
+export async function getRevenueByYear(
+  options: { program?: StudentProgram } = {},
+  client?: TypedSupabaseClient
+): Promise<YearRevenue[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { program = 'architecture' } = options;
+
+  const { data, error } = await supabase
+    .from('student_profiles')
+    .select(
+      `
+      total_fee, fee_paid, fee_due, payment_status,
+      users!inner ( academic_year, user_type, student_program )
+    `
+    )
+    .eq('users.user_type', 'student')
+    .eq('users.student_program', program);
+  if (error) throw error;
+
+  const buckets = new Map<string | null, YearRevenue>();
+  for (const sp of (data as any[]) || []) {
+    const u = Array.isArray(sp.users) ? sp.users[0] : sp.users;
+    const year: string | null = u?.academic_year ?? null;
+    const b =
+      buckets.get(year) ??
+      ({ year, studentCount: 0, totalFee: 0, collected: 0, pending: 0, fullyPaidCount: 0, partialCount: 0 } as YearRevenue);
+    b.studentCount++;
+    b.totalFee += Number(sp.total_fee) || 0;
+    b.collected += Number(sp.fee_paid) || 0;
+    b.pending += Number(sp.fee_due) || 0;
+    if (sp.payment_status === 'paid') b.fullyPaidCount++;
+    else if (sp.payment_status === 'pending' && (Number(sp.fee_paid) || 0) > 0) b.partialCount++;
+    buckets.set(year, b);
+  }
+
+  return [...buckets.values()].sort((a, b) => {
+    if (a.year === null) return -1;
+    if (b.year === null) return 1;
+    return b.year.localeCompare(a.year);
+  });
 }
 
 /**

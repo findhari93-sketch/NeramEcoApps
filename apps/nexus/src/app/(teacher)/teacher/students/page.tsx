@@ -9,6 +9,7 @@ import {
   Chip,
   Skeleton,
   TextField,
+  MenuItem,
   IconButton,
   Snackbar,
   Tooltip,
@@ -38,7 +39,8 @@ interface EnrolledStudent {
   avatar_url: string | null;
   ms_oid: string | null;
   nexus_access_enabled: boolean;
-  batch: StudentBatch | null;
+  batch: StudentBatch | null; // classroom section (nexus_batches)
+  exam_batch: string | null; // exam-year cohort (users.academic_year)
   attendance: { attended: number; total: number; percentage: number };
   checklist: { completed: number; total: number };
 }
@@ -53,7 +55,28 @@ export default function TeacherStudents() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [batchFilter, setBatchFilter] = useState<string | null>(null);
+  // Exam-year cohort filter (users.academic_year), independent of the classroom section.
+  const [examBatches, setExamBatches] = useState<{ code: string }[]>([]);
+  const [examBatchFilter, setExamBatchFilter] = useState<string>('all');
   const [snackbar, setSnackbar] = useState<string | null>(null);
+
+  // Load the exam-year batch list once (for the filter dropdown).
+  useEffect(() => {
+    async function loadExamBatches() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          setExamBatches(data.batches || []);
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
+    loadExamBatches();
+  }, [getToken]);
 
   useEffect(() => {
     if (!activeClassroom) return;
@@ -66,6 +89,7 @@ export default function TeacherStudents() {
 
         let url = `/api/students?classroom=${activeClassroom!.id}`;
         if (batchFilter) url += `&batch=${batchFilter}`;
+        if (examBatchFilter && examBatchFilter !== 'all') url += `&examBatch=${examBatchFilter}`;
 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
@@ -84,7 +108,7 @@ export default function TeacherStudents() {
     }
 
     fetchStudents();
-  }, [activeClassroom, getToken, batchFilter]);
+  }, [activeClassroom, getToken, batchFilter, examBatchFilter]);
 
   // Bulk presence for all loaded students
   const { presenceMap } = usePresence(students.map((s) => s.ms_oid));
@@ -139,7 +163,25 @@ export default function TeacherStudents() {
         inputProps={{ style: { minHeight: 24 } }}
       />
 
-      {/* Batch filter chips */}
+      {/* Exam-year cohort filter (users.academic_year) — separate from the classroom section below */}
+      {examBatches.length > 0 && (
+        <TextField
+          select
+          size="small"
+          label="Exam year"
+          value={examBatchFilter}
+          onChange={(e) => setExamBatchFilter(e.target.value)}
+          sx={{ mb: 1.5, minWidth: 170 }}
+        >
+          <MenuItem value="all">All exam years</MenuItem>
+          {examBatches.map((b) => (
+            <MenuItem key={b.code} value={b.code}>{b.code}</MenuItem>
+          ))}
+          <MenuItem value="none">No exam year set</MenuItem>
+        </TextField>
+      )}
+
+      {/* Classroom section (nexus_batches) filter chips */}
       {batches.length > 0 && (
         <Box sx={{ display: 'flex', gap: 1, mb: 2, overflowX: 'auto', pb: 0.5 }}>
           <Chip
@@ -227,6 +269,14 @@ export default function TeacherStudents() {
                       >
                         {student.name}
                       </Typography>
+                      {student.exam_batch && (
+                        <Chip
+                          label={student.exam_batch}
+                          size="small"
+                          color="primary"
+                          sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, fontFamily: 'monospace' }}
+                        />
+                      )}
                       {student.batch && (
                         <Chip
                           label={student.batch.name}

@@ -587,8 +587,8 @@ export default function UsersTable(props: UsersTableProps) {
       },
       {
         accessorKey: 'academic_year',
-        header: 'Cohort',
-        size: 100,
+        header: 'Exam Batch',
+        size: 110,
         enableSorting: true,
         Cell: ({ row }) => {
           const year = row.original.academic_year;

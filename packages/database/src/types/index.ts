@@ -179,6 +179,41 @@ export type LifecycleStatus = 'active' | 'archived';
 /** Recorded answer to the "are you writing the exam?" outreach. */
 export type ExamStatus = 'writing_exam_this_year' | 'completed_exam' | 'not_sure' | 'not_writing';
 
+// ============================================================================
+// EXAM-YEAR COHORT ("batch"). See the academic_batches table + users.academic_year.
+// NOT the same as `Batch` (course-class schedule, line ~1238) or `NexusBatch`
+// (classroom section, line ~4601). This registry never uses a batch_id FK — the
+// 'YYYY-YY' string on users.academic_year is the join key.
+// ============================================================================
+
+/** Lifecycle of an exam-year batch. open = accepting, active = mid-cycle, closed = graduated. */
+export type AcademicBatchStatus = 'open' | 'active' | 'closed';
+
+/**
+ * A registered exam-year cohort (the academic year a student sits the entrance
+ * exam, e.g. '2026-27'). `code` mirrors users.academic_year. Exactly one batch is
+ * `is_current`: the cohort every admin/Nexus user-list defaults to.
+ */
+export interface AcademicBatch {
+  id: string;
+  code: string;                 // 'YYYY-YY', mirrors users.academic_year
+  label: string | null;
+  start_date: string | null;    // ~July 1 of the start year
+  end_date: string | null;      // closing date; editable anytime
+  status: AcademicBatchStatus;
+  is_current: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+/** Counts of users with no batch set, keyed by user_type (the "needs batch" worklist). */
+export interface BatchNeedsAssignmentCounts {
+  lead: number;
+  student: number;
+}
+
 /**
  * User profile history - tracks all profile changes for admin visibility
  */
@@ -3093,7 +3128,8 @@ export interface UserJourneyListOptions {
   // Lifecycle focus filters (migration 20260622)
   lifecycleStatus?: LifecycleStatus;     // explicit active/archived filter
   excludeArchived?: boolean;             // default true; hides archived from the list
-  academicYear?: string;                 // 'YYYY-YY' cohort filter
+  academicYear?: string;                 // 'YYYY-YY' cohort, or sentinel 'current' | 'none' | 'all'
+  currentBatchCode?: string;             // registry current-batch code, injected so 'current'/old_cohort use it (not the April-March helper)
   candidateSegment?: CandidateSegment;   // suggestion-only smart segments
   dateFrom?: string;
   dateTo?: string;
@@ -4458,6 +4494,7 @@ export interface StudentDeviceSummary {
   user_name: string;
   user_email: string | null;
   user_avatar: string | null;
+  academic_year?: string | null; // exam-year batch (users.academic_year)
   devices: StudentRegisteredDevice[];
   total_active_time: number;
   last_active: string | null;
@@ -4500,6 +4537,264 @@ export type NexusTopicProgressStatus = 'not_started' | 'attended' | 'completed' 
 export type NexusResourceType = 'pdf' | 'image' | 'youtube' | 'onenote' | 'link';
 export type RemovalReasonCategory = 'fee_nonpayment' | 'course_completed' | 'college_admitted' | 'self_withdrawal' | 'disciplinary' | 'other';
 export type EnrollmentHistoryAction = 'enrolled' | 'removed' | 'restored';
+
+// ============================================================
+// Nexus Study Materials (folder-based file manager)
+// ============================================================
+
+/** A folder in the Study Materials tree. parent_id null = root folder. */
+export interface NexusStudyFolder {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  /** Empty array = visible to everyone. Values match NexusClassroomType ('nata' | 'jee' | ...). */
+  target_exams: string[];
+  /** Empty array = visible to everyone. Values match users.student_program ('architecture' | 'software'). */
+  target_programs: string[];
+  /** Folder default. false = view-only. */
+  allow_download: boolean;
+  created_by: string | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A file inside a Study Materials folder. Bytes live in SharePoint. */
+export interface NexusStudyFile {
+  id: string;
+  folder_id: string;
+  title: string;
+  file_name: string;
+  file_type: string | null;
+  file_size_bytes: number | null;
+  page_count: number | null;
+  sharepoint_item_id: string | null;
+  sharepoint_web_url: string | null;
+  storage_path: string | null;
+  /** Per-file override of the folder's allow_download. null = inherit folder. */
+  allow_download: boolean | null;
+  sort_order: number;
+  uploaded_by: string | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Coarse file kind used by the browser to pick a viewer/icon. */
+export type NexusStudyFileKind = 'pdf' | 'image' | 'other';
+
+/** A file as returned to the student browser: no SharePoint URLs, with the effective download flag. */
+export interface NexusStudyFileDTO {
+  id: string;
+  folder_id: string;
+  title: string;
+  file_name: string;
+  file_type: string | null;
+  file_size_bytes: number | null;
+  page_count: number | null;
+  kind: NexusStudyFileKind;
+  /** Effective downloadable: file.allow_download ?? folder.allow_download ?? false. */
+  downloadable: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+/** A folder summary card in the browser. */
+export interface NexusStudyFolderDTO {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  item_count: number;
+  /** Staff-only fields (omitted/ignored for students). */
+  target_exams?: string[];
+  target_programs?: string[];
+  allow_download?: boolean;
+}
+
+/** Response shape for GET /api/study-materials/folders. */
+export interface NexusStudyBrowseResult {
+  folder: NexusStudyFolderDTO | null;
+  breadcrumb: { id: string; name: string }[];
+  folders: NexusStudyFolderDTO[];
+  files: NexusStudyFileDTO[];
+}
+
+// ============================================================
+// Nexus Curriculum + Teaching Plans (Course Plan v2)
+// ============================================================
+
+export type NexusTopicPriority = 'mandatory' | 'high' | 'medium' | 'low';
+export type NexusCourseTopicStatus = 'idea' | 'drafted' | 'class_ready';
+export type NexusTopicDelivery = 'live' | 'self_learning' | 'either';
+export type NexusPlanExamType = 'nata' | 'jee' | 'foundation' | 'custom';
+export type NexusTeachingPlanStatus = 'draft' | 'active' | 'completed' | 'archived';
+export type NexusPlanEntryType = 'live_class' | 'self_learning' | 'test';
+export type NexusPlanEntryStatus = 'planned' | 'scheduled' | 'done' | 'spillover' | 'skipped';
+export type NexusPlanAuditAction =
+  | 'created'
+  | 'edited'
+  | 'activated'
+  | 'completed'
+  | 'added_entry'
+  | 'removed_entry'
+  | 'moved'
+  | 'rescheduled'
+  | 'scheduled_class'
+  | 'status_changed'
+  | 'converted'
+  | 'reordered'
+  | 'coverage_logged'
+  | 'carried'
+  | 'pinned'
+  | 'shared_catchup';
+export type NexusPlanDayItemStatus = 'pending' | 'covered' | 'partial' | 'skipped';
+export type NexusCatchupItemStatus = 'todo' | 'done';
+
+/** Repository module: the top-level grouping of the shared curriculum library. */
+export interface NexusCourseModule {
+  id: string;
+  title: string;
+  description: string | null;
+  exam_tags: string[];
+  color: string | null;
+  sort_order: number;
+  created_by: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Repository topic: the schedulable unit, shared across plans. */
+export interface NexusCourseTopic {
+  id: string;
+  module_id: string;
+  title: string;
+  priority: NexusTopicPriority;
+  status: NexusCourseTopicStatus;
+  intended_delivery: NexusTopicDelivery;
+  estimated_sessions: number;
+  summary: string | null;
+  activities: string | null;
+  drills: string | null;
+  visible_to_students: boolean;
+  is_self_learning: boolean;
+  sort_order: number;
+  created_by: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusCourseTopicResource {
+  id: string;
+  topic_id: string;
+  kind: 'link' | 'youtube' | 'study_file';
+  title: string;
+  url: string | null;
+  study_file_id: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusCourseTopicTest {
+  id: string;
+  topic_id: string;
+  test_id: string;
+  purpose: 'quiz' | 'practice';
+}
+
+export interface NexusTeachingPlan {
+  id: string;
+  classroom_id: string;
+  title: string;
+  exam_type: NexusPlanExamType;
+  start_date: string;
+  expected_end_date: string;
+  status: NexusTeachingPlanStatus;
+  activated_at: string | null;
+  saturday_classes: boolean;
+  exam_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * An entry on a plan: a topic or a test in the ordered queue.
+ * position = global queue order; planned_date = pinned date (tests only,
+ * NULL for auto-flow topic entries whose dates are computed).
+ */
+export interface NexusTeachingPlanEntry {
+  id: string;
+  plan_id: string;
+  topic_id: string | null;
+  test_id: string | null;
+  label: string | null;
+  entry_type: NexusPlanEntryType;
+  planned_date: string | null;
+  position: number;
+  status: NexusPlanEntryStatus;
+  is_unplanned: boolean;
+  session_span: number | null;
+  completed_sessions: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A checklist line on a class day (Class Day agenda). */
+export interface NexusPlanDayItem {
+  id: string;
+  plan_id: string;
+  entry_id: string | null;
+  class_date: string;
+  title: string;
+  topic_id: string | null;
+  status: NexusPlanDayItemStatus;
+  is_unplanned: boolean;
+  source: 'seeded' | 'manual';
+  position: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Catch-up track for a late-joining student (visible to them once shared). */
+export interface NexusCatchupTrack {
+  id: string;
+  plan_id: string;
+  student_id: string;
+  shared_at: string | null;
+  shared_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusCatchupItem {
+  id: string;
+  track_id: string;
+  topic_id: string;
+  entry_id: string | null;
+  position: number;
+  status: NexusCatchupItemStatus;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusPlanAuditLog {
+  id: string;
+  plan_id: string;
+  entry_id: string | null;
+  action: NexusPlanAuditAction;
+  performed_by: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
 
 export interface NexusClassroom extends Timestamps {
   id: string;

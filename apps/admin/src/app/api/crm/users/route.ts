@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { listUserJourneys, getPipelineStageCounts } from '@neram/database';
+import { listUserJourneys, getPipelineStageCounts, getCurrentBatch } from '@neram/database';
 import type {
   UserJourneyListOptions,
   PipelineStage,
@@ -22,6 +22,19 @@ export async function GET(request: NextRequest) {
     const includeArchived =
       lifecycleStatus === 'archived' || searchParams.get('include_archived') === 'true';
 
+    // Batch (exam-year cohort) filter. Accept ?batch= (new) with ?academic_year=
+    // as an alias; supports the 'current' | 'none' | 'all' sentinels. Resolve the
+    // registry current so 'current' means the admin-set batch (OR untagged users).
+    const batchParam = searchParams.get('batch') || searchParams.get('academic_year') || undefined;
+    let currentBatchCode: string | undefined;
+    if (batchParam === 'current') {
+      try {
+        currentBatchCode = (await getCurrentBatch()).code;
+      } catch {
+        /* fall back to the helper inside listUserJourneys */
+      }
+    }
+
     const options: UserJourneyListOptions = {
       search: searchParams.get('search') || undefined,
       pipelineStage: (searchParams.get('pipeline_stage') as PipelineStage) || undefined,
@@ -36,7 +49,8 @@ export async function GET(request: NextRequest) {
       isIrrelevant: searchParams.get('is_irrelevant') === 'true' || undefined,
       lifecycleStatus,
       excludeArchived: includeArchived ? false : undefined,
-      academicYear: searchParams.get('academic_year') || undefined,
+      academicYear: batchParam,
+      currentBatchCode,
       candidateSegment,
       dateFrom: searchParams.get('date_from') || undefined,
       dateTo: searchParams.get('date_to') || undefined,

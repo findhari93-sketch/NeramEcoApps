@@ -143,12 +143,25 @@ export async function POST(request: NextRequest) {
           // Match recording to class by date and approximate time
           const matched = matchRecordingToClass(recordings, cls);
           if (matched) {
+            // Best-effort transcript fetch (feeds the class-recap generator).
+            let transcriptUrl: string | null = null;
+            try {
+              const oid = extractOidFromJoinUrl(cls.teams_meeting_join_url!);
+              transcriptUrl = await fetchTranscriptByJoinUrl(
+                supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, oid,
+              );
+            } catch (tErr) {
+              console.error(`[sync-now] Transcript fetch failed for class ${cls.id}:`, tErr);
+            }
+
+            const recordingUpdate: Record<string, unknown> = {
+              recording_url: matched.webUrl,
+              recording_fetched_at: now.toISOString(),
+            };
+            if (transcriptUrl) recordingUpdate.transcript_url = transcriptUrl;
             await supabase
               .from('nexus_scheduled_classes')
-              .update({
-                recording_url: matched.webUrl,
-                recording_fetched_at: now.toISOString(),
-              })
+              .update(recordingUpdate)
               .eq('id', cls.id);
 
             await notifyRecordingAvailable(cls.classroom_id, cls.title, cls.id).catch(() => {});
@@ -177,9 +190,22 @@ export async function POST(request: NextRequest) {
               supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, organizerOid,
             );
             if (recordingUrl) {
+              let transcriptUrl: string | null = null;
+              try {
+                transcriptUrl = await fetchTranscriptByJoinUrl(
+                  supabase, appToken, cls.teams_meeting_join_url!, cls.teacher_id, organizerOid,
+                );
+              } catch (tErr) {
+                console.error(`[sync-now] Transcript fetch failed for class ${cls.id}:`, tErr);
+              }
+              const recordingUpdate: Record<string, unknown> = {
+                recording_url: recordingUrl,
+                recording_fetched_at: now.toISOString(),
+              };
+              if (transcriptUrl) recordingUpdate.transcript_url = transcriptUrl;
               await supabase
                 .from('nexus_scheduled_classes')
-                .update({ recording_url: recordingUrl, recording_fetched_at: now.toISOString() })
+                .update(recordingUpdate)
                 .eq('id', cls.id);
               recordingsFound++;
             }
@@ -600,4 +626,62 @@ async function fetchRecordingByJoinUrl(
 
   // Prefer recordingContentUrl (direct playable link), fall back to content stream URL
   return recordings[0].recordingContentUrl || recordings[0].content || null;
+}
+
+/**
+ * Look up a Teams online meeting by its join URL, then fetch the first transcript.
+ *
+ * Requires the Azure app registration to have:
+ *   OnlineMeetingTranscript.Read.All  (Application permission, admin consent)
+ *
+ * Returns the transcript content URL (a Graph endpoint yielding VTT). Callers
+ * store it on nexus_scheduled_classes.transcript_url; the recap generator then
+ * fetches it, falling back to resolving the transcript from the recording file.
+ */
+async function fetchTranscriptByJoinUrl(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  appToken: string,
+  joinUrl: string,
+  teacherId: string | null,
+  organizerOid: string | null,
+): Promise<string | null> {
+  let userOid = organizerOid;
+
+  if (!userOid && teacherId) {
+    const { data: teacher } = await supabase
+      .from('users')
+      .select('ms_oid')
+      .eq('id', teacherId)
+      .single();
+    userOid = teacher?.ms_oid || null;
+  }
+
+  if (!userOid) return null;
+
+  const filterQuery = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
+  const meetingRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${userOid}/onlineMeetings?$filter=${encodeURIComponent(filterQuery)}`,
+    { headers: { Authorization: `Bearer ${appToken}` } }
+  );
+
+  if (!meetingRes.ok) return null;
+
+  const meetingData = await meetingRes.json();
+  const meetings = meetingData.value || [];
+  if (meetings.length === 0) return null;
+
+  const meetingId = meetings[0].id as string;
+
+  const transcriptsRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${userOid}/onlineMeetings/${meetingId}/transcripts`,
+    { headers: { Authorization: `Bearer ${appToken}` } }
+  );
+
+  if (!transcriptsRes.ok) return null;
+
+  const transcriptsData = await transcriptsRes.json();
+  const transcripts = transcriptsData.value || [];
+  if (transcripts.length === 0) return null;
+
+  return transcripts[0].transcriptContentUrl || transcripts[0].content || null;
 }

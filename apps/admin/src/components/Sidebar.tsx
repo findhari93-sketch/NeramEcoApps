@@ -16,8 +16,14 @@ import {
   Tooltip,
   IconButton,
   Badge,
+  Menu,
+  MenuItem,
+  Divider,
 } from '@neram/ui';
+import { useBatches } from '@/contexts/BatchContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
 import PeopleIcon from '@mui/icons-material/People';
 import PaymentIcon from '@mui/icons-material/Payment';
 import BookIcon from '@mui/icons-material/Book';
@@ -98,6 +104,7 @@ const menuGroups: MenuGroup[] = [
     label: 'People & CRM',
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
+      { text: 'Exam Batches', icon: CalendarMonthIcon, path: '/exam-batches' },
       { text: 'Leads', icon: PersonSearchIcon, path: '/leads', hasBadge: 'leads' },
       { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
@@ -187,6 +194,9 @@ export default function Sidebar() {
   const router = useRouter();
   const { user, signOut } = useMicrosoftAuth();
   const { collapsed, toggleSidebar, sidebarWidth, isMobile, mobileOpen, setMobileOpen } = useSidebar();
+  // Global exam-batch switch lives in this profile menu; every user-list follows it.
+  const { current: currentBatch, batches, selectedBatch, setSelectedBatch } = useBatches();
+  const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [careersNewCount, setCareersNewCount] = useState(0);
   const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({
@@ -429,22 +439,28 @@ export default function Sidebar() {
         }}
       >
         {!showCollapsed ? (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
-              <UserAvatar name={user?.name || 'Admin'} size={28} />
-              <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0, color: 'text.primary' }}>
+          <Box
+            onClick={(e) => setProfileAnchor(e.currentTarget)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1,
+              cursor: 'pointer', borderRadius: 1, p: 0.5,
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
+          >
+            <UserAvatar name={user?.name || 'Admin'} size={28} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="caption" fontWeight={600} noWrap sx={{ display: 'block', color: 'text.primary', lineHeight: 1.2 }}>
                 {user?.name || 'Admin'}
               </Typography>
+              <Typography variant="caption" noWrap sx={{ display: 'block', color: 'text.secondary', fontSize: 10, lineHeight: 1.2 }}>
+                Batch: {selectedBatch === 'current' ? (currentBatch?.code || 'current') : selectedBatch === 'all' ? 'All' : selectedBatch}
+              </Typography>
             </Box>
-            <Tooltip title="Logout" placement="top" arrow>
-              <IconButton onClick={handleLogout} size="small" sx={{ width: 24, height: 24, color: 'text.secondary' }}>
-                <LogoutIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          </>
+            <ArrowDropUpIcon sx={{ color: 'text.secondary', fontSize: 18 }} />
+          </Box>
         ) : (
-          <Tooltip title={`${user?.name || 'Admin'} — Logout`} placement="right" arrow>
-            <IconButton onClick={handleLogout} size="small" sx={{ width: 32, height: 32 }}>
+          <Tooltip title={`${user?.name || 'Admin'} — menu`} placement="right" arrow>
+            <IconButton onClick={(e) => setProfileAnchor(e.currentTarget)} size="small" sx={{ width: 32, height: 32 }}>
               <Avatar
                 sx={{
                   width: 28,
@@ -460,6 +476,50 @@ export default function Sidebar() {
           </Tooltip>
         )}
       </Box>
+      <Menu
+        anchorEl={profileAnchor}
+        open={Boolean(profileAnchor)}
+        onClose={() => setProfileAnchor(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        PaperProps={{ sx: { minWidth: 250 } }}
+      >
+        <Box sx={{ px: 2, py: 1 }}>
+          <Typography variant="subtitle2" fontWeight={700} noWrap>{user?.name || 'Admin'}</Typography>
+          {user?.email && <Typography variant="caption" color="text.secondary" noWrap>{user.email}</Typography>}
+        </Box>
+        <Divider />
+        <Typography variant="caption" sx={{ px: 2, pt: 1, pb: 0.5, display: 'block', color: 'text.secondary', fontWeight: 700 }}>
+          <CalendarMonthIcon sx={{ fontSize: 13, verticalAlign: 'middle', mr: 0.5 }} />
+          Exam Batch (applies everywhere)
+        </Typography>
+        <MenuItem
+          selected={selectedBatch === 'current'}
+          onClick={() => { setSelectedBatch('current'); setProfileAnchor(null); }}
+        >
+          Current{currentBatch?.code ? ` (${currentBatch.code})` : ''}
+        </MenuItem>
+        {batches.map((b) => (
+          <MenuItem
+            key={b.code}
+            selected={selectedBatch === b.code}
+            onClick={() => { setSelectedBatch(b.code); setProfileAnchor(null); }}
+          >
+            {b.code}{b.status === 'closed' ? ' (closed)' : ''}
+          </MenuItem>
+        ))}
+        <MenuItem
+          selected={selectedBatch === 'all'}
+          onClick={() => { setSelectedBatch('all'); setProfileAnchor(null); }}
+        >
+          All batches
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => { setProfileAnchor(null); handleLogout(); }}>
+          <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Logout</ListItemText>
+        </MenuItem>
+      </Menu>
     </>
   );
 

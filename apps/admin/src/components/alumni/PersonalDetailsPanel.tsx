@@ -35,6 +35,20 @@ const GENDERS = [
   { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
+const COURSES = [
+  { value: 'nata', label: 'NATA' },
+  { value: 'jee_paper2', label: 'JEE Paper 2' },
+  { value: 'both', label: 'Both' },
+  { value: 'not_sure', label: 'Not sure yet' },
+];
+
+const COURSE_LABELS: Record<string, string> = {
+  nata: 'NATA',
+  jee_paper2: 'JEE Paper 2',
+  both: 'Both',
+  not_sure: 'Not sure yet',
+};
+
 function fmtDate(d?: string | null): string {
   if (!d) return '';
   const dt = new Date(d);
@@ -68,6 +82,7 @@ export default function PersonalDetailsPanel({ user, leadProfile, userId, adminI
       city: leadProfile?.city || '',
       state: leadProfile?.state || '',
       school_college: leadProfile?.school_college || '',
+      interest_course: leadProfile?.interest_course || '',
     });
     setError('');
     setOpen(true);
@@ -127,6 +142,7 @@ export default function PersonalDetailsPanel({ user, leadProfile, userId, adminI
         <Field label="City" value={leadProfile?.city} />
         <Field label="State" value={leadProfile?.state} />
         <Field label="School / College" value={leadProfile?.school_college} />
+        <Field label="Course" value={leadProfile?.interest_course ? COURSE_LABELS[leadProfile.interest_course] || leadProfile.interest_course : ''} />
         <Field label="Phone" value={user?.phone} />
         <Field label="Email (primary)" value={user?.email} />
         <Field label="Personal Gmail" value={user?.personal_email} />
@@ -163,6 +179,14 @@ export default function PersonalDetailsPanel({ user, leadProfile, userId, adminI
             <TextField label="City" size="small" value={form.city || ''} onChange={set('city')} />
             <TextField label="State" size="small" value={form.state || ''} onChange={set('state')} />
             <TextField label="School / College" size="small" value={form.school_college || ''} onChange={set('school_college')} />
+            <TextField label="Course" select size="small" value={form.interest_course || ''} onChange={set('interest_course')}>
+              <MenuItem value="">Not set</MenuItem>
+              {COURSES.map((c) => (
+                <MenuItem key={c.value} value={c.value}>
+                  {c.label}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField label="Phone" size="small" value={form.phone || ''} onChange={set('phone')} />
             <TextField
               label="Personal Gmail"

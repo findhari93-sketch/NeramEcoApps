@@ -48,6 +48,7 @@ import StudentDetailDrawer from '../../../components/alumni/StudentDetailDrawer'
 import MarkStaffDialog from '../../../components/alumni/MarkStaffDialog';
 import AlumniManualAddDialog from '../../../components/alumni/AlumniManualAddDialog';
 import { academicYearOptions, currentAcademicYear, formatDate } from '../../../components/crm/academic-years';
+import { useBatches } from '@/contexts/BatchContext';
 
 interface StudentRow {
   id: string;
@@ -228,6 +229,8 @@ function FilterSelect({
 export default function AlumniPage() {
   const router = useRouter();
   const { supabaseUserId } = useAdminProfile();
+  // Follow the global exam-batch switch (profile menu) for the active-students tab.
+  const { selectedBatch, resolvedBatchCode } = useBatches();
   const isMobile = useMediaQuery('(max-width:899px)', { noSsr: true });
 
   const [tab, setTab] = useState(0);
@@ -240,7 +243,7 @@ export default function AlumniPage() {
   const [allStudents, setAllStudents] = useState<StudentRow[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [sSearch, setSSearch] = useState('');
-  const [sYear, setSYear] = useState('all'); // 'all' | 'none' | 'YYYY-YY'
+  const [sYear, setSYear] = useState('all'); // 'all' | 'none' | 'YYYY-YY'; synced from the global batch
   const [sActivity, setSActivity] = useState('all'); // 'all' | 'inactive'
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -249,6 +252,14 @@ export default function AlumniPage() {
   const [studentDrawer, setStudentDrawer] = useState<StudentRow | null>(null);
   // People queued for the "Mark as staff" dialog (bulk selection or a single drawer row).
   const [markStaff, setMarkStaff] = useState<StudentRow[] | null>(null);
+
+  // Follow the global exam-batch switch for the active-students tab. The alumni
+  // directory tab (inherently past cohorts) keeps its own cohort browse below.
+  useEffect(() => {
+    if (selectedBatch === 'all') setSYear('all');
+    else if (selectedBatch === 'none') setSYear('none');
+    else if (resolvedBatchCode) setSYear(resolvedBatchCode);
+  }, [selectedBatch, resolvedBatchCode]);
 
   // ---- Alumni tab (directory) ----
   const [alumni, setAlumni] = useState<AlumniRow[]>([]);

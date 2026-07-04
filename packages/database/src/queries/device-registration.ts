@@ -270,17 +270,38 @@ export async function getDeviceDailyActivity(
 // ============================================
 
 /**
- * Get device distribution stats across all students
+ * Apply the exam-year batch (users.academic_year) filter to a users query.
+ * 'current' shows the current batch OR untagged; 'none' only untagged; a
+ * 'YYYY-YY' code shows that batch; 'all'/undefined skips. currentBatchCode is the
+ * registry current (resolved by the caller). NOT nexus_batches / course batches.
  */
-export async function getDeviceDistributionStats(): Promise<DeviceDistributionStats> {
+function applyDeviceBatchFilter(query: any, batch?: string, currentBatchCode?: string) {
+  if (batch === 'none') return query.is('academic_year', null);
+  if (batch === 'current') {
+    return currentBatchCode
+      ? query.or(`academic_year.eq.${currentBatchCode},academic_year.is.null`)
+      : query;
+  }
+  if (batch && batch !== 'all') return query.eq('academic_year', batch);
+  return query;
+}
+
+/**
+ * Get device distribution stats across students (optionally scoped to a batch)
+ */
+export async function getDeviceDistributionStats(
+  options: { batch?: string; currentBatchCode?: string } = {}
+): Promise<DeviceDistributionStats> {
   const supabase = getSupabaseAdminClient();
 
-  // Get all students
-  const { data: students } = await supabase
+  // Get students (optionally scoped to the selected exam-year batch)
+  let studentsQuery = supabase
     .from('users')
     .select('id')
     .eq('user_type', 'student')
     .eq('status', 'active');
+  studentsQuery = applyDeviceBatchFilter(studentsQuery, options.batch, options.currentBatchCode);
+  const { data: students } = await studentsQuery;
 
   const totalStudents = students?.length || 0;
   const studentIds = students?.map((s) => s.id) || [];
@@ -325,15 +346,15 @@ export async function getDeviceDistributionStats(): Promise<DeviceDistributionSt
  * Get per-student device summaries for admin/teacher view
  */
 export async function getStudentDeviceSummaries(
-  options: { limit?: number; offset?: number; search?: string } = {}
+  options: { limit?: number; offset?: number; search?: string; batch?: string; currentBatchCode?: string } = {}
 ): Promise<{ data: StudentDeviceSummary[]; total: number }> {
-  const { limit = 50, offset = 0, search } = options;
+  const { limit = 50, offset = 0, search, batch, currentBatchCode } = options;
   const supabase = getSupabaseAdminClient();
 
-  // Get students
+  // Get students (academic_year = exam-year batch, for the column + filter)
   let query = supabase
     .from('users')
-    .select('id, name, email, avatar_url', { count: 'exact' })
+    .select('id, name, email, avatar_url, academic_year', { count: 'exact' })
     .eq('user_type', 'student')
     .eq('status', 'active')
     .order('name', { ascending: true })
@@ -342,6 +363,8 @@ export async function getStudentDeviceSummaries(
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
   }
+
+  query = applyDeviceBatchFilter(query, batch, currentBatchCode);
 
   const { data: students, count } = await query;
 
@@ -386,6 +409,7 @@ export async function getStudentDeviceSummaries(
       user_name: s.name,
       user_email: s.email,
       user_avatar: s.avatar_url,
+      academic_year: s.academic_year ?? null,
       devices: userDevices,
       total_active_time: totalTime,
       last_active: lastActive,

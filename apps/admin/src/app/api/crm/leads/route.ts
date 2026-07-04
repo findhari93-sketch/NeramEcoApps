@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { listUserJourneys, getLeadPipelineStageCounts } from '@neram/database';
+import { listUserJourneys, getLeadPipelineStageCounts, getCurrentBatch } from '@neram/database';
 import type { UserJourneyListOptions, PipelineStage } from '@neram/database';
 
 const EXCLUDED_STAGES: PipelineStage[] = ['enrolled', 'payment_complete'];
@@ -9,6 +9,19 @@ const EXCLUDED_STAGES: PipelineStage[] = ['enrolled', 'payment_complete'];
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+
+    // Batch (exam-year cohort) filter. Accept ?batch= with ?academic_year= alias;
+    // supports 'current' | 'none' | 'all'. Leads are mostly untagged, so 'current'
+    // deliberately includes untagged rows (see listUserJourneys) for triage.
+    const batchParam = searchParams.get('batch') || searchParams.get('academic_year') || undefined;
+    let currentBatchCode: string | undefined;
+    if (batchParam === 'current') {
+      try {
+        currentBatchCode = (await getCurrentBatch()).code;
+      } catch {
+        /* fall back to the helper inside listUserJourneys */
+      }
+    }
 
     const options: UserJourneyListOptions = {
       search: searchParams.get('search') || undefined,
@@ -24,6 +37,8 @@ export async function GET(request: NextRequest) {
         : undefined,
       isDeadLead: searchParams.get('is_dead_lead') === 'true' || undefined,
       isIrrelevant: searchParams.get('is_irrelevant') === 'true' || undefined,
+      academicYear: batchParam,
+      currentBatchCode,
       dateFrom: searchParams.get('date_from') || undefined,
       dateTo: searchParams.get('date_to') || undefined,
       limit: parseInt(searchParams.get('limit') || '25', 10),

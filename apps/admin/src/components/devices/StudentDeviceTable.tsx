@@ -33,6 +33,8 @@ import type { StudentDeviceSummary } from '@neram/database';
 interface StudentDeviceTableProps {
   onViewStudent?: (userId: string) => void;
   isMobile?: boolean;
+  /** Global exam-batch scope ('current' | 'all' | 'none' | 'YYYY-YY'). */
+  batch?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -70,7 +72,7 @@ const statusLabels: Record<string, string> = {
   none: 'None',
 };
 
-export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTableProps) {
+export function StudentDeviceTable({ onViewStudent, isMobile, batch }: StudentDeviceTableProps) {
   const [data, setData] = useState<StudentDeviceSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -87,6 +89,7 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
         offset: String(page * rowsPerPage),
       });
       if (search) params.set('search', search);
+      if (batch) params.set('batch', batch);
 
       const res = await fetch(`/api/devices?${params}`);
       if (res.ok) {
@@ -99,11 +102,16 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, search]);
+  }, [page, rowsPerPage, search, batch]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Reset to the first page when the global batch changes (avoids empty pages).
+  useEffect(() => {
+    setPage(0);
+  }, [batch]);
 
   // Debounce search
   const [searchInput, setSearchInput] = useState('');
@@ -239,6 +247,14 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
                         size="small"
                         sx={{ height: 18, fontSize: 9, '& .MuiChip-label': { px: 0.5 } }}
                       />
+                      {student.academic_year && (
+                        <Chip
+                          label={student.academic_year}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 9, fontFamily: 'monospace', '& .MuiChip-label': { px: 0.5 } }}
+                        />
+                      )}
                       {student.total_active_time > 0 && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
                           <AccessTimeIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
@@ -319,6 +335,7 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
           <TableHead>
             <TableRow>
               <TableCell>Student</TableCell>
+              <TableCell>Exam Batch</TableCell>
               <TableCell>Devices</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Active Time</TableCell>
@@ -331,14 +348,14 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <Box sx={{ height: 40, bgcolor: 'grey.100', borderRadius: 1 }} />
                   </TableCell>
                 </TableRow>
               ))
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">No students found</Typography>
                 </TableCell>
               </TableRow>
@@ -357,6 +374,13 @@ export function StudentDeviceTable({ onViewStudent, isMobile }: StudentDeviceTab
                         </Typography>
                       </Box>
                     </Box>
+                  </TableCell>
+                  <TableCell>
+                    {student.academic_year ? (
+                      <Chip label={student.academic_year} size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 22, fontFamily: 'monospace' }} />
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">--</Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>

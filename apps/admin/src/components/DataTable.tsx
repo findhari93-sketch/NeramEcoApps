@@ -29,12 +29,34 @@ interface DataTableProps {
   loading?: boolean;
   onRowClick?: (row: any) => void;
   defaultRowsPerPage?: number;
+  /** Show the checkbox selection column. Defaults to true (current behaviour). */
+  selectable?: boolean;
+  /** Controlled selection (row ids). When provided with onSelectedChange the
+   *  page owns the selection so a bulk-action toolbar can read it. */
+  selected?: string[];
+  onSelectedChange?: (ids: string[]) => void;
 }
 
-export default function DataTable({ rows, columns, loading = false, onRowClick, defaultRowsPerPage = 10 }: DataTableProps) {
+export default function DataTable({
+  rows,
+  columns,
+  loading = false,
+  onRowClick,
+  defaultRowsPerPage = 10,
+  selectable = true,
+  selected: controlledSelected,
+  onSelectedChange,
+}: DataTableProps) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [internalSelected, setInternalSelected] = useState<string[]>([]);
+
+  const isControlled = controlledSelected !== undefined;
+  const selected = isControlled ? (controlledSelected as string[]) : internalSelected;
+  const updateSelected = (ids: string[]) => {
+    if (isControlled) onSelectedChange?.(ids);
+    else setInternalSelected(ids);
+  };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
@@ -46,32 +68,13 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
   };
 
   const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.checked) {
-      const newSelected = rows.map((row) => row.id);
-      setSelected(newSelected);
-      return;
-    }
-    setSelected([]);
+    updateSelected(event.target.checked ? rows.map((row) => row.id) : []);
   };
 
   const handleSelect = (id: string) => {
-    const selectedIndex = selected.indexOf(id);
-    let newSelected: string[] = [];
-
-    if (selectedIndex === -1) {
-      newSelected = newSelected.concat(selected, id);
-    } else if (selectedIndex === 0) {
-      newSelected = newSelected.concat(selected.slice(1));
-    } else if (selectedIndex === selected.length - 1) {
-      newSelected = newSelected.concat(selected.slice(0, -1));
-    } else if (selectedIndex > 0) {
-      newSelected = newSelected.concat(
-        selected.slice(0, selectedIndex),
-        selected.slice(selectedIndex + 1)
-      );
-    }
-
-    setSelected(newSelected);
+    updateSelected(
+      selected.indexOf(id) === -1 ? [...selected, id] : selected.filter((s) => s !== id)
+    );
   };
 
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
@@ -104,13 +107,15 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
         <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
-              <TableCell padding="checkbox">
-                <Checkbox
-                  indeterminate={selected.length > 0 && selected.length < rows.length}
-                  checked={rows.length > 0 && selected.length === rows.length}
-                  onChange={handleSelectAll}
-                />
-              </TableCell>
+              {selectable && (
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    indeterminate={selected.length > 0 && selected.length < rows.length}
+                    checked={rows.length > 0 && selected.length === rows.length}
+                    onChange={handleSelectAll}
+                  />
+                </TableCell>
+              )}
               {columns.map((column) => (
                 <TableCell
                   key={column.field}
@@ -136,13 +141,15 @@ export default function DataTable({ rows, columns, loading = false, onRowClick, 
                   selected={isItemSelected}
                   sx={{ cursor: onRowClick ? 'pointer' : 'default' }}
                 >
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={isItemSelected}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={() => handleSelect(row.id)}
-                    />
-                  </TableCell>
+                  {selectable && (
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={isItemSelected}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => handleSelect(row.id)}
+                      />
+                    </TableCell>
+                  )}
                   {columns.map((column) => (
                     <TableCell key={column.field} sx={{ py: 0.5, px: 1, fontSize: 13 }}>
                       {column.renderCell

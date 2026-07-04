@@ -8,6 +8,7 @@ import { useMicrosoftAuth } from '@neram/auth';
 import Sidebar from '@/components/Sidebar';
 import NotificationBell from '@/components/NotificationBell';
 import { AdminProfileProvider } from '@/contexts/AdminProfileContext';
+import { BatchProvider } from '@/contexts/BatchContext';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 
 function MobileTopBar() {
@@ -101,9 +102,11 @@ export default function DashboardLayout({
 }) {
   return (
     <AdminProfileProvider>
-      <SidebarProvider>
-        <DashboardContent>{children}</DashboardContent>
-      </SidebarProvider>
+      <BatchProvider>
+        <SidebarProvider>
+          <DashboardContent>{children}</DashboardContent>
+        </SidebarProvider>
+      </BatchProvider>
     </AdminProfileProvider>
   );
 }

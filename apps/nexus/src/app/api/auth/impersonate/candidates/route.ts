@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
 
 /**
  * GET /api/auth/impersonate/candidates?q={search}
@@ -38,6 +38,19 @@ export async function GET(request: NextRequest) {
       .replace(/[%_]/g, '\\$&')
       .replace(/,/g, ' ');
     const orFilter = safe ? `name.ilike.%${safe}%,email.ilike.%${safe}%` : null;
+
+    // Optional exam-year cohort scope (users.academic_year). 'current' resolves to
+    // the registry current batch; 'none' = untagged. NOT nexus_enrollments.batch_id.
+    const examBatchParam = request.nextUrl.searchParams.get('examBatch') || undefined;
+    let examBatchCode: string | null = null;
+    if (examBatchParam && examBatchParam !== 'all' && examBatchParam !== 'none') {
+      examBatchCode = examBatchParam === 'current' ? (await getCurrentBatch()).code : examBatchParam;
+    }
+    const applyExamBatch = (q: any) => {
+      if (examBatchParam === 'none') return q.is('academic_year', null);
+      if (examBatchCode) return q.eq('academic_year', examBatchCode);
+      return q;
+    };
 
     const supabase = getSupabaseAdminClient();
 
@@ -79,9 +92,13 @@ export async function GET(request: NextRequest) {
         .select('id, name, email, linked_classroom_email, avatar_url, ms_oid')
         .eq('user_type', 'student')
         .not('ms_oid', 'is', null)
+        // Hide synthetic E2E test accounts (e2e-<purpose>@…). Anchored on the dash
+        // so the canonical e2etesting* account stays selectable for impersonation.
+        .or('email.is.null,email.not.ilike.e2e-*')
         .order('name', { ascending: true })
         .limit(MAX_RESULTS);
 
+      query = applyExamBatch(query);
       if (orFilter) query = query.or(orFilter);
 
       const { data: students } = await query;
@@ -131,9 +148,13 @@ export async function GET(request: NextRequest) {
       .in('id', studentIds)
       .eq('user_type', 'student')
       .not('ms_oid', 'is', null)
+      // Hide synthetic E2E test accounts (e2e-<purpose>@…). Anchored on the dash
+      // so the canonical e2etesting* account stays selectable for impersonation.
+      .or('email.is.null,email.not.ilike.e2e-*')
       .order('name', { ascending: true })
       .limit(MAX_RESULTS);
 
+    query = applyExamBatch(query);
     if (orFilter) query = query.or(orFilter);
 
     const { data: students } = await query;

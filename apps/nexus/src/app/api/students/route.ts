@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
 
 /**
- * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}
+ * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}&examBatch={code|current|none}
  *
  * List enrolled students for a classroom with attendance and checklist stats.
+ *
+ * Two independent "batch" axes (do not confuse them):
+ *   - `batch`     = the classroom SECTION (nexus_enrollments.batch_id -> nexus_batches)
+ *   - `examBatch` = the EXAM-YEAR COHORT (users.academic_year, e.g. '2026-27')
  */
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +18,7 @@ export async function GET(request: NextRequest) {
     const classroomId = request.nextUrl.searchParams.get('classroom');
     const search = request.nextUrl.searchParams.get('search');
     const batchFilter = request.nextUrl.searchParams.get('batch');
+    const examBatchParam = request.nextUrl.searchParams.get('examBatch');
 
     if (!classroomId) {
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
@@ -21,10 +26,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    // Get student enrollments with user info and batch
+    // Get student enrollments with user info, classroom section (batch) and exam year (academic_year)
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, ms_oid, nexus_access_enabled), batch:nexus_batches(id, name)')
+      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, ms_oid, nexus_access_enabled, academic_year), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student');
 
@@ -37,6 +42,16 @@ export async function GET(request: NextRequest) {
         enrollmentQuery = enrollmentQuery.is('batch_id', null);
       } else {
         enrollmentQuery = enrollmentQuery.eq('batch_id', batchFilter);
+      }
+    }
+
+    // Exam-year cohort filter (users.academic_year), independent of the classroom section.
+    if (examBatchParam && examBatchParam !== 'all') {
+      if (examBatchParam === 'none') {
+        enrollmentQuery = enrollmentQuery.is('users.academic_year', null);
+      } else {
+        const code = examBatchParam === 'current' ? (await getCurrentBatch()).code : examBatchParam;
+        enrollmentQuery = enrollmentQuery.eq('users.academic_year', code);
       }
     }
 
@@ -119,6 +134,7 @@ export async function GET(request: NextRequest) {
         avatar_url: string | null;
         ms_oid: string | null;
         nexus_access_enabled: boolean | null;
+        academic_year: string | null;
       };
       const attendance = attendanceByStudent[userId] || { attended: 0, total: 0 };
 
@@ -131,6 +147,7 @@ export async function GET(request: NextRequest) {
         avatar_url: user.avatar_url,
         ms_oid: user.ms_oid,
         nexus_access_enabled: user.nexus_access_enabled ?? false,
+        exam_batch: user.academic_year ?? null,
         enrolled_at: enrollment.enrolled_at,
         batch: batch ? { id: batch.id, name: batch.name } : null,
         attendance: {

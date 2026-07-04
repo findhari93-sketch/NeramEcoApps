@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Badge,
@@ -25,7 +25,7 @@ import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { IMPERSONATION_BANNER_HEIGHT } from './ImpersonationBanner';
 import { useSidebarContext, SIDEBAR_EXPANDED, SIDEBAR_ICONS } from './SidebarProvider';
-import { usePanelContext } from './PanelProvider';
+import { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from './PanelProvider';
 import { useNavBadges } from './NavBadgeProvider';
 
 // Re-export for backward compat (layouts import this)
@@ -59,11 +59,34 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
   const theme = useTheme();
   const { user, nexusRole, impersonation } = useNexusAuthContext();
   const { sidebarState, cycle, toggle, expand } = useSidebarContext();
-  const { currentPanelTitle } = usePanelContext();
   const { getBadgeCount } = useNavBadges();
 
   // Collapsed groups (by label) — empty set means all expanded
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Course Plans left-rail sub-nav: which plan its screens point at.
+  const onCoursePlans = pathname.startsWith(COURSE_PLANS_PATH);
+  const currentPlanId = useMemo(() => {
+    const m = pathname.match(/^\/teacher\/course-plans\/([^/]+)/);
+    return m ? m[1] : null;
+  }, [pathname]);
+  const [lastPlanId, setLastPlanId] = useState<string | null>(null);
+  const [coursePlansOpen, setCoursePlansOpen] = useState(true);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('nexus_last_course_plan');
+    if (stored) setLastPlanId(stored);
+  }, []);
+  useEffect(() => {
+    if (currentPlanId) {
+      localStorage.setItem('nexus_last_course_plan', currentPlanId);
+      setLastPlanId(currentPlanId);
+    }
+  }, [currentPlanId]);
+  // Auto-open the section when the user enters it.
+  useEffect(() => {
+    if (onCoursePlans) setCoursePlansOpen(true);
+  }, [onCoursePlans]);
 
   // Click delay pattern: single click waits 250ms, double-click cancels and fires toggle
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,12 +207,105 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
     return button;
   };
 
+  // Course Plans as an expandable folder (design's left rail): Overview + the
+  // five plan screens, which resolve against the open plan (or the last one).
+  const renderCoursePlans = (icon: React.ReactNode) => {
+    const resolvePlanPath = (suffix: string) => {
+      const id = currentPlanId || lastPlanId;
+      return id ? `${COURSE_PLANS_PATH}/${id}${suffix}` : COURSE_PLANS_PATH;
+    };
+    const childActive = (item: (typeof COURSE_PLAN_SUBNAV)[number]) => {
+      if (!item.planScreen) return pathname === COURSE_PLANS_PATH;
+      if (!currentPlanId) return false;
+      const base = `${COURSE_PLANS_PATH}/${currentPlanId}`;
+      if (item.suffix === '') return pathname === base;
+      return pathname === base + item.suffix || pathname.startsWith(base + item.suffix + '/');
+    };
+    return (
+      <Box key={COURSE_PLANS_PATH}>
+        <ListItemButton
+          onClick={() => router.push(COURSE_PLANS_PATH)}
+          sx={{
+            borderRadius: 2.5,
+            mb: 0.5,
+            px: 1.5,
+            py: 1,
+            minHeight: 44,
+            bgcolor: onCoursePlans ? alpha('#fff', 0.14) : 'transparent',
+            color: onCoursePlans ? '#fff' : alpha('#fff', 0.7),
+            '&:hover': { bgcolor: alpha('#fff', 0.08) },
+            transition: TRANSITION,
+          }}
+        >
+          <ListItemIcon
+            sx={{ minWidth: 36, color: 'inherit', '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
+          >
+            {icon}
+          </ListItemIcon>
+          <ListItemText
+            primary="Course Plans"
+            primaryTypographyProps={{ variant: 'body2', fontWeight: onCoursePlans ? 600 : 500 }}
+          />
+          <ExpandMoreIcon
+            onClick={(e) => {
+              e.stopPropagation();
+              setCoursePlansOpen((o) => !o);
+            }}
+            sx={{
+              fontSize: '1.1rem',
+              color: alpha('#fff', 0.5),
+              transform: coursePlansOpen ? 'rotate(0)' : 'rotate(-90deg)',
+              transition: 'transform 200ms ease',
+            }}
+          />
+        </ListItemButton>
+        <Collapse in={coursePlansOpen} timeout={200}>
+          <Box sx={{ ml: 2.5, pl: 1, borderLeft: `2px solid ${alpha('#fff', 0.15)}`, mb: 0.5 }}>
+            {COURSE_PLAN_SUBNAV.map((s) => {
+              const active = childActive(s);
+              return (
+                <ListItemButton
+                  key={s.key}
+                  onClick={() => router.push(s.planScreen ? resolvePlanPath(s.suffix) : COURSE_PLANS_PATH)}
+                  sx={{
+                    borderRadius: 2,
+                    mb: 0.25,
+                    px: 1.25,
+                    py: 0.6,
+                    minHeight: 36,
+                    bgcolor: active ? alpha('#fff', 0.16) : 'transparent',
+                    color: active ? '#fff' : alpha('#fff', 0.62),
+                    '&:hover': { bgcolor: alpha('#fff', 0.08) },
+                    transition: TRANSITION,
+                  }}
+                >
+                  <ListItemText
+                    primary={s.label}
+                    primaryTypographyProps={{
+                      variant: 'body2',
+                      fontSize: '0.8rem',
+                      fontWeight: active ? 600 : 500,
+                    }}
+                  />
+                </ListItemButton>
+              );
+            })}
+          </Box>
+        </Collapse>
+      </Box>
+    );
+  };
+
   const renderNavContent = () => {
     // Icon-only mode or flat items: render flat list
     if (isIcons || !groups) {
       return (
         <List sx={{ px: isExpanded ? 1.5 : 0.75 }}>
-          {flatItems.map(renderNavItem)}
+          {flatItems.map((item) =>
+            isExpanded && item.path === COURSE_PLANS_PATH
+              ? renderCoursePlans(item.icon)
+              : renderNavItem(item),
+          )}
         </List>
       );
     }
@@ -313,14 +429,6 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
               </Tooltip>
             )}
           </Box>
-          {isExpanded && (
-            <Typography
-              variant="caption"
-              sx={{ color: alpha('#fff', 0.6), fontWeight: 500, letterSpacing: '0.5px', textTransform: 'uppercase', fontSize: '0.625rem' }}
-            >
-              {currentPanelTitle}
-            </Typography>
-          )}
         </Box>
 
         <Divider sx={{ borderColor: alpha('#fff', 0.12), mx: isExpanded ? 2 : 1, mb: 1, flexShrink: 0 }} />

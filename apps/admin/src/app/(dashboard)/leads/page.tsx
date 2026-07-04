@@ -31,6 +31,7 @@ import PipelineFunnel from '../../../components/crm/PipelineFunnel';
 import UsersTable from '../../../components/crm/UsersTable';
 import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import { useBatches } from '@/contexts/BatchContext';
 import AuthFunnelChart from '../../../components/leads/AuthFunnelChart';
 import LeadDiagnosticsDrawer from '../../../components/leads/LeadDiagnosticsDrawer';
 
@@ -48,6 +49,9 @@ export default function LeadsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { supabaseUserId } = useAdminProfile();
+  // Follow the global exam-batch switch (profile menu). Leads are mostly untagged,
+  // so 'current' includes untagged rows for triage (handled in listUserJourneys).
+  const { selectedBatch } = useBatches();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -104,6 +108,7 @@ export default function LeadsPage() {
       if (showDeadLeads) params.set('is_dead_lead', 'true');
       if (showIrrelevant) params.set('is_irrelevant', 'true');
       if (globalFilter) params.set('search', globalFilter);
+      if (selectedBatch) params.set('batch', selectedBatch);
 
       if (sorting.length > 0) {
         params.set('order_by', sorting[0].id);
@@ -122,7 +127,7 @@ export default function LeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant]);
+  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, selectedBatch]);
 
   const fetchStudentMatches = useCallback(async () => {
     try {

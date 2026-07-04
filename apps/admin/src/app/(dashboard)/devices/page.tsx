@@ -41,6 +41,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import type { DeviceDistributionStats, StudentDeviceSummary, DeviceSwapRequestWithUser } from '@neram/database';
 import { DeviceDistributionChart } from '@/components/devices/DeviceDistributionChart';
 import { StudentDeviceTable } from '@/components/devices/StudentDeviceTable';
+import { useBatches } from '@/contexts/BatchContext';
 
 function StatCard({
   label,
@@ -520,17 +521,22 @@ function SwapRequestsSection({ isMobile }: { isMobile?: boolean }) {
 export default function DevicesPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  // Follow the global exam-batch switch (profile menu). Stats + list both scope to it.
+  const { selectedBatch, current: currentBatch } = useBatches();
   const [stats, setStats] = useState<DeviceDistributionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/devices?type=stats')
+    setLoading(true);
+    const params = new URLSearchParams({ type: 'stats' });
+    if (selectedBatch) params.set('batch', selectedBatch);
+    fetch(`/api/devices?${params}`)
       .then((r) => r.json())
       .then((s) => setStats(s))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedBatch]);
 
   return (
     <Box sx={{ p: isMobile ? 2 : 3 }}>
@@ -540,6 +546,13 @@ export default function DevicesPage() {
         <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight={700}>
           Student Devices
         </Typography>
+        <Chip
+          size="small"
+          color="primary"
+          variant="outlined"
+          label={`Batch: ${selectedBatch === 'current' ? (currentBatch?.code || 'current') : selectedBatch === 'all' ? 'All' : selectedBatch === 'none' ? 'No batch' : selectedBatch}`}
+          sx={{ ml: 0.5 }}
+        />
       </Box>
 
       {/* Stat cards */}
@@ -662,7 +675,7 @@ export default function DevicesPage() {
         <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight={600} gutterBottom>
           Student Device List
         </Typography>
-        <StudentDeviceTable onViewStudent={(id) => setSelectedStudentId(id)} isMobile={isMobile} />
+        <StudentDeviceTable onViewStudent={(id) => setSelectedStudentId(id)} isMobile={isMobile} batch={selectedBatch} />
       </Paper>
 
       {/* Student detail dialog */}

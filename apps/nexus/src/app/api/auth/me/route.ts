@@ -182,7 +182,12 @@ export async function GET(request: NextRequest) {
       );
 
       if (hasNoOnboardingClassroom) {
+        // Light onboarding: the classroom skips the in-app wizard entirely.
+        // Details were already collected in the marketing application form, so
+        // we don't gate on the in-app profile fields either. The student lands
+        // straight on the dashboard and sees the one-time welcome orientation.
         onboardingStatus = 'approved';
+        profileComplete = true;
       } else {
         const { data: onboarding } = await supabase
           .from('nexus_student_onboarding')
@@ -191,11 +196,11 @@ export async function GET(request: NextRequest) {
           .maybeSingle();
 
         onboardingStatus = onboarding?.status || null;
-      }
 
-      // Check profile completeness (for the profile gate)
-      if (onboardingStatus === 'approved') {
-        profileComplete = !!(user.phone && user.date_of_birth && user.gender);
+        // Check profile completeness (for the profile gate)
+        if (onboardingStatus === 'approved') {
+          profileComplete = !!(user.phone && user.date_of_birth && user.gender);
+        }
       }
     }
 

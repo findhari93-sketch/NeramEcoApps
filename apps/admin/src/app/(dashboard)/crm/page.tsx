@@ -34,6 +34,7 @@ import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
 import ArchiveDialog from '../../../components/crm/ArchiveDialog';
 import VerifyStatusDialog from '../../../components/crm/VerifyStatusDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import { useBatches } from '@/contexts/BatchContext';
 
 type LifecycleView = 'active' | 'archived' | 'candidates';
 
@@ -41,6 +42,8 @@ export default function CRMPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { supabaseUserId } = useAdminProfile();
+  // Follow the global exam-batch switch (profile menu).
+  const { selectedBatch } = useBatches();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -109,6 +112,12 @@ export default function CRMPage() {
         params.set('candidate', candidateSegment);
       }
 
+      // Global exam-batch scope. Skip in the candidates view (its 'old_cohort'
+      // segment already filters by year and would conflict).
+      if (lifecycleView !== 'candidates' && selectedBatch) {
+        params.set('batch', selectedBatch);
+      }
+
       if (sorting.length > 0) {
         params.set('order_by', sorting[0].id);
         params.set('order_dir', sorting[0].desc ? 'desc' : 'asc');
@@ -126,7 +135,7 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, lifecycleView, candidateSegment]);
+  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, lifecycleView, candidateSegment, selectedBatch]);
 
   useEffect(() => {
     fetchUsers();

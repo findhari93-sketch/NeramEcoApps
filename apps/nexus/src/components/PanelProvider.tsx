@@ -29,9 +29,32 @@ import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
+
+/** Root of the Course Plans section (its sidebar item + sub-nav are special-cased). */
+export const COURSE_PLANS_PATH = '/teacher/course-plans';
+
+/**
+ * The Course Plans left-rail sub-navigation. "Overview" is the plans list;
+ * the rest are the screens of the currently open plan (a `[planId]` route).
+ * `suffix` is appended to `/teacher/course-plans/{planId}`.
+ */
+export const COURSE_PLAN_SUBNAV: {
+  key: string;
+  label: string;
+  planScreen: boolean;
+  suffix: string;
+}[] = [
+  { key: 'overview', label: 'Overview', planScreen: false, suffix: '' },
+  { key: 'builder', label: 'Builder', planScreen: true, suffix: '' },
+  { key: 'schedule', label: 'Schedule', planScreen: true, suffix: '/schedule' },
+  { key: 'classday', label: 'Class Day', planScreen: true, suffix: '/class-day' },
+  { key: 'health', label: 'Health', planScreen: true, suffix: '/health' },
+  { key: 'catchup', label: 'Catch-up', planScreen: true, suffix: '/catchup' },
+];
 
 interface NavItem {
   label: string;
@@ -62,6 +85,7 @@ const PANELS: PanelConfig[] = [
     sidebarItems: [
       { label: 'Dashboard', path: '/teacher/dashboard', icon: <DashboardOutlinedIcon /> },
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
+      { label: 'Repository', path: '/teacher/curriculum', icon: <AutoStoriesOutlinedIcon /> },
       { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
@@ -96,6 +120,8 @@ const PANELS: PanelConfig[] = [
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
+      { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
+      { label: 'Class Recaps', path: '/teacher/class-recaps', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
@@ -165,6 +191,7 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
   if (pathname.startsWith('/teacher/onboarding-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/drawing-reviews')) return 'teaching';
+  if (pathname.startsWith('/teacher/curriculum')) return 'teaching';
   if (pathname.startsWith('/teacher/course-plans')) return 'teaching';
   if (pathname.startsWith('/teacher/exam-schedule')) return 'teaching';
   if (pathname.startsWith('/teacher/exams')) return 'teaching';

@@ -7,16 +7,12 @@ import {
   Typography,
   Paper,
   Chip,
-  TextField,
-  InputAdornment,
   Skeleton,
   Alert,
   IconButton,
   Tooltip,
   MenuItem,
   Select,
-  FormControl,
-  InputLabel,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -25,29 +21,26 @@ import {
   CircularProgress,
 } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
-import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import DeleteIcon from '@mui/icons-material/Delete';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
-import KeyIcon from '@mui/icons-material/Key';
-import SendIcon from '@mui/icons-material/Send';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
-import EditIcon from '@mui/icons-material/Edit';
-import GroupsIcon from '@mui/icons-material/Groups';
-import SaveIcon from '@mui/icons-material/Save';
 import SyncIcon from '@mui/icons-material/Sync';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import DataTable from '@/components/DataTable';
-import CopyablePhone from '@/components/CopyablePhone';
-import { useRouter } from 'next/navigation';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import LaptopMacIcon from '@mui/icons-material/LaptopMac';
+import InsightsIcon from '@mui/icons-material/Insights';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import StudentHubTable from '@/components/students/StudentHubTable';
+import StudentDetailDrawer from '@/components/alumni/StudentDetailDrawer';
+import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import GraduateDialog from '@/components/crm/GraduateDialog';
+import SetAcademicYearDialog from '@/components/crm/SetAcademicYearDialog';
+import MarkStaffDialog from '@/components/alumni/MarkStaffDialog';
+import { useBatches } from '@/contexts/BatchContext';
+import { currentAcademicYear } from '@/components/crm/academic-years';
 
 // Types for the student data
 interface StudentRow {
@@ -55,24 +48,32 @@ interface StudentRow {
   user_id: string;
   first_name: string;
   last_name: string;
+  name?: string | null;
   email: string;
+  classroom_email: string | null;
+  personal_email: string | null;
   phone: string;
   avatar_url: string | null;
+  academic_year: string | null;
+  is_alumni: boolean;
+  last_login_at: string | null;
   enrollment_date: string;
-  batch_id: string | null;
-  batch_name: string | null;
   payment_status: string;
   total_fee: number;
   fee_paid: number;
   fee_due: number;
   interest_course: string | null;
   student_id: string | null;
+  student_profile_id: string | null;
   application_number: string | null;
   final_fee: number | null;
   full_payment_discount: number | null;
   discount_amount: number | null;
   source: string | null;
   ms_teams_email: string | null;
+  application_complete: boolean;
+  application_status: string | null;
+  application_missing: 'no_application' | 'incomplete' | null;
 }
 
 interface Stats {
@@ -80,14 +81,18 @@ interface Stats {
   fullyPaid: number;
   partialPayment: number;
   totalRevenue: number;
+  totalPending: number;
 }
 
-const COURSE_LABELS: Record<string, string> = {
-  nata: 'NATA',
-  jee_paper2: 'JEE Paper 2',
-  both: 'Both',
-  not_sure: 'Not Sure',
-};
+interface YearRevenue {
+  year: string | null;
+  studentCount: number;
+  totalFee: number;
+  collected: number;
+  pending: number;
+  fullyPaidCount: number;
+  partialCount: number;
+}
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-IN', {
@@ -95,43 +100,6 @@ function formatCurrency(amount: number): string {
     currency: 'INR',
     maximumFractionDigits: 0,
   }).format(amount);
-}
-
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-function getPaymentStatusColor(status: string): 'success' | 'warning' | 'error' | 'default' {
-  switch (status) {
-    case 'paid':
-      return 'success';
-    case 'pending':
-      return 'warning';
-    case 'failed':
-      return 'error';
-    default:
-      return 'default';
-  }
-}
-
-function getPaymentStatusLabel(status: string): string {
-  switch (status) {
-    case 'paid':
-      return 'Paid';
-    case 'pending':
-      return 'Partial';
-    case 'failed':
-      return 'Failed';
-    case 'refunded':
-      return 'Refunded';
-    default:
-      return status || 'Pending';
-  }
 }
 
 // Stat card component
@@ -193,47 +161,160 @@ function StatCard({
   );
 }
 
+const ACCENT = '#B45309'; // brand amber, single accent
+
+// Revenue overview: per-year fee rollup. Comparison bars (sorted by collected,
+// desc, with value labels) + per-year cards. Built from /api/students/revenue-by-year.
+function RevenueOverview({
+  revenue,
+  loading,
+  onPickYear,
+}: {
+  revenue: YearRevenue[];
+  loading: boolean;
+  onPickYear: (year: string) => void;
+}) {
+  const yearName = (y: string | null) => (y === null ? 'No year set' : y);
+  const totalCollected = revenue.reduce((s, r) => s + r.collected, 0);
+  const totalPending = revenue.reduce((s, r) => s + r.pending, 0);
+  const totalStudents = revenue.reduce((s, r) => s + r.studentCount, 0);
+  const maxCollected = Math.max(1, ...revenue.map((r) => r.collected));
+  const byCollected = [...revenue].sort((a, b) => b.collected - a.collected);
+
+  if (loading) {
+    return (
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1 }}>
+        <Skeleton width={240} height={28} />
+        <Skeleton variant="rectangular" height={200} sx={{ mt: 2, borderRadius: 1 }} />
+      </Paper>
+    );
+  }
+  if (revenue.length === 0) {
+    return (
+      <Paper elevation={0} sx={{ p: 4, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, textAlign: 'center' }}>
+        <Typography color="text.secondary">No revenue recorded yet.</Typography>
+      </Paper>
+    );
+  }
+
+  return (
+    <Box>
+      {/* All-years totals */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        <StatCard title="Total collected (all years)" value={formatCurrency(totalCollected)} icon={<CurrencyRupeeIcon sx={{ color: '#2e7d32', fontSize: 24 }} />} color="#2e7d32" loading={false} />
+        <StatCard title="Total pending (all years)" value={formatCurrency(totalPending)} icon={<AccountBalanceWalletIcon sx={{ color: '#ed6c02', fontSize: 24 }} />} color="#ed6c02" loading={false} />
+        <StatCard title="Students (all years)" value={totalStudents} icon={<PeopleAltIcon sx={{ color: '#1976d2', fontSize: 24 }} />} color="#1976d2" loading={false} />
+      </Box>
+
+      {/* Comparison bars */}
+      <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1 }}>
+        <Typography variant="subtitle2" fontWeight={700}>Collected revenue by year</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+          From enrollment records (fees recorded per student), highest first.
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          {byCollected.map((r) => (
+            <Box key={r.year ?? 'none'} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box sx={{ width: 120, flexShrink: 0 }}>
+                <Typography variant="body2" fontWeight={600}>{yearName(r.year)}</Typography>
+                <Typography variant="caption" color="text.secondary">{r.studentCount} students</Typography>
+              </Box>
+              <Box sx={{ flex: 1, height: 24, bgcolor: 'grey.100', borderRadius: 0.75, overflow: 'hidden' }}>
+                <Box sx={{ width: `${Math.round((r.collected / maxCollected) * 100)}%`, height: '100%', bgcolor: ACCENT, opacity: 0.9, minWidth: r.collected > 0 ? 4 : 0 }} />
+              </Box>
+              <Box sx={{ width: 150, flexShrink: 0, textAlign: 'right' }}>
+                <Typography variant="body2" fontWeight={700} sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(r.collected)}</Typography>
+                {r.pending > 0 && <Typography variant="caption" color="error.main">{formatCurrency(r.pending)} due</Typography>}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
+
+      {/* Per-year cards */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+        {revenue.map((r) => {
+          const pct = r.totalFee > 0 ? Math.min(100, Math.round((r.collected / r.totalFee) * 100)) : 0;
+          return (
+            <Paper
+              key={r.year ?? 'none'}
+              elevation={0}
+              onClick={() => r.year && onPickYear(r.year)}
+              sx={{
+                p: 2,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 1,
+                cursor: r.year ? 'pointer' : 'default',
+                transition: 'border-color 150ms',
+                '&:hover': r.year ? { borderColor: ACCENT } : {},
+              }}
+            >
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700}>{yearName(r.year)}</Typography>
+                <Chip label={`${r.studentCount} students`} size="small" sx={{ height: 22, fontSize: 11 }} />
+              </Box>
+              <Typography variant="h6" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+                {formatCurrency(r.collected)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">collected of {formatCurrency(r.totalFee)}</Typography>
+              <Box sx={{ height: 8, bgcolor: 'grey.100', borderRadius: 4, overflow: 'hidden', my: 1 }}>
+                <Box sx={{ width: `${pct}%`, height: '100%', bgcolor: ACCENT }} />
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary">{r.fullyPaidCount} fully paid · {r.partialCount} partial</Typography>
+                <Typography variant="caption" color={r.pending > 0 ? 'error.main' : 'text.secondary'} fontWeight={600}>
+                  {r.pending > 0 ? `${formatCurrency(r.pending)} due` : 'Cleared'}
+                </Typography>
+              </Box>
+            </Paper>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
+
 export default function StudentsPage() {
   const router = useRouter();
+  const { supabaseUserId } = useAdminProfile();
 
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
     fullyPaid: 0,
     partialPayment: 0,
     totalRevenue: 0,
+    totalPending: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState<{ type: 'success' | 'info'; text: string } | null>(null);
+
+  // Exam-batch organisation is GLOBAL: the one switch in the profile menu drives
+  // every list. We alias the global selectedBatch/setSelectedBatch to the local
+  // year/setYear names the rest of this page already uses.
+  const { current: currentBatch, selectedBatch: year, setSelectedBatch: setYear } = useBatches();
+  const [view, setView] = useState<'list' | 'revenue'>('list');
+  const [revenue, setRevenue] = useState<YearRevenue[]>([]);
+  const [revenueLoading, setRevenueLoading] = useState(false);
+
+  // Bulk actions: the grid owns row selection and hands the selected rows to these
+  // handlers. bulkRows holds the set the year / graduate dialogs act on; bumping
+  // selectionResetKey clears the grid selection after an action reloads the data.
+  const [bulkRows, setBulkRows] = useState<StudentRow[]>([]);
+  const [selectionResetKey, setSelectionResetKey] = useState(0);
+  const [setYearOpen, setSetYearOpen] = useState(false);
+  const [graduateOpen, setGraduateOpen] = useState(false);
+  const [markStaff, setMarkStaff] = useState<StudentRow[] | null>(null);
+
+  // Row-click detail drawer
+  const [drawerStudent, setDrawerStudent] = useState<StudentRow | null>(null);
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-
-  // Filters
-  const [search, setSearch] = useState('');
-  const [courseFilter, setCourseFilter] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState('');
-  const [batchFilter, setBatchFilter] = useState('');
-
-  // (Legacy batch assignment removed — using Nexus classrooms only)
-
-  // Nexus classrooms & batches
-  const [nexusClassrooms, setNexusClassrooms] = useState<{ id: string; name: string; type: string }[]>([]);
-  const [nexusBatchesMap, setNexusBatchesMap] = useState<Record<string, { id: string; name: string }[]>>({});
-  const [nexusEnrollments, setNexusEnrollments] = useState<Record<string, { classroom_id: string; batch_id: string | null }[]>>({});
-  const [assigningNexus, setAssigningNexus] = useState<string | null>(null);
-
-  // Share Credentials
-  const [credTarget, setCredTarget] = useState<StudentRow | null>(null);
-  const [credEmail, setCredEmail] = useState('');
-  const [credPassword, setCredPassword] = useState('');
-  const [credShowPassword, setCredShowPassword] = useState(false);
-  const [credSharing, setCredSharing] = useState(false);
-  const [credError, setCredError] = useState('');
-  const [credSuccess, setCredSuccess] = useState(false);
 
   // Legacy student reconciliation
   const [legacyStudents, setLegacyStudents] = useState<any[]>([]);
@@ -252,38 +333,23 @@ export default function StudentsPage() {
   const [entraCourseMap, setEntraCourseMap] = useState<Record<string, string>>({});
   const [entraSelected, setEntraSelected] = useState<Set<string>>(new Set());
 
-  // Group chat config
-  const [groupChatConfig, setGroupChatConfig] = useState<{ chat_id: string; chat_name: string; invite_link: string; auto_add_enabled: boolean }>({ chat_id: '', chat_name: '', invite_link: '', auto_add_enabled: false });
-  const [editingGroupChat, setEditingGroupChat] = useState(false);
-  const [groupChatInput, setGroupChatInput] = useState('');
-  const [groupChatNameInput, setGroupChatNameInput] = useState('');
-  const [groupChatInviteLinkInput, setGroupChatInviteLinkInput] = useState('');
-  const [savingGroupChat, setSavingGroupChat] = useState(false);
-  const [groupChatInfo, setGroupChatInfo] = useState<string | null>(null);
+  const bumpReset = () => setSelectionResetKey((k) => k + 1);
 
-  // Debounce
-  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-
+  // The grid does all per-column filtering / global search / paging client-side on
+  // the loaded cohort, so this fetch only takes the year scope.
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
       const params = new URLSearchParams();
-      params.set('limit', '500'); // Fetch all for client-side pagination (DataTable paginates)
-      params.set('offset', '0');
-
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (courseFilter) params.set('course', courseFilter);
-      if (paymentFilter) params.set('paymentStatus', paymentFilter);
+      params.set('year', year);
 
       const res = await fetch(`/api/students?${params.toString()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch students');
 
       const data = await res.json();
       setStudents(data.students || []);
-      setTotalCount(data.total || 0);
       if (data.stats) {
         setStats(data.stats);
       }
@@ -292,51 +358,136 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, courseFilter, paymentFilter]);
+  }, [year]);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
 
-  // Fetch Nexus classrooms
-  useEffect(() => {
-    fetch('/api/nexus/classrooms')
-      .then((r) => r.json())
-      .then((d) => setNexusClassrooms(d.data || []))
-      .catch(() => {});
-  }, []);
-
-  // Fetch group chat config
-  useEffect(() => {
-    fetch('/api/settings/teams-group-chat')
-      .then((r) => r.json())
-      .then((d) => { if (d.data) setGroupChatConfig(d.data); })
-      .catch(() => {});
-  }, []);
-
-  const handleSaveGroupChat = async () => {
-    setSavingGroupChat(true);
+  // Lazy-load the per-year revenue rollup only when the overview is opened.
+  const fetchRevenue = useCallback(async () => {
+    setRevenueLoading(true);
     try {
-      const res = await fetch('/api/settings/teams-group-chat', {
-        method: 'PUT',
+      const res = await fetch('/api/students/revenue-by-year', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) setRevenue(data.years || []);
+    } catch {
+      // non-fatal: the overview just shows an empty state
+    } finally {
+      setRevenueLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'revenue' && revenue.length === 0) fetchRevenue();
+  }, [view, revenue.length, fetchRevenue]);
+
+  // Defaults for the bulk dialogs, derived from the rows the grid handed us.
+  const selectedYearDefault = year !== 'all' && year !== 'none' && year !== 'current' ? year : (currentBatch?.code || currentAcademicYear());
+  const graduateDefaultYear = (() => {
+    const years = new Set(bulkRows.map((s) => s.academic_year).filter(Boolean) as string[]);
+    if (years.size === 1) return [...years][0];
+    return selectedYearDefault;
+  })();
+
+  // Bulk: set academic year (re-buckets the selected students to a cohort).
+  const handleSetYear = useCallback(
+    async (academicYear: string) => {
+      if (!supabaseUserId) throw new Error('Admin session not ready, try again in a moment.');
+      const ids = bulkRows.map((s) => s.id);
+      const res = await fetch('/api/crm/alumni/set-year', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId: groupChatInput,
-          chatName: groupChatNameInput,
-          inviteLink: groupChatInviteLinkInput,
-          autoAddEnabled: true,
-        }),
+        body: JSON.stringify({ userIds: ids, academicYear, adminId: supabaseUserId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setGroupChatConfig(data.data);
-      setEditingGroupChat(false);
-    } catch (err: any) {
-      setError(err.message || 'Failed to save group chat config');
-    } finally {
-      setSavingGroupChat(false);
-    }
-  };
+      if (!res.ok) throw new Error(data.error || 'Failed to set academic year');
+      setSetYearOpen(false);
+      bumpReset();
+      setNotice({ type: 'success', text: `Set academic year ${academicYear} on ${data.updated} student(s).` });
+      fetchStudents();
+      if (view === 'revenue') fetchRevenue();
+    },
+    [supabaseUserId, bulkRows, fetchStudents, fetchRevenue, view]
+  );
+
+  // Bulk: move to the Software course program (leaves the architecture list).
+  const moveToSoftware = useCallback(
+    async (rows: StudentRow[]) => {
+      const ids = rows.map((s) => s.id);
+      if (!ids.length) return;
+      if (!supabaseUserId) {
+        setError('Admin session not ready, try again in a moment.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/crm/alumni/set-program', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIds: ids, program: 'software', adminId: supabaseUserId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to move students');
+        const moved = new Set(ids);
+        setStudents((prev) => prev.filter((s) => !moved.has(s.id)));
+        bumpReset();
+        setNotice({ type: 'success', text: `Moved ${data.updated} student(s) to the Software course.` });
+      } catch (err: any) {
+        setError(err.message || 'Failed to move students');
+      }
+    },
+    [supabaseUserId]
+  );
+
+  // Bulk: reclassify mis-tagged students as staff (teacher/admin).
+  const markAsStaff = useCallback(
+    async (role: 'teacher' | 'admin') => {
+      const people = markStaff || [];
+      const ids = people.map((s) => s.id);
+      if (!ids.length) return;
+      if (!supabaseUserId) throw new Error('Admin session not ready, try again in a moment.');
+      const res = await fetch('/api/crm/alumni/set-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: ids, role, adminId: supabaseUserId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update role');
+      const moved = new Set(ids);
+      setStudents((prev) => prev.filter((s) => !moved.has(s.id)));
+      bumpReset();
+      const noun = data.updated === 1 ? 'person' : 'people';
+      setNotice({ type: 'success', text: `Marked ${data.updated} ${noun} as ${role === 'admin' ? 'admin' : 'staff'}.` });
+    },
+    [markStaff, supabaseUserId]
+  );
+
+  // Bulk: graduate the selected cohort. They become alumni (Nexus access revoked)
+  // and re-bucket under their academic year, leaving the active list.
+  const handleGraduate = useCallback(
+    async (opts: { academicYear: string; reason: string; offboardMicrosoft: boolean }) => {
+      if (!supabaseUserId) throw new Error('Admin session not ready, try again in a moment.');
+      const graduatedIds = bulkRows.map((s) => s.id);
+      const res = await fetch('/api/crm/alumni/graduate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: graduatedIds, adminId: supabaseUserId, ...opts }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to graduate students');
+      const graduated = new Set(graduatedIds);
+      setStudents((prev) => prev.filter((s) => !graduated.has(s.id)));
+      bumpReset();
+      if (view === 'revenue') fetchRevenue();
+      return data;
+    },
+    [supabaseUserId, bulkRows, view, fetchRevenue]
+  );
+
+  const closeGraduate = useCallback(() => {
+    setGraduateOpen(false);
+    fetchStudents();
+  }, [fetchStudents]);
 
   // Fetch legacy students count
   useEffect(() => {
@@ -435,170 +586,6 @@ export default function StudentsPage() {
     }
   };
 
-  // Fetch Nexus enrollments for all loaded students (supports multiple classrooms per student)
-  useEffect(() => {
-    if (students.length === 0) return;
-    const fetchEnrollments = async () => {
-      const enrollmentMap: Record<string, { classroom_id: string; batch_id: string | null }[]> = {};
-      await Promise.all(
-        students.map(async (s) => {
-          try {
-            const res = await fetch(`/api/students/${s.user_id}/nexus-enroll`);
-            const data = await res.json();
-            if (data.data && data.data.length > 0) {
-              enrollmentMap[s.user_id] = data.data.map((e: any) => ({
-                classroom_id: e.classroom_id,
-                batch_id: e.batch_id,
-              }));
-            }
-          } catch {}
-        })
-      );
-      setNexusEnrollments(enrollmentMap);
-
-      // Pre-fetch batches for all enrolled classrooms
-      const classroomIds = [...new Set(Object.values(enrollmentMap).flatMap((enrollments) => enrollments.map((e) => e.classroom_id)))];
-      for (const cid of classroomIds) {
-        if (cid) fetchNexusBatches(cid);
-      }
-    };
-    fetchEnrollments();
-  }, [students]);
-
-  // Fetch Nexus batches when classroom is selected
-  const fetchNexusBatches = async (classroomId: string) => {
-    if (nexusBatchesMap[classroomId]) return;
-    try {
-      const res = await fetch(`/api/nexus/classrooms/${classroomId}/batches`);
-      const data = await res.json();
-      setNexusBatchesMap((prev) => ({ ...prev, [classroomId]: data.data || [] }));
-    } catch {}
-  };
-
-  const handleNexusClassroomAdd = async (userId: string, classroomId: string) => {
-    setAssigningNexus(userId);
-    try {
-      const res = await fetch(`/api/students/${userId}/nexus-enroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroomId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to assign classroom');
-      setNexusEnrollments((prev) => {
-        const existing = prev[userId] || [];
-        if (existing.some((e) => e.classroom_id === classroomId)) return prev;
-        return { ...prev, [userId]: [...existing, { classroom_id: classroomId, batch_id: null }] };
-      });
-      fetchNexusBatches(classroomId);
-
-      // Show Teams auto-add result and group chat invite link
-      if (data.teamsAutoAdd?.reason === 'no_ms_teams_email') {
-        setError('Classroom assigned but Teams auto-add skipped — share credentials first so the student gets a Teams email.');
-      } else {
-        setError('');
-      }
-      if (data.groupChatInviteLink) {
-        setGroupChatInfo(data.groupChatInviteLink);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAssigningNexus(null);
-    }
-  };
-
-  const handleNexusClassroomRemove = async (userId: string, classroomId: string) => {
-    setAssigningNexus(userId);
-    try {
-      const supabase = await fetch(`/api/students/${userId}/nexus-enroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroomId, remove: true }),
-      });
-      setNexusEnrollments((prev) => {
-        const existing = prev[userId] || [];
-        return { ...prev, [userId]: existing.filter((e) => e.classroom_id !== classroomId) };
-      });
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAssigningNexus(null);
-    }
-  };
-
-  const handleNexusBatchAssign = async (userId: string, classroomId: string, batchId: string) => {
-    setAssigningNexus(userId);
-    try {
-      const res = await fetch(`/api/students/${userId}/nexus-enroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroomId, batchId: batchId || null }),
-      });
-      if (!res.ok) throw new Error('Failed to assign batch');
-      setNexusEnrollments((prev) => {
-        const existing = prev[userId] || [];
-        return {
-          ...prev,
-          [userId]: existing.map((e) =>
-            e.classroom_id === classroomId ? { ...e, batch_id: batchId || null } : e
-          ),
-        };
-      });
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAssigningNexus(null);
-    }
-  };
-
-  const handleShareCredentials = async () => {
-    if (!credTarget || !credEmail || !credPassword) return;
-    setCredSharing(true);
-    setCredError('');
-    try {
-      const targetUserId = credTarget.user_id;
-      const sharedEmail = credEmail;
-      const res = await fetch(`/api/students/${targetUserId}/credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: sharedEmail, password: credPassword, credentialType: 'ms_teams' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to share credentials');
-      // Update local student data so classroom assignment becomes enabled immediately
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.user_id === targetUserId ? { ...s, ms_teams_email: sharedEmail } : s
-        )
-      );
-      setCredSuccess(true);
-      setCredTarget(null);
-      setCredEmail('');
-      setCredPassword('');
-      setCredShowPassword(false);
-      setTimeout(() => setCredSuccess(false), 5000);
-    } catch (err: any) {
-      setCredError(err.message || 'Failed to share');
-    } finally {
-      setCredSharing(false);
-    }
-  };
-
-  // Handle search with debounce
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    if (searchDebounce) clearTimeout(searchDebounce);
-    const timeout = setTimeout(() => {
-      setDebouncedSearch(value);
-    }, 400);
-    setSearchDebounce(timeout);
-  };
-
-  const handleRowClick = (row: StudentRow) => {
-    router.push(`/crm/${row.user_id}`);
-  };
-
   const handleDeleteStudent = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -618,288 +605,6 @@ export default function StudentsPage() {
       setDeleting(false);
     }
   };
-
-  // Column definitions for DataTable
-  const columns = [
-    {
-      field: 'student_id',
-      headerName: 'Student ID',
-      width: 150,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: 13 }}>
-          {row.student_id || '-'}
-        </Typography>
-      ),
-    },
-    {
-      field: 'name',
-      headerName: 'Name',
-      width: 180,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2" fontWeight={500} noWrap>
-          {[row.first_name, row.last_name].filter(Boolean).join(' ') || '-'}
-        </Typography>
-      ),
-    },
-    {
-      field: 'email',
-      headerName: 'Email',
-      width: 220,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2" color="text.secondary" noWrap>
-          {row.email || '-'}
-        </Typography>
-      ),
-    },
-    {
-      field: 'phone',
-      headerName: 'Phone',
-      width: 170,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <CopyablePhone phone={row.phone} noWrap showOnHover />
-      ),
-    },
-    {
-      field: 'interest_course',
-      headerName: 'Course',
-      width: 130,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Chip
-          label={COURSE_LABELS[row.interest_course || ''] || row.interest_course || '-'}
-          size="small"
-          variant="outlined"
-          sx={{ fontWeight: 500 }}
-        />
-      ),
-    },
-    {
-      field: 'enrollment_date',
-      headerName: 'Enrolled',
-      width: 110,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2" sx={{ fontSize: 13 }}>
-          {formatDate(row.enrollment_date)}
-        </Typography>
-      ),
-    },
-    {
-      field: 'source',
-      headerName: 'Join Method',
-      width: 120,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => {
-        const label = row.source === 'direct_link' ? 'Direct' : 'Application';
-        const color = row.source === 'direct_link' ? '#7B1FA2' : '#1565C0';
-        return (
-          <Chip
-            label={label}
-            size="small"
-            sx={{
-              fontWeight: 600,
-              fontSize: 11,
-              height: 22,
-              bgcolor: `${color}14`,
-              color,
-              borderRadius: 0.75,
-            }}
-          />
-        );
-      },
-    },
-    {
-      field: 'payment_status',
-      headerName: 'Payment',
-      width: 110,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Chip
-          label={getPaymentStatusLabel(row.payment_status)}
-          color={getPaymentStatusColor(row.payment_status)}
-          size="small"
-          sx={{ fontWeight: 500 }}
-        />
-      ),
-    },
-    {
-      field: 'fee_paid',
-      headerName: 'Total Paid',
-      width: 120,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography variant="body2" fontWeight={500} color="success.main">
-          {formatCurrency(row.fee_paid)}
-        </Typography>
-      ),
-    },
-    {
-      field: 'fee_due',
-      headerName: 'Fee Due',
-      width: 120,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Typography
-          variant="body2"
-          fontWeight={500}
-          color={row.fee_due > 0 ? 'error.main' : 'text.secondary'}
-        >
-          {row.fee_due > 0 ? formatCurrency(row.fee_due) : '-'}
-        </Typography>
-      ),
-    },
-    {
-      field: 'nexus_classroom',
-      headerName: 'Classrooms & Batches',
-      width: 320,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => {
-        const enrollments = nexusEnrollments[row.user_id] || [];
-        const enrolledClassroomIds = enrollments.map((e) => e.classroom_id);
-        const unassignedClassrooms = nexusClassrooms.filter((c) => !enrolledClassroomIds.includes(c.id));
-        const hasCredentials = !!row.ms_teams_email;
-
-        // If no credentials shared yet, show disabled state with guidance
-        if (!hasCredentials) {
-          return (
-            <Tooltip title="Share credentials first to enable classroom assignment" arrow>
-              <Box
-                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.5, width: '100%', opacity: 0.5, cursor: 'not-allowed' }}
-              >
-                <KeyIcon sx={{ fontSize: 14, color: 'warning.main' }} />
-                <Typography variant="body2" color="text.disabled" sx={{ fontSize: 11 }}>
-                  Share credentials first
-                </Typography>
-              </Box>
-            </Tooltip>
-          );
-        }
-
-        return (
-          <Box
-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.5, width: '100%' }}
-          >
-            {/* Enrolled classrooms with batch selectors */}
-            {enrollments.map((enrollment) => {
-              const classroom = nexusClassrooms.find((c) => c.id === enrollment.classroom_id);
-              const batches = nexusBatchesMap[enrollment.classroom_id] || [];
-              return (
-                <Box key={enrollment.classroom_id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Chip
-                    label={classroom?.name || 'Unknown'}
-                    size="small"
-                    onDelete={() => handleNexusClassroomRemove(row.user_id, enrollment.classroom_id)}
-                    deleteIcon={<CloseIcon sx={{ fontSize: '14px !important' }} />}
-                    sx={{ fontSize: 11, height: 22, fontWeight: 500 }}
-                  />
-                  <Select
-                    size="small"
-                    value={enrollment.batch_id || ''}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handleNexusBatchAssign(row.user_id, enrollment.classroom_id, e.target.value as string);
-                    }}
-                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                    displayEmpty
-                    disabled={assigningNexus === row.user_id}
-                    sx={{ fontSize: 11, height: 22, minWidth: 90, '& .MuiSelect-select': { py: 0, px: 1 } }}
-                  >
-                    <MenuItem value="" sx={{ fontSize: 11 }}>
-                      <em>No batch</em>
-                    </MenuItem>
-                    {batches.map((b: any) => (
-                      <MenuItem key={b.id} value={b.id} sx={{ fontSize: 11 }}>
-                        {b.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </Box>
-              );
-            })}
-
-            {/* Add classroom selector */}
-            {unassignedClassrooms.length > 0 && (
-              <Select
-                size="small"
-                value=""
-                onChange={(e) => {
-                  e.stopPropagation();
-                  if (e.target.value) handleNexusClassroomAdd(row.user_id, e.target.value as string);
-                }}
-                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                displayEmpty
-                disabled={assigningNexus === row.user_id}
-                sx={{ fontSize: 11, height: 22, minWidth: 120, '& .MuiSelect-select': { py: 0, px: 1 }, color: 'text.secondary' }}
-              >
-                <MenuItem value="" sx={{ fontSize: 11 }}>
-                  <em><AddIcon sx={{ fontSize: 12, mr: 0.5, verticalAlign: 'middle' }} /> Add classroom</em>
-                </MenuItem>
-                {unassignedClassrooms.map((c) => (
-                  <MenuItem key={c.id} value={c.id} sx={{ fontSize: 11 }}>
-                    {c.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            )}
-
-            {enrollments.length === 0 && unassignedClassrooms.length === 0 && (
-              <Typography variant="body2" color="text.disabled" sx={{ fontSize: 11 }}>No classrooms</Typography>
-            )}
-          </Box>
-        );
-      },
-    },
-    {
-      field: 'credentials',
-      headerName: 'Credentials',
-      width: 150,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => {
-        const hasCredentials = !!row.ms_teams_email;
-        return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {hasCredentials && (
-              <Tooltip title={`Credentials shared: ${row.ms_teams_email}`}>
-                <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
-              </Tooltip>
-            )}
-            <Tooltip title={hasCredentials ? 'Re-share Teams login credentials' : 'Share Teams login credentials'}>
-              <Button
-                size="small"
-                variant={hasCredentials ? 'text' : 'outlined'}
-                color={hasCredentials ? 'inherit' : 'primary'}
-                startIcon={<KeyIcon sx={{ fontSize: 14 }} />}
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  setCredTarget(row);
-                  setCredEmail(row.ms_teams_email || '');
-                  setCredPassword('');
-                  setCredShowPassword(false);
-                  setCredError('');
-                }}
-                sx={{ fontSize: 11, height: 28, textTransform: 'none' }}
-              >
-                {hasCredentials ? 'Re-share' : 'Share'}
-              </Button>
-            </Tooltip>
-          </Box>
-        );
-      },
-    },
-    {
-      field: 'actions',
-      headerName: '',
-      width: 60,
-      renderCell: ({ row }: { row: StudentRow; value: any }) => (
-        <Tooltip title="Delete student">
-          <IconButton
-            size="small"
-            color="error"
-            onClick={(e: React.MouseEvent) => {
-              e.stopPropagation();
-              setDeleteTarget(row);
-            }}
-          >
-            <DeleteIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      ),
-    },
-  ];
 
   return (
     <Box>
@@ -924,23 +629,44 @@ export default function StudentsPage() {
               Enrolled Students
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {loading ? 'Loading...' : `${stats.totalStudents} students enrolled`}
+              {loading
+                ? 'Loading...'
+                : `${stats.totalStudents} students · ${
+                    year === 'current'
+                      ? `Current cohort (${currentAcademicYear()})`
+                      : year === 'all'
+                      ? 'All years'
+                      : year === 'none'
+                      ? 'No year set'
+                      : `Batch ${year}`
+                  }`}
             </Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             size="small"
-            variant="outlined"
-            startIcon={<SyncIcon />}
-            onClick={() => { setShowEntraSync(true); handleFetchEntra(); }}
+            variant={view === 'revenue' ? 'contained' : 'outlined'}
+            startIcon={view === 'revenue' ? <ArrowBackIcon /> : <InsightsIcon />}
+            onClick={() => setView(view === 'revenue' ? 'list' : 'revenue')}
             sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
           >
-            Sync from Entra
+            {view === 'revenue' ? 'Back to students' : 'Revenue overview'}
           </Button>
+          {view === 'list' && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<SyncIcon />}
+              onClick={() => { setShowEntraSync(true); handleFetchEntra(); }}
+              sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
+            >
+              Sync from Entra
+            </Button>
+          )}
           <Tooltip title="Refresh data">
             <span>
-              <IconButton size="small" onClick={fetchStudents} disabled={loading}>
+              <IconButton size="small" onClick={() => { fetchStudents(); if (view === 'revenue') fetchRevenue(); }} disabled={loading}>
                 <RefreshIcon fontSize="small" />
               </IconButton>
             </span>
@@ -954,39 +680,28 @@ export default function StudentsPage() {
           {error}
         </Alert>
       )}
-      {groupChatInfo && (
-        <Alert
-          severity="info"
-          sx={{ mb: 2, borderRadius: 1 }}
-          onClose={() => setGroupChatInfo(null)}
-          action={
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              <Tooltip title="Copy invite link">
-                <IconButton size="small" color="inherit" onClick={() => navigator.clipboard.writeText(groupChatInfo)}>
-                  <ContentCopyIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Open in Teams">
-                <IconButton size="small" color="inherit" component="a" href={groupChatInfo} target="_blank" rel="noopener noreferrer">
-                  <OpenInNewIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          }
-        >
-          Classroom assigned. Share this group chat invite link with the student so they can join the chat.
-        </Alert>
-      )}
-      {credSuccess && (
-        <Alert severity="success" sx={{ mb: 2, borderRadius: 1 }} onClose={() => setCredSuccess(false)}>
-          Credentials shared successfully! The student can view them in their onboarding page.
+      {notice && (
+        <Alert severity={notice.type} sx={{ mb: 2, borderRadius: 1 }} onClose={() => setNotice(null)}>
+          {notice.text}
         </Alert>
       )}
 
-      {/* Stats Cards */}
+      {/* Revenue overview view */}
+      {view === 'revenue' && (
+        <RevenueOverview
+          revenue={revenue}
+          loading={revenueLoading}
+          onPickYear={(y) => { setYear(y); setView('list'); }}
+        />
+      )}
+
+      {/* List view: current cohort / selected year roster + operations */}
+      {view === 'list' && (
+        <>
+      {/* Stats Cards (scoped to the selected year) */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <StatCard
-          title="Total Students"
+          title="Students"
           value={stats.totalStudents}
           icon={<PeopleAltIcon sx={{ color: '#1976d2', fontSize: 24 }} />}
           color="#1976d2"
@@ -1007,10 +722,17 @@ export default function StudentsPage() {
           loading={loading}
         />
         <StatCard
-          title="Total Revenue"
+          title="Collected"
           value={formatCurrency(stats.totalRevenue)}
-          icon={<CurrencyRupeeIcon sx={{ color: '#9c27b0', fontSize: 24 }} />}
-          color="#9c27b0"
+          icon={<CurrencyRupeeIcon sx={{ color: '#2e7d32', fontSize: 24 }} />}
+          color="#2e7d32"
+          loading={loading}
+        />
+        <StatCard
+          title="Pending Fees"
+          value={formatCurrency(stats.totalPending)}
+          icon={<AccountBalanceWalletIcon sx={{ color: '#ed6c02', fontSize: 24 }} />}
+          color="#ed6c02"
           loading={loading}
         />
       </Box>
@@ -1041,176 +763,34 @@ export default function StudentsPage() {
         </Alert>
       )}
 
-      {/* Group Chat Config */}
-      <Paper elevation={0} sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <GroupsIcon sx={{ color: '#7B1FA2', fontSize: 20 }} />
-        {editingGroupChat ? (
-          <>
-            <TextField
-              size="small"
-              label="Chat Name"
-              value={groupChatNameInput}
-              onChange={(e) => setGroupChatNameInput(e.target.value)}
-              sx={{ width: 200 }}
-              placeholder="e.g., 2026 - Neramclasses"
-            />
-            <TextField
-              size="small"
-              label="Teams Chat ID"
-              value={groupChatInput}
-              onChange={(e) => setGroupChatInput(e.target.value)}
-              sx={{ width: 280 }}
-              placeholder="19:xxx@thread.v2"
-              helperText="From the Teams chat URL"
-            />
-            <TextField
-              size="small"
-              label="Group Chat Invite Link"
-              value={groupChatInviteLinkInput}
-              onChange={(e) => setGroupChatInviteLinkInput(e.target.value)}
-              sx={{ flex: 1, minWidth: 300 }}
-              placeholder="https://teams.microsoft.com/l/chat/..."
-              helperText="Right-click the chat in Teams and click Get link to chat"
-            />
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={savingGroupChat ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
-              onClick={handleSaveGroupChat}
-              disabled={savingGroupChat || !groupChatInput}
-              sx={{ textTransform: 'none', fontWeight: 600 }}
-            >
-              Save
-            </Button>
-            <Button size="small" onClick={() => setEditingGroupChat(false)} sx={{ textTransform: 'none' }}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Auto-join Group Chat:
-            </Typography>
-            {groupChatConfig.chat_id ? (
-              <>
-                <Chip label={groupChatConfig.chat_name || 'Configured'} size="small" color="primary" variant="outlined" />
-                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                  {groupChatConfig.chat_id.slice(0, 30)}...
-                </Typography>
-                {groupChatConfig.invite_link ? (
-                  <Tooltip title="Copy group chat invite link">
-                    <Chip
-                      label="Invite Link"
-                      size="small"
-                      color="success"
-                      variant="outlined"
-                      icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
-                      onClick={() => navigator.clipboard.writeText(groupChatConfig.invite_link)}
-                      sx={{ cursor: 'pointer' }}
-                    />
-                  </Tooltip>
-                ) : (
-                  <Chip label="No invite link" size="small" color="warning" variant="outlined" />
-                )}
-              </>
-            ) : (
-              <Typography variant="body2" color="text.secondary">Not configured</Typography>
-            )}
-            <Tooltip title="Edit group chat config">
-              <IconButton
-                size="small"
-                onClick={() => {
-                  setGroupChatInput(groupChatConfig.chat_id);
-                  setGroupChatNameInput(groupChatConfig.chat_name);
-                  setGroupChatInviteLinkInput(groupChatConfig.invite_link || '');
-                  setEditingGroupChat(true);
-                }}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </>
-        )}
-      </Paper>
-
-      {/* Filters */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
+      {/* Active exam-batch scope. The switch is GLOBAL (profile menu, bottom-left);
+          this chip just shows what you're viewing. Columns filter client-side. */}
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Chip
+          label={`Exam Batch: ${year === 'current' ? (currentBatch?.code || 'current') : year === 'all' ? 'All batches' : year === 'none' ? 'No batch set' : year}`}
+          color="primary"
+          variant="outlined"
           size="small"
-          placeholder="Search by name, email, or phone..."
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          sx={{ minWidth: 300 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" color="action" />
-              </InputAdornment>
-            ),
-          }}
         />
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Course</InputLabel>
-          <Select
-            value={courseFilter}
-            label="Course"
-            onChange={(e) => setCourseFilter(e.target.value)}
-          >
-            <MenuItem value="">All Courses</MenuItem>
-            <MenuItem value="nata">NATA</MenuItem>
-            <MenuItem value="jee_paper2">JEE Paper 2</MenuItem>
-            <MenuItem value="both">Both</MenuItem>
-            <MenuItem value="not_sure">Not Sure</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 170 }}>
-          <InputLabel>Payment Status</InputLabel>
-          <Select
-            value={paymentFilter}
-            label="Payment Status"
-            onChange={(e) => setPaymentFilter(e.target.value)}
-          >
-            <MenuItem value="">All Statuses</MenuItem>
-            <MenuItem value="paid">Paid</MenuItem>
-            <MenuItem value="pending">Pending / Partial</MenuItem>
-            <MenuItem value="failed">Failed</MenuItem>
-            <MenuItem value="refunded">Refunded</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 170 }}>
-          <InputLabel>Classroom</InputLabel>
-          <Select
-            value={batchFilter}
-            label="Classroom"
-            onChange={(e) => setBatchFilter(e.target.value)}
-          >
-            <MenuItem value="">All Classrooms</MenuItem>
-            <MenuItem value="unassigned">No Classroom</MenuItem>
-            {nexusClassrooms.map((c) => (
-              <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Typography variant="caption" color="text.secondary">
+          Switch batch from the profile menu (bottom-left). Filter any column from the box under its header; click a student for full details.
+        </Typography>
       </Box>
 
-      {/* Data Table */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 1,
-          border: '1px solid',
-          borderColor: 'grey.200',
-          overflow: 'hidden',
-        }}
-      >
-        <DataTable
-          rows={batchFilter ? (batchFilter === 'unassigned' ? students.filter((s) => !nexusEnrollments[s.user_id]?.length) : students.filter((s) => nexusEnrollments[s.user_id]?.some((e) => e.classroom_id === batchFilter))) : students}
-          columns={columns}
-          loading={loading}
-          onRowClick={handleRowClick}
-          defaultRowsPerPage={25}
-        />
-      </Paper>
+      {/* Student grid: per-column filters, selection-bar bulk actions, row-click drawer */}
+      <StudentHubTable
+        students={students}
+        loading={loading}
+        selectionResetKey={selectionResetKey}
+        onRowClick={(row) => setDrawerStudent(row)}
+        onDelete={(row) => setDeleteTarget(row)}
+        onSetYear={(rows) => { setBulkRows(rows); setSetYearOpen(true); }}
+        onMoveSoftware={(rows) => moveToSoftware(rows)}
+        onMarkStaff={(rows) => setMarkStaff(rows)}
+        onGraduate={(rows) => { setBulkRows(rows); setGraduateOpen(true); }}
+      />
+        </>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)}>
@@ -1245,70 +825,6 @@ export default function StudentsPage() {
             disabled={deleting}
           >
             {deleting ? 'Deleting...' : 'Delete Permanently'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Share Credentials Dialog */}
-      <Dialog open={!!credTarget} onClose={() => !credSharing && setCredTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          Share Teams Credentials
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Share Microsoft Teams login credentials with{' '}
-            <strong>
-              {credTarget
-                ? [credTarget.first_name, credTarget.last_name].filter(Boolean).join(' ') || credTarget.email
-                : ''}
-            </strong>
-            . The student will see these in their onboarding page. Credentials auto-destruct 24 hours after first view.
-          </Typography>
-
-          {credError && (
-            <Alert severity="error" sx={{ mb: 2 }}>{credError}</Alert>
-          )}
-
-          <TextField
-            label="Teams Email"
-            fullWidth
-            value={credEmail}
-            onChange={(e) => setCredEmail(e.target.value)}
-            placeholder="student@neramclasses.onmicrosoft.com"
-            size="small"
-            sx={{ mb: 2 }}
-            disabled={credSharing}
-          />
-          <TextField
-            label="Temporary Password"
-            fullWidth
-            value={credPassword}
-            onChange={(e) => setCredPassword(e.target.value)}
-            type={credShowPassword ? 'text' : 'password'}
-            placeholder="Enter the temporary password"
-            size="small"
-            disabled={credSharing}
-            InputProps={{
-              endAdornment: (
-                <IconButton onClick={() => setCredShowPassword(!credShowPassword)} size="small">
-                  {credShowPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-                </IconButton>
-              ),
-            }}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => { setCredTarget(null); setCredError(''); }} disabled={credSharing} sx={{ textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleShareCredentials}
-            disabled={!credEmail || !credPassword || credSharing}
-            startIcon={credSharing ? <CircularProgress size={16} color="inherit" /> : <SendIcon />}
-            sx={{ textTransform: 'none', fontWeight: 600 }}
-          >
-            {credSharing ? 'Sharing...' : 'Share with Student'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1588,6 +1104,86 @@ export default function StudentsPage() {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Set academic year (bulk) */}
+      <SetAcademicYearDialog
+        open={setYearOpen}
+        count={bulkRows.length}
+        defaultYear={selectedYearDefault}
+        onClose={() => setSetYearOpen(false)}
+        onConfirm={handleSetYear}
+      />
+
+      {/* Graduate (bulk) -> they re-bucket under their academic year */}
+      <GraduateDialog
+        open={graduateOpen}
+        students={bulkRows.map((s) => ({
+          id: s.id,
+          name: s.name || [s.first_name, s.last_name].filter(Boolean).join(' ') || null,
+          email: s.classroom_email || s.personal_email || s.email,
+          avatar_url: s.avatar_url,
+          academic_year: s.academic_year,
+        }))}
+        defaultYear={graduateDefaultYear}
+        onClose={closeGraduate}
+        onConfirm={handleGraduate}
+      />
+
+      {/* Mark as staff (reclassify a mis-tagged student) */}
+      <MarkStaffDialog
+        open={!!markStaff}
+        people={(markStaff || []).map((s) => ({
+          id: s.id,
+          name: s.name || [s.first_name, s.last_name].filter(Boolean).join(' ') || null,
+          email: s.classroom_email || s.personal_email || s.email,
+          avatar_url: s.avatar_url,
+        }))}
+        onClose={() => setMarkStaff(null)}
+        onConfirm={markAsStaff}
+      />
+
+      {/* Row-click detail drawer: full application detail + editable personal fields */}
+      <StudentDetailDrawer
+        open={!!drawerStudent}
+        student={
+          drawerStudent
+            ? {
+                id: drawerStudent.id,
+                name: drawerStudent.name || [drawerStudent.first_name, drawerStudent.last_name].filter(Boolean).join(' ') || null,
+                email: drawerStudent.classroom_email || drawerStudent.personal_email || drawerStudent.email || null,
+                avatar_url: drawerStudent.avatar_url,
+                academic_year: drawerStudent.academic_year,
+                last_login_at: drawerStudent.last_login_at,
+                submission_count: 0,
+              }
+            : null
+        }
+        adminId={supabaseUserId}
+        onClose={() => setDrawerStudent(null)}
+        onGraduate={() => {
+          if (drawerStudent) {
+            setBulkRows([drawerStudent]);
+            setGraduateOpen(true);
+          }
+          setDrawerStudent(null);
+        }}
+        moveAction={{
+          label: 'Move to Software course',
+          icon: <LaptopMacIcon fontSize="small" />,
+          onClick: () => {
+            if (drawerStudent) moveToSoftware([drawerStudent]);
+            setDrawerStudent(null);
+          },
+        }}
+        staffAction={{
+          label: 'Mark as staff',
+          icon: <BadgeOutlinedIcon fontSize="small" />,
+          onClick: () => {
+            if (drawerStudent) setMarkStaff([drawerStudent]);
+            setDrawerStudent(null);
+          },
+        }}
+      />
     </Box>
   );
 }

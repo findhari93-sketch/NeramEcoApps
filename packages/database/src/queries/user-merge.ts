@@ -145,8 +145,9 @@ export async function mergeUserRecords(
 // ----------------------------------------------------------------------------
 
 const USER_PERSONAL_FIELDS = ['phone', 'personal_email', 'date_of_birth', 'gender', 'name', 'first_name', 'last_name'] as const;
-const LEAD_PERSONAL_FIELDS = ['father_name', 'city', 'state', 'school_college'] as const;
+const LEAD_PERSONAL_FIELDS = ['father_name', 'city', 'state', 'school_college', 'interest_course'] as const;
 const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
+const COURSES = ['nata', 'jee_paper2', 'both', 'not_sure'];
 
 export interface PersonalDetailsInput {
   phone?: string | null;
@@ -160,6 +161,7 @@ export interface PersonalDetailsInput {
   city?: string | null;
   state?: string | null;
   school_college?: string | null;
+  interest_course?: string | null;
 }
 
 /**
@@ -177,6 +179,9 @@ export async function updatePersonalDetails(
 
   if (fields.gender && !GENDERS.includes(fields.gender)) {
     throw new Error(`Invalid gender '${fields.gender}'. Allowed: ${GENDERS.join(', ')}.`);
+  }
+  if (fields.interest_course && !COURSES.includes(fields.interest_course)) {
+    throw new Error(`Invalid course '${fields.interest_course}'. Allowed: ${COURSES.join(', ')}.`);
   }
 
   const userUpdate: Record<string, unknown> = {};

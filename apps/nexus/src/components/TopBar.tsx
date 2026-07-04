@@ -23,6 +23,7 @@ import {
 } from '@neram/ui';
 import GraphAvatar from '@/components/GraphAvatar';
 import NotificationBell from '@/components/NotificationBell';
+import PanelSwitcher from '@/components/PanelSwitcher';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
@@ -34,6 +35,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import { usePanelContext } from '@/components/PanelProvider';
+import { useStudentZoneContext } from '@/components/StudentZoneProvider';
 import { IMPERSONATION_BANNER_HEIGHT } from '@/components/ImpersonationBanner';
 
 /* Role → color mapping for the ring & badge */
@@ -66,6 +68,7 @@ export default function TopBar() {
 
   const { sidebarState, expand } = useSidebarContext();
   const { activePanel, setActivePanel, availablePanels } = usePanelContext();
+  const { activeZone, setActiveZone, availableZones } = useStudentZoneContext();
   const pathname = usePathname();
   const [reportIssueOpen, setReportIssueOpen] = useState(false);
   const [viewAsOpen, setViewAsOpen] = useState(false);
@@ -148,6 +151,12 @@ export default function TopBar() {
         >
           Nexus
         </Typography>
+
+        {/* Workspace switcher - compact segmented control (Teaching / Management / Admin).
+            Renders only for staff with more than one panel; icon-only on mobile. */}
+        <Box sx={{ mr: showClassroomSelector ? 1 : 0 }}>
+          <PanelSwitcher accent={roleAccent} />
+        </Box>
 
         {/* Active Classroom Chip - shown for students (always) and teachers on Teaching panel */}
         {showClassroomSelector && (
@@ -475,6 +484,66 @@ export default function TopBar() {
                     {isActive && (
                       <CheckIcon sx={{ fontSize: '0.95rem', color: roleAccent }} />
                     )}
+                  </MenuItem>
+                );
+              })}
+              <Divider sx={{ my: 0.75, mx: 1.5 }} />
+            </>
+          )}
+
+          {/* Zone Switcher — students only (Classroom ⇄ Study Zone) */}
+          {nexusRole === 'student' && availableZones.length > 1 && (
+            <>
+              <Box sx={{ px: 2.5, py: 0.75 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.8px',
+                    fontSize: '0.6rem',
+                  }}
+                >
+                  Switch Zone
+                </Typography>
+              </Box>
+              {availableZones.map((zone) => {
+                const isActive = zone.id === activeZone;
+                return (
+                  <MenuItem
+                    key={zone.id}
+                    onClick={() => {
+                      setProfileAnchor(null);
+                      if (!isActive) setActiveZone(zone.id);
+                    }}
+                    sx={{
+                      py: 1,
+                      px: 2.5,
+                      mx: 1,
+                      borderRadius: 2,
+                      gap: 1.5,
+                      minHeight: 42,
+                      bgcolor: isActive ? alpha(roleAccent, 0.08) : 'transparent',
+                      '&:hover': {
+                        bgcolor: isActive
+                          ? alpha(roleAccent, 0.12)
+                          : alpha(theme.palette.action.hover, 0.06),
+                      },
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 0, color: isActive ? roleAccent : 'text.secondary' }}>
+                      {zone.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={zone.label}
+                      primaryTypographyProps={{
+                        variant: 'body2',
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? roleAccent : 'text.primary',
+                      }}
+                    />
+                    {isActive && <CheckIcon sx={{ fontSize: '0.95rem', color: roleAccent }} />}
                   </MenuItem>
                 );
               })}

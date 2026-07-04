@@ -21,6 +21,7 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import StudentWorksPanel from './StudentWorksPanel';
 import MergeDuplicatePanel from './MergeDuplicatePanel';
 import PersonalDetailsPanel from './PersonalDetailsPanel';
+import ApplicationDetailsPanel from './ApplicationDetailsPanel';
 import { ACCENT, INK, MUTED, LINE } from './theme';
 import { formatDate } from '../crm/academic-years';
 
@@ -125,6 +126,9 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
           {/* Duplicate detection + editable personal details */}
           {userId && <MergeDuplicatePanel userId={userId} adminId={adminId ?? null} onMerged={load} />}
           {userId && <PersonalDetailsPanel user={detail?.user} leadProfile={lead} userId={userId} adminId={adminId ?? null} onSaved={load} />}
+
+          {/* What the student filled in the application form, with a completeness banner */}
+          {userId && <ApplicationDetailsPanel leadProfile={lead} />}
 
           {/* Activity */}
           <SectionTitle text="Activity" />
