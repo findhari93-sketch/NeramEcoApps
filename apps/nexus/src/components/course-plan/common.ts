@@ -7,6 +7,8 @@ import type {
   NexusTeachingPlanEntryDetail,
   NexusPlanAuditLogDetail,
   NexusPlanDayItem,
+  NexusAssignmentStatus,
+  NexusAssignmentFormat,
 } from '@neram/database';
 
 export type Entry = NexusTeachingPlanEntryDetail;
@@ -16,6 +18,25 @@ export interface PlanData {
   audit: NexusPlanAuditLogDetail[];
   teachers: { id: string; name: string | null }[];
   tests: { id: string; title: string }[];
+}
+
+export interface ClassDayAssignmentSummary {
+  id: string;
+  title: string;
+  class_date: string;
+  submission_format: NexusAssignmentFormat;
+  max_marks: number;
+  due_at: string | null;
+  status: NexusAssignmentStatus;
+  attachment_count: number;
+  submitted_count: number;
+  topic_id: string | null;
+}
+
+export interface ClassLinks {
+  class_id: string;
+  recording_url: string | null;
+  youtube_url: string | null;
 }
 
 export interface ClassDayPayload {
@@ -31,6 +52,9 @@ export interface ClassDayPayload {
   items: NexusPlanDayItem[];
   class_day_index: number;
   total_class_days: number;
+  assignments: ClassDayAssignmentSummary[];
+  class_links: ClassLinks | null;
+  recap: { id: string; status: string } | null;
 }
 
 export const ENTRY_STATUS: Record<string, { label: string; color: string; bg: string }> = {

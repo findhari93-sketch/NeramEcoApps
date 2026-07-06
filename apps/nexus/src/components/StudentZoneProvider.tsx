@@ -20,12 +20,14 @@ import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import ViewTimelineOutlinedIcon from '@mui/icons-material/ViewTimelineOutlined';
 
 export type StudentZoneId = 'classroom' | 'study';
 
 const QB_PATH = '/student/question-bank';
 const STUDY_MATERIALS_PATH = '/student/study-materials';
 const SELF_LEARNING_PATH = '/student/self-learning';
+const COURSE_PLAN_PATH = '/student/course-plan';
 // Covers both the list (/student/class-recaps) and the player (/student/class-recap/[id]).
 const CLASS_RECAP_PATH = '/student/class-recap';
 const CLASS_RECAPS_PATH = '/student/class-recaps';
@@ -60,7 +62,10 @@ const CLASSROOM: ZoneConfig = {
   navGroups: [
     {
       label: 'Live Class',
-      items: [{ label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> }],
+      items: [
+        { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
+        { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
+      ],
     },
     {
       label: 'Learn',
@@ -96,6 +101,7 @@ const CLASSROOM: ZoneConfig = {
     { label: 'QB', path: QB_PATH, icon: <LibraryBooksOutlinedIcon /> },
   ],
   overflowItems: [
+    { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
     { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
     { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
     { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
@@ -167,6 +173,7 @@ function detectZoneFromPath(pathname: string): StudentZoneId | null {
   const classroomExclusive = [
     '/student/dashboard',
     '/student/timetable',
+    COURSE_PLAN_PATH,
     '/student/tests',
     '/student/drawings',
     '/student/exam-recall',

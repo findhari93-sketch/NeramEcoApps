@@ -41,6 +41,8 @@ export interface NexusTeachingPlanEntryDetail extends NexusTeachingPlanEntry {
     end_time: string | null;
     teacher_id: string | null;
     teams_meeting_join_url: string | null;
+    recording_url: string | null;
+    youtube_url: string | null;
     status: string;
     teacher: { id: string; name: string | null } | null;
   }[];
@@ -205,7 +207,8 @@ export async function getTeachingPlanWithEntries(
         'module:nexus_course_modules(id, title, color)), ' +
         'test:nexus_tests(id, title), ' +
         'classes:nexus_scheduled_classes!plan_entry_id(id, scheduled_date, start_time, end_time, ' +
-        'teacher_id, teams_meeting_join_url, status, teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name))',
+        'teacher_id, teams_meeting_join_url, recording_url, youtube_url, status, ' +
+        'teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name))',
     )
     .eq('plan_id', planId)
     .order('position', { ascending: true });

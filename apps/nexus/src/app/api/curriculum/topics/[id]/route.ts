@@ -80,6 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           title: body.title.trim(),
           url: body.url ?? null,
           study_file_id: body.study_file_id ?? null,
+          section: body.section === 'drill' ? 'drill' : 'resource',
         });
         return NextResponse.json({ resource });
       }

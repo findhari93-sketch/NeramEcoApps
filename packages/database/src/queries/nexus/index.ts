@@ -27,6 +27,7 @@ export * from './curriculum';
 export * from './teaching-plans';
 export * from './catchup';
 export * from './class-recaps';
+export * from './assignments';
 export * from './drawing-checklist';
 export * from './drawing-gallery';
 export * from './drawing-references';

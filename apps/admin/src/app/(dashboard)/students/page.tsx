@@ -29,6 +29,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import LaptopMacIcon from '@mui/icons-material/LaptopMac';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import InsightsIcon from '@mui/icons-material/Insights';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -749,6 +750,7 @@ export default function StudentsPage() {
         students={students}
         loading={loading}
         selectionResetKey={selectionResetKey}
+        currentBatchCode={currentBatch?.code || currentAcademicYear()}
         onRowClick={(row) => setDrawerStudent(row)}
         onDelete={(row) => setDeleteTarget(row)}
         onSetYear={(rows) => { setBulkRows(rows); setSetYearOpen(true); }}
@@ -1147,6 +1149,17 @@ export default function StudentsPage() {
           icon: <BadgeOutlinedIcon fontSize="small" />,
           onClick: () => {
             if (drawerStudent) setMarkStaff([drawerStudent]);
+            setDrawerStudent(null);
+          },
+        }}
+        setYearAction={{
+          label: 'Set exam year',
+          icon: <EventOutlinedIcon fontSize="small" />,
+          onClick: () => {
+            if (drawerStudent) {
+              setBulkRows([drawerStudent]);
+              setSetYearOpen(true);
+            }
             setDrawerStudent(null);
           },
         }}

@@ -1804,7 +1804,10 @@ export async function listStudentsByYear(
   if (year === 'current') {
     if (status === undefined) query = query.eq('is_alumni', false);
     const cy = currentBatchCode || currentAcademicYear();
-    query = query.or(`academic_year.eq.${cy},academic_year.is.null`);
+    // Current cohort = the current code OR a FUTURE code (a student whose own exam
+    // year is later, e.g. a class-11 student in 2027-28 who attends this year's
+    // classes) OR untagged. gte works because 'YYYY-YY' sorts lexicographically.
+    query = query.or(`academic_year.gte.${cy},academic_year.is.null`);
   } else if (year === 'none') {
     query = query.is('academic_year', null);
   } else if (year && year !== 'all') {

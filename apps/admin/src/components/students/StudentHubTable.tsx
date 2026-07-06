@@ -63,6 +63,8 @@ interface StudentHubTableProps {
   loading?: boolean;
   /** Bumping this clears the row selection (e.g. after a bulk action reloads data). */
   selectionResetKey?: number;
+  /** Current cohort code (e.g. '2026-27'); a future-coded year chip is accented. */
+  currentBatchCode?: string | null;
   onRowClick: (row: StudentRow) => void;
   onDelete: (row: StudentRow) => void;
   onSetYear: (rows: StudentRow[]) => void;
@@ -109,6 +111,7 @@ export default function StudentHubTable({
   students,
   loading = false,
   selectionResetKey = 0,
+  currentBatchCode,
   onRowClick,
   onDelete,
   onSetYear,
@@ -345,7 +348,25 @@ export default function StudentHubTable({
         Cell: ({ row }) => {
           const y = row.original.academic_year;
           if (!y) return <Typography variant="caption" sx={{ color: 'text.disabled' }}>No year</Typography>;
-          return <Chip label={y} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600, fontFamily: 'monospace', bgcolor: 'grey.100', color: 'text.secondary' }} />;
+          // Future-coded cohort (a junior attending this year's classes): accent it
+          // so staff notice they are not part of the current exam batch.
+          const isFuture = !!currentBatchCode && y > currentBatchCode;
+          return (
+            <Tooltip title={isFuture ? 'Future exam batch, also attending the current cohort' : ''} disableHoverListener={!isFuture}>
+              <Chip
+                label={y}
+                size="small"
+                sx={{
+                  height: 22,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  fontFamily: 'monospace',
+                  bgcolor: isFuture ? 'rgba(180,83,9,0.12)' : 'grey.100',
+                  color: isFuture ? ACCENT : 'text.secondary',
+                }}
+              />
+            </Tooltip>
+          );
         },
       },
       {
@@ -368,7 +389,7 @@ export default function StudentHubTable({
         enableHiding: true,
       },
     ],
-    [yearOptions]
+    [yearOptions, currentBatchCode]
   );
 
   const table = useMaterialReactTable({

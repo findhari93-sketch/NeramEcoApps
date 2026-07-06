@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress } from '@neram/ui';
+import RecapYouTubePlayer from './RecapYouTubePlayer';
 
 export interface RecapPlayerSection {
   id: string;
@@ -18,13 +19,13 @@ interface RecapPlayerProps {
 }
 
 /**
- * Gated player for a class recording (Teams/SharePoint recording streamed as a
- * native <video>). Mirrors the Foundation SharePointPlayer gating: it auto-pauses
- * at each checkpoint end and fires onSectionEnd so a mandatory quiz can open;
- * during a rewatch it clamps seeking past the checkpoint end (anti-skip).
- *
- * Exposes a control handle on window.__recapPlayer (namespaced separately from
- * the Foundation player) for the page to seek / resume / toggle rewatch mode.
+ * Gated player for a class recording. Two sources:
+ *   - SharePoint (Teams recording) streamed as a native <video>.
+ *   - YouTube (the durable unlisted backup) via the YouTube IFrame API.
+ * Both mirror the Foundation SharePointPlayer gating: auto-pause at each
+ * checkpoint end, fire onSectionEnd so a mandatory quiz can open, and clamp
+ * seeking past the checkpoint end during a rewatch (anti-skip). Both expose the
+ * same control handle on window.__recapPlayer so the page logic is unchanged.
  */
 export default function RecapPlayer({
   recapId,
@@ -35,6 +36,7 @@ export default function RecapPlayer({
 }: RecapPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [youtubeId, setYoutubeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const retryCountRef = useRef(0);
@@ -57,7 +59,13 @@ export default function RecapPlayer({
       );
       if (res.ok) {
         const data = await res.json();
-        setStreamUrl(data.streamUrl);
+        if (data.video_source === 'youtube') {
+          setYoutubeId(data.youtube_id);
+          setStreamUrl(null);
+        } else {
+          setStreamUrl(data.streamUrl);
+          setYoutubeId(null);
+        }
         retryCountRef.current = 0;
       } else {
         const errData = await res.json().catch(() => ({ error: 'Failed to load recording' }));
@@ -74,8 +82,10 @@ export default function RecapPlayer({
     fetchStreamUrl();
   }, [fetchStreamUrl]);
 
-  // Register the control handle (namespaced for recaps).
+  // Register the control handle (namespaced for recaps). SharePoint only; the
+  // YouTube player registers its own handle.
   useEffect(() => {
+    if (!streamUrl) return;
     const video = videoRef.current;
     (window as any).__recapPlayer = {
       seekTo: (seconds: number) => {
@@ -102,7 +112,7 @@ export default function RecapPlayer({
   // timeupdate: quiz-trigger at checkpoint end + anti-skip during rewatch.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !streamUrl) return;
 
     const handler = () => {
       const time = video.currentTime;
@@ -179,6 +189,17 @@ export default function RecapPlayer({
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', bgcolor: '#000' }}>
         <CircularProgress size={32} sx={{ color: 'white' }} />
       </Box>
+    );
+  }
+
+  if (youtubeId) {
+    return (
+      <RecapYouTubePlayer
+        youtubeId={youtubeId}
+        sections={sections}
+        onSectionEnd={onSectionEnd}
+        onTimeUpdate={onTimeUpdate}
+      />
     );
   }
 

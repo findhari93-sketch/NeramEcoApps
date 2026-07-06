@@ -29,6 +29,9 @@ import RedoIcon from '@mui/icons-material/Redo';
 import PlanShell from '@/components/course-plan/PlanShell';
 import { usePlanData } from '@/components/course-plan/usePlanData';
 import AgendaList from '@/components/course-plan/AgendaList';
+import ClassLinksCard from '@/components/course-plan/ClassLinksCard';
+import AssignmentCard from '@/components/course-plan/AssignmentCard';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import {
   entryTitle,
   entrySpan,
@@ -46,6 +49,7 @@ function ClassDayInner() {
   const search = useSearchParams();
   const planData = usePlanData(planId);
   const { plan, flow, today, authFetch, setSnack } = planData;
+  const { getToken } = useNexusAuthContext();
 
   const date = search.get('date') || today;
   const [payload, setPayload] = useState<ClassDayPayload | null>(null);
@@ -53,6 +57,8 @@ function ClassDayInner() {
   const [addOpen, setAddOpen] = useState(false);
   const [addTitle, setAddTitle] = useState('');
   const [ended, setEnded] = useState(false);
+  const [linksSaving, setLinksSaving] = useState(false);
+  const [recapCreating, setRecapCreating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -91,6 +97,48 @@ function ClassDayInner() {
       return false;
     } finally {
       setBusy(false);
+    }
+  };
+
+  const saveLinks = async (recordingUrl: string, youtubeUrl: string) => {
+    if (!payload?.class_links) return false;
+    setLinksSaving(true);
+    try {
+      await authFetch(`/api/teaching-plans/${planId}/class-day`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'set_class_links',
+          class_id: payload.class_links.class_id,
+          recording_url: recordingUrl || null,
+          youtube_url: youtubeUrl || null,
+        }),
+      });
+      setSnack({ msg: 'Recording links saved.', sev: 'success' });
+      await load();
+      return true;
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not save links', sev: 'error' });
+      return false;
+    } finally {
+      setLinksSaving(false);
+    }
+  };
+
+  const createRecap = async () => {
+    if (!payload?.class_links) return;
+    setRecapCreating(true);
+    try {
+      const res = await authFetch('/api/class-recaps', {
+        method: 'POST',
+        body: JSON.stringify({ scheduled_class_id: payload.class_links.class_id }),
+      });
+      setSnack({ msg: 'Guided recap created. Open it to add checkpoints and publish.', sev: 'success' });
+      await load();
+      if (res?.recap?.id) router.push(`/teacher/class-recaps/${res.recap.id}`);
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not create recap', sev: 'error' });
+    } finally {
+      setRecapCreating(false);
     }
   };
 
@@ -263,6 +311,28 @@ function ClassDayInner() {
                   setAddOpen(true);
                 }}
                 disabled={busy}
+              />
+
+              {/* Recording links (past/today only) + assignments for this class. */}
+              {payload.class_links && date <= today && (
+                <ClassLinksCard
+                  classLinks={payload.class_links}
+                  recap={payload.recap}
+                  saving={linksSaving}
+                  onSaveLinks={saveLinks}
+                  onCreateRecap={createRecap}
+                  creatingRecap={recapCreating}
+                />
+              )}
+              <AssignmentCard
+                assignments={payload.assignments}
+                planId={planId}
+                date={date}
+                topicId={entry.topic_id}
+                hasTopicDrills={!!entry.topic_id}
+                authFetch={authFetch}
+                getToken={getToken}
+                onChanged={load}
               />
             </Box>
           </Box>

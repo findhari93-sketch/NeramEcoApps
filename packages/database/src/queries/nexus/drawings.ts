@@ -399,9 +399,12 @@ export async function getDrawingReviewQueue(
     if (tagRestrictedIds.length === 0) return [];
   }
 
+  // !inner + is_alumni=false so graduated students' historical submissions drop
+  // out of the teacher review queue (they can no longer log in either).
   let query = supabase
     .from('drawing_submissions' as any)
-    .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
+    .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey!inner(id, name, email, avatar_url, is_alumni)')
+    .eq('student.is_alumni', false)
     .order('submitted_at', { ascending: true });
 
   const status = filters?.status || 'submitted';

@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getSharePointStreamUrl } from '@/lib/sharepoint';
+import { extractYouTubeId } from '@/lib/youtube';
 
 /**
  * GET /api/student/class-recaps/[recapId]/video-embed
- * Resolve the recap's SharePoint recording into a short-lived direct stream URL
- * (SharePoint blocks iframes, so the player uses a <video> src). Mirrors the
- * foundation chapter video-embed route.
+ * Resolve the recap's recording into something the gated player can render:
+ *   - SharePoint: a short-lived direct stream URL (SharePoint blocks iframes,
+ *     so the player uses a <video> src).
+ *   - YouTube: the video id (the durable unlisted backup; played via the
+ *     YouTube IFrame API so the checkpoint gating still works).
  *
- * Returns: { streamUrl: string }
+ * Returns: { video_source: 'sharepoint', streamUrl } | { video_source: 'youtube', youtube_id }
  */
 export async function GET(
   request: NextRequest,
@@ -31,13 +34,24 @@ export async function GET(
     if (!recap || recap.status !== 'published') {
       return NextResponse.json({ error: 'Recap not available' }, { status: 403 });
     }
-    if (!recap.recording_url || recap.video_source !== 'sharepoint') {
+    if (!recap.recording_url) {
       return NextResponse.json({ error: 'No recording available' }, { status: 404 });
+    }
+
+    if (recap.video_source === 'youtube') {
+      const youtubeId = extractYouTubeId(recap.recording_url);
+      if (!youtubeId) {
+        return NextResponse.json({ error: 'Invalid YouTube recording' }, { status: 404 });
+      }
+      return NextResponse.json(
+        { video_source: 'youtube', youtube_id: youtubeId },
+        { headers: { 'Cache-Control': 'private, max-age=900' } },
+      );
     }
 
     const streamUrl = await getSharePointStreamUrl(recap.recording_url);
     return NextResponse.json(
-      { streamUrl },
+      { video_source: 'sharepoint', streamUrl },
       { headers: { 'Cache-Control': 'private, max-age=900' } },
     );
   } catch (err) {

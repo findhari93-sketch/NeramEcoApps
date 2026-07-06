@@ -46,6 +46,8 @@ interface StudentDetailDrawerProps {
   moveAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
   /** Optional "Mark as staff" action: reclassify a mis-tagged student as a teacher/admin. */
   staffAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
+  /** Optional "Set exam year" action: move a mis-batched student to a different cohort. */
+  setYearAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
 }
 
 const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', color: ACCENT, fontWeight: 700 } as const;
@@ -57,7 +59,7 @@ const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', c
  * published/hidden split that answers "how many reached the gallery"), onboarding
  * documents, and a one-click path to graduate or to the full CRM profile.
  */
-export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction, staffAction }: StudentDetailDrawerProps) {
+export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction, staffAction, setYearAction }: StudentDetailDrawerProps) {
   const router = useRouter();
   const userId = student?.id || null;
   const [detail, setDetail] = useState<any>(null);
@@ -218,6 +220,17 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
               sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
             >
               {staffAction.label}
+            </Button>
+          )}
+          {setYearAction && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={setYearAction.icon}
+              onClick={() => userId && setYearAction.onClick(userId)}
+              sx={{ textTransform: 'none', borderColor: LINE, color: INK }}
+            >
+              {setYearAction.label}
             </Button>
           )}
           {onGraduate && (

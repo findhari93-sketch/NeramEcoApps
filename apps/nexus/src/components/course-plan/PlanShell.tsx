@@ -28,6 +28,9 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import SwapHorizOutlinedIcon from '@mui/icons-material/SwapHorizOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { PLAN_STATUS, fmtShort, type PlanData } from './common';
 import type { UsePlanData } from './usePlanData';
 
@@ -114,7 +117,8 @@ export default function PlanShell({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const { data, plan, flow, today, busy, snack, setSnack, patch } = planData;
+  const { data, plan, flow, today, busy, loadError, snack, setSnack, patch, load } = planData;
+  const { signIn } = useNexusAuthContext();
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const dayProgress = useMemo(() => {
@@ -126,6 +130,60 @@ export default function PlanShell({
   }, [flow, today]);
 
   if (!data || !plan) {
+    // A load failure must not look like loading forever: show what went wrong
+    // and the way out (retry, re-sign-in for stale Microsoft sessions, back).
+    if (loadError) {
+      const sessionExpired = /session expired|not authenticated|sign in/i.test(loadError);
+      const notFound = /not found/i.test(loadError);
+      return (
+        <Box
+          sx={{
+            maxWidth: 480,
+            mx: 'auto',
+            mt: { xs: 6, md: 10 },
+            p: 3,
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: alpha('#C62828', 0.25),
+            bgcolor: alpha('#C62828', 0.04),
+            textAlign: 'center',
+          }}
+        >
+          <ErrorOutlineIcon sx={{ fontSize: 40, color: 'error.main', mb: 1 }} />
+          <Typography sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
+            {notFound
+              ? 'This plan is no longer available'
+              : sessionExpired
+                ? 'Your session has expired'
+                : "Couldn't load this plan"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {notFound
+              ? 'It may have been deleted. Pick a plan from the Course Plans list.'
+              : loadError}
+          </Typography>
+          <Stack direction="row" spacing={1.5} justifyContent="center" sx={{ mt: 2.5 }}>
+            {sessionExpired ? (
+              <Button variant="contained" onClick={() => signIn()} sx={{ minHeight: 44 }}>
+                Sign in again
+              </Button>
+            ) : !notFound ? (
+              <Button variant="contained" startIcon={<RefreshIcon />} onClick={() => load()} sx={{ minHeight: 44 }}>
+                Try again
+              </Button>
+            ) : null}
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => router.push('/teacher/course-plans')}
+              sx={{ minHeight: 44 }}
+            >
+              Course Plans
+            </Button>
+          </Stack>
+        </Box>
+      );
+    }
     return (
       <Box>
         <Skeleton width={160} height={32} />

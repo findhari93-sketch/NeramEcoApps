@@ -8,7 +8,9 @@ type TimetableEventType =
   | 'class_rescheduled'
   | 'holiday_marked'
   | 'recording_available'
-  | 'review_submitted';
+  | 'review_submitted'
+  | 'assignment_published'
+  | 'assignment_reviewed';
 
 interface NotifyParams {
   classroomId: string;
@@ -157,5 +159,52 @@ export async function notifyRecordingAvailable(
     message: `The recording for "${classTitle}" is now available.`,
     metadata: { class_id: classId },
     recipientUserIds: studentIds,
+  });
+}
+
+/**
+ * Notify all enrolled students when an assignment is published.
+ */
+export async function notifyAssignmentPublished(
+  classroomId: string,
+  assignmentTitle: string,
+  assignmentId: string,
+  dueAt?: string | null
+) {
+  const studentIds = await getEnrolledUsers(classroomId, 'student');
+  const dueLine = dueAt
+    ? ` Due ${new Date(dueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}.`
+    : '';
+  await insertNotifications({
+    classroomId,
+    eventType: 'assignment_published',
+    title: 'New Assignment',
+    message: `"${assignmentTitle}" has been assigned.${dueLine}`,
+    metadata: { assignment_id: assignmentId },
+    recipientUserIds: studentIds,
+  });
+}
+
+/**
+ * Notify a single student when their submission has been reviewed.
+ */
+export async function notifyAssignmentReviewed(
+  classroomId: string,
+  studentId: string,
+  assignmentTitle: string,
+  assignmentId: string,
+  action: 'complete' | 'redo'
+) {
+  const message =
+    action === 'redo'
+      ? `Your teacher asked you to redo "${assignmentTitle}". Open it to see the feedback.`
+      : `Your submission for "${assignmentTitle}" has been marked.`;
+  await insertNotifications({
+    classroomId,
+    eventType: 'assignment_reviewed',
+    title: action === 'redo' ? 'Please redo your work' : 'Assignment marked',
+    message,
+    metadata: { assignment_id: assignmentId, action },
+    recipientUserIds: [studentId],
   });
 }

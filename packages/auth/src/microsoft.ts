@@ -361,6 +361,29 @@ export async function signInSilent(
   }
 }
 
+// Guard for the automatic acquireTokenRedirect below: if the interactive
+// round-trip does not satisfy Microsoft's challenge (e.g. a pending mandatory
+// MFA-registration requirement on the tenant), every data fetch would trigger
+// another full-page redirect, looping the app through login.microsoftonline.com
+// forever. Allow one automatic redirect per minute; past that, return null and
+// let the caller surface a "sign in again" state.
+let lastAutoRedirectAt = 0;
+
+async function redirectForTokenOnce(
+  msal: PublicClientApplication,
+  scopes: string[],
+  account: AccountInfo
+): Promise<null> {
+  if (Date.now() - lastAutoRedirectAt < 60_000) {
+    console.warn('[MSAL] Interactive token redirect suppressed (one already ran in the last minute).');
+    return null;
+  }
+  lastAutoRedirectAt = Date.now();
+  await msal.acquireTokenRedirect({ scopes, account });
+  // acquireTokenRedirect navigates away — this line won't execute
+  return null;
+}
+
 export async function getAccessToken(
   scopes: string[] = loginScopes.default
 ): Promise<string | null> {
@@ -382,9 +405,7 @@ export async function getAccessToken(
       // Use redirect instead of popup to avoid interaction_in_progress conflicts.
       // Popup-based token acquisition often gets blocked by browsers and conflicts
       // with the redirect-based login flow, causing BrowserAuthError.
-      await msal.acquireTokenRedirect({ scopes, account });
-      // acquireTokenRedirect navigates away — this line won't execute
-      return null;
+      return redirectForTokenOnce(msal, scopes, account);
     }
     if (
       error instanceof BrowserAuthError &&
@@ -394,8 +415,7 @@ export async function getAccessToken(
       // Redirect cleanly to Microsoft login instead of throwing, which would
       // cause an infinite /login → / → /login flicker loop.
       console.warn('[MSAL] Silent token iframe timed out, redirecting for interactive auth...');
-      await msal.acquireTokenRedirect({ scopes, account });
-      return null;
+      return redirectForTokenOnce(msal, scopes, account);
     }
     throw error;
   }

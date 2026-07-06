@@ -211,13 +211,35 @@ export async function addTopicResource(
     title: string;
     url?: string | null;
     study_file_id?: string | null;
+    section?: 'resource' | 'drill';
   },
   client?: TypedSupabaseClient,
 ): Promise<NexusCourseTopicResource> {
   const supabase = client || getSupabaseAdminClient();
-  const { data: row, error } = await supabase.from(RESOURCES).insert(data).select().single();
+  const { data: row, error } = await supabase
+    .from(RESOURCES)
+    .insert({ ...data, section: data.section ?? 'resource' })
+    .select()
+    .single();
   if (error) throw error;
   return row as NexusCourseTopicResource;
+}
+
+/** Study-file resources of a topic flagged as drills (for one-tap "attach topic drills"). */
+export async function getTopicDrillFiles(
+  topicId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ id: string; title: string; study_file_id: string }[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(RESOURCES)
+    .select('id, title, study_file_id')
+    .eq('topic_id', topicId)
+    .eq('kind', 'study_file')
+    .eq('section', 'drill')
+    .not('study_file_id', 'is', null);
+  if (error) throw error;
+  return (data || []) as { id: string; title: string; study_file_id: string }[];
 }
 
 export async function removeTopicResource(

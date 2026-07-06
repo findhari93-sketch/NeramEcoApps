@@ -4555,6 +4555,8 @@ export interface NexusStudyFolder {
   target_programs: string[];
   /** Folder default. false = view-only. */
   allow_download: boolean;
+  /** System folders (e.g. assignment/drill attachments) are hidden from the browse tree. */
+  is_system?: boolean;
   created_by: string | null;
   is_deleted: boolean;
   created_at: string;
@@ -4696,6 +4698,8 @@ export interface NexusCourseTopicResource {
   title: string;
   url: string | null;
   study_file_id: string | null;
+  /** 'drill' = take-home practice material (attachable to assignments); 'resource' = everything else. */
+  section: 'resource' | 'drill';
   sort_order: number;
   created_at: string;
 }
@@ -4794,6 +4798,77 @@ export interface NexusPlanAuditLog {
   performed_by: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+// ============================================================
+// Class assignments (per-class-day handouts + student submissions + marks)
+// ============================================================
+
+export type NexusAssignmentFormat = 'pdf' | 'pdf_or_image';
+export type NexusAssignmentStatus = 'draft' | 'published' | 'closed';
+export type NexusAssignmentSubmissionStatus = 'submitted' | 'reviewed' | 'redo';
+
+/** One uploaded file inside a submission (private assignment-submissions bucket). */
+export interface NexusAssignmentSubmissionFile {
+  path: string;
+  name: string;
+  mime: string;
+  size_bytes: number;
+}
+
+/** A prior attempt, appended to a submission's history on redo-resubmit. */
+export interface NexusAssignmentSubmissionHistoryEntry {
+  attempt: number;
+  files: NexusAssignmentSubmissionFile[];
+  submitted_at: string;
+  marks?: number | null;
+  feedback?: string | null;
+}
+
+/** An assignment pinned to the class day it was handed out in. */
+export interface NexusClassAssignment {
+  id: string;
+  classroom_id: string;
+  plan_id: string | null;
+  plan_entry_id: string | null;
+  topic_id: string | null;
+  class_date: string;
+  title: string;
+  instructions: string | null;
+  submission_format: NexusAssignmentFormat;
+  max_marks: number;
+  due_at: string | null;
+  status: NexusAssignmentStatus;
+  published_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusAssignmentAttachment {
+  id: string;
+  assignment_id: string;
+  study_file_id: string;
+  source: 'upload' | 'topic_drill';
+  sort_order: number;
+  created_at: string;
+}
+
+export interface NexusAssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  files: NexusAssignmentSubmissionFile[];
+  status: NexusAssignmentSubmissionStatus;
+  attempt_number: number;
+  marks: number | null;
+  feedback: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  submitted_at: string;
+  history: NexusAssignmentSubmissionHistoryEntry[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface NexusClassroom extends Timestamps {

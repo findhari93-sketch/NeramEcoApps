@@ -49,12 +49,13 @@ import {
   useAuthFetch,
 } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { ASSIGNMENT_ATTACHMENTS_FOLDER_ID } from '@/lib/assignment-constants';
 import type { NexusCourseTopicDetail } from '@neram/database';
 
 export default function TopicDetailPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const router = useRouter();
-  const { loading: authLoading, activeClassroom } = useNexusAuthContext();
+  const { loading: authLoading, activeClassroom, getToken } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
   const [topic, setTopic] = useState<NexusCourseTopicDetail | null>(null);
@@ -70,9 +71,12 @@ export default function TopicDetailPage() {
 
   // Add-resource dialog
   const [resDialog, setResDialog] = useState(false);
-  const [resKind, setResKind] = useState<'link' | 'youtube'>('link');
+  const [resKind, setResKind] = useState<'link' | 'youtube' | 'study_file'>('link');
+  const [resSection, setResSection] = useState<'resource' | 'drill'>('resource');
   const [resTitle, setResTitle] = useState('');
   const [resUrl, setResUrl] = useState('');
+  const [resFile, setResFile] = useState<File | null>(null);
+  const [uploadingRes, setUploadingRes] = useState(false);
 
   // Link-test dialog
   const [testDialog, setTestDialog] = useState(false);
@@ -128,6 +132,55 @@ export default function TopicDetailPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const addResource = async () => {
+    if (!resTitle.trim()) return;
+    // File resources upload to the system study folder first, then link.
+    if (resKind === 'study_file') {
+      if (!resFile) {
+        setSnack({ msg: 'Choose a file to upload.', sev: 'error' });
+        return;
+      }
+      setUploadingRes(true);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Your session expired. Sign in again.');
+        const form = new FormData();
+        form.append('file', resFile);
+        form.append('folder_id', ASSIGNMENT_ATTACHMENTS_FOLDER_ID);
+        form.append('title', resTitle.trim());
+        const upRes = await fetch('/api/study-materials/files', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        const upData = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) throw new Error(upData.error || 'Upload failed');
+        setResDialog(false);
+        setResFile(null);
+        await post(
+          {
+            action: 'add_resource',
+            kind: 'study_file',
+            title: resTitle.trim(),
+            study_file_id: upData.file.id,
+            section: resSection,
+          },
+          resSection === 'drill' ? 'Drill file added.' : 'File added.',
+        );
+      } catch (err) {
+        setSnack({ msg: err instanceof Error ? err.message : 'Upload failed', sev: 'error' });
+      } finally {
+        setUploadingRes(false);
+      }
+      return;
+    }
+    setResDialog(false);
+    await post(
+      { action: 'add_resource', kind: resKind, title: resTitle.trim(), url: resUrl || null, section: resSection },
+      'Resource added.',
+    );
   };
 
   const openPlanDialog = async () => {
@@ -380,8 +433,15 @@ export default function TopicDetailPage() {
                   >
                     <ListItemIcon sx={{ minWidth: 40 }}>{resourceIcon(r.kind)}</ListItemIcon>
                     <ListItemText
-                      primary={r.title}
-                      secondary={r.kind === 'youtube' ? 'YouTube' : r.kind === 'study_file' ? 'Study Materials file' : r.url}
+                      primary={
+                        <Stack direction="row" spacing={0.75} alignItems="center">
+                          <span>{r.title}</span>
+                          {r.section === 'drill' && (
+                            <Chip label="drill" size="small" sx={{ height: 18, fontSize: '0.6rem' }} />
+                          )}
+                        </Stack>
+                      }
+                      secondary={r.kind === 'youtube' ? 'YouTube' : r.kind === 'study_file' ? 'Uploaded file' : r.url}
                       primaryTypographyProps={{ fontWeight: 600, fontSize: '0.88rem' }}
                       secondaryTypographyProps={{ fontSize: '0.74rem', noWrap: true }}
                     />
@@ -390,7 +450,7 @@ export default function TopicDetailPage() {
               </List>
             )}
           </Card>
-          <Button startIcon={<AddIcon />} variant="outlined" size="small" sx={{ mt: 1.5, minHeight: 40 }} onClick={() => { setResKind('link'); setResTitle(''); setResUrl(''); setResDialog(true); }}>
+          <Button startIcon={<AddIcon />} variant="outlined" size="small" sx={{ mt: 1.5, minHeight: 40 }} onClick={() => { setResKind('link'); setResSection('resource'); setResTitle(''); setResUrl(''); setResFile(null); setResDialog(true); }}>
             Add resource
           </Button>
         </Box>
@@ -440,25 +500,45 @@ export default function TopicDetailPage() {
         <DialogTitle>Add resource</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <TextField select label="Type" value={resKind} onChange={(e) => setResKind(e.target.value as 'link' | 'youtube')} fullWidth>
+            <TextField
+              select
+              label="Type"
+              value={resKind}
+              onChange={(e) => setResKind(e.target.value as 'link' | 'youtube' | 'study_file')}
+              fullWidth
+            >
               <MenuItem value="link">Link</MenuItem>
               <MenuItem value="youtube">YouTube video</MenuItem>
+              <MenuItem value="study_file">Upload file (PDF or image)</MenuItem>
+            </TextField>
+            <TextField select label="Section" value={resSection} onChange={(e) => setResSection(e.target.value as 'resource' | 'drill')} fullWidth helperText="Drill files can be attached to a class assignment in one tap.">
+              <MenuItem value="resource">Resource</MenuItem>
+              <MenuItem value="drill">Drill (take-home practice)</MenuItem>
             </TextField>
             <TextField label="Title" value={resTitle} onChange={(e) => setResTitle(e.target.value)} fullWidth autoFocus />
-            <TextField label="URL" value={resUrl} onChange={(e) => setResUrl(e.target.value)} fullWidth placeholder="https://..." />
+            {resKind === 'study_file' ? (
+              <Button variant="outlined" component="label" sx={{ minHeight: 48, textTransform: 'none' }}>
+                {resFile ? resFile.name : 'Choose PDF or image'}
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  hidden
+                  onChange={(e) => setResFile(e.target.files?.[0] || null)}
+                />
+              </Button>
+            ) : (
+              <TextField label="URL" value={resUrl} onChange={(e) => setResUrl(e.target.value)} fullWidth placeholder="https://..." />
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setResDialog(false)}>Cancel</Button>
           <Button
             variant="contained"
-            disabled={busy || !resTitle.trim()}
-            onClick={() => {
-              setResDialog(false);
-              post({ action: 'add_resource', kind: resKind, title: resTitle, url: resUrl || null }, 'Resource added.');
-            }}
+            disabled={busy || uploadingRes || !resTitle.trim() || (resKind === 'study_file' && !resFile)}
+            onClick={addResource}
           >
-            Add
+            {uploadingRes ? 'Uploading...' : 'Add'}
           </Button>
         </DialogActions>
       </Dialog>

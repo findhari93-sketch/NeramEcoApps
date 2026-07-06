@@ -29,6 +29,7 @@ import AddIcon from '@mui/icons-material/Add';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import PublishIcon from '@mui/icons-material/Publish';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { ToggleButtonGroup, ToggleButton } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface EditQuestion {
@@ -65,7 +66,7 @@ export default function TeacherClassRecapEditor() {
   const recapId = params?.recapId as string;
   const { loading: authLoading, getTeacherToken } = useNexusAuthContext();
 
-  const [recap, setRecap] = useState<{ id: string; title: string; status: string; recording_url: string | null } | null>(null);
+  const [recap, setRecap] = useState<{ id: string; title: string; status: string; recording_url: string | null; video_source: string } | null>(null);
   const [sections, setSections] = useState<EditSection[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' | 'info' } | null>(null);
@@ -112,7 +113,7 @@ export default function TeacherClassRecapEditor() {
     try {
       const res = await teacherFetch(`/api/class-recaps/${recapId}`);
       const r = res.recap;
-      setRecap({ id: r.id, title: r.title, status: r.status, recording_url: r.recording_url });
+      setRecap({ id: r.id, title: r.title, status: r.status, recording_url: r.recording_url, video_source: r.video_source || 'sharepoint' });
       setSections(toEdit(r.sections));
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Failed to load', sev: 'error' });
@@ -191,6 +192,33 @@ export default function TeacherClassRecapEditor() {
     [teacherFetch, recapId],
   );
 
+  const setVideoSource = useCallback(
+    async (source: 'sharepoint' | 'youtube') => {
+      setBusy('source');
+      try {
+        const res = await teacherFetch(`/api/class-recaps/${recapId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ action: 'set_video_source', video_source: source }),
+        });
+        setRecap((prev) =>
+          prev ? { ...prev, video_source: res.recap.video_source, recording_url: res.recap.recording_url } : prev,
+        );
+        setSnack({
+          msg:
+            source === 'youtube'
+              ? 'Students will watch the YouTube backup copy.'
+              : 'Students will watch the Teams recording.',
+          sev: 'success',
+        });
+      } catch (err) {
+        setSnack({ msg: err instanceof Error ? err.message : 'Failed', sev: 'error' });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [teacherFetch, recapId],
+  );
+
   // ── section/question editing helpers ──
   const patchSection = (i: number, patch: Partial<EditSection>) =>
     setSections((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -244,6 +272,30 @@ export default function TeacherClassRecapEditor() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Generate checkpoint quizzes from the class transcript, review them, then publish for late joiners.
       </Typography>
+
+      {/* Video source: which copy students watch */}
+      <Box sx={{ mb: 2.5 }}>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}>
+          Which recording do students watch?
+        </Typography>
+        <ToggleButtonGroup
+          value={recap.video_source}
+          exclusive
+          size="small"
+          disabled={!!busy}
+          onChange={(_, v) => v && setVideoSource(v)}
+        >
+          <ToggleButton value="sharepoint" sx={{ textTransform: 'none', minHeight: 40, px: 2 }}>
+            Teams recording
+          </ToggleButton>
+          <ToggleButton value="youtube" sx={{ textTransform: 'none', minHeight: 40, px: 2 }}>
+            YouTube backup
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          The Teams recording is used for the transcript. The unlisted YouTube copy is the durable one (Teams expires after ~6 months).
+        </Typography>
+      </Box>
 
       {/* Actions */}
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2.5 }}>

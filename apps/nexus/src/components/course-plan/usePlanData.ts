@@ -17,6 +17,8 @@ export interface UsePlanData {
   flow: FlowResult | null;
   today: string;
   busy: boolean;
+  /** Terminal load failure (auth expiry, plan deleted, server error). Null while loading or after success. */
+  loadError: string | null;
   snack: { msg: string; sev: 'success' | 'error' } | null;
   setSnack: (s: { msg: string; sev: 'success' | 'error' } | null) => void;
   load: () => Promise<void>;
@@ -34,14 +36,20 @@ export function usePlanData(planId: string): UsePlanData {
   const [data, setData] = useState<PlanData | null>(null);
   const [busy, setBusy] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const today = istToday();
 
   const load = useCallback(async () => {
     try {
       const res = await authFetch(`/api/teaching-plans/${planId}`);
       setData(res as PlanData);
+      setLoadError(null);
     } catch (err) {
-      setSnack({ msg: err instanceof Error ? err.message : 'Failed to load plan', sev: 'error' });
+      const msg = err instanceof Error ? err.message : 'Failed to load plan';
+      // Before the first successful load there is nothing behind the skeleton,
+      // so surface a terminal error instead of spinning forever.
+      setLoadError(msg);
+      setSnack({ msg, sev: 'error' });
     }
   }, [authFetch, planId]);
 
@@ -107,5 +115,5 @@ export function usePlanData(planId: string): UsePlanData {
     [authFetch, planId, load],
   );
 
-  return { data, plan, flow, today, busy, snack, setSnack, load, act, patch, entriesById, authFetch };
+  return { data, plan, flow, today, busy, loadError, snack, setSnack, load, act, patch, entriesById, authFetch };
 }

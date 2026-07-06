@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
-import { getRecapById, setRecapStatus, refreshRecapMedia } from '@neram/database';
+import { getRecapById, setRecapStatus, refreshRecapMedia, setRecapVideoSource } from '@neram/database';
 
 /**
  * GET /api/class-recaps/[recapId]
@@ -25,7 +25,7 @@ export async function GET(
 
 /**
  * PATCH /api/class-recaps/[recapId]
- * Body: { action: 'publish' | 'unpublish' | 'archive' | 'refresh_media' }
+ * Body: { action: 'publish' | 'unpublish' | 'archive' | 'refresh_media' | 'set_video_source', video_source? }
  */
 export async function PATCH(
   request: NextRequest,
@@ -39,6 +39,12 @@ export async function PATCH(
 
     if (action === 'refresh_media') {
       const recap = await refreshRecapMedia(recapId);
+      return NextResponse.json({ recap });
+    }
+
+    if (action === 'set_video_source') {
+      const source = body.video_source === 'youtube' ? 'youtube' : 'sharepoint';
+      const recap = await setRecapVideoSource(recapId, source);
       return NextResponse.json({ recap });
     }
 

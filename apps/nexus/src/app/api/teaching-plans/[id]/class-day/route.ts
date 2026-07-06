@@ -7,11 +7,25 @@ import {
   updateDayItem,
   updatePlanEntry,
   logPlanAudit,
+  listAssignmentsForPlan,
+  createAssignment,
+  updateScheduledClassLinks,
+  getRecapByClass,
 } from '@neram/database';
 import type { NexusTeachingPlanEntryDetail } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { computeFlow, toFlowEntries, istToday } from '@/lib/plan-flow';
 import { errorResponse } from '@/lib/api-errors';
+import { extractYouTubeId, isValidYouTubeUrl } from '@/lib/youtube';
+
+/** The scheduled class linked to this entry on this specific date (spillover-safe). */
+function matchedClass(
+  entry: NexusTeachingPlanEntryDetail | null,
+  date: string,
+): NexusTeachingPlanEntryDetail['classes'][number] | null {
+  if (!entry) return null;
+  return (entry.classes || []).find((c) => c.scheduled_date === date) ?? null;
+}
 
 /**
  * Pull checklist lines out of the topic's authored markdown: one item per
@@ -101,7 +115,23 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         );
       }
     }
-    return NextResponse.json(dayPayload(ctx, items, date));
+    // Assignments given on this day + the class links (Teams + YouTube) and any
+    // existing recap for the scheduled class.
+    const [assignments, cls] = [
+      await listAssignmentsForPlan(params.id, [date]),
+      matchedClass(ctx.entry as NexusTeachingPlanEntryDetail | null, date),
+    ];
+    const recap = cls ? await getRecapByClass(cls.id) : null;
+    const classLinks = cls
+      ? { class_id: cls.id, recording_url: cls.recording_url, youtube_url: cls.youtube_url }
+      : null;
+
+    return NextResponse.json({
+      ...dayPayload(ctx, items, date),
+      assignments,
+      class_links: classLinks,
+      recap: recap ? { id: recap.id, status: recap.status } : null,
+    });
   } catch (err) {
     return errorResponse(err, 'Failed to load class day');
   }
@@ -113,6 +143,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
  * body { action: 'add_item', date, title, topic_id? }        // unplanned, added mid-class
  * body { action: 'end_class', date }                         // log coverage: completed_sessions += 1
  * body { action: 'carry_remaining', date }                   // needs one more class: session_span += 1
+ * body { action: 'set_class_links', class_id, recording_url?, youtube_url? }
+ * body { action: 'create_assignment', date, title, instructions?, submission_format?, max_marks?, due_at?, topic_id? }
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -219,6 +251,58 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           },
         });
         return NextResponse.json({ entry });
+      }
+
+      case 'set_class_links': {
+        if (!body.class_id) {
+          return NextResponse.json({ error: 'class_id is required' }, { status: 400 });
+        }
+        const patch: { recording_url?: string | null; youtube_url?: string | null } = {};
+        if (body.recording_url !== undefined) {
+          patch.recording_url = body.recording_url ? String(body.recording_url).trim() : null;
+        }
+        if (body.youtube_url !== undefined) {
+          const yt = body.youtube_url ? String(body.youtube_url).trim() : '';
+          if (yt && !isValidYouTubeUrl(yt)) {
+            return NextResponse.json(
+              { error: 'That does not look like a YouTube link. Paste a youtube.com or youtu.be URL.' },
+              { status: 400 },
+            );
+          }
+          // Store the canonical watch URL so the player and validation agree.
+          const id = extractYouTubeId(yt);
+          patch.youtube_url = id ? `https://www.youtube.com/watch?v=${id}` : null;
+        }
+        await updateScheduledClassLinks(body.class_id, patch);
+        return NextResponse.json({ ok: true, ...patch });
+      }
+
+      case 'create_assignment': {
+        const date = body.date || istToday();
+        const title = String(body.title || '').trim();
+        if (!title) {
+          return NextResponse.json({ error: 'Title is required' }, { status: 400 });
+        }
+        const format = body.submission_format === 'pdf' ? 'pdf' : 'pdf_or_image';
+        const maxMarks = Number(body.max_marks);
+        const ctx = await loadDayContext(params.id, date);
+        if (!ctx) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+        const topicId =
+          body.topic_id ?? (ctx.entry as NexusTeachingPlanEntryDetail | null)?.topic?.id ?? null;
+        const assignment = await createAssignment({
+          classroom_id: ctx.plan.classroom_id,
+          plan_id: params.id,
+          plan_entry_id: ctx.entry?.id ?? null,
+          topic_id: topicId,
+          class_date: date,
+          title,
+          instructions: body.instructions ? String(body.instructions) : null,
+          submission_format: format,
+          max_marks: Number.isFinite(maxMarks) && maxMarks > 0 ? maxMarks : 10,
+          due_at: body.due_at || null,
+          created_by: user.id,
+        });
+        return NextResponse.json({ assignment });
       }
 
       default:

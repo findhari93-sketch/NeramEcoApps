@@ -97,7 +97,9 @@ export async function createRecapForClass(
 
   const { data: cls, error: clsErr } = await supabase
     .from('nexus_scheduled_classes')
-    .select('id, classroom_id, title, recording_url, transcript_url, recording_duration_minutes')
+    .select(
+      'id, classroom_id, title, recording_url, youtube_url, transcript_url, recording_duration_minutes',
+    )
     .eq('id', scheduledClassId)
     .single();
   if (clsErr) throw clsErr;
@@ -105,15 +107,21 @@ export async function createRecapForClass(
   const durationSeconds =
     cls.recording_duration_minutes != null ? Math.round(cls.recording_duration_minutes * 60) : null;
 
+  // Prefer the SharePoint recording (has a transcript for AI generation); fall
+  // back to the durable YouTube backup so the recap always has a playable video.
+  const hasSharePoint = !!cls.recording_url;
+  const videoSource = hasSharePoint ? 'sharepoint' : cls.youtube_url ? 'youtube' : 'sharepoint';
+  const recordingUrl = hasSharePoint ? cls.recording_url : cls.youtube_url ?? null;
+
   const { data, error } = await supabase
     .from(RECAPS)
     .insert({
       scheduled_class_id: scheduledClassId,
       classroom_id: cls.classroom_id ?? null,
       title: cls.title || 'Class recap',
-      recording_url: cls.recording_url ?? null,
+      recording_url: recordingUrl,
       transcript_url: cls.transcript_url ?? null,
-      video_source: 'sharepoint',
+      video_source: videoSource,
       video_duration_seconds: durationSeconds,
       status: 'draft',
       created_by: createdBy,
@@ -284,6 +292,48 @@ export async function replaceRecapSections(
     .update({ generated_at: new Date().toISOString() })
     .eq('id', recapId);
   if (uErr) throw uErr;
+}
+
+/**
+ * Switch the recap's video source between the SharePoint (Teams) recording and
+ * the durable YouTube backup, pulling the matching URL from the linked scheduled
+ * class when there is one. For an ad-hoc recap (no scheduled class) it just flips
+ * the source flag and leaves the pasted recording_url in place.
+ */
+export async function setRecapVideoSource(
+  recapId: string,
+  source: 'sharepoint' | 'youtube',
+  client?: TypedSupabaseClient,
+): Promise<NexusClassRecap> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: recap, error: rErr } = await supabase
+    .from(RECAPS)
+    .select('id, scheduled_class_id, recording_url')
+    .eq('id', recapId)
+    .single();
+  if (rErr) throw rErr;
+
+  const patch: Record<string, unknown> = { video_source: source };
+  if (recap.scheduled_class_id) {
+    const { data: cls } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('recording_url, youtube_url')
+      .eq('id', recap.scheduled_class_id)
+      .single();
+    if (cls) {
+      const url = source === 'youtube' ? cls.youtube_url : cls.recording_url;
+      if (url) patch.recording_url = url;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from(RECAPS)
+    .update(patch)
+    .eq('id', recapId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as NexusClassRecap;
 }
 
 export async function setRecapStatus(

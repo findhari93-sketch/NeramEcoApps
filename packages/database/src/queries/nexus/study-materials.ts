@@ -61,7 +61,8 @@ export function fileKind(fileType: string | null): NexusStudyFileKind {
 // Reads
 // ============================================================
 
-/** Child folders of a parent (null = root). Active (non-deleted) only by default. */
+/** Child folders of a parent (null = root). Active (non-deleted) only by default.
+ *  System folders (e.g. assignment/drill attachments) are hidden from the browse tree. */
 export async function listChildFolders(
   parentId: string | null,
   client?: TypedSupabaseClient,
@@ -71,6 +72,7 @@ export async function listChildFolders(
     .from(FOLDERS as any)
     .select('*')
     .eq('is_deleted', false)
+    .eq('is_system', false)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   query = parentId === null ? query.is('parent_id', null) : query.eq('parent_id', parentId);
@@ -79,13 +81,15 @@ export async function listChildFolders(
   return (data || []) as NexusStudyFolder[];
 }
 
-/** All active folders (for staff move/target pickers and item-count rollups). */
+/** All active folders (for staff move/target pickers and item-count rollups).
+ *  System folders are excluded so they never appear as a move target. */
 export async function listAllFolders(client?: TypedSupabaseClient): Promise<NexusStudyFolder[]> {
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from(FOLDERS as any)
     .select('*')
     .eq('is_deleted', false)
+    .eq('is_system', false)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error) throw error;

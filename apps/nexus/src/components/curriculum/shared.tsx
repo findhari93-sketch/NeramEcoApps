@@ -108,7 +108,16 @@ export function useAuthFetch() {
   return useCallback(
     async (url: string, init?: RequestInit) => {
       const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token) {
+        // No token means the Microsoft session is gone (silent renewal failed
+        // and the auto-redirect was suppressed or has not landed yet). Treat it
+        // like a 401 so the UI offers re-sign-in instead of a dead generic error.
+        if (Date.now() - lastReauthAt > 60_000) {
+          lastReauthAt = Date.now();
+          void signIn();
+        }
+        throw new Error('Your session expired. Please sign in again.');
+      }
       const res = await fetch(url, {
         ...init,
         headers: {
