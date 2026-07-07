@@ -301,6 +301,12 @@ export default function StudentsPage() {
   const [entraCourseMap, setEntraCourseMap] = useState<Record<string, string>>({});
   const [entraSelected, setEntraSelected] = useState<Set<string>>(new Set());
 
+  // Sync current batch → the single classroom + linked Team + group chat
+  const [showBatchSync, setShowBatchSync] = useState(false);
+  const [batchSyncPreview, setBatchSyncPreview] = useState<any>(null);
+  const [batchSyncing, setBatchSyncing] = useState(false);
+  const [batchSyncProgress, setBatchSyncProgress] = useState<{ processed: number; succeeded: number; failed: number } | null>(null);
+
   const bumpReset = () => setSelectionResetKey((k) => k + 1);
 
   // The grid does all per-column filtering / global search / paging client-side on
@@ -531,6 +537,9 @@ export default function StudentsPage() {
         email: s.email,
         name: s.name,
         course: entraCourseMap[s.msOid],
+        // When the picker found an existing student (their Google row), link this
+        // Entra account onto it explicitly instead of creating a duplicate.
+        linkUserId: s.suggestedMatch?.id,
       }));
 
     if (studentsToEnroll.length === 0) return;
@@ -551,6 +560,52 @@ export default function StudentsPage() {
       setError(err.message || 'Enrollment failed');
     } finally {
       setEntraEnrolling(false);
+    }
+  };
+
+  const handleOpenBatchSync = async () => {
+    setShowBatchSync(true);
+    setBatchSyncPreview(null);
+    setBatchSyncProgress(null);
+    try {
+      const res = await fetch('/api/students/sync-current-batch');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setBatchSyncPreview(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load current batch');
+    }
+  };
+
+  const handleRunBatchSync = async () => {
+    setBatchSyncing(true);
+    let processed = 0, succeeded = 0, failed = 0;
+    try {
+      // Chunked loop: keep calling until the server reports 0 remaining. The
+      // iteration cap is a safety backstop against an unexpected non-converging loop.
+      for (let i = 0; i < 200; i++) {
+        const res = await fetch('/api/students/sync-current-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 40 }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        const s = data.summary || {};
+        processed += s.processed || 0;
+        succeeded += s.succeeded || 0;
+        failed += s.failed || 0;
+        setBatchSyncProgress({ processed, succeeded, failed });
+        if ((s.remaining ?? 0) <= 0 || (s.processed ?? 0) === 0) break;
+      }
+      const pre = await fetch('/api/students/sync-current-batch').then((r) => r.json()).catch(() => null);
+      if (pre) setBatchSyncPreview(pre);
+      fetchStudents();
+      setNotice({ type: 'success', text: `Current batch synced: ${succeeded} enrolled, ${failed} failed.` });
+    } catch (err: any) {
+      setError(err.message || 'Sync failed');
+    } finally {
+      setBatchSyncing(false);
     }
   };
 
@@ -630,6 +685,17 @@ export default function StudentsPage() {
               sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
             >
               Sync from Entra
+            </Button>
+          )}
+          {view === 'list' && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<PeopleAltIcon sx={{ fontSize: 18 }} />}
+              onClick={handleOpenBatchSync}
+              sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
+            >
+              Sync current batch
             </Button>
           )}
           <Tooltip title="Refresh data">
@@ -798,6 +864,52 @@ export default function StudentsPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Sync Current Batch Dialog */}
+      <Dialog open={showBatchSync} onClose={() => !batchSyncing && setShowBatchSync(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SyncIcon color="primary" /> Sync current batch to classroom
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Enrolls every active student in the current batch into the single Nexus
+            classroom and adds them to the linked Microsoft Team and group chat. Runs
+            in chunks, so it is safe to run repeatedly.
+          </Typography>
+          {batchSyncPreview ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1 }}>
+              <Typography variant="body2">
+                <strong>Classroom:</strong> {batchSyncPreview.classroom?.name || 'not set'}
+                {batchSyncPreview.classroom?.batchCode ? ` (${batchSyncPreview.classroom.batchCode})` : ''}
+              </Typography>
+              <Typography variant="body2"><strong>Current batch students:</strong> {batchSyncPreview.rosterTotal ?? 0}</Typography>
+              <Typography variant="body2"><strong>Already enrolled:</strong> {batchSyncPreview.alreadyEnrolled ?? 0}</Typography>
+              <Typography variant="body2"><strong>Remaining to enroll:</strong> {batchSyncPreview.remaining ?? 0}</Typography>
+            </Box>
+          ) : (
+            <CircularProgress size={20} />
+          )}
+          {batchSyncProgress && (
+            <Alert severity={batchSyncProgress.failed > 0 ? 'warning' : 'success'} sx={{ mt: 1 }}>
+              Processed {batchSyncProgress.processed} · Enrolled {batchSyncProgress.succeeded} · Failed {batchSyncProgress.failed}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setShowBatchSync(false)} disabled={batchSyncing} sx={{ textTransform: 'none' }}>
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleRunBatchSync}
+            disabled={batchSyncing || !batchSyncPreview || (batchSyncPreview?.remaining ?? 0) === 0}
+            startIcon={batchSyncing ? <CircularProgress size={16} color="inherit" /> : <SyncIcon />}
+            sx={{ textTransform: 'none' }}
+          >
+            {batchSyncing ? 'Syncing...' : 'Sync now'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Entra Sync Dialog */}
       <Dialog open={showEntraSync} onClose={() => !entraEnrolling && setShowEntraSync(false)} maxWidth="lg" fullWidth>
         <DialogTitle sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -897,6 +1009,11 @@ export default function StudentsPage() {
                         <Box>
                           <Typography variant="body2" fontWeight={600}>{s.name}</Typography>
                           <Typography variant="caption" color="text.secondary">{s.email}</Typography>
+                          {s.suggestedMatch && (
+                            <Typography variant="caption" sx={{ display: 'block', color: 'success.main', fontWeight: 600 }}>
+                              Links to existing student: {s.suggestedMatch.name || s.suggestedMatch.email} (matched by {s.suggestedMatch.matchedBy})
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
                       <Select

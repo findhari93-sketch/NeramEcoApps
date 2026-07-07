@@ -22,6 +22,7 @@ export * from './crm';
 export * from './academicBatches';
 export * from './alumni';
 export * from './user-merge';
+export * from './ms-identity';
 export * from './scholarship';
 export * from './user-notifications';
 export * from './refund-requests';

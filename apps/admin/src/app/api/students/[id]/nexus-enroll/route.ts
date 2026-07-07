@@ -2,8 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
-import { addMemberToTeam } from '@neram/auth';
+import { getSupabaseAdminClient, getDefaultClassroom } from '@neram/database';
+import { addStudentToClassroomTeams } from '@neram/auth';
 
 /**
  * POST /api/students/[id]/nexus-enroll — Enroll student in a Nexus classroom + optional batch
@@ -19,13 +19,21 @@ export async function POST(
   try {
     const { id: userId } = await params;
     const body = await request.json();
-    const { classroomId, batchId, remove } = body;
-
-    if (!classroomId) {
-      return NextResponse.json({ error: 'classroomId is required' }, { status: 400 });
-    }
+    const { batchId, remove } = body;
+    let { classroomId } = body;
 
     const supabase = getSupabaseAdminClient() as any;
+
+    // Single-classroom mode: when no classroom is specified, default to the one
+    // active classroom (type='common'). Keeps admin flows working without a
+    // classroom picker while the multi-classroom code stays intact for the future.
+    if (!classroomId) {
+      const defaultClassroom = await getDefaultClassroom(supabase);
+      if (!defaultClassroom) {
+        return NextResponse.json({ error: 'No active classroom configured' }, { status: 400 });
+      }
+      classroomId = defaultClassroom.id;
+    }
 
     // Block enrollment if credentials haven't been shared (ms_teams_email not set)
     if (!remove) {
@@ -86,41 +94,27 @@ export async function POST(
       // Non-blocking
     }
 
-    // Auto-add student to Microsoft Teams team if classroom has sync enabled
+    // Add the student to the classroom's linked Team AND the global group chat in
+    // one shared call (also writes the nexus_teams_sync_log audit row and returns
+    // the group-chat invite link, which is the real fallback since app-only Graph
+    // cannot add to a chat).
     let teamsResult: { success: boolean; reason?: string } | null = null;
+    let groupChatInviteLink: string | null = null;
     try {
-      // 1. Check if classroom has a Teams team linked
-      const { data: classroom } = await supabase
-        .from('nexus_classrooms')
-        .select('ms_team_id, ms_team_sync_enabled, name')
-        .eq('id', classroomId)
-        .single();
+      const { data: studentProfile } = await supabase
+        .from('student_profiles')
+        .select('ms_teams_email')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      if (classroom?.ms_team_id && classroom.ms_team_sync_enabled) {
-        // 2. Get student's ms_teams_email
-        const { data: studentProfile } = await supabase
-          .from('student_profiles')
-          .select('ms_teams_email')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (studentProfile?.ms_teams_email) {
-          // 3. Add to Teams via Graph API
-          teamsResult = await addMemberToTeam(classroom.ms_team_id, studentProfile.ms_teams_email);
-
-          // 4. Log the sync attempt
-          await supabase.from('nexus_teams_sync_log').insert({
-            classroom_id: classroomId,
-            user_id: userId,
-            action: 'add_member',
-            status: teamsResult.success ? 'success' : 'failed',
-            error_message: teamsResult.success ? null : teamsResult.reason,
-            details: { source: 'admin_enroll', classroom_name: classroom.name },
-          }).catch(() => {});
-        } else {
-          teamsResult = { success: false, reason: 'no_ms_teams_email' };
-        }
-      }
+      const sync = await addStudentToClassroomTeams(supabase, {
+        classroomId,
+        userId,
+        upn: studentProfile?.ms_teams_email,
+        source: 'admin_enroll',
+      });
+      teamsResult = sync.team;
+      groupChatInviteLink = sync.inviteLink;
     } catch (teamsErr: any) {
       console.warn('[nexus-enroll] Teams auto-add failed:', teamsErr?.message);
       teamsResult = { success: false, reason: teamsErr?.message || 'unknown_error' };
@@ -168,26 +162,6 @@ export async function POST(
       } catch {
         // Don't block enrollment if onboarding update fails
       }
-    }
-
-    // Fetch the group chat invite link (if configured) to return to the caller.
-    // Note: Microsoft Graph API does not support application permissions for
-    // POST /chats/{chatId}/members, so we cannot auto-add members programmatically.
-    // Instead, we return the invite link so the admin can share it with the student.
-    let groupChatInviteLink: string | null = null;
-    try {
-      const { data: chatSetting } = await supabase
-        .from('app_settings')
-        .select('setting_value')
-        .eq('setting_key', 'teams_group_chat')
-        .maybeSingle();
-
-      const chatConfig = chatSetting?.setting_value;
-      if (chatConfig?.invite_link) {
-        groupChatInviteLink = chatConfig.invite_link;
-      }
-    } catch {
-      // Non-blocking — enrollment still succeeds without the invite link
     }
 
     return NextResponse.json({

@@ -71,8 +71,25 @@ export function buildMergePreview(a: MergeUserRow, b: MergeUserRow): {
   warnings: string[];
 } {
   // Winner = the row whose email is on a Neram domain (the official identity).
-  const winner = isNeramEmail(a.email) ? a : isNeramEmail(b.email) ? b : a;
-  const loser = winner === a ? b : a;
+  let winner = isNeramEmail(a.email) ? a : isNeramEmail(b.email) ? b : a;
+  let loser = winner === a ? b : a;
+
+  // EXCEPTION — provisioning shell: the @neram row can be a hollow duplicate (no
+  // ms_oid, no Google/app login, no data) created before the person's real
+  // identity was linked, while the OTHER row (their Google row) holds the real
+  // logins + every reference. Keep that rich row as the survivor so its
+  // firebase_uid and all its data stay put and only the shell's few refs move.
+  // merge_user_records still adopts the @neram address as the primary email and
+  // COALESCEs ms_oid/firebase_uid from both sides, so the consolidated identity is
+  // identical either way. (Duplicate cleanup finding, 2026-07-07: the Google row
+  // is the correct survivor, not the empty @neramclasses.com shell.)
+  const isHollow = (r: MergeUserRow) => !r.ms_oid && !r.firebase_uid && !r.google_id;
+  const keptGoogleRowOverShell = isNeramEmail(winner.email) && isHollow(winner) && !isHollow(loser);
+  if (keptGoogleRowOverShell) {
+    const tmp = winner;
+    winner = loser;
+    loser = tmp;
+  }
 
   const neramEmail = isNeramEmail(winner.email)
     ? winner.email
@@ -85,6 +102,9 @@ export function buildMergePreview(a: MergeUserRow, b: MergeUserRow): {
     (winner.email && !isNeramEmail(winner.email) ? winner.email : null);
 
   const warnings: string[] = [];
+  if (keptGoogleRowOverShell) {
+    warnings.push('The @neramclasses.com row is an empty provisioning shell; the row with the real login and data is kept as the surviving record, and the classroom email becomes its primary identity.');
+  }
   if (winner.firebase_uid && loser.firebase_uid && winner.firebase_uid !== loser.firebase_uid) {
     warnings.push('Both rows have a separate app (Firebase) login. The surviving login is kept; the other is archived in the merge record.');
   }

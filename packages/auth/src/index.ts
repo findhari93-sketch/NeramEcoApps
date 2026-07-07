@@ -69,6 +69,7 @@ export {
   getAppOnlyToken,
   addMemberToTeam,
   addMemberToGroupChat,
+  addStudentToClassroomTeams,
   getUserAssignedLicenses,
   getUserMsStatus,
   getUserProfile,
@@ -81,7 +82,7 @@ export {
   userExists,
   findUserOidByEmail,
 } from './graph';
-export type { UserLicenseInfo, GraphErrorInfo } from './graph';
+export type { UserLicenseInfo, GraphErrorInfo, ClassroomTeamsSyncResult } from './graph';
 
 // Hooks
 export {

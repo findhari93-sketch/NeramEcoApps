@@ -368,7 +368,7 @@ export async function getUserMsStatus(
 export async function getUserProfile(userId: string): Promise<Record<string, any> | null> {
   try {
     const res = await graphFetch(
-      `/users/${encodeURIComponent(userId)}?$select=displayName,givenName,surname,mail,userPrincipalName,mobilePhone,businessPhones,jobTitle,department,officeLocation,preferredLanguage,city,country`,
+      `/users/${encodeURIComponent(userId)}?$select=displayName,givenName,surname,mail,otherMails,userPrincipalName,mobilePhone,businessPhones,jobTitle,department,officeLocation,preferredLanguage,city,country`,
     );
     if (!res.ok) return null;
     return await res.json();
@@ -469,6 +469,98 @@ export async function setAccountEnabled(
   } catch (error) {
     return { success: false, reason: error instanceof Error ? error.message : 'Unknown error' };
   }
+}
+
+/**
+ * Result of syncing one student to a classroom's Team + the global group chat.
+ * `team` / `groupChat` are null when that step was not applicable (no linked
+ * team / no chat configured). `inviteLink` is the shareable group-chat link the
+ * caller should surface, since app-only Graph generally cannot add to a chat.
+ */
+export interface ClassroomTeamsSyncResult {
+  team: { success: boolean; reason?: string } | null;
+  groupChat: { success: boolean; reason?: string } | null;
+  inviteLink: string | null;
+  /** true when there was no UPN/email to sync (Team/chat both skipped). */
+  skipped: boolean;
+}
+
+/**
+ * Add a student to (1) the classroom's linked Microsoft Team and (2) the global
+ * student Teams group chat, in a single call. This dedupes the enroll-time block
+ * that was copy-pasted across the admin enroll / sync-entra / reconcile routes.
+ *
+ * The Supabase client is PASSED IN (never imported) so @neram/auth stays free of
+ * a @neram/database dependency. Reads:
+ *   - nexus_classrooms.ms_team_id / ms_team_sync_enabled (Team link)
+ *   - app_settings.teams_group_chat = { chat_id, invite_link, auto_add_enabled }
+ *
+ * Everything is best-effort and non-blocking (never throws):
+ *   - Team add works app-only (TeamMember.ReadWrite.All).
+ *   - Group-chat add (POST /chats/{id}/members) is generally BLOCKED for app-only
+ *     tokens by Microsoft (403). It is attempted only when auto_add_enabled, and
+ *     the invite_link is always returned as the real fallback mechanism.
+ * Users with no UPN/email are skipped (returns { skipped: true }).
+ */
+export async function addStudentToClassroomTeams(
+  client: any,
+  opts: { classroomId: string; userId?: string | null; upn?: string | null; source?: string }
+): Promise<ClassroomTeamsSyncResult> {
+  const { classroomId, userId = null, upn, source = 'enroll' } = opts;
+  const result: ClassroomTeamsSyncResult = { team: null, groupChat: null, inviteLink: null, skipped: false };
+
+  const email = (upn || '').trim();
+  if (!email) {
+    result.skipped = true;
+    return result;
+  }
+
+  // 1) Classroom's linked Team (only when a team is linked AND sync is enabled).
+  try {
+    const { data: classroom } = await client
+      .from('nexus_classrooms')
+      .select('ms_team_id, ms_team_sync_enabled, name')
+      .eq('id', classroomId)
+      .maybeSingle();
+
+    if (classroom?.ms_team_id && classroom.ms_team_sync_enabled) {
+      result.team = await addMemberToTeam(classroom.ms_team_id, email);
+      // Best-effort audit trail; never let a logging failure break enrollment.
+      try {
+        await client.from('nexus_teams_sync_log').insert({
+          classroom_id: classroomId,
+          user_id: userId,
+          action: 'add_member',
+          status: result.team.success ? 'success' : 'failed',
+          error_message: result.team.success ? null : result.team.reason,
+          details: { source, classroom_name: classroom.name },
+        });
+      } catch {
+        /* non-blocking */
+      }
+    }
+  } catch (err) {
+    result.team = { success: false, reason: err instanceof Error ? err.message : 'unknown_error' };
+  }
+
+  // 2) Global student group chat (best-effort; invite_link is the real path).
+  try {
+    const { data: chatSetting } = await client
+      .from('app_settings')
+      .select('setting_value')
+      .eq('setting_key', 'teams_group_chat')
+      .maybeSingle();
+
+    const chatConfig = chatSetting?.setting_value;
+    if (chatConfig?.invite_link) result.inviteLink = chatConfig.invite_link;
+    if (chatConfig?.chat_id && chatConfig.auto_add_enabled) {
+      result.groupChat = await addMemberToGroupChat(chatConfig.chat_id, email);
+    }
+  } catch (err) {
+    result.groupChat = { success: false, reason: err instanceof Error ? err.message : 'unknown_error' };
+  }
+
+  return result;
 }
 
 /**

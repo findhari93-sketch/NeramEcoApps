@@ -2,8 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
-import { getAppOnlyToken, addMemberToTeam, addMemberToGroupChat } from '@neram/auth';
+import { getSupabaseAdminClient, getDefaultClassroom, reconcileMsIdentity } from '@neram/database';
+import { getAppOnlyToken, addStudentToClassroomTeams, getUserProfile } from '@neram/auth';
 
 /**
  * GET /api/students/sync-entra — Pull all student accounts from Azure AD,
@@ -16,7 +16,7 @@ export async function GET() {
 
     // 1. Fetch all users from Azure AD (paginated, with 30s timeout per page)
     let allAdUsers: any[] = [];
-    let nextLink = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses&$top=100';
+    let nextLink = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,otherMails,mobilePhone,accountEnabled,assignedLicenses&$top=100';
 
     while (nextLink) {
       const controller = new AbortController();
@@ -113,6 +113,38 @@ export async function GET() {
       };
     });
 
+    // Suggested existing-row match for accounts NOT yet linked by ms_oid. Uses the
+    // SAME reconciler the POST applies (dry-run, no writes), so the admin sees the
+    // exact link that will happen: this Entra account attaches to the student's
+    // existing Google row instead of creating a duplicate @neramclasses.com shell.
+    // Bounded so a large unmatched set can't blow up the request.
+    const adById = new Map(studentAccounts.map((u: any) => [u.id, u]));
+    const SUGGEST_CAP = 100;
+    let suggested = 0;
+    for (const s of students) {
+      if (s.inDatabase || suggested >= SUGGEST_CAP) continue;
+      const ad: any = adById.get(s.msOid);
+      const phoneHints = ad ? [ad.mobilePhone, ...(ad.businessPhones || [])] : [];
+      const emailHints = ad ? (ad.otherMails || []) : [];
+      const match = await reconcileMsIdentity(supabase, {
+        msOid: s.msOid,
+        upn: s.email,
+        phoneHints,
+        emailHints,
+        dryRun: true,
+      }).catch(() => null);
+      suggested++;
+      if (match && match.user) {
+        s.suggestedMatch = {
+          id: match.user.id,
+          name: match.user.name,
+          email: match.user.email,
+          personalEmail: match.user.personal_email || null,
+          matchedBy: match.action.replace('linked_by_', ''),
+        };
+      }
+    }
+
     // Sort: needs setup first, then by name
     students.sort((a: any, b: any) => {
       if (a.needsSetup !== b.needsSetup) return a.needsSetup ? -1 : 1;
@@ -149,23 +181,13 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    // Get classroom IDs
-    const { data: classrooms } = await supabase
-      .from('nexus_classrooms')
-      .select('id, name, type, ms_team_id, ms_team_sync_enabled')
-      .eq('is_active', true);
-
-    const commonClassroom = classrooms?.find((c: any) => c.type === 'common');
-    const nataClassroom = classrooms?.find((c: any) => c.type === 'nata');
-    const jeeClassroom = classrooms?.find((c: any) => c.type === 'jee');
-
-    // Get group chat config
-    const { data: chatSetting } = await supabase
-      .from('app_settings')
-      .select('setting_value')
-      .eq('setting_key', 'teams_group_chat')
-      .maybeSingle();
-    const groupChatConfig = chatSetting?.setting_value;
+    // Single-classroom mode: everyone enrolls into the one active classroom
+    // (type='common'). The Team + group-chat sync is handled per-student by the
+    // shared addStudentToClassroomTeams helper below.
+    const defaultClassroom = await getDefaultClassroom(supabase);
+    if (!defaultClassroom) {
+      return NextResponse.json({ error: 'No active classroom configured' }, { status: 400 });
+    }
 
     // Auto-complete step keys
     const autoCompleteStepKeys = ['install_teams', 'install_authenticator', 'view_credentials', 'confirm_login_terms', 'delete_credentials'];
@@ -181,112 +203,99 @@ export async function POST(request: NextRequest) {
       const result: any = { email: student.email, name: student.name, course: student.course, success: true, actions: [] };
 
       try {
-        // 1. Find or create user in DB
-        let userId: string;
-        const { data: existingUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('ms_oid', student.msOid)
-          .maybeSingle();
-
         // Split display name into first_name
         const nameParts = (student.name || '').trim().split(/\s+/);
         const firstName = nameParts[0] || student.email?.split('@')[0] || '';
 
-        if (existingUser) {
-          userId = existingUser.id;
-          // Update name/first_name if missing
-          await supabase
+        // 1. Find, LINK, or create the user. The admin picker may pass an explicit
+        //    linkUserId (the existing Google row the admin chose to attach this
+        //    Entra account to); honour it directly. Otherwise reconcile against
+        //    existing rows by ms_oid → classroom email → email → phone → personal
+        //    email, pulling phone/otherMails from Graph so a pre-existing Google
+        //    row is linked instead of spawning a duplicate @neramclasses.com shell.
+        let userId: string;
+        if (student.linkUserId) {
+          const { data: linkRow } = await supabase
             .from('users')
-            .update({
-              name: student.name || undefined,
-              first_name: firstName || undefined,
-            })
-            .eq('id', existingUser.id)
-            .is('first_name', null);
-          result.actions.push('user_exists');
+            .select('id, ms_oid, linked_classroom_email')
+            .eq('id', student.linkUserId)
+            .maybeSingle();
+          if (!linkRow) throw new Error(`linkUserId ${student.linkUserId} not found`);
+          if (linkRow.ms_oid && linkRow.ms_oid !== student.msOid) {
+            throw new Error('Chosen student already has a different Microsoft account linked');
+          }
+          const updates: Record<string, unknown> = { ms_oid: student.msOid };
+          if (!linkRow.linked_classroom_email) {
+            updates.linked_classroom_email = student.email;
+            updates.linked_classroom_at = new Date().toISOString();
+          }
+          await supabase.from('users').update(updates).eq('id', linkRow.id);
+          userId = linkRow.id;
+          result.actions.push('user_linked_manual');
         } else {
-          const { data: newUser, error: userErr } = await supabase
-            .from('users')
-            .insert({
-              name: student.name,
-              first_name: firstName,
-              email: student.email,
-              ms_oid: student.msOid,
-              user_type: 'student',
-              status: 'active',
-              email_verified: true,
-            })
-            .select()
-            .single();
-
-          if (userErr) throw new Error(`User creation failed: ${userErr.message}`);
-          userId = newUser.id;
-          result.actions.push('user_created');
+          const profile = await getUserProfile(student.msOid).catch(() => null);
+          const phoneHints = profile ? [profile.mobilePhone, ...(profile.businessPhones || [])] : [];
+          const emailHints = profile ? (profile.otherMails || []) : [];
+          const reconciled = await reconcileMsIdentity(supabase, {
+            msOid: student.msOid,
+            upn: student.email,
+            name: student.name,
+            phoneHints,
+            emailHints,
+            createDefaults: { first_name: firstName },
+          });
+          userId = reconciled.user.id;
+          result.actions.push(
+            reconciled.action === 'created'
+              ? 'user_created'
+              : reconciled.linked
+                ? `user_linked_${reconciled.action.replace('linked_by_', '')}`
+                : 'user_exists'
+          );
         }
 
-        // 2. Validate course and determine classrooms
-        const validCourses = ['nata', 'jee_paper2', 'both'];
-        if (!student.course || !validCourses.includes(student.course)) {
-          console.warn(`[sync-entra] Student ${student.email} has invalid/missing course: '${student.course}'. Only common classroom will be assigned.`);
-          result.actions.push(`warning_invalid_course_${student.course || 'none'}`);
+        // Backfill name/first_name on a matched/linked row when first_name is missing.
+        await supabase
+          .from('users')
+          .update({ name: student.name || undefined, first_name: firstName || undefined })
+          .eq('id', userId)
+          .is('first_name', null);
+
+        // 2. Enroll into the single default classroom (idempotent).
+        const { error: enrollErr } = await supabase
+          .from('nexus_enrollments')
+          .upsert(
+            { user_id: userId, classroom_id: defaultClassroom.id, role: 'student', is_active: true },
+            { onConflict: 'user_id,classroom_id' }
+          );
+        if (!enrollErr) {
+          result.actions.push(`enrolled_${defaultClassroom.name}`);
         }
 
-        const targetClassrooms: any[] = [];
-        if (commonClassroom) targetClassrooms.push(commonClassroom);
-        if (student.course === 'nata' || student.course === 'both') {
-          if (nataClassroom) targetClassrooms.push(nataClassroom);
+        // 3. Add to the classroom's linked Team + the global group chat (best-effort).
+        const sync = await addStudentToClassroomTeams(supabase, {
+          classroomId: defaultClassroom.id,
+          userId,
+          upn: student.email,
+          source: 'sync_entra',
+        });
+        if (sync.team) {
+          result.actions.push(`teams_${sync.team.success ? (sync.team.reason || 'added') : 'failed'}`);
         }
-        if (student.course === 'jee_paper2' || student.course === 'both') {
-          if (jeeClassroom) targetClassrooms.push(jeeClassroom);
-        }
-
-        // 3. Create nexus enrollments
-        for (const classroom of targetClassrooms) {
-          const { error: enrollErr } = await supabase
-            .from('nexus_enrollments')
-            .upsert(
-              { user_id: userId, classroom_id: classroom.id, role: 'student', is_active: true },
-              { onConflict: 'user_id,classroom_id' }
-            );
-          if (!enrollErr) {
-            result.actions.push(`enrolled_${classroom.name}`);
-          }
-
-          // Auto-add to Teams team
-          if (classroom.ms_team_id && classroom.ms_team_sync_enabled) {
-            try {
-              const teamsResult = await addMemberToTeam(classroom.ms_team_id, student.email);
-              result.actions.push(`teams_${classroom.name}_${teamsResult.success ? (teamsResult.reason || 'added') : 'failed'}`);
-            } catch (teamsErr) {
-              console.warn(`[sync-entra] Failed to add ${student.email} to Teams team ${classroom.ms_team_id}:`, teamsErr);
-              result.actions.push(`teams_${classroom.name}_error`);
-            }
-          }
-
-          // Create nexus_student_onboarding
-          await supabase
-            .from('nexus_student_onboarding')
-            .upsert(
-              { student_id: userId, classroom_id: classroom.id, status: 'in_progress' },
-              { onConflict: 'student_id,classroom_id' }
-            );
+        if (sync.groupChat) {
+          result.actions.push(`group_chat_${sync.groupChat.success ? (sync.groupChat.reason || 'added') : 'failed'}`);
         }
 
-        // 4. Add to group chat
-        if (groupChatConfig?.chat_id && groupChatConfig.auto_add_enabled) {
-          try {
-            const chatResult = await addMemberToGroupChat(groupChatConfig.chat_id, student.email);
-            result.actions.push(`group_chat_${chatResult.success ? (chatResult.reason || 'added') : 'failed'}`);
-          } catch (chatErr) {
-            console.warn(`[sync-entra] Failed to add ${student.email} to group chat:`, chatErr);
-            result.actions.push('group_chat_error');
-          }
-        }
+        // 4. Track onboarding for the classroom.
+        await supabase
+          .from('nexus_student_onboarding')
+          .upsert(
+            { student_id: userId, classroom_id: defaultClassroom.id, status: 'in_progress' },
+            { onConflict: 'student_id,classroom_id' }
+          );
 
-        // 5. Create student_profile with course linkage
-        const courseClassroom = student.course === 'jee_paper2' ? jeeClassroom : nataClassroom;
-
+        // 5. Create/update student_profile. Course-specific classroom linkage is
+        // retired in single-classroom mode, so course_id stays null.
         const { data: existingProfile } = await supabase
           .from('student_profiles')
           .select('id')
@@ -301,7 +310,7 @@ export async function POST(request: NextRequest) {
             .from('student_profiles')
             .update({
               ms_teams_email: student.email,
-              course_id: courseClassroom?.id || null,
+              course_id: null,
             })
             .eq('id', existingProfile.id);
         } else {
@@ -311,7 +320,7 @@ export async function POST(request: NextRequest) {
               user_id: userId,
               enrollment_date: new Date().toISOString().split('T')[0],
               ms_teams_email: student.email,
-              course_id: courseClassroom?.id || null,
+              course_id: null,
               payment_status: 'paid',
               total_fee: 0,
               fee_paid: 0,

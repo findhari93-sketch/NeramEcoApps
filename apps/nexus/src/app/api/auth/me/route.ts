@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, reconcileMsIdentity } from '@neram/database';
+import { getUserProfile } from '@neram/auth';
 
 /**
  * GET /api/auth/me
@@ -15,69 +16,33 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Find user by Microsoft OID
-    let { data: user, error } = await supabase
+    // Fast path: an already-linked Microsoft account (the vast majority of logins).
+    let { data: user } = await supabase
       .from('users')
       .select('*')
       .eq('ms_oid', msUser.oid)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code === 'PGRST116') {
-      // User not found by ms_oid. Try to link to an existing CRM user by email.
-      // Matches either the primary email OR the linked_classroom_email the
-      // admin pre-set, and uses ILIKE so the lookup is case-insensitive
-      // (Azure UPN casing does not always match the case stored in DB, e.g.
-      // MS returns "Sanjeevraj_Ramesh@..." while DB has "sanjeevraj_ramesh@...").
-      // _ and % must be escaped because emails commonly contain underscores
-      // (e.g. firstname_lastname@neramclasses.com) which would otherwise act
-      // as single-char wildcards in ILIKE.
-      const safeEmail = msUser.email
-        .replace(/\\/g, '\\\\')
-        .replace(/[%_]/g, '\\$&');
-      const { data: emailUser } = await supabase
-        .from('users')
-        .select('*')
-        .or(`email.ilike.${safeEmail},linked_classroom_email.ilike.${safeEmail}`)
-        .maybeSingle();
-
-      if (emailUser) {
-        // Link Microsoft identity to the existing user, and record the classroom
-        // email if it wasn't already set, so future logins (or admin tools)
-        // have an explicit link recorded.
-        const updates: Record<string, unknown> = { ms_oid: msUser.oid };
-        if (!emailUser.linked_classroom_email) {
-          updates.linked_classroom_email = msUser.email;
-          updates.linked_classroom_at = new Date().toISOString();
-        }
-        await supabase.from('users').update(updates).eq('id', emailUser.id);
-        user = { ...emailUser, ...updates };
-      } else {
-        // No match — auto-create as student (teachers are pre-set by admin)
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert({
-            name: msUser.name,
-            email: msUser.email,
-            ms_oid: msUser.oid,
-            user_type: 'student',
-            status: 'active',
-            email_verified: true,
-            phone_verified: false,
-            preferred_language: 'en',
-          })
-          .select()
-          .single();
-
-        if (createError) {
-          console.error('Failed to create user:', createError);
-          return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
-        }
-
-        user = newUser;
-      }
-    } else if (error) {
-      console.error('Database error:', error);
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    if (!user) {
+      // First login / not yet linked. Reconcile against the student's existing
+      // rows instead of minting a duplicate @neramclasses.com shell. The shared
+      // reconciler matches by ms_oid → linked_classroom_email → email → phone →
+      // personal email, so a student who first signed up via Google (Tools app)
+      // gets their Microsoft identity ATTACHED to that Google row. Phone and
+      // otherMails come from Graph (best-effort; null if app-only creds are
+      // unavailable, in which case it degrades to the old email-based linking).
+      const profile = await getUserProfile(msUser.oid).catch(() => null);
+      const phoneHints = profile ? [profile.mobilePhone, ...(profile.businessPhones || [])] : [];
+      const emailHints = profile ? (profile.otherMails || []) : [];
+      const reconciled = await reconcileMsIdentity(supabase, {
+        msOid: msUser.oid,
+        upn: msUser.email,
+        name: msUser.name,
+        phoneHints,
+        emailHints,
+        createDefaults: { phone_verified: false, preferred_language: 'en' },
+      });
+      user = reconciled.user;
     }
 
     if (!user) {
@@ -142,12 +107,21 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .eq('is_active', true);
 
+    // Only surface enrollments whose classroom is still active. Archiving a
+    // classroom (is_active=false) must remove it from the switcher even if the
+    // enrollment row is left active — the enrollment filter above does not cover
+    // that. Use a JS filter (not an !inner embed, which would silently drop rows
+    // with a missing classroom).
+    const activeEnrollments = (enrollments || []).filter(
+      (e: any) => e.classroom && e.classroom.is_active !== false
+    );
+
     // Determine the effective Nexus role from user_type or enrollments
     const nexusRole = user.user_type === 'admin'
       ? 'admin'
       : user.user_type === 'teacher'
         ? 'teacher'
-        : enrollments?.some((e: any) => e.role === 'teacher')
+        : activeEnrollments.some((e: any) => e.role === 'teacher')
           ? 'teacher'
           : 'student';
 
@@ -175,9 +149,9 @@ export async function GET(request: NextRequest) {
     let onboardingStatus: string | null = null;
     let profileComplete = true;
 
-    if (nexusRole === 'student' && enrollments && enrollments.length > 0) {
+    if (nexusRole === 'student' && activeEnrollments.length > 0) {
       // Classrooms with onboarding_type='none' auto-approve
-      const hasNoOnboardingClassroom = enrollments.some(
+      const hasNoOnboardingClassroom = activeEnrollments.some(
         (e: any) => e.classroom?.onboarding_type === 'none'
       );
 
@@ -216,7 +190,7 @@ export async function GET(request: NextRequest) {
       nexusRole,
       onboardingStatus,
       profileComplete,
-      classrooms: (enrollments || []).map((e: any) => ({
+      classrooms: activeEnrollments.map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,
       })),

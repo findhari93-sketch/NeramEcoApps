@@ -205,7 +205,9 @@ export default function TopBar() {
                   textTransform: 'capitalize',
                 }}
               >
-                {activeClassroom.type} &middot; {activeClassroom.enrollmentRole}
+                {activeClassroom.type && activeClassroom.type !== 'common'
+                  ? `${activeClassroom.type} · ${activeClassroom.enrollmentRole}`
+                  : activeClassroom.enrollmentRole}
               </Typography>
             </Box>
             {classrooms.length > 1 && (
@@ -752,7 +754,9 @@ export default function TopBar() {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" sx={{ fontWeight: selected ? 600 : 400 }}>{c.name}</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize', fontSize: '0.65rem' }}>
-                      {c.type} &middot; {c.enrollmentRole}
+                      {c.type && c.type !== 'common'
+                        ? `${c.type} · ${c.enrollmentRole}`
+                        : c.enrollmentRole}
                     </Typography>
                   </Box>
                   {selected && <CheckIcon sx={{ fontSize: '1rem', color: 'primary.main' }} />}

@@ -11,6 +11,7 @@ import {
   incrementBatchEnrollment,
   notifyNewApplication,
   initializeStudentOnboarding,
+  enrollUserInDefaultClassroom,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
 
@@ -147,6 +148,18 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create student profile. Please contact support.', details: spError?.message },
         { status: 500 }
       );
+    }
+
+    // Best-effort: put the student into the single Nexus classroom now so they
+    // show up in the roster immediately. DB-only here (nexus_enrollments); these
+    // self-serve students have no Microsoft account yet, so Team + group-chat
+    // membership is synced later during admin provisioning. Note: link.batch_id is
+    // a `batches` id, NOT a nexus_batches id, so it is intentionally not passed.
+    // Never block enrollment if the classroom isn't configured yet.
+    try {
+      await enrollUserInDefaultClassroom(auth.userId, {}, supabase);
+    } catch (enrollErr: any) {
+      console.warn('[Direct Enrollment] Default classroom enroll skipped:', enrollErr?.message);
     }
 
     // Use DB-generated student_id as the canonical application number

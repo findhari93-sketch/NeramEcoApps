@@ -2,7 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { setUserAcademicYear } from '@neram/database';
+import { setUserAcademicYear, getSupabaseAdminClient } from '@neram/database';
+import { isCurrentBatch, syncUserToDefaultClassroom } from '@/lib/nexus-enroll';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
@@ -40,7 +41,21 @@ export async function POST(
     }
 
     await setUserAcademicYear(params.id, academicYear, adminId);
-    return NextResponse.json({ success: true });
+
+    // If this places the student into the CURRENT batch, auto-add them to the
+    // single classroom + Team + group chat. Best-effort: a Graph hiccup must not
+    // fail the year assignment.
+    let classroomSync: any = null;
+    try {
+      const supabase = getSupabaseAdminClient() as any;
+      if (await isCurrentBatch(supabase, academicYear)) {
+        classroomSync = await syncUserToDefaultClassroom(supabase, params.id, 'set_academic_year');
+      }
+    } catch {
+      /* non-blocking */
+    }
+
+    return NextResponse.json({ success: true, classroomSync });
   } catch (error: any) {
     console.error('CRM academic-year error:', error);
     return NextResponse.json(

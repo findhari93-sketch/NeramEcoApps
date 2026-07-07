@@ -133,6 +133,52 @@ export async function enrollUser(
   return enrollment;
 }
 
+/**
+ * The single "default" classroom = the active classroom with type='common'.
+ * A unique partial index guarantees at most one such row, so this is the app's
+ * source of truth for "the one classroom everyone is in" during single-classroom
+ * mode. Returns null if none is active.
+ */
+export async function getDefaultClassroom(
+  client?: TypedSupabaseClient
+) {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data, error } = await supabase
+    .from('nexus_classrooms')
+    .select('*')
+    .eq('type', 'common')
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Enroll a user (student by default) into the single default classroom, idempotently.
+ * DB-only: it creates/reactivates the nexus_enrollments row and returns the
+ * classroom so the caller can sync Microsoft Teams membership separately (Graph
+ * lives in @neram/auth, kept out of the DB layer). Throws if no default classroom.
+ */
+export async function enrollUserInDefaultClassroom(
+  userId: string,
+  opts: { batchId?: string | null; role?: 'teacher' | 'student' } = {},
+  client?: TypedSupabaseClient
+) {
+  const supabase = client || getSupabaseAdminClient();
+  const classroom = await getDefaultClassroom(supabase);
+  if (!classroom) {
+    throw new Error('No active default classroom (type=common) found');
+  }
+  const enrollData: { user_id: string; classroom_id: string; role: 'teacher' | 'student'; batch_id?: string } = {
+    user_id: userId,
+    classroom_id: classroom.id,
+    role: opts.role || 'student',
+  };
+  if (opts.batchId) enrollData.batch_id = opts.batchId;
+  const enrollment = await enrollUser(enrollData, supabase);
+  return { classroom, enrollment };
+}
+
 export async function updateEnrollmentBatch(
   enrollmentId: string,
   batchId: string | null,

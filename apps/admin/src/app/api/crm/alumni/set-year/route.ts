@@ -2,7 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { bulkSetAcademicYear } from '@neram/database';
+import { bulkSetAcademicYear, enrollUserInDefaultClassroom, getSupabaseAdminClient } from '@neram/database';
+import { isCurrentBatch } from '@/lib/nexus-enroll';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
@@ -29,7 +30,29 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await bulkSetAcademicYear(userIds, academicYear, adminId);
-    return NextResponse.json({ success: true, ...result });
+
+    // When bulk-assigning into the CURRENT batch, enroll everyone into the single
+    // classroom (DB-only, fast). Microsoft Team + group-chat membership is pushed
+    // separately via the chunked "Sync current batch" action so this route never
+    // fans out hundreds of Graph calls and times out.
+    let classroomEnrolled = 0;
+    try {
+      const supabase = getSupabaseAdminClient() as any;
+      if (await isCurrentBatch(supabase, academicYear)) {
+        for (const uid of userIds) {
+          try {
+            await enrollUserInDefaultClassroom(uid, {}, supabase);
+            classroomEnrolled++;
+          } catch {
+            /* skip individual failures */
+          }
+        }
+      }
+    } catch {
+      /* non-blocking */
+    }
+
+    return NextResponse.json({ success: true, ...result, classroomEnrolled });
   } catch (error: any) {
     console.error('CRM alumni set-year error:', error);
     return NextResponse.json({ error: error.message || 'Failed to set academic year' }, { status: 500 });
