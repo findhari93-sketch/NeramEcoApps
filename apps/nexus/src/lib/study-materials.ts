@@ -6,6 +6,7 @@
  */
 import { getSupabaseAdminClient } from '@neram/database';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { ApiError } from '@/lib/api-errors';
 
 export interface RequestUser {
   id: string;
@@ -33,6 +34,21 @@ export function isStaff(user: RequestUser): boolean {
 
 export function assertStaff(user: RequestUser): void {
   if (!isStaff(user)) throw new Error('Not authorized');
+}
+
+export function isAdmin(user: RequestUser): boolean {
+  return user.user_type === 'admin';
+}
+
+/**
+ * Owner-or-admin gate for mutating a shared repository row (subject/topic).
+ * Admin may act on anything; a teacher only on rows they created; a row with no
+ * recorded owner (legacy data) is admin-only. Throws a 403 ApiError otherwise.
+ */
+export function assertCanMutate(user: RequestUser, createdBy: string | null | undefined): void {
+  if (isAdmin(user)) return;
+  if (createdBy && createdBy === user.id) return;
+  throw new ApiError('You can only edit or delete items you created.', 403);
 }
 
 /**

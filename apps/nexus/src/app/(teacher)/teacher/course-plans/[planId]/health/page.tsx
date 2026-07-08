@@ -95,13 +95,16 @@ export default function PlanHealthPage() {
     <PlanShell planId={planId} active="health" planData={planData}>
       {plan && flow && stats && (
         <Box sx={{ maxWidth: 860 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
             <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
               {plan.exam_date ? `Exam ${fmtShort(plan.exam_date)} · ` : ''}
               {stats.doneSessions} of {stats.totalSessions} sessions covered
             </Typography>
             <Chip label={statusChip.label} size="small" sx={{ ml: 'auto', bgcolor: statusChip.bg, color: statusChip.color, fontWeight: 800 }} />
           </Box>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 2 }}>
+            This page updates itself. Nothing to fill in, it reads from what you mark on <strong>Class Day</strong>.
+          </Typography>
 
           <DriftBanner
             planId={planId}
@@ -224,7 +227,7 @@ export default function PlanHealthPage() {
             {/* Module coverage */}
             <Box sx={{ flex: 1, minWidth: 260 }}>
               <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'text.disabled', mb: 1.25 }}>
-                Module coverage
+                Subject coverage
               </Typography>
               {modules.length === 0 ? (
                 <Typography variant="body2" color="text.disabled">

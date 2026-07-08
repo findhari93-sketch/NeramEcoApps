@@ -124,7 +124,7 @@ export default function RepositoryPanel({
           onClick={() => router.push('/teacher/curriculum')}
           sx={{ ml: 'auto', minHeight: 32, fontSize: '0.72rem' }}
         >
-          Module
+          Subject
         </Button>
       </Box>
       <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 1 }}>
@@ -133,7 +133,7 @@ export default function RepositoryPanel({
       <Stack spacing={1}>
         {modules.length === 0 && (
           <Typography variant="body2" color="text.disabled" sx={{ textAlign: 'center', py: 2 }}>
-            The repository is empty. Add modules and topics first.
+            The repository is empty. Add subjects and topics first.
           </Typography>
         )}
         {modules.map((m, mi) => {
@@ -235,7 +235,7 @@ export default function RepositoryPanel({
                 })}
                 {m.topics.length === 0 && (
                   <Typography variant="caption" color="text.disabled" sx={{ display: 'block', px: 1.5, py: 1 }}>
-                    No topics in this module yet
+                    No topics in this subject yet
                   </Typography>
                 )}
               </Collapse>

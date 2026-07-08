@@ -45,6 +45,19 @@ describe('calendar basics', () => {
       false,
     );
   });
+
+  it('cancelled/holiday wins, makeup turns an off-day into a class day, holiday beats makeup', () => {
+    // Makeup on a Sunday -> class day.
+    expect(isClassDay('2026-01-04', { saturdayClasses: true, extraDays: ['2026-01-04'] })).toBe(true);
+    // Makeup on an off Saturday -> class day.
+    expect(isClassDay('2026-01-10', { saturdayClasses: false, extraDays: ['2026-01-10'] })).toBe(true);
+    // Cancelled weekday -> not a class day.
+    expect(isClassDay('2026-01-06', { saturdayClasses: true, holidays: ['2026-01-06'] })).toBe(false);
+    // A date in both holidays and extraDays -> cancelled wins.
+    expect(
+      isClassDay('2026-01-04', { saturdayClasses: true, holidays: ['2026-01-04'], extraDays: ['2026-01-04'] }),
+    ).toBe(false);
+  });
 });
 
 describe('computeFlow', () => {
@@ -84,6 +97,27 @@ describe('computeFlow', () => {
     const flow = computeFlow(entries, opts({ saturdayClasses: false }));
     expect(flow.entryDates.get('e4')).toEqual(['2026-01-09']); // Fri
     expect(flow.entryDates.get('e5')).toEqual(['2026-01-12']); // Mon (Sat+Sun skipped)
+  });
+
+  it('a cancelled class day shifts the queue forward', () => {
+    nextPos = 0;
+    const a = entry({ id: 'a' });
+    const b = entry({ id: 'b' });
+    const c = entry({ id: 'c' });
+    // Cancel Tue Jan 6 -> a Mon 5, b Wed 7, c Thu 8 (all shift past the gap).
+    const flow = computeFlow([a, b, c], opts({ holidays: ['2026-01-06'] }));
+    expect(flow.entryDates.get('a')).toEqual(['2026-01-05']);
+    expect(flow.entryDates.get('b')).toEqual(['2026-01-07']);
+    expect(flow.entryDates.get('c')).toEqual(['2026-01-08']);
+  });
+
+  it('a makeup day runs a class on an off-day (Sunday) to catch up', () => {
+    nextPos = 0;
+    const e = Array.from({ length: 7 }, (_, i) => entry({ id: `m${i}` }));
+    // Normally m6 would land on Mon 12 (Sun 11 skipped). A makeup on Sun 11 pulls it in.
+    const flow = computeFlow(e, opts({ extraDays: ['2026-01-11'] }));
+    expect(flow.entryDates.get('m5')).toEqual(['2026-01-10']); // Sat
+    expect(flow.entryDates.get('m6')).toEqual(['2026-01-11']); // Sun makeup
   });
 
   it('multi-session entries consume consecutive class days with day k of N', () => {

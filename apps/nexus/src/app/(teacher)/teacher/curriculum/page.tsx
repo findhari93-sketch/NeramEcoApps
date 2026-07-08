@@ -1,8 +1,11 @@
 'use client';
 
 /**
- * Curriculum repository: org-wide modules containing topics, shared by all teaching plans.
- * Fast capture first (quick-add), full authoring on the topic detail page.
+ * Curriculum repository: org-wide subjects containing topics, shared by all
+ * course plans. "Subject" is the user-facing name; the underlying table is
+ * nexus_course_modules. Fast capture first (quick-add), full authoring on the
+ * topic detail page. Edit / archive / delete live behind a per-row menu, gated
+ * by ownership (admin does anything; a teacher only their own rows).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -20,6 +23,10 @@ import {
   DialogActions,
   TextField,
   MenuItem,
+  Menu,
+  ListItemIcon,
+  ListItemText,
+  Tooltip,
   Stack,
   Snackbar,
   Alert,
@@ -34,14 +41,22 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
+import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import {
   RepoModule,
+  RepoTopic,
   PRIORITY_OPTIONS,
   DELIVERY_OPTIONS,
   PriorityBadge,
   TopicStatusChip,
   DeliveryIcon,
   moduleColor,
+  MODULE_COLORS,
   useAuthFetch,
 } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -62,31 +77,52 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'idea', label: 'Ideas' },
 ];
 
+type SubjectDialogState = { editingId: string | null } | null;
+type Confirm =
+  | { kind: 'archive' | 'delete'; target: 'subject'; id: string; title: string }
+  | { kind: 'archive' | 'delete'; target: 'topic'; id: string; title: string; usedInPlans: number }
+  | null;
+
 export default function CurriculumPage() {
   const router = useRouter();
-  const { loading: authLoading } = useNexusAuthContext();
+  const { loading: authLoading, user } = useNexusAuthContext();
   const authFetch = useAuthFetch();
 
   const [modules, setModules] = useState<RepoModule[] | null>(null);
   const [openModules, setOpenModules] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState<Filter>('all');
+  const [showArchived, setShowArchived] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Quick-add dialogs
+  // Quick-add topic
   const [topicDialog, setTopicDialog] = useState<{ moduleId?: string } | null>(null);
   const [tTitle, setTTitle] = useState('');
   const [tModule, setTModule] = useState('');
   const [tPriority, setTPriority] = useState('high');
   const [tDelivery, setTDelivery] = useState('live');
   const [tSessions, setTSessions] = useState(1);
-  const [moduleDialog, setModuleDialog] = useState(false);
+
+  // Create / edit subject
+  const [subjectDialog, setSubjectDialog] = useState<SubjectDialogState>(null);
   const [mTitle, setMTitle] = useState('');
   const [mExams, setMExams] = useState<string[]>([]);
+  const [mColor, setMColor] = useState<string | null>(null);
+
+  // Row action menus + confirm
+  const [subjectMenu, setSubjectMenu] = useState<{ el: HTMLElement; module: RepoModule } | null>(null);
+  const [topicMenu, setTopicMenu] = useState<{ el: HTMLElement; topic: RepoTopic } | null>(null);
+  const [confirm, setConfirm] = useState<Confirm>(null);
+
+  const canMutate = useCallback(
+    (createdBy: string | null | undefined) =>
+      user?.user_type === 'admin' || (!!createdBy && createdBy === user?.id),
+    [user],
+  );
 
   const load = useCallback(async () => {
     try {
-      const data = await authFetch('/api/curriculum');
+      const data = await authFetch('/api/curriculum?include_archived=1');
       setModules(data.modules);
       setOpenModules((prev) => {
         const next = { ...prev };
@@ -103,23 +139,38 @@ export default function CurriculumPage() {
     if (!authLoading) load();
   }, [authLoading, load]);
 
-  const allTopics = useMemo(() => (modules || []).flatMap((m) => m.topics), [modules]);
+  const activeModules = useMemo(() => (modules || []).filter((m) => m.is_active), [modules]);
+  const activeTopics = useMemo(
+    () => activeModules.flatMap((m) => m.topics.filter((t) => t.is_active)),
+    [activeModules],
+  );
   const stats = useMemo(
     () => ({
-      total: allTopics.length,
-      ready: allTopics.filter((t) => t.status === 'class_ready').length,
-      drafted: allTopics.filter((t) => t.status === 'drafted').length,
-      idea: allTopics.filter((t) => t.status === 'idea').length,
+      total: activeTopics.length,
+      ready: activeTopics.filter((t) => t.status === 'class_ready').length,
+      drafted: activeTopics.filter((t) => t.status === 'drafted').length,
+      idea: activeTopics.filter((t) => t.status === 'idea').length,
     }),
-    [allTopics],
+    [activeTopics],
   );
 
-  const matchesFilter = (t: RepoModule['topics'][number]) =>
-    filter === 'all' || t.priority === filter || t.status === filter;
+  // Archived items (subjects + individually-archived topics under an active subject).
+  const archivedSubjects = useMemo(() => (modules || []).filter((m) => !m.is_active), [modules]);
+  const archivedTopics = useMemo(
+    () =>
+      activeModules.flatMap((m) =>
+        m.topics.filter((t) => !t.is_active).map((t) => ({ topic: t, subjectTitle: m.title })),
+      ),
+    [activeModules],
+  );
+  const archivedCount = archivedSubjects.length + archivedTopics.length;
 
+  const matchesFilter = (t: RepoTopic) => filter === 'all' || t.priority === filter || t.status === filter;
+
+  // ---- Topic quick-add ----
   const openTopicDialog = (moduleId?: string) => {
     setTTitle('');
-    setTModule(moduleId || modules?.[0]?.id || '');
+    setTModule(moduleId || activeModules?.[0]?.id || '');
     setTPriority('high');
     setTDelivery('live');
     setTSessions(1);
@@ -151,21 +202,111 @@ export default function CurriculumPage() {
     }
   };
 
-  const createModule = async () => {
+  // ---- Subject create / edit ----
+  const openNewSubject = () => {
+    setMTitle('');
+    setMExams([]);
+    setMColor(null);
+    setSubjectDialog({ editingId: null });
+  };
+  const openEditSubject = (m: RepoModule) => {
+    setMTitle(m.title);
+    setMExams(m.exam_tags || []);
+    setMColor(m.color);
+    setSubjectDialog({ editingId: m.id });
+  };
+
+  const saveSubject = async () => {
     if (!mTitle.trim()) return;
+    setBusy(true);
+    try {
+      if (subjectDialog?.editingId) {
+        await authFetch('/api/curriculum', {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'update_module',
+            module_id: subjectDialog.editingId,
+            title: mTitle.trim(),
+            exam_tags: mExams,
+            color: mColor,
+          }),
+        });
+        setSnack({ msg: 'Subject updated.', sev: 'success' });
+      } else {
+        await authFetch('/api/curriculum', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'create_module', title: mTitle.trim(), exam_tags: mExams, color: mColor }),
+        });
+        setSnack({ msg: 'Subject created.', sev: 'success' });
+      }
+      setSubjectDialog(null);
+      load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed to save subject', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ---- Archive / restore / delete ----
+  const setSubjectActive = async (id: string, active: boolean) => {
     setBusy(true);
     try {
       await authFetch('/api/curriculum', {
         method: 'POST',
-        body: JSON.stringify({ action: 'create_module', title: mTitle, exam_tags: mExams }),
+        body: JSON.stringify(active ? { action: 'update_module', module_id: id, is_active: true } : { action: 'archive_module', module_id: id }),
       });
-      setModuleDialog(false);
-      setMTitle('');
-      setMExams([]);
-      setSnack({ msg: 'Module created.', sev: 'success' });
+      setSnack({ msg: active ? 'Subject restored.' : 'Subject archived.', sev: 'success' });
       load();
     } catch (err) {
-      setSnack({ msg: err instanceof Error ? err.message : 'Failed to add module', sev: 'error' });
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deleteSubject = async (id: string) => {
+    setBusy(true);
+    try {
+      await authFetch('/api/curriculum', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete_module', module_id: id }),
+      });
+      setConfirm(null);
+      setSnack({ msg: 'Subject deleted.', sev: 'success' });
+      load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed to delete', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const setTopicActive = async (id: string, active: boolean) => {
+    setBusy(true);
+    try {
+      await authFetch(`/api/curriculum/topics/${id}`, {
+        method: active ? 'PATCH' : 'POST',
+        body: JSON.stringify(active ? { is_active: true } : { action: 'archive_topic' }),
+      });
+      setSnack({ msg: active ? 'Topic restored.' : 'Topic archived.', sev: 'success' });
+      load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deleteTopic = async (id: string) => {
+    setBusy(true);
+    try {
+      await authFetch(`/api/curriculum/topics/${id}`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete_topic' }),
+      });
+      setConfirm(null);
+      setSnack({ msg: 'Topic deleted.', sev: 'success' });
+      load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Failed to delete', sev: 'error' });
     } finally {
       setBusy(false);
     }
@@ -186,12 +327,12 @@ export default function CurriculumPage() {
             Repository
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Everything teachable, organised as modules and topics. Shared across all course plans.
+            Your subjects and topics, shared across all course plans. Build once, reuse every batch.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" size="small" sx={{ minHeight: 40 }} onClick={() => setModuleDialog(true)}>
-            New module
+          <Button variant="outlined" size="small" sx={{ minHeight: 40 }} onClick={openNewSubject}>
+            New subject
           </Button>
           <Button variant="contained" size="small" startIcon={<AddIcon />} sx={{ minHeight: 40 }} onClick={() => openTopicDialog()}>
             Add topic
@@ -244,26 +385,28 @@ export default function CurriculumPage() {
         ))}
       </Box>
 
-      {/* Modules */}
+      {/* Subjects */}
       {modules === null ? (
         <Stack spacing={1.5}>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} variant="rounded" height={72} sx={{ borderRadius: 3 }} />
           ))}
         </Stack>
-      ) : modules.length === 0 ? (
+      ) : activeModules.length === 0 ? (
         <EmptyState
           title="Start your curriculum"
-          description="Create a module (like Drawing or NATA Foundation), then dump every topic you can think of into it."
-          action={<Button variant="contained" onClick={() => setModuleDialog(true)}>Create the first module</Button>}
+          description="Create a subject (like Mathematics, Aptitude or Drawing), then dump every topic you can think of into it."
+          action={<Button variant="contained" onClick={openNewSubject}>Create the first subject</Button>}
         />
       ) : (
         <Stack spacing={1.5}>
-          {modules.map((m, mi) => {
+          {activeModules.map((m, mi) => {
             const color = moduleColor(m, mi);
-            const visible = m.topics.filter(matchesFilter);
-            const ready = m.topics.filter((t) => t.status === 'class_ready').length;
+            const visible = m.topics.filter((t) => t.is_active).filter(matchesFilter);
+            const ready = m.topics.filter((t) => t.is_active && t.status === 'class_ready').length;
+            const activeCount = m.topics.filter((t) => t.is_active).length;
             const open = openModules[m.id] !== false;
+            const mutable = canMutate(m.created_by);
             return (
               <Card key={m.id} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
                 <Box
@@ -292,14 +435,25 @@ export default function CurriculumPage() {
                     <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: '-0.2px' }}>{m.title}</Typography>
                     <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
                       <Typography variant="caption" color="text.secondary">
-                        {m.topics.length} topics, {ready} class ready
+                        {activeCount} topics, {ready} class ready
                       </Typography>
                       {m.exam_tags.map((e) => (
                         <Chip key={e} label={e.toUpperCase()} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.62rem' }} />
                       ))}
                     </Stack>
                   </Box>
-                  <IconButton size="small" aria-label={open ? 'Collapse module' : 'Expand module'} sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+                  <IconButton
+                    size="small"
+                    aria-label="Subject actions"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSubjectMenu({ el: e.currentTarget, module: m });
+                    }}
+                    sx={{ width: 40, height: 40 }}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                  <IconButton size="small" aria-label={open ? 'Collapse subject' : 'Expand subject'} tabIndex={-1} sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
                     <ExpandMoreIcon />
                   </IconButton>
                 </Box>
@@ -341,9 +495,20 @@ export default function CurriculumPage() {
                               )}
                             </Stack>
                           </Box>
-                          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexShrink: 0, color: 'text.disabled' }}>
+                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0, color: 'text.disabled' }}>
                             <DeliveryIcon delivery={t.intended_delivery} />
                             <Typography variant="caption">{t.estimated_sessions} session{t.estimated_sessions > 1 ? 's' : ''}</Typography>
+                            <IconButton
+                              size="small"
+                              aria-label="Topic actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTopicMenu({ el: e.currentTarget, topic: t });
+                              }}
+                              sx={{ width: 36, height: 36 }}
+                            >
+                              <MoreVertIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
                           </Stack>
                         </Box>
                       ))
@@ -361,8 +526,125 @@ export default function CurriculumPage() {
               </Card>
             );
           })}
+
+          {/* Archived */}
+          {archivedCount > 0 && (
+            <>
+              <Button
+                onClick={() => setShowArchived((v) => !v)}
+                startIcon={<ExpandMoreIcon sx={{ transform: showArchived ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />}
+                sx={{ alignSelf: 'flex-start', color: 'text.secondary', fontWeight: 700, minHeight: 40 }}
+              >
+                {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+              </Button>
+              <Collapse in={showArchived} unmountOnExit>
+                <Stack spacing={1}>
+                  {archivedSubjects.map((m) => (
+                    <ArchivedRow
+                      key={m.id}
+                      title={m.title}
+                      subtitle="Subject"
+                      canMutate={canMutate(m.created_by)}
+                      busy={busy}
+                      onRestore={() => setSubjectActive(m.id, true)}
+                      onDelete={() => setConfirm({ kind: 'delete', target: 'subject', id: m.id, title: m.title })}
+                    />
+                  ))}
+                  {archivedTopics.map(({ topic, subjectTitle }) => (
+                    <ArchivedRow
+                      key={topic.id}
+                      title={topic.title}
+                      subtitle={`Topic · ${subjectTitle}`}
+                      canMutate={canMutate(topic.created_by)}
+                      busy={busy}
+                      onRestore={() => setTopicActive(topic.id, true)}
+                      onDelete={() =>
+                        setConfirm({ kind: 'delete', target: 'topic', id: topic.id, title: topic.title, usedInPlans: topic.used_in_plans })
+                      }
+                    />
+                  ))}
+                </Stack>
+              </Collapse>
+            </>
+          )}
         </Stack>
       )}
+
+      {/* Subject actions menu */}
+      <Menu anchorEl={subjectMenu?.el} open={!!subjectMenu} onClose={() => setSubjectMenu(null)}>
+        <MenuItem
+          disabled={!subjectMenu || !canMutate(subjectMenu.module.created_by)}
+          onClick={() => {
+            if (subjectMenu) openEditSubject(subjectMenu.module);
+            setSubjectMenu(null);
+          }}
+        >
+          <ListItemIcon><EditOutlinedIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Edit subject</ListItemText>
+        </MenuItem>
+        <MenuItem
+          disabled={!subjectMenu || !canMutate(subjectMenu.module.created_by)}
+          onClick={() => {
+            if (subjectMenu) setConfirm({ kind: 'archive', target: 'subject', id: subjectMenu.module.id, title: subjectMenu.module.title });
+            setSubjectMenu(null);
+          }}
+        >
+          <ListItemIcon><ArchiveOutlinedIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Archive (hide)</ListItemText>
+        </MenuItem>
+        <MenuItem
+          disabled={!subjectMenu || !canMutate(subjectMenu.module.created_by)}
+          onClick={() => {
+            if (subjectMenu) setConfirm({ kind: 'delete', target: 'subject', id: subjectMenu.module.id, title: subjectMenu.module.title });
+            setSubjectMenu(null);
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+          <ListItemText>Delete permanently</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Topic actions menu */}
+      <Menu anchorEl={topicMenu?.el} open={!!topicMenu} onClose={() => setTopicMenu(null)}>
+        <MenuItem
+          onClick={() => {
+            if (topicMenu) router.push(`/teacher/curriculum/${topicMenu.topic.id}`);
+            setTopicMenu(null);
+          }}
+        >
+          <ListItemIcon><OpenInNewIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Open / edit</ListItemText>
+        </MenuItem>
+        <MenuItem
+          disabled={!topicMenu || !canMutate(topicMenu.topic.created_by)}
+          onClick={() => {
+            if (topicMenu) setConfirm({ kind: 'archive', target: 'topic', id: topicMenu.topic.id, title: topicMenu.topic.title, usedInPlans: topicMenu.topic.used_in_plans });
+            setTopicMenu(null);
+          }}
+        >
+          <ListItemIcon><ArchiveOutlinedIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Archive (hide)</ListItemText>
+        </MenuItem>
+        <Tooltip
+          title={topicMenu && topicMenu.topic.used_in_plans > 0 ? 'Used in a course plan. Archive it instead.' : ''}
+          placement="left"
+        >
+          <span>
+            <MenuItem
+              disabled={!topicMenu || !canMutate(topicMenu.topic.created_by) || topicMenu.topic.used_in_plans > 0}
+              onClick={() => {
+                if (topicMenu) setConfirm({ kind: 'delete', target: 'topic', id: topicMenu.topic.id, title: topicMenu.topic.title, usedInPlans: topicMenu.topic.used_in_plans });
+                setTopicMenu(null);
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+              <ListItemText>Delete permanently</ListItemText>
+            </MenuItem>
+          </span>
+        </Tooltip>
+      </Menu>
 
       {/* Quick-add topic */}
       <Dialog open={!!topicDialog} onClose={() => setTopicDialog(null)} maxWidth="xs" fullWidth>
@@ -373,8 +655,8 @@ export default function CurriculumPage() {
           </Typography>
           <Stack spacing={2}>
             <TextField label="Title" value={tTitle} onChange={(e) => setTTitle(e.target.value)} autoFocus fullWidth placeholder="e.g. Shadows and light logic" />
-            <TextField select label="Module" value={tModule} onChange={(e) => setTModule(e.target.value)} fullWidth>
-              {(modules || []).map((m) => (
+            <TextField select label="Subject" value={tModule} onChange={(e) => setTModule(e.target.value)} fullWidth>
+              {activeModules.map((m) => (
                 <MenuItem key={m.id} value={m.id}>
                   {m.title}
                 </MenuItem>
@@ -413,15 +695,15 @@ export default function CurriculumPage() {
         </DialogActions>
       </Dialog>
 
-      {/* New module */}
-      <Dialog open={moduleDialog} onClose={() => setModuleDialog(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>New module</DialogTitle>
+      {/* Create / edit subject */}
+      <Dialog open={!!subjectDialog} onClose={() => setSubjectDialog(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{subjectDialog?.editingId ? 'Edit subject' : 'New subject'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <TextField label="Module name" value={mTitle} onChange={(e) => setMTitle(e.target.value)} autoFocus fullWidth placeholder="e.g. Drawing" />
+            <TextField label="Subject name" value={mTitle} onChange={(e) => setMTitle(e.target.value)} autoFocus fullWidth placeholder="e.g. Mathematics, Aptitude, Drawing" />
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Exams this module serves
+                Exams this subject serves
               </Typography>
               <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
                 {EXAM_TAGS.map((e) => (
@@ -437,14 +719,91 @@ export default function CurriculumPage() {
                 ))}
               </Stack>
             </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                Colour
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: 'wrap' }} useFlexGap>
+                {MODULE_COLORS.map((c) => (
+                  <Box
+                    key={c}
+                    role="button"
+                    aria-label={`Colour ${c}`}
+                    onClick={() => setMColor(c)}
+                    sx={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: '50%',
+                      bgcolor: c,
+                      cursor: 'pointer',
+                      border: '3px solid',
+                      borderColor: mColor === c ? alpha(c, 0.35) : 'transparent',
+                      boxShadow: mColor === c ? `0 0 0 2px ${c}` : 'none',
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setModuleDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={createModule} disabled={busy || !mTitle.trim()}>
-            Create module
+          <Button onClick={() => setSubjectDialog(null)}>Cancel</Button>
+          <Button variant="contained" onClick={saveSubject} disabled={busy || !mTitle.trim()}>
+            {subjectDialog?.editingId ? 'Save changes' : 'Create subject'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Confirm archive / delete */}
+      <Dialog open={!!confirm} onClose={() => !busy && setConfirm(null)} maxWidth="xs" fullWidth>
+        {confirm && (
+          <>
+            <DialogTitle>
+              {confirm.kind === 'archive' ? `Archive “${confirm.title}”?` : `Delete “${confirm.title}” permanently?`}
+            </DialogTitle>
+            <DialogContent>
+              {confirm.kind === 'archive' ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  It is hidden from the repository. You can bring it back any time from “Show archived”.
+                  {confirm.target === 'subject' ? ' Its topics are hidden with it.' : ''}
+                </Typography>
+              ) : (
+                <Alert severity="error" sx={{ mt: 0.5 }}>
+                  This cannot be undone. The {confirm.target}
+                  {confirm.target === 'subject' ? ' and all its topics' : ''} are removed for good.
+                  {confirm.target === 'topic' && confirm.usedInPlans > 0
+                    ? ' It is placed in a course plan, so it must be archived, not deleted.'
+                    : ''}
+                </Alert>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setConfirm(null)} disabled={busy}>Cancel</Button>
+              {confirm.kind === 'archive' ? (
+                <Button
+                  variant="contained"
+                  color="warning"
+                  disabled={busy}
+                  onClick={() => {
+                    if (confirm.target === 'subject') setSubjectActive(confirm.id, false).then(() => setConfirm(null));
+                    else setTopicActive(confirm.id, false).then(() => setConfirm(null));
+                  }}
+                >
+                  Archive
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  color="error"
+                  disabled={busy || (confirm.target === 'topic' && confirm.usedInPlans > 0)}
+                  onClick={() => (confirm.target === 'subject' ? deleteSubject(confirm.id) : deleteTopic(confirm.id))}
+                >
+                  Delete permanently
+                </Button>
+              )}
+            </DialogActions>
+          </>
+        )}
       </Dialog>
 
       <Snackbar open={!!snack} autoHideDuration={3500} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
@@ -453,5 +812,39 @@ export default function CurriculumPage() {
         </Alert>
       </Snackbar>
     </Box>
+  );
+}
+
+/** One archived subject/topic row with Restore + Delete. */
+function ArchivedRow({
+  title,
+  subtitle,
+  canMutate,
+  busy,
+  onRestore,
+  onDelete,
+}: {
+  title: string;
+  subtitle: string;
+  canMutate: boolean;
+  busy: boolean;
+  onRestore: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Card elevation={0} sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2.5, opacity: 0.75 }}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }} noWrap>{title}</Typography>
+          <Typography variant="caption" color="text.secondary">{subtitle}</Typography>
+        </Box>
+        <Button size="small" startIcon={<UnarchiveOutlinedIcon sx={{ fontSize: 16 }} />} onClick={onRestore} disabled={busy || !canMutate} sx={{ minHeight: 36, fontWeight: 700 }}>
+          Restore
+        </Button>
+        <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={onDelete} disabled={busy || !canMutate} sx={{ minHeight: 36, fontWeight: 700 }}>
+          Delete
+        </Button>
+      </Stack>
+    </Card>
   );
 }

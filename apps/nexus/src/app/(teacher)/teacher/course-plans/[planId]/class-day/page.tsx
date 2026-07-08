@@ -206,7 +206,7 @@ function ClassDayInner() {
           <Box sx={{ p: 3, borderRadius: 3, bgcolor: alpha(TEST_COLOR, 0.05), border: `1px dashed ${alpha(TEST_COLOR, 0.4)}`, maxWidth: 560 }}>
             <Typography sx={{ fontWeight: 800, color: TEST_COLOR }}>◈ {entryTitle(entry)}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Test day. Run it from the Tests module.
+              Test day. Run it from the Tests section.
             </Typography>
             <Button variant="outlined" size="small" onClick={() => router.push('/teacher/tests')} sx={{ mt: 1.5, minHeight: 40 }}>
               Open Tests

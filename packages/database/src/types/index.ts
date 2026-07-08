@@ -4767,6 +4767,21 @@ export interface NexusPlanDayItem {
   updated_at: string;
 }
 
+/**
+ * A per-plan class-day override for the auto-flow engine:
+ * 'cancelled' drops a class day (flow shifts forward); 'makeup' adds an extra
+ * class day even on a normally-off day (to catch a slipping plan back up).
+ */
+export interface NexusPlanScheduleOverride {
+  id: string;
+  plan_id: string;
+  date: string;
+  kind: 'cancelled' | 'makeup';
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 /** Catch-up track for a late-joining student (visible to them once shared). */
 export interface NexusCatchupTrack {
   id: string;

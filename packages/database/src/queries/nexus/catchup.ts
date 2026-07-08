@@ -50,7 +50,7 @@ export async function listLateJoiners(
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('nexus_enrollments')
-    .select('user_id, enrolled_at, user:users(id, name, email, avatar_url)')
+    .select('user_id, enrolled_at, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url)')
     .eq('classroom_id', classroomId)
     .eq('role', 'student')
     .eq('is_active', true)

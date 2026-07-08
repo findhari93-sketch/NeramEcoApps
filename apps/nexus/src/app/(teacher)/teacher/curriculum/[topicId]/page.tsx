@@ -549,7 +549,7 @@ export default function TopicDetailPage() {
         <DialogContent>
           {availableTests.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-              No tests available to link. Create one in the Tests module first.
+              No tests available to link. Create one in the Tests section first.
             </Typography>
           ) : (
             <List disablePadding>

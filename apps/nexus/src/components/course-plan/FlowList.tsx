@@ -149,13 +149,17 @@ export default function FlowList({
       </Box>
 
       {flow.days.length === 0 && (
-        <Typography
-          variant="body2"
-          color="text.disabled"
-          sx={{ textAlign: 'center', py: 4, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}
+        <Box
+          sx={{ textAlign: 'center', py: 4, px: 2, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}
         >
-          Nothing planned yet. Pick topics from the repository to start building.
-        </Typography>
+          <Typography variant="body2" color="text.disabled">
+            Nothing planned yet. Pick topics from a subject on the left to start building.
+          </Typography>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
+            Repository = your library of subjects and topics. Drag topics here to set the teaching order,
+            then Schedule lays them onto real dates automatically.
+          </Typography>
+        </Box>
       )}
 
       <Stack spacing={0.75}>

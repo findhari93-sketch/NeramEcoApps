@@ -15,8 +15,9 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
  * Teams meeting creation is NOT exercised here (needs a real Graph token);
  * the schedule bridge is tested without it.
  *
- * Requires migrations 20260703000000_nexus_curriculum.sql and
- * 20260703120000_nexus_plan_autoflow.sql to be applied.
+ * Requires migrations 20260703000000_nexus_curriculum.sql,
+ * 20260703120000_nexus_plan_autoflow.sql and
+ * 20260708000000_nexus_plan_schedule_overrides.sql to be applied.
  */
 
 const NEXUS_URL = APP_URLS.nexus;
@@ -374,6 +375,16 @@ test.describe('Teaching Plans (Course Plan v2 auto-flow)', () => {
     expect(track.items.length).toBe(2);
   });
 
+  // Guards the ambiguous-embed fix: nexus_enrollments has two FKs to users, so the
+  // late-joiners embed must name the FK or PostgREST 500s and the tab shows a red banner.
+  test('teacher catch-up tab loads (late-joiners embed resolves)', async ({ request }) => {
+    test.skip(!catchupPlanId, 'catch-up plan not created');
+    const res = await request.get(`/api/teaching-plans/${catchupPlanId}/catchup`, auth(teacherToken));
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.late_joiners)).toBe(true);
+  });
+
   test('student cannot see an unshared track', async ({ request }) => {
     test.skip(!catchupPlanId, 'catch-up plan not created');
     const res = await request.get('/api/student/catchup', auth(studentToken));
@@ -445,28 +456,118 @@ test.describe('Teaching Plans (Course Plan v2 auto-flow)', () => {
     expect(res.status()).not.toBe(200);
   });
 
-  // ── Cleanup (soft) ─────────────────────────────────────
-
-  test('cleanup: archive plans, deactivate topics and module', async ({ request }) => {
-    await request.patch(`/api/teaching-plans/${planId}`, {
+  // ── Repository lifecycle: archive, restore, hard-delete ─
+  test('repository: archive, restore and hard-delete a subject and topic', async ({ request }) => {
+    // A throwaway subject + topic, not placed in any plan.
+    const sub = await request.post('/api/curriculum', {
       ...auth(teacherToken),
-      data: { status: 'archived' },
+      data: { action: 'create_module', title: `${STAMP} Disposable`, exam_tags: [] },
     });
-    if (catchupPlanId) {
-      await request.patch(`/api/teaching-plans/${catchupPlanId}`, {
-        ...auth(teacherToken),
-        data: { status: 'archived' },
-      });
+    expect(sub.status()).toBe(200);
+    const subId = (await sub.json()).module.id;
+    const top = await request.post('/api/curriculum', {
+      ...auth(teacherToken),
+      data: { action: 'create_topic', module_id: subId, title: `${STAMP} Throwaway topic` },
+    });
+    expect(top.status()).toBe(200);
+    const topId = (await top.json()).topic.id;
+
+    // Archive the topic -> hidden from the default repository listing.
+    const arch = await request.post(`/api/curriculum/topics/${topId}`, {
+      ...auth(teacherToken),
+      data: { action: 'archive_topic' },
+    });
+    expect(arch.status()).toBe(200);
+    const dflt = await (await request.get('/api/curriculum', auth(teacherToken))).json();
+    const subDefault = dflt.modules.find((m: { id: string }) => m.id === subId);
+    expect(subDefault.topics.some((t: { id: string }) => t.id === topId)).toBe(false);
+
+    // include_archived surfaces it again (for Restore).
+    const withArch = await (await request.get('/api/curriculum?include_archived=1', auth(teacherToken))).json();
+    const subArch = withArch.modules.find((m: { id: string }) => m.id === subId);
+    expect(subArch.topics.some((t: { id: string }) => t.id === topId)).toBe(true);
+
+    // Restore, then hard-delete the topic and the subject.
+    await request.patch(`/api/curriculum/topics/${topId}`, { ...auth(teacherToken), data: { is_active: true } });
+    const delTopic = await request.post(`/api/curriculum/topics/${topId}`, {
+      ...auth(teacherToken),
+      data: { action: 'delete_topic' },
+    });
+    expect(delTopic.status()).toBe(200);
+    const delSub = await request.post('/api/curriculum', {
+      ...auth(teacherToken),
+      data: { action: 'delete_module', module_id: subId },
+    });
+    expect(delSub.status()).toBe(200);
+  });
+
+  test('repository: a topic placed in a plan cannot be hard-deleted (must archive)', async ({ request }) => {
+    // topicA is placed in planId, so delete is blocked with 400.
+    const res = await request.post(`/api/curriculum/topics/${topicAId}`, {
+      ...auth(teacherToken),
+      data: { action: 'delete_topic' },
+    });
+    expect(res.status()).toBe(400);
+  });
+
+  // ── Schedule overrides: cancel + makeup ───────────────
+  test('schedule: cancel and makeup overrides persist, shift and can be removed', async ({ request }) => {
+    const cancelDate = '2026-07-13'; // Monday inside the plan window
+    const makeupDate = '2026-07-12'; // Sunday (off-day) makeup
+
+    const c = await request.post(`/api/teaching-plans/${planId}`, {
+      ...auth(teacherToken),
+      data: { action: 'cancel_class', date: cancelDate, reason: 'Public holiday' },
+    });
+    expect(c.status()).toBe(200);
+    const m = await request.post(`/api/teaching-plans/${planId}`, {
+      ...auth(teacherToken),
+      data: { action: 'add_makeup', date: makeupDate },
+    });
+    expect(m.status()).toBe(200);
+
+    const plan = (await (await request.get(`/api/teaching-plans/${planId}`, auth(teacherToken))).json()).plan;
+    const ovr = plan.schedule_overrides as { date: string; kind: string }[];
+    expect(ovr.some((o) => o.date === cancelDate && o.kind === 'cancelled')).toBe(true);
+    expect(ovr.some((o) => o.date === makeupDate && o.kind === 'makeup')).toBe(true);
+
+    // Undo the cancel; makeup remains.
+    const rm = await request.post(`/api/teaching-plans/${planId}`, {
+      ...auth(teacherToken),
+      data: { action: 'remove_override', date: cancelDate },
+    });
+    expect(rm.status()).toBe(200);
+    const plan2 = (await (await request.get(`/api/teaching-plans/${planId}`, auth(teacherToken))).json()).plan;
+    const ovr2 = plan2.schedule_overrides as { date: string; kind: string }[];
+    expect(ovr2.some((o) => o.date === cancelDate)).toBe(false);
+    expect(ovr2.some((o) => o.date === makeupDate)).toBe(true);
+
+    // Clean the leftover makeup so it does not affect other assertions.
+    await request.post(`/api/teaching-plans/${planId}`, {
+      ...auth(teacherToken),
+      data: { action: 'remove_override', date: makeupDate },
+    });
+  });
+
+  // ── Cleanup (hard-delete so E2E rows never pollute the repository) ─
+  test('cleanup: hard-delete plans, topics and subject', async ({ request }) => {
+    // Archive then permanently delete the plans so the topics are no longer "in a plan".
+    for (const id of [planId, catchupPlanId].filter(Boolean)) {
+      await request.patch(`/api/teaching-plans/${id}`, { ...auth(teacherToken), data: { status: 'archived' } });
+      await request.delete(`/api/teaching-plans/${id}`, auth(teacherToken));
     }
-    for (const topicId of [topicAId, topicBId]) {
-      await request.patch(`/api/curriculum/topics/${topicId}`, {
+    // Now unused -> hard-delete the topics.
+    for (const topicId of [topicAId, topicBId].filter(Boolean)) {
+      const res = await request.post(`/api/curriculum/topics/${topicId}`, {
         ...auth(teacherToken),
-        data: { is_active: false },
+        data: { action: 'delete_topic' },
       });
+      expect(res.status()).toBe(200);
     }
+    // Finally delete the subject (module).
     const res = await request.post('/api/curriculum', {
       ...auth(teacherToken),
-      data: { action: 'update_module', module_id: moduleId, is_active: false },
+      data: { action: 'delete_module', module_id: moduleId },
     });
     expect(res.status()).toBe(200);
   });

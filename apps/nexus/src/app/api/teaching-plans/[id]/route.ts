@@ -13,6 +13,8 @@ import {
   getPlanMeta,
   getPlanEntryWithRefs,
   publishTopicsAsSelfLearning,
+  addPlanScheduleOverride,
+  removePlanScheduleOverride,
 } from '@neram/database';
 import type { NexusPlanAuditAction } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
@@ -35,10 +37,13 @@ function entryLabel(entry: {
 async function loadFlow(planId: string) {
   const plan = await getTeachingPlanWithEntries(planId);
   if (!plan) return null;
+  const overrides = plan.schedule_overrides ?? [];
   const flow = computeFlow(toFlowEntries(plan.entries), {
     startDate: plan.start_date,
     saturdayClasses: plan.saturday_classes ?? true,
     today: istToday(),
+    holidays: overrides.filter((o) => o.kind === 'cancelled').map((o) => o.date),
+    extraDays: overrides.filter((o) => o.kind === 'makeup').map((o) => o.date),
   });
   return { plan, flow };
 }
@@ -359,6 +364,53 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         await log('removed_entry', {
           summary: `removed ${entryLabel(before)}, returned to repository`,
         });
+        return NextResponse.json({ ok: true });
+      }
+
+      case 'cancel_class': {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '')) {
+          return NextResponse.json({ error: 'A valid date is required' }, { status: 400 });
+        }
+        const override = await addPlanScheduleOverride({
+          plan_id: params.id,
+          date: body.date,
+          kind: 'cancelled',
+          reason: body.reason ?? null,
+          created_by: user.id,
+        });
+        await log('edited', {
+          summary: `cancelled the class on ${body.date}, later classes moved forward`,
+          date: body.date,
+          ...(body.reason ? { notes: body.reason } : {}),
+        });
+        return NextResponse.json({ override });
+      }
+
+      case 'add_makeup': {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '')) {
+          return NextResponse.json({ error: 'A valid date is required' }, { status: 400 });
+        }
+        const override = await addPlanScheduleOverride({
+          plan_id: params.id,
+          date: body.date,
+          kind: 'makeup',
+          reason: body.reason ?? null,
+          created_by: user.id,
+        });
+        await log('edited', {
+          summary: `added a makeup class on ${body.date}, the plan catches up`,
+          date: body.date,
+          ...(body.reason ? { notes: body.reason } : {}),
+        });
+        return NextResponse.json({ override });
+      }
+
+      case 'remove_override': {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '')) {
+          return NextResponse.json({ error: 'A valid date is required' }, { status: 400 });
+        }
+        await removePlanScheduleOverride(params.id, body.date);
+        await log('edited', { summary: `cleared the schedule change on ${body.date}`, date: body.date });
         return NextResponse.json({ ok: true });
       }
 

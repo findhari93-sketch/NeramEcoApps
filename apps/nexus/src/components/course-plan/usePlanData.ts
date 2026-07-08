@@ -61,10 +61,13 @@ export function usePlanData(planId: string): UsePlanData {
 
   const flow = useMemo(() => {
     if (!plan) return null;
+    const overrides = plan.schedule_overrides ?? [];
     return computeFlow(toFlowEntries(plan.entries), {
       startDate: plan.start_date,
       saturdayClasses: plan.saturday_classes ?? true,
       today,
+      holidays: overrides.filter((o) => o.kind === 'cancelled').map((o) => o.date),
+      extraDays: overrides.filter((o) => o.kind === 'makeup').map((o) => o.date),
     });
   }, [plan, today]);
 

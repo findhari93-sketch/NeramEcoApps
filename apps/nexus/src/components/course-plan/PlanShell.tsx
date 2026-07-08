@@ -15,6 +15,7 @@ import {
   Typography,
   Chip,
   Button,
+  IconButton,
   Skeleton,
   Tabs,
   Tab,
@@ -23,6 +24,12 @@ import {
   Alert,
   Drawer,
   Avatar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
   alpha,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -30,9 +37,17 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import SwapHorizOutlinedIcon from '@mui/icons-material/SwapHorizOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { PLAN_STATUS, fmtShort, type PlanData } from './common';
 import type { UsePlanData } from './usePlanData';
+
+const EXAM_OPTIONS = [
+  { value: 'nata', label: 'NATA' },
+  { value: 'jee', label: 'JEE' },
+  { value: 'foundation', label: 'Foundation' },
+  { value: 'custom', label: 'Custom' },
+];
 
 const SUBNAV: { key: string; label: string; path: string }[] = [
   { key: 'builder', label: 'Builder', path: '' },
@@ -120,6 +135,40 @@ export default function PlanShell({
   const { data, plan, flow, today, busy, loadError, snack, setSnack, patch, load } = planData;
   const { signIn } = useNexusAuthContext();
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Edit basic details (title / exam / dates). Backend PATCH already supports these.
+  const [editOpen, setEditOpen] = useState(false);
+  const [eTitle, setETitle] = useState('');
+  const [eExam, setEExam] = useState('nata');
+  const [eStart, setEStart] = useState('');
+  const [eEnd, setEEnd] = useState('');
+
+  const openEdit = () => {
+    if (!plan) return;
+    setETitle(plan.title);
+    setEExam(plan.exam_type);
+    setEStart(plan.start_date);
+    setEEnd(plan.expected_end_date);
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!plan || !eTitle.trim() || !eStart || !eEnd) return;
+    const updates: Record<string, unknown> = {};
+    if (eTitle.trim() !== plan.title) updates.title = eTitle.trim();
+    if (eExam !== plan.exam_type) updates.exam_type = eExam;
+    if (eStart !== plan.start_date) updates.start_date = eStart;
+    if (eEnd !== plan.expected_end_date) updates.expected_end_date = eEnd;
+    if (Object.keys(updates).length === 0) {
+      setEditOpen(false);
+      return;
+    }
+    const ok = await patch(updates, 'Plan details updated.');
+    if (ok) setEditOpen(false);
+  };
+
+  // Warn only when an active plan's schedule-driving dates change (re-flows classes).
+  const datesChanged = !!plan && (eStart !== plan.start_date || eEnd !== plan.expected_end_date);
 
   const dayProgress = useMemo(() => {
     if (!flow || !flow.days.length) return null;
@@ -209,6 +258,14 @@ export default function PlanShell({
         <Typography variant="h5" sx={{ fontSize: { xs: '1.2rem', sm: '1.4rem' }, letterSpacing: '-0.3px' }}>
           {plan.title}
         </Typography>
+        <IconButton
+          size="small"
+          aria-label="Edit plan details"
+          onClick={openEdit}
+          sx={{ width: 32, height: 32, color: 'text.secondary' }}
+        >
+          <EditOutlinedIcon sx={{ fontSize: 18 }} />
+        </IconButton>
         <Chip
           label={planMeta.label}
           size="small"
@@ -258,6 +315,63 @@ export default function PlanShell({
       </Tabs>
 
       {children}
+
+      <Dialog open={editOpen} onClose={() => !busy && setEditOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit plan details</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Plan title"
+              value={eTitle}
+              onChange={(e) => setETitle(e.target.value)}
+              autoFocus
+              fullWidth
+              placeholder="e.g. JEE B.Arch Session 1 2027"
+            />
+            <TextField select label="Exam" value={eExam} onChange={(e) => setEExam(e.target.value)} fullWidth>
+              {EXAM_OPTIONS.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
+                  {o.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Stack direction="row" spacing={1.5}>
+              <TextField
+                label="Start date"
+                type="date"
+                value={eStart}
+                onChange={(e) => setEStart(e.target.value)}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Expected completion"
+                type="date"
+                value={eEnd}
+                onChange={(e) => setEEnd(e.target.value)}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Stack>
+            {plan.status === 'active' && datesChanged && (
+              <Alert severity="warning" sx={{ py: 0.5 }}>
+                This plan is <strong>Active</strong>. Changing the dates re-flows all upcoming classes on the calendar.
+              </Alert>
+            )}
+            <Typography variant="caption" color="text.secondary">
+              To change Saturday classes or the exam date, use <strong>Schedule settings</strong> on the Builder.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditOpen(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={saveEdit} disabled={busy || !eTitle.trim() || !eStart || !eEnd}>
+            Save changes
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Drawer
         anchor="right"

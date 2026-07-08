@@ -39,7 +39,10 @@ export interface FlowOptions {
   saturdayClasses: boolean;
   /** YYYY-MM-DD in IST; use istToday(). */
   today: string;
+  /** Dropped class days (holidays + cancelled classes): the queue skips them. */
   holidays?: string[];
+  /** Makeup days: treated as class days even on a Sunday / off Saturday. */
+  extraDays?: string[];
   /** Safety cap on generated class days. */
   maxDays?: number;
 }
@@ -96,12 +99,15 @@ export function dayOfWeek(date: string): number {
 
 export function isClassDay(
   date: string,
-  opts: Pick<FlowOptions, 'saturdayClasses' | 'holidays'>,
+  opts: Pick<FlowOptions, 'saturdayClasses' | 'holidays' | 'extraDays'>,
 ): boolean {
+  // Precedence: a cancelled/holiday date is never a class day; a makeup date
+  // always is (even on a Sunday); otherwise the normal weekday rule applies.
+  if (opts.holidays?.includes(date)) return false;
+  if (opts.extraDays?.includes(date)) return true;
   const dow = dayOfWeek(date);
   if (dow === 0) return false;
   if (dow === 6 && !opts.saturdayClasses) return false;
-  if (opts.holidays?.includes(date)) return false;
   return true;
 }
 

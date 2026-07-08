@@ -21,22 +21,26 @@ export interface NexusCourseModuleWithTopics extends NexusCourseModule {
 // Modules
 // ============================================================
 
-/** All active modules with their active topics, ordered for the repository browser. */
+/**
+ * All modules with their topics, ordered for the repository browser. By default
+ * only active rows (the working repository); pass includeInactive to also return
+ * archived subjects/topics so the UI can offer Restore.
+ */
 export async function listCourseModules(
+  opts?: { includeInactive?: boolean },
   client?: TypedSupabaseClient,
 ): Promise<NexusCourseModuleWithTopics[]> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from(MODULES)
-    .select('*, topics:nexus_course_topics(*)')
-    .eq('is_active', true)
+  let query = supabase.from(MODULES).select('*, topics:nexus_course_topics(*)');
+  if (!opts?.includeInactive) query = query.eq('is_active', true);
+  const { data, error } = await query
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data || []).map((m) => ({
     ...m,
     topics: (m.topics || [])
-      .filter((t) => t.is_active)
+      .filter((t) => opts?.includeInactive || t.is_active)
       .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)),
   })) as NexusCourseModuleWithTopics[];
 }
@@ -71,6 +75,46 @@ export async function updateCourseModule(
     .single();
   if (error) throw error;
   return data as NexusCourseModule;
+}
+
+/** Minimal module row for ownership / permission checks (create_by, active flag). */
+export async function getCourseModuleMeta(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<{ id: string; title: string; created_by: string | null; is_active: boolean } | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(MODULES)
+    .select('id, title, created_by, is_active')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as { id: string; title: string; created_by: string | null; is_active: boolean } | null;
+}
+
+/** How many plan entries reference any topic inside this module (blocks a hard delete). */
+export async function countModulePlanUsage(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: topicRows, error: tErr } = await supabase.from(TOPICS).select('id').eq('module_id', id);
+  if (tErr) throw tErr;
+  const ids = (topicRows || []).map((t) => t.id);
+  if (!ids.length) return 0;
+  const { count, error } = await supabase
+    .from('nexus_teaching_plan_entries')
+    .select('id', { count: 'exact', head: true })
+    .in('topic_id', ids);
+  if (error) throw error;
+  return count || 0;
+}
+
+/** Hard-delete a module (its topics/resources/tests cascade; plan entries keep, topic_id SET NULL). */
+export async function deleteCourseModule(id: string, client?: TypedSupabaseClient): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.from(MODULES).delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ============================================================
@@ -145,6 +189,41 @@ export async function updateCourseTopic(
     .single();
   if (error) throw error;
   return data as NexusCourseTopic;
+}
+
+/** Minimal topic row for ownership / permission checks. */
+export async function getCourseTopicMeta(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<{ id: string; title: string; created_by: string | null; is_active: boolean; module_id: string } | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(TOPICS)
+    .select('id, title, created_by, is_active, module_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as
+    | { id: string; title: string; created_by: string | null; is_active: boolean; module_id: string }
+    | null;
+}
+
+/** How many plan entries reference this single topic ("In N plans"; blocks a hard delete). */
+export async function countTopicPlanUsage(id: string, client?: TypedSupabaseClient): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  const { count, error } = await supabase
+    .from('nexus_teaching_plan_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('topic_id', id);
+  if (error) throw error;
+  return count || 0;
+}
+
+/** Hard-delete a topic (its resources/test-links cascade; plan entries keep, topic_id SET NULL). */
+export async function deleteCourseTopic(id: string, client?: TypedSupabaseClient): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.from(TOPICS).delete().eq('id', id);
+  if (error) throw error;
 }
 
 /** Just the authored class content of a topic (agenda seeding). */

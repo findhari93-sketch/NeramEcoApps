@@ -36,6 +36,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -108,6 +109,7 @@ export default function CoursePlansPage() {
   const [pExamDate, setPExamDate] = useState('');
   const [pSaturday, setPSaturday] = useState(true);
   const [duplicateFrom, setDuplicateFrom] = useState<PlanCard | null>(null);
+  const [editingPlan, setEditingPlan] = useState<PlanCard | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -124,6 +126,7 @@ export default function CoursePlansPage() {
   }, [authLoading, load]);
 
   const openDialog = (source?: PlanCard) => {
+    setEditingPlan(null);
     setDuplicateFrom(source || null);
     setPTitle(source ? `${source.title} (copy)` : '');
     setPExam(source?.exam_type || 'nata');
@@ -135,9 +138,40 @@ export default function CoursePlansPage() {
     setDialog(true);
   };
 
-  const createPlan = async () => {
+  // Edit an existing plan's basic details in place (PATCH, classroom stays fixed).
+  const openEditDialog = (p: PlanCard) => {
+    setEditingPlan(p);
+    setDuplicateFrom(null);
+    setPTitle(p.title);
+    setPExam(p.exam_type);
+    setPClassroom(p.classroom_id);
+    setPStart(p.start_date);
+    setPEnd(p.expected_end_date);
+    setPExamDate(p.exam_date || '');
+    setPSaturday(p.saturday_classes ?? true);
+    setDialog(true);
+  };
+
+  const savePlan = async () => {
     setBusy(true);
     try {
+      if (editingPlan) {
+        await authFetch(`/api/teaching-plans/${editingPlan.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            title: pTitle,
+            exam_type: pExam,
+            start_date: pStart,
+            expected_end_date: pEnd,
+            saturday_classes: pSaturday,
+            exam_date: pExamDate || null,
+          }),
+        });
+        setDialog(false);
+        await load();
+        setSnack({ msg: 'Plan details updated', sev: 'success' });
+        return;
+      }
       const data = await authFetch('/api/teaching-plans', {
         method: 'POST',
         body: JSON.stringify({
@@ -154,7 +188,10 @@ export default function CoursePlansPage() {
       setDialog(false);
       router.push(`/teacher/course-plans/${data.plan.id}`);
     } catch (err) {
-      setSnack({ msg: err instanceof Error ? err.message : 'Failed to create plan', sev: 'error' });
+      setSnack({
+        msg: err instanceof Error ? err.message : editingPlan ? 'Failed to update plan' : 'Failed to create plan',
+        sev: 'error',
+      });
     } finally {
       setBusy(false);
     }
@@ -268,7 +305,7 @@ export default function CoursePlansPage() {
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.25, flexWrap: 'wrap' }}>
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-            {p.module_count} {p.module_count === 1 ? 'module' : 'modules'} · {p.topic_count} {p.topic_count === 1 ? 'topic' : 'topics'} · {p.test_count} {p.test_count === 1 ? 'test' : 'tests'}
+            {p.module_count} {p.module_count === 1 ? 'subject' : 'subjects'} · {p.topic_count} {p.topic_count === 1 ? 'topic' : 'topics'} · {p.test_count} {p.test_count === 1 ? 'test' : 'tests'}
             {p.done_count ? ` · ${p.done_count} done` : ''}
           </Typography>
           <Stack direction="row" spacing={0.75} sx={{ ml: 'auto' }} flexWrap="wrap" useFlexGap>
@@ -294,6 +331,9 @@ export default function CoursePlansPage() {
                 </Button>
                 <Button size="small" variant="outlined" onClick={() => router.push(`/teacher/course-plans/${p.id}/health`)} sx={{ minHeight: 36 }}>
                   Health
+                </Button>
+                <Button size="small" color="inherit" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => openEditDialog(p)} sx={{ minHeight: 36, color: 'text.secondary' }}>
+                  Edit
                 </Button>
                 <Button size="small" color="inherit" startIcon={<Inventory2OutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setConfirm({ kind: 'archive', plan: p })} sx={{ minHeight: 36, color: 'text.secondary' }}>
                   Archive
@@ -413,8 +453,10 @@ export default function CoursePlansPage() {
         </Stack>
       )}
 
-      <Dialog open={dialog} onClose={() => setDialog(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>{duplicateFrom ? `Duplicate “${duplicateFrom.title}”` : 'New course plan'}</DialogTitle>
+      <Dialog open={dialog} onClose={() => !busy && setDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {editingPlan ? `Edit “${editingPlan.title}”` : duplicateFrom ? `Duplicate “${duplicateFrom.title}”` : 'New course plan'}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             {duplicateFrom && (
@@ -431,13 +473,15 @@ export default function CoursePlansPage() {
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField select label="Classroom" value={pClassroom} onChange={(e) => setPClassroom(e.target.value)} fullWidth>
-                {(classrooms || []).map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+              {!editingPlan && (
+                <TextField select label="Classroom" value={pClassroom} onChange={(e) => setPClassroom(e.target.value)} fullWidth>
+                  {(classrooms || []).map((c) => (
+                    <MenuItem key={c.id} value={c.id}>
+                      {c.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
             </Stack>
             <Stack direction="row" spacing={1.5}>
               <TextField label="Start date" type="date" value={pStart} onChange={(e) => setPStart(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
@@ -448,12 +492,18 @@ export default function CoursePlansPage() {
               control={<Switch checked={pSaturday} onChange={(e) => setPSaturday(e.target.checked)} />}
               label={<Typography sx={{ fontWeight: 600, fontSize: '0.88rem' }}>Saturday classes</Typography>}
             />
+            {editingPlan?.status === 'active' &&
+              (pStart !== editingPlan.start_date || pEnd !== editingPlan.expected_end_date || pSaturday !== (editingPlan.saturday_classes ?? true)) && (
+                <Alert severity="warning">
+                  This plan is <strong>Active</strong>. Changing the dates or Saturday classes re-flows all upcoming classes on the calendar.
+                </Alert>
+              )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={createPlan} disabled={busy || !pTitle.trim() || !pClassroom || !pStart || !pEnd}>
-            {duplicateFrom ? 'Duplicate plan' : 'Create plan'}
+          <Button onClick={() => setDialog(false)} disabled={busy}>Cancel</Button>
+          <Button variant="contained" onClick={savePlan} disabled={busy || !pTitle.trim() || (!editingPlan && !pClassroom) || !pStart || !pEnd}>
+            {editingPlan ? 'Save changes' : duplicateFrom ? 'Duplicate plan' : 'Create plan'}
           </Button>
         </DialogActions>
       </Dialog>

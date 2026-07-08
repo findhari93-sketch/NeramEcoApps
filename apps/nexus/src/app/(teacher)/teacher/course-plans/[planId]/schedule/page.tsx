@@ -8,9 +8,27 @@
  */
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Box, Typography, Stack, IconButton, alpha, useTheme, useMediaQuery } from '@neram/ui';
+import {
+  Box,
+  Typography,
+  Stack,
+  IconButton,
+  Button,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  alpha,
+  useTheme,
+  useMediaQuery,
+} from '@neram/ui';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import PlanShell from '@/components/course-plan/PlanShell';
 import { usePlanData } from '@/components/course-plan/usePlanData';
 import DriftBanner from '@/components/course-plan/DriftBanner';
@@ -39,6 +57,43 @@ export default function PlanSchedulePage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const planData = usePlanData(planId);
   const { plan, flow, today, busy, act, entriesById } = planData;
+
+  // Cancel / makeup overrides that bend the auto-flow onto real class days.
+  const cancelledDates = useMemo(
+    () => new Set((plan?.schedule_overrides ?? []).filter((o) => o.kind === 'cancelled').map((o) => o.date)),
+    [plan],
+  );
+  const makeupDates = useMemo(
+    () => new Set((plan?.schedule_overrides ?? []).filter((o) => o.kind === 'makeup').map((o) => o.date)),
+    [plan],
+  );
+  const classDayOpts = useMemo(
+    () => ({ saturdayClasses: plan?.saturday_classes ?? true, holidays: [...cancelledDates], extraDays: [...makeupDates] }),
+    [plan, cancelledDates, makeupDates],
+  );
+
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelDate, setCancelDate] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [makeupDate, setMakeupDate] = useState('');
+
+  const doCancel = async () => {
+    if (!cancelDate) return;
+    const ok = await act(
+      { action: 'cancel_class', date: cancelDate, reason: cancelReason || undefined },
+      'Class cancelled. Later classes moved forward.',
+    );
+    if (ok) {
+      setCancelDate('');
+      setCancelReason('');
+    }
+  };
+  const doMakeup = async () => {
+    if (!makeupDate) return;
+    const ok = await act({ action: 'add_makeup', date: makeupDate }, 'Makeup class added. The plan catches up.');
+    if (ok) setMakeupDate('');
+  };
+  const removeOverride = (date: string) => act({ action: 'remove_override', date }, 'Schedule change removed.');
 
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const start = useMemo(() => {
@@ -96,11 +151,45 @@ export default function PlanSchedulePage() {
   const DayCard = ({ date }: { date: string }) => {
     const d = dayByDate.get(date);
     const entry = d?.entryId ? entriesById.get(d.entryId) : null;
-    const classDay = plan ? isClassDay(date, { saturdayClasses: plan.saturday_classes ?? true }) : false;
+    const classDay = plan ? isClassDay(date, classDayOpts) : false;
     const inPlan = !!d;
     const isToday = date === today;
+    const isCancelled = cancelledDates.has(date);
+    const isMakeup = makeupDates.has(date);
 
     if (!classDay && !d?.isTest) {
+      // A cancelled day reads as "Cancelled" (with undo) instead of a plain Off day.
+      if (isCancelled) {
+        return (
+          <Box
+            sx={{
+              minHeight: isMobile ? 44 : 96,
+              borderRadius: 2.5,
+              border: '1px dashed',
+              borderColor: alpha('#C62828', 0.4),
+              bgcolor: alpha('#C62828', 0.05),
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 0.25,
+              px: 0.5,
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 700, color: '#C62828' }}>
+              Cancelled
+            </Typography>
+            <Button
+              size="small"
+              onClick={() => removeOverride(date)}
+              disabled={busy}
+              sx={{ minHeight: 28, fontSize: '0.62rem', px: 0.75, color: 'text.secondary' }}
+            >
+              Undo
+            </Button>
+          </Box>
+        );
+      }
       return (
         <Box sx={{ minHeight: isMobile ? 44 : 96, borderRadius: 2.5, bgcolor: alpha('#1A2027', 0.02), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Typography variant="caption" color="text.disabled">
@@ -130,6 +219,13 @@ export default function PlanSchedulePage() {
             {new Date(date + 'T00:00:00').getDate()}
             {isToday ? ' · TODAY' : ''}
           </Typography>
+        )}
+        {isMakeup && (
+          <Chip
+            label="Makeup"
+            size="small"
+            sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, bgcolor: alpha('#2E7D32', 0.14), color: '#1B5E20', alignSelf: 'flex-start' }}
+          />
         )}
         {entry && d ? (
           <Box
@@ -230,6 +326,16 @@ export default function PlanSchedulePage() {
             <IconButton onClick={() => setWeekStart(addDays(start, 14))} sx={{ width: 40, height: 40, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
               <ChevronRightIcon sx={{ fontSize: 18 }} />
             </IconButton>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<EventBusyOutlinedIcon sx={{ fontSize: 16 }} />}
+              onClick={() => setRescheduleOpen(true)}
+              sx={{ minHeight: 40, fontWeight: 600 }}
+            >
+              Cancel / makeup
+              {cancelledDates.size + makeupDates.size > 0 ? ` (${cancelledDates.size + makeupDates.size})` : ''}
+            </Button>
             {!isMobile && legend.length > 0 && (
               <Stack direction="row" spacing={1.5} sx={{ ml: 'auto' }} flexWrap="wrap" useFlexGap>
                 {legend.map((l) => (
@@ -292,6 +398,118 @@ export default function PlanSchedulePage() {
               Tap a class card to open Class Day. Tap ＋ to open the Builder.
             </Typography>
           )}
+
+          <Dialog open={rescheduleOpen} onClose={() => !busy && setRescheduleOpen(false)} maxWidth="xs" fullWidth>
+            <DialogTitle>Cancel or makeup a class</DialogTitle>
+            <DialogContent>
+              <Stack spacing={2.5} sx={{ mt: 0.5 }}>
+                {/* Cancel */}
+                <Box>
+                  <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.5 }}>
+                    <EventBusyOutlinedIcon sx={{ fontSize: 18, color: '#C62828' }} />
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Cancel a class</Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    The class day is dropped. Every class after it shifts one day forward.
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+                    <TextField
+                      label="Date"
+                      type="date"
+                      value={cancelDate}
+                      onChange={(e) => setCancelDate(e.target.value)}
+                      fullWidth
+                      size="small"
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <Button variant="contained" color="error" onClick={doCancel} disabled={busy || !cancelDate} sx={{ minHeight: 40, whiteSpace: 'nowrap' }}>
+                      Cancel class
+                    </Button>
+                  </Stack>
+                  <TextField
+                    label="Reason (optional)"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    fullWidth
+                    size="small"
+                    sx={{ mt: 1 }}
+                    placeholder="e.g. Public holiday, teacher unavailable"
+                  />
+                </Box>
+
+                {/* Makeup */}
+                <Box>
+                  <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.5 }}>
+                    <EventAvailableOutlinedIcon sx={{ fontSize: 18, color: '#1B5E20' }} />
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>Add a makeup class</Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    Runs an extra class on an off-day (a Sunday works) so the plan catches back up.
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25}>
+                    <TextField
+                      label="Date"
+                      type="date"
+                      value={makeupDate}
+                      onChange={(e) => setMakeupDate(e.target.value)}
+                      fullWidth
+                      size="small"
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <Button variant="contained" color="success" onClick={doMakeup} disabled={busy || !makeupDate} sx={{ minHeight: 40, whiteSpace: 'nowrap' }}>
+                      Add makeup
+                    </Button>
+                  </Stack>
+                </Box>
+
+                {/* Current overrides */}
+                {(plan?.schedule_overrides ?? []).length > 0 && (
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.78rem', color: 'text.secondary', mb: 0.75 }}>
+                      Current changes
+                    </Typography>
+                    <Stack spacing={0.75}>
+                      {(plan?.schedule_overrides ?? []).map((o) => (
+                        <Stack
+                          key={o.id}
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          sx={{ p: 1, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+                        >
+                          <Chip
+                            label={o.kind === 'cancelled' ? 'Cancelled' : 'Makeup'}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.62rem',
+                              fontWeight: 700,
+                              bgcolor: o.kind === 'cancelled' ? alpha('#C62828', 0.12) : alpha('#2E7D32', 0.14),
+                              color: o.kind === 'cancelled' ? '#C62828' : '#1B5E20',
+                            }}
+                          />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }}>{fmtShort(o.date)}</Typography>
+                            {o.reason && (
+                              <Typography variant="caption" color="text.secondary" noWrap>
+                                {o.reason}
+                              </Typography>
+                            )}
+                          </Box>
+                          <IconButton size="small" aria-label="Remove change" onClick={() => removeOverride(o.date)} disabled={busy} sx={{ width: 32, height: 32 }}>
+                            <CloseIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setRescheduleOpen(false)} disabled={busy}>Done</Button>
+            </DialogActions>
+          </Dialog>
         </Box>
       )}
     </PlanShell>

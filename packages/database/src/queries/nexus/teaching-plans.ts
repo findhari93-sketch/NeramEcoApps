@@ -8,12 +8,14 @@ import type {
   NexusPlanAuditAction,
   NexusCourseTopic,
   NexusPlanDayItem,
+  NexusPlanScheduleOverride,
 } from '../../types';
 
 const PLANS = 'nexus_teaching_plans';
 const ENTRIES = 'nexus_teaching_plan_entries';
 const AUDIT = 'nexus_plan_audit_log';
 const DAY_ITEMS = 'nexus_plan_day_items';
+const SCHEDULE_OVERRIDES = 'nexus_plan_schedule_overrides';
 
 /** Queue positions are spaced by this gap so inserts rarely need a renumber. */
 export const POSITION_GAP = 1024;
@@ -50,6 +52,8 @@ export interface NexusTeachingPlanEntryDetail extends NexusTeachingPlanEntry {
 
 export interface NexusTeachingPlanDetail extends NexusTeachingPlan {
   entries: NexusTeachingPlanEntryDetail[];
+  /** Cancelled / makeup class-day overrides feeding the flow engine. */
+  schedule_overrides: NexusPlanScheduleOverride[];
 }
 
 export interface NexusPlanAuditLogDetail extends NexusPlanAuditLog {
@@ -213,7 +217,71 @@ export async function getTeachingPlanWithEntries(
     .eq('plan_id', planId)
     .order('position', { ascending: true });
   if (entErr) throw entErr;
-  return { ...plan, entries: entries || [] } as NexusTeachingPlanDetail;
+  const schedule_overrides = await listPlanScheduleOverrides(planId, supabase);
+  return { ...plan, entries: entries || [], schedule_overrides } as NexusTeachingPlanDetail;
+}
+
+// ============================================================
+// Schedule overrides (cancel / makeup class days)
+// ============================================================
+
+/**
+ * All cancel/makeup overrides for a plan. Soft-fails to [] if the table is not
+ * migrated yet, so the plan still loads before the migration is applied.
+ */
+export async function listPlanScheduleOverrides(
+  planId: string,
+  client?: TypedSupabaseClient,
+): Promise<NexusPlanScheduleOverride[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(SCHEDULE_OVERRIDES)
+    .select('*')
+    .eq('plan_id', planId)
+    .order('date', { ascending: true });
+  if (error) {
+    // Table not migrated yet -> treat as "no overrides" so the plan still loads.
+    // 42P01 = Postgres undefined_table; PGRST205 = PostgREST schema-cache miss.
+    const code = (error as { code?: string }).code;
+    if (code === '42P01' || code === 'PGRST205' || /schema cache|does not exist/i.test(error.message || '')) {
+      return [];
+    }
+    throw error;
+  }
+  return (data || []) as NexusPlanScheduleOverride[];
+}
+
+/** Add (or replace) a cancel/makeup override for one date. */
+export async function addPlanScheduleOverride(
+  data: { plan_id: string; date: string; kind: 'cancelled' | 'makeup'; reason?: string | null; created_by: string },
+  client?: TypedSupabaseClient,
+): Promise<NexusPlanScheduleOverride> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: row, error } = await supabase
+    .from(SCHEDULE_OVERRIDES)
+    .upsert(
+      { plan_id: data.plan_id, date: data.date, kind: data.kind, reason: data.reason ?? null, created_by: data.created_by },
+      { onConflict: 'plan_id,date' },
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return row as NexusPlanScheduleOverride;
+}
+
+/** Remove the override on a date (undo a cancel or makeup). */
+export async function removePlanScheduleOverride(
+  planId: string,
+  date: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase
+    .from(SCHEDULE_OVERRIDES)
+    .delete()
+    .eq('plan_id', planId)
+    .eq('date', date);
+  if (error) throw error;
 }
 
 // ============================================================
