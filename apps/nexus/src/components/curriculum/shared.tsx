@@ -5,7 +5,7 @@
  * priority/status/delivery badges, option lists, and the API DTO shapes the pages consume.
  */
 import { useCallback } from 'react';
-import { Chip, Box } from '@neram/ui';
+import { Chip, Box, Tooltip } from '@neram/ui';
 import StarIcon from '@mui/icons-material/Star';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
@@ -33,10 +33,25 @@ export const DELIVERY_OPTIONS: { value: NexusTopicDelivery; label: string }[] = 
   { value: 'self_learning', label: 'Self-learning' },
   { value: 'either', label: 'Either' },
 ];
-export const STATUS_META: Record<NexusCourseTopicStatus, { label: string; color: string; bg: string }> = {
-  idea: { label: 'Idea', color: '#5A6672', bg: 'rgba(139,149,161,0.15)' },
-  drafted: { label: 'Drafted', color: '#8D5A00', bg: 'rgba(249,168,37,0.18)' },
-  class_ready: { label: 'Class ready', color: '#1B5E20', bg: 'rgba(46,125,50,0.12)' },
+export const STATUS_META: Record<NexusCourseTopicStatus, { label: string; color: string; bg: string; hint: string }> = {
+  idea: {
+    label: 'Idea',
+    color: '#5A6672',
+    bg: 'rgba(139,149,161,0.15)',
+    hint: 'A draft topic. Add the class content, then mark it class-ready.',
+  },
+  drafted: {
+    label: 'Drafted',
+    color: '#8D5A00',
+    bg: 'rgba(249,168,37,0.18)',
+    hint: 'Content started but not finished.',
+  },
+  class_ready: {
+    label: 'Class ready',
+    color: '#1B5E20',
+    bg: 'rgba(46,125,50,0.12)',
+    hint: 'Ready to teach. Any teacher can run this topic.',
+  },
 };
 /** Fallback accent colors assigned to modules that have none set. */
 export const MODULE_COLORS = ['#7C3AED', '#00897B', '#EF6C00', '#1565C0', '#C2185B', '#5D4037'];
@@ -75,11 +90,13 @@ export function PriorityBadge({ priority }: { priority: NexusTopicPriority }) {
 export function TopicStatusChip({ status }: { status: NexusCourseTopicStatus }) {
   const meta = STATUS_META[status];
   return (
-    <Chip
-      label={meta.label}
-      size="small"
-      sx={{ bgcolor: meta.bg, color: meta.color, fontWeight: 600, height: 20, fontSize: '0.68rem' }}
-    />
+    <Tooltip title={meta.hint} arrow enterTouchDelay={0}>
+      <Chip
+        label={meta.label}
+        size="small"
+        sx={{ bgcolor: meta.bg, color: meta.color, fontWeight: 600, height: 20, fontSize: '0.68rem' }}
+      />
+    </Tooltip>
   );
 }
 

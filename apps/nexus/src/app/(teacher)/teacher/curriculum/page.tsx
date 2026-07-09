@@ -79,8 +79,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 
 type SubjectDialogState = { editingId: string | null } | null;
 type Confirm =
-  | { kind: 'archive' | 'delete'; target: 'subject'; id: string; title: string }
-  | { kind: 'archive' | 'delete'; target: 'topic'; id: string; title: string; usedInPlans: number }
+  | { kind: 'archive' | 'delete'; target: 'subject' | 'topic'; id: string; title: string; usedInPlans: number }
   | null;
 
 export default function CurriculumPage() {
@@ -118,6 +117,14 @@ export default function CurriculumPage() {
     (createdBy: string | null | undefined) =>
       user?.user_type === 'admin' || (!!createdBy && createdBy === user?.id),
     [user],
+  );
+
+  // How many of a subject's topics are placed in a course plan. > 0 means the
+  // server blocks a hard delete (plan days would be blanked), so the UI steers
+  // the teacher to Archive instead.
+  const moduleUsage = useCallback(
+    (m: RepoModule) => m.topics.reduce((sum, t) => sum + (t.used_in_plans || 0), 0),
+    [],
   );
 
   const load = useCallback(async () => {
@@ -547,7 +554,7 @@ export default function CurriculumPage() {
                       canMutate={canMutate(m.created_by)}
                       busy={busy}
                       onRestore={() => setSubjectActive(m.id, true)}
-                      onDelete={() => setConfirm({ kind: 'delete', target: 'subject', id: m.id, title: m.title })}
+                      onDelete={() => setConfirm({ kind: 'delete', target: 'subject', id: m.id, title: m.title, usedInPlans: moduleUsage(m) })}
                     />
                   ))}
                   {archivedTopics.map(({ topic, subjectTitle }) => (
@@ -585,24 +592,35 @@ export default function CurriculumPage() {
         <MenuItem
           disabled={!subjectMenu || !canMutate(subjectMenu.module.created_by)}
           onClick={() => {
-            if (subjectMenu) setConfirm({ kind: 'archive', target: 'subject', id: subjectMenu.module.id, title: subjectMenu.module.title });
+            if (subjectMenu) setConfirm({ kind: 'archive', target: 'subject', id: subjectMenu.module.id, title: subjectMenu.module.title, usedInPlans: moduleUsage(subjectMenu.module) });
             setSubjectMenu(null);
           }}
         >
           <ListItemIcon><ArchiveOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Archive (hide)</ListItemText>
+          <ListItemText
+            primary="Archive (hide)"
+            secondary={subjectMenu && moduleUsage(subjectMenu.module) > 0 ? 'In use by a course plan. Archive to hide it.' : undefined}
+            secondaryTypographyProps={{ fontSize: '0.7rem' }}
+          />
         </MenuItem>
-        <MenuItem
-          disabled={!subjectMenu || !canMutate(subjectMenu.module.created_by)}
-          onClick={() => {
-            if (subjectMenu) setConfirm({ kind: 'delete', target: 'subject', id: subjectMenu.module.id, title: subjectMenu.module.title });
-            setSubjectMenu(null);
-          }}
-          sx={{ color: 'error.main' }}
+        <Tooltip
+          title={subjectMenu && moduleUsage(subjectMenu.module) > 0 ? 'A topic here is used in a course plan. Archive it instead.' : ''}
+          placement="left"
         >
-          <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
-          <ListItemText>Delete permanently</ListItemText>
-        </MenuItem>
+          <span>
+            <MenuItem
+              disabled={!subjectMenu || !canMutate(subjectMenu.module.created_by) || moduleUsage(subjectMenu.module) > 0}
+              onClick={() => {
+                if (subjectMenu) setConfirm({ kind: 'delete', target: 'subject', id: subjectMenu.module.id, title: subjectMenu.module.title, usedInPlans: moduleUsage(subjectMenu.module) });
+                setSubjectMenu(null);
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon><DeleteOutlineIcon fontSize="small" color="error" /></ListItemIcon>
+              <ListItemText>Delete permanently</ListItemText>
+            </MenuItem>
+          </span>
+        </Tooltip>
       </Menu>
 
       {/* Topic actions menu */}
@@ -771,8 +789,10 @@ export default function CurriculumPage() {
                 <Alert severity="error" sx={{ mt: 0.5 }}>
                   This cannot be undone. The {confirm.target}
                   {confirm.target === 'subject' ? ' and all its topics' : ''} are removed for good.
-                  {confirm.target === 'topic' && confirm.usedInPlans > 0
-                    ? ' It is placed in a course plan, so it must be archived, not deleted.'
+                  {confirm.usedInPlans > 0
+                    ? confirm.target === 'subject'
+                      ? ' A topic here is placed in a course plan, so it must be archived, not deleted.'
+                      : ' It is placed in a course plan, so it must be archived, not deleted.'
                     : ''}
                 </Alert>
               )}
@@ -795,7 +815,7 @@ export default function CurriculumPage() {
                 <Button
                   variant="contained"
                   color="error"
-                  disabled={busy || (confirm.target === 'topic' && confirm.usedInPlans > 0)}
+                  disabled={busy || confirm.usedInPlans > 0}
                   onClick={() => (confirm.target === 'subject' ? deleteSubject(confirm.id) : deleteTopic(confirm.id))}
                 >
                   Delete permanently

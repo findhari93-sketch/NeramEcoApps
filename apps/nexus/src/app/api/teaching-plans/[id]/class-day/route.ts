@@ -9,6 +9,7 @@ import {
   logPlanAudit,
   listAssignmentsForPlan,
   createAssignment,
+  createScheduledClass,
   updateScheduledClassLinks,
   getRecapByClass,
 } from '@neram/database';
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
  * body { action: 'add_item', date, title, topic_id? }        // unplanned, added mid-class
  * body { action: 'end_class', date }                         // log coverage: completed_sessions += 1
  * body { action: 'carry_remaining', date }                   // needs one more class: session_span += 1
+ * body { action: 'backfill_class', date, start_time?, end_time? }  // past class taught in Teams: create a completed class row (no Teams), mark the session covered
  * body { action: 'set_class_links', class_id, recording_url?, youtube_url? }
  * body { action: 'create_assignment', date, title, instructions?, submission_format?, max_marks?, due_at?, topic_id? }
  */
@@ -251,6 +253,65 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           },
         });
         return NextResponse.json({ entry });
+      }
+
+      case 'backfill_class': {
+        // A class was taught directly in Teams on a past date, so no scheduled
+        // class row exists. Create a lightweight completed class (no Teams
+        // meeting) so a recording can hang off it, and count the session as
+        // covered. Future dates use "Schedule the class" instead.
+        const date = body.date || istToday();
+        if (date > istToday()) {
+          return NextResponse.json(
+            { error: 'This class is in the future. Use Schedule the class instead.' },
+            { status: 400 },
+          );
+        }
+        const ctx = await loadDayContext(params.id, date);
+        if (!ctx) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+        if (!ctx.entry || ctx.day?.isTest) {
+          return NextResponse.json({ error: 'No class planned on this day' }, { status: 400 });
+        }
+        const topic = (ctx.entry as NexusTeachingPlanEntryDetail).topic;
+        const existing = matchedClass(ctx.entry as NexusTeachingPlanEntryDetail, date);
+        let classId = existing?.id ?? null;
+        if (!classId) {
+          const cls = await createScheduledClass({
+            classroom_id: ctx.plan.classroom_id,
+            teacher_id: user.id,
+            title: topic?.title || ctx.entry.label || 'Class',
+            description: null,
+            scheduled_date: date,
+            start_time: body.start_time || '19:00',
+            end_time: body.end_time || '20:30',
+            status: 'completed',
+            plan_entry_id: ctx.entry.id,
+            course_topic_id: ctx.entry.topic_id,
+          });
+          classId = (cls as { id: string }).id;
+          // Count this session as covered the first time we backfill its date.
+          const span = Math.max(1, ctx.entry.session_span ?? topic?.estimated_sessions ?? 1);
+          const completed = Math.min((ctx.entry.completed_sessions ?? 0) + 1, span);
+          const finished = completed >= span;
+          await updatePlanEntry(ctx.entry.id, {
+            completed_sessions: completed,
+            ...(finished ? { status: 'done' } : {}),
+          });
+          await logPlanAudit({
+            plan_id: params.id,
+            entry_id: ctx.entry.id,
+            action: 'coverage_logged',
+            performed_by: user.id,
+            metadata: {
+              summary: `marked ${topic?.title || ctx.entry.label || 'the class'} taught on ${date} and opened a recording slot`,
+              date,
+              completed_sessions: completed,
+              done: finished,
+              backfilled: true,
+            },
+          });
+        }
+        return NextResponse.json({ ok: true, class_id: classId });
       }
 
       case 'set_class_links': {

@@ -20,12 +20,14 @@ import {
   alpha,
 } from '@neram/ui';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudentAssignmentDialog from '@/components/assignments/StudentAssignmentDialog';
+import RecordingPlayerDialog from '@/components/course-plan/RecordingPlayerDialog';
 
 type MyStatus = 'missing' | 'submitted' | 'late' | 'reviewed' | 'redo';
 
@@ -46,6 +48,7 @@ interface PlanDay {
   session_label: string | null;
   teacher: { name: string | null } | null;
   recap: { id: string } | null;
+  recording: { youtube_id: string } | null;
   recording_pending: boolean;
   assignments: DayAssignment[];
 }
@@ -76,6 +79,7 @@ export default function StudentCoursePlanPage() {
   const [sections, setSections] = useState<PlanSection[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openAssignment, setOpenAssignment] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<{ youtubeId: string; title: string } | null>(null);
   const [snack, setSnack] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -149,6 +153,16 @@ export default function StudentCoursePlanPage() {
                   sx={{ minHeight: 40, textTransform: 'none' }}
                 >
                   Guided recap
+                </Button>
+              ) : day.recording ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PlayCircleOutlineIcon sx={{ fontSize: 18 }} />}
+                  onClick={() => setPlaying({ youtubeId: day.recording!.youtube_id, title: day.topic?.title || 'Class recording' })}
+                  sx={{ minHeight: 40, textTransform: 'none' }}
+                >
+                  Watch recording
                 </Button>
               ) : day.recording_pending ? (
                 <Chip
@@ -256,6 +270,15 @@ export default function StudentCoursePlanPage() {
             setSnack('Submission saved.');
             load();
           }}
+        />
+      )}
+
+      {playing && (
+        <RecordingPlayerDialog
+          open={!!playing}
+          onClose={() => setPlaying(null)}
+          youtubeId={playing.youtubeId}
+          title={playing.title}
         />
       )}
 

@@ -10,6 +10,7 @@ import type { NexusTeachingPlanEntryDetail, AssignmentSummary } from '@neram/dat
 import { getRequestUser } from '@/lib/study-materials';
 import { computeFlow, toFlowEntries, istToday } from '@/lib/plan-flow';
 import { errorResponse } from '@/lib/api-errors';
+import { extractYouTubeId } from '@/lib/youtube';
 
 /** How many upcoming classes a student sees beyond today (plans change often). */
 const FUTURE_PREVIEW_DAYS = 1;
@@ -82,7 +83,12 @@ export async function GET(request: NextRequest) {
         const entry = d.entryId ? entryById.get(d.entryId) : null;
         const cls = entry?.classes?.find((c) => c.scheduled_date === d.date) || null;
         const recap = cls ? recapByClass.get(cls.id) : undefined;
+        const published = !!(recap && recap.status === 'published');
         const hasRecording = !!(cls && (cls.recording_url || cls.youtube_url));
+        // View-only self-study: a completed class with an unlisted YouTube backup
+        // is watchable directly (embeddable). Teams links stay private. If a gated
+        // recap is published, that takes precedence over the plain view.
+        const youtubeId = !published && cls?.youtube_url ? extractYouTubeId(cls.youtube_url) : null;
         const dayAssignments = publishedOnly
           .filter((a) => a.class_date === d.date)
           .map((a) => {
@@ -108,9 +114,12 @@ export async function GET(request: NextRequest) {
           session_label:
             !d.isTest && d.sessionCount > 1 ? `Day ${d.sessionIndex + 1} of ${d.sessionCount}` : null,
           teacher: cls?.teacher ? { name: cls.teacher.name } : null,
-          // Recording is gated: only a published recap is watchable.
-          recap: recap && recap.status === 'published' ? { id: recap.id } : null,
-          recording_pending: hasRecording && !(recap && recap.status === 'published'),
+          // Gated recap wins; else a plain view-only recording (YouTube backup).
+          recap: published ? { id: recap!.id } : null,
+          recording: youtubeId ? { youtube_id: youtubeId } : null,
+          // "Pending" only when there is a recording we cannot show yet (a Teams
+          // link with no YouTube backup and no published recap).
+          recording_pending: hasRecording && !published && !youtubeId,
           assignments: dayAssignments,
         };
       };

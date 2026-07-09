@@ -11,6 +11,8 @@ import { useMemo, useState } from 'react';
 import { Box, Typography, Stack, Chip, alpha } from '@neram/ui';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import CloseIcon from '@mui/icons-material/Close';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
@@ -28,6 +30,7 @@ export default function FlowList({
   onDropBefore,
   onEntryClick,
   onRemove,
+  onSetSpan,
   onDragEntryStart,
   onDragEnd,
   dragging,
@@ -43,6 +46,8 @@ export default function FlowList({
   onDropBefore: (beforeEntryId: string | null) => void;
   onEntryClick: (entry: Entry) => void;
   onRemove: (entry: Entry) => void;
+  /** Change how many class days a placed topic occupies (recomputes dates). */
+  onSetSpan: (entry: Entry, span: number) => void;
   onDragEntryStart: (e: React.DragEvent, entryId: string) => void;
   onDragEnd: () => void;
   /** True while any drag is in flight (enables drop highlights). */
@@ -248,15 +253,29 @@ export default function FlowList({
           const span = entrySpan(entry);
           const isFirst = d.sessionIndex === 0;
           const locked = flow.lockedEntryIds.has(entry.id) || d.locked;
+          // The span floor is whatever has already been taught (never below 1).
+          const minSpan = Math.max(1, entry.completed_sessions ?? 0);
+          const canEditSpan = isFirst && !locked && entry.entry_type === 'live_class';
           const cls = entry.classes?.find((c) => c.scheduled_date === d.date) || entry.classes?.[0];
+          // A day whose date has passed is treated as done (the schedule has
+          // moved on); the teacher backfills its recording from Class Day.
+          const isPast = d.date < today;
           const statusLabel = d.isCovered
             ? '✓ covered'
             : d.isToday
               ? cls?.start_time
                 ? `◷ today, ${fmtTime(cls.start_time)}`
                 : '◷ today'
-              : 'planned';
-          const statusColor = d.isCovered ? '#1B5E20' : d.isToday ? TEST_COLOR : 'text.disabled';
+              : isPast
+                ? '✓ done'
+                : 'planned';
+          const statusColor = d.isCovered
+            ? '#1B5E20'
+            : d.isToday
+              ? TEST_COLOR
+              : isPast
+                ? '#1B5E20'
+                : 'text.disabled';
 
           return (
             <Box key={key}>
@@ -291,7 +310,7 @@ export default function FlowList({
                     border: '1px solid',
                     borderColor: d.isToday ? alpha('#7C3AED', 0.55) : 'divider',
                     borderLeft: `3px solid ${entryColor(entry)}`,
-                    opacity: d.isCovered ? 0.55 : 1,
+                    opacity: d.isCovered || isPast ? 0.55 : 1,
                     cursor: locked ? 'pointer' : 'grab',
                     boxShadow: d.isToday ? `0 0 0 3px ${alpha('#7C3AED', 0.08)}` : 'none',
                     '&:hover': { borderColor: alpha('#7C3AED', 0.4) },
@@ -315,6 +334,59 @@ export default function FlowList({
                       </Typography>
                     )}
                   </Typography>
+                  {canEditSpan && (
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      onClick={(e) => e.stopPropagation()}
+                      sx={{ flexShrink: 0, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}
+                    >
+                      <Box
+                        role="button"
+                        tabIndex={0}
+                        aria-label="One fewer class day"
+                        title="One fewer class day"
+                        onClick={() => span > minSpan && onSetSpan(entry, span - 1)}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: span > minSpan ? 'text.secondary' : 'text.disabled',
+                          cursor: span > minSpan ? 'pointer' : 'default',
+                          '&:hover': span > minSpan ? { bgcolor: alpha('#7C3AED', 0.08) } : {},
+                        }}
+                      >
+                        <RemoveIcon sx={{ fontSize: 15 }} />
+                      </Box>
+                      <Typography
+                        sx={{ minWidth: 16, textAlign: 'center', fontSize: '0.72rem', fontWeight: 700 }}
+                        title="Class days for this topic"
+                      >
+                        {span}
+                      </Typography>
+                      <Box
+                        role="button"
+                        tabIndex={0}
+                        aria-label="One more class day"
+                        title="One more class day"
+                        onClick={() => span < 30 && onSetSpan(entry, span + 1)}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: span < 30 ? 'text.secondary' : 'text.disabled',
+                          cursor: span < 30 ? 'pointer' : 'default',
+                          '&:hover': span < 30 ? { bgcolor: alpha('#7C3AED', 0.08) } : {},
+                        }}
+                      >
+                        <AddIcon sx={{ fontSize: 15 }} />
+                      </Box>
+                    </Stack>
+                  )}
                   <Typography variant="caption" sx={{ fontWeight: 700, color: statusColor, flexShrink: 0 }}>
                     {statusLabel}
                   </Typography>

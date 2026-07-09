@@ -30,6 +30,7 @@ import {
   ListItemIcon,
   ListItemText,
   Switch,
+  Tooltip,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
@@ -41,6 +42,7 @@ import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import YouTubeIcon from '@mui/icons-material/YouTube';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import {
   PRIORITY_OPTIONS,
   DELIVERY_OPTIONS,
@@ -48,9 +50,25 @@ import {
   TopicStatusChip,
   useAuthFetch,
 } from '@/components/curriculum/shared';
+import QuickAddDialog from '@/components/curriculum/QuickAddDialog';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { ASSIGNMENT_ATTACHMENTS_FOLDER_ID } from '@/lib/assignment-constants';
+import type { TopicQuickAddData } from '@/lib/topic-quick-add';
 import type { NexusCourseTopicDetail } from '@neram/database';
+
+interface TopicPlacement {
+  entry_id: string;
+  plan: { id: string; title: string; status: string };
+  entry_status: string;
+  session_span: number | null;
+  completed_sessions: number;
+  date: string | null;
+  is_past: boolean;
+  has_recording: boolean;
+}
+
+const fmtDate = (iso: string) =>
+  new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 
 export default function TopicDetailPage() {
   const { topicId } = useParams<{ topicId: string }>();
@@ -86,6 +104,52 @@ export default function TopicDetailPage() {
   const [planDialog, setPlanDialog] = useState(false);
   const [availablePlans, setAvailablePlans] = useState<{ id: string; title: string; status: string }[]>([]);
 
+  // Confirm before converting to a self-learning module (publishes to students)
+  const [confirmSelfLearning, setConfirmSelfLearning] = useState(false);
+
+  // "Where this is taught": plans this topic is scheduled in (lazy, only if used).
+  const [placements, setPlacements] = useState<TopicPlacement[] | null>(null);
+
+  // Quick Add: paste AI output to auto-fill the topic content.
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  const applyQuickAdd = async (qa: TopicQuickAddData) => {
+    setBusy(true);
+    try {
+      const scalars: Record<string, unknown> = {};
+      if (qa.summary) scalars.summary = qa.summary;
+      if (qa.activities) scalars.activities = qa.activities;
+      if (qa.drills) scalars.drills = qa.drills;
+      if (qa.priority) scalars.priority = qa.priority;
+      if (qa.intended_delivery) scalars.intended_delivery = qa.intended_delivery;
+      if (qa.estimated_sessions) scalars.estimated_sessions = qa.estimated_sessions;
+      if (Object.keys(scalars).length) {
+        await authFetch(`/api/curriculum/topics/${topicId}`, { method: 'PATCH', body: JSON.stringify(scalars) });
+      }
+      for (const r of qa.resources) {
+        await authFetch(`/api/curriculum/topics/${topicId}`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'add_resource', kind: r.kind, title: r.title, url: r.url, section: r.section }),
+        });
+      }
+      setQuickAddOpen(false);
+      setSnack({ msg: 'Filled in. Review it, then mark it class-ready.', sev: 'success' });
+      await load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not apply', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const convertToSelfLearning = () => {
+    setConfirmSelfLearning(false);
+    patch(
+      { is_self_learning: true, visible_to_students: true },
+      'Converted to a self-learning module and shared with students.',
+    );
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -104,6 +168,18 @@ export default function TopicDetailPage() {
   useEffect(() => {
     if (!authLoading) load();
   }, [authLoading, load]);
+
+  // Load placements lazily once we know the topic is used in a plan.
+  const usedInPlans = topic?.used_in_plans ?? 0;
+  useEffect(() => {
+    if (usedInPlans > 0) {
+      authFetch(`/api/curriculum/topics/${topicId}/placements`)
+        .then((d) => setPlacements(d.placements || []))
+        .catch(() => setPlacements([]));
+    } else {
+      setPlacements([]);
+    }
+  }, [usedInPlans, topicId, authFetch]);
 
   const patch = async (updates: Record<string, unknown>, msg?: string) => {
     setBusy(true);
@@ -251,25 +327,42 @@ export default function TopicDetailPage() {
           <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
             <PriorityBadge priority={topic.priority} />
             <TopicStatusChip status={topic.status} />
-            {topic.module && <Chip label={topic.module.title} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
-            <Chip label={`${topic.estimated_sessions} session${topic.estimated_sessions > 1 ? 's' : ''}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
+            {topic.module && (
+              <Tooltip title={`Subject: ${topic.module.title}`} arrow enterTouchDelay={0}>
+                <Chip label={topic.module.title} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
+              </Tooltip>
+            )}
+            <Tooltip title={`Planned length: ${topic.estimated_sessions} class session${topic.estimated_sessions > 1 ? 's' : ''}`} arrow enterTouchDelay={0}>
+              <Chip label={`${topic.estimated_sessions} session${topic.estimated_sessions > 1 ? 's' : ''}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
+            </Tooltip>
             {topic.used_in_plans > 0 && (
               <Chip label={`In ${topic.used_in_plans} plan${topic.used_in_plans > 1 ? 's' : ''}`} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />
             )}
           </Stack>
         </Box>
-        {topic.status !== 'class_ready' && (
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
           <Button
-            variant="contained"
+            variant="outlined"
             size="small"
-            startIcon={<CheckCircleOutlineIcon />}
-            disabled={busy}
-            onClick={() => patch({ status: 'class_ready' }, 'Marked class ready. Any teacher can now run this topic.')}
+            startIcon={<AutoAwesomeOutlinedIcon />}
+            onClick={() => setQuickAddOpen(true)}
             sx={{ minHeight: 40 }}
           >
-            Mark class ready
+            Quick Add with AI
           </Button>
-        )}
+          {topic.status !== 'class_ready' && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<CheckCircleOutlineIcon />}
+              disabled={busy}
+              onClick={() => patch({ status: 'class_ready' }, 'Marked class ready. Any teacher can now run this topic.')}
+              sx={{ minHeight: 40 }}
+            >
+              Mark class ready
+            </Button>
+          )}
+        </Stack>
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" allowScrollButtonsMobile sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
@@ -347,14 +440,13 @@ export default function TopicDetailPage() {
               <Switch
                 checked={topic.is_self_learning ?? false}
                 disabled={busy}
-                onChange={(e) =>
-                  patch(
-                    e.target.checked
-                      ? { is_self_learning: true, visible_to_students: true }
-                      : { is_self_learning: false },
-                    e.target.checked ? 'Marked as a self-learning module and made visible.' : 'No longer a self-learning module.',
-                  )
-                }
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setConfirmSelfLearning(true);
+                  } else {
+                    patch({ is_self_learning: false }, 'No longer a self-learning module.');
+                  }
+                }}
               />
             </Box>
           </Card>
@@ -367,15 +459,66 @@ export default function TopicDetailPage() {
                 variant="outlined"
                 startIcon={<MenuBookOutlinedIcon />}
                 disabled={busy}
-                onClick={() =>
-                  patch({ is_self_learning: true, visible_to_students: true }, 'Converted to a self-learning module and shared with students.')
-                }
+                onClick={() => setConfirmSelfLearning(true)}
                 sx={{ minHeight: 48 }}
               >
                 Convert to self-learning module
               </Button>
             )}
           </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            Already taught it? Open the plan&apos;s Class Day to add the recording.
+          </Typography>
+
+          {placements && placements.length > 0 && (
+            <Card elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                Where this is taught
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+                The recording lives on each class day, not on this Idea. Open a class day to add or watch it.
+              </Typography>
+              <Stack spacing={1}>
+                {placements.map((pl) => (
+                  <Box key={pl.entry_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.85rem' }} noWrap>
+                        {pl.plan.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {pl.date ? fmtDate(pl.date) : 'Not dated yet'}
+                        {pl.session_span && pl.session_span > 1 ? ` · ${pl.completed_sessions}/${pl.session_span} classes done` : ''}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={pl.is_past ? 'Completed' : 'Upcoming'}
+                      size="small"
+                      sx={{
+                        height: 20,
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        bgcolor: pl.is_past ? 'rgba(46,125,50,0.12)' : 'rgba(139,149,161,0.15)',
+                        color: pl.is_past ? '#1B5E20' : '#5A6672',
+                      }}
+                    />
+                    {pl.has_recording && (
+                      <Chip label="Recording" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                    )}
+                    {pl.date && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => router.push(`/teacher/course-plans/${pl.plan.id}/class-day?date=${pl.date}`)}
+                        sx={{ minHeight: 36 }}
+                      >
+                        Open class day
+                      </Button>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+            </Card>
+          )}
         </Stack>
       )}
 
@@ -610,6 +753,25 @@ export default function TopicDetailPage() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setPlanDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Quick Add with AI */}
+      <QuickAddDialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} onApply={applyQuickAdd} busy={busy} />
+
+      {/* Confirm convert to self-learning */}
+      <Dialog open={confirmSelfLearning} onClose={() => setConfirmSelfLearning(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Convert to a self-learning module?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Students study this on their own, and it becomes visible to them right away. You can turn it off later.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmSelfLearning(false)}>Cancel</Button>
+          <Button variant="contained" disabled={busy} onClick={convertToSelfLearning} startIcon={<MenuBookOutlinedIcon />}>
+            Convert
+          </Button>
         </DialogActions>
       </Dialog>
 

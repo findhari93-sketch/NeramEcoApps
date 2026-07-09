@@ -219,6 +219,47 @@ export async function countTopicPlanUsage(id: string, client?: TypedSupabaseClie
   return count || 0;
 }
 
+export interface NexusTopicPlacement {
+  entry_id: string;
+  plan_id: string;
+  session_span: number | null;
+  completed_sessions: number;
+  status: string;
+  plan: { id: string; title: string; start_date: string; saturday_classes: boolean | null; status: string } | null;
+  classes: { id: string; scheduled_date: string; recording_url: string | null; youtube_url: string | null }[];
+}
+
+/**
+ * Every place a topic is scheduled: its plan-entry (span, coverage, status), the
+ * parent plan, and any dated scheduled classes (with recording links). Topic
+ * class-day dates are computed by the flow engine, not stored, so the caller
+ * recomputes them; this returns only the persisted rows.
+ */
+export async function getTopicPlacements(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<NexusTopicPlacement[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_teaching_plan_entries')
+    .select(
+      'id, plan_id, session_span, completed_sessions, status, ' +
+        'plan:nexus_teaching_plans(id, title, start_date, saturday_classes, status), ' +
+        'classes:nexus_scheduled_classes!plan_entry_id(id, scheduled_date, recording_url, youtube_url)',
+    )
+    .eq('topic_id', id);
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    entry_id: r.id,
+    plan_id: r.plan_id,
+    session_span: r.session_span,
+    completed_sessions: r.completed_sessions,
+    status: r.status,
+    plan: r.plan,
+    classes: r.classes || [],
+  })) as NexusTopicPlacement[];
+}
+
 /** Hard-delete a topic (its resources/test-links cascade; plan entries keep, topic_id SET NULL). */
 export async function deleteCourseTopic(id: string, client?: TypedSupabaseClient): Promise<void> {
   const supabase = client || getSupabaseAdminClient();

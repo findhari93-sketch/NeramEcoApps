@@ -471,6 +471,7 @@ export default function PlanBuilderPage() {
               onDropBefore={onDropBefore}
               onEntryClick={(e) => setActionEntry(e)}
               onRemove={(e) => act({ action: 'remove_entry', entry_id: e.id }, 'Removed. Returned to the repository.')}
+              onSetSpan={(e, span) => act({ action: 'set_span', entry_id: e.id, session_span: span }, 'Classes updated. Dates recalculated.')}
               onDragEntryStart={(e, entryId) => {
                 e.dataTransfer.setData('text/plain', entryId);
                 e.dataTransfer.effectAllowed = 'move';

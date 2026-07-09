@@ -26,6 +26,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RedoIcon from '@mui/icons-material/Redo';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import PlanShell from '@/components/course-plan/PlanShell';
 import { usePlanData } from '@/components/course-plan/usePlanData';
 import AgendaList from '@/components/course-plan/AgendaList';
@@ -122,6 +123,13 @@ function ClassDayInner() {
     } finally {
       setLinksSaving(false);
     }
+  };
+
+  // A past class taught directly in Teams has no scheduled class row. Create a
+  // completed one (no Teams meeting) so a recording slot appears; also marks the
+  // session covered. post() reloads, so class_links then renders the card.
+  const backfillClass = async () => {
+    await post({ action: 'backfill_class', date }, 'Marked as taught. Add its recording below.');
   };
 
   const createRecap = async () => {
@@ -314,7 +322,7 @@ function ClassDayInner() {
               />
 
               {/* Recording links (past/today only) + assignments for this class. */}
-              {payload.class_links && date <= today && (
+              {date <= today && payload.class_links && (
                 <ClassLinksCard
                   classLinks={payload.class_links}
                   recap={payload.recap}
@@ -323,6 +331,21 @@ function ClassDayInner() {
                   onCreateRecap={createRecap}
                   creatingRecap={recapCreating}
                 />
+              )}
+              {/* A past class with no scheduled row yet: taught directly in Teams. */}
+              {date < today && !payload.class_links && (
+                <Box sx={{ mt: 1.5, p: 2, borderRadius: 3, border: '1px dashed', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
+                    <VideocamOutlinedIcon sx={{ fontSize: 20, color: 'primary.main' }} />
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>This class is over</Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    Taught it directly in Teams? Mark it done and add its recording (Teams link plus an unlisted YouTube backup). No meeting is created.
+                  </Typography>
+                  <Button variant="contained" startIcon={<VideocamOutlinedIcon />} disabled={busy} onClick={backfillClass} sx={{ minHeight: 44 }}>
+                    Add its recording
+                  </Button>
+                </Box>
               )}
               <AssignmentCard
                 assignments={payload.assignments}
