@@ -8,7 +8,7 @@
  * them; past rows are locked.
  */
 import { useMemo, useState } from 'react';
-import { Box, Typography, Stack, Chip, alpha } from '@neram/ui';
+import { Box, Typography, Stack, Chip, Tooltip, alpha } from '@neram/ui';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
@@ -391,29 +391,45 @@ export default function FlowList({
                     {statusLabel}
                   </Typography>
                   {isFirst && !locked && (
-                    <Box
-                      role="button"
-                      tabIndex={0}
-                      aria-label="Remove from plan"
-                      title="Remove, returns to repository"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove(entry);
-                      }}
-                      sx={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 1.5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'text.disabled',
-                        flexShrink: 0,
-                        '&:hover': { bgcolor: 'rgba(198,40,40,0.08)', color: '#C62828' },
-                      }}
-                    >
-                      <CloseIcon sx={{ fontSize: 15 }} />
-                    </Box>
+                    <Tooltip title="Remove from plan (topic stays in the Repository)" arrow enterTouchDelay={0}>
+                      <Box
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Remove from plan"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove(entry);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onRemove(entry);
+                          }
+                        }}
+                        sx={{
+                          width: 30,
+                          height: 30,
+                          borderRadius: 1.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'text.secondary',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          flexShrink: 0,
+                          cursor: 'pointer',
+                          transition: 'all .12s',
+                          '&:hover': {
+                            bgcolor: 'rgba(198,40,40,0.08)',
+                            color: '#C62828',
+                            borderColor: alpha('#C62828', 0.4),
+                          },
+                        }}
+                      >
+                        <CloseIcon sx={{ fontSize: 16 }} />
+                      </Box>
+                    </Tooltip>
                   )}
                 </Box>
               </Box>
