@@ -81,13 +81,15 @@ export const PRIORITY_DISPLAY: Record<string, string> = {
 };
 
 export const TEST_COLOR = '#1565C0';
+export const TASK_COLOR = '#B26A00';
 
 export function entryTitle(e: Entry): string {
-  return e.topic?.title || e.test?.title || e.label || 'Entry';
+  return e.topic?.title || e.test?.title || e.label || (e.entry_type === 'task' ? 'Task' : 'Entry');
 }
 
 export function entryColor(e: Entry): string {
   if (e.entry_type === 'test') return TEST_COLOR;
+  if (e.entry_type === 'task') return TASK_COLOR;
   return e.topic?.module?.color || '#7C3AED';
 }
 

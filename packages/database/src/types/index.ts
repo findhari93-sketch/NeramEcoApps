@@ -4634,7 +4634,7 @@ export type NexusCourseTopicStatus = 'idea' | 'drafted' | 'class_ready';
 export type NexusTopicDelivery = 'live' | 'self_learning' | 'either';
 export type NexusPlanExamType = 'nata' | 'jee' | 'foundation' | 'custom';
 export type NexusTeachingPlanStatus = 'draft' | 'active' | 'completed' | 'archived';
-export type NexusPlanEntryType = 'live_class' | 'self_learning' | 'test';
+export type NexusPlanEntryType = 'live_class' | 'self_learning' | 'test' | 'task';
 export type NexusPlanEntryStatus = 'planned' | 'scheduled' | 'done' | 'spillover' | 'skipped';
 export type NexusPlanAuditAction =
   | 'created'
@@ -4728,9 +4728,10 @@ export interface NexusTeachingPlan {
 }
 
 /**
- * An entry on a plan: a topic or a test in the ordered queue.
- * position = global queue order; planned_date = pinned date (tests only,
- * NULL for auto-flow topic entries whose dates are computed).
+ * An entry on a plan: a topic, a test or a task in the ordered queue.
+ * position = global queue order; planned_date = pinned date (any entry type,
+ * NULL for auto-flow entries whose dates are computed from queue order).
+ * task_time = the time shown on a 'task' entry (an info task / no-class day).
  */
 export interface NexusTeachingPlanEntry {
   id: string;
@@ -4746,6 +4747,7 @@ export interface NexusTeachingPlanEntry {
   session_span: number | null;
   completed_sessions: number;
   notes: string | null;
+  task_time: string | null;
   created_at: string;
   updated_at: string;
 }

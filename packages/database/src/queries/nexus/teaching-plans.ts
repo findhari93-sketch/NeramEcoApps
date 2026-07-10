@@ -317,6 +317,8 @@ export async function addPlanEntries(
     planned_date?: string | null;
     is_unplanned?: boolean;
     session_span?: number | null;
+    notes?: string | null;
+    task_time?: string | null;
   }[],
   options?: { afterPosition?: number; client?: TypedSupabaseClient },
 ): Promise<NexusTeachingPlanEntry[]> {
@@ -341,7 +343,9 @@ export async function addPlanEntries(
     }
   }
   // PostgREST bulk inserts require every row to carry the SAME keys, so
-  // normalize each entry to the full column set.
+  // normalize each entry to the full column set. task_time is only included
+  // when a task is being added, so ordinary inserts never reference the column.
+  const hasTaskTime = entries.some((e) => e.task_time !== undefined);
   const { data, error } = await supabase
     .from(ENTRIES)
     .insert(
@@ -355,6 +359,8 @@ export async function addPlanEntries(
         planned_date: e.planned_date ?? null,
         is_unplanned: e.is_unplanned ?? false,
         session_span: e.session_span ?? null,
+        notes: e.notes ?? null,
+        ...(hasTaskTime ? { task_time: e.task_time ?? null } : {}),
       })),
     )
     .select();

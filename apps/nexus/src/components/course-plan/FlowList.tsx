@@ -17,9 +17,10 @@ import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import type { NexusTeachingPlanDetail } from '@neram/database';
 import type { FlowResult } from '@/lib/plan-flow';
-import { entryTitle, entryColor, entrySpan, fmtShort, fmtTime, TEST_COLOR, type Entry } from './common';
+import { entryTitle, entryColor, entrySpan, fmtShort, fmtTime, TEST_COLOR, TASK_COLOR, type Entry } from './common';
 
 export default function FlowList({
   plan,
@@ -153,6 +154,23 @@ export default function FlowList({
         )}
       </Box>
 
+      {plan.status === 'draft' && (
+        <Typography
+          sx={{
+            fontSize: '0.72rem',
+            fontWeight: 600,
+            color: 'text.secondary',
+            mb: 1.25,
+            px: 1,
+            py: 0.75,
+            borderRadius: 1.5,
+            bgcolor: alpha('#7C3AED', 0.06),
+          }}
+        >
+          Draft: arrange freely. Dates and locking start when you activate the plan.
+        </Typography>
+      )}
+
       {flow.days.length === 0 && (
         <Box
           sx={{ textAlign: 'center', py: 4, px: 2, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}
@@ -214,6 +232,64 @@ export default function FlowList({
             );
           }
 
+          // Info task (a no-class day: title, description and time).
+          if (entry && entry.entry_type === 'task') {
+            const time = fmtTime(entry.task_time ?? null);
+            return (
+              <Box key={key}>
+                {marker(key)}
+                <Box sx={{ display: 'flex', gap: 1.25 }} {...targetProps(key, entry.id, !d.locked)}>
+                  {dateCol(fmtShort(d.date) + (d.isToday ? ' · today' : ''), TASK_COLOR)}
+                  <Box
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => (placing ? onInsertBefore(entry.id) : onEntryClick(entry))}
+                    onKeyDown={(e) => e.key === 'Enter' && onEntryClick(entry)}
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 1,
+                      px: 1.5,
+                      py: 1.1,
+                      minHeight: 48,
+                      borderRadius: 2.5,
+                      cursor: 'pointer',
+                      opacity: d.isCovered || d.date < today ? 0.6 : 1,
+                      bgcolor: alpha(TASK_COLOR, 0.05),
+                      border: `1px dashed ${alpha(TASK_COLOR, 0.45)}`,
+                    }}
+                  >
+                    <AssignmentOutlinedIcon sx={{ fontSize: 18, color: TASK_COLOR, flexShrink: 0, mt: 0.2 }} />
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: 'wrap' }} useFlexGap>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: TASK_COLOR }} noWrap>
+                          {entryTitle(entry)}
+                        </Typography>
+                        <Chip
+                          label="TASK"
+                          size="small"
+                          sx={{ height: 16, fontSize: '0.58rem', fontWeight: 800, bgcolor: alpha(TASK_COLOR, 0.14), color: TASK_COLOR }}
+                        />
+                        {time && (
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: alpha(TASK_COLOR, 0.85) }}>
+                            {time}
+                          </Typography>
+                        )}
+                      </Stack>
+                      {entry.notes && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, whiteSpace: 'pre-wrap' }}>
+                          {entry.notes}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+              </Box>
+            );
+          }
+
           // Free day (queue ran out before the last pinned test).
           if (!entry) {
             const before = nextTestAfter(d.date);
@@ -252,7 +328,10 @@ export default function FlowList({
           // Topic session row.
           const span = entrySpan(entry);
           const isFirst = d.sessionIndex === 0;
-          const locked = flow.lockedEntryIds.has(entry.id) || d.locked;
+          // Editability is entry-level: a draft locks nothing (lockedEntryIds is
+          // empty), so past rows stay removable and reorderable. We keep d.locked
+          // and isPast only for the dimming and the "done" label below.
+          const locked = flow.lockedEntryIds.has(entry.id);
           // The span floor is whatever has already been taught (never below 1).
           const minSpan = Math.max(1, entry.completed_sessions ?? 0);
           const canEditSpan = isFirst && !locked && entry.entry_type === 'live_class';
@@ -386,6 +465,11 @@ export default function FlowList({
                         <AddIcon sx={{ fontSize: 15 }} />
                       </Box>
                     </Stack>
+                  )}
+                  {isFirst && entry.planned_date && (
+                    <Tooltip title="Fixed to this date. Other classes flow around it." arrow enterTouchDelay={0}>
+                      <PushPinOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled', flexShrink: 0 }} />
+                    </Tooltip>
                   )}
                   <Typography variant="caption" sx={{ fontWeight: 700, color: statusColor, flexShrink: 0 }}>
                     {statusLabel}

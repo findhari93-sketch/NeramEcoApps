@@ -103,10 +103,15 @@ export async function GET(request: NextRequest) {
               marks,
             };
           });
+        const isTask = entry?.entry_type === 'task';
         return {
           date: d.date,
           is_today: d.date === today,
           is_test: d.isTest,
+          is_task: isTask,
+          task: isTask
+            ? { title: entry?.label ?? 'Task', description: entry?.notes ?? null, time: entry?.task_time ?? null }
+            : null,
           test_title: d.isTest ? entry?.test?.title ?? entry?.label ?? 'Test' : null,
           topic: entry?.topic
             ? { title: entry.topic.title, module_color: entry.topic.module?.color ?? null }

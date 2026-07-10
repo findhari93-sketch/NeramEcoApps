@@ -42,6 +42,7 @@ async function loadFlow(planId: string) {
     startDate: plan.start_date,
     saturdayClasses: plan.saturday_classes ?? true,
     today: istToday(),
+    draft: plan.status === 'draft',
     holidays: overrides.filter((o) => o.kind === 'cancelled').map((o) => o.date),
     extraDays: overrides.filter((o) => o.kind === 'makeup').map((o) => o.date),
   });
@@ -164,7 +165,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
  * POST /api/teaching-plans/[id]  (staff) — queue operations, each writing an audit row.
  * body { action: 'add_entries', entries: [...], after_position? }   // insert into the queue
  * body { action: 'reorder_entry', entry_id, after_entry_id? | to_start? }
- * body { action: 'pin_test', entry_id, pinned_date }                // tests sit on fixed dates
+ * body { action: 'set_entry_date', entry_id, date }                 // put any entry on a date (null clears)
  * body { action: 'set_span', entry_id, session_span }               // how many class days
  * body { action: 'set_status', entry_id, status, notes? }           // done | skipped | planned
  * body { action: 'convert', entry_id, entry_type, publish? }        // live_class <-> self_learning
@@ -261,24 +262,69 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return NextResponse.json({ entry_id: body.entry_id, position });
       }
 
+      // Put any entry (topic, task or test) on a specific calendar date, so
+      // other classes flow around it. Passing a null date clears the pin and
+      // returns the entry to auto-flow. 'pin_test' is kept as an alias.
+      case 'set_entry_date':
       case 'pin_test': {
         const before = await loadEntry(body.entry_id);
         if (!before) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
-        if (before.entry_type !== 'test') {
-          return NextResponse.json({ error: 'Only tests can be pinned to a date' }, { status: 400 });
+        const newDate: string | null = body.pinned_date ?? body.date ?? null;
+        if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+          return NextResponse.json({ error: 'A valid date is required' }, { status: 400 });
         }
-        const entry = await updatePlanEntry(body.entry_id, { planned_date: body.pinned_date ?? null });
+        // On a live (non-draft) plan, history is protected: a class that has
+        // already happened cannot be re-dated, and nothing can be pinned into
+        // the past. Drafts are still being assembled, so any date is allowed.
+        const ctx = await loadFlow(params.id);
+        if (ctx && ctx.plan.status !== 'draft') {
+          if (ctx.flow.lockedEntryIds.has(body.entry_id)) {
+            return NextResponse.json(
+              { error: 'This class already happened and cannot be re-dated' },
+              { status: 400 },
+            );
+          }
+          if (newDate && newDate < istToday()) {
+            return NextResponse.json({ error: 'Pick a date that is not in the past' }, { status: 400 });
+          }
+        }
+        const entry = await updatePlanEntry(body.entry_id, { planned_date: newDate });
         await log(
           'pinned',
           {
-            summary: body.pinned_date
-              ? `pinned ${entryLabel(before)} to ${body.pinned_date}`
-              : `unpinned ${entryLabel(before)}`,
+            summary: newDate
+              ? `set ${entryLabel(before)} to ${newDate}`
+              : `cleared the date on ${entryLabel(before)}, back to auto-flow`,
             from: before.planned_date,
-            to: body.pinned_date ?? null,
+            to: newDate,
           },
           body.entry_id,
         );
+        return NextResponse.json({ entry });
+      }
+
+      // Edit an info task's fields (title / description / time / date).
+      case 'update_task': {
+        const before = await loadEntry(body.entry_id);
+        if (!before) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
+        if (before.entry_type !== 'task') {
+          return NextResponse.json({ error: 'Only tasks can be edited this way' }, { status: 400 });
+        }
+        const newDate: string | null = body.planned_date ?? null;
+        if (newDate && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+          return NextResponse.json({ error: 'A valid date is required' }, { status: 400 });
+        }
+        const ctx = await loadFlow(params.id);
+        if (ctx && ctx.plan.status !== 'draft' && ctx.flow.lockedEntryIds.has(body.entry_id)) {
+          return NextResponse.json({ error: 'This task is in the past and cannot be edited' }, { status: 400 });
+        }
+        const entry = await updatePlanEntry(body.entry_id, {
+          label: body.label ?? null,
+          notes: body.notes ?? null,
+          task_time: body.task_time ?? null,
+          planned_date: newDate,
+        });
+        await log('edited', { summary: `edited the task ${(body.label ?? '').trim() || '(untitled)'}` }, body.entry_id);
         return NextResponse.json({ entry });
       }
 

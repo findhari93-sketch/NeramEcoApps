@@ -43,6 +43,8 @@ interface PlanDay {
   date: string;
   is_today: boolean;
   is_test: boolean;
+  is_task: boolean;
+  task: { title: string; description: string | null; time: string | null } | null;
   test_title: string | null;
   topic: { title: string; module_color: string | null } | null;
   session_label: string | null;
@@ -71,6 +73,12 @@ function fmtDate(iso: string) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+function fmtTaskTime(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const hh = h % 12 || 12;
+  return `${hh}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 export default function StudentCoursePlanPage() {
   const router = useRouter();
   const authFetch = useAuthFetch();
@@ -97,6 +105,55 @@ export default function StudentCoursePlanPage() {
   }, [authLoading, load]);
 
   const renderDay = (day: PlanDay, upcoming = false) => {
+    // Info task (a no-class day): read-only title, details and time.
+    if (day.is_task && day.task) {
+      const t = day.task;
+      const accent = '#B26A00';
+      return (
+        <Box key={`${day.date}-task-${t.title}`} sx={{ display: 'flex', gap: 1.5, opacity: upcoming ? 0.72 : 1 }}>
+          <Stack alignItems="center" sx={{ pt: 0.5 }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: accent, flexShrink: 0 }} />
+            <Box sx={{ width: 2, flex: 1, bgcolor: 'divider', mt: 0.5 }} />
+          </Stack>
+          <Box
+            sx={{
+              flex: 1,
+              mb: 2,
+              p: 2,
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: day.is_today ? alpha(accent, 0.5) : 'divider',
+              bgcolor: 'background.paper',
+              borderLeft: `3px solid ${accent}`,
+            }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }} flexWrap="wrap" useFlexGap>
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.04em', color: 'text.secondary', textTransform: 'uppercase' }}>
+                {day.is_today ? 'Today · ' : ''}
+                {fmtDate(day.date)}
+              </Typography>
+              <Chip label="Task" size="small" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 800, bgcolor: alpha(accent, 0.14), color: accent }} />
+              {t.time && (
+                <Typography variant="caption" sx={{ fontWeight: 700, color: accent }}>
+                  {fmtTaskTime(t.time)}
+                </Typography>
+              )}
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <AssignmentOutlinedIcon sx={{ fontSize: 20, color: accent, mt: 0.2, flexShrink: 0 }} />
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '1.02rem', lineHeight: 1.3 }}>{t.title}</Typography>
+                {t.description && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
+                    {t.description}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+          </Box>
+        </Box>
+      );
+    }
     const accent = day.is_test ? '#1565C0' : day.topic?.module_color || '#7C3AED';
     return (
       <Box

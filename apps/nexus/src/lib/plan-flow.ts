@@ -7,9 +7,9 @@
  *    entry; they are computed here from the plan's start date.
  *  - Class days = every day from start_date onward except Sundays, Saturdays
  *    when the plan has saturday_classes off, and explicit holidays.
- *  - Test entries with a pinned date sit on that exact date; topic entries
- *    flow around them in queue order, each consuming `sessionSpan`
- *    consecutive class days ("day k of N").
+ *  - Any entry with a pinned date sits on that date (a multi-session topic
+ *    also takes the class days after it); the rest flow around them in queue
+ *    order, each consuming `sessionSpan` consecutive class days ("day k of N").
  *  - self_learning and skipped entries consume zero class days (that is the
  *    payoff of converting or skipping when a plan drifts).
  *  - Entries that have started on or before `today` are locked: they cannot
@@ -20,13 +20,13 @@
  * free; all dates are YYYY-MM-DD strings, "today" is IST.
  */
 
-export type FlowEntryType = 'live_class' | 'self_learning' | 'test';
+export type FlowEntryType = 'live_class' | 'self_learning' | 'test' | 'task';
 
 export interface FlowEntryInput {
   id: string;
   entryType: FlowEntryType;
   position: number;
-  /** Pinned date; tests only. NULL for auto-flow topic entries. */
+  /** Pinned calendar date (any entry type). NULL for auto-flow entries. */
   pinnedDate: string | null;
   /** Resolved span: entry.session_span ?? topic.estimated_sessions ?? 1. */
   sessionSpan: number;
@@ -43,6 +43,12 @@ export interface FlowOptions {
   holidays?: string[];
   /** Makeup days: treated as class days even on a Sunday / off Saturday. */
   extraDays?: string[];
+  /**
+   * Draft plans are still being assembled, so nothing is locked: past-dated
+   * rows stay removable, reorderable and re-datable. Active / completed plans
+   * keep their history locked. Defaults to false (locking on).
+   */
+  draft?: boolean;
   /** Safety cap on generated class days. */
   maxDays?: number;
 }
@@ -80,6 +86,8 @@ export interface FlowResult {
   behindBy: number;
   /** Per pinned test: entries queued before it whose dates land after it. */
   wontFit: { testEntryId: string; entryIds: string[] }[];
+  /** Pinned entries bumped off their exact date by an overlapping pin. */
+  pinConflicts: { entryId: string; wantedDate: string; placedDate: string }[];
 }
 
 const DAY_MS = 86400000;
@@ -120,24 +128,66 @@ export function computeFlow(entries: FlowEntryInput[], opts: FlowOptions): FlowR
   const maxDays = opts.maxDays ?? 500;
   const sorted = [...entries].sort((a, b) => a.position - b.position);
 
-  const pinnedByDate = new Map<string, FlowEntryInput>();
+  // Partition: off-calendar entries (skipped / self-learning) consume no class
+  // days; entries with a pinned date sit on it; the rest flow in queue order.
+  const pinned: FlowEntryInput[] = [];
   const flowing: FlowEntryInput[] = [];
   for (const e of sorted) {
-    if (e.entryType === 'test' && e.pinnedDate) {
-      pinnedByDate.set(e.pinnedDate, e);
-    } else if (e.status === 'skipped' || e.entryType === 'self_learning') {
+    if (e.status === 'skipped' || e.entryType === 'self_learning') {
       // Consumes no class days.
+    } else if (e.pinnedDate) {
+      pinned.push(e);
     } else {
       flowing.push(e);
     }
   }
-  const lastPinnedDate = [...pinnedByDate.keys()].sort().pop() ?? null;
+
+  // Reserve the day(s) each pinned entry occupies. Session 0 sits on the exact
+  // pinned date (honoured even if it is not a normal class day, e.g. a class
+  // held on a Sunday); a multi-session pinned topic takes the following
+  // unoccupied class days. When two pins want the same day, the earlier pinned
+  // date wins (ties broken by position) and the loser is bumped and flagged.
+  const occupied = new Map<string, { entry: FlowEntryInput; sessionIndex: number; sessionCount: number }>();
+  const pinConflicts: FlowResult['pinConflicts'] = [];
+  const nextFreeClassDay = (from: string): string => {
+    let d = from;
+    let guard = 0;
+    while ((occupied.has(d) || !isClassDay(d, opts)) && guard < maxDays) {
+      d = addDays(d, 1);
+      guard += 1;
+    }
+    return d;
+  };
+  const pinnedSorted = [...pinned].sort((a, b) =>
+    a.pinnedDate! < b.pinnedDate! ? -1 : a.pinnedDate! > b.pinnedDate! ? 1 : a.position - b.position,
+  );
+  for (const e of pinnedSorted) {
+    const span = e.entryType === 'test' ? 1 : Math.max(1, e.sessionSpan);
+    let cursor = e.pinnedDate!;
+    if (occupied.has(cursor)) {
+      const placed = nextFreeClassDay(cursor);
+      pinConflicts.push({ entryId: e.id, wantedDate: cursor, placedDate: placed });
+      cursor = placed;
+    }
+    occupied.set(cursor, { entry: e, sessionIndex: 0, sessionCount: span });
+    for (let s = 1; s < span; s++) {
+      cursor = nextFreeClassDay(addDays(cursor, 1));
+      occupied.set(cursor, { entry: e, sessionIndex: s, sessionCount: span });
+    }
+  }
+  const occupiedDates = [...occupied.keys()].sort();
+  const lastOccupiedDate = occupiedDates[occupiedDates.length - 1] ?? null;
+  const firstOccupiedDate = occupiedDates[0] ?? null;
+  // Start the walk early enough to emit a class pinned before the plan start,
+  // but only let the auto-flow queue and free days begin at the start date.
+  const walkStart =
+    firstOccupiedDate && firstOccupiedDate < opts.startDate ? firstOccupiedDate : opts.startDate;
 
   const days: FlowDay[] = [];
   const entryDates = new Map<string, string[]>();
   for (const e of sorted) entryDates.set(e.id, []);
 
-  let date = opts.startDate;
+  let date = walkStart;
   let flowIdx = 0;
   let sessionInEntry = 0;
   let computedEndDate: string | null = null;
@@ -165,14 +215,17 @@ export function computeFlow(entries: FlowEntryInput[], opts: FlowOptions): FlowR
 
   while (days.length < maxDays) {
     const queueDone = flowIdx >= flowing.length;
-    const pinsDone = !lastPinnedDate || date > lastPinnedDate;
+    const pinsDone = !lastOccupiedDate || date > lastOccupiedDate;
     if (queueDone && pinsDone) break;
 
-    if (isClassDay(date, opts) || pinnedByDate.has(date)) {
-      const pinned = pinnedByDate.get(date);
-      if (pinned) {
-        pushDay(pinned, 0, 1);
-      } else if (!queueDone) {
+    const pin = occupied.get(date);
+    if (pin) {
+      pushDay(pin.entry, pin.sessionIndex, pin.sessionCount);
+      // A pinned content class (topic / task) extends the plan end; a pinned
+      // test is an event that does not.
+      if (pin.entry.entryType !== 'test') computedEndDate = date;
+    } else if (date >= opts.startDate && isClassDay(date, opts)) {
+      if (!queueDone) {
         const entry = flowing[flowIdx];
         const span = Math.max(1, entry.sessionSpan);
         pushDay(entry, sessionInEntry, span);
@@ -189,15 +242,19 @@ export function computeFlow(entries: FlowEntryInput[], opts: FlowOptions): FlowR
     date = addDays(date, 1);
   }
 
-  // Locking: an entry is locked once its first computed day is not in the future.
+  // Locking: an entry is locked once its first computed day is not in the
+  // future. Draft plans are exempt: the teacher is still assembling them, so
+  // every row stays editable regardless of date.
   const lockedEntryIds = new Set<string>();
-  for (const e of sorted) {
-    const dates = entryDates.get(e.id)!;
-    if (dates.length && dates[0] <= opts.today) lockedEntryIds.add(e.id);
-  }
   let minInsertIndex = 0;
-  for (let i = 0; i < sorted.length; i++) {
-    if (lockedEntryIds.has(sorted[i].id)) minInsertIndex = i + 1;
+  if (!opts.draft) {
+    for (const e of sorted) {
+      const dates = entryDates.get(e.id)!;
+      if (dates.length && dates[0] <= opts.today) lockedEntryIds.add(e.id);
+    }
+    for (let i = 0; i < sorted.length; i++) {
+      if (lockedEntryIds.has(sorted[i].id)) minInsertIndex = i + 1;
+    }
   }
 
   // Drift: past live-class sessions never logged as covered.
@@ -230,6 +287,7 @@ export function computeFlow(entries: FlowEntryInput[], opts: FlowOptions): FlowR
     minInsertIndex,
     behindBy,
     wontFit,
+    pinConflicts,
   };
 }
 
@@ -253,7 +311,8 @@ export function toFlowEntries(
     id: e.id,
     entryType: e.entry_type as FlowEntryType,
     position: e.position,
-    pinnedDate: e.entry_type === 'test' ? e.planned_date : null,
+    // Any entry can be pinned to a date now, not just tests.
+    pinnedDate: e.planned_date ?? null,
     sessionSpan: Math.max(1, e.session_span ?? e.topic?.estimated_sessions ?? 1),
     completedSessions: e.completed_sessions ?? 0,
     status: e.status,

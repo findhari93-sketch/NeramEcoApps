@@ -66,6 +66,7 @@ export function usePlanData(planId: string): UsePlanData {
       startDate: plan.start_date,
       saturdayClasses: plan.saturday_classes ?? true,
       today,
+      draft: plan.status === 'draft',
       holidays: overrides.filter((o) => o.kind === 'cancelled').map((o) => o.date),
       extraDays: overrides.filter((o) => o.kind === 'makeup').map((o) => o.date),
     });

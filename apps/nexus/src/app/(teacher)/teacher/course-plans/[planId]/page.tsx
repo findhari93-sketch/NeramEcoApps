@@ -38,6 +38,7 @@ import LowPriorityIcon from '@mui/icons-material/LowPriority';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PlanShell from '@/components/course-plan/PlanShell';
 import { usePlanData } from '@/components/course-plan/usePlanData';
@@ -71,6 +72,14 @@ export default function PlanBuilderPage() {
   const [pinDate, setPinDate] = useState('');
   const [spanEntry, setSpanEntry] = useState<Entry | null>(null);
   const [spanValue, setSpanValue] = useState(1);
+
+  // Task dialog (create + edit an info task / no-class day)
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [taskEditId, setTaskEditId] = useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDesc, setTaskDesc] = useState('');
+  const [taskDate, setTaskDate] = useState('');
+  const [taskTime, setTaskTime] = useState('');
 
   // Schedule dialog (Teams bridge, unchanged behavior)
   const [scheduleEntry, setScheduleEntry] = useState<Entry | null>(null);
@@ -196,6 +205,44 @@ export default function PlanBuilderPage() {
     setTestDate('');
   };
 
+  const openTaskCreate = () => {
+    setTaskEditId(null);
+    setTaskTitle('');
+    setTaskDesc('');
+    setTaskDate(planData.today);
+    setTaskTime('');
+    setTaskOpen(true);
+  };
+
+  const openTaskEdit = (e: Entry) => {
+    setActionEntry(null);
+    setTaskEditId(e.id);
+    setTaskTitle(e.label || '');
+    setTaskDesc(e.notes || '');
+    setTaskDate(e.planned_date || '');
+    setTaskTime(e.task_time || '');
+    setTaskOpen(true);
+  };
+
+  const doSaveTask = async () => {
+    if (!taskTitle.trim() || !taskDate) return;
+    setTaskOpen(false);
+    const payload = {
+      label: taskTitle.trim(),
+      notes: taskDesc.trim() || null,
+      planned_date: taskDate,
+      task_time: taskTime || null,
+    };
+    if (taskEditId) {
+      await act({ action: 'update_task', entry_id: taskEditId, ...payload }, 'Task saved.');
+    } else {
+      await act(
+        { action: 'add_entries', entries: [{ entry_type: 'task', ...payload }] },
+        `Task added on ${fmtShortDow(taskDate)}.`,
+      );
+    }
+  };
+
   const repoPanel = flow && plan && (
     <RepositoryPanel
       entries={plan.entries}
@@ -234,11 +281,21 @@ export default function PlanBuilderPage() {
           show: actionEntry.entry_type === 'live_class' && actionEntry.status !== 'skipped',
         },
         {
+          icon: <AssignmentOutlinedIcon />,
+          label: 'Edit task',
+          sub: 'Change the title, details, date or time',
+          onClick: () => openTaskEdit(actionEntry),
+          show: actionEntry.entry_type === 'task',
+        },
+        {
           icon: <VideocamOutlinedIcon />,
           label: 'Schedule the class',
           sub: 'Date, time, teacher and Teams meeting',
           onClick: () => openSchedule(actionEntry),
-          show: actionEntry.entry_type !== 'test' && !['done', 'skipped'].includes(actionEntry.status),
+          show:
+            actionEntry.entry_type !== 'test' &&
+            actionEntry.entry_type !== 'task' &&
+            !['done', 'skipped'].includes(actionEntry.status),
         },
         {
           icon: <LowPriorityIcon />,
@@ -248,18 +305,28 @@ export default function PlanBuilderPage() {
             setActionEntry(null);
             setPlacing({ kind: 'entry', id: actionEntry.id, title: entryTitle(actionEntry) });
           },
-          show: !flow?.lockedEntryIds.has(actionEntry.id) && actionEntry.entry_type !== 'test',
+          show:
+            !flow?.lockedEntryIds.has(actionEntry.id) &&
+            actionEntry.entry_type !== 'test' &&
+            actionEntry.entry_type !== 'task',
         },
         {
           icon: <PushPinOutlinedIcon />,
-          label: 'Pin to a date',
-          sub: 'Tests sit on fixed dates; topics flow around them',
+          label: actionEntry.planned_date ? 'Change the date' : 'Set the date',
+          sub:
+            actionEntry.entry_type === 'test'
+              ? 'This test sits on the date you pick; topics flow around it'
+              : 'Put this class on a specific date; other classes flow around it',
           onClick: () => {
             setActionEntry(null);
             setPinDate(actionEntry.planned_date || '');
             setPinEntry(actionEntry);
           },
-          show: actionEntry.entry_type === 'test',
+          show:
+            !flow?.lockedEntryIds.has(actionEntry.id) &&
+            actionEntry.entry_type !== 'self_learning' &&
+            actionEntry.entry_type !== 'task' &&
+            actionEntry.status !== 'skipped',
         },
         {
           icon: <TuneOutlinedIcon />,
@@ -280,7 +347,7 @@ export default function PlanBuilderPage() {
             setActionEntry(null);
             act({ action: 'set_status', entry_id: actionEntry.id, status: 'done' }, 'Marked done.');
           },
-          show: ['planned', 'scheduled'].includes(actionEntry.status),
+          show: ['planned', 'scheduled'].includes(actionEntry.status) && actionEntry.entry_type !== 'task',
         },
         {
           icon: actionEntry.entry_type === 'self_learning' ? <VideocamOutlinedIcon /> : <MenuBookOutlinedIcon />,
@@ -303,7 +370,10 @@ export default function PlanBuilderPage() {
                 : 'Converted to self-learning and shared with students.',
             );
           },
-          show: actionEntry.entry_type !== 'test' && actionEntry.status !== 'skipped',
+          show:
+            actionEntry.entry_type !== 'test' &&
+            actionEntry.entry_type !== 'task' &&
+            actionEntry.status !== 'skipped',
         },
         {
           icon: <SkipNextOutlinedIcon />,
@@ -323,7 +393,7 @@ export default function PlanBuilderPage() {
               actionEntry.status === 'skipped' ? 'Restored.' : 'Skipped. Later classes moved up.',
             );
           },
-          show: actionEntry.entry_type !== 'test',
+          show: actionEntry.entry_type !== 'test' && actionEntry.entry_type !== 'task',
         },
         {
           icon: <OpenInNewOutlinedIcon />,
@@ -445,6 +515,9 @@ export default function PlanBuilderPage() {
             <Button variant="outlined" size="small" startIcon={<QuizOutlinedIcon />} onClick={() => setTestOpen(true)} sx={{ minHeight: 40 }}>
               Add test
             </Button>
+            <Button variant="outlined" size="small" startIcon={<AssignmentOutlinedIcon />} onClick={openTaskCreate} sx={{ minHeight: 40 }}>
+              Add task
+            </Button>
             <Button
               variant="text"
               size="small"
@@ -549,9 +622,9 @@ export default function PlanBuilderPage() {
             </DialogActions>
           </Dialog>
 
-          {/* Pin test */}
+          {/* Set the class date */}
           <Dialog open={!!pinEntry} onClose={() => setPinEntry(null)} maxWidth="xs" fullWidth>
-            <DialogTitle sx={{ pb: 0.5 }}>Pin to a date</DialogTitle>
+            <DialogTitle sx={{ pb: 0.5 }}>Set the class date</DialogTitle>
             <DialogContent>
               <Typography variant="caption" color="text.secondary">
                 {pinEntry ? entryTitle(pinEntry) : ''}
@@ -564,20 +637,87 @@ export default function PlanBuilderPage() {
                 fullWidth
                 InputLabelProps={{ shrink: true }}
                 sx={{ mt: 1.5 }}
+                helperText="Other classes flow around this date. Clear it to go back to auto-flow by position."
               />
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2 }}>
               <Button onClick={() => setPinEntry(null)}>Cancel</Button>
+              {pinEntry?.planned_date && (
+                <Button
+                  color="inherit"
+                  disabled={busy}
+                  onClick={async () => {
+                    const e = pinEntry;
+                    setPinEntry(null);
+                    if (e) await act({ action: 'set_entry_date', entry_id: e.id, date: null }, 'Back to auto-flow. Dates recalculated.');
+                  }}
+                >
+                  Back to auto-flow
+                </Button>
+              )}
               <Button
                 variant="contained"
                 disabled={busy || !pinDate}
                 onClick={async () => {
                   const e = pinEntry;
                   setPinEntry(null);
-                  if (e) await act({ action: 'pin_test', entry_id: e.id, pinned_date: pinDate }, `Pinned to ${fmtShortDow(pinDate)}.`);
+                  if (e) await act({ action: 'set_entry_date', entry_id: e.id, date: pinDate }, `Set to ${fmtShortDow(pinDate)}. Dates recalculated.`);
                 }}
               >
-                Pin
+                Set date
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Add / edit an info task (no-class day) */}
+          <Dialog open={taskOpen} onClose={() => setTaskOpen(false)} maxWidth="xs" fullWidth>
+            <DialogTitle sx={{ pb: 0.5 }}>{taskEditId ? 'Edit task' : 'Add a task'}</DialogTitle>
+            <DialogContent>
+              <Stack spacing={2} sx={{ mt: 1 }}>
+                <TextField
+                  label="Task"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  fullWidth
+                  autoFocus
+                  placeholder="e.g. Sketch 3 elevations"
+                />
+                <TextField
+                  label="Details for students"
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  placeholder="What to do, and how to submit or bring it"
+                />
+                <Stack direction="row" spacing={1.5}>
+                  <TextField
+                    label="Date"
+                    type="date"
+                    value={taskDate}
+                    onChange={(e) => setTaskDate(e.target.value)}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField
+                    label="Time (optional)"
+                    type="time"
+                    value={taskTime}
+                    onChange={(e) => setTaskTime(e.target.value)}
+                    fullWidth
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  Students see this on their timeline. It sits on the date you pick; classes flow around it.
+                </Typography>
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setTaskOpen(false)}>Cancel</Button>
+              <Button variant="contained" onClick={doSaveTask} disabled={busy || !taskTitle.trim() || !taskDate}>
+                {taskEditId ? 'Save' : 'Add task'}
               </Button>
             </DialogActions>
           </Dialog>

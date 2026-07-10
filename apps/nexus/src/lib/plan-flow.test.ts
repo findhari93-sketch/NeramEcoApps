@@ -207,6 +207,57 @@ describe('computeFlow', () => {
     expect(flow.wontFit).toEqual([{ testEntryId: 'test', entryIds: ['b'] }]);
   });
 
+  it('pins any entry to a date and flows topics around it', () => {
+    nextPos = 0;
+    const a = entry({ id: 'a' });
+    const pinnedTopic = entry({ id: 'p', pinnedDate: '2026-01-06' }); // Tue
+    const b = entry({ id: 'b' });
+    const flow = computeFlow([a, pinnedTopic, b], opts());
+    expect(flow.entryDates.get('p')).toEqual(['2026-01-06']);
+    expect(flow.entryDates.get('a')).toEqual(['2026-01-05']); // Mon
+    expect(flow.entryDates.get('b')).toEqual(['2026-01-07']); // Wed (Tue is taken)
+  });
+
+  it('a multi-session pinned topic takes consecutive class days from its date', () => {
+    nextPos = 0;
+    const p = entry({ id: 'p', sessionSpan: 2, pinnedDate: '2026-01-06' }); // Tue + Wed
+    const a = entry({ id: 'a' });
+    const flow = computeFlow([p, a], opts());
+    expect(flow.entryDates.get('p')).toEqual(['2026-01-06', '2026-01-07']);
+    expect(flow.entryDates.get('a')).toEqual(['2026-01-05']); // Mon, the free class day
+    expect(flow.computedEndDate).toBe('2026-01-07'); // the pinned topic extends the end
+  });
+
+  it('honours a pinned date that falls on an off-day (a class held on a Sunday)', () => {
+    nextPos = 0;
+    const p = entry({ id: 'p', pinnedDate: '2026-01-04' }); // Sunday
+    const flow = computeFlow([p], opts());
+    expect(flow.entryDates.get('p')).toEqual(['2026-01-04']);
+  });
+
+  it('bumps a second pin off a taken day and flags the conflict', () => {
+    nextPos = 0;
+    const p1 = entry({ id: 'p1', pinnedDate: '2026-01-06' });
+    const p2 = entry({ id: 'p2', pinnedDate: '2026-01-06' });
+    const flow = computeFlow([p1, p2], opts());
+    expect(flow.entryDates.get('p1')).toEqual(['2026-01-06']); // Tue keeps it
+    expect(flow.entryDates.get('p2')).toEqual(['2026-01-07']); // bumped to Wed
+    expect(flow.pinConflicts).toEqual([
+      { entryId: 'p2', wantedDate: '2026-01-06', placedDate: '2026-01-07' },
+    ]);
+  });
+
+  it('a draft locks nothing even when rows are in the past', () => {
+    nextPos = 0;
+    const a = entry({ id: 'a' }); // Mon 5 (past relative to today below)
+    const b = entry({ id: 'b' }); // Tue 6
+    const flow = computeFlow([a, b], opts({ today: '2026-01-07', draft: true }));
+    expect(flow.lockedEntryIds.size).toBe(0);
+    expect(flow.minInsertIndex).toBe(0);
+    // The day is still cosmetically marked past/locked for dimming.
+    expect(flow.days.find((d) => d.date === '2026-01-05')!.locked).toBe(true);
+  });
+
   it('handles 100+ entries within the day cap', () => {
     nextPos = 0;
     const entries = Array.from({ length: 120 }, (_, i) => entry({ id: `e${i}` }));
@@ -255,8 +306,8 @@ describe('toFlowEntries', () => {
     expect(c.sessionSpan).toBe(1);
   });
 
-  it('only tests keep a pinned date', () => {
-    const [t, l] = toFlowEntries([
+  it('keeps a pinned date on any entry type', () => {
+    const [t, l, u] = toFlowEntries([
       {
         id: 't',
         entry_type: 'test',
@@ -275,8 +326,18 @@ describe('toFlowEntries', () => {
         completed_sessions: 0,
         status: 'planned',
       },
+      {
+        id: 'u',
+        entry_type: 'live_class',
+        position: 3,
+        planned_date: null,
+        session_span: null,
+        completed_sessions: 0,
+        status: 'planned',
+      },
     ]);
     expect(t.pinnedDate).toBe('2026-02-02');
-    expect(l.pinnedDate).toBeNull();
+    expect(l.pinnedDate).toBe('2026-02-03');
+    expect(u.pinnedDate).toBeNull();
   });
 });
