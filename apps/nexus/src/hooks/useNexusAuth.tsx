@@ -2,6 +2,12 @@
 
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { useMicrosoftAuth, getAccessToken, loginScopes } from '@neram/auth';
+import {
+  resolveFlags,
+  allFeaturesEnabled,
+  isFeatureEnabled as checkFeatureEnabled,
+  type FlagMap,
+} from '@/lib/feature-flags';
 
 // Types for Nexus auth context
 interface NexusUser {
@@ -26,8 +32,6 @@ interface NexusClassroom {
 }
 
 type NexusRole = 'admin' | 'teacher' | 'student' | 'parent';
-
-type OnboardingStatus = 'in_progress' | 'submitted' | 'approved' | 'rejected' | null;
 
 // "View as Student" (impersonation) shapes
 export interface ImpersonationStudent {
@@ -59,11 +63,14 @@ interface NexusAuthState {
   activeClassroom: NexusClassroom | null;
   setActiveClassroom: (classroom: NexusClassroom) => void;
 
-  // Onboarding
-  onboardingStatus: OnboardingStatus;
-  isOnboardingComplete: boolean;
-  isProfileComplete: boolean;
-  refreshOnboardingStatus: () => void;
+  /**
+   * Resolved feature-flag map (every known feature id → boolean), driving which
+   * menus/pages are available. Comes from /api/auth/me (admin overrides merged
+   * with registry defaults). See @/lib/feature-flags.
+   */
+  featureFlags: FlagMap;
+  /** Convenience: is a given feature id enabled for this user right now? */
+  isFeatureEnabled: (id: string) => boolean;
 
   // Combined loading
   loading: boolean;
@@ -132,12 +139,11 @@ export function useNexusAuth(): NexusAuthState {
   const [nexusRole, setNexusRole] = useState<NexusRole | null>(null);
   const [classrooms, setClassrooms] = useState<NexusClassroom[]>([]);
   const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(null);
-  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>(null);
-  const [profileComplete, setProfileComplete] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [dbLoading, setDbLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accessEnded, setAccessEnded] = useState<{ reason: string; message: string } | null>(null);
+  // Default to registry defaults (student features off, staff on) until /me loads.
+  const [featureFlags, setFeatureFlags] = useState<FlagMap>(() => resolveFlags({}));
 
   // "View as Student" (impersonation) state, persisted in sessionStorage so it
   // survives reloads within the tab but auto-clears when the tab closes.
@@ -197,16 +203,10 @@ export function useNexusAuth(): NexusAuthState {
         setUser(parsedUser);
         setNexusRole(roleStr as NexusRole);
         setClassrooms(parsedClassrooms);
-
-        // Restore onboarding/profile status from localStorage (set during test-login injection)
-        const storedOnboardingStatus = localStorage.getItem('nexus_auth_onboarding_status');
-        if (storedOnboardingStatus) {
-          setOnboardingStatus(storedOnboardingStatus as OnboardingStatus);
-        }
-        const storedProfileComplete = localStorage.getItem('nexus_auth_profile_complete');
-        if (storedProfileComplete !== null) {
-          setProfileComplete(storedProfileComplete === 'true');
-        }
+        // E2E test mode has no /me call: keep every feature enabled so existing
+        // student-facing specs are unaffected. Impersonation-based tests hit the
+        // real /me path and get the DB-driven flags instead.
+        setFeatureFlags(allFeaturesEnabled());
 
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
         const savedClassroom = parsedClassrooms.find(c => c.id === savedClassroomId);
@@ -230,6 +230,7 @@ export function useNexusAuth(): NexusAuthState {
       setNexusRole(null);
       setClassrooms([]);
       setActiveClassroomState(null);
+      setFeatureFlags(resolveFlags({}));
       // Only clear dbLoading if MS auth is definitively done (not loading)
       // so we don't briefly show loading=false with user=null
       if (!msLoading) setDbLoading(false);
@@ -261,28 +262,25 @@ export function useNexusAuth(): NexusAuthState {
             return;
           }
           const data = await response.json().catch(() => ({}));
-          // Full-screen lockouts: the /api/auth/me gate returns 403 with a
-          // reason. 'alumni' = the student graduated (warm "you've graduated"
-          // screen); 'nexus_closed' = Nexus is closed to this student during the
-          // 2026-27 rebuild ("preparing your classroom" screen). Both surface a
-          // dedicated state so the UI shows a friendly screen, not an error.
-          if (
-            response.status === 403 &&
-            (data?.error === 'alumni' || data?.error === 'nexus_closed')
-          ) {
+          // Full-screen lockout: the /api/auth/me gate returns 403 with
+          // error: 'alumni' when the student has graduated. It surfaces a
+          // dedicated state so the UI shows a friendly "you've graduated"
+          // screen instead of an error. (Students who simply aren't enrolled
+          // in a classroom get a 200 with classrooms: [] and see the
+          // NoClassroomWelcome screen via RoleGuard, not a 403.)
+          if (response.status === 403 && data?.error === 'alumni') {
             if (!cancelled) {
               setAccessEnded({
                 reason: data.error,
                 message:
                   data.message ||
-                  (data.error === 'nexus_closed'
-                    ? "We're getting your Nexus classroom ready. You'll get access very soon."
-                    : "You've completed the program and are now a Neram alumnus. Your Nexus access has ended."),
+                  "You've completed the program and are now a Neram alumnus. Your Nexus access has ended.",
               });
               setUser(null);
               setNexusRole(null);
               setClassrooms([]);
               setActiveClassroomState(null);
+              setFeatureFlags(resolveFlags({}));
             }
             return;
           }
@@ -295,8 +293,7 @@ export function useNexusAuth(): NexusAuthState {
         setUser(data.user);
         setNexusRole(data.nexusRole);
         setClassrooms(data.classrooms || []);
-        setOnboardingStatus(data.onboardingStatus || null);
-        setProfileComplete(data.profileComplete ?? true);
+        setFeatureFlags(data.featureFlags || resolveFlags({}));
 
         // Restore active classroom from localStorage or use first one
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
@@ -318,7 +315,7 @@ export function useNexusAuth(): NexusAuthState {
 
     fetchNexusUser();
     return () => { cancelled = true; };
-  }, [msUser, msLoading, refreshKey, impersonationToken, clearImpersonation, testMode]);
+  }, [msUser, msLoading, impersonationToken, clearImpersonation, testMode]);
 
   // Auto-exit impersonation when the token expires, returning to teacher view.
   useEffect(() => {
@@ -400,10 +397,6 @@ export function useNexusAuth(): NexusAuthState {
     localStorage.setItem(ACTIVE_CLASSROOM_KEY, classroom.id);
   }, []);
 
-  const refreshOnboardingStatus = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-  }, []);
-
   const signIn = useCallback(async () => {
     await msSignIn();
   }, [msSignIn]);
@@ -414,6 +407,7 @@ export function useNexusAuth(): NexusAuthState {
     setClassrooms([]);
     setActiveClassroomState(null);
     setAccessEnded(null);
+    setFeatureFlags(resolveFlags({}));
     localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
     clearImpersonation();
     await msSignOut();
@@ -429,13 +423,11 @@ export function useNexusAuth(): NexusAuthState {
     classrooms,
     activeClassroom,
     setActiveClassroom,
+    featureFlags,
+    isFeatureEnabled: (id: string) => checkFeatureEnabled(id, featureFlags),
     loading: testMode ? dbLoading : msLoading || dbLoading,
     error,
     accessEnded,
-    onboardingStatus,
-    isOnboardingComplete: onboardingStatus === 'approved' || nexusRole !== 'student',
-    isProfileComplete: profileComplete,
-    refreshOnboardingStatus,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',
     isStudent: nexusRole === 'student',
     isAdmin: nexusRole === 'admin',

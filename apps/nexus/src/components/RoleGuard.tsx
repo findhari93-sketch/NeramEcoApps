@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
@@ -10,24 +10,22 @@ interface RoleGuardProps {
   children: React.ReactNode;
   allowedRoles: ('admin' | 'teacher' | 'student' | 'parent')[];
   redirectTo?: string;
-  /** Skip onboarding check (used by the onboarding route itself) */
-  skipOnboardingCheck?: boolean;
 }
 
 /**
  * Guards routes based on the user's Nexus role.
  * Redirects unauthorized users to the appropriate route.
- * For students: also checks onboarding completion status.
+ * For students, access is governed solely by classroom membership: a student
+ * with no active classroom sees NoClassroomWelcome (the "contact admin on
+ * Teams" screen). There is no onboarding wizard or profile gate.
  */
 export default function RoleGuard({
   children,
   allowedRoles,
   redirectTo,
-  skipOnboardingCheck = false,
 }: RoleGuardProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const { user, nexusRole, classrooms, loading, isOnboardingComplete, isProfileComplete } = useNexusAuthContext();
+  const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
@@ -42,32 +40,7 @@ export default function RoleGuard({
       router.push(target);
       return;
     }
-
-    // Onboarding gate: redirect students who haven't completed onboarding
-    if (
-      !skipOnboardingCheck &&
-      nexusRole === 'student' &&
-      classrooms.length > 0 &&
-      !isOnboardingComplete &&
-      !pathname.startsWith('/onboarding')
-    ) {
-      router.push('/onboarding');
-      return;
-    }
-
-    // Profile completion gate: redirect approved students with missing profile fields
-    if (
-      !skipOnboardingCheck &&
-      nexusRole === 'student' &&
-      classrooms.length > 0 &&
-      isOnboardingComplete &&
-      !isProfileComplete &&
-      !pathname.startsWith('/student/complete-profile')
-    ) {
-      router.push('/student/complete-profile');
-      return;
-    }
-  }, [user, nexusRole, loading, allowedRoles, redirectTo, router, isOnboardingComplete, isProfileComplete, skipOnboardingCheck, classrooms, pathname]);
+  }, [user, nexusRole, loading, allowedRoles, redirectTo, router, classrooms]);
 
   if (loading) {
     return (
@@ -93,30 +66,10 @@ export default function RoleGuard({
     return null;
   }
 
-  // User is authenticated but has no classrooms — show welcome/onboarding page
+  // User is authenticated but has no classrooms — show the "contact admin on
+  // Teams" welcome screen. This is the sole access gate for students.
   if (classrooms.length === 0) {
     return <NoClassroomWelcome />;
-  }
-
-  // Student hasn't completed onboarding — don't render content (redirect in progress)
-  if (
-    !skipOnboardingCheck &&
-    nexusRole === 'student' &&
-    !isOnboardingComplete &&
-    !pathname.startsWith('/onboarding')
-  ) {
-    return null;
-  }
-
-  // Student hasn't completed profile — don't render content (redirect in progress)
-  if (
-    !skipOnboardingCheck &&
-    nexusRole === 'student' &&
-    isOnboardingComplete &&
-    !isProfileComplete &&
-    !pathname.startsWith('/student/complete-profile')
-  ) {
-    return null;
   }
 
   return <>{children}</>;

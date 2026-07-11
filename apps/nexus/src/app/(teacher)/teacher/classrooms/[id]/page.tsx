@@ -40,6 +40,7 @@ import ClassroomFormDialog from '@/components/ClassroomFormDialog';
 import BatchFormDialog from '@/components/BatchFormDialog';
 import BatchAssignDialog from '@/components/BatchAssignDialog';
 import AddStudentDialog from '@/components/AddStudentDialog';
+import AvailableStudentsSection from '@/components/AvailableStudentsSection';
 import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import HistoricalStudentsTab from '@/components/HistoricalStudentsTab';
 import GraphAvatar from '@/components/GraphAvatar';
@@ -984,6 +985,15 @@ export default function ClassroomDetailPage() {
               </>
             )}
           </Box>
+
+          {/* Directory: organisation students not yet in this class (one-click add) */}
+          {!selectionMode && (
+            <AvailableStudentsSection
+              classroomId={id}
+              getToken={getToken}
+              onEnrolled={() => { fetchClassroom(); fetchEnrollments(); }}
+            />
+          )}
 
           {/* Student list */}
           {sortedEnrollments.length === 0 ? (

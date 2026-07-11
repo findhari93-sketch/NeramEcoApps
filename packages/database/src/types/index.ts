@@ -2585,6 +2585,7 @@ export type NotificationEventType =
   | 'foundation_issue_awaiting_confirmation'
   | 'foundation_issue_reopened'
   | 'foundation_issue_closed'
+  | 'study_material_comment_added'
   | 'auto_first_touch_sent';
 
 // Classroom access request types
@@ -4601,6 +4602,11 @@ export interface NexusStudyFileDTO {
   downloadable: boolean;
   sort_order: number;
   created_at: string;
+  /** Computed per-request extras (optional so existing callers are unaffected). */
+  is_new?: boolean;
+  is_unread?: boolean;
+  is_favorite?: boolean;
+  comment_count?: number;
 }
 
 /** A folder summary card in the browser. */
@@ -4611,6 +4617,8 @@ export interface NexusStudyFolderDTO {
   description: string | null;
   sort_order: number;
   item_count: number;
+  /** Direct-child unread files for the current student (optional). */
+  unread_count?: number;
   /** Staff-only fields (omitted/ignored for students). */
   target_exams?: string[];
   target_programs?: string[];
@@ -4623,6 +4631,73 @@ export interface NexusStudyBrowseResult {
   breadcrumb: { id: string; name: string }[];
   folders: NexusStudyFolderDTO[];
   files: NexusStudyFileDTO[];
+}
+
+// ---- Study Materials: comments, engagement, search ----
+
+export type NexusStudyCommentVisibility = 'public' | 'private';
+export type NexusStudyCommentAuthorRole = 'student' | 'teacher';
+
+/** A comment on a study-materials file. See migration 20260711120000 for the thread model. */
+export interface NexusStudyFileComment {
+  id: string;
+  file_id: string;
+  author_id: string;
+  author_role: NexusStudyCommentAuthorRole;
+  visibility: NexusStudyCommentVisibility;
+  /** Owner of a private thread; null for public class comments. */
+  thread_student_id: string | null;
+  body: string;
+  parent_comment_id: string | null;
+  is_resolved: boolean;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusStudyFileCommentWithAuthor extends NexusStudyFileComment {
+  author: { id: string; name: string; avatar_url: string | null };
+}
+
+/** One row in the teacher Feedback inbox: a file with open student comments. */
+export interface NexusStudyFeedbackThread {
+  file_id: string;
+  file_title: string;
+  folder_id: string;
+  breadcrumb: { id: string; name: string }[];
+  visibility: NexusStudyCommentVisibility;
+  /** The student who owns this thread (null for a public thread). */
+  student: { id: string; name: string; avatar_url: string | null } | null;
+  open_count: number;
+  latest_snippet: string;
+  latest_at: string;
+}
+
+export interface NexusStudyFileRead {
+  user_id: string;
+  file_id: string;
+  opened_at: string;
+}
+
+export interface NexusStudyFileFavorite {
+  user_id: string;
+  file_id: string;
+  created_at: string;
+}
+
+/** A flat search hit across folders + files. */
+export interface NexusStudySearchResult {
+  kind: 'folder' | 'file';
+  id: string;
+  name: string;
+  /** For a folder hit: the folder to open. For a file hit: its parent folder to open. */
+  folder_id: string | null;
+  breadcrumb: { id: string; name: string }[];
+  /** File-only fields. */
+  file_kind?: NexusStudyFileKind;
+  downloadable?: boolean;
 }
 
 // ============================================================

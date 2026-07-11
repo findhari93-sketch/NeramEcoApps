@@ -8,6 +8,7 @@ import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import PanelProvider, { usePanelContext } from '@/components/PanelProvider';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
+import FeatureGate from '@/components/FeatureGate';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
@@ -42,7 +43,7 @@ function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
           }}
         >
           <Container maxWidth="lg" disableGutters>
-            {children}
+            <FeatureGate surface="staff">{children}</FeatureGate>
           </Container>
         </Box>
         <BottomNav items={currentBottomNavItems} overflowItems={currentOverflowItems} />

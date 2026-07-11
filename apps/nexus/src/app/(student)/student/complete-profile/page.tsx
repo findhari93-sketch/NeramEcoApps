@@ -78,8 +78,10 @@ interface FeeData {
 
 export default function CompleteProfilePage() {
   const router = useRouter();
-  const { getToken, loading: authLoading, isProfileComplete, refreshOnboardingStatus } = useNexusAuthContext();
-  const isMandatory = !isProfileComplete;
+  const { getToken, loading: authLoading } = useNexusAuthContext();
+  // Profile completion is no longer a gate — this page is a fully optional
+  // editor students can reach from the dashboard nudge. Nothing is required.
+  const isMandatory = false;
   const [activeStep, setActiveStep] = useState(0);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [feeData, setFeeData] = useState<FeeData | null>(null);
@@ -593,7 +595,7 @@ export default function CompleteProfilePage() {
               <Button
                 variant="contained"
                 startIcon={<ArrowBackIcon />}
-                onClick={() => { localStorage.removeItem('nexus_profile_step'); refreshOnboardingStatus(); router.push('/student/dashboard'); }}
+                onClick={() => { localStorage.removeItem('nexus_profile_step'); router.push('/student/dashboard'); }}
                 sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600, px: 3 }}
               >
                 Back to Dashboard

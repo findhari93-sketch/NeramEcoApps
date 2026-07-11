@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, reconcileMsIdentity } from '@neram/database';
+import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting } from '@neram/database';
 import { getUserProfile } from '@neram/auth';
+import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
 
 /**
  * GET /api/auth/me
@@ -125,57 +126,23 @@ export async function GET(request: NextRequest) {
           ? 'teacher'
           : 'student';
 
-    // Student access gate: during the 2026-27 rebuild Nexus is opened to
-    // students one by one. A student who hasn't been granted access yet sees a
-    // friendly "preparing your classroom" screen instead of the app. Mirrors
-    // the alumni gate above. Teachers/admins always pass; a teacher/admin using
-    // "View as Student" passes too, so they can preview the student experience.
-    if (
-      nexusRole === 'student' &&
-      !user.nexus_access_enabled &&
-      !msUser.impersonatorUserId
-    ) {
-      return NextResponse.json(
-        {
-          error: 'nexus_closed',
-          message:
-            "We're getting your Nexus classroom ready. You'll get access very soon. Thank you for your patience!",
-        },
-        { status: 403 }
-      );
-    }
+    // Access is governed solely by classroom membership. A student who is not
+    // enrolled in any active classroom falls through to the client-side
+    // RoleGuard, which shows the "contact admin on Teams" welcome screen
+    // (NoClassroomWelcome). Being added to the classroom is what grants access;
+    // there is no separate onboarding wizard or per-student access flag.
 
-    // Check onboarding status — single record per student
-    let onboardingStatus: string | null = null;
-    let profileComplete = true;
-
-    if (nexusRole === 'student' && activeEnrollments.length > 0) {
-      // Classrooms with onboarding_type='none' auto-approve
-      const hasNoOnboardingClassroom = activeEnrollments.some(
-        (e: any) => e.classroom?.onboarding_type === 'none'
-      );
-
-      if (hasNoOnboardingClassroom) {
-        // Light onboarding: the classroom skips the in-app wizard entirely.
-        // Details were already collected in the marketing application form, so
-        // we don't gate on the in-app profile fields either. The student lands
-        // straight on the dashboard and sees the one-time welcome orientation.
-        onboardingStatus = 'approved';
-        profileComplete = true;
-      } else {
-        const { data: onboarding } = await supabase
-          .from('nexus_student_onboarding')
-          .select('status')
-          .eq('student_id', user.id)
-          .maybeSingle();
-
-        onboardingStatus = onboarding?.status || null;
-
-        // Check profile completeness (for the profile gate)
-        if (onboardingStatus === 'approved') {
-          profileComplete = !!(user.phone && user.date_of_birth && user.gender);
-        }
-      }
+    // Feature flags: a single global settings row of admin overrides, merged
+    // with registry defaults into a full resolved map. This drives which menu
+    // items and pages are available (student features default off; staff on).
+    // One cheap read on an already-dynamic route. Never let a settings error
+    // break auth — fall back to registry defaults.
+    let featureFlags: FlagMap;
+    try {
+      const setting = await getNexusSetting(FEATURE_FLAGS_KEY);
+      featureFlags = resolveFlags((setting?.value as FlagMap) || {});
+    } catch {
+      featureFlags = resolveFlags({});
     }
 
     return NextResponse.json({
@@ -188,12 +155,11 @@ export async function GET(request: NextRequest) {
         user_type: user.user_type,
       },
       nexusRole,
-      onboardingStatus,
-      profileComplete,
       classrooms: activeEnrollments.map((e: any) => ({
         ...e.classroom,
         enrollmentRole: e.role,
       })),
+      featureFlags,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Authentication failed';

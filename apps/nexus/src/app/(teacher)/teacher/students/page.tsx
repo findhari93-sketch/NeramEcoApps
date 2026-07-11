@@ -38,7 +38,6 @@ interface EnrolledStudent {
   email: string | null;
   avatar_url: string | null;
   ms_oid: string | null;
-  nexus_access_enabled: boolean;
   batch: StudentBatch | null; // classroom section (nexus_batches)
   exam_batch: string | null; // exam-year cohort (users.academic_year)
   attendance: { attended: number; total: number; percentage: number };
@@ -358,13 +357,6 @@ export default function TeacherStudents() {
                     size="small"
                     color={checklistPct >= 50 ? 'info' : 'default'}
                     variant="outlined"
-                    sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
-                  />
-                  <Chip
-                    label={student.nexus_access_enabled ? 'Active' : 'Gated'}
-                    size="small"
-                    color={student.nexus_access_enabled ? 'success' : 'default'}
-                    variant={student.nexus_access_enabled ? 'outlined' : 'filled'}
                     sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }}
                   />
                   {/* Show truncated email as subtle text on mobile */}

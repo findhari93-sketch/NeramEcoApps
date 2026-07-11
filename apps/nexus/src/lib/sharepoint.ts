@@ -370,6 +370,30 @@ export async function getSharePointDownloadUrl(itemId: string): Promise<string> 
 }
 
 /**
+ * Resolve a Microsoft Graph thumbnail URL for a SharePoint driveItem (e.g. a PDF first page or an
+ * image). Returns null when Graph has no thumbnail for the item (unsupported type, or still being
+ * generated asynchronously just after upload). Uses the app-only token.
+ *
+ * @param itemId - Graph driveItem id
+ * @param size   - 'small' | 'medium' | 'large'
+ */
+export async function getSharePointThumbnailUrl(
+  itemId: string,
+  size: 'small' | 'medium' | 'large' = 'medium'
+): Promise<string | null> {
+  const token = await getAppOnlyToken();
+  const siteId = await getSiteId(token);
+
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}/thumbnails/0/${size}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return data?.url || null;
+}
+
+/**
  * Delete a file from SharePoint by its item ID.
  */
 export async function deleteFromSharePoint(

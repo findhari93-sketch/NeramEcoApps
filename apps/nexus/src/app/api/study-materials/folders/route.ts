@@ -4,11 +4,16 @@ import {
   listFilesInFolder,
   getFolderById,
   getFolderItemCounts,
+  getFolderUnreadCounts,
   getBreadcrumb,
   createFolder,
   isFolderVisibleToStudent,
   effectiveDownloadable,
   fileKind,
+  isNewFile,
+  listReadFileIds,
+  listFavoriteFileIds,
+  getCommentCounts,
 } from '@neram/database';
 import { getRequestUser, isStaff, assertStaff, getStudentExamSet } from '@/lib/study-materials';
 
@@ -47,7 +52,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const counts = await getFolderItemCounts(childFolders.map((f) => f.id));
+    const childFolderIds = childFolders.map((f) => f.id);
+    const counts = await getFolderItemCounts(childFolderIds);
+    // Unread rollup for the student's own view (direct-child files only).
+    const folderUnread = staff ? {} : await getFolderUnreadCounts(user.id, childFolderIds);
     const folders = childFolders.map((f) => ({
       id: f.id,
       parent_id: f.parent_id,
@@ -55,6 +63,7 @@ export async function GET(request: NextRequest) {
       description: f.description,
       sort_order: f.sort_order,
       item_count: counts[f.id] || 0,
+      ...(staff ? {} : { unread_count: folderUnread[f.id] || 0 }),
       ...(staff
         ? {
             target_exams: f.target_exams,
@@ -68,6 +77,14 @@ export async function GET(request: NextRequest) {
     let files: any[] = [];
     if (parentId && currentFolder) {
       const rawFiles = await listFilesInFolder(parentId);
+      const fileIds = rawFiles.map((f) => f.id);
+      // Per-user + shared computed extras.
+      const [readSet, favSet, commentCounts] = await Promise.all([
+        staff ? Promise.resolve(new Set<string>()) : listReadFileIds(user.id, fileIds),
+        staff ? Promise.resolve(new Set<string>()) : listFavoriteFileIds(user.id, fileIds),
+        getCommentCounts(fileIds),
+      ]);
+      const now = Date.now();
       files = rawFiles.map((file) => ({
         id: file.id,
         folder_id: file.folder_id,
@@ -80,6 +97,9 @@ export async function GET(request: NextRequest) {
         downloadable: effectiveDownloadable(file, currentFolder),
         sort_order: file.sort_order,
         created_at: file.created_at,
+        is_new: isNewFile(file.created_at, now),
+        comment_count: commentCounts[file.id] || 0,
+        ...(staff ? {} : { is_unread: !readSet.has(file.id), is_favorite: favSet.has(file.id) }),
         ...(staff ? { allow_download: file.allow_download } : {}),
       }));
     }

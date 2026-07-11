@@ -28,9 +28,10 @@ import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
-import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { isPathEnabled } from '@/lib/feature-flags';
 
 export type PanelId = 'teaching' | 'management' | 'admin';
 
@@ -89,7 +90,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
-      { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
+      { label: 'Access Requests', path: '/teacher/access-requests', icon: <HowToRegOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
       { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
@@ -101,7 +102,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
     ],
     overflowItems: [
-      { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
+      { label: 'Access Requests', path: '/teacher/access-requests', icon: <HowToRegOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
       { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
@@ -118,9 +119,10 @@ const PANELS: PanelConfig[] = [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
-      { label: 'Onboarding', path: '/teacher/onboarding-reviews', icon: <HowToRegOutlinedIcon /> },
+      { label: 'Access Requests', path: '/teacher/access-requests', icon: <HowToRegOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
+      { label: 'Materials Feedback', path: '/teacher/study-materials/feedback', icon: <RateReviewOutlinedIcon /> },
       { label: 'Class Recaps', path: '/teacher/class-recaps', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
@@ -162,13 +164,13 @@ const PANELS: PanelConfig[] = [
     defaultPath: '/teacher/admin/users',
     sidebarItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
-      { label: 'Access', path: '/teacher/admin/access', icon: <LockOpenOutlinedIcon /> },
+      { label: 'Features', path: '/teacher/admin/features', icon: <ToggleOnOutlinedIcon /> },
       { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
     bottomNavItems: [
       { label: 'Users', path: '/teacher/admin/users', icon: <GroupOutlinedIcon /> },
-      { label: 'Access', path: '/teacher/admin/access', icon: <LockOpenOutlinedIcon /> },
+      { label: 'Features', path: '/teacher/admin/features', icon: <ToggleOnOutlinedIcon /> },
       { label: 'Review URLs', path: '/teacher/admin/review-platforms', icon: <LinkOutlinedIcon /> },
       { label: 'Settings', path: '/teacher/admin/settings', icon: <SettingsOutlinedIcon /> },
     ],
@@ -189,7 +191,7 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (PATH_TO_PANEL[pathname]) return PATH_TO_PANEL[pathname];
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
-  if (pathname.startsWith('/teacher/onboarding-reviews')) return 'teaching';
+  if (pathname.startsWith('/teacher/access-requests')) return 'teaching';
   if (pathname.startsWith('/teacher/drawing-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/curriculum')) return 'teaching';
   if (pathname.startsWith('/teacher/course-plans')) return 'teaching';
@@ -241,16 +243,20 @@ export function usePanelContext() {
 }
 
 export default function PanelProvider({ children }: { children: React.ReactNode }) {
-  const { nexusRole } = useNexusAuthContext();
+  const { nexusRole, featureFlags } = useNexusAuthContext();
   const pathname = usePathname();
   const router = useRouter();
   const [activePanel, setActivePanelState] = useState<PanelId>('teaching');
   const [hydrated, setHydrated] = useState(false);
 
-  // Filter panels by role
+  // Filter panels by role AND by feature flags: a panel whose every nav item is
+  // disabled disappears from the switcher (its pages are still blocked by
+  // FeatureGate). The Admin panel is all-core so it never drops.
   const availablePanels = useMemo(() => {
-    return PANELS.filter((p) => nexusRole && p.requiredRoles.includes(nexusRole));
-  }, [nexusRole]);
+    return PANELS.filter((p) => nexusRole && p.requiredRoles.includes(nexusRole)).filter(
+      (p) => p.sidebarItems.some((i) => isPathEnabled(i.path, featureFlags)),
+    );
+  }, [nexusRole, featureFlags]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -293,15 +299,26 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
 
   const currentPanel = PANELS.find((p) => p.id === activePanel) || PANELS[0];
 
-  const value = useMemo<PanelContextValue>(() => ({
-    activePanel,
-    setActivePanel,
-    availablePanels,
-    currentPanelTitle: currentPanel.title,
-    currentSidebarItems: currentPanel.sidebarItems,
-    currentBottomNavItems: currentPanel.bottomNavItems,
-    currentOverflowItems: currentPanel.overflowItems,
-  }), [activePanel, setActivePanel, availablePanels, currentPanel]);
+  const value = useMemo<PanelContextValue>(() => {
+    const filterItems = (items: NavItem[]) =>
+      items.filter((i) => isPathEnabled(i.path, featureFlags));
+    // If the active panel got fully filtered out (every feature off), fall back
+    // to the first still-available panel so staff are never stranded on an empty
+    // sidebar.
+    const resolvedPanel =
+      filterItems(currentPanel.sidebarItems).length > 0
+        ? currentPanel
+        : availablePanels[0] || currentPanel;
+    return {
+      activePanel: resolvedPanel.id,
+      setActivePanel,
+      availablePanels,
+      currentPanelTitle: resolvedPanel.title,
+      currentSidebarItems: filterItems(resolvedPanel.sidebarItems),
+      currentBottomNavItems: filterItems(resolvedPanel.bottomNavItems),
+      currentOverflowItems: filterItems(resolvedPanel.overflowItems),
+    };
+  }, [activePanel, setActivePanel, availablePanels, currentPanel, featureFlags]);
 
   return (
     <PanelContext.Provider value={value}>

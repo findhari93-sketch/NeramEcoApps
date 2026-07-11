@@ -85,7 +85,7 @@ setup('authenticate as teacher', async ({ page }) => {
 
   if (testLoginResponse?.ok()) {
     const authData = await testLoginResponse.json();
-    const { user, nexusRole, classrooms, testToken, onboardingStatus, profileComplete } = authData;
+    const { user, nexusRole, classrooms, testToken } = authData;
 
     console.log(`✅ Teacher auth successful: ${user.name} (${nexusRole})`);
     console.log(`   Classrooms: ${classrooms.length}`);
@@ -95,7 +95,7 @@ setup('authenticate as teacher', async ({ page }) => {
     await page.waitForLoadState('domcontentloaded');
 
     // Inject MSAL-like state and Nexus auth data into localStorage
-    await page.evaluate(({ user, nexusRole, classrooms, testToken, onboardingStatus, profileComplete }) => {
+    await page.evaluate(({ user, nexusRole, classrooms, testToken }) => {
       // Store the test token for API calls
       localStorage.setItem('nexus_test_token', testToken);
 
@@ -108,15 +108,7 @@ setup('authenticate as teacher', async ({ page }) => {
       localStorage.setItem('nexus_auth_user', JSON.stringify(user));
       localStorage.setItem('nexus_auth_role', nexusRole);
       localStorage.setItem('nexus_auth_classrooms', JSON.stringify(classrooms));
-
-      // Store onboarding/profile status so RoleGuard doesn't redirect
-      if (onboardingStatus) {
-        localStorage.setItem('nexus_auth_onboarding_status', onboardingStatus);
-      }
-      if (profileComplete !== undefined) {
-        localStorage.setItem('nexus_auth_profile_complete', String(profileComplete));
-      }
-    }, { user, nexusRole, classrooms, testToken, onboardingStatus, profileComplete });
+    }, { user, nexusRole, classrooms, testToken });
 
     // Set the Authorization header for all API requests in this context
     await page.context().setExtraHTTPHeaders({

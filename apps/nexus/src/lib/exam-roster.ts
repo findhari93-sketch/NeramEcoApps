@@ -49,7 +49,7 @@ export async function getExamRoster(
 export async function getStudentInfo(
   db: SupabaseClient,
   studentIds: string[],
-  classroomIds?: string[],
+  _classroomIds?: string[],
 ): Promise<{
   nameMap: Record<string, string>;
   academicYearMap: Record<string, string | null>;
@@ -59,9 +59,10 @@ export async function getStudentInfo(
 
   if (studentIds.length === 0) return { nameMap, academicYearMap };
 
+  // academic_year is the canonical exam-year cohort on the users row.
   const { data: users } = await db
     .from('users')
-    .select('id, first_name, last_name, name')
+    .select('id, first_name, last_name, name, academic_year')
     .in('id', studentIds);
 
   for (const u of users || []) {
@@ -69,21 +70,7 @@ export async function getStudentInfo(
       u.first_name && u.last_name
         ? `${u.first_name} ${u.last_name}`
         : u.name || 'Unknown';
-  }
-
-  // Get academic year from onboarding (use any classroom)
-  if (classroomIds && classroomIds.length > 0) {
-    const { data: onboarding } = await (db as any)
-      .from('nexus_student_onboarding')
-      .select('student_id, academic_year')
-      .in('classroom_id', classroomIds)
-      .in('student_id', studentIds);
-
-    for (const o of onboarding || []) {
-      if (!academicYearMap[o.student_id]) {
-        academicYearMap[o.student_id] = o.academic_year;
-      }
-    }
+    academicYearMap[u.id] = u.academic_year ?? null;
   }
 
   return { nameMap, academicYearMap };

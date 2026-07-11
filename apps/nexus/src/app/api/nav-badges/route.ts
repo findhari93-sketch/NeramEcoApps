@@ -34,14 +34,14 @@ export async function GET(request: NextRequest) {
 
       badges.issues = count ?? 0;
 
-      // Count pending onboarding reviews (submitted, not yet approved/rejected)
+      // Count pending classroom access requests (students awaiting enrollment)
       const db = supabase as any;
-      const { count: onboardingCount } = await db
-        .from('nexus_student_onboarding')
+      const { count: accessCount } = await db
+        .from('classroom_access_requests')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'submitted');
+        .eq('status', 'pending');
 
-      badges.onboarding = onboardingCount ?? 0;
+      badges.access_requests = accessCount ?? 0;
 
       // Count pending drawing reviews (submitted, not yet reviewed)
       const { count: drawingCount } = await supabase

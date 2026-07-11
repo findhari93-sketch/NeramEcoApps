@@ -9,8 +9,7 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
  * the two: the default (architecture) list excludes software students, and
  * ?program=software returns only them.
  *
- * The round trip always restores the test student to 'architecture' AND re-grants
- * Nexus access (moving to software flips nexus_access_enabled false), so the shared
+ * The round trip always restores the test student to 'architecture' so the shared
  * e2etestingstudent is left exactly as other specs expect it.
  *
  * Prerequisites (otherwise self-skips): Admin dev server on :3013, Nexus on :3012,
@@ -25,7 +24,6 @@ test.describe('Admin — Software course separation', () => {
 
   let studentId: string;
   let adminId: string;
-  let teacherToken: string | null = null;
 
   test('setup: resolve student and admin ids', async ({ request }) => {
     const studentRes = await request.post(`${NEXUS}/api/auth/test-login`, {
@@ -35,7 +33,6 @@ test.describe('Admin — Software course separation', () => {
     studentId = (await studentRes.json()).user?.id;
 
     const teacherAuth = await getTestAuthToken(request, 'teacher');
-    teacherToken = teacherAuth?.testToken ?? null;
     adminId = teacherAuth?.user?.id;
 
     expect(studentId).toBeTruthy();
@@ -77,15 +74,6 @@ test.describe('Admin — Software course separation', () => {
         data: { userIds: [studentId], program: 'architecture', adminId },
       });
       expect(backRes.status()).toBe(200);
-
-      // Re-grant Nexus access (the software move turned it off) so the shared test
-      // student can still log into Nexus for other specs.
-      if (teacherToken) {
-        await request.patch(`${NEXUS}/api/admin/student-access`, {
-          headers: { Authorization: `Bearer ${teacherToken}` },
-          data: { studentIds: [studentId], enabled: true },
-        });
-      }
     }
 
     // Back in the architecture Students list, gone from the software list.

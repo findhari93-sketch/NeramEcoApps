@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { isPathEnabled } from '@/lib/feature-flags';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
@@ -18,6 +20,7 @@ import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import ViewTimelineOutlinedIcon from '@mui/icons-material/ViewTimelineOutlined';
@@ -26,6 +29,7 @@ export type StudentZoneId = 'classroom' | 'study';
 
 const QB_PATH = '/student/question-bank';
 const STUDY_MATERIALS_PATH = '/student/study-materials';
+const STARRED_PATH = '/student/study-materials/starred';
 const SELF_LEARNING_PATH = '/student/self-learning';
 const COURSE_PLAN_PATH = '/student/course-plan';
 // Covers both the list (/student/class-recaps) and the player (/student/class-recap/[id]).
@@ -128,6 +132,7 @@ const STUDY: ZoneConfig = {
       label: 'Study',
       items: [
         { label: 'Study Materials', path: STUDY_MATERIALS_PATH, icon: <FolderOutlinedIcon /> },
+        { label: 'Starred', path: STARRED_PATH, icon: <StarBorderOutlinedIcon /> },
         { label: 'Self-learning', path: SELF_LEARNING_PATH, icon: <AutoStoriesOutlinedIcon /> },
         { label: 'Class Recaps', path: CLASS_RECAPS_PATH, icon: <VideoLibraryOutlinedIcon /> },
         { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
@@ -221,6 +226,7 @@ export default function StudentZoneProvider({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { featureFlags } = useNexusAuthContext();
   const [activeZone, setActiveZoneState] = useState<StudentZoneId>('classroom');
   const [hydrated, setHydrated] = useState(false);
 
@@ -256,28 +262,41 @@ export default function StudentZoneProvider({
 
   const current = ZONES.find((z) => z.id === activeZone) || CLASSROOM;
 
-  // Apply QB-access filtering to whichever zone is active (mirrors the old layout behaviour).
+  // Filter nav by the admin feature flags. Disabled features are stripped from
+  // the sidebar/bottom-nav; empty groups and empty zones disappear. Question
+  // Bank carries an extra per-classroom gate (isQBEnabled) on top of its global
+  // flag, so it shows only when BOTH are on.
   const value = useMemo<StudentZoneContextValue>(() => {
-    const filterQB = (groups: NavGroup[]) =>
-      isQBEnabled
-        ? groups
-        : groups
-            .map((g) => ({ ...g, items: g.items.filter((i) => i.path !== QB_PATH) }))
-            .filter((g) => g.items.length > 0);
-    const filterItems = (items: NavItem[]) =>
-      isQBEnabled ? items : items.filter((i) => i.path !== QB_PATH);
+    const isItemEnabled = (path: string) => {
+      if (path === QB_PATH && !isQBEnabled) return false;
+      return isPathEnabled(path, featureFlags);
+    };
+    const filterGroups = (groups: NavGroup[]) =>
+      groups
+        .map((g) => ({ ...g, items: g.items.filter((i) => isItemEnabled(i.path)) }))
+        .filter((g) => g.items.length > 0);
+    const filterItems = (items: NavItem[]) => items.filter((i) => isItemEnabled(i.path));
+
+    const zoneHasContent = (z: ZoneConfig) =>
+      filterItems(z.bottomNavItems).length > 0 ||
+      filterItems(z.overflowItems).length > 0 ||
+      filterGroups(z.navGroups).length > 0;
 
     return {
       activeZone,
       setActiveZone,
-      availableZones: ZONES.map((z) => ({ id: z.id, label: z.label, icon: z.icon })),
-      currentNavGroups: filterQB(current.navGroups),
+      availableZones: ZONES.filter(zoneHasContent).map((z) => ({
+        id: z.id,
+        label: z.label,
+        icon: z.icon,
+      })),
+      currentNavGroups: filterGroups(current.navGroups),
       currentBottomNavItems: filterItems(current.bottomNavItems),
       currentOverflowItems: filterItems(current.overflowItems),
       currentHomePath: current.defaultPath,
       currentZoneTitle: current.title,
     };
-  }, [activeZone, setActiveZone, current, isQBEnabled]);
+  }, [activeZone, setActiveZone, current, isQBEnabled, featureFlags]);
 
   return <StudentZoneContext.Provider value={value}>{children}</StudentZoneContext.Provider>;
 }

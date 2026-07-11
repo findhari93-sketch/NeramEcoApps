@@ -9,9 +9,9 @@ import { useSidebarContext } from '@/components/SidebarProvider';
 import { useQBAccess } from '@/hooks/useQBAccess';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
 import DeviceRegistrationProvider from '@/components/DeviceRegistrationProvider';
-import ExamReminderModal from '@/components/ExamReminderModal';
 import WelcomeOrientation from '@/components/WelcomeOrientation';
 import StudentZoneProvider, { useStudentZoneContext } from '@/components/StudentZoneProvider';
+import FeatureGate from '@/components/FeatureGate';
 
 /**
  * Inner shell — consumes the active student zone (Classroom / Study Zone) and renders the
@@ -52,9 +52,8 @@ function StudentShell({ children }: { children: React.ReactNode }) {
         >
           <Container maxWidth="lg" disableGutters>
             <DeviceRegistrationProvider>
-              <ExamReminderModal />
               <WelcomeOrientation />
-              {children}
+              <FeatureGate surface="student">{children}</FeatureGate>
             </DeviceRegistrationProvider>
           </Container>
         </Box>

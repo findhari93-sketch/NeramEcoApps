@@ -50,10 +50,11 @@ export async function GET(
       }
     }
 
-    // Get student info
-    const { data: student } = await supabase
+    // Get student info (academic_year is the canonical exam-year cohort on users;
+    // use the loosely-typed db client as the generated types lag this column).
+    const { data: student } = await db
       .from('users')
-      .select('id, first_name, last_name, name')
+      .select('id, first_name, last_name, name, academic_year')
       .eq('id', studentId)
       .single();
 
@@ -63,14 +64,8 @@ export async function GET(
       ? `${student.first_name} ${student.last_name}`
       : student.name || 'Unknown';
 
-    // Get academic year from onboarding
-    const { data: onboarding } = await db
-      .from('nexus_student_onboarding')
-      .select('academic_year')
-      .eq('student_id', studentId)
-      .limit(1);
-
-    const academicYear = onboarding?.[0]?.academic_year ?? null;
+    // academic_year is the canonical exam-year cohort on the users row.
+    const academicYear = student.academic_year ?? null;
 
     // Get all attempts for this exam type (all phases)
     const { data: attempts } = await db
