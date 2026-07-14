@@ -34,15 +34,6 @@ export async function GET(request: NextRequest) {
 
       badges.issues = count ?? 0;
 
-      // Count pending classroom access requests (students awaiting enrollment)
-      const db = supabase as any;
-      const { count: accessCount } = await db
-        .from('classroom_access_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pending');
-
-      badges.access_requests = accessCount ?? 0;
-
       // Count pending drawing reviews (submitted, not yet reviewed)
       const { count: drawingCount } = await supabase
         .from('drawing_submissions')

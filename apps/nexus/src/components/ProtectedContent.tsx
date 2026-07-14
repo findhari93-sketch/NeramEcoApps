@@ -1,11 +1,14 @@
 'use client';
 
 import { Box } from '@neram/ui';
+import type { SxProps, Theme } from '@neram/ui';
 import { useEffect } from 'react';
 
 interface ProtectedContentProps {
   children: React.ReactNode;
   disableScreenshot?: boolean;
+  /** Extra styles merged onto the wrapper (e.g. to let it flex/fill its parent). */
+  sx?: SxProps<Theme>;
 }
 
 /**
@@ -15,6 +18,7 @@ interface ProtectedContentProps {
 export default function ProtectedContent({
   children,
   disableScreenshot = false,
+  sx,
 }: ProtectedContentProps) {
   useEffect(() => {
     // Disable right-click context menu
@@ -50,14 +54,17 @@ export default function ProtectedContent({
 
   return (
     <Box
-      sx={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTouchCallout: 'none',
-        '@media print': {
-          display: 'none !important',
+      sx={[
+        {
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+          '@media print': {
+            display: 'none !important',
+          },
         },
-      }}
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
       {children}
     </Box>

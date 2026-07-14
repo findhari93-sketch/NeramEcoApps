@@ -18,6 +18,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import StudentWorksPanel from './StudentWorksPanel';
 import MergeDuplicatePanel from './MergeDuplicatePanel';
 import PersonalDetailsPanel from './PersonalDetailsPanel';
@@ -32,7 +35,14 @@ interface StudentLite {
   avatar_url: string | null;
   academic_year: string | null;
   last_login_at: string | null;
+  /** Nexus-only login signal (null until the student opens the Nexus app themselves). */
+  nexus_first_login_at?: string | null;
+  nexus_last_login_at?: string | null;
   submission_count: number;
+  /** Class-provided Teams email; required before Nexus access can be granted. */
+  ms_teams_email?: string | null;
+  /** Whether the student currently holds live Nexus access (seeds the panel before the check). */
+  has_nexus_access?: boolean;
 }
 
 interface StudentDetailDrawerProps {
@@ -46,8 +56,12 @@ interface StudentDetailDrawerProps {
   moveAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
   /** Optional "Mark as staff" action: reclassify a mis-tagged student as a teacher/admin. */
   staffAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
-  /** Optional "Set exam year" action: move a mis-batched student to a different cohort. */
+  /** Optional "Change batch" action: move a mis-batched student to a different cohort. */
   setYearAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
+  /** Optional "Promote to current" action for a past-batch student (also restores Nexus access). Emphasized. */
+  promoteAction?: { label: string; icon?: ReactNode; onClick: (studentId: string) => void };
+  /** Called after this drawer grants or revokes Nexus access, so the parent list can refresh. */
+  onChanged?: () => void;
 }
 
 const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', color: ACCENT, fontWeight: 700 } as const;
@@ -59,7 +73,7 @@ const yearChipSx = { height: 22, fontSize: 11, bgcolor: 'rgba(180,83,9,0.10)', c
  * published/hidden split that answers "how many reached the gallery"), onboarding
  * documents, and a one-click path to graduate or to the full CRM profile.
  */
-export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction, staffAction, setYearAction }: StudentDetailDrawerProps) {
+export default function StudentDetailDrawer({ open, student, adminId, onClose, onGraduate, moveAction, staffAction, setYearAction, promoteAction, onChanged }: StudentDetailDrawerProps) {
   const router = useRouter();
   const userId = student?.id || null;
   const [detail, setDetail] = useState<any>(null);
@@ -108,9 +122,19 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
                 ) : (
                   <Chip label="No year" size="small" variant="outlined" sx={{ height: 22, fontSize: 11, borderColor: LINE }} />
                 )}
-                <Typography variant="caption" sx={{ color: '#94A3B8' }}>
-                  {student.last_login_at ? `Last login ${formatDate(student.last_login_at)}` : 'Never logged in'}
+                <Typography
+                  variant="caption"
+                  sx={{ color: student.nexus_first_login_at ? '#15803D' : '#94A3B8', fontWeight: student.nexus_first_login_at ? 600 : 400 }}
+                >
+                  {student.nexus_first_login_at
+                    ? `Opened Nexus ${formatDate(student.nexus_last_login_at || student.nexus_first_login_at)}`
+                    : 'Never opened Nexus'}
                 </Typography>
+                {student.last_login_at && (
+                  <Typography variant="caption" sx={{ color: '#CBD5E1' }}>
+                    {`· any-app login ${formatDate(student.last_login_at)}`}
+                  </Typography>
+                )}
               </Box>
             </Box>
           </>
@@ -125,6 +149,17 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
       {/* Body */}
       {student && (
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+          {/* Nexus access: grant or revoke this student's entry into the classroom app. */}
+          {userId && (
+            <NexusAccessPanel
+              userId={userId}
+              msTeamsEmail={student.ms_teams_email}
+              initialHasAccess={student.has_nexus_access}
+              adminId={adminId}
+              onChanged={onChanged}
+            />
+          )}
+
           {/* Duplicate detection + editable personal details */}
           {userId && <MergeDuplicatePanel userId={userId} adminId={adminId ?? null} onMerged={load} />}
           {userId && <PersonalDetailsPanel user={detail?.user} leadProfile={lead} userId={userId} adminId={adminId ?? null} onSaved={load} />}
@@ -200,6 +235,18 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
           >
             Full CRM profile
           </Button>
+          {promoteAction && (
+            <Button
+              size="small"
+              variant="contained"
+              color="warning"
+              startIcon={promoteAction.icon}
+              onClick={() => userId && promoteAction.onClick(userId)}
+              sx={{ textTransform: 'none' }}
+            >
+              {promoteAction.label}
+            </Button>
+          )}
           {moveAction && (
             <Button
               size="small"
@@ -247,6 +294,141 @@ export default function StudentDetailDrawer({ open, student, adminId, onClose, o
         </Box>
       )}
     </Drawer>
+  );
+}
+
+/**
+ * Grant or revoke a single student's Nexus access. Access = an active
+ * enrollment in the default classroom; with none, the student only sees the
+ * "You're almost in" welcome screen. Grant needs a Teams email (the enroll
+ * endpoint blocks otherwise), so the button is disabled with a hint until then.
+ */
+function NexusAccessPanel({
+  userId,
+  msTeamsEmail,
+  initialHasAccess,
+  adminId,
+  onChanged,
+}: {
+  userId: string;
+  msTeamsEmail?: string | null;
+  initialHasAccess?: boolean;
+  adminId?: string | null;
+  onChanged?: () => void;
+}) {
+  const [checking, setChecking] = useState(true);
+  const [hasAccess, setHasAccess] = useState<boolean>(!!initialHasAccess);
+  const [classroomName, setClassroomName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/students/${userId}/nexus-enroll`);
+      const data = await res.json().catch(() => ({}));
+      const rows = res.ok ? data.data || [] : [];
+      setHasAccess(rows.length > 0);
+      setClassroomName(rows[0]?.classroom?.name || null);
+    } catch {
+      /* keep the optimistic value from the row */
+    } finally {
+      setChecking(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const mutate = async (body: Record<string, unknown>, failMsg: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/students/${userId}/nexus-enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || failMsg);
+      await refresh();
+      onChanged?.();
+    } catch (e: any) {
+      setError(e.message || failMsg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const grant = () => mutate({}, 'Could not grant access');
+  const revoke = () => {
+    if (!window.confirm('Revoke Nexus access for this student? They will see the welcome screen until they are re-enrolled.')) return;
+    mutate({ remove: true, removedBy: adminId || null }, 'Could not revoke access');
+  };
+
+  const canGrant = !!msTeamsEmail;
+
+  return (
+    <Box sx={{ mb: 2, p: 1.5, border: '1px solid', borderColor: LINE, borderRadius: 1.5, bgcolor: '#FAFAFA' }}>
+      <SectionTitle text="Nexus access" />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        {checking ? (
+          <CircularProgress size={16} />
+        ) : hasAccess ? (
+          <Chip
+            icon={<CheckCircleIcon sx={{ fontSize: '15px !important' }} />}
+            label={classroomName ? `Has access, ${classroomName}` : 'Has Nexus access'}
+            size="small"
+            sx={{ height: 24, fontSize: 12, fontWeight: 700, bgcolor: 'rgba(22,163,74,0.10)', color: '#15803D' }}
+          />
+        ) : (
+          <Chip
+            label="No access, sees the welcome screen"
+            size="small"
+            sx={{ height: 24, fontSize: 12, fontWeight: 700, bgcolor: 'rgba(100,116,139,0.12)', color: '#475569' }}
+          />
+        )}
+        <Box sx={{ flex: 1 }} />
+        {hasAccess ? (
+          <Button
+            size="small"
+            variant="outlined"
+            color="error"
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={14} /> : <LockOutlinedIcon />}
+            onClick={revoke}
+            sx={{ textTransform: 'none' }}
+          >
+            Revoke access
+          </Button>
+        ) : canGrant ? (
+          <Button
+            size="small"
+            variant="contained"
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={14} /> : <LockOpenOutlinedIcon />}
+            onClick={grant}
+            sx={{ textTransform: 'none', bgcolor: '#15803D', '&:hover': { bgcolor: '#166534' } }}
+          >
+            Grant access
+          </Button>
+        ) : (
+          <Tooltip title="Share credentials first: this student needs a Teams email before they can be added to a classroom." arrow>
+            <span>
+              <Button size="small" variant="contained" disabled startIcon={<LockOpenOutlinedIcon />} sx={{ textTransform: 'none' }}>
+                Grant access
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+      </Box>
+      {error && (
+        <Typography variant="caption" sx={{ color: '#B91C1C', display: 'block', mt: 0.75 }}>
+          {error}
+        </Typography>
+      )}
+    </Box>
   );
 }
 

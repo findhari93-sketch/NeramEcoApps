@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -51,6 +51,10 @@ interface Stats {
   partialPayment: number;
   totalRevenue: number;
   totalPending: number;
+  // Active students stuck on a past batch (subset of the current view), and how
+  // many of those have lost their Nexus access.
+  pastBatchActive?: number;
+  pastBatchNoAccess?: number;
 }
 
 interface YearRevenue {
@@ -254,6 +258,8 @@ export default function StudentsPage() {
     partialPayment: 0,
     totalRevenue: 0,
     totalPending: 0,
+    pastBatchActive: 0,
+    pastBatchNoAccess: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -279,6 +285,11 @@ export default function StudentsPage() {
   // Row-click detail drawer
   const [drawerStudent, setDrawerStudent] = useState<StudentRow | null>(null);
 
+  // Client-side "show only past-batch actives" filter (toggled by the warning
+  // banner). It narrows the already-loaded rows and never touches the global batch
+  // switcher, so the exam-batch chip and other banners are unaffected.
+  const [pastBatchFilter, setPastBatchFilter] = useState(false);
+
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -300,6 +311,7 @@ export default function StudentsPage() {
   const [entraResults, setEntraResults] = useState<any>(null);
   const [entraCourseMap, setEntraCourseMap] = useState<Record<string, string>>({});
   const [entraSelected, setEntraSelected] = useState<Set<string>>(new Set());
+  const [refreshingEntra, setRefreshingEntra] = useState(false);
 
   // Sync current batch → the single classroom + linked Team + group chat
   const [showBatchSync, setShowBatchSync] = useState(false);
@@ -314,6 +326,8 @@ export default function StudentsPage() {
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     setError('');
+    // A batch switch reloads a different cohort, so never carry a stale filter over.
+    setPastBatchFilter(false);
 
     try {
       const params = new URLSearchParams();
@@ -383,6 +397,46 @@ export default function StudentsPage() {
       if (view === 'revenue') fetchRevenue();
     },
     [supabaseUserId, bulkRows, fetchStudents, fetchRevenue, view]
+  );
+
+  // Promote past-batch students to the CURRENT batch. Reuses the set-year route with
+  // academicYear = the current code, which makes it re-enroll them into the live
+  // classroom (isCurrentBatch path) and so restores their Nexus access.
+  const handlePromoteToCurrent = useCallback(
+    async (rows: StudentRow[]) => {
+      if (!supabaseUserId) {
+        setError('Admin session not ready, try again in a moment.');
+        return;
+      }
+      const code = currentBatch?.code || currentAcademicYear();
+      const ids = rows.map((s) => s.id);
+      if (!ids.length) return;
+      try {
+        const res = await fetch('/api/crm/alumni/set-year', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIds: ids, academicYear: code, adminId: supabaseUserId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to promote');
+        bumpReset();
+        setNotice({
+          type: 'success',
+          text: `Promoted ${data.updated} student(s) to ${code}. Nexus access restored for ${data.classroomEnrolled ?? 0}.`,
+        });
+        fetchStudents();
+        if (view === 'revenue') fetchRevenue();
+      } catch (err: any) {
+        setError(err.message || 'Failed to promote');
+      }
+    },
+    [supabaseUserId, currentBatch, fetchStudents, fetchRevenue, view]
+  );
+
+  // Rows handed to the grid: narrowed to past-batch actives when the banner filter is on.
+  const visibleStudents = useMemo(
+    () => (pastBatchFilter ? students.filter((s) => s.past_batch) : students),
+    [students, pastBatchFilter]
   );
 
   // Bulk: move to the Software course program (leaves the architecture list).
@@ -529,6 +583,33 @@ export default function StudentsPage() {
     }
   };
 
+  // Pull the CURRENT Microsoft UPN for every linked student and write it back to
+  // the DB (matched by ms_oid), so a recent Entra rename (…onmicrosoft.com ->
+  // @neramclasses.com) is reflected here and in Nexus.
+  const handleRefreshEntra = async () => {
+    setRefreshingEntra(true);
+    setNotice(null);
+    setError('');
+    try {
+      const res = await fetch('/api/students/refresh-entra', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const { checked = 0, updated = 0 } = data.summary || {};
+      setNotice({
+        type: updated > 0 ? 'success' : 'info',
+        text:
+          updated > 0
+            ? `Refreshed ${updated} of ${checked} student email(s) from Entra.`
+            : `Checked ${checked} student(s). All emails already up to date.`,
+      });
+      await fetchStudents();
+    } catch (err: any) {
+      setError(err.message || 'Failed to refresh from Entra');
+    } finally {
+      setRefreshingEntra(false);
+    }
+  };
+
   const handleEntraEnroll = async () => {
     const studentsToEnroll = entraStudents
       .filter((s: any) => s.needsSetup && entraSelected.has(s.msOid) && entraCourseMap[s.msOid])
@@ -662,7 +743,7 @@ export default function StudentsPage() {
                       : year === 'none'
                       ? 'No year set'
                       : `Batch ${year}`
-                  }`}
+                  }${year === 'current' && (stats.pastBatchActive ?? 0) > 0 ? ` (incl. ${stats.pastBatchActive} past-batch)` : ''}`}
             </Typography>
           </Box>
         </Box>
@@ -686,6 +767,22 @@ export default function StudentsPage() {
             >
               Sync from Entra
             </Button>
+          )}
+          {view === 'list' && (
+            <Tooltip title="Pull the latest Microsoft email for each student (fixes accounts renamed to @neramclasses.com)">
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={refreshingEntra ? <CircularProgress size={14} color="inherit" /> : <RefreshIcon />}
+                  onClick={handleRefreshEntra}
+                  disabled={refreshingEntra}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
+                >
+                  Refresh from Entra
+                </Button>
+              </span>
+            </Tooltip>
           )}
           {view === 'list' && (
             <Button
@@ -797,6 +894,31 @@ export default function StudentsPage() {
         </Alert>
       )}
 
+      {/* Past-batch actives banner: non-graduated students still tagged to an older
+          exam batch. They are included in the current view (red "Past" chip) so they
+          can be promoted to the current batch (restores Nexus access) or graduated. */}
+      {year === 'current' && (stats.pastBatchActive ?? 0) > 0 && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2, borderRadius: 1 }}
+          action={
+            pastBatchFilter ? (
+              <Button color="warning" size="small" variant="text" onClick={() => setPastBatchFilter(false)} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                Show all
+              </Button>
+            ) : (
+              <Button color="warning" size="small" variant="contained" onClick={() => setPastBatchFilter(true)} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                Show them
+              </Button>
+            )
+          }
+        >
+          <strong>{stats.pastBatchActive} active students</strong> are still on a past batch.
+          Promote them to the current batch ({currentBatch?.code || currentAcademicYear()}) or graduate them.
+          {(stats.pastBatchNoAccess ?? 0) > 0 && ` ${stats.pastBatchNoAccess} have lost Nexus access.`}
+        </Alert>
+      )}
+
       {/* Active exam-batch scope. The switch is GLOBAL (profile menu, bottom-left);
           this chip just shows what you're viewing. Columns filter client-side. */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -806,6 +928,15 @@ export default function StudentsPage() {
           variant="outlined"
           size="small"
         />
+        {pastBatchFilter && (
+          <Chip
+            label="Showing past-batch students"
+            color="warning"
+            variant="filled"
+            size="small"
+            onDelete={() => setPastBatchFilter(false)}
+          />
+        )}
         <Typography variant="caption" color="text.secondary">
           Switch batch from the profile menu (bottom-left). Filter any column from the box under its header; click a student for full details.
         </Typography>
@@ -813,7 +944,7 @@ export default function StudentsPage() {
 
       {/* Student grid: per-column filters, selection-bar bulk actions, row-click drawer */}
       <StudentHubTable
-        students={students}
+        students={visibleStudents}
         loading={loading}
         selectionResetKey={selectionResetKey}
         currentBatchCode={currentBatch?.code || currentAcademicYear()}
@@ -823,6 +954,7 @@ export default function StudentsPage() {
         onMoveSoftware={(rows) => moveToSoftware(rows)}
         onMarkStaff={(rows) => setMarkStaff(rows)}
         onGraduate={(rows) => { setBulkRows(rows); setGraduateOpen(true); }}
+        onPromote={(rows) => handlePromoteToCurrent(rows)}
       />
         </>
       )}
@@ -1240,11 +1372,16 @@ export default function StudentsPage() {
                 avatar_url: drawerStudent.avatar_url,
                 academic_year: drawerStudent.academic_year,
                 last_login_at: drawerStudent.last_login_at,
+                nexus_first_login_at: drawerStudent.nexus_first_login_at,
+                nexus_last_login_at: drawerStudent.nexus_last_login_at,
                 submission_count: 0,
+                ms_teams_email: drawerStudent.ms_teams_email,
+                has_nexus_access: drawerStudent.has_nexus_access,
               }
             : null
         }
         adminId={supabaseUserId}
+        onChanged={fetchStudents}
         onClose={() => setDrawerStudent(null)}
         onGraduate={() => {
           if (drawerStudent) {
@@ -1270,7 +1407,7 @@ export default function StudentsPage() {
           },
         }}
         setYearAction={{
-          label: 'Set exam year',
+          label: 'Change batch',
           icon: <EventOutlinedIcon fontSize="small" />,
           onClick: () => {
             if (drawerStudent) {
@@ -1280,6 +1417,18 @@ export default function StudentsPage() {
             setDrawerStudent(null);
           },
         }}
+        promoteAction={
+          drawerStudent?.past_batch
+            ? {
+                label: `Promote to current (${currentBatch?.code || currentAcademicYear()})`,
+                icon: <EventOutlinedIcon fontSize="small" />,
+                onClick: () => {
+                  if (drawerStudent) handlePromoteToCurrent([drawerStudent]);
+                  setDrawerStudent(null);
+                },
+              }
+            : undefined
+        }
       />
     </Box>
   );

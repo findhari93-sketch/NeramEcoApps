@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       staff,
       studentExams,
       studentProgram: user.student_program,
+      studentId: staff ? null : user.id,
     });
     return NextResponse.json({ results });
   } catch (err) {

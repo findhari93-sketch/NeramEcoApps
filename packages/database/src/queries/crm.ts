@@ -1735,7 +1735,9 @@ export interface HubStudent {
   avatar_url: string | null;
   academic_year: string | null;
   is_alumni: boolean;
-  last_login_at: string | null;
+  last_login_at: string | null; // cross-app (Tools + Nexus + signup)
+  nexus_first_login_at: string | null; // Nexus-only: "opened Nexus at least once"
+  nexus_last_login_at: string | null; // Nexus-only: last opened Nexus
   ms_oid: string | null;
   // Fees (0 / null when the student has no profile row yet)
   student_profile_id: string | null;
@@ -1771,18 +1773,24 @@ export async function listStudentsByYear(
     program?: StudentProgram;
     paymentStatus?: string;
     currentBatchCode?: string; // registry current-batch code; falls back to the April-March helper
+    // Admin-hub opt-in: when 'current', also include active students still stuck on a
+    // PAST batch (so the roster can flag and promote them). Only the admin /students
+    // list route sets this; sync-current-batch and the graduate route must NOT, or
+    // they would treat past-batch students as if they were current.
+    includePastActive?: boolean;
   } = {},
   client?: TypedSupabaseClient
 ): Promise<{ students: HubStudent[]; total: number }> {
   const supabase = client || getSupabaseAdminClient();
-  const { search, year = 'current', status, program = 'architecture', paymentStatus, currentBatchCode } = options;
+  const { search, year = 'current', status, program = 'architecture', paymentStatus, currentBatchCode, includePastActive } = options;
 
   let query = supabase
     .from('users')
     .select(
       `
       id, name, first_name, last_name, email, personal_email, linked_classroom_email,
-      phone, avatar_url, academic_year, is_alumni, last_login_at, ms_oid,
+      phone, avatar_url, academic_year, is_alumni, last_login_at,
+      nexus_first_login_at, nexus_last_login_at, ms_oid,
       student_profiles!student_profiles_user_id_fkey (
         id, student_id, enrollment_date, total_fee, fee_paid, fee_due,
         payment_status, ms_teams_email
@@ -1803,11 +1811,16 @@ export async function listStudentsByYear(
   // we want (e.g. the e2e guard AND the year group AND the search group).
   if (year === 'current') {
     if (status === undefined) query = query.eq('is_alumni', false);
-    const cy = currentBatchCode || currentAcademicYear();
-    // Current cohort = the current code OR a FUTURE code (a student whose own exam
-    // year is later, e.g. a class-11 student in 2027-28 who attends this year's
-    // classes) OR untagged. gte works because 'YYYY-YY' sorts lexicographically.
-    query = query.or(`academic_year.gte.${cy},academic_year.is.null`);
+    if (!includePastActive) {
+      const cy = currentBatchCode || currentAcademicYear();
+      // Current cohort = the current code OR a FUTURE code (a student whose own exam
+      // year is later, e.g. a class-11 student in 2027-28 who attends this year's
+      // classes) OR untagged. gte works because 'YYYY-YY' sorts lexicographically.
+      query = query.or(`academic_year.gte.${cy},academic_year.is.null`);
+    }
+    // includePastActive: omit the year predicate so the result is every non-alumni
+    // architecture student (past ∪ current ∪ future ∪ untagged). The admin route then
+    // tags the past-batch rows so they can be surfaced and promoted.
   } else if (year === 'none') {
     query = query.is('academic_year', null);
   } else if (year && year !== 'all') {
@@ -1838,6 +1851,8 @@ export async function listStudentsByYear(
       academic_year: u.academic_year || null,
       is_alumni: !!u.is_alumni,
       last_login_at: u.last_login_at || null,
+      nexus_first_login_at: u.nexus_first_login_at || null,
+      nexus_last_login_at: u.nexus_last_login_at || null,
       ms_oid: u.ms_oid || null,
       student_profile_id: sp?.id || null,
       student_id: sp?.student_id || null,

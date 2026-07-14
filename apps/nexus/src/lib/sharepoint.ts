@@ -375,11 +375,13 @@ export async function getSharePointDownloadUrl(itemId: string): Promise<string> 
  * generated asynchronously just after upload). Uses the app-only token.
  *
  * @param itemId - Graph driveItem id
- * @param size   - 'small' | 'medium' | 'large'
+ * @param size   - a named preset ('small'≈96px, 'medium'≈176px, 'large'≈800px longest edge) OR a
+ *                 Graph custom crop like 'c800x0' (0 = preserve aspect on that axis) for a sharper,
+ *                 display-sized thumbnail.
  */
 export async function getSharePointThumbnailUrl(
   itemId: string,
-  size: 'small' | 'medium' | 'large' = 'medium'
+  size: string = 'large'
 ): Promise<string | null> {
   const token = await getAppOnlyToken();
   const siteId = await getSiteId(token);

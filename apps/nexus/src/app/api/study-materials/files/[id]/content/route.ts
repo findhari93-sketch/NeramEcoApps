@@ -4,6 +4,7 @@ import {
   getFolderById,
   isFolderVisibleToStudent,
   effectiveDownloadable,
+  hasActiveDownloadGrant,
 } from '@neram/database';
 import { getSharePointDownloadUrl } from '@/lib/sharepoint';
 import { getRequestUser, isStaff, getStudentExamSet } from '@/lib/study-materials';
@@ -43,7 +44,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
-    const downloadable = staff || effectiveDownloadable(file, folder);
+    // Staff always; else the file/folder's own setting, else an active time-limited grant for
+    // this student (a teacher-issued printout window).
+    const granted = !staff && (await hasActiveDownloadGrant(user.id, file));
+    const downloadable = staff || effectiveDownloadable(file, folder) || granted;
     const wantDownload = request.nextUrl.searchParams.get('download') === '1' && downloadable;
 
     const downloadUrl = await getSharePointDownloadUrl(file.sharepoint_item_id);

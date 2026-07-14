@@ -295,11 +295,18 @@ export function useNexusAuth(): NexusAuthState {
         setClassrooms(data.classrooms || []);
         setFeatureFlags(data.featureFlags || resolveFlags({}));
 
-        // Restore active classroom from localStorage or use first one
+        // Restore active classroom from localStorage or use first one. /api/auth/me
+        // returns non-archived classrooms with the current academic-year one first,
+        // so classrooms[0] is the current cohort.
         const savedClassroomId = localStorage.getItem(ACTIVE_CLASSROOM_KEY);
         const savedClassroom = (data.classrooms || []).find(
           (c: NexusClassroom) => c.id === savedClassroomId
         );
+        // Drop a stale saved id that no longer maps to a live classroom (e.g. it was
+        // archived at a year-end rollover) so we fall back to the current-year one.
+        if (savedClassroomId && !savedClassroom) {
+          localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
+        }
         setActiveClassroomState(savedClassroom || data.classrooms?.[0] || null);
       } catch (err) {
         if (!cancelled) {

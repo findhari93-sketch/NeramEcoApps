@@ -26,7 +26,7 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { ASSIGNMENT_SUBMISSIONS_BUCKET } from '@/lib/assignment-constants';
 
-type Format = 'pdf' | 'pdf_or_image';
+type Format = 'pdf' | 'image' | 'pdf_or_image';
 const MAX_FILES = 12;
 
 interface AssignmentSubmitSheetProps {

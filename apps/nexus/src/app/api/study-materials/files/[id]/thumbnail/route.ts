@@ -38,8 +38,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
+    // Accept the named presets, or a Graph custom crop like "c800x0" for sharper display-sized
+    // thumbnails. Anything else falls back to a large (sharp) preset.
     const sizeParam = request.nextUrl.searchParams.get('size');
-    const size = sizeParam === 'small' || sizeParam === 'large' ? sizeParam : 'medium';
+    const size =
+      sizeParam === 'small' || sizeParam === 'medium' || sizeParam === 'large'
+        ? sizeParam
+        : sizeParam && /^c\d{1,4}x\d{1,4}$/.test(sizeParam)
+          ? sizeParam
+          : 'large';
 
     const thumbUrl = await getSharePointThumbnailUrl(file.sharepoint_item_id, size);
     if (!thumbUrl) {

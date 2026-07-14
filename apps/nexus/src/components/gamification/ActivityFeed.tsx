@@ -18,6 +18,7 @@ import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlin
 import StarOutlinedIcon from '@mui/icons-material/StarOutlined';
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
 import CardGiftcardOutlinedIcon from '@mui/icons-material/CardGiftcardOutlined';
+import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import type {
   GamificationStudentActivityLog,
   GamificationActivityType,
@@ -50,6 +51,12 @@ const ACTIVITY_ICONS: Record<GamificationActivityType, React.ReactNode> = {
   ),
   class_attended: (
     <EventAvailableOutlinedIcon sx={{ color: neramTokens.success, fontSize: '1.25rem' }} />
+  ),
+  assignment_submitted: (
+    <AssignmentTurnedInOutlinedIcon sx={{ color: neramTokens.blue[500], fontSize: '1.25rem' }} />
+  ),
+  assignment_reviewed: (
+    <AssignmentTurnedInOutlinedIcon sx={{ color: neramTokens.success, fontSize: '1.25rem' }} />
   ),
   rank_improved: (
     <TrendingUpOutlinedIcon sx={{ color: neramTokens.blue[500], fontSize: '1.25rem' }} />

@@ -391,6 +391,7 @@ export default function AlumniPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to set academic year');
       setSetYearOpen(false);
+      setSelection(new Set());
       setBanner({ type: 'success', text: `Set academic year ${academicYear} on ${data.updated} student(s).` });
       loadStudents();
     },
@@ -1024,6 +1025,15 @@ export default function AlumniPage() {
         onGraduate={graduateSingle}
         moveAction={{ label: 'Move to Software course', icon: <LaptopMacIcon />, onClick: (id) => moveToSoftware([id]) }}
         staffAction={{ label: 'Mark as staff', icon: <BadgeOutlinedIcon />, onClick: markStaffSingle }}
+        setYearAction={{
+          label: 'Set batch',
+          icon: <EventIcon />,
+          onClick: (id) => {
+            setSelection(new Set([id]));
+            setStudentDrawer(null);
+            setSetYearOpen(true);
+          },
+        }}
       />
 
       <AlumniAddDrawer

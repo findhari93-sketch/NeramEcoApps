@@ -35,6 +35,7 @@ export interface StudentRow {
   avatar_url: string | null;
   email: string;
   classroom_email: string | null;
+  classroom_email_status?: 'org' | 'onmicrosoft' | 'personal' | 'none';
   personal_email: string | null;
   ms_teams_email: string | null;
   phone: string;
@@ -49,8 +50,15 @@ export interface StudentRow {
   discount_amount: number | null;
   academic_year: string | null;
   is_alumni: boolean;
+  /** Active student whose exam batch is behind the current one (needs promote/graduate). */
+  past_batch?: boolean;
+  /** Currently holds live Nexus access (active enrollment in an active classroom). */
+  has_nexus_access?: boolean;
   enrollment_date: string | null;
   last_login_at: string | null;
+  /** Nexus-only login signal (null until the student opens the Nexus app themselves). */
+  nexus_first_login_at?: string | null;
+  nexus_last_login_at?: string | null;
   student_profile_id: string | null;
   application_number: string | null;
   application_complete: boolean;
@@ -71,6 +79,8 @@ interface StudentHubTableProps {
   onMoveSoftware: (rows: StudentRow[]) => void;
   onMarkStaff: (rows: StudentRow[]) => void;
   onGraduate: (rows: StudentRow[]) => void;
+  /** Promote past-batch students to the current batch (also restores Nexus access). */
+  onPromote?: (rows: StudentRow[]) => void;
 }
 
 const ACCENT = '#B45309';
@@ -118,6 +128,7 @@ export default function StudentHubTable({
   onMoveSoftware,
   onMarkStaff,
   onGraduate,
+  onPromote,
 }: StudentHubTableProps) {
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
 
@@ -176,17 +187,44 @@ export default function StudentHubTable({
           const email = row.original.classroom_email;
           if (!email) {
             return (
-              <Tooltip title="Microsoft classroom account not provisioned yet" arrow>
-                <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
-                  Not assigned
-                </Typography>
+              <Tooltip
+                title="No organisation ID yet. Create this student's @neramclasses.com Microsoft account, then click Refresh from Entra."
+                arrow
+              >
+                <Chip
+                  icon={<ErrorOutlineIcon sx={{ fontSize: 12 }} />}
+                  label="No org ID"
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                  sx={{ height: 16, fontSize: 9, fontWeight: 700, '& .MuiChip-label': { px: 0.5 } }}
+                />
               </Tooltip>
             );
           }
+          const status = row.original.classroom_email_status;
+          const onDefaultDomain = status === 'onmicrosoft';
           return (
-            <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12.5 }} noWrap>
-              {email}
-            </Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12.5 }} noWrap>
+                {email}
+              </Typography>
+              {onDefaultDomain && (
+                <Tooltip
+                  title="On the Microsoft default domain. Rename this account to @neramclasses.com in Entra, then click Refresh from Entra."
+                  arrow
+                >
+                  <Chip
+                    icon={<ErrorOutlineIcon sx={{ fontSize: 12 }} />}
+                    label="Default domain"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ height: 16, fontSize: 9, fontWeight: 700, mt: 0.25, '& .MuiChip-label': { px: 0.5 } }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
           );
         },
       },
@@ -346,23 +384,120 @@ export default function StudentHubTable({
         filterVariant: 'select',
         filterSelectOptions: yearOptions,
         Cell: ({ row }) => {
-          const y = row.original.academic_year;
+          const s = row.original;
+          const y = s.academic_year;
           if (!y) return <Typography variant="caption" sx={{ color: 'text.disabled' }}>No year</Typography>;
-          // Future-coded cohort (a junior attending this year's classes): accent it
-          // so staff notice they are not part of the current exam batch.
+          // Future-coded cohort (a junior attending this year's classes): accent amber.
+          // Past-coded cohort (still active but stuck on last year's batch): flag red.
           const isFuture = !!currentBatchCode && y > currentBatchCode;
+          const isPast = !!currentBatchCode && y < currentBatchCode;
+          const noAccess = isPast && s.has_nexus_access === false;
+          const tip = isPast
+            ? 'Past exam batch, promote to current or graduate'
+            : isFuture
+              ? 'Future exam batch, also attending the current cohort'
+              : '';
           return (
-            <Tooltip title={isFuture ? 'Future exam batch, also attending the current cohort' : ''} disableHoverListener={!isFuture}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Tooltip title={tip} disableHoverListener={!tip}>
+                <Chip
+                  label={isPast ? `Past: ${y}` : y}
+                  size="small"
+                  sx={{
+                    height: 22,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: 'monospace',
+                    bgcolor: isPast ? 'rgba(220,38,38,0.12)' : isFuture ? 'rgba(180,83,9,0.12)' : 'grey.100',
+                    color: isPast ? '#B91C1C' : isFuture ? ACCENT : 'text.secondary',
+                  }}
+                />
+              </Tooltip>
+              {noAccess && (
+                <Tooltip title="No live Nexus access, promote to restore">
+                  <ErrorOutlineIcon sx={{ fontSize: 15, color: '#B91C1C' }} />
+                </Tooltip>
+              )}
+            </Box>
+          );
+        },
+      },
+      {
+        id: 'nexus_access',
+        header: 'Access',
+        size: 100,
+        accessorFn: (row) => (row.has_nexus_access ? 'In' : 'Out'),
+        filterVariant: 'select',
+        filterSelectOptions: [
+          { value: 'In', text: 'In' },
+          { value: 'Out', text: 'Out' },
+        ],
+        Cell: ({ row }) => {
+          const inClass = !!row.original.has_nexus_access;
+          return (
+            <Tooltip title={inClass ? 'Enrolled: has full Nexus access' : 'Not enrolled: only sees the welcome screen'} arrow>
               <Chip
-                label={y}
+                label={inClass ? 'In' : 'Out'}
                 size="small"
                 sx={{
                   height: 22,
                   fontSize: 11,
-                  fontWeight: 600,
-                  fontFamily: 'monospace',
-                  bgcolor: isFuture ? 'rgba(180,83,9,0.12)' : 'grey.100',
-                  color: isFuture ? ACCENT : 'text.secondary',
+                  fontWeight: 700,
+                  bgcolor: inClass ? 'rgba(22,163,74,0.10)' : 'rgba(100,116,139,0.12)',
+                  color: inClass ? '#15803D' : '#64748B',
+                }}
+              />
+            </Tooltip>
+          );
+        },
+      },
+      {
+        id: 'nexus_opened',
+        header: 'Opened Nexus',
+        size: 130,
+        // "Opened" = has ever authenticated to the Nexus app itself (distinct from
+        // the cross-app last_login_at). "Not yet" flags students who have access
+        // but haven't logged in, the ones to chase before the class announcement.
+        accessorFn: (row) => (row.nexus_first_login_at ? 'Opened' : 'Not yet'),
+        filterVariant: 'select',
+        filterSelectOptions: [
+          { value: 'Opened', text: 'Opened' },
+          { value: 'Not yet', text: 'Not yet' },
+        ],
+        Cell: ({ row }) => {
+          const s = row.original;
+          if (s.is_alumni) {
+            return <Typography variant="caption" sx={{ color: 'text.disabled' }}>-</Typography>;
+          }
+          if (s.nexus_first_login_at) {
+            return (
+              <Tooltip title={`First opened ${formatDate(s.nexus_first_login_at)}`} arrow>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <CheckCircleIcon sx={{ fontSize: 15, color: '#15803D' }} />
+                  <Typography variant="body2" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                    {formatDate(s.nexus_last_login_at || s.nexus_first_login_at)}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            );
+          }
+          // Never opened. Highlight (amber) when they DO have access, that's the
+          // actionable "has access but hasn't logged in yet" state.
+          const hasAccess = !!s.has_nexus_access;
+          return (
+            <Tooltip
+              title={hasAccess ? 'Has access but has never opened Nexus, follow up' : 'Never opened Nexus (no access yet)'}
+              arrow
+            >
+              <Chip
+                label="Not yet"
+                size="small"
+                sx={{
+                  height: 22,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  bgcolor: hasAccess ? 'rgba(180,83,9,0.12)' : 'rgba(100,116,139,0.10)',
+                  color: hasAccess ? ACCENT : '#94A3B8',
                 }}
               />
             </Tooltip>
@@ -449,8 +584,13 @@ export default function StudentHubTable({
             {count} selected
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
+          {onPromote && rows.some((r) => r.past_batch) && (
+            <Button size="small" variant="contained" color="warning" startIcon={<EventIcon sx={{ fontSize: 18 }} />} onClick={() => onPromote(rows)} sx={{ textTransform: 'none', borderRadius: 0.75 }}>
+              Promote to current
+            </Button>
+          )}
           <Button size="small" variant="outlined" startIcon={<EventIcon sx={{ fontSize: 18 }} />} onClick={() => onSetYear(rows)} sx={{ textTransform: 'none', borderRadius: 0.75 }}>
-            Set year
+            Change batch
           </Button>
           <Button size="small" variant="outlined" startIcon={<LaptopMacIcon sx={{ fontSize: 18 }} />} onClick={() => onMoveSoftware(rows)} sx={{ textTransform: 'none', borderRadius: 0.75 }}>
             Move to Software

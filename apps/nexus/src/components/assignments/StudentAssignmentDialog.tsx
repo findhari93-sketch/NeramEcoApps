@@ -36,7 +36,7 @@ interface AssignmentDetail {
   id: string;
   title: string;
   instructions: string | null;
-  submission_format: 'pdf' | 'pdf_or_image';
+  submission_format: 'pdf' | 'image' | 'pdf_or_image';
   max_marks: number;
   due_at: string | null;
   attachments: Attachment[];

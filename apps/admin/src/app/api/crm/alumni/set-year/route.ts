@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { bulkSetAcademicYear, enrollUserInDefaultClassroom, getSupabaseAdminClient } from '@neram/database';
 import { isCurrentBatch } from '@/lib/nexus-enroll';
+import { examYearFromAcademicYear } from '@/components/crm/academic-years';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
@@ -30,6 +31,19 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await bulkSetAcademicYear(userIds, academicYear, adminId);
+
+    // Batch and target exam year are one concept: mirror the derived exam year
+    // (e.g. 2026-27 -> 2027) onto every affected lead profile so CRM/drawer reads
+    // stay consistent. Best-effort: never fail the batch assignment over this.
+    try {
+      const supabase = getSupabaseAdminClient() as any;
+      await supabase
+        .from('lead_profiles')
+        .update({ target_exam_year: examYearFromAcademicYear(academicYear) })
+        .in('user_id', userIds);
+    } catch {
+      /* non-blocking */
+    }
 
     // When bulk-assigning into the CURRENT batch, enroll everyone into the single
     // classroom (DB-only, fast). Microsoft Team + group-chat membership is pushed

@@ -26,6 +26,24 @@ export function academicYearOptions(): string[] {
   return years;
 }
 
+/**
+ * '2026-27' -> 2027 (the calendar year the batch writes the exam).
+ * The exam year is the batch's second calendar year, i.e. start year + 1.
+ */
+export function examYearFromAcademicYear(ay: string | null | undefined): number | null {
+  const m = /^([0-9]{4})-[0-9]{2}$/.exec(ay || '');
+  return m ? Number(m[1]) + 1 : null;
+}
+
+/**
+ * 2026 -> '2025-26'. Only used to seed the batch dropdown from a legacy
+ * target_exam_year when a student has an exam year but no academic_year yet.
+ */
+export function academicYearFromExamYear(examYear: number | null | undefined): string {
+  if (!examYear) return '';
+  return `${examYear - 1}-${String(examYear % 100).padStart(2, '0')}`;
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '';
   try {

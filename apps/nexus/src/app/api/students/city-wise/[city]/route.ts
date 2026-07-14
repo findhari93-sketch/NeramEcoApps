@@ -1,26 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getStudentsByCity } from '@neram/database';
+import { getActiveGeoStudents, filterStudentsInCity } from '@/lib/geo-students';
 
 /**
- * GET /api/students/city-wise/[city]?search=&limit=&offset=
+ * GET /api/students/city-wise/[city]?state=&country=&search=&limit=&offset=
  *
- * Returns students in a specific city with search and pagination.
- * Accessible by teachers and admins.
+ * Returns active students in a specific city. `state` / `country` disambiguate
+ * same-named cities across states (the 4-level drill passes them). Alumni and
+ * past-cohort students are excluded (see lib/geo-students.ts). Teachers/admins only.
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { city: string } }
+  { params }: { params: { city: string } },
 ) {
   try {
     await verifyMsToken(request.headers.get('Authorization'));
 
     const city = decodeURIComponent(params.city);
+    const state = request.nextUrl.searchParams.get('state') || undefined;
+    const country = request.nextUrl.searchParams.get('country') || undefined;
     const search = request.nextUrl.searchParams.get('search') || undefined;
-    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '50', 10);
+    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '100', 10);
     const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
 
-    const result = await getStudentsByCity({ city, search, limit, offset });
+    const all = await getActiveGeoStudents();
+    const result = filterStudentsInCity(all, { city, state, country, search, limit, offset });
 
     return NextResponse.json(result);
   } catch (err) {

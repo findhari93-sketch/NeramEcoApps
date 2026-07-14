@@ -7,6 +7,8 @@ import type {
   NexusAssignmentSubmission,
   NexusAssignmentSubmissionFile,
   NexusAssignmentFormat,
+  NexusAssignmentLink,
+  NexusAssignmentRecordingSource,
 } from '../../types';
 import { getTopicDrillFiles } from './curriculum';
 
@@ -37,6 +39,12 @@ export async function createAssignment(
     submission_format?: NexusAssignmentFormat;
     max_marks?: number;
     due_at?: string | null;
+    content_image_url?: string | null;
+    content_video_url?: string | null;
+    links?: NexusAssignmentLink[];
+    recording_url?: string | null;
+    recording_source?: NexusAssignmentRecordingSource | null;
+    catchup_window_days?: number;
     created_by?: string | null;
   },
   client?: TypedSupabaseClient,
@@ -55,6 +63,12 @@ export async function createAssignment(
       submission_format: input.submission_format ?? 'pdf_or_image',
       max_marks: input.max_marks ?? 10,
       due_at: input.due_at ?? null,
+      content_image_url: input.content_image_url ?? null,
+      content_video_url: input.content_video_url ?? null,
+      links: input.links ?? [],
+      recording_url: input.recording_url ?? null,
+      recording_source: input.recording_source ?? null,
+      catchup_window_days: input.catchup_window_days ?? 7,
       status: 'draft',
       created_by: input.created_by ?? null,
     })
@@ -78,6 +92,12 @@ export async function updateAssignment(
       | 'published_at'
       | 'topic_id'
       | 'class_date'
+      | 'content_image_url'
+      | 'content_video_url'
+      | 'links'
+      | 'recording_url'
+      | 'recording_source'
+      | 'catchup_window_days'
     >
   >,
   client?: TypedSupabaseClient,
@@ -144,6 +164,37 @@ export async function getAssignmentDetail(
 export interface AssignmentSummary extends NexusClassAssignment {
   attachment_count: number;
   submitted_count: number;
+}
+
+/**
+ * Assignments for a classroom (the durable anchor, survives plan reorders /
+ * archival), newest class first. Powers the standalone Assignments hub, which is
+ * classroom-scoped rather than tied to one teaching plan.
+ */
+export async function listAssignmentsForClassroom(
+  classroomId: string,
+  opts?: { status?: NexusAssignmentStatus },
+  client?: TypedSupabaseClient,
+): Promise<AssignmentSummary[]> {
+  const supabase = client || getSupabaseAdminClient();
+  let query = supabase
+    .from(ASSIGNMENTS)
+    .select(
+      '*, attachments:nexus_assignment_attachments(id), submissions:nexus_assignment_submissions(id)',
+    )
+    .eq('classroom_id', classroomId)
+    .order('class_date', { ascending: false });
+  if (opts?.status) query = query.eq('status', opts.status);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map((a) => {
+    const { attachments, submissions, ...rest } = a;
+    return {
+      ...rest,
+      attachment_count: (attachments || []).length,
+      submitted_count: (submissions || []).length,
+    };
+  }) as AssignmentSummary[];
 }
 
 /** Assignments for a plan (optionally a specific set of class dates), with counts. */
@@ -295,6 +346,300 @@ export async function getAssignmentRoster(
   return { assignment, rows };
 }
 
+// ------------------------------------------------------------------
+// Personal-clock helpers (day math). Canonical client-safe copy lives in
+// apps/nexus/src/lib/assignment-clock.ts; duplicated here (like
+// ASSIGNMENT_ATTACHMENTS_FOLDER_ID) so server rollups avoid importing app code.
+// ------------------------------------------------------------------
+const DAY_MS = 86_400_000;
+function istTodayYmd(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+function dayEpoch(s: string): number {
+  return Date.parse(`${s.slice(0, 10)}T00:00:00Z`);
+}
+function addDaysYmd(ymd: string, days: number): string {
+  return new Date(dayEpoch(ymd) + days * DAY_MS).toISOString().slice(0, 10);
+}
+function diffDaysYmd(from: string, to: string): number {
+  return Math.round((dayEpoch(to) - dayEpoch(from)) / DAY_MS);
+}
+/** Personal start/due for one (assignment, student), mirroring assignment-clock.ts. */
+function personalDeadline(
+  classDate: string,
+  enrolledAt: string | null,
+  dueAt: string | null,
+  windowDays: number,
+): { personalStart: string; personalDue: string | null; isLate: boolean } {
+  const classDay = classDate.slice(0, 10);
+  const enrolledDay = enrolledAt ? enrolledAt.slice(0, 10) : null;
+  const isLate = !!enrolledDay && enrolledDay > classDay;
+  const personalStart = isLate ? (enrolledDay as string) : classDay;
+  const personalDue = isLate
+    ? addDaysYmd(personalStart, Math.max(0, windowDays || 0))
+    : dueAt
+      ? dueAt.slice(0, 10)
+      : null;
+  return { personalStart, personalDue, isLate };
+}
+
+/**
+ * Resolve the class recording to show a late joiner: the assignment's own
+ * recording, else the recording on its linked scheduled class (YouTube backup
+ * preferred, then the Teams/SharePoint copy).
+ */
+export async function resolveAssignmentRecording(
+  assignment: Pick<NexusClassAssignment, 'recording_url' | 'recording_source' | 'plan_entry_id'>,
+  client?: TypedSupabaseClient,
+): Promise<{ url: string | null; source: 'youtube' | 'sharepoint' | null }> {
+  if (assignment.recording_url) {
+    return { url: assignment.recording_url, source: (assignment.recording_source as any) ?? 'sharepoint' };
+  }
+  if (!assignment.plan_entry_id) return { url: null, source: null };
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('recording_url, youtube_url')
+    .eq('plan_entry_id', assignment.plan_entry_id)
+    .limit(1);
+  const row = (data || [])[0];
+  if (row?.youtube_url) return { url: row.youtube_url, source: 'youtube' };
+  if (row?.recording_url) return { url: row.recording_url, source: 'sharepoint' };
+  return { url: null, source: null };
+}
+
+export interface StudentAssignmentItem extends NexusClassAssignment {
+  submission: NexusAssignmentSubmission | null;
+  /** The student's enrolment timestamp (drives the personal clock in the UI). */
+  enrolled_at: string | null;
+  /** Class recording for catch-up: the assignment's own, else the linked class. */
+  resolved_recording_url: string | null;
+  resolved_recording_source: 'youtube' | 'sharepoint' | null;
+}
+
+/**
+ * A student's published assignments for a classroom, each with their submission,
+ * their enrolment date (so the UI can render the personal clock), and a resolved
+ * class-recording link (the assignment's own, else the linked scheduled class).
+ */
+export async function listAssignmentsForStudent(
+  studentId: string,
+  classroomId: string,
+  client?: TypedSupabaseClient,
+): Promise<StudentAssignmentItem[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: enrollment } = await supabase
+    .from('nexus_enrollments')
+    .select('enrolled_at')
+    .eq('classroom_id', classroomId)
+    .eq('user_id', studentId)
+    .eq('is_active', true)
+    .maybeSingle();
+  const enrolledAt = enrollment?.enrolled_at ?? null;
+
+  const { data: assignments, error: aErr } = await supabase
+    .from(ASSIGNMENTS)
+    .select('*')
+    .eq('classroom_id', classroomId)
+    .eq('status', 'published')
+    .order('class_date', { ascending: false });
+  if (aErr) throw aErr;
+  const list = (assignments || []) as NexusClassAssignment[];
+  if (!list.length) return [];
+
+  const ids = list.map((a) => a.id);
+  const subMap = await getMySubmissions(studentId, ids, supabase);
+
+  // Resolve fallback recordings from the linked scheduled classes in one query.
+  const entryIds = [...new Set(list.map((a) => a.plan_entry_id).filter(Boolean))] as string[];
+  const recByEntry = new Map<string, { recording_url: string | null; youtube_url: string | null }>();
+  if (entryIds.length) {
+    const { data: classes } = await supabase
+      .from('nexus_scheduled_classes')
+      .select('plan_entry_id, recording_url, youtube_url')
+      .in('plan_entry_id', entryIds);
+    for (const c of classes || []) {
+      if (c.plan_entry_id && !recByEntry.has(c.plan_entry_id)) {
+        recByEntry.set(c.plan_entry_id, { recording_url: c.recording_url, youtube_url: c.youtube_url });
+      }
+    }
+  }
+
+  return list.map((a) => {
+    let recUrl = a.recording_url;
+    let recSrc = a.recording_source as 'youtube' | 'sharepoint' | null;
+    if (!recUrl && a.plan_entry_id) {
+      const fallback = recByEntry.get(a.plan_entry_id);
+      if (fallback?.youtube_url) {
+        recUrl = fallback.youtube_url;
+        recSrc = 'youtube';
+      } else if (fallback?.recording_url) {
+        recUrl = fallback.recording_url;
+        recSrc = 'sharepoint';
+      }
+    }
+    return {
+      ...a,
+      submission: subMap.get(a.id) ?? null,
+      enrolled_at: enrolledAt,
+      resolved_recording_url: recUrl ?? null,
+      resolved_recording_source: recUrl ? recSrc : null,
+    } as StudentAssignmentItem;
+  });
+}
+
+export type AssignmentEngagementStatus = 'active' | 'partial' | 'inactive';
+
+export interface AssignmentEngagementRow {
+  student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
+  enrolled_at: string | null;
+  is_late_joiner: boolean;
+  /** Assignments whose personal clock has started for this student (due to them). */
+  applicable: number;
+  submitted: number;
+  reviewed: number;
+  on_time: number;
+  overdue: number;
+  avg_marks_pct: number | null;
+  last_submitted_at: string | null;
+  days_since_last: number | null;
+  status: AssignmentEngagementStatus;
+}
+
+export interface AssignmentEngagement {
+  stats: { total_students: number; active: number; partial: number; inactive: number; avg_marks_pct: number | null };
+  rows: AssignmentEngagementRow[];
+}
+
+/**
+ * Per active non-alumni student, their standing across all published assignments
+ * of the classroom, judged on each student's PERSONAL clock (so late joiners are
+ * fair). Status thresholds mirror the library-engagement convention:
+ *   active   = submitted within 7 days AND submitted/applicable >= 0.7
+ *   inactive = nothing submitted, OR nothing in the last 14 days
+ *   partial  = everything in between
+ */
+export async function getAssignmentEngagement(
+  classroomId: string,
+  client?: TypedSupabaseClient,
+): Promise<AssignmentEngagement> {
+  const supabase = client || getSupabaseAdminClient();
+  const today = istTodayYmd();
+
+  const { data: assignments, error: aErr } = await supabase
+    .from(ASSIGNMENTS)
+    .select('id, class_date, due_at, catchup_window_days, max_marks')
+    .eq('classroom_id', classroomId)
+    .eq('status', 'published');
+  if (aErr) throw aErr;
+  const assns = (assignments || []) as Array<{
+    id: string;
+    class_date: string;
+    due_at: string | null;
+    catchup_window_days: number;
+    max_marks: number;
+  }>;
+  const assnById = new Map(assns.map((a) => [a.id, a]));
+
+  const { data: enrollments, error: enErr } = await supabase
+    .from('nexus_enrollments')
+    .select(
+      'enrolled_at, user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni)',
+    )
+    .eq('classroom_id', classroomId)
+    .eq('role', 'student')
+    .eq('is_active', true);
+  if (enErr) throw enErr;
+
+  const students: { id: string; name: string | null; email: string | null; avatar_url: string | null; enrolled_at: string | null }[] = [];
+  const seen = new Set<string>();
+  for (const en of enrollments || []) {
+    const u = en.user as unknown as { id: string; name: string | null; email: string | null; avatar_url: string | null; is_alumni?: boolean };
+    if (!u || u.is_alumni || seen.has(u.id)) continue;
+    seen.add(u.id);
+    students.push({ id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url, enrolled_at: en.enrolled_at ?? null });
+  }
+
+  // All submissions for these assignments, grouped by student.
+  const subsByStudent = new Map<string, NexusAssignmentSubmission[]>();
+  if (assns.length) {
+    const { data: subs, error: sErr } = await supabase
+      .from(SUBMISSIONS)
+      .select('*')
+      .in('assignment_id', assns.map((a) => a.id));
+    if (sErr) throw sErr;
+    for (const s of subs || []) {
+      const arr = subsByStudent.get(s.student_id) || [];
+      arr.push(s as NexusAssignmentSubmission);
+      subsByStudent.set(s.student_id, arr);
+    }
+  }
+
+  const rows: AssignmentEngagementRow[] = students.map((st) => {
+    let applicable = 0;
+    let isLate = false;
+    const dueByAssn = new Map<string, string | null>();
+    for (const a of assns) {
+      const pd = personalDeadline(a.class_date, st.enrolled_at, a.due_at, a.catchup_window_days);
+      if (pd.isLate) isLate = true;
+      dueByAssn.set(a.id, pd.personalDue);
+      if (pd.personalStart <= today) applicable += 1;
+    }
+
+    const subs = subsByStudent.get(st.id) || [];
+    let submitted = 0;
+    let reviewed = 0;
+    let onTime = 0;
+    let lastSubmittedAt: string | null = null;
+    const marksPcts: number[] = [];
+    for (const s of subs) {
+      submitted += 1;
+      if (s.status === 'reviewed') reviewed += 1;
+      const personalDue = dueByAssn.get(s.assignment_id) ?? null;
+      if (!personalDue || s.submitted_at.slice(0, 10) <= personalDue) onTime += 1;
+      if (!lastSubmittedAt || s.submitted_at > lastSubmittedAt) lastSubmittedAt = s.submitted_at;
+      const a = assnById.get(s.assignment_id);
+      if (s.marks != null && a && a.max_marks > 0) marksPcts.push((s.marks / a.max_marks) * 100);
+    }
+    const overdue = Math.max(0, applicable - submitted); // rough: unmet applicable work
+    const avgMarksPct = marksPcts.length ? Math.round(marksPcts.reduce((x, y) => x + y, 0) / marksPcts.length) : null;
+    const daysSinceLast = lastSubmittedAt ? diffDaysYmd(lastSubmittedAt, today) : null;
+
+    let status: AssignmentEngagementStatus;
+    const ratio = applicable > 0 ? submitted / applicable : 0;
+    if (submitted === 0 || (daysSinceLast != null && daysSinceLast > 14)) status = 'inactive';
+    else if (daysSinceLast != null && daysSinceLast <= 7 && ratio >= 0.7) status = 'active';
+    else status = 'partial';
+
+    return {
+      student: { id: st.id, name: st.name, email: st.email, avatar_url: st.avatar_url },
+      enrolled_at: st.enrolled_at,
+      is_late_joiner: isLate,
+      applicable,
+      submitted,
+      reviewed,
+      on_time: onTime,
+      overdue,
+      avg_marks_pct: avgMarksPct,
+      last_submitted_at: lastSubmittedAt,
+      days_since_last: daysSinceLast,
+      status,
+    };
+  });
+
+  rows.sort((a, b) => (a.student.name || '').localeCompare(b.student.name || ''));
+  const allPcts = rows.map((r) => r.avg_marks_pct).filter((x): x is number => x != null);
+  const stats = {
+    total_students: rows.length,
+    active: rows.filter((r) => r.status === 'active').length,
+    partial: rows.filter((r) => r.status === 'partial').length,
+    inactive: rows.filter((r) => r.status === 'inactive').length,
+    avg_marks_pct: allPcts.length ? Math.round(allPcts.reduce((x, y) => x + y, 0) / allPcts.length) : null,
+  };
+  return { stats, rows };
+}
+
 export async function getSubmission(
   assignmentId: string,
   studentId: string,
@@ -420,6 +765,27 @@ export async function reviewSubmission(
 export interface StudentActivePlan {
   classroom: { id: string; name: string | null; type: string | null };
   plan: { id: string; title: string; exam_type: string; start_date: string; expected_end_date: string; saturday_classes: boolean; exam_date: string | null; status: string };
+}
+
+/** Classrooms a student is actively enrolled in (for the Assignments space). */
+export async function listActiveEnrolledClassrooms(
+  userId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ id: string; name: string | null; type: string | null }[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_enrollments')
+    .select('classroom:nexus_classrooms(id, name, type, is_active)')
+    .eq('user_id', userId)
+    .eq('role', 'student')
+    .eq('is_active', true);
+  if (error) throw error;
+  const byId = new Map<string, { id: string; name: string | null; type: string | null }>();
+  for (const e of data || []) {
+    const c = e.classroom as unknown as { id: string; name: string | null; type: string | null; is_active?: boolean };
+    if (c && c.is_active !== false && !byId.has(c.id)) byId.set(c.id, { id: c.id, name: c.name, type: c.type });
+  }
+  return [...byId.values()];
 }
 
 /** Active teaching plans across the student's enrolled classrooms. */

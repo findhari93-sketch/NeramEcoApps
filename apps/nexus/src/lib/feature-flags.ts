@@ -51,6 +51,7 @@ export const FEATURES: FeatureDef[] = [
 
   { id: 'student.timetable', label: 'Timetable', surface: 'student', group: 'Live Class', paths: ['/student/timetable'], defaultEnabled: false },
   { id: 'student.course-plan', label: 'Course Plan', surface: 'student', group: 'Live Class', paths: ['/student/course-plan'], defaultEnabled: false },
+  { id: 'student.assignments', label: 'Assignments', surface: 'student', group: 'Live Class', paths: ['/student/assignments'], defaultEnabled: false },
 
   { id: 'student.library', label: 'Library', surface: 'student', group: 'Learn', paths: ['/student/library'], defaultEnabled: false },
   { id: 'student.question-bank', label: 'Question Bank', surface: 'student', group: 'Learn', paths: ['/student/question-bank'], defaultEnabled: false },
@@ -76,9 +77,9 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.timetable', label: 'Timetable', surface: 'staff', group: 'Teaching', paths: ['/teacher/timetable'], defaultEnabled: true },
   { id: 'staff.curriculum', label: 'Repository', surface: 'staff', group: 'Teaching', paths: ['/teacher/curriculum'], defaultEnabled: true },
   { id: 'staff.course-plans', label: 'Course Plans', surface: 'staff', group: 'Teaching', paths: ['/teacher/course-plans'], defaultEnabled: true },
+  { id: 'staff.assignments', label: 'Assignments', surface: 'staff', group: 'Teaching', paths: ['/teacher/assignments'], defaultEnabled: true },
   { id: 'staff.drawing-reviews', label: 'Drawing Reviews', surface: 'staff', group: 'Teaching', paths: ['/teacher/drawing-reviews'], defaultEnabled: true },
   { id: 'staff.attendance', label: 'Attendance', surface: 'staff', group: 'Teaching', paths: ['/teacher/attendance'], defaultEnabled: true },
-  { id: 'staff.access-requests', label: 'Access Requests', surface: 'staff', group: 'Teaching', paths: ['/teacher/access-requests'], defaultEnabled: true },
   { id: 'staff.leaderboard', label: 'Leaderboard', surface: 'staff', group: 'Teaching', paths: ['/teacher/leaderboard'], defaultEnabled: true },
   { id: 'staff.exams', label: 'Exams', surface: 'staff', group: 'Teaching', paths: ['/teacher/exams'], defaultEnabled: true },
   { id: 'staff.guide', label: 'Teaching Guide', surface: 'staff', group: 'Teaching', paths: ['/teacher/guide'], defaultEnabled: true },

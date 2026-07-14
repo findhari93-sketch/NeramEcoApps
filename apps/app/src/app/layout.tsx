@@ -3,6 +3,7 @@ import { Inter, DM_Sans } from 'next/font/google';
 import { NeramThemeProvider } from '@neram/ui';
 import { enterpriseLightTheme, enterpriseDarkTheme } from '@/lib/theme';
 import GoogleAdsTag from '@/components/GoogleAdsTag';
+import EnvBadge from '@/components/EnvBadge';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-inter' });
@@ -89,6 +90,7 @@ export default function RootLayout({
           defaultMode="light"
         >
           {children}
+          <EnvBadge />
         </NeramThemeProvider>
       </body>
     </html>

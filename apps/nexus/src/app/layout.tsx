@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { NeramThemeProvider, nexusLightTheme, nexusDarkTheme } from '@neram/ui';
 import Providers from './providers';
+import EnvBadge from '@/components/EnvBadge';
 import 'katex/dist/katex.min.css';
 import './globals.css';
 
@@ -59,6 +60,7 @@ export default function RootLayout({
           defaultMode="light"
         >
           <Providers>{children}</Providers>
+          <EnvBadge />
         </NeramThemeProvider>
       </body>
     </html>

@@ -8,6 +8,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import type { UserJourneyDetail, AcademicData, SchoolStudentAcademicData, DiplomaStudentAcademicData, CollegeStudentAcademicData, WorkingProfessionalAcademicData, ApplicantCategory } from '@neram/database';
 import { EDUCATION_BOARD_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
 import CopyablePhone from '@/components/CopyablePhone';
+import { academicYearFromExamYear } from './academic-years';
 
 interface UserProfileSectionProps {
   detail: UserJourneyDetail;
@@ -197,7 +198,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
             <InfoRow label="Father's Name" value={leadProfile.father_name} />
             <InfoRow label="Category" value={leadProfile.applicant_category ? <span style={{ textTransform: 'capitalize' }}>{leadProfile.applicant_category.replace(/_/g, ' ')}</span> : null} />
             <InfoRow label="Caste Category" value={leadProfile.caste_category?.toUpperCase()} />
-            <InfoRow label="Target Exam Year" value={leadProfile.target_exam_year} />
+            <InfoRow label="Exam Batch" value={user.academic_year || academicYearFromExamYear(leadProfile.target_exam_year) || null} />
             {leadProfile.academic_data && renderAcademicData(
               leadProfile.academic_data,
               leadProfile.applicant_category

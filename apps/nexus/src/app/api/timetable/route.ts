@@ -27,10 +27,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Look up user and enrollment
+    // Look up user (need user_type so staff can browse archived past-year classrooms)
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, user_type')
       .eq('ms_oid', msUser.oid)
       .single();
 
@@ -38,17 +38,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // Look up the classroom to know whether it is an archived (past-year, read-only)
+    // cohort. Under one-classroom-per-year each classroom is a single cohort, so no
+    // cross-classroom "Common" merge is needed anymore.
+    const { data: classroom } = await supabase
+      .from('nexus_classrooms')
+      .select('id, is_archived')
+      .eq('id', classroomId)
+      .single();
+
+    if (!classroom) {
+      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+    }
+
+    const isStaff = user.user_type === 'teacher' || user.user_type === 'admin';
+
     const { data: enrollment } = await supabase
       .from('nexus_enrollments')
       .select('role, batch_id')
       .eq('user_id', user.id)
       .eq('classroom_id', classroomId)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
-    if (!enrollment) {
+    // Access control:
+    //  - Archived classroom: read-only Past Sessions browse for staff only. A teacher
+    //    who never taught that cohort may still view it; students are blocked (their
+    //    own archived enrollment is already filtered out of /api/auth/me).
+    //  - Active classroom: unchanged — the caller must be enrolled.
+    if (classroom.is_archived) {
+      if (!isStaff) {
+        return NextResponse.json({ error: 'This classroom is archived' }, { status: 403 });
+      }
+    } else if (!enrollment) {
       return NextResponse.json({ error: 'Not enrolled in this classroom' }, { status: 403 });
     }
+
+    // Effective view role: the enrolled role if any, else staff browsing gets the
+    // full (teacher) view.
+    const effectiveRole = enrollment?.role || 'teacher';
 
     let query = supabase
       .from('nexus_scheduled_classes')
@@ -60,8 +88,8 @@ export async function GET(request: NextRequest) {
       .order('start_time', { ascending: true });
 
     // For students: filter by their batch (show classroom-wide + their batch)
-    if (enrollment.role === 'student') {
-      if (enrollment.batch_id) {
+    if (effectiveRole === 'student') {
+      if (enrollment?.batch_id) {
         // Show classes where batch_id is null (classroom-wide) OR matches student's batch
         query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
       } else {
@@ -79,58 +107,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    let allClasses = data || [];
-
-    // Merge Common Classes into every classroom view
-    // (skip if the active classroom IS the common classroom)
-    const { data: commonClassroom } = await supabase
-      .from('nexus_classrooms')
-      .select('id')
-      .eq('type', 'common')
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-
-    if (commonClassroom && commonClassroom.id !== classroomId) {
-      // Check user is enrolled in common classroom too
-      const { data: commonEnrollment } = await supabase
-        .from('nexus_enrollments')
-        .select('role, batch_id')
-        .eq('user_id', user.id)
-        .eq('classroom_id', commonClassroom.id)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (commonEnrollment) {
-        let commonQuery = supabase
-          .from('nexus_scheduled_classes')
-          .select(CLASS_SELECT)
-          .eq('classroom_id', commonClassroom.id)
-          .gte('scheduled_date', start)
-          .lte('scheduled_date', end)
-          .order('scheduled_date', { ascending: true })
-          .order('start_time', { ascending: true });
-
-        if (commonEnrollment.role === 'student') {
-          if (commonEnrollment.batch_id) {
-            commonQuery = commonQuery.or(`batch_id.is.null,batch_id.eq.${commonEnrollment.batch_id}`);
-          } else {
-            commonQuery = commonQuery.is('batch_id', null);
-          }
-        }
-
-        const { data: commonData } = await commonQuery;
-        if (commonData && commonData.length > 0) {
-          allClasses = [...allClasses, ...commonData].sort((a, b) => {
-            const dateCmp = a.scheduled_date.localeCompare(b.scheduled_date);
-            if (dateCmp !== 0) return dateCmp;
-            return a.start_time.localeCompare(b.start_time);
-          });
-        }
-      }
-    }
-
-    return NextResponse.json({ classes: allClasses, role: enrollment.role });
+    return NextResponse.json({ classes: data || [], role: effectiveRole, archived: !!classroom.is_archived });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load timetable';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -151,6 +128,17 @@ async function verifyTeacherRole(msOid: string, classroomId: string) {
     .single();
 
   if (!user) throw new Error('User not found');
+
+  // Archived (past-year) classrooms are read-only — no create/update/delete.
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('is_archived')
+    .eq('id', classroomId)
+    .single();
+
+  if (classroom?.is_archived) {
+    throw new Error('This classroom is archived and read-only');
+  }
 
   const { data: enrollment } = await supabase
     .from('nexus_enrollments')
@@ -264,7 +252,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create class';
-    const status = message.includes('Only teachers') ? 403 : 500;
+    const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -310,7 +298,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ class: data });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update class';
-    const status = message.includes('Only teachers') ? 403 : 500;
+    const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -389,7 +377,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ class: data, ...(teamsWarning && { teamsWarning }) });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to cancel class';
-    const status = message.includes('Only teachers') ? 403 : 500;
+    const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

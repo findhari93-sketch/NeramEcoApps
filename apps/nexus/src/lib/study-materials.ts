@@ -52,9 +52,18 @@ export function assertCanMutate(user: RequestUser, createdBy: string | null | un
 }
 
 /**
+ * The consolidated single classroom (type='common') is the merged B.Arch cohort, which
+ * prepares for both NATA and JEE Paper 2. Expand it to those exams so exam-tagged Study
+ * Materials stay visible after the single-classroom consolidation (a 'common' student would
+ * otherwise match no exam-targeted folder).
+ */
+const COMMON_CLASSROOM_EXAMS = ['nata', 'jee'];
+
+/**
  * Distinct classroom types ('nata' | 'jee' | ...) across the student's active enrolments.
  * Used as the student's "exam set" for audience filtering. Empty when unknown (treated as
- * show-all by isFolderVisibleToStudent).
+ * show-all by isFolderVisibleToStudent). The consolidated 'common' classroom expands to the
+ * exams it serves (see COMMON_CLASSROOM_EXAMS).
  */
 export async function getStudentExamSet(userId: string): Promise<string[]> {
   const supabase = getSupabaseAdminClient();
@@ -68,7 +77,12 @@ export async function getStudentExamSet(userId: string): Promise<string[]> {
   for (const row of (data as any[]) || []) {
     const classroom = row.classroom;
     const type = Array.isArray(classroom) ? classroom[0]?.type : classroom?.type;
-    if (type) types.add(type);
+    if (!type) continue;
+    if (type === 'common') {
+      for (const e of COMMON_CLASSROOM_EXAMS) types.add(e);
+    } else {
+      types.add(type);
+    }
   }
   return [...types];
 }

@@ -1,11 +1,13 @@
 // @ts-nocheck — nexus_study_folders / nexus_study_files not yet in generated Supabase types;
 // regenerate with pnpm supabase:gen:types after the migration is applied.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { hasTestForFiles } from './study-tests';
 import type {
   NexusStudyFolder,
   NexusStudyFile,
   NexusStudyFileKind,
   NexusStudyFileDTO,
+  NexusStudyFileStatus,
   NexusStudyCommentVisibility,
   NexusStudyCommentAuthorRole,
   NexusStudyFileCommentWithAuthor,
@@ -17,6 +19,7 @@ const FILES = 'nexus_study_files';
 const COMMENTS = 'nexus_study_file_comments';
 const READS = 'nexus_study_file_reads';
 const FAVORITES = 'nexus_study_file_favorites';
+const GRANTS = 'nexus_study_download_grants';
 const AUTHOR_JOIN = 'author:users!nexus_study_file_comments_author_id_fkey(id, name, avatar_url)';
 
 /** Number of days a file is flagged "new" after upload. */
@@ -63,6 +66,39 @@ export function effectiveDownloadable(
     return file.allow_download;
   }
   return folder.allow_download ?? false;
+}
+
+/** A minimal active download grant (as returned by listActiveGrantsForStudent). */
+export interface ActiveDownloadGrant {
+  scope: 'file' | 'folder' | 'all';
+  file_id: string | null;
+  folder_id: string | null;
+  expires_at: string;
+}
+
+/**
+ * Does any of the student's active grants cover this file? Pure — feed it the grants from
+ * listActiveGrantsForStudent so a single query serves a whole folder listing.
+ */
+export function grantCoversFile(
+  grants: ActiveDownloadGrant[],
+  file: Pick<NexusStudyFile, 'id' | 'folder_id'>,
+): boolean {
+  return grants.some(
+    (g) =>
+      g.scope === 'all' ||
+      (g.scope === 'folder' && g.folder_id === file.folder_id) ||
+      (g.scope === 'file' && g.file_id === file.id),
+  );
+}
+
+/** Build the browser-facing recording object from a file's stored columns (null when none). */
+export function fileRecording(
+  file: Pick<NexusStudyFile, 'recording_url' | 'video_source' | 'youtube_id'>,
+): { source: 'youtube' | 'link'; youtube_id: string | null; url: string | null } | null {
+  if (file.youtube_id) return { source: 'youtube', youtube_id: file.youtube_id, url: file.recording_url };
+  if (file.recording_url) return { source: 'link', youtube_id: null, url: file.recording_url };
+  return null;
 }
 
 /** Map a MIME type to a coarse kind for the browser. */
@@ -283,6 +319,92 @@ export async function softDeleteFolderTree(
   await supabase.from(FOLDERS as any).update({ is_deleted: true, updated_at: now }).in('id', subtree);
 }
 
+/**
+ * Ids of every descendant folder of `id` (children, grandchildren, ...), excluding `id` itself.
+ * Used to block moving a folder into its own subtree (which would orphan the branch).
+ * Reuses the parent -> children map technique from softDeleteFolderTree.
+ */
+export async function getDescendantFolderIds(
+  id: string,
+  client?: TypedSupabaseClient,
+): Promise<string[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const all = await listAllFolders(supabase);
+  const childrenOf = new Map<string | null, string[]>();
+  for (const f of all) {
+    const arr = childrenOf.get(f.parent_id) || [];
+    arr.push(f.id);
+    childrenOf.set(f.parent_id, arr);
+  }
+  const out: string[] = [];
+  const stack = [...(childrenOf.get(id) || [])];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    out.push(cur);
+    for (const c of childrenOf.get(cur) || []) stack.push(c);
+  }
+  return out;
+}
+
+/**
+ * Next sort_order for a new sibling (max existing + 1) so new items append to the END of their
+ * list instead of all stacking at 0 on top. `scope` picks files-in-a-folder or folders-under-a-parent.
+ */
+export async function getNextSortOrder(
+  scope: { files: string } | { folders: string | null },
+  client?: TypedSupabaseClient,
+): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  let query;
+  if ('files' in scope) {
+    query = supabase
+      .from(FILES as any)
+      .select('sort_order')
+      .eq('folder_id', scope.files)
+      .eq('is_deleted', false);
+  } else {
+    query = supabase
+      .from(FOLDERS as any)
+      .select('sort_order')
+      .eq('is_deleted', false);
+    query = scope.folders === null ? query.is('parent_id', null) : query.eq('parent_id', scope.folders);
+  }
+  const { data, error } = await query.order('sort_order', { ascending: false }).limit(1);
+  if (error) throw error;
+  const top = (data && data[0]?.sort_order) ?? -1;
+  return top + 1;
+}
+
+/**
+ * Bulk-set sort_order for study files and/or folders in one reorder operation (staff).
+ * Each row is scoped by id; callers send the full new order of the affected group.
+ */
+export async function reorderStudyItems(
+  input: {
+    files?: { id: string; sort_order: number }[];
+    folders?: { id: string; sort_order: number }[];
+  },
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const now = new Date().toISOString();
+  const updates: Promise<any>[] = [];
+  for (const f of input.files || []) {
+    updates.push(
+      supabase.from(FILES as any).update({ sort_order: f.sort_order, updated_at: now }).eq('id', f.id),
+    );
+  }
+  for (const f of input.folders || []) {
+    updates.push(
+      supabase.from(FOLDERS as any).update({ sort_order: f.sort_order, updated_at: now }).eq('id', f.id),
+    );
+  }
+  const results = await Promise.all(updates);
+  for (const r of results) {
+    if ((r as any)?.error) throw (r as any).error;
+  }
+}
+
 export async function createFileRecord(
   input: {
     folder_id: string;
@@ -325,7 +447,12 @@ export async function createFileRecord(
 
 export async function updateFile(
   id: string,
-  patch: Partial<Pick<NexusStudyFile, 'title' | 'folder_id' | 'allow_download' | 'sort_order'>>,
+  patch: Partial<
+    Pick<
+      NexusStudyFile,
+      'title' | 'folder_id' | 'allow_download' | 'sort_order' | 'recording_url' | 'video_source' | 'youtube_id'
+    >
+  >,
   client?: TypedSupabaseClient,
 ): Promise<NexusStudyFile> {
   const supabase = client || getSupabaseAdminClient();
@@ -553,6 +680,64 @@ export async function markFileOpened(
   if (error) throw error;
 }
 
+/**
+ * Add idle-aware active seconds to the student's (file) reads row, creating it on first heartbeat.
+ * Atomic via the nexus_study_record_heartbeat SQL function so concurrent flushes never clobber.
+ */
+export async function markFileHeartbeat(
+  userId: string,
+  fileId: string,
+  addSeconds: number,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const add = Math.max(0, Math.min(Math.round(addSeconds || 0), 600));
+  if (add === 0) return;
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.rpc('nexus_study_record_heartbeat', {
+    p_user_id: userId,
+    p_file_id: fileId,
+    p_add: add,
+  });
+  if (error) throw error;
+}
+
+export interface FileProgress {
+  active_seconds: number;
+  completed_at: string | null;
+  best_score_pct: number | null;
+}
+
+/** Derive the coarse per-student status from a progress row (absent row = not opened). */
+export function deriveFileStatus(progress: FileProgress | undefined): NexusStudyFileStatus {
+  if (!progress) return 'not_opened';
+  if (progress.completed_at) return 'completed';
+  return 'studying';
+}
+
+/** Per-(student,file) progress rows keyed by file_id, for status + time on the browse cards. */
+export async function getFileProgressMap(
+  userId: string,
+  fileIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<Map<string, FileProgress>> {
+  const map = new Map<string, FileProgress>();
+  if (fileIds.length === 0) return map;
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from(READS as any)
+    .select('file_id, active_seconds, completed_at, best_score_pct')
+    .eq('user_id', userId)
+    .in('file_id', fileIds);
+  for (const r of (data || []) as any[]) {
+    map.set(r.file_id, {
+      active_seconds: r.active_seconds || 0,
+      completed_at: r.completed_at ?? null,
+      best_score_pct: r.best_score_pct ?? null,
+    });
+  }
+  return map;
+}
+
 /** Which of these file ids the user has already opened. */
 export async function listReadFileIds(
   userId: string,
@@ -662,6 +847,10 @@ export async function listFavorites(
   const files = (fileRows || []) as NexusStudyFile[];
 
   const folderMap = await getFolderMap(supabase);
+  const grants = await listActiveGrantsForStudent(userId, supabase);
+  const favFileIds = favRows.map((f) => f.file_id);
+  const progress = await getFileProgressMap(userId, favFileIds, supabase);
+  const testSet = await hasTestForFiles(favFileIds, supabase);
   const now = Date.now();
   const out: (NexusStudyFileDTO & { breadcrumb: { id: string; name: string }[] })[] = [];
   // Preserve favorite order (favRows is newest-first).
@@ -672,6 +861,7 @@ export async function listFavorites(
     const folder = folderMap.get(file.folder_id);
     if (!folder || folder.is_deleted) continue;
     if (!isFolderVisibleToStudent(folder, studentExams, studentProgram)) continue;
+    const p = progress.get(file.id);
     out.push({
       id: file.id,
       folder_id: file.folder_id,
@@ -681,11 +871,16 @@ export async function listFavorites(
       file_size_bytes: file.file_size_bytes,
       page_count: file.page_count,
       kind: fileKind(file.file_type),
-      downloadable: effectiveDownloadable(file, folder),
+      downloadable: effectiveDownloadable(file, folder) || grantCoversFile(grants, file),
       sort_order: file.sort_order,
       created_at: file.created_at,
       is_new: isNewFile(file.created_at, now),
       is_favorite: true,
+      status: deriveFileStatus(p),
+      active_seconds: p?.active_seconds ?? 0,
+      best_score_pct: p?.best_score_pct ?? null,
+      has_test: testSet.has(file.id),
+      recording: fileRecording(file),
       breadcrumb: buildBreadcrumb(folder.id, folderMap),
     });
   }
@@ -727,7 +922,7 @@ function buildBreadcrumb(
  */
 export async function searchStudyMaterials(
   q: string,
-  ctx: { staff: boolean; studentExams: string[]; studentProgram: string | null },
+  ctx: { staff: boolean; studentExams: string[]; studentProgram: string | null; studentId?: string | null },
   client?: TypedSupabaseClient,
 ): Promise<any[]> {
   // Strip characters that would break PostgREST filter parsing (comma/paren separators in .or(),
@@ -737,6 +932,8 @@ export async function searchStudyMaterials(
   const supabase = client || getSupabaseAdminClient();
   const like = `%${term}%`;
   const folderMap = await getFolderMap(supabase);
+  const grants =
+    !ctx.staff && ctx.studentId ? await listActiveGrantsForStudent(ctx.studentId, supabase) : [];
 
   const visible = (folder: NexusStudyFolder | undefined): boolean => {
     if (!folder || folder.is_deleted) return false;
@@ -783,9 +980,232 @@ export async function searchStudyMaterials(
       folder_id: file.folder_id,
       breadcrumb: buildBreadcrumb(file.folder_id, folderMap),
       file_kind: fileKind(file.file_type),
-      downloadable: effectiveDownloadable(file, folder!),
+      downloadable: effectiveDownloadable(file, folder!) || grantCoversFile(grants, file),
     });
   }
 
   return results;
+}
+
+// ============================================================
+// Download grants (time-limited, per-student)
+// ============================================================
+
+/** Active (non-revoked, non-expired) download grants for a student. */
+export async function listActiveGrantsForStudent(
+  studentId: string,
+  client?: TypedSupabaseClient,
+): Promise<ActiveDownloadGrant[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from(GRANTS as any)
+    .select('scope, file_id, folder_id, expires_at')
+    .eq('student_id', studentId)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString());
+  return (data || []) as ActiveDownloadGrant[];
+}
+
+/** Does the student have an active grant that lets them download this specific file? */
+export async function hasActiveDownloadGrant(
+  studentId: string,
+  file: Pick<NexusStudyFile, 'id' | 'folder_id'>,
+  client?: TypedSupabaseClient,
+): Promise<boolean> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from(GRANTS as any)
+    .select('id')
+    .eq('student_id', studentId)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .or(
+      `scope.eq.all,and(scope.eq.folder,folder_id.eq.${file.folder_id}),and(scope.eq.file,file_id.eq.${file.id})`,
+    )
+    .limit(1);
+  return !!(data && data.length);
+}
+
+/** Create a download grant. expiresAt is an ISO timestamp. */
+export async function createDownloadGrant(
+  input: {
+    studentId: string;
+    scope: 'file' | 'folder' | 'all';
+    fileId?: string | null;
+    folderId?: string | null;
+    grantedBy: string;
+    reason?: string | null;
+    expiresAt: string;
+  },
+  client?: TypedSupabaseClient,
+): Promise<{ id: string }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from(GRANTS as any)
+    .insert({
+      student_id: input.studentId,
+      scope: input.scope,
+      file_id: input.scope === 'file' ? input.fileId ?? null : null,
+      folder_id: input.scope === 'folder' ? input.folderId ?? null : null,
+      granted_by: input.grantedBy,
+      reason: input.reason ?? null,
+      expires_at: input.expiresAt,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data as { id: string };
+}
+
+/** Revoke a grant (soft): stamps revoked_at/revoked_by so it stops covering downloads immediately. */
+export async function revokeDownloadGrant(
+  grantId: string,
+  revokedBy: string,
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase
+    .from(GRANTS as any)
+    .update({ revoked_at: new Date().toISOString(), revoked_by: revokedBy })
+    .eq('id', grantId)
+    .is('revoked_at', null);
+  if (error) throw error;
+}
+
+/** A grant row with the grantee's name, for the teacher management list. */
+export interface DownloadGrantWithStudent {
+  id: string;
+  student_id: string;
+  student_name: string | null;
+  scope: 'file' | 'folder' | 'all';
+  file_id: string | null;
+  folder_id: string | null;
+  reason: string | null;
+  granted_at: string;
+  expires_at: string;
+}
+
+const GRANT_STUDENT_JOIN =
+  'student:users!nexus_study_download_grants_student_id_fkey(id, name)';
+
+function mapGrantRow(row: any): DownloadGrantWithStudent {
+  const student = Array.isArray(row.student) ? row.student[0] : row.student;
+  return {
+    id: row.id,
+    student_id: row.student_id,
+    student_name: student?.name ?? null,
+    scope: row.scope,
+    file_id: row.file_id,
+    folder_id: row.folder_id,
+    reason: row.reason,
+    granted_at: row.granted_at,
+    expires_at: row.expires_at,
+  };
+}
+
+/** Active grants that target a specific file (for the teacher "manage grants" list). */
+export async function listGrantsForFile(
+  fileId: string,
+  client?: TypedSupabaseClient,
+): Promise<DownloadGrantWithStudent[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from(GRANTS as any)
+    .select(`id, student_id, scope, file_id, folder_id, reason, granted_at, expires_at, ${GRANT_STUDENT_JOIN}`)
+    .eq('file_id', fileId)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('granted_at', { ascending: false });
+  return ((data || []) as any[]).map(mapGrantRow);
+}
+
+/** Active grants that target a specific folder (for the teacher "manage grants" list). */
+export async function listGrantsForFolder(
+  folderId: string,
+  client?: TypedSupabaseClient,
+): Promise<DownloadGrantWithStudent[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from(GRANTS as any)
+    .select(`id, student_id, scope, file_id, folder_id, reason, granted_at, expires_at, ${GRANT_STUDENT_JOIN}`)
+    .eq('folder_id', folderId)
+    .is('revoked_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('granted_at', { ascending: false });
+  return ((data || []) as any[]).map(mapGrantRow);
+}
+
+// ============================================================
+// Completion dashboard (per file, per classroom)
+// ============================================================
+
+export interface StudyFileCompletionStudent {
+  student_id: string;
+  name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  status: NexusStudyFileStatus;
+  active_seconds: number;
+  best_score_pct: number | null;
+  first_opened_at: string | null;
+  completed_at: string | null;
+  days_since_started: number | null;
+}
+
+/**
+ * Every active student in the classroom crossed with their progress on this file, for the teacher
+ * completion dashboard. Status derives from the reads row; days_since_started counts from first open.
+ */
+export async function getStudyFileCompletion(
+  fileId: string,
+  classroomId: string,
+  client?: TypedSupabaseClient,
+): Promise<StudyFileCompletionStudent[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: enr } = await supabase
+    .from('nexus_enrollments' as any)
+    .select('user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, is_alumni)')
+    .eq('classroom_id', classroomId)
+    .eq('role', 'student')
+    .eq('is_active', true)
+    .eq('users.is_alumni', false);
+
+  const students = ((enr || []) as any[])
+    .map((e) => (Array.isArray(e.user) ? e.user[0] : e.user))
+    .filter(Boolean);
+  const ids = students.map((s) => s.id);
+  if (ids.length === 0) return [];
+
+  const { data: reads } = await supabase
+    .from(READS as any)
+    .select('user_id, active_seconds, opened_at, completed_at, best_score_pct')
+    .eq('file_id', fileId)
+    .in('user_id', ids);
+  const byUser = new Map((reads || []).map((r: any) => [r.user_id, r]));
+
+  const now = Date.now();
+  const seen = new Set<string>();
+  const rows: StudyFileCompletionStudent[] = [];
+  for (const s of students) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    const r = byUser.get(s.id);
+    const status: NexusStudyFileStatus = !r ? 'not_opened' : r.completed_at ? 'completed' : 'studying';
+    const firstOpened = r?.opened_at ?? null;
+    rows.push({
+      student_id: s.id,
+      name: s.name,
+      email: s.email,
+      avatar_url: s.avatar_url,
+      status,
+      active_seconds: r?.active_seconds || 0,
+      best_score_pct: r?.best_score_pct ?? null,
+      first_opened_at: firstOpened,
+      completed_at: r?.completed_at ?? null,
+      days_since_started: firstOpened
+        ? Math.floor((now - new Date(firstOpened).getTime()) / 86_400_000)
+        : null,
+    });
+  }
+  return rows;
 }

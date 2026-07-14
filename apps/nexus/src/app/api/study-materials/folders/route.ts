@@ -7,13 +7,21 @@ import {
   getFolderUnreadCounts,
   getBreadcrumb,
   createFolder,
+  listAllFolders,
+  getNextSortOrder,
   isFolderVisibleToStudent,
   effectiveDownloadable,
+  grantCoversFile,
+  listActiveGrantsForStudent,
   fileKind,
+  fileRecording,
   isNewFile,
-  listReadFileIds,
+  getFileProgressMap,
+  deriveFileStatus,
+  hasTestForFiles,
   listFavoriteFileIds,
   getCommentCounts,
+  type FileProgress,
 } from '@neram/database';
 import { getRequestUser, isStaff, assertStaff, getStudentExamSet } from '@/lib/study-materials';
 
@@ -25,6 +33,16 @@ import { getRequestUser, isStaff, assertStaff, getStudentExamSet } from '@/lib/s
 export async function GET(request: NextRequest) {
   try {
     const user = await getRequestUser(request.headers.get('Authorization'));
+
+    // Flat folder list for the staff "Move to folder..." picker.
+    if (request.nextUrl.searchParams.get('all') === '1') {
+      assertStaff(user);
+      const all = await listAllFolders();
+      return NextResponse.json({
+        folders: all.map((f) => ({ id: f.id, parent_id: f.parent_id, name: f.name })),
+      });
+    }
+
     const parentParam = request.nextUrl.searchParams.get('parent');
     const parentId = parentParam && parentParam !== 'root' ? parentParam : null;
 
@@ -78,30 +96,49 @@ export async function GET(request: NextRequest) {
     if (parentId && currentFolder) {
       const rawFiles = await listFilesInFolder(parentId);
       const fileIds = rawFiles.map((f) => f.id);
-      // Per-user + shared computed extras.
-      const [readSet, favSet, commentCounts] = await Promise.all([
-        staff ? Promise.resolve(new Set<string>()) : listReadFileIds(user.id, fileIds),
+      // Per-user + shared computed extras. Students also get their study progress (status + time)
+      // and active download grants; teachers see the file's own setting only.
+      const [progress, favSet, commentCounts, grants, testSet] = await Promise.all([
+        staff
+          ? Promise.resolve(new Map<string, FileProgress>())
+          : getFileProgressMap(user.id, fileIds),
         staff ? Promise.resolve(new Set<string>()) : listFavoriteFileIds(user.id, fileIds),
         getCommentCounts(fileIds),
+        staff ? Promise.resolve([]) : listActiveGrantsForStudent(user.id),
+        hasTestForFiles(fileIds),
       ]);
       const now = Date.now();
-      files = rawFiles.map((file) => ({
-        id: file.id,
-        folder_id: file.folder_id,
-        title: file.title,
-        file_name: file.file_name,
-        file_type: file.file_type,
-        file_size_bytes: file.file_size_bytes,
-        page_count: file.page_count,
-        kind: fileKind(file.file_type),
-        downloadable: effectiveDownloadable(file, currentFolder),
-        sort_order: file.sort_order,
-        created_at: file.created_at,
-        is_new: isNewFile(file.created_at, now),
-        comment_count: commentCounts[file.id] || 0,
-        ...(staff ? {} : { is_unread: !readSet.has(file.id), is_favorite: favSet.has(file.id) }),
-        ...(staff ? { allow_download: file.allow_download } : {}),
-      }));
+      files = rawFiles.map((file) => {
+        const p = progress.get(file.id);
+        return {
+          id: file.id,
+          folder_id: file.folder_id,
+          title: file.title,
+          file_name: file.file_name,
+          file_type: file.file_type,
+          file_size_bytes: file.file_size_bytes,
+          page_count: file.page_count,
+          kind: fileKind(file.file_type),
+          downloadable:
+            effectiveDownloadable(file, currentFolder) || (!staff && grantCoversFile(grants, file)),
+          has_test: testSet.has(file.id),
+          recording: fileRecording(file),
+          sort_order: file.sort_order,
+          created_at: file.created_at,
+          is_new: isNewFile(file.created_at, now),
+          comment_count: commentCounts[file.id] || 0,
+          ...(staff
+            ? {}
+            : {
+                is_unread: !p,
+                is_favorite: favSet.has(file.id),
+                status: deriveFileStatus(p),
+                active_seconds: p?.active_seconds ?? 0,
+                best_score_pct: p?.best_score_pct ?? null,
+              }),
+          ...(staff ? { allow_download: file.allow_download } : {}),
+        };
+      });
     }
 
     const breadcrumb = await getBreadcrumb(parentId);
@@ -149,13 +186,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Folder name is required' }, { status: 400 });
     }
 
+    const parentId = body.parent_id ?? null;
+    // Append to the end of its group so a new folder does not jump to the top.
+    const sortOrder = await getNextSortOrder({ folders: parentId });
+
     const folder = await createFolder({
       name: body.name.trim(),
-      parent_id: body.parent_id ?? null,
+      parent_id: parentId,
       description: body.description ?? null,
       target_exams: Array.isArray(body.target_exams) ? body.target_exams : [],
       target_programs: Array.isArray(body.target_programs) ? body.target_programs : [],
       allow_download: !!body.allow_download,
+      sort_order: sortOrder,
       created_by: user.id,
     });
 

@@ -454,6 +454,20 @@ export async function getQBQuestions(
     query = query.in('id', yearFilteredIds);
   }
 
+  // Tag-based filter (managed registry). OR-semantics: question carries any selected tag.
+  if (filters.tag_ids && filters.tag_ids.length > 0) {
+    const { data: tagRows, error: tagErr } = await supabase
+      .from('nexus_qb_question_tags' as any)
+      .select('question_id')
+      .in('tag_id', filters.tag_ids);
+    if (tagErr) throw tagErr;
+    const tagFilteredIds = [...new Set((tagRows || []).map((r: any) => r.question_id))];
+    if (tagFilteredIds.length === 0) {
+      return { questions: [], total: 0 };
+    }
+    query = query.in('id', tagFilteredIds);
+  }
+
   // Order and paginate
   query = query
     .order('display_order', { ascending: true, nullsFirst: false })
@@ -1655,6 +1669,20 @@ export async function getTeacherQBQuestions(
         query = query.is('solution_video_url', null).is('solution_image_url', null).is('explanation_brief', null);
         break;
     }
+  }
+
+  // Tag-based filter (managed registry). OR-semantics: question carries any selected tag.
+  if (filters.tag_ids && filters.tag_ids.length > 0) {
+    const { data: tagRows, error: tagErr } = await supabase
+      .from('nexus_qb_question_tags' as any)
+      .select('question_id')
+      .in('tag_id', filters.tag_ids);
+    if (tagErr) throw tagErr;
+    const tagFilteredIds = [...new Set((tagRows || []).map((r: any) => r.question_id))];
+    if (tagFilteredIds.length === 0) {
+      return { questions: [], total: 0 };
+    }
+    query = query.in('id', tagFilteredIds);
   }
 
   query = query

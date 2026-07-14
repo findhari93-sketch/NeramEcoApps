@@ -19,14 +19,13 @@ import {
   Stack,
   Paper,
   EmptyState,
+  ToggleButton,
+  ToggleButtonGroup,
   alpha,
   useTheme,
 } from '@neram/ui';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
-import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
-import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import CloseIcon from '@mui/icons-material/Close';
@@ -35,63 +34,29 @@ import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import SearchIcon from '@mui/icons-material/Search';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
+import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
+import { FileThumb, FileIcon } from '@/components/study-materials/FileThumb';
 import type { NexusStudyBrowseResult, NexusStudyFileDTO, NexusStudySearchResult } from '@neram/database/types';
 
-const coverSx = {
-  width: '100%',
-  height: 92,
-  borderRadius: 2,
-  overflow: 'hidden',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  bgcolor: 'action.hover',
-  mb: 1,
-} as const;
-
-/** File cover: a Graph thumbnail (PDF first page / image) with a glyph fallback. */
-function FileThumb({ kind, src }: { kind: string; src: string | null }) {
-  const [failed, setFailed] = useState(false);
-  const canPreview = (kind === 'pdf' || kind === 'image') && !!src && !failed;
-  return (
-    <Box sx={coverSx}>
-      {canPreview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src!}
-          alt=""
-          loading="lazy"
-          onError={() => setFailed(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
-      ) : (
-        <FileIcon kind={kind} />
-      )}
-    </Box>
-  );
-}
-
-function formatSize(bytes: number | null): string {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function FileIcon({ kind, size = 30 }: { kind: string; size?: number }) {
-  if (kind === 'pdf') return <PictureAsPdfOutlinedIcon sx={{ fontSize: size, color: '#d32f2f' }} />;
-  if (kind === 'image') return <ImageOutlinedIcon sx={{ fontSize: size, color: '#1976d2' }} />;
-  return <InsertDriveFileOutlinedIcon sx={{ fontSize: size, color: 'text.secondary' }} />;
-}
+// Layout preference, shared with the teacher study-materials view.
+const VIEW_STORAGE_KEY = 'nexus:study-view';
 
 function StudyMaterialsBrowser() {
   const theme = useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = searchParams.get('folder');
-  const { getToken, loading: authLoading } = useNexusAuthContext();
+  const { getToken, user, loading: authLoading } = useNexusAuthContext();
+
+  // Identity stamped over PDFs/images to deter redistribution (name + phone/email).
+  const watermark = user
+    ? [user.name, user.phone || user.email].filter(Boolean).join('   ·   ')
+    : undefined;
 
   const [token, setToken] = useState<string | null>(null);
   const [data, setData] = useState<NexusStudyBrowseResult | null>(null);
@@ -103,6 +68,8 @@ function StudyMaterialsBrowser() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<NexusStudySearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
+
+  const [view, setView] = useState<'grid' | 'list'>('grid');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -161,6 +128,26 @@ function StudyMaterialsBrowser() {
     };
   }, [search, token, getToken]);
 
+  // Restore the saved layout preference (shared with the teacher view).
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
+      if (saved === 'grid' || saved === 'list') setView(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const changeView = (next: 'grid' | 'list' | null) => {
+    if (!next) return;
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const goToFolder = (id: string | null) =>
     router.push(id ? `/student/study-materials?folder=${id}` : '/student/study-materials');
 
@@ -168,7 +155,7 @@ function StudyMaterialsBrowser() {
     `/api/study-materials/files/${fileId}/content?token=${encodeURIComponent(token || '')}${download ? '&download=1' : ''}`;
 
   const thumbUrl = (fileId: string) =>
-    `/api/study-materials/files/${fileId}/thumbnail?token=${encodeURIComponent(token || '')}&size=medium`;
+    `/api/study-materials/files/${fileId}/thumbnail?token=${encodeURIComponent(token || '')}&size=large`;
 
   // Record a file as read (once per open) and clear its unread dot optimistically.
   const markRead = useCallback((fileId: string) => {
@@ -242,14 +229,72 @@ function StudyMaterialsBrowser() {
     openFile(partial);
   };
 
+  // Status + affordance chips shown under a file's title in both grid and list layouts.
+  const fileStatusChips = (file: NexusStudyFileDTO) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+      <Chip
+        size="small"
+        icon={file.downloadable ? <DownloadOutlinedIcon /> : <LockOutlinedIcon />}
+        label={file.downloadable ? 'Download' : 'View only'}
+        sx={{
+          height: 20,
+          fontSize: '0.62rem',
+          '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' },
+          bgcolor: file.downloadable
+            ? alpha(theme.palette.success.main, 0.12)
+            : alpha(theme.palette.text.secondary, 0.1),
+          color: file.downloadable ? 'success.main' : 'text.secondary',
+        }}
+      />
+      {file.is_new && (
+        <Chip size="small" label="New" color="success" sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700 }} />
+      )}
+      {file.status === 'completed' && (
+        <Chip
+          size="small"
+          icon={<CheckCircleOutlineIcon />}
+          label={file.best_score_pct != null ? `Completed · ${Math.round(file.best_score_pct)}%` : 'Completed'}
+          sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.success.main, 0.16), color: 'success.main' }}
+        />
+      )}
+      {file.status === 'studying' && (
+        <Chip
+          size="small"
+          icon={<AutoStoriesOutlinedIcon />}
+          label="In progress"
+          sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.warning.main, 0.16), color: 'warning.dark' }}
+        />
+      )}
+      {!!file.comment_count && (
+        <Chip
+          size="small"
+          icon={<ChatBubbleOutlineIcon />}
+          label={file.comment_count}
+          sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.78rem', ml: '4px' } }}
+        />
+      )}
+    </Box>
+  );
+
   // ── Header ──
   const header = (
     <Box sx={{ mb: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
         <FolderOpenOutlinedIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h5" sx={{ fontWeight: 800 }}>
+        <Typography variant="h5" sx={{ fontWeight: 800, flex: 1 }}>
           Study Materials
         </Typography>
+        <ToggleButtonGroup
+          value={view}
+          exclusive
+          size="small"
+          onChange={(_, v) => changeView(v)}
+          aria-label="View layout"
+          sx={{ '& .MuiToggleButton-root': { px: 1 } }}
+        >
+          <ToggleButton value="grid" aria-label="Grid view"><GridViewOutlinedIcon fontSize="small" /></ToggleButton>
+          <ToggleButton value="list" aria-label="List view"><ViewListOutlinedIcon fontSize="small" /></ToggleButton>
+        </ToggleButtonGroup>
       </Box>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
         Question papers, books, references and counseling documents, organised for you.
@@ -385,6 +430,91 @@ function StudyMaterialsBrowser() {
       </Stack>
     );
 
+  // ── Compact list view (folders then files, one row each) ──
+  const rowSx = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.25,
+    p: 1,
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: 2,
+    cursor: 'pointer',
+    transition: 'background-color 150ms ease',
+    '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+  } as const;
+
+  const listView = (
+    <Stack spacing={1}>
+      {folders.map((f) => (
+        <Box
+          key={f.id}
+          onClick={() => goToFolder(f.id)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') goToFolder(f.id); }}
+          sx={rowSx}
+        >
+          <Box sx={{ width: 44, height: 44, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1), flexShrink: 0 }}>
+            <FolderOutlinedIcon sx={{ color: 'primary.main' }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>{f.name}</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {f.item_count} {f.item_count === 1 ? 'item' : 'items'}
+              {f.unread_count ? ` · ${f.unread_count} new` : ''}
+            </Typography>
+          </Box>
+        </Box>
+      ))}
+
+      {files.map((file) => (
+        <Box
+          key={file.id}
+          onClick={() => openFile(file)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') openFile(file); }}
+          sx={rowSx}
+        >
+          <Box sx={{ width: 44, height: 44, flexShrink: 0, position: 'relative' }}>
+            <FileThumb kind={file.kind} src={thumbUrl(file.id)} sx={{ height: 44, mb: 0, borderRadius: 1.5 }} iconSize={22} />
+            {file.is_unread && (
+              <Box sx={{ position: 'absolute', top: -2, right: -2, width: 9, height: 9, borderRadius: '50%', bgcolor: 'primary.main', border: `2px solid ${theme.palette.background.paper}` }} />
+            )}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: file.is_unread ? 700 : 600 }} noWrap>{file.title}</Typography>
+            {fileStatusChips(file)}
+          </Box>
+          <Tooltip title={file.is_favorite ? 'Remove from starred' : 'Add to starred'}>
+            <IconButton
+              size="small"
+              onClick={(e) => toggleFavorite(file, e)}
+              aria-label={file.is_favorite ? 'Remove from starred' : 'Add to starred'}
+              sx={{ flexShrink: 0 }}
+            >
+              {file.is_favorite
+                ? <StarIcon sx={{ fontSize: '1.05rem', color: '#f5b400' }} />
+                : <StarBorderIcon sx={{ fontSize: '1.05rem' }} />}
+            </IconButton>
+          </Tooltip>
+          {file.downloadable && (
+            <Tooltip title="Download">
+              <IconButton
+                size="small"
+                onClick={(e) => { e.stopPropagation(); window.open(contentUrl(file.id, true), '_blank'); }}
+                aria-label="Download"
+                sx={{ flexShrink: 0 }}
+              >
+                <DownloadOutlinedIcon sx={{ fontSize: '1.05rem' }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      ))}
+    </Stack>
+  );
+
   return (
     <Box>
       {header}
@@ -399,6 +529,8 @@ function StudyMaterialsBrowser() {
           description="Your teachers have not added materials to this folder yet. Check back soon."
           icon={<FolderOutlinedIcon />}
         />
+      ) : view === 'list' ? (
+        listView
       ) : (
         <Box
           sx={{
@@ -477,33 +609,7 @@ function StudyMaterialsBrowser() {
                       {file.title}
                     </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                    <Chip
-                      size="small"
-                      icon={file.downloadable ? <DownloadOutlinedIcon /> : <LockOutlinedIcon />}
-                      label={file.downloadable ? 'Download' : 'View only'}
-                      sx={{
-                        height: 20,
-                        fontSize: '0.62rem',
-                        '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' },
-                        bgcolor: file.downloadable
-                          ? alpha(theme.palette.success.main, 0.12)
-                          : alpha(theme.palette.text.secondary, 0.1),
-                        color: file.downloadable ? 'success.main' : 'text.secondary',
-                      }}
-                    />
-                    {file.is_new && (
-                      <Chip size="small" label="New" color="success" sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700 }} />
-                    )}
-                    {!!file.comment_count && (
-                      <Chip
-                        size="small"
-                        icon={<ChatBubbleOutlineIcon />}
-                        label={file.comment_count}
-                        sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.78rem', ml: '4px' } }}
-                      />
-                    )}
-                  </Box>
+                  {fileStatusChips(file)}
                 </Box>
               </CardActionArea>
 
@@ -547,6 +653,9 @@ function StudyMaterialsBrowser() {
         token={token}
         getToken={getToken}
         onClose={() => setViewerFile(null)}
+        watermark={watermark}
+        track
+        onProgressChange={load}
       />
     </Box>
   );

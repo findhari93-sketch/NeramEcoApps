@@ -85,6 +85,25 @@ export async function POST(
       return NextResponse.json({ error: 'role is required' }, { status: 400 });
     }
 
+    // Load the target classroom up front. Under one-classroom-per-year an archived
+    // classroom is a past cohort and is read-only, so students may not be enrolled
+    // into it (add them to the current-year classroom instead).
+    const { data: targetClassroom } = await supabase
+      .from('nexus_classrooms')
+      .select('id, name, is_archived, ms_team_id, ms_team_sync_enabled')
+      .eq('id', id)
+      .single();
+
+    if (!targetClassroom) {
+      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+    }
+    if (targetClassroom.is_archived && role === 'student') {
+      return NextResponse.json(
+        { error: 'This classroom is archived (a past academic year) and is read-only. Enroll students into the current-year classroom instead.' },
+        { status: 409 }
+      );
+    }
+
     let resolvedUserId: string;
 
     if (body.user_id) {
@@ -138,48 +157,19 @@ export async function POST(
 
     if (error) throw error;
 
-    // Non-blocking: auto-add to Teams team if sync is enabled
-    // Also sync to Common classroom's Teams team (cross-classroom visibility)
+    // Non-blocking: auto-add to the classroom's own Teams team if sync is enabled.
+    // Under one-classroom-per-year each yearly classroom has its own Team, so there
+    // is no separate cross-year "Common" team to also sync into.
     const userMsOid = body.ms_oid || null;
-    if (userMsOid) {
-      const { data: classroomConfig } = await supabase
-        .from('nexus_classrooms')
-        .select('ms_team_id, ms_team_sync_enabled, name')
-        .eq('id', id)
-        .single();
-
-      if (classroomConfig?.ms_team_id && classroomConfig?.ms_team_sync_enabled) {
-        addMemberToTeam(classroomConfig.ms_team_id, userMsOid).catch((err: unknown) =>
-          console.error('[Teams auto-sync] Failed to add member:', err)
-        );
-      }
-
-      // Also add to Common Teams team (the DB trigger auto-enrolls in Common classroom,
-      // but can't call external APIs — so we sync to Common team here)
-      if (role === 'student') {
-        const { data: commonClassroom } = await supabase
-          .from('nexus_classrooms')
-          .select('ms_team_id, ms_team_sync_enabled')
-          .eq('type', 'common')
-          .eq('is_active', true)
-          .single();
-
-        if (commonClassroom?.ms_team_id && commonClassroom?.ms_team_sync_enabled) {
-          addMemberToTeam(commonClassroom.ms_team_id, userMsOid).catch((err: unknown) =>
-            console.error('[Teams auto-sync] Failed to add member to Common team:', err)
-          );
-        }
-      }
+    if (userMsOid && targetClassroom.ms_team_id && targetClassroom.ms_team_sync_enabled) {
+      addMemberToTeam(targetClassroom.ms_team_id, userMsOid).catch((err: unknown) =>
+        console.error('[Teams auto-sync] Failed to add member:', err)
+      );
     }
 
     // Send notification to the enrolled user
     try {
-      const { data: classroom } = await supabase
-        .from('nexus_classrooms')
-        .select('name')
-        .eq('id', id)
-        .single();
-      const classroomName = classroom?.name || 'a classroom';
+      const classroomName = targetClassroom.name || 'a classroom';
 
       await createUserNotification(
         {

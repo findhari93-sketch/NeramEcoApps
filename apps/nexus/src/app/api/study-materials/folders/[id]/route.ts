@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateFolder, softDeleteFolderTree } from '@neram/database';
+import { updateFolder, softDeleteFolderTree, getDescendantFolderIds } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 
 /**
@@ -21,8 +21,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (typeof body.allow_download === 'boolean') patch.allow_download = body.allow_download;
     if (typeof body.sort_order === 'number') patch.sort_order = body.sort_order;
 
-    if (params.id === body.parent_id) {
-      return NextResponse.json({ error: 'A folder cannot be its own parent' }, { status: 400 });
+    if ('parent_id' in patch && patch.parent_id) {
+      const newParent = patch.parent_id as string;
+      if (newParent === params.id) {
+        return NextResponse.json({ error: 'A folder cannot be its own parent' }, { status: 400 });
+      }
+      const descendants = await getDescendantFolderIds(params.id);
+      if (descendants.includes(newParent)) {
+        return NextResponse.json(
+          { error: 'You cannot move a folder into one of its own subfolders' },
+          { status: 400 },
+        );
+      }
     }
 
     const folder = await updateFolder(params.id, patch as any);

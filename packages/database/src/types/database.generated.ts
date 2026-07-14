@@ -6331,11 +6331,13 @@ export type Database = {
       }
       nexus_classrooms: {
         Row: {
+          academic_year: string | null
           created_at: string | null
           created_by: string | null
           description: string | null
           id: string
           is_active: boolean | null
+          is_archived: boolean | null
           ms_team_id: string | null
           ms_team_name: string | null
           ms_team_sync_enabled: boolean | null
@@ -6346,11 +6348,13 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          academic_year?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           id?: string
           is_active?: boolean | null
+          is_archived?: boolean | null
           ms_team_id?: string | null
           ms_team_name?: string | null
           ms_team_sync_enabled?: boolean | null
@@ -6361,11 +6365,13 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          academic_year?: string | null
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           id?: string
           is_active?: boolean | null
+          is_archived?: boolean | null
           ms_team_id?: string | null
           ms_team_name?: string | null
           ms_team_sync_enabled?: boolean | null
@@ -15319,6 +15325,8 @@ export type Database = {
           student_program: string
           alumni_since: string | null
           last_login_at: string | null
+          nexus_first_login_at: string | null
+          nexus_last_login_at: string | null
           last_name: string | null
           linked_classroom_at: string | null
           linked_classroom_by: string | null
@@ -15359,6 +15367,8 @@ export type Database = {
           student_program?: string
           alumni_since?: string | null
           last_login_at?: string | null
+          nexus_first_login_at?: string | null
+          nexus_last_login_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
           linked_classroom_by?: string | null
@@ -15399,6 +15409,8 @@ export type Database = {
           student_program?: string
           alumni_since?: string | null
           last_login_at?: string | null
+          nexus_first_login_at?: string | null
+          nexus_last_login_at?: string | null
           last_name?: string | null
           linked_classroom_at?: string | null
           linked_classroom_by?: string | null

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting } from '@neram/database';
+import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting, getCurrentBatch } from '@neram/database';
 import { getUserProfile } from '@neram/auth';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
 
@@ -77,6 +77,17 @@ export async function GET(request: NextRequest) {
     const updates: Record<string, string> = msUser.impersonatorUserId
       ? {}
       : { last_login_at: new Date().toISOString() };
+    // Nexus-specific login signal. last_login_at is cross-app (also written by
+    // the Tools app and at signup), so it can't tell admins who has actually
+    // opened Nexus. These two columns are written ONLY here (never on
+    // impersonation), so nexus_first_login_at != null == "opened Nexus at least
+    // once" and nexus_last_login_at == "last opened Nexus".
+    if (!msUser.impersonatorUserId) {
+      updates.nexus_last_login_at = updates.last_login_at;
+      if (!user.nexus_first_login_at) {
+        updates.nexus_first_login_at = updates.last_login_at;
+      }
+    }
     if (msUser.name && msUser.name !== user.name) updates.name = msUser.name;
     if (
       msUser.email &&
@@ -108,14 +119,35 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .eq('is_active', true);
 
-    // Only surface enrollments whose classroom is still active. Archiving a
-    // classroom (is_active=false) must remove it from the switcher even if the
-    // enrollment row is left active — the enrollment filter above does not cover
-    // that. Use a JS filter (not an !inner embed, which would silently drop rows
-    // with a missing classroom).
+    // Only surface enrollments whose classroom is still live. A classroom drops
+    // out of the student's view when it is disabled (is_active=false, hard
+    // kill-switch) OR archived (is_archived=true, year-end lifecycle: last year's
+    // cohort classroom is kept in the DB for staff but hidden from students).
+    // Use a JS filter (not an !inner embed, which would silently drop rows with a
+    // missing classroom).
     const activeEnrollments = (enrollments || []).filter(
-      (e: any) => e.classroom && e.classroom.is_active !== false
+      (e: any) => e.classroom && e.classroom.is_active !== false && e.classroom.is_archived !== true
     );
+
+    // Order so the current academic-year classroom is first. The client picks
+    // classrooms[0] when no saved selection matches, so a student who persisted
+    // across a rollover (and whose old classroom is now archived + filtered out)
+    // defaults to the current year. Archived cohorts are already excluded above.
+    let currentBatchCode: string | null = null;
+    try {
+      currentBatchCode = (await getCurrentBatch(supabase)).code;
+    } catch {
+      currentBatchCode = null;
+    }
+    activeEnrollments.sort((a: any, b: any) => {
+      const ay = a.classroom?.academic_year || '';
+      const by = b.classroom?.academic_year || '';
+      if (currentBatchCode) {
+        if (ay === currentBatchCode && by !== currentBatchCode) return -1;
+        if (by === currentBatchCode && ay !== currentBatchCode) return 1;
+      }
+      return by.localeCompare(ay); // newest year first, null/blank years last
+    });
 
     // Determine the effective Nexus role from user_type or enrollments
     const nexusRole = user.user_type === 'admin'

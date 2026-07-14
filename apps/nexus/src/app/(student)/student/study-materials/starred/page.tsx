@@ -14,6 +14,8 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
 import type { NexusStudyFileDTO } from '@neram/database/types';
@@ -44,7 +46,12 @@ function Thumb({ kind, src }: { kind: string; src: string | null }) {
 export default function StarredPage() {
   const theme = useTheme();
   const router = useRouter();
-  const { getToken, loading: authLoading } = useNexusAuthContext();
+  const { getToken, user, loading: authLoading } = useNexusAuthContext();
+
+  // Identity stamped over PDFs/images to deter redistribution (name + phone/email).
+  const watermark = user
+    ? [user.name, user.phone || user.email].filter(Boolean).join('   ·   ')
+    : undefined;
 
   const [token, setToken] = useState<string | null>(null);
   const [files, setFiles] = useState<StarredFile[]>([]);
@@ -78,7 +85,7 @@ export default function StarredPage() {
   const contentUrl = (fileId: string, download = false) =>
     `/api/study-materials/files/${fileId}/content?token=${encodeURIComponent(token || '')}${download ? '&download=1' : ''}`;
   const thumbUrl = (fileId: string) =>
-    `/api/study-materials/files/${fileId}/thumbnail?token=${encodeURIComponent(token || '')}&size=medium`;
+    `/api/study-materials/files/${fileId}/thumbnail?token=${encodeURIComponent(token || '')}&size=large`;
 
   const openFile = (file: StarredFile) => {
     if (file.kind === 'pdf' || file.kind === 'image') setViewerFile(file);
@@ -161,7 +168,7 @@ export default function StarredPage() {
                   <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                     {file.breadcrumb.map((b) => b.name).join(' › ') || 'Study Materials'}
                   </Typography>
-                  <Box sx={{ mt: 0.5 }}>
+                  <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                     <Chip
                       size="small"
                       icon={file.downloadable ? <DownloadOutlinedIcon /> : <LockOutlinedIcon />}
@@ -172,6 +179,22 @@ export default function StarredPage() {
                         color: file.downloadable ? 'success.main' : 'text.secondary',
                       }}
                     />
+                    {file.status === 'completed' && (
+                      <Chip
+                        size="small"
+                        icon={<CheckCircleOutlineIcon />}
+                        label={file.best_score_pct != null ? `Completed · ${Math.round(file.best_score_pct)}%` : 'Completed'}
+                        sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.success.main, 0.16), color: 'success.main' }}
+                      />
+                    )}
+                    {file.status === 'studying' && (
+                      <Chip
+                        size="small"
+                        icon={<AutoStoriesOutlinedIcon />}
+                        label="In progress"
+                        sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.8rem', ml: '4px' }, bgcolor: alpha(theme.palette.warning.main, 0.16), color: 'warning.dark' }}
+                      />
+                    )}
                   </Box>
                 </Box>
               </CardActionArea>
@@ -186,7 +209,7 @@ export default function StarredPage() {
         </Box>
       )}
 
-      <StudyFileViewer file={viewerFile} token={token} getToken={getToken} onClose={() => setViewerFile(null)} />
+      <StudyFileViewer file={viewerFile} token={token} getToken={getToken} onClose={() => setViewerFile(null)} watermark={watermark} track onProgressChange={load} />
     </Box>
   );
 }

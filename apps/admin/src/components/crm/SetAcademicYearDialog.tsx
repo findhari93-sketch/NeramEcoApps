@@ -73,7 +73,7 @@ export default function SetAcademicYearDialog({
         <EventIcon sx={{ color: '#2563EB' }} />
         <Box>
           <Typography variant="h6" fontWeight={700}>
-            Set academic year
+            Change exam batch
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {count} student{count === 1 ? '' : 's'} selected
@@ -95,7 +95,7 @@ export default function SetAcademicYearDialog({
           select
           fullWidth
           size="small"
-          label="Academic year"
+          label="Exam batch"
           value={options.includes(year) ? year : ''}
           onChange={(e) => setYear(e.target.value)}
           disabled={submitting}

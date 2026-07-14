@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch } from '@neram/database';
+import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear } from '@neram/database';
 
 // A "classroom" account is the class-provided identity: @neramclasses.com or any
 // Microsoft tenant address (*.onmicrosoft.com, which also covers the misspelled
@@ -11,6 +11,19 @@ function isClassroomEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   const e = email.toLowerCase().trim();
   return /@.*neramclasses\.com$/.test(e) || /\.onmicrosoft\.com$/.test(e);
+}
+
+// Domain tier of a classroom email, so the table can flag accounts that still
+// need correcting. onmicrosoft (the default tenant, e.g. nerasmclasses.onmicrosoft.com)
+// must be tested before org since it is NOT the custom domain.
+type EmailDomainStatus = 'org' | 'onmicrosoft' | 'personal' | 'none';
+function classifyDomain(email: string | null | undefined): EmailDomainStatus {
+  if (!email) return 'none';
+  const e = email.toLowerCase().trim();
+  if (!e) return 'none';
+  if (/\.onmicrosoft\.com$/.test(e)) return 'onmicrosoft';
+  if (/@.*neramclasses\.com$/.test(e)) return 'org';
+  return 'personal';
 }
 
 // "Completed the basic application form" is driven by the lead status, not the apply
@@ -57,7 +70,15 @@ export async function GET(request: NextRequest) {
     }
 
     const { students: hub } = await listStudentsByYear(
-      { year, status: status as any, program: 'architecture', currentBatchCode },
+      {
+        year,
+        status: status as any,
+        program: 'architecture',
+        currentBatchCode,
+        // In the default current view, also pull active students still stuck on a
+        // past batch so the roster can flag and promote them.
+        includePastActive: year === 'current',
+      },
       supabase
     );
 
@@ -75,6 +96,14 @@ export async function GET(request: NextRequest) {
         .in('user_id', userIds);
       for (const l of leads || []) leadByUser[l.user_id] = l;
     }
+
+    // Which of these students currently hold LIVE Nexus access (active enrollment
+    // in an active classroom). Used to flag non-graduated past-batch students who
+    // lost their enrollment (e.g. during the single-classroom consolidation).
+    const accessIds = await getUsersWithActiveNexusAccess(userIds, supabase);
+    // Compare code for the past-batch flag: registry current, else the calendar helper
+    // (never undefined, so a past-batch row is never mis-read as current).
+    const cmpCode = currentBatchCode || currentAcademicYear();
 
     const students = hub.map((s) => {
       const lead = leadByUser[s.id];
@@ -99,12 +128,21 @@ export async function GET(request: NextRequest) {
         name: s.name,
         email: s.email || '',
         classroom_email,
+        classroom_email_status: classifyDomain(classroom_email),
         personal_email,
         phone: s.phone || '',
         avatar_url: s.avatar_url,
         academic_year: s.academic_year,
         is_alumni: s.is_alumni,
+        // Active (non-alumni) student whose exam batch is behind the current one:
+        // still ours, but needs promoting to the current batch or graduating.
+        past_batch: !s.is_alumni && !!s.academic_year && s.academic_year < cmpCode,
+        // Live Nexus access right now (active enrollment in an active classroom).
+        has_nexus_access: !s.is_alumni && accessIds.has(s.id),
         last_login_at: s.last_login_at,
+        // Nexus-only login signal (null until they open the Nexus app themselves).
+        nexus_first_login_at: s.nexus_first_login_at,
+        nexus_last_login_at: s.nexus_last_login_at,
         enrollment_date: s.enrollment_date,
         payment_status: s.payment_status,
         total_fee: s.total_fee,
@@ -131,6 +169,11 @@ export async function GET(request: NextRequest) {
       partialPayment: students.filter((s) => s.payment_status === 'pending' && (s.fee_paid || 0) > 0).length,
       totalRevenue: students.reduce((sum, s) => sum + (s.fee_paid || 0), 0),
       totalPending: students.reduce((sum, s) => sum + (s.fee_due || 0), 0),
+      // Active students stuck on a past batch, and how many of those have lost Nexus access.
+      pastBatchActive: students.filter((s) => s.past_batch).length,
+      pastBatchNoAccess: students.filter((s) => s.past_batch && !s.has_nexus_access).length,
+      // Have Nexus access but have never opened the Nexus app, the ones to chase.
+      accessNeverOpened: students.filter((s) => s.has_nexus_access && !s.nexus_first_login_at).length,
     };
 
     return NextResponse.json({ students, total: students.length, stats });

@@ -3,6 +3,7 @@
 import { Box, Typography, Chip, Alert } from '@neram/ui';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { Field, SectionCard } from './uiPrimitives';
+import { academicYearFromExamYear } from '../crm/academic-years';
 
 interface ApplicationDetailsPanelProps {
   leadProfile: any;
@@ -85,7 +86,7 @@ export default function ApplicationDetailsPanel({ leadProfile: lead }: Applicati
           <Field label="Class / Year" value={grade ? titleCase(String(grade)) : ''} />
           <Field label="Board" value={board ? String(board).toUpperCase() : ''} />
           <Field label="Marks / Percentage" value={percentage ? `${percentage}%` : ''} />
-          <Field label="Target exam year" value={lead.target_exam_year} />
+          <Field label="Exam batch" value={academicYearFromExamYear(lead.target_exam_year)} />
           <Field label="Category" value={lead.caste_category ? String(lead.caste_category).toUpperCase() : ''} />
           <Field label="Location" value={location} />
           <Field label="Pincode" value={lead.pincode} />

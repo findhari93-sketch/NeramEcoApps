@@ -22,19 +22,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get all active classrooms
-    const { data: classrooms, error } = await supabase
-      .from('nexus_classrooms')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+    // ?archived=1 returns past cohorts (Past Sessions); default returns live
+    // classrooms (active, not archived). Archived classrooms keep is_active=true,
+    // so they must be excluded explicitly from the live list.
+    const showArchived = request.nextUrl.searchParams.get('archived') === '1';
+
+    let classroomQuery = supabase.from('nexus_classrooms').select('*');
+    if (showArchived) {
+      classroomQuery = classroomQuery
+        .eq('is_archived', true)
+        .order('academic_year', { ascending: false })
+        .order('created_at', { ascending: false });
+    } else {
+      classroomQuery = classroomQuery
+        .eq('is_active', true)
+        .eq('is_archived', false)
+        .order('created_at', { ascending: false });
+    }
+
+    const { data: classrooms, error } = await classroomQuery;
 
     if (error) throw error;
 
-    // Get enrollment counts and batch counts per classroom
+    // Get enrollment counts, batch counts, and class counts per classroom
     const classroomIds = (classrooms || []).map((c: any) => c.id);
 
-    const [enrollmentResult, batchResult] = await Promise.all([
+    const [enrollmentResult, batchResult, classResult] = await Promise.all([
       supabase
         .from('nexus_enrollments')
         .select('classroom_id, role')
@@ -45,6 +58,10 @@ export async function GET(request: NextRequest) {
         .select('classroom_id')
         .in('classroom_id', classroomIds)
         .eq('is_active', true),
+      supabase
+        .from('nexus_scheduled_classes')
+        .select('classroom_id')
+        .in('classroom_id', classroomIds),
     ]);
 
     // Count students and teachers per classroom
@@ -61,11 +78,18 @@ export async function GET(request: NextRequest) {
       batchCounts[b.classroom_id] = (batchCounts[b.classroom_id] || 0) + 1;
     }
 
+    // Count scheduled classes per classroom (useful for the Past Sessions list)
+    const classCounts: Record<string, number> = {};
+    for (const s of classResult.data || []) {
+      classCounts[s.classroom_id] = (classCounts[s.classroom_id] || 0) + 1;
+    }
+
     const result = (classrooms || []).map((c: any) => ({
       ...c,
       studentCount: enrollmentCounts[c.id]?.students || 0,
       teacherCount: enrollmentCounts[c.id]?.teachers || 0,
       batchCount: batchCounts[c.id] || 0,
+      classCount: classCounts[c.id] || 0,
     }));
 
     return NextResponse.json({ classrooms: result });

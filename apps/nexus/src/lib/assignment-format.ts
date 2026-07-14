@@ -4,9 +4,10 @@
  * framework-free.
  *
  *   'pdf'          -> exactly one PDF.
+ *   'image'        -> one-to-many images only (e.g. recreate the JEE shape).
  *   'pdf_or_image' -> one PDF, OR one-to-many images (no mixing the two).
  */
-export type AssignmentFormat = 'pdf' | 'pdf_or_image';
+export type AssignmentFormat = 'pdf' | 'image' | 'pdf_or_image';
 
 export const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 export const PDF_MIME = 'application/pdf';
@@ -26,6 +27,12 @@ export function validateSubmissionFormat(
   if (format === 'pdf') {
     if (files.length !== 1 || files[0].mime !== PDF_MIME) {
       return 'This assignment accepts a single PDF file.';
+    }
+    return null;
+  }
+  if (format === 'image') {
+    if (!files.every((f) => IMAGE_MIMES.includes(f.mime))) {
+      return 'This assignment accepts photos only (JPG, PNG or WEBP).';
     }
     return null;
   }

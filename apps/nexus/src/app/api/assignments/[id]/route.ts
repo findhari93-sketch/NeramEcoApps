@@ -12,6 +12,8 @@ import {
   signSubmissionFiles,
   deleteAssignment,
   getUserEnrollment,
+  recordGamificationEvent,
+  resolveAssignmentRecording,
 } from '@neram/database';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
@@ -62,7 +64,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const signed = submission
       ? { ...submission, files: await signSubmissionFiles(submission.files || []) }
       : null;
-    return NextResponse.json({ assignment: detail, submission: signed, role: 'student' });
+    const recording = await resolveAssignmentRecording(detail);
+    return NextResponse.json({
+      assignment: detail,
+      submission: signed,
+      enrolled_at: (enrollment as any)?.enrolled_at ?? null,
+      recording,
+      role: 'student',
+    });
   } catch (err) {
     return errorResponse(err, 'Failed to load assignment');
   }
@@ -92,7 +101,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (body.title !== undefined) updates.title = String(body.title).trim();
         if (body.instructions !== undefined) updates.instructions = body.instructions || null;
         if (body.submission_format !== undefined) {
-          updates.submission_format = body.submission_format === 'pdf' ? 'pdf' : 'pdf_or_image';
+          const fmt = ['pdf', 'image', 'pdf_or_image'].includes(body.submission_format)
+            ? body.submission_format
+            : 'pdf_or_image';
+          updates.submission_format = fmt;
         }
         if (body.max_marks !== undefined) {
           const m = Number(body.max_marks);
@@ -103,6 +115,30 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
         if (body.due_at !== undefined) updates.due_at = body.due_at || null;
         if (body.class_date !== undefined) updates.class_date = body.class_date;
+        if (body.content_image_url !== undefined) updates.content_image_url = body.content_image_url || null;
+        if (body.content_video_url !== undefined) updates.content_video_url = body.content_video_url || null;
+        if (body.links !== undefined && Array.isArray(body.links)) {
+          updates.links = body.links
+            .filter((l: any) => l && typeof l.url === 'string' && /^https?:\/\//i.test(l.url))
+            .map((l: any) => ({ label: String(l.label || l.url).trim(), url: String(l.url).trim() }));
+        }
+        if (body.recording_url !== undefined) {
+          updates.recording_url = body.recording_url || null;
+          if (body.recording_url) {
+            updates.recording_source =
+              body.recording_source === 'youtube' || body.recording_source === 'sharepoint'
+                ? body.recording_source
+                : /youtube\.com|youtu\.be/i.test(String(body.recording_url))
+                  ? 'youtube'
+                  : 'sharepoint';
+          } else {
+            updates.recording_source = null;
+          }
+        }
+        if (body.catchup_window_days !== undefined) {
+          const w = Number(body.catchup_window_days);
+          if (Number.isFinite(w) && w >= 0) updates.catchup_window_days = Math.round(w);
+        }
         const updated = await updateAssignment(params.id, updates);
         return NextResponse.json({ assignment: updated });
       }
@@ -189,6 +225,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             params.id,
             reviewAction,
           ).catch((e) => console.error('notifyAssignmentReviewed failed:', e));
+
+          // Marks feed the leaderboard: up to 20 pts scaled by the score, awarded
+          // once per assignment (first completed review). Redo requests award none.
+          if (reviewAction === 'complete' && marks != null && assignment.max_marks > 0) {
+            const pts = Math.round((marks / assignment.max_marks) * 20);
+            recordGamificationEvent({
+              student_id: studentId,
+              classroom_id: assignment.classroom_id,
+              batch_id: null,
+              event_type: 'assignment_reviewed',
+              points: pts,
+              source_id: params.id,
+              activity_type: 'assignment_reviewed',
+              activity_title: `Marked: ${assignment.title}`,
+              metadata: { assignment_id: params.id, marks, max_marks: assignment.max_marks },
+            }).catch((e) => console.error('assignment_reviewed points failed:', e));
+          }
         }
         return NextResponse.json({ submission: reviewed });
       }

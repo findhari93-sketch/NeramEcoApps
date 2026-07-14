@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getDefaultClassroom } from '@neram/database';
+import { getSupabaseAdminClient, getDefaultClassroom, removeEnrollments } from '@neram/database';
 import { addStudentToClassroomTeams } from '@neram/auth';
 
 /**
@@ -19,7 +19,7 @@ export async function POST(
   try {
     const { id: userId } = await params;
     const body = await request.json();
-    const { batchId, remove } = body;
+    const { batchId, remove, removedBy } = body;
     let { classroomId } = body;
 
     const supabase = getSupabaseAdminClient() as any;
@@ -51,15 +51,41 @@ export async function POST(
       }
     }
 
-    // Remove enrollment if requested
+    // Remove enrollment if requested. Soft-delete for parity with the Nexus
+    // teacher Remove: the row is flipped inactive with a history entry and stays
+    // restorable from the classroom History tab, instead of being destroyed.
     if (remove) {
-      const { error } = await supabase
+      const { data: active } = await supabase
         .from('nexus_enrollments')
-        .delete()
+        .select('id')
         .eq('user_id', userId)
-        .eq('classroom_id', classroomId);
+        .eq('classroom_id', classroomId)
+        .eq('is_active', true);
 
-      if (error) throw error;
+      const ids = (active || []).map((e: any) => e.id);
+      if (ids.length === 0) {
+        // Already out (or never enrolled); nothing to do.
+        return NextResponse.json({ success: true, removed: true, alreadyOut: true });
+      }
+
+      const note = 'Access revoked by admin from the Students hub.';
+      try {
+        await removeEnrollments(ids, classroomId, removedBy || null, 'other', note, supabase);
+      } catch (softErr: any) {
+        // Fallback: if the history-writing helper fails (e.g. no admin id), still
+        // revoke access by flipping the enrollment inactive so /api/auth/me drops it.
+        console.warn('[nexus-enroll] soft-delete via removeEnrollments failed, falling back:', softErr?.message);
+        await supabase
+          .from('nexus_enrollments')
+          .update({
+            is_active: false,
+            removed_at: new Date().toISOString(),
+            removed_by: removedBy || null,
+            removal_reason_category: 'other',
+            removal_notes: note,
+          })
+          .in('id', ids);
+      }
 
       return NextResponse.json({ success: true, removed: true });
     }

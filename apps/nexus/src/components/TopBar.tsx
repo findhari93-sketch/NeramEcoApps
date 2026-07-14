@@ -24,6 +24,7 @@ import {
 import GraphAvatar from '@/components/GraphAvatar';
 import NotificationBell from '@/components/NotificationBell';
 import PanelSwitcher from '@/components/PanelSwitcher';
+import ZoneSwitcher from '@/components/ZoneSwitcher';
 import LogoutIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
@@ -152,10 +153,13 @@ export default function TopBar() {
           Nexus
         </Typography>
 
-        {/* Workspace switcher - compact segmented control (Teaching / Management / Admin).
-            Renders only for staff with more than one panel; icon-only on mobile. */}
+        {/* Workspace/zone switcher - compact segmented control. Staff see the
+            Teaching / Management / Admin pill; students see the Study Zone /
+            Classroom pill. Each self-hides when it has nothing to switch, so
+            only the relevant one shows. */}
         <Box sx={{ mr: showClassroomSelector ? 1 : 0 }}>
           <PanelSwitcher accent={roleAccent} />
+          <ZoneSwitcher accent={roleAccent} />
         </Box>
 
         {/* Active Classroom Chip - shown for students (always) and teachers on Teaching panel */}

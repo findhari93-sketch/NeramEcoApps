@@ -5,8 +5,6 @@ import {
   Box,
   Typography,
   Paper,
-  UserAvatar,
-  Chip,
   IconButton,
   Skeleton,
   Snackbar,
@@ -17,11 +15,29 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
-import type { GeographicStudent } from '@neram/database';
+import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
+import GraphAvatar from '@/components/GraphAvatar';
+import EmailDomainFlag from '@/components/students/EmailDomainFlag';
+import type { EmailDomainStatus } from '@/lib/classroom-email';
+
+/** A student returned by the geographic search (active population only). */
+export interface GeoResultStudent {
+  id: string;
+  name: string;
+  email: string | null;
+  email_status?: EmailDomainStatus;
+  phone: string | null;
+  avatar_url?: string | null;
+  ms_oid?: string | null;
+  city: string | null;
+  state: string | null;
+  district?: string | null;
+  country?: string | null;
+  enrolled_at?: string | null;
+}
 
 interface StudentSearchResultsProps {
-  students: GeographicStudent[];
+  students: GeoResultStudent[];
   total: number;
   loading: boolean;
   searchQuery: string;
@@ -45,7 +61,7 @@ export default function StudentSearchResults({
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rounded" height={100} sx={{ borderRadius: 2 }} />
+          <Skeleton key={i} variant="rounded" height={84} sx={{ borderRadius: 2 }} />
         ))}
       </Box>
     );
@@ -53,9 +69,10 @@ export default function StudentSearchResults({
 
   if (students.length === 0) {
     return (
-      <Paper sx={{ p: 4, textAlign: 'center' }}>
-        <Typography variant="body1" color="text.secondary">
-          No students match "{searchQuery}"
+      <Paper variant="outlined" sx={{ p: 5, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed' }}>
+        <SearchOffOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
+        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+          No students match &ldquo;{searchQuery}&rdquo;
         </Typography>
         <Typography variant="body2" color="text.disabled" sx={{ mt: 0.5 }}>
           Try searching by name, email, or phone number.
@@ -64,7 +81,7 @@ export default function StudentSearchResults({
     );
   }
 
-  const buildLocationBreadcrumb = (student: GeographicStudent): string => {
+  const buildLocationBreadcrumb = (student: GeoResultStudent): string => {
     const parts = [student.city, student.district, student.state].filter(Boolean);
     return parts.join(', ');
   };
@@ -72,7 +89,7 @@ export default function StudentSearchResults({
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontWeight: 500 }}>
-        {total} {total === 1 ? 'result' : 'results'} for "{searchQuery}"
+        {total} {total === 1 ? 'result' : 'results'} for &ldquo;{searchQuery}&rdquo;
         {total > students.length && ` (showing ${students.length})`}
       </Typography>
 
@@ -85,103 +102,70 @@ export default function StudentSearchResults({
               p: 2,
               borderRadius: 2,
               transition: 'border-color 0.2s',
-              '&:hover': {
-                borderColor: theme.palette.primary.light,
-              },
+              '&:hover': { borderColor: theme.palette.primary.light },
             }}
           >
-            <Box sx={{ display: 'flex', gap: 2, alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' } }}>
-              {/* Avatar + Name */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
-                <UserAvatar
-                  src={student.avatar_url}
-                  name={student.name}
-                  size={40}
-                  sx={{
-                    fontWeight: 700,
-                  }}
-                />
-                <Box sx={{ minWidth: 0 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
-                      {student.name}
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              <GraphAvatar msOid={student.ms_oid} name={student.name} size={44} tapToView={false} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
+                  {student.name}
+                </Typography>
+                {buildLocationBreadcrumb(student) && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                    <LocationOnOutlinedIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {buildLocationBreadcrumb(student)}
                     </Typography>
-                    <Chip
-                      label={student.user_type}
-                      size="small"
-                      color={student.user_type === 'student' ? 'success' : 'default'}
-                      sx={{ height: 20, fontSize: 11 }}
-                    />
-                  </Box>
-                  {/* Location breadcrumb */}
-                  {buildLocationBreadcrumb(student) && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-                      <LocationOnOutlinedIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
-                      <Typography variant="caption" color="text.secondary" noWrap>
-                        {buildLocationBreadcrumb(student)}
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Box>
-
-              {/* Contact info */}
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                {student.email && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <EmailOutlinedIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
-                    <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 180 }} noWrap>
-                      {student.email}
-                    </Typography>
-                    <Tooltip title="Copy email">
-                      <IconButton
-                        size="small"
-                        onClick={() => copyToClipboard(student.email!, 'Email')}
-                        sx={{ p: 0.5 }}
-                      >
-                        <ContentCopyIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    </Tooltip>
                   </Box>
                 )}
-                {student.phone && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <PhoneOutlinedIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
-                    <Typography variant="caption" color="text.secondary">
-                      {student.phone}
-                    </Typography>
-                    <Tooltip title="Copy phone">
-                      <IconButton
-                        size="small"
-                        onClick={() => copyToClipboard(student.phone!, 'Phone')}
-                        sx={{ p: 0.5 }}
-                      >
-                        <ContentCopyIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    </Tooltip>
+                {student.email_status && student.email_status !== 'org' && (
+                  <Box sx={{ mt: 0.5 }}>
+                    <EmailDomainFlag status={student.email_status} />
                   </Box>
+                )}
+              </Box>
+
+              {/* Contact actions */}
+              <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                {student.email && (
+                  <Tooltip title={student.email} arrow>
+                    <IconButton
+                      size="small"
+                      aria-label="Copy email"
+                      onClick={() => copyToClipboard(student.email!, 'Email')}
+                      sx={{ width: 40, height: 40, color: 'primary.main' }}
+                    >
+                      <EmailOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {student.phone && (
+                  <Tooltip title={student.phone} arrow>
+                    <IconButton
+                      size="small"
+                      aria-label="Copy phone"
+                      onClick={() => copyToClipboard(student.phone!, 'Phone')}
+                      sx={{ width: 40, height: 40, color: 'secondary.main' }}
+                    >
+                      <PhoneOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {student.email && (
+                  <Tooltip title="Copy email">
+                    <IconButton
+                      size="small"
+                      aria-label="Copy email text"
+                      onClick={() => copyToClipboard(student.email!, 'Email')}
+                      sx={{ width: 40, height: 40, display: { xs: 'none', sm: 'inline-flex' } }}
+                    >
+                      <ContentCopyIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </Box>
             </Box>
-
-            {/* Bottom row: course + date */}
-            {(student.course_name || student.enrolled_at) && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1, ml: { xs: 0, sm: 7 } }}>
-                {student.course_name && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <SchoolOutlinedIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
-                    <Typography variant="caption" color="text.disabled">
-                      {student.course_name}
-                    </Typography>
-                  </Box>
-                )}
-                {student.enrolled_at && (
-                  <Typography variant="caption" color="text.disabled">
-                    Enrolled: {new Date(student.enrolled_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-                  </Typography>
-                )}
-              </Box>
-            )}
           </Paper>
         ))}
       </Box>

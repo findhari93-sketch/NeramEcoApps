@@ -140,6 +140,10 @@ export interface User extends Timestamps {
 
   // Metadata
   last_login_at: string | null;
+  // Nexus-only login signal, written at apps/nexus /api/auth/me (migration
+  // 20260712). Distinct from the cross-app last_login_at above.
+  nexus_first_login_at: string | null;
+  nexus_last_login_at: string | null;
   metadata: Record<string, unknown> | null;
 
   // Lifecycle focus (reversible archive) + academic-year cohort + exam status
@@ -4583,6 +4587,10 @@ export interface NexusStudyFile {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+  /** Optional linked class recording. */
+  recording_url: string | null;
+  video_source: string | null; // 'youtube' | 'link'
+  youtube_id: string | null;
 }
 
 /** Coarse file kind used by the browser to pick a viewer/icon. */
@@ -4607,6 +4615,102 @@ export interface NexusStudyFileDTO {
   is_unread?: boolean;
   is_favorite?: boolean;
   comment_count?: number;
+  /** Silent study tracking (student view): not_opened -> studying -> completed. */
+  status?: NexusStudyFileStatus;
+  /** Idle-aware seconds the student has spent reading this file. */
+  active_seconds?: number;
+  /** Best test score % once the linked test is passed (Phase 4). */
+  best_score_pct?: number | null;
+  /** Whether this file has a linked test (completion requires passing it). */
+  has_test?: boolean;
+  /** Optional linked class recording (YouTube embeds inline; other links open externally). */
+  recording?: NexusStudyFileRecording | null;
+}
+
+/** Per-student progress status for a study-material file. */
+export type NexusStudyFileStatus = 'not_opened' | 'studying' | 'completed';
+
+/** A file's linked class recording, as surfaced to the browser. */
+export interface NexusStudyFileRecording {
+  source: 'youtube' | 'link';
+  youtube_id: string | null;
+  url: string | null;
+}
+
+// ============================================================
+// Study Materials: per-PDF tests (mandatory to complete)
+// ============================================================
+
+/** A per-file test row. */
+export interface NexusStudyTest {
+  id: string;
+  file_id: string;
+  title: string | null;
+  passing_pct: number;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A full MCQ question (staff/authoring view — includes the answer). */
+export interface NexusStudyTestQuestion {
+  id: string;
+  test_id: string;
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c: string | null;
+  option_d: string | null;
+  correct_option: 'a' | 'b' | 'c' | 'd';
+  explanation: string | null;
+  sort_order: number;
+}
+
+/** A question as authored (before it has a DB id), from JSON upload or manual entry. */
+export interface NexusStudyTestQuestionInput {
+  question_text: string;
+  option_a: string;
+  option_b: string;
+  option_c?: string | null;
+  option_d?: string | null;
+  correct_option: 'a' | 'b' | 'c' | 'd';
+  explanation?: string | null;
+}
+
+/** A question as sent to the student — no correct_option / explanation. */
+export interface NexusStudyTestQuestionStudent {
+  id: string;
+  question_text: string;
+  options: { key: 'a' | 'b' | 'c' | 'd'; text: string }[];
+}
+
+/** Test payload for the student take flow. */
+export interface NexusStudyTestForStudent {
+  id: string;
+  file_id: string;
+  title: string | null;
+  passing_pct: number;
+  questions: NexusStudyTestQuestionStudent[];
+}
+
+/** Result returned after grading a submitted attempt. */
+export interface NexusStudyTestAttemptResult {
+  attempt_id: string;
+  correct_count: number;
+  total_count: number;
+  score_pct: number;
+  passed: boolean;
+  passing_pct: number;
+  completed: boolean;
+  /** Per-question correctness + the right answer, for review after submitting. */
+  review: {
+    question_id: string;
+    correct_option: 'a' | 'b' | 'c' | 'd';
+    selected: string | null;
+    is_correct: boolean;
+    explanation: string | null;
+  }[];
 }
 
 /** A folder summary card in the browser. */
@@ -4896,9 +5000,17 @@ export interface NexusPlanAuditLog {
 // Class assignments (per-class-day handouts + student submissions + marks)
 // ============================================================
 
-export type NexusAssignmentFormat = 'pdf' | 'pdf_or_image';
+export type NexusAssignmentFormat = 'pdf' | 'image' | 'pdf_or_image';
 export type NexusAssignmentStatus = 'draft' | 'published' | 'closed';
 export type NexusAssignmentSubmissionStatus = 'submitted' | 'reviewed' | 'redo';
+/** Where an attached class recording is hosted (null when none attached). */
+export type NexusAssignmentRecordingSource = 'youtube' | 'sharepoint';
+
+/** An external reference link shown with an assignment (JEE PYQ, docs, etc.). */
+export interface NexusAssignmentLink {
+  label: string;
+  url: string;
+}
 
 /** One uploaded file inside a submission (private assignment-submissions bucket). */
 export interface NexusAssignmentSubmissionFile {
@@ -4932,6 +5044,17 @@ export interface NexusClassAssignment {
   due_at: string | null;
   status: NexusAssignmentStatus;
   published_at: string | null;
+  /** Optional inline image shown with the instructions. */
+  content_image_url: string | null;
+  /** Optional short explainer video for the task itself. */
+  content_video_url: string | null;
+  /** External reference links (JEE PYQ, docs). */
+  links: NexusAssignmentLink[];
+  /** Class recording a late joiner watches before doing the assignment. */
+  recording_url: string | null;
+  recording_source: NexusAssignmentRecordingSource | null;
+  /** Days a late joiner gets from their join date before it counts overdue. */
+  catchup_window_days: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -4972,6 +5095,10 @@ export interface NexusClassroom extends Timestamps {
   ms_team_name: string | null;
   ms_team_sync_enabled: boolean;
   is_active: boolean;
+  /** Exam-year cohort this classroom serves (mirrors academic_batches.code, e.g. '2026-27'). Null for legacy/global. */
+  academic_year: string | null;
+  /** Year-end lifecycle: true = read-only, hidden from students, staff-browsable. Distinct from is_active. */
+  is_archived: boolean;
   created_by: string | null;
 }
 
@@ -5936,6 +6063,10 @@ export type QBPaperSource = 'official' | 'recalled';
 export type QBShift = 'forenoon' | 'afternoon';
 export type QBTopicPriority = 'critical' | 'high' | 'medium' | 'low';
 
+// Managed tag registry (unified question repository)
+export type NexusQBTagGroup = 'exam' | 'subject' | 'theme';
+export type NexusQBOrigin = 'pyq' | 'authored' | 'student_recalled' | 'imported';
+
 export type QBCategory =
   // Broad categories
   | 'mathematics'
@@ -6040,6 +6171,7 @@ export interface NexusQBQuestion {
   categories: string[];
   topic_id: string | null;
   sub_topic: string | null;
+  origin: NexusQBOrigin;
   repeat_group_id: string | null;
   original_paper_id: string | null;
   original_paper_page: number | null;
@@ -6150,6 +6282,91 @@ export interface NexusQBClassroomLink {
   enabled_by: string | null;
 }
 
+// Managed tag registry: one question carries many tags ("titles")
+export interface NexusQBTag {
+  id: string;
+  group_type: NexusQBTagGroup;
+  slug: string;
+  label: string;
+  parent_id: string | null;
+  color: string | null;
+  icon: string | null;
+  sort_order: number;
+  is_system: boolean;   // curated/locked vs teacher-added
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NexusQBQuestionTag {
+  question_id: string;
+  tag_id: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+// Tag plus its usage count, for filter chips / registry management
+export interface NexusQBTagWithCount extends NexusQBTag {
+  question_count: number;
+}
+
+// Unified test engine: a test is placed into one or more contexts
+export type NexusPlacementContext =
+  | 'study_file'
+  | 'classroom_assignment'
+  | 'class_recap_section'
+  | 'foundation_section'
+  | 'module_item'
+  | 'student_practice';
+
+export interface NexusTestPlacement {
+  id: string;
+  test_id: string;
+  context_type: NexusPlacementContext;
+  context_id: string;
+  passing_pct: number | null;
+  min_questions_to_pass: number | null;
+  sort_order: number;
+  is_visible: boolean;
+  available_from: string | null;
+  available_until: string | null;
+  gating: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+  is_active: boolean;
+}
+
+// One question inside a composed test (student-safe: no correct_answer)
+export interface NexusComposedQuestion {
+  test_question_id: string;
+  question_id: string; // the underlying qb/verified question id (answer key)
+  question_text: string | null;
+  question_image_url: string | null;
+  question_format: string;
+  options: unknown;
+  marks: number;
+  sort_order: number;
+}
+
+export interface NexusTestGradeReviewItem {
+  question_id: string;
+  correct_answer: string | null;
+  selected: string | null;
+  is_correct: boolean;
+  marks_awarded: number;
+}
+
+export interface NexusTestGradeResult {
+  attempt_id: string;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  passed: boolean;
+  passing_pct: number | null;
+  review: NexusTestGradeReviewItem[];
+}
+
 // QB Joined/Computed Types
 
 export interface QBAttemptSummary {
@@ -6184,6 +6401,7 @@ export interface QBFilterState {
   exam_sessions?: string[];
   topic_ids?: string[];
   categories?: string[];
+  tag_ids?: string[];   // managed tag registry (nexus_qb_tags); OR-semantics like categories
   difficulty?: QBDifficulty[];
   question_format?: QBQuestionFormat[];
   attempt_status?: 'all' | 'unattempted' | 'correct' | 'incorrect';
@@ -7304,7 +7522,10 @@ export type GamificationPointEventType =
   | 'quiz_completed'
   | 'peer_help'
   | 'badge_bonus'
-  | 'manual_teacher_award';
+  | 'manual_teacher_award'
+  | 'assignment_submitted'
+  | 'assignment_ontime'
+  | 'assignment_reviewed';
 
 export type GamificationActivityType =
   | 'class_attended'
@@ -7315,7 +7536,9 @@ export type GamificationActivityType =
   | 'badge_earned'
   | 'streak_milestone'
   | 'rank_improved'
-  | 'manual_award';
+  | 'manual_award'
+  | 'assignment_submitted'
+  | 'assignment_reviewed';
 
 export interface GamificationBadgeDefinition {
   id: string;

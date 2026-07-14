@@ -34,6 +34,7 @@ import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import HistoryIcon from '@mui/icons-material/History';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { Snackbar, Alert, Checkbox } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ClassroomFormDialog from '@/components/ClassroomFormDialog';
@@ -54,6 +55,8 @@ interface ClassroomDetail {
   type: string;
   description: string | null;
   is_active: boolean;
+  academic_year: string | null;
+  is_archived: boolean;
   ms_team_id: string | null;
   ms_team_name: string | null;
   ms_team_sync_enabled: boolean;
@@ -472,6 +475,8 @@ export default function ClassroomDetailPage() {
     );
   }
 
+  const readOnly = !!classroom.is_archived;
+
   return (
     <Box>
       {/* Header */}
@@ -480,7 +485,7 @@ export default function ClassroomDetailPage() {
           <ArrowBackIcon />
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant="h5" component="h1" sx={{ fontWeight: 700 }} noWrap>
               {classroom.name}
             </Typography>
@@ -490,6 +495,9 @@ export default function ClassroomDetailPage() {
               color="primary"
               variant="outlined"
             />
+            {classroom.academic_year && (
+              <Chip label={classroom.academic_year} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+            )}
           </Box>
           {classroom.description && (
             <Typography variant="body2" color="text.secondary">
@@ -497,10 +505,23 @@ export default function ClassroomDetailPage() {
             </Typography>
           )}
         </Box>
-        <IconButton onClick={() => setEditOpen(true)}>
-          <EditIcon />
-        </IconButton>
+        {!readOnly && (
+          <IconButton onClick={() => setEditOpen(true)}>
+            <EditIcon />
+          </IconButton>
+        )}
       </Box>
+
+      {/* Read-only banner for archived (past-year) cohorts */}
+      {readOnly && (
+        <Alert
+          severity="info"
+          icon={<LockOutlinedIcon />}
+          sx={{ mb: 2, borderRadius: 2 }}
+        >
+          This is an archived past session{classroom.academic_year ? ` (${classroom.academic_year})` : ''}. It is read-only, you can review its classes, batches, and roster, but changes are disabled.
+        </Alert>
+      )}
 
       {/* Stats row */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
@@ -581,7 +602,7 @@ export default function ClassroomDetailPage() {
                   <Switch
                     checked={qbEnabled === true}
                     onChange={handleQBToggle}
-                    disabled={qbEnabled === null}
+                    disabled={qbEnabled === null || readOnly}
                     size="small"
                   />
                 )}
@@ -589,7 +610,8 @@ export default function ClassroomDetailPage() {
             </Box>
           </Paper>
 
-          {/* Teams Integration Panel */}
+          {/* Teams Integration Panel (hidden for archived read-only cohorts) */}
+          {!readOnly && (
           <Paper variant="outlined" sx={{ p: 2.5, mt: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
               <GroupsIcon color="primary" />
@@ -728,22 +750,25 @@ export default function ClassroomDetailPage() {
               </Box>
             )}
           </Paper>
+          )}
         </Box>
       )}
 
       {/* Tab: Batches */}
       {tab === 1 && (
         <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={() => { setEditingBatch(null); setBatchFormOpen(true); }}
-            >
-              New Batch
-            </Button>
-          </Box>
+          {!readOnly && (
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => { setEditingBatch(null); setBatchFormOpen(true); }}
+              >
+                New Batch
+              </Button>
+            </Box>
+          )}
 
           {batches.length === 0 ? (
             <Paper sx={{ p: 3, textAlign: 'center' }}>
@@ -772,23 +797,27 @@ export default function ClassroomDetailPage() {
                       {batch.studentCount} student{batch.studentCount !== 1 ? 's' : ''}
                     </Typography>
                   </Box>
-                  <IconButton
-                    size="small"
-                    onClick={() => { setEditingBatch(batch); setBatchFormOpen(true); }}
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      if (confirm(`Delete batch "${batch.name}"? Students will become unassigned.`)) {
-                        handleDeleteBatch(batch.id);
-                      }
-                    }}
-                    color="error"
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  {!readOnly && (
+                    <>
+                      <IconButton
+                        size="small"
+                        onClick={() => { setEditingBatch(batch); setBatchFormOpen(true); }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          if (confirm(`Delete batch "${batch.name}"? Students will become unassigned.`)) {
+                            handleDeleteBatch(batch.id);
+                          }
+                        }}
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </>
+                  )}
                 </Paper>
               ))}
             </Box>
@@ -799,16 +828,18 @@ export default function ClassroomDetailPage() {
       {/* Tab: Teachers */}
       {tab === 2 && (
         <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<PersonAddAltOutlinedIcon />}
-              onClick={() => setAddTeacherOpen(true)}
-            >
-              Add Teacher
-            </Button>
-          </Box>
+          {!readOnly && (
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<PersonAddAltOutlinedIcon />}
+                onClick={() => setAddTeacherOpen(true)}
+              >
+                Add Teacher
+              </Button>
+            </Box>
+          )}
 
           {teacherEnrollments.length === 0 ? (
             <Paper sx={{ p: 3, textAlign: 'center' }}>
@@ -908,7 +939,8 @@ export default function ClassroomDetailPage() {
             </Box>
           </Box>
 
-          {/* Action buttons */}
+          {/* Action buttons (hidden for archived read-only cohorts) */}
+          {!readOnly && (
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2, flexWrap: 'wrap' }}>
             {selectionMode ? (
               <>
@@ -985,9 +1017,10 @@ export default function ClassroomDetailPage() {
               </>
             )}
           </Box>
+          )}
 
           {/* Directory: organisation students not yet in this class (one-click add) */}
-          {!selectionMode && (
+          {!selectionMode && !readOnly && (
             <AvailableStudentsSection
               classroomId={id}
               getToken={getToken}
@@ -1061,7 +1094,7 @@ export default function ClassroomDetailPage() {
           )}
 
           {/* Mobile FAB for batch assignment */}
-          {!selectionMode && sortedEnrollments.length > 0 && batches.length > 0 && (
+          {!readOnly && !selectionMode && sortedEnrollments.length > 0 && batches.length > 0 && (
             <Fab
               color="primary"
               onClick={() => setAssignOpen(true)}

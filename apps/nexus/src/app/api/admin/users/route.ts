@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { getNexusMemberUserIds } from '@/lib/nexus-members';
 
 /**
- * GET /api/admin/users?q={query}&page={page}&limit={limit}
+ * GET /api/admin/users?q={query}&role={role}&page={page}&limit={limit}
  *
- * List all users with optional search. Admin-only.
+ * List Nexus members (active-access students + teachers + admins) with optional
+ * search and role filter. Admin-only. Scoped via getNexusMemberUserIds so leads
+ * and Tools-app signups from the shared users table never appear here.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -24,13 +27,26 @@ export async function GET(request: NextRequest) {
     }
 
     const q = request.nextUrl.searchParams.get('q')?.trim();
+    const role = request.nextUrl.searchParams.get('role')?.trim();
     const page = parseInt(request.nextUrl.searchParams.get('page') || '1', 10);
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '50', 10), 100);
     const offset = (page - 1) * limit;
 
+    // Scope to Nexus members only (staff + active-access students), so leads and
+    // Tools-app signups from the shared users table are excluded.
+    const memberIds = await getNexusMemberUserIds();
+    if (memberIds.length === 0) {
+      return NextResponse.json({ users: [], total: 0, page, limit, totalPages: 0 });
+    }
+
     let query = supabase
       .from('users')
-      .select('id, name, email, phone, avatar_url, user_type, status, created_at, ms_oid, firebase_uid', { count: 'exact' });
+      .select('id, name, email, phone, avatar_url, user_type, status, created_at, ms_oid, firebase_uid', { count: 'exact' })
+      .in('id', memberIds);
+
+    if (role === 'student' || role === 'teacher' || role === 'admin') {
+      query = query.eq('user_type', role);
+    }
 
     if (q && q.length >= 2) {
       query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`);

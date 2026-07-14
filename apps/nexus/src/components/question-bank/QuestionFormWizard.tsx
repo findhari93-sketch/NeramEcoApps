@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -43,6 +43,7 @@ import type { QBCategory } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import QuestionCard from './QuestionCard';
 import ImageUploadZone from './ImageUploadZone';
+import DedupeWarning, { type DedupeCandidate } from './DedupeWarning';
 
 interface QuestionFormWizardProps {
   initialData?: NexusQBQuestion;
@@ -199,6 +200,45 @@ export default function QuestionFormWizard({
     },
     []
   );
+
+  // Live duplicate detection on the question text (skip when editing an existing question).
+  const [dupes, setDupes] = useState<DedupeCandidate[]>([]);
+  const [dupeLoading, setDupeLoading] = useState(false);
+  const [dupeDismissed, setDupeDismissed] = useState(false);
+
+  useEffect(() => {
+    const text = form.question_text.trim();
+    setDupeDismissed(false);
+    if (initialData || text.length < 12) {
+      setDupes([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setDupeLoading(true);
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const res = await fetch('/api/question-bank/dedupe-check', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, exam_relevance: form.exam_relevance }),
+        });
+        if (res.ok && !cancelled) {
+          const json = await res.json();
+          setDupes(json.data?.candidates || []);
+        }
+      } catch {
+        /* non-blocking */
+      } finally {
+        if (!cancelled) setDupeLoading(false);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [form.question_text, form.exam_relevance, getToken, initialData]);
 
   const handleNext = () => setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
@@ -419,6 +459,14 @@ export default function QuestionFormWizard({
               onChange={(e) => updateField('question_text', e.target.value)}
               fullWidth
             />
+            {!dupeDismissed && (dupeLoading || dupes.length > 0) && (
+              <DedupeWarning
+                candidates={dupes}
+                loading={dupeLoading}
+                onUseExisting={(c) => window.open(`/teacher/question-bank/questions/${c.id}`, '_blank')}
+                onAddAnyway={() => setDupeDismissed(true)}
+              />
+            )}
             <TextField
               label="Question Text (Hindi) — हिंदी"
               multiline

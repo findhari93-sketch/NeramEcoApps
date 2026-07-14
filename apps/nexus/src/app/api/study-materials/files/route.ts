@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken } from '@/lib/ms-verify';
 import { uploadToSharePoint } from '@/lib/sharepoint';
-import { getFolderById, createFileRecord } from '@neram/database';
+import { getFolderById, createFileRecord, getNextSortOrder } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
     if (allowDownloadRaw === 'true') allowDownload = true;
     else if (allowDownloadRaw === 'false') allowDownload = false;
 
+    // Append to the end of the folder so a fresh upload does not jump to the top.
+    const sortOrder = await getNextSortOrder({ files: folderId });
+
     const record = await createFileRecord({
       folder_id: folderId,
       title: title || file.name.replace(/\.[^.]+$/, ''),
@@ -68,6 +71,7 @@ export async function POST(request: NextRequest) {
       sharepoint_web_url: result.webUrl,
       storage_path: storagePath,
       allow_download: allowDownload,
+      sort_order: sortOrder,
       uploaded_by: user.id,
     });
 

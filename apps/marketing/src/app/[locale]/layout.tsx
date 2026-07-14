@@ -14,6 +14,7 @@ const GeneralChatbot = dynamic(() => import('@/components/GeneralChatbot'), { ss
 const ComparisonTray = dynamic(() => import('@/components/college-hub/ComparisonTray'), { ssr: false });
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import AttributionCapture from '@/components/AttributionCapture';
+import EnvBadge from '@/components/EnvBadge';
 import '@/styles/globals.css';
 
 // Font loading - reduced to 2-3 fonts for faster FCP on 3G
@@ -182,6 +183,7 @@ export default async function RootLayout({
             </AuthProvider>
           </ThemeRegistry>
         </NextIntlClientProvider>
+        <EnvBadge />
       </body>
     </html>
   );

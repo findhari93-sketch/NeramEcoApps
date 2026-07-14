@@ -7,6 +7,8 @@ import {
   getTeacherQBQuestions,
   createQBQuestion,
   addQuestionSource,
+  syncTagsForNewQuestion,
+  setQuestionTags,
 } from '@neram/database';
 import type { QBQuestionStatus } from '@neram/database';
 
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest) {
       exam_relevance: (params.get('exam_relevance') as any) || undefined,
       exam_years: params.get('years') ? params.get('years')!.split(',').map(Number) : undefined,
       categories: params.get('categories') ? params.get('categories')!.split(',') : undefined,
+      tag_ids: params.get('tag_ids') ? params.get('tag_ids')!.split(',') : undefined,
       difficulty: params.get('difficulty') ? params.get('difficulty')!.split(',') as any : undefined,
       question_format: params.get('format') ? params.get('format')!.split(',') as any : undefined,
       attempt_status: (params.get('status') as any) || undefined,
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sources, ...questionData } = body;
+    const { sources, tag_ids, ...questionData } = body;
 
     // Create the question
     const question = await createQBQuestion({
@@ -104,6 +107,17 @@ export async function POST(request: NextRequest) {
           ...source,
         });
       }
+    }
+
+    // Tag write-through: explicit tag_ids if provided, else derive from categories + exam.
+    if (Array.isArray(tag_ids) && tag_ids.length > 0) {
+      await setQuestionTags(question.id, tag_ids, caller.id);
+    } else {
+      await syncTagsForNewQuestion(question.id, {
+        categories: questionData.categories,
+        examRelevance: questionData.exam_relevance,
+        createdBy: caller.id,
+      });
     }
 
     return NextResponse.json({ data: question }, { status: 201 });

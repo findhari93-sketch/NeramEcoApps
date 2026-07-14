@@ -13,6 +13,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
@@ -32,6 +33,7 @@ const STUDY_MATERIALS_PATH = '/student/study-materials';
 const STARRED_PATH = '/student/study-materials/starred';
 const SELF_LEARNING_PATH = '/student/self-learning';
 const COURSE_PLAN_PATH = '/student/course-plan';
+const ASSIGNMENTS_PATH = '/student/assignments';
 // Covers both the list (/student/class-recaps) and the player (/student/class-recap/[id]).
 const CLASS_RECAP_PATH = '/student/class-recap';
 const CLASS_RECAPS_PATH = '/student/class-recaps';
@@ -69,6 +71,7 @@ const CLASSROOM: ZoneConfig = {
       items: [
         { label: 'Timetable', path: '/student/timetable', icon: <CalendarTodayOutlinedIcon /> },
         { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
+        { label: 'Assignments', path: ASSIGNMENTS_PATH, icon: <AssignmentTurnedInOutlinedIcon /> },
       ],
     },
     {
@@ -106,6 +109,7 @@ const CLASSROOM: ZoneConfig = {
   ],
   overflowItems: [
     { label: 'Course Plan', path: COURSE_PLAN_PATH, icon: <ViewTimelineOutlinedIcon /> },
+    { label: 'Assignments', path: ASSIGNMENTS_PATH, icon: <AssignmentTurnedInOutlinedIcon /> },
     { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
     { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
     { label: 'Tests', path: '/student/tests', icon: <AssignmentOutlinedIcon /> },
@@ -160,7 +164,10 @@ const STUDY: ZoneConfig = {
   ],
 };
 
-const ZONES: ZoneConfig[] = [CLASSROOM, STUDY];
+// Study Zone is listed first so it reads as the primary/default zone in both the
+// top-bar pill and the profile-menu "Switch Zone" list. Classroom is secondary.
+// Order is display-only; lookups use .find, so this does not affect routing.
+const ZONES: ZoneConfig[] = [STUDY, CLASSROOM];
 
 const STORAGE_KEY = 'nexus_student_zone';
 
@@ -179,6 +186,7 @@ function detectZoneFromPath(pathname: string): StudentZoneId | null {
     '/student/dashboard',
     '/student/timetable',
     COURSE_PLAN_PATH,
+    ASSIGNMENTS_PATH,
     '/student/tests',
     '/student/drawings',
     '/student/exam-recall',
@@ -227,7 +235,9 @@ export default function StudentZoneProvider({
   const pathname = usePathname();
   const router = useRouter();
   const { featureFlags } = useNexusAuthContext();
-  const [activeZone, setActiveZoneState] = useState<StudentZoneId>('classroom');
+  // Default to Study Zone (first paint, before localStorage hydration / URL
+  // detection). A saved zone or a zone-exclusive URL still overrides this.
+  const [activeZone, setActiveZoneState] = useState<StudentZoneId>('study');
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate from localStorage on mount.
@@ -260,8 +270,6 @@ export default function StudentZoneProvider({
     [router],
   );
 
-  const current = ZONES.find((z) => z.id === activeZone) || CLASSROOM;
-
   // Filter nav by the admin feature flags. Disabled features are stripped from
   // the sidebar/bottom-nav; empty groups and empty zones disappear. Question
   // Bank carries an extra per-classroom gate (isQBEnabled) on top of its global
@@ -282,21 +290,27 @@ export default function StudentZoneProvider({
       filterItems(z.overflowItems).length > 0 ||
       filterGroups(z.navGroups).length > 0;
 
+    const available = ZONES.filter(zoneHasContent);
+    // Resolve the zone to actually render. If the active zone was stripped by
+    // feature flags (e.g. Study Zone disabled), fall back to the first available
+    // zone so the sidebar/pill never end up empty or mis-highlighted.
+    const effective = available.find((z) => z.id === activeZone) || available[0] || CLASSROOM;
+
     return {
-      activeZone,
+      activeZone: effective.id,
       setActiveZone,
-      availableZones: ZONES.filter(zoneHasContent).map((z) => ({
+      availableZones: available.map((z) => ({
         id: z.id,
         label: z.label,
         icon: z.icon,
       })),
-      currentNavGroups: filterGroups(current.navGroups),
-      currentBottomNavItems: filterItems(current.bottomNavItems),
-      currentOverflowItems: filterItems(current.overflowItems),
-      currentHomePath: current.defaultPath,
-      currentZoneTitle: current.title,
+      currentNavGroups: filterGroups(effective.navGroups),
+      currentBottomNavItems: filterItems(effective.bottomNavItems),
+      currentOverflowItems: filterItems(effective.overflowItems),
+      currentHomePath: effective.defaultPath,
+      currentZoneTitle: effective.title,
     };
-  }, [activeZone, setActiveZone, current, isQBEnabled, featureFlags]);
+  }, [activeZone, setActiveZone, isQBEnabled, featureFlags]);
 
   return <StudentZoneContext.Provider value={value}>{children}</StudentZoneContext.Provider>;
 }

@@ -244,6 +244,16 @@ export async function replaceRecapSections(
 ): Promise<void> {
   const supabase = client || getSupabaseAdminClient();
 
+  // Tear down the bank mirror for this recap's existing sections before replacing them.
+  try {
+    const { data: oldSections } = await supabase.from(SECTIONS).select('id').eq('recap_id', recapId);
+    for (const os of oldSections || []) {
+      await removeRecapSectionMirror(supabase, (os as any).id);
+    }
+  } catch (err) {
+    console.error('[recap] bank mirror teardown failed (non-fatal):', err instanceof Error ? err.message : err);
+  }
+
   const { error: delErr } = await supabase.from(SECTIONS).delete().eq('recap_id', recapId);
   if (delErr) throw delErr;
 
@@ -284,6 +294,19 @@ export async function replaceRecapSections(
         })),
       );
       if (qErr) throw qErr;
+
+      // Mirror this checkpoint's questions into the bank + unified engine (best-effort).
+      try {
+        await composeAndPlaceRecapSection(supabase, {
+          sectionId: section.id,
+          title: s.title,
+          sortOrder: i,
+          minQuestionsToPass: s.min_questions_to_pass ?? null,
+          questions,
+        });
+      } catch (err) {
+        console.error('[recap] bank mirror failed (non-fatal):', err instanceof Error ? err.message : err);
+      }
     }
   }
 
@@ -292,6 +315,102 @@ export async function replaceRecapSections(
     .update({ generated_at: new Date().toISOString() })
     .eq('id', recapId);
   if (uErr) throw uErr;
+}
+
+/** Delete the composed/placed bank test for a recap section + any exclusively-owned bank questions. */
+async function removeRecapSectionMirror(supabase: any, sectionId: string): Promise<void> {
+  const { data: priorPlacements } = await supabase
+    .from('nexus_test_placements')
+    .select('id, test_id')
+    .eq('context_type', 'class_recap_section')
+    .eq('context_id', sectionId)
+    .eq('is_active', true);
+
+  for (const p of priorPlacements || []) {
+    const { data: priorTqs } = await supabase
+      .from('nexus_test_questions')
+      .select('qb_question_id')
+      .eq('test_id', p.test_id);
+    const priorQids = (priorTqs || []).map((r: any) => r.qb_question_id).filter(Boolean);
+
+    await supabase.from('nexus_tests').delete().eq('id', p.test_id);
+
+    for (const qid of priorQids) {
+      const { count } = await supabase
+        .from('nexus_test_questions')
+        .select('test_id', { count: 'exact', head: true })
+        .eq('qb_question_id', qid);
+      if (!count || count === 0) {
+        await supabase.from('nexus_qb_questions').delete().eq('id', qid);
+      }
+    }
+  }
+}
+
+/** Create bank questions for a recap checkpoint, compose a test, and place it on the section. */
+async function composeAndPlaceRecapSection(
+  supabase: any,
+  input: {
+    sectionId: string;
+    title?: string | null;
+    sortOrder: number;
+    minQuestionsToPass: number | null;
+    questions: Array<{ question_text: string; option_a: string; option_b: string; option_c?: string | null; option_d?: string | null; correct_option: string; explanation?: string | null }>;
+  },
+): Promise<void> {
+  const OPTS = ['a', 'b', 'c', 'd'] as const;
+  const bankRows = input.questions.map((q) => ({
+    question_text: q.question_text,
+    question_format: 'MCQ',
+    options: OPTS.filter((k) => (q as any)[`option_${k}`] != null && (q as any)[`option_${k}`] !== '')
+      .map((k) => ({ id: k, text: (q as any)[`option_${k}`] })),
+    correct_answer: q.correct_option,
+    explanation_brief: q.explanation || 'From a class-recap checkpoint',
+    difficulty: 'MEDIUM',
+    exam_relevance: 'NATA',
+    categories: [],
+    status: 'active',
+    origin: 'authored',
+    answer_source: 'teacher_verified',
+    is_active: true,
+  }));
+  const { data: inserted, error: insErr } = await supabase.from('nexus_qb_questions').insert(bankRows).select('id');
+  if (insErr) throw insErr;
+  const bankIds = (inserted || []).map((r: any) => r.id);
+  if (bankIds.length !== input.questions.length) return;
+
+  const { data: test, error: testErr } = await supabase
+    .from('nexus_tests')
+    .insert({
+      title: input.title || 'Checkpoint',
+      test_type: 'untimed',
+      total_marks: bankIds.length,
+      is_published: true,
+      is_active: true,
+      is_repository: true,
+      created_from: 'recap_authored',
+    })
+    .select('id')
+    .single();
+  if (testErr) throw testErr;
+
+  const tqRows = bankIds.map((id: string, i: number) => ({
+    test_id: test.id,
+    qb_question_id: id,
+    sort_order: i,
+    marks: 1,
+    negative_marks: 0,
+  }));
+  await supabase.from('nexus_test_questions').insert(tqRows);
+
+  await supabase.from('nexus_test_placements').insert({
+    test_id: test.id,
+    context_type: 'class_recap_section',
+    context_id: input.sectionId,
+    min_questions_to_pass: input.minQuestionsToPass,
+    sort_order: input.sortOrder,
+    gating: { sequential_unlock: true },
+  });
 }
 
 /**

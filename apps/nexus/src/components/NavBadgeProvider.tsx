@@ -26,7 +26,6 @@ export function useNavBadges() {
 const PATH_TO_BADGE_KEY: Record<string, string> = {
   '/student/issues': 'issues',
   '/teacher/issues': 'issues',
-  '/teacher/access-requests': 'access_requests',
   '/teacher/drawing-reviews': 'drawing_reviews',
 };
 

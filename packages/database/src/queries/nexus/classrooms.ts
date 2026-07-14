@@ -1,4 +1,5 @@
 import { getSupabaseBrowserClient, getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { getCurrentBatch } from '../academicBatches';
 
 export async function getClassroomsByUser(
   userId: string,
@@ -78,7 +79,7 @@ export async function getUserRoleInClassroom(
 }
 
 export async function createClassroom(
-  data: { name: string; type: string; description?: string; ms_team_id?: string; created_by?: string },
+  data: { name: string; type: string; description?: string; ms_team_id?: string; created_by?: string; academic_year?: string | null; is_archived?: boolean },
   client?: TypedSupabaseClient
 ) {
   const supabase = client || getSupabaseAdminClient();
@@ -105,7 +106,7 @@ export async function getAllClassrooms(
 
 export async function updateClassroom(
   classroomId: string,
-  data: { name?: string; type?: string; description?: string; ms_team_id?: string; is_active?: boolean },
+  data: { name?: string; type?: string; description?: string; ms_team_id?: string; is_active?: boolean; academic_year?: string | null; is_archived?: boolean },
   client?: TypedSupabaseClient
 ) {
   const supabase = client || getSupabaseAdminClient();
@@ -134,30 +135,65 @@ export async function enrollUser(
 }
 
 /**
- * The single "default" classroom = the active classroom with type='common'.
- * A unique partial index guarantees at most one such row, so this is the app's
- * source of truth for "the one classroom everyone is in" during single-classroom
- * mode. Returns null if none is active.
+ * The classroom for the CURRENT academic year (exam-year cohort) under the
+ * one-classroom-per-year model. This is the source of truth for "the one
+ * classroom this year's students are in". It resolves the current batch code
+ * from the academic_batches registry and returns the non-archived classroom
+ * stamped with that code.
+ *
+ * Falls back to the legacy non-archived type='common' classroom so the app is
+ * never classroom-less mid-migration (before the rollup stamps academic_year on
+ * the existing shared classroom). Returns null if none is found.
+ */
+export async function getCurrentClassroom(
+  client?: TypedSupabaseClient
+) {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const batch = await getCurrentBatch(supabase);
+
+  const { data: byYear, error } = await supabase
+    .from('nexus_classrooms')
+    .select('*')
+    .eq('academic_year', batch.code)
+    .eq('is_archived', false)
+    .maybeSingle();
+  if (error) throw error;
+  if (byYear) return byYear;
+
+  // Fallback: the legacy single common classroom (pre-rollup, academic_year not
+  // yet stamped). Newest first + limit(1) so a stray legacy row can't shadow the
+  // live one or trip maybeSingle's "multiple rows" guard.
+  const { data: legacy, error: legacyErr } = await supabase
+    .from('nexus_classrooms')
+    .select('*')
+    .eq('type', 'common')
+    .eq('is_archived', false)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (legacyErr) throw legacyErr;
+  return legacy || null;
+}
+
+/**
+ * @deprecated Prefer {@link getCurrentClassroom}. Kept as an alias so existing
+ * callers automatically route to the current academic-year classroom. Under
+ * one-classroom-per-year, "the default classroom" is the current cohort's
+ * classroom. Returns null if none is found.
  */
 export async function getDefaultClassroom(
   client?: TypedSupabaseClient
 ) {
-  const supabase = (client || getSupabaseAdminClient()) as any;
-  const { data, error } = await supabase
-    .from('nexus_classrooms')
-    .select('*')
-    .eq('type', 'common')
-    .eq('is_active', true)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  return getCurrentClassroom(client);
 }
 
 /**
- * Enroll a user (student by default) into the single default classroom, idempotently.
- * DB-only: it creates/reactivates the nexus_enrollments row and returns the
- * classroom so the caller can sync Microsoft Teams membership separately (Graph
- * lives in @neram/auth, kept out of the DB layer). Throws if no default classroom.
+ * Enroll a user (student by default) into the CURRENT academic-year classroom,
+ * idempotently. DB-only: it creates/reactivates the nexus_enrollments row and
+ * returns the classroom so the caller can sync Microsoft Teams membership
+ * separately (Graph lives in @neram/auth, kept out of the DB layer). Throws if no
+ * current classroom exists.
  */
 export async function enrollUserInDefaultClassroom(
   userId: string,
@@ -165,9 +201,9 @@ export async function enrollUserInDefaultClassroom(
   client?: TypedSupabaseClient
 ) {
   const supabase = client || getSupabaseAdminClient();
-  const classroom = await getDefaultClassroom(supabase);
+  const classroom = await getCurrentClassroom(supabase);
   if (!classroom) {
-    throw new Error('No active default classroom (type=common) found');
+    throw new Error('No current academic-year classroom found (run the year rollover to create one)');
   }
   const enrollData: { user_id: string; classroom_id: string; role: 'teacher' | 'student'; batch_id?: string } = {
     user_id: userId,
@@ -177,6 +213,36 @@ export async function enrollUserInDefaultClassroom(
   if (opts.batchId) enrollData.batch_id = opts.batchId;
   const enrollment = await enrollUser(enrollData, supabase);
   return { classroom, enrollment };
+}
+
+/**
+ * From the given set of user ids, return those that currently hold LIVE Nexus
+ * access: an active student enrollment (is_active, role='student') in an active
+ * classroom. This mirrors the /api/auth/me gate and the geo-students predicate.
+ * It does NOT apply the is_alumni check (the caller combines that) and it does
+ * NOT read the dead users.nexus_access_enabled column.
+ */
+export async function getUsersWithActiveNexusAccess(
+  userIds: string[],
+  client?: TypedSupabaseClient
+): Promise<Set<string>> {
+  if (!userIds.length) return new Set();
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data: classrooms } = await supabase
+    .from('nexus_classrooms')
+    .select('id')
+    .eq('is_active', true)
+    .eq('is_archived', false);
+  const classroomIds = (classrooms || []).map((c: any) => c.id);
+  if (!classroomIds.length) return new Set();
+  const { data: enr } = await supabase
+    .from('nexus_enrollments')
+    .select('user_id')
+    .eq('is_active', true)
+    .eq('role', 'student')
+    .in('classroom_id', classroomIds)
+    .in('user_id', userIds);
+  return new Set((enr || []).map((e: any) => e.user_id));
 }
 
 export async function updateEnrollmentBatch(

@@ -24,12 +24,12 @@ import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
-import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LeaderboardOutlinedIcon from '@mui/icons-material/LeaderboardOutlined';
 import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
+import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
 
@@ -88,9 +88,9 @@ const PANELS: PanelConfig[] = [
       { label: 'Timetable', path: '/teacher/timetable', icon: <CalendarTodayOutlinedIcon /> },
       { label: 'Repository', path: '/teacher/curriculum', icon: <AutoStoriesOutlinedIcon /> },
       { label: 'Course Plans', path: '/teacher/course-plans', icon: <PlaylistAddCheckOutlinedIcon /> },
+      { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon /> },
       { label: 'Drawing Reviews', path: '/teacher/drawing-reviews', icon: <BrushOutlinedIcon /> },
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
-      { label: 'Access Requests', path: '/teacher/access-requests', icon: <HowToRegOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
       { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
@@ -102,7 +102,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Attendance', path: '/teacher/attendance', icon: <EventNoteOutlinedIcon /> },
     ],
     overflowItems: [
-      { label: 'Access Requests', path: '/teacher/access-requests', icon: <HowToRegOutlinedIcon /> },
+      { label: 'Assignments', path: '/teacher/assignments', icon: <AssignmentTurnedInOutlinedIcon /> },
       { label: 'Leaderboard', path: '/teacher/leaderboard', icon: <LeaderboardOutlinedIcon /> },
       { label: 'Exams', path: '/teacher/exams', icon: <DateRangeOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/guide', icon: <HelpOutlineOutlinedIcon /> },
@@ -119,7 +119,6 @@ const PANELS: PanelConfig[] = [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
-      { label: 'Access Requests', path: '/teacher/access-requests', icon: <HowToRegOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
       { label: 'Materials Feedback', path: '/teacher/study-materials/feedback', icon: <RateReviewOutlinedIcon /> },
@@ -191,7 +190,6 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (PATH_TO_PANEL[pathname]) return PATH_TO_PANEL[pathname];
 
   // Check prefix match (e.g., /teacher/classrooms/123 → management)
-  if (pathname.startsWith('/teacher/access-requests')) return 'teaching';
   if (pathname.startsWith('/teacher/drawing-reviews')) return 'teaching';
   if (pathname.startsWith('/teacher/curriculum')) return 'teaching';
   if (pathname.startsWith('/teacher/course-plans')) return 'teaching';

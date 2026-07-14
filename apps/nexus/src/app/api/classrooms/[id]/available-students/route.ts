@@ -113,8 +113,33 @@ export async function GET(
       .in('ms_oid', allOids.length > 0 ? allOids : ['__none__']);
     const existingOids = new Set((existingUsers || []).map((u: any) => u.ms_oid));
 
+    // 5. Build the "must never be offered" set: graduated (alumni) students and
+    // any teacher/admin account. Match on BOTH ms_oid AND every known email, not
+    // ms_oid alone: some graduated rows have a null/mismatched ms_oid (e.g. a
+    // Google-first signup whose oid lives on a duplicate row), or a UPN whose
+    // casing differs from the stored email. Email matching closes those gaps.
+    const { data: blockedUsers } = await supabase
+      .from('users')
+      .select('ms_oid, email, personal_email, linked_classroom_email, is_alumni, user_type')
+      .or('is_alumni.eq.true,user_type.in.(teacher,admin)');
+
+    const blockedOids = new Set<string>();
+    const blockedEmails = new Set<string>();
+    for (const u of blockedUsers || []) {
+      if (u.ms_oid) blockedOids.add(u.ms_oid);
+      for (const e of [u.email, u.personal_email, u.linked_classroom_email]) {
+        if (e) blockedEmails.add(String(e).trim().toLowerCase());
+      }
+    }
+    const isBlocked = (u: any): boolean => {
+      if (blockedOids.has(u.id)) return true;
+      const upn = (u.userPrincipalName || '').trim().toLowerCase();
+      const mail = (u.mail || '').trim().toLowerCase();
+      return (!!upn && blockedEmails.has(upn)) || (!!mail && blockedEmails.has(mail));
+    };
+
     const students = studentAccounts
-      .filter((u: any) => !enrolledOids.has(u.id))
+      .filter((u: any) => !enrolledOids.has(u.id) && !isBlocked(u))
       .map((u: any) => ({
         ms_oid: u.id,
         name: u.displayName || u.userPrincipalName?.split('@')[0] || 'Unknown',

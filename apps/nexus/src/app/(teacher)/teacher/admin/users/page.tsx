@@ -46,6 +46,22 @@ const ROLE_COLORS: Record<string, 'primary' | 'success' | 'warning' | 'default'>
   parent: 'warning',
 };
 
+type RoleTab = 'all' | 'student' | 'teacher' | 'admin';
+
+const ROLE_TABS: { value: RoleTab; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'student', label: 'Students' },
+  { value: 'teacher', label: 'Teachers' },
+  { value: 'admin', label: 'Admins' },
+];
+
+const EMPTY_LABEL: Record<RoleTab, string> = {
+  all: 'No Nexus members yet',
+  student: 'No students with access yet',
+  teacher: 'No teachers yet',
+  admin: 'No admins yet',
+};
+
 export default function AdminUsersPage() {
   const { isAdmin, loading: authLoading, getToken } = useNexusAuthContext();
   const router = useRouter();
@@ -54,6 +70,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [roleTab, setRoleTab] = useState<RoleTab>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -82,6 +99,7 @@ export default function AdminUsersPage() {
       const token = await getToken();
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (search.trim().length >= 2) params.set('q', search.trim());
+      if (roleTab !== 'all') params.set('role', roleTab);
 
       const res = await fetch(`/api/admin/users?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -99,16 +117,16 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, page, search]);
+  }, [getToken, page, search, roleTab]);
 
   useEffect(() => {
     if (isAdmin) fetchUsers();
   }, [isAdmin, fetchUsers]);
 
-  // Debounce search
+  // Reset to first page when the filters change
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, roleTab]);
 
   const handleSaveRole = async (userId: string) => {
     setSaving(true);
@@ -151,9 +169,71 @@ export default function AdminUsersPage() {
             Users
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {total} total users
+            {total} Nexus {total === 1 ? 'member' : 'members'}
           </Typography>
         </Box>
+      </Box>
+
+      {/* Role filter tabs */}
+      <Box
+        role="tablist"
+        aria-label="Filter members by role"
+        sx={{
+          display: 'inline-flex',
+          gap: 0.5,
+          p: 0.5,
+          mb: 2,
+          borderRadius: 2.5,
+          bgcolor: alpha(theme.palette.primary.main, 0.06),
+          border: `1px solid ${theme.palette.divider}`,
+          maxWidth: '100%',
+          overflowX: 'auto',
+        }}
+      >
+        {ROLE_TABS.map(({ value, label }) => {
+          const active = roleTab === value;
+          return (
+            <Box
+              key={value}
+              role="tab"
+              aria-selected={active}
+              tabIndex={0}
+              onClick={() => !active && setRoleTab(value)}
+              onKeyDown={(e) => {
+                if (!active && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  setRoleTab(value);
+                }
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                px: { xs: 1.75, sm: 2.5 },
+                py: 1,
+                minHeight: 40,
+                borderRadius: 2,
+                fontWeight: 700,
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                cursor: active ? 'default' : 'pointer',
+                color: active ? 'primary.main' : 'text.secondary',
+                bgcolor: active ? 'background.paper' : 'transparent',
+                boxShadow: active ? '0 1px 4px rgba(0,0,0,0.12)' : 'none',
+                transition: 'color .2s, background-color .2s, box-shadow .2s',
+                '&:hover': active
+                  ? {}
+                  : { color: 'text.primary', bgcolor: alpha(theme.palette.primary.main, 0.05) },
+                '&:focus-visible': {
+                  outline: `2px solid ${theme.palette.primary.main}`,
+                  outlineOffset: 2,
+                },
+              }}
+            >
+              {label}
+            </Box>
+          );
+        })}
       </Box>
 
       {/* Search */}
@@ -231,6 +311,19 @@ export default function AdminUsersPage() {
                     <Typography variant="caption" color="text.secondary" noWrap>
                       {user.email || user.phone || 'No contact info'}
                     </Typography>
+                    {/* Flag active students who have no Microsoft/Entra identity (e.g. Google-only
+                        sign-ups). They keep their Nexus access but have no MS license yet. */}
+                    {user.user_type === 'student' && !user.ms_oid && (
+                      <Box sx={{ mt: 0.5 }}>
+                        <Chip
+                          label="No MS license"
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.65rem' }}
+                        />
+                      </Box>
+                    )}
                   </Box>
 
                   {/* Auth provider indicators */}
@@ -260,7 +353,6 @@ export default function AdminUsersPage() {
                         <MenuItem value="student">Student</MenuItem>
                         <MenuItem value="teacher">Teacher</MenuItem>
                         <MenuItem value="admin">Admin</MenuItem>
-                        <MenuItem value="parent">Parent</MenuItem>
                       </Select>
                       <IconButton
                         size="small"
@@ -307,6 +399,22 @@ export default function AdminUsersPage() {
                 </Box>
               </Paper>
             ))}
+
+        {!loading && users.length === 0 && (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 2.5,
+              border: `1px dashed ${theme.palette.divider}`,
+              textAlign: 'center',
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              {search.trim().length >= 2 ? 'No members match your search.' : EMPTY_LABEL[roleTab]}
+            </Typography>
+          </Paper>
+        )}
       </Box>
 
       {/* Pagination */}

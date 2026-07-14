@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
+import { pickClassroomEmail } from '@/lib/classroom-email';
 
 /**
  * GET /api/students?classroom={id}&search={query}&batch={batchId|unassigned}&examBatch={code|current|none}
@@ -26,12 +27,20 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    // Get student enrollments with user info, classroom section (batch) and exam year (academic_year)
+    // Source of truth for the "current" exam-year cohort. Nexus only manages
+    // students who still hold access = current exam year + future years.
+    const currentCode = (await getCurrentBatch()).code;
+
+    // Get student enrollments with user info, classroom section (batch) and exam year (academic_year).
+    // Hard-exclude graduated students (users.is_alumni) and deactivated enrollments (is_active):
+    // once a student is graduated in Admin they lose Nexus access and must not appear here.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, avatar_url, ms_oid, nexus_access_enabled, academic_year), batch:nexus_batches(id, name)')
+      .select('user_id, enrolled_at, batch_id, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, is_alumni), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
-      .eq('role', 'student');
+      .eq('role', 'student')
+      .eq('is_active', true)
+      .eq('users.is_alumni', false);
 
     if (search) {
       enrollmentQuery = enrollmentQuery.ilike('users.name', `%${search}%`);
@@ -46,27 +55,41 @@ export async function GET(request: NextRequest) {
     }
 
     // Exam-year cohort filter (users.academic_year), independent of the classroom section.
-    if (examBatchParam && examBatchParam !== 'all') {
-      if (examBatchParam === 'none') {
-        enrollmentQuery = enrollmentQuery.is('users.academic_year', null);
-      } else {
-        const code = examBatchParam === 'current' ? (await getCurrentBatch()).code : examBatchParam;
-        enrollmentQuery = enrollmentQuery.eq('users.academic_year', code);
-      }
+    // An explicit year selection ('none' or a specific code) narrows further; when no
+    // specific year is chosen we default to the ACTIVE cohort (current + future + untagged),
+    // applied in JS below so alumni/past cohorts never leak in.
+    if (examBatchParam === 'none') {
+      enrollmentQuery = enrollmentQuery.is('users.academic_year', null);
+    } else if (examBatchParam && examBatchParam !== 'all' && examBatchParam !== 'current') {
+      enrollmentQuery = enrollmentQuery.eq('users.academic_year', examBatchParam);
     }
 
-    const { data: enrollments, error: enrollmentError } = await enrollmentQuery;
+    const { data: rawEnrollments, error: enrollmentError } = await enrollmentQuery;
 
     if (enrollmentError) throw enrollmentError;
 
-    if (!enrollments || enrollments.length === 0) {
-      return NextResponse.json({ students: [] });
+    // Access is defined by the LICENSE (active enrollment in an active classroom +
+    // non-alumni), exactly like /api/auth/me. So the default view shows EVERY
+    // licensed student regardless of exam year: the moment a teacher adds a
+    // student to the class they must appear here, even if their academic_year is
+    // an older cohort (e.g. a 2025-26 student re-added to the current class).
+    // The exam-year cohort is only an OPTIONAL narrowing: 'current' keeps just
+    // current + future + untagged (academic_year is 'YYYY-YY' so lexical >= works).
+    const applyActiveCohort = examBatchParam === 'current';
+    const enrollments = (rawEnrollments || []).filter((e: any) => {
+      if (!applyActiveCohort) return true;
+      const y: string | null = e.user?.academic_year ?? null;
+      return y === null || y >= currentCode;
+    });
+
+    if (enrollments.length === 0) {
+      return NextResponse.json({ students: [], batches: [], currentBatch: currentCode });
     }
 
     const studentIds = enrollments.map((e: any) => e.user_id);
 
     // Fetch stats in parallel
-    const [attendanceResult, totalClassesResult, checklistTotalResult, checklistProgressResult] =
+    const [attendanceResult, totalClassesResult, checklistTotalResult, checklistProgressResult, profileEmailResult] =
       await Promise.all([
         // Attendance records for all students in this classroom's classes
         supabase
@@ -95,12 +118,28 @@ export async function GET(request: NextRequest) {
           .in('student_id', studentIds)
           .eq('is_completed', true)
           .eq('nexus_checklist_items.classroom_id', classroomId),
+
+        // Classroom (Teams) email per student, used to prefer the @neramclasses.com
+        // identity over the personal Gmail stored in users.email.
+        supabase
+          .from('student_profiles')
+          .select('user_id, ms_teams_email')
+          .in('user_id', studentIds),
       ]);
 
     if (attendanceResult.error) throw attendanceResult.error;
     if (totalClassesResult.error) throw totalClassesResult.error;
     if (checklistTotalResult.error) throw checklistTotalResult.error;
     if (checklistProgressResult.error) throw checklistProgressResult.error;
+
+    // Map user_id -> ms_teams_email (classroom address).
+    const msTeamsByUser = (profileEmailResult.data || []).reduce(
+      (acc: Record<string, string | null>, row: any) => {
+        acc[row.user_id] = row.ms_teams_email ?? null;
+        return acc;
+      },
+      {} as Record<string, string | null>,
+    );
 
     const totalClasses = totalClassesResult.count || 0;
     const totalChecklistItems = checklistTotalResult.count || 0;
@@ -130,7 +169,9 @@ export async function GET(request: NextRequest) {
       const user = enrollment.user as unknown as {
         id: string;
         name: string;
-        email: string;
+        email: string | null;
+        personal_email: string | null;
+        linked_classroom_email: string | null;
         avatar_url: string | null;
         ms_oid: string | null;
         nexus_access_enabled: boolean | null;
@@ -140,10 +181,20 @@ export async function GET(request: NextRequest) {
 
       const batch = (enrollment as any).batch as { id: string; name: string } | null;
 
+      // Prefer the @neramclasses.com class identity over the personal Gmail that
+      // still sits in users.email for many students. email_status lets the UI flag
+      // anyone still on the default onmicrosoft domain or with no class email yet.
+      const { email: classroomEmail, status: emailStatus } = pickClassroomEmail({
+        ms_teams_email: msTeamsByUser[userId],
+        linked_classroom_email: user.linked_classroom_email,
+        email: user.email,
+      });
+
       return {
         id: user.id,
         name: user.name,
-        email: user.email,
+        email: classroomEmail ?? user.personal_email ?? user.email ?? null,
+        email_status: emailStatus,
         avatar_url: user.avatar_url,
         ms_oid: user.ms_oid,
         nexus_access_enabled: user.nexus_access_enabled ?? false,
@@ -171,7 +222,7 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .order('name');
 
-    return NextResponse.json({ students, batches: batches || [] });
+    return NextResponse.json({ students, batches: batches || [], currentBatch: currentCode });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load students';
     console.error('Students GET error:', message);

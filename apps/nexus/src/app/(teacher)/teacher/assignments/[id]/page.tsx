@@ -26,9 +26,11 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SendIcon from '@mui/icons-material/Send';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import SubmissionReviewSheet, { type ReviewRow } from '@/components/assignments/SubmissionReviewSheet';
+import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
 
 interface AssignmentInfo {
   id: string;
@@ -46,7 +48,7 @@ export default function AssignmentReviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const authFetch = useAuthFetch();
-  const { loading: authLoading } = useNexusAuthContext();
+  const { loading: authLoading, getTeacherToken } = useNexusAuthContext();
 
   const [assignment, setAssignment] = useState<AssignmentInfo | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -56,6 +58,21 @@ export default function AssignmentReviewPage() {
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [nudgeOpen, setNudgeOpen] = useState(false);
+
+  const setStatus = async (action: 'publish' | 'close') => {
+    if (!assignment) return;
+    setBusy(true);
+    try {
+      await authFetch(`/api/assignments/${id}`, { method: 'POST', body: JSON.stringify({ action }) });
+      setSnack({ msg: action === 'publish' ? 'Published to students.' : 'Assignment closed.', sev: 'success' });
+      await load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not update', sev: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -167,6 +184,25 @@ export default function AssignmentReviewPage() {
               : ''}
           </Typography>
 
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+            <Chip
+              label={assignment.status}
+              size="small"
+              sx={{ height: 22, fontWeight: 700, textTransform: 'capitalize' }}
+              color={assignment.status === 'published' ? 'success' : assignment.status === 'draft' ? 'default' : 'warning'}
+            />
+            {assignment.status === 'draft' && (
+              <Button size="small" variant="contained" disabled={busy} onClick={() => setStatus('publish')} sx={{ minHeight: 40, textTransform: 'none' }}>
+                Publish to students
+              </Button>
+            )}
+            {assignment.status === 'published' && (
+              <Button size="small" variant="outlined" disabled={busy} onClick={() => setStatus('close')} sx={{ minHeight: 40, textTransform: 'none' }}>
+                Close
+              </Button>
+            )}
+          </Stack>
+
           <ToggleButtonGroup
             value={tab}
             exclusive
@@ -192,6 +228,11 @@ export default function AssignmentReviewPage() {
                   Copy names
                 </Button>
               </Tooltip>
+            )}
+            {tab === 'missing' && bucketRows.length > 0 && (
+              <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => setNudgeOpen(true)} sx={{ minHeight: 40 }}>
+                Message
+              </Button>
             )}
           </Stack>
 
@@ -272,6 +313,18 @@ export default function AssignmentReviewPage() {
         hasPrev={reviewIndex != null && reviewIndex > 0}
         hasNext={reviewIndex != null && reviewIndex < bucketRows.length - 1}
       />
+
+      {assignment && (
+        <AssignmentNudgeDialog
+          open={nudgeOpen}
+          assignments={[{ id: assignment.id, title: assignment.title }]}
+          recipients={rows
+            .filter((r) => r.bucket === 'missing')
+            .map((r) => ({ id: r.student.id, name: r.student.name }))}
+          getToken={getTeacherToken}
+          onClose={() => setNudgeOpen(false)}
+        />
+      )}
 
       <Snackbar
         open={!!snack}

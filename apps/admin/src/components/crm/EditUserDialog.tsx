@@ -17,6 +17,7 @@ import {
   Divider,
 } from '@neram/ui';
 import type { UserJourneyDetail } from '@neram/database';
+import { academicYearOptions, examYearFromAcademicYear, academicYearFromExamYear } from './academic-years';
 
 interface EditUserDialogProps {
   open: boolean;
@@ -99,7 +100,6 @@ export default function EditUserDialog({
   const [applicantCategory, setApplicantCategory] = useState('');
   const [interestCourse, setInterestCourse] = useState('');
   const [casteCategory, setCasteCategory] = useState('');
-  const [targetExamYear, setTargetExamYear] = useState('');
   const [learningMode, setLearningMode] = useState('');
   const [schoolType, setSchoolType] = useState('');
 
@@ -133,14 +133,15 @@ export default function EditUserDialog({
       setPhone(user.phone || '');
       setDob(user.date_of_birth || '');
       setGender(user.gender || '');
-      setAcademicYear(user.academic_year || '');
+      // Single "Exam Batch" field: prefer the batch string; for a legacy student
+      // that only has a target_exam_year, derive the batch so the dropdown pre-selects.
+      setAcademicYear(user.academic_year || academicYearFromExamYear(leadProfile?.target_exam_year) || '');
 
       // Lead fields — always reset (prevents stale data from previous user)
       setFatherName(leadProfile?.father_name || '');
       setApplicantCategory(leadProfile?.applicant_category || '');
       setInterestCourse(leadProfile?.interest_course || '');
       setCasteCategory(leadProfile?.caste_category || '');
-      setTargetExamYear(leadProfile?.target_exam_year?.toString() || '');
       setLearningMode(leadProfile?.learning_mode || '');
       setSchoolType(leadProfile?.school_type || '');
       setCity(leadProfile?.city || '');
@@ -171,10 +172,11 @@ export default function EditUserDialog({
       if (phone !== (user.phone || '')) userUpdates.phone = phone || null;
       if (dob !== (user.date_of_birth || '')) userUpdates.date_of_birth = dob || null;
       if (gender !== (user.gender || '')) userUpdates.gender = gender || null;
-      if (academicYear !== (user.academic_year || '')) {
-        if (academicYear && !/^[0-9]{4}-[0-9]{2}$/.test(academicYear)) {
-          throw new Error('Academic Year must be in YYYY-YY format, e.g. 2026-27');
-        }
+      // Single "Exam Batch" field drives both the batch (users.academic_year) and
+      // the derived target_exam_year (see leadUpdates below). The dropdown only
+      // offers valid YYYY-YY values, so no regex guard is needed.
+      const academicYearChanged = academicYear !== (user.academic_year || '');
+      if (academicYearChanged) {
         userUpdates.academic_year = academicYear || null;
       }
 
@@ -184,8 +186,10 @@ export default function EditUserDialog({
         if (applicantCategory !== (leadProfile.applicant_category || '')) leadUpdates.applicant_category = applicantCategory || null;
         if (interestCourse !== (leadProfile.interest_course || '')) leadUpdates.interest_course = interestCourse || null;
         if (casteCategory !== (leadProfile.caste_category || '')) leadUpdates.caste_category = casteCategory || null;
-        if (targetExamYear !== (leadProfile.target_exam_year?.toString() || '')) {
-          leadUpdates.target_exam_year = targetExamYear ? Number(targetExamYear) : null;
+        // target_exam_year is derived from the single batch field and kept in sync.
+        const derivedExamYear = academicYear ? examYearFromAcademicYear(academicYear) : null;
+        if (derivedExamYear !== (leadProfile.target_exam_year ?? null)) {
+          leadUpdates.target_exam_year = derivedExamYear;
         }
         if (learningMode !== (leadProfile.learning_mode || '')) leadUpdates.learning_mode = learningMode || null;
         if (schoolType !== (leadProfile.school_type || '')) leadUpdates.school_type = schoolType || null;
@@ -301,14 +305,6 @@ export default function EditUserDialog({
               <MenuItem value="other">Other</MenuItem>
             </TextField>
           </Box>
-          <TextField
-            fullWidth size="small" label="Academic Year (Cohort)"
-            value={academicYear}
-            onChange={(e) => setAcademicYear(e.target.value)}
-            placeholder="2026-27"
-            helperText="Format YYYY-YY. Update when a past-batch student re-attempts next year."
-            sx={{ mb: 2 }}
-          />
           {leadProfile && (
             <TextField fullWidth size="small" label="Father's Name" value={fatherName} onChange={(e) => setFatherName(e.target.value)} />
           )}
@@ -332,20 +328,24 @@ export default function EditUserDialog({
             <MenuItem value="">-- Select --</MenuItem>
             {COURSE_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
           </TextField>
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-            <TextField
-              select fullWidth size="small" label="Caste Category"
-              value={casteCategory} onChange={(e) => setCasteCategory(e.target.value)}
-            >
-              <MenuItem value="">-- Select --</MenuItem>
-              {CASTE_CATEGORIES.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
-            </TextField>
-            <TextField
-              fullWidth size="small" label="Target Exam Year" type="number"
-              value={targetExamYear} onChange={(e) => setTargetExamYear(e.target.value)}
-              placeholder="e.g. 2026"
-            />
-          </Box>
+          <TextField
+            select fullWidth size="small" label="Exam Batch (Academic Year)"
+            value={academicYearOptions().includes(academicYear) ? academicYear : ''}
+            onChange={(e) => setAcademicYear(e.target.value)}
+            helperText="Sets the batch and target exam year together."
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="">-- Select --</MenuItem>
+            {academicYearOptions().map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+          </TextField>
+          <TextField
+            select fullWidth size="small" label="Caste Category"
+            value={casteCategory} onChange={(e) => setCasteCategory(e.target.value)}
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="">-- Select --</MenuItem>
+            {CASTE_CATEGORIES.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+          </TextField>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <TextField
               select fullWidth size="small" label="Learning Mode"

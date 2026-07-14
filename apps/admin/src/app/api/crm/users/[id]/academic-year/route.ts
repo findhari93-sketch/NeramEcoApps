@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { setUserAcademicYear, getSupabaseAdminClient } from '@neram/database';
 import { isCurrentBatch, syncUserToDefaultClassroom } from '@/lib/nexus-enroll';
+import { examYearFromAcademicYear } from '@/components/crm/academic-years';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
@@ -41,6 +42,19 @@ export async function POST(
     }
 
     await setUserAcademicYear(params.id, academicYear, adminId);
+
+    // Batch and target exam year are one concept: keep lead_profiles.target_exam_year
+    // mirrored (e.g. 2026-27 -> 2027) so the CRM/drawer display stays consistent.
+    // Best-effort: a failure here must not fail the batch assignment.
+    try {
+      const supabase = getSupabaseAdminClient() as any;
+      await supabase
+        .from('lead_profiles')
+        .update({ target_exam_year: examYearFromAcademicYear(academicYear) })
+        .eq('user_id', params.id);
+    } catch {
+      /* non-blocking */
+    }
 
     // If this places the student into the CURRENT batch, auto-add them to the
     // single classroom + Team + group chat. Best-effort: a Graph hiccup must not

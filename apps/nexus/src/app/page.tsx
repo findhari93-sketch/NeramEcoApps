@@ -4,6 +4,9 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { isPathEnabled } from '@/lib/feature-flags';
+
+const STUDY_MATERIALS_PATH = '/student/study-materials';
 
 /**
  * Root page — redirects authenticated users to their role-appropriate dashboard.
@@ -11,7 +14,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
  */
 export default function RootRedirect() {
   const router = useRouter();
-  const { user, nexusRole, loading } = useNexusAuthContext();
+  const { user, nexusRole, loading, featureFlags } = useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
@@ -31,10 +34,16 @@ export default function RootRedirect() {
         break;
       case 'student':
       default:
-        router.replace('/student/dashboard');
+        // Students land in Study Zone by default. Fall back to the Classroom
+        // dashboard when Study Zone content is disabled by admin feature flags.
+        router.replace(
+          isPathEnabled(STUDY_MATERIALS_PATH, featureFlags)
+            ? STUDY_MATERIALS_PATH
+            : '/student/dashboard',
+        );
         break;
     }
-  }, [user, nexusRole, loading, router]);
+  }, [user, nexusRole, loading, featureFlags, router]);
 
   return (
     <Box
@@ -49,7 +58,7 @@ export default function RootRedirect() {
     >
       <CircularProgress size={40} />
       <Typography variant="body2" color="text.secondary">
-        Loading your classroom...
+        Loading Nexus...
       </Typography>
     </Box>
   );

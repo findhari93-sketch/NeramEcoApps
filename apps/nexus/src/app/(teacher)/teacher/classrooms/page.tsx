@@ -16,6 +16,9 @@ import {
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ClassroomFormDialog from '@/components/ClassroomFormDialog';
 
@@ -26,9 +29,12 @@ interface ClassroomSummary {
   short_code: string | null;
   description: string | null;
   is_active: boolean;
+  academic_year: string | null;
+  is_archived: boolean;
   studentCount: number;
   teacherCount: number;
   batchCount: number;
+  classCount: number;
 }
 
 const typeLabels: Record<string, string> = {
@@ -47,6 +53,8 @@ const typeColors: Record<string, 'primary' | 'secondary' | 'info' | 'warning' | 
   other: 'default',
 };
 
+type ClassroomView = 'active' | 'archived';
+
 export default function ClassroomsPage() {
   const router = useRouter();
   const theme = useTheme();
@@ -54,13 +62,15 @@ export default function ClassroomsPage() {
   const [classrooms, setClassrooms] = useState<ClassroomSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [view, setView] = useState<ClassroomView>('active');
 
-  const fetchClassrooms = useCallback(async () => {
+  const fetchClassrooms = useCallback(async (which: ClassroomView) => {
+    setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
 
-      const res = await fetch('/api/classrooms', {
+      const res = await fetch(`/api/classrooms${which === 'archived' ? '?archived=1' : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -76,8 +86,8 @@ export default function ClassroomsPage() {
   }, [getToken]);
 
   useEffect(() => {
-    fetchClassrooms();
-  }, [fetchClassrooms]);
+    fetchClassrooms(view);
+  }, [fetchClassrooms, view]);
 
   const handleCreate = async (formData: { name: string; type: string; description: string; ms_team_id: string | null }) => {
     const token = await getToken();
@@ -97,8 +107,10 @@ export default function ClassroomsPage() {
       throw new Error(err.error || 'Failed to create classroom');
     }
 
-    await fetchClassrooms();
+    await fetchClassrooms('active');
   };
+
+  const isArchived = view === 'archived';
 
   return (
     <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
@@ -108,7 +120,7 @@ export default function ClassroomsPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          mb: { xs: 2, sm: 3 },
+          mb: { xs: 1.5, sm: 2 },
         }}
       >
         <Box sx={{ minWidth: 0 }}>
@@ -127,21 +139,45 @@ export default function ClassroomsPage() {
             color="text.secondary"
             sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
           >
-            Manage your classrooms and batches
+            {isArchived
+              ? 'Past academic years, read-only'
+              : 'Manage your classrooms and batches'}
           </Typography>
         </Box>
-        {/* Desktop create button */}
-        <Box sx={{ display: { xs: 'none', sm: 'block' }, flexShrink: 0 }}>
-          <Fab
-            color="primary"
-            variant="extended"
-            size="medium"
-            onClick={() => setCreateOpen(true)}
-          >
-            <AddIcon sx={{ mr: 1 }} />
-            New Classroom
-          </Fab>
-        </Box>
+        {/* Desktop create button (active view only) */}
+        {!isArchived && (
+          <Box sx={{ display: { xs: 'none', sm: 'block' }, flexShrink: 0 }}>
+            <Fab
+              color="primary"
+              variant="extended"
+              size="medium"
+              onClick={() => setCreateOpen(true)}
+            >
+              <AddIcon sx={{ mr: 1 }} />
+              New Classroom
+            </Fab>
+          </Box>
+        )}
+      </Box>
+
+      {/* Segmented view toggle: Active / Past Sessions */}
+      <Box sx={{ display: 'flex', gap: 1, mb: { xs: 2, sm: 3 } }}>
+        <Chip
+          label="Active"
+          icon={<SchoolOutlinedIcon />}
+          color={view === 'active' ? 'primary' : 'default'}
+          variant={view === 'active' ? 'filled' : 'outlined'}
+          onClick={() => setView('active')}
+          sx={{ fontWeight: 600, height: 34 }}
+        />
+        <Chip
+          label="Past Sessions"
+          icon={<HistoryOutlinedIcon />}
+          color={view === 'archived' ? 'primary' : 'default'}
+          variant={view === 'archived' ? 'filled' : 'outlined'}
+          onClick={() => setView('archived')}
+          sx={{ fontWeight: 600, height: 34 }}
+        />
       </Box>
 
       {/* Classroom Cards */}
@@ -164,12 +200,18 @@ export default function ClassroomsPage() {
             borderRadius: 3,
           }}
         >
-          <SchoolOutlinedIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.disabled', mb: 2 }} />
+          {isArchived ? (
+            <HistoryOutlinedIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.disabled', mb: 2 }} />
+          ) : (
+            <SchoolOutlinedIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.disabled', mb: 2 }} />
+          )}
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            No classrooms yet
+            {isArchived ? 'No past sessions yet' : 'No classrooms yet'}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Create your first classroom to start managing students and batches.
+            {isArchived
+              ? 'Archived academic years will appear here after a year-end rollover.'
+              : 'Create your first classroom to start managing students and batches.'}
           </Typography>
         </Paper>
       ) : (
@@ -185,6 +227,8 @@ export default function ClassroomsPage() {
                 borderRadius: 2.5,
                 transition: 'all 0.15s ease',
                 WebkitTapHighlightColor: 'transparent',
+                opacity: classroom.is_archived ? 0.92 : 1,
+                borderStyle: classroom.is_archived ? 'dashed' : 'solid',
                 '&:hover': {
                   backgroundColor: 'action.hover',
                   borderColor: 'primary.main',
@@ -228,13 +272,32 @@ export default function ClassroomsPage() {
                     </Typography>
                   )}
                 </Box>
-                <Chip
-                  label={typeLabels[classroom.type] || classroom.type}
-                  size="small"
-                  color={typeColors[classroom.type] || 'default'}
-                  variant="outlined"
-                  sx={{ flexShrink: 0, height: 24, fontSize: '0.7rem' }}
-                />
+                <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {classroom.academic_year && (
+                    <Chip
+                      label={classroom.academic_year}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 24, fontSize: '0.7rem', fontWeight: 600 }}
+                    />
+                  )}
+                  {classroom.is_archived && (
+                    <Chip
+                      icon={<LockOutlinedIcon sx={{ fontSize: 14 }} />}
+                      label="Read-only"
+                      size="small"
+                      color="default"
+                      sx={{ height: 24, fontSize: '0.7rem' }}
+                    />
+                  )}
+                  <Chip
+                    label={typeLabels[classroom.type] || classroom.type}
+                    size="small"
+                    color={typeColors[classroom.type] || 'default'}
+                    variant="outlined"
+                    sx={{ height: 24, fontSize: '0.7rem' }}
+                  />
+                </Box>
               </Box>
 
               {/* Description */}
@@ -305,28 +368,50 @@ export default function ClassroomsPage() {
                     {classroom.batchCount} batch{classroom.batchCount !== 1 ? 'es' : ''}
                   </Typography>
                 </Box>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    bgcolor: alpha(theme.palette.info.main, 0.06),
+                    borderRadius: 1.5,
+                    px: 1,
+                    py: 0.25,
+                  }}
+                >
+                  <EventNoteOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500, fontSize: '0.75rem' }}
+                  >
+                    {classroom.classCount} class{classroom.classCount !== 1 ? 'es' : ''}
+                  </Typography>
+                </Box>
               </Box>
             </Paper>
           ))}
         </Box>
       )}
 
-      {/* Mobile FAB */}
-      <Fab
-        color="primary"
-        onClick={() => setCreateOpen(true)}
-        sx={{
-          display: { xs: 'flex', sm: 'none' },
-          position: 'fixed',
-          bottom: 80,
-          right: 16,
-          zIndex: 1000,
-          width: 56,
-          height: 56,
-        }}
-      >
-        <AddIcon />
-      </Fab>
+      {/* Mobile FAB (active view only) */}
+      {!isArchived && (
+        <Fab
+          color="primary"
+          onClick={() => setCreateOpen(true)}
+          sx={{
+            display: { xs: 'flex', sm: 'none' },
+            position: 'fixed',
+            bottom: 80,
+            right: 16,
+            zIndex: 1000,
+            width: 56,
+            height: 56,
+          }}
+        >
+          <AddIcon />
+        </Fab>
+      )}
 
       <ClassroomFormDialog
         open={createOpen}
