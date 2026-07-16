@@ -6,6 +6,9 @@ import type {
   NexusTestPlacement,
   NexusComposedQuestion,
   NexusTestGradeResult,
+  NexusOverviewTest,
+  NexusTestOverviewGroup,
+  NexusTestOverviewGroupKey,
 } from '../../types';
 
 const TESTS = 'nexus_tests';
@@ -128,6 +131,167 @@ export async function listRepositoryTests(
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * Every active test, categorized by where it is placed / what it is linked to, for the
+ * teacher "Tests" hub. Resolves study_file placements to their chapter (file) + folder name
+ * (app-level batched join, context_id is polymorphic with no FK) and classroom names, so the
+ * flat undifferentiated test list becomes legible groups: Study chapters, Recaps, Foundation,
+ * Modules, Classroom, Practice/Drafts.
+ */
+export async function listTestsGroupedByContext(
+  client?: TypedSupabaseClient,
+): Promise<NexusTestOverviewGroup[]> {
+  const supabase = client || getSupabaseAdminClient();
+
+  // 1. All active tests (repository + legacy classroom-scoped).
+  const { data: tests, error: tErr } = await supabase
+    .from(TESTS)
+    .select('id, title, test_type, total_marks, is_published, is_repository, created_from, created_at, classroom_id')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+  if (tErr) throw tErr;
+  const testList = tests || [];
+  if (testList.length === 0) return [];
+  const testIds = testList.map((t: any) => t.id);
+
+  // 2. Primary active placement per test (lowest sort_order wins).
+  const { data: placements } = await supabase
+    .from(PLACEMENTS)
+    .select('test_id, context_type, context_id, sort_order')
+    .in('test_id', testIds)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+  const placementByTest = new Map<string, any>();
+  for (const p of placements || []) {
+    if (!placementByTest.has(p.test_id)) placementByTest.set(p.test_id, p);
+  }
+
+  // 3. Question + attempt counts (single column pulls, tallied in memory).
+  const qCount = new Map<string, number>();
+  const { data: tqRows } = await supabase
+    .from(TEST_QUESTIONS)
+    .select('test_id')
+    .in('test_id', testIds)
+    .range(0, 100000);
+  for (const r of tqRows || []) qCount.set(r.test_id, (qCount.get(r.test_id) || 0) + 1);
+  const aCount = new Map<string, number>();
+  const { data: atRows } = await supabase
+    .from(ATTEMPTS)
+    .select('test_id')
+    .in('test_id', testIds)
+    .range(0, 100000);
+  for (const r of atRows || []) aCount.set(r.test_id, (aCount.get(r.test_id) || 0) + 1);
+
+  // 4. Resolve context names. study_file -> file title + folder; classroom_assignment / legacy -> name.
+  const studyFileIds = [
+    ...new Set((placements || []).filter((p: any) => p.context_type === 'study_file').map((p: any) => p.context_id)),
+  ];
+  const fileMap = new Map<string, { title: string; folder_id: string }>();
+  const folderNameMap = new Map<string, string>();
+  if (studyFileIds.length > 0) {
+    const { data: files } = await supabase
+      .from('nexus_study_files')
+      .select('id, title, folder_id')
+      .in('id', studyFileIds);
+    for (const f of files || []) fileMap.set(f.id, { title: f.title, folder_id: f.folder_id });
+    const folderIds = [...new Set((files || []).map((f: any) => f.folder_id).filter(Boolean))];
+    if (folderIds.length > 0) {
+      const { data: folders } = await supabase.from('nexus_study_folders').select('id, name').in('id', folderIds);
+      for (const fo of folders || []) folderNameMap.set(fo.id, fo.name);
+    }
+  }
+  const classroomIds = new Set<string>();
+  for (const p of placements || []) if (p.context_type === 'classroom_assignment') classroomIds.add(p.context_id);
+  for (const t of testList) if (t.classroom_id) classroomIds.add(t.classroom_id);
+  const classroomNameMap = new Map<string, string>();
+  if (classroomIds.size > 0) {
+    const { data: crs } = await supabase.from('nexus_classrooms').select('id, name').in('id', [...classroomIds]);
+    for (const c of crs || []) classroomNameMap.set(c.id, c.name);
+  }
+
+  // 5. Categorize each test into a group (+ folder subgroup for study chapters).
+  const GROUP_ORDER: { key: NexusTestOverviewGroupKey; label: string }[] = [
+    { key: 'study_materials', label: 'Study Materials' },
+    { key: 'class_recaps', label: 'Class Recaps' },
+    { key: 'foundation', label: 'Foundation' },
+    { key: 'modules', label: 'Modules' },
+    { key: 'classroom', label: 'Classroom tests' },
+    { key: 'practice', label: 'Practice / Drafts' },
+  ];
+  const flat = new Map<NexusTestOverviewGroupKey, NexusOverviewTest[]>();
+  // study_materials sub-grouped by folder id.
+  const studySub = new Map<string, { label: string; tests: NexusOverviewTest[] }>();
+
+  for (const t of testList) {
+    const p = placementByTest.get(t.id);
+    const base: NexusOverviewTest = {
+      id: t.id,
+      title: t.title || 'Untitled test',
+      test_type: t.test_type || 'untimed',
+      total_marks: t.total_marks ?? null,
+      is_published: !!t.is_published,
+      created_from: t.created_from ?? null,
+      created_at: t.created_at,
+      question_count: qCount.get(t.id) || 0,
+      attempt_count: aCount.get(t.id) || 0,
+      context_type: (p?.context_type as NexusPlacementContext) ?? null,
+      context_label: null,
+      file_id: null,
+    };
+
+    const ctx = p?.context_type as NexusPlacementContext | undefined;
+    if (ctx === 'study_file') {
+      const f = fileMap.get(p.context_id);
+      base.context_label = f?.title || 'Chapter';
+      base.file_id = p.context_id;
+      const folderKey = f?.folder_id || 'other';
+      const folderLabel = (f && folderNameMap.get(f.folder_id)) || 'Study Materials';
+      if (!studySub.has(folderKey)) studySub.set(folderKey, { label: folderLabel, tests: [] });
+      studySub.get(folderKey)!.tests.push(base);
+    } else if (ctx === 'class_recap_section') {
+      pushFlat(flat, 'class_recaps', base);
+    } else if (ctx === 'foundation_section') {
+      pushFlat(flat, 'foundation', base);
+    } else if (ctx === 'module_item') {
+      pushFlat(flat, 'modules', base);
+    } else if (ctx === 'classroom_assignment') {
+      base.context_label = classroomNameMap.get(p.context_id) || 'Classroom';
+      pushFlat(flat, 'classroom', base);
+    } else if (t.classroom_id) {
+      base.context_label = classroomNameMap.get(t.classroom_id) || 'Classroom';
+      pushFlat(flat, 'classroom', base);
+    } else {
+      pushFlat(flat, 'practice', base);
+    }
+  }
+
+  const groups: NexusTestOverviewGroup[] = [];
+  for (const g of GROUP_ORDER) {
+    if (g.key === 'study_materials') {
+      if (studySub.size === 0) continue;
+      const subgroups = [...studySub.values()]
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .map((s) => ({ key: s.label, label: s.label, tests: s.tests }));
+      const count = subgroups.reduce((n, s) => n + s.tests.length, 0);
+      groups.push({ key: g.key, label: g.label, count, subgroups, tests: subgroups.flatMap((s) => s.tests) });
+    } else {
+      const tests = flat.get(g.key) || [];
+      if (tests.length === 0) continue;
+      groups.push({ key: g.key, label: g.label, count: tests.length, tests });
+    }
+  }
+  return groups;
+}
+
+function pushFlat(
+  map: Map<NexusTestOverviewGroupKey, NexusOverviewTest[]>,
+  key: NexusTestOverviewGroupKey,
+  test: NexusOverviewTest,
+): void {
+  if (!map.has(key)) map.set(key, []);
+  map.get(key)!.push(test);
 }
 
 /**

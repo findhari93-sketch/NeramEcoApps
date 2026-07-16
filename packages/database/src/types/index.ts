@@ -4580,6 +4580,12 @@ export interface NexusStudyFile {
   sharepoint_item_id: string | null;
   sharepoint_web_url: string | null;
   storage_path: string | null;
+  /**
+   * When set, the file is an external LINK (a pasted OneDrive/SharePoint share
+   * URL) rather than uploaded bytes. The content route streams it via
+   * getSharePointStreamUrl(link_url) instead of the single-site item id.
+   */
+  link_url: string | null;
   /** Per-file override of the folder's allow_download. null = inherit folder. */
   allow_download: boolean | null;
   sort_order: number;
@@ -4676,6 +4682,12 @@ export interface NexusStudyTestQuestionInput {
   option_d?: string | null;
   correct_option: 'a' | 'b' | 'c' | 'd';
   explanation?: string | null;
+  /**
+   * When a question is picked from the central bank ("Pick from bank" mode), its bank id is
+   * carried here so the save-time mirror LINKS the existing question instead of inserting a
+   * duplicate. Absent for author-new questions.
+   */
+  qb_question_id?: string | null;
 }
 
 /** A question as sent to the student — no correct_option / explanation. */
@@ -5001,6 +5013,16 @@ export interface NexusPlanAuditLog {
 // ============================================================
 
 export type NexusAssignmentFormat = 'pdf' | 'image' | 'pdf_or_image';
+/**
+ * What kind of task an assignment is, which decides how it is created, submitted
+ * and reviewed:
+ *  - 'drawing'  : a photos-only sketch task routed through the Drawing Review
+ *                 channel (smart evaluation, redo threads, gallery). Backed by a
+ *                 drawing_questions row referenced via drawing_question_id.
+ *  - 'document' : a "solve a paper" task (attach a PDF, student uploads their
+ *                 solved work, teacher marks it). The original/default behavior.
+ */
+export type NexusAssignmentType = 'drawing' | 'document';
 export type NexusAssignmentStatus = 'draft' | 'published' | 'closed';
 export type NexusAssignmentSubmissionStatus = 'submitted' | 'reviewed' | 'redo';
 /** Where an attached class recording is hosted (null when none attached). */
@@ -5039,6 +5061,10 @@ export interface NexusClassAssignment {
   class_date: string;
   title: string;
   instructions: string | null;
+  /** Drawing (smart eval) vs document (attach a paper, marks review). */
+  assignment_type: NexusAssignmentType;
+  /** Backing drawing_questions row for a drawing-type assignment (else null). */
+  drawing_question_id: string | null;
   submission_format: NexusAssignmentFormat;
   max_marks: number;
   due_at: string | null;
@@ -6365,6 +6391,45 @@ export interface NexusTestGradeResult {
   passed: boolean;
   passing_pct: number | null;
   review: NexusTestGradeReviewItem[];
+}
+
+// ---- Categorized tests overview (teacher "Tests" hub) ----
+// A test row enriched with where it is placed / what it is linked to.
+export interface NexusOverviewTest {
+  id: string;
+  title: string;
+  test_type: string;
+  total_marks: number | null;
+  is_published: boolean;
+  created_from: string | null;
+  created_at: string;
+  question_count: number;
+  attempt_count: number;
+  context_type: NexusPlacementContext | null;
+  context_label: string | null; // resolved chapter/file title, classroom name, ...
+  file_id: string | null;        // study_file placements: deep-link target for the edit dialog
+}
+
+export interface NexusTestOverviewSubgroup {
+  key: string;
+  label: string;
+  tests: NexusOverviewTest[];
+}
+
+export type NexusTestOverviewGroupKey =
+  | 'study_materials'
+  | 'class_recaps'
+  | 'foundation'
+  | 'modules'
+  | 'classroom'
+  | 'practice';
+
+export interface NexusTestOverviewGroup {
+  key: NexusTestOverviewGroupKey;
+  label: string;
+  count: number;
+  subgroups?: NexusTestOverviewSubgroup[]; // study_materials nests by folder -> chapter
+  tests: NexusOverviewTest[];              // flat list for non-nested groups
 }
 
 // QB Joined/Computed Types
@@ -7763,7 +7828,7 @@ export * from './expenses';
 export type DrawingCategory = '2d_composition' | '3d_composition' | 'kit_sculpture';
 export type DrawingDifficulty = 'easy' | 'medium' | 'hard';
 export type DrawingSubmissionStatus = 'submitted' | 'under_review' | 'redo' | 'completed' | 'reviewed';
-export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice';
+export type DrawingSubmissionSource = 'question_bank' | 'homework' | 'free_practice' | 'assignment';
 
 export interface DrawingTag {
   id: string;
@@ -7847,6 +7912,8 @@ export interface DrawingSubmission {
   student_id: string;
   question_id: string | null;
   homework_id: string | null;
+  /** Set when this submission answers a drawing-type class assignment. */
+  assignment_id: string | null;
   source_type: DrawingSubmissionSource;
   original_image_url: string;
   reviewed_image_url: string | null;

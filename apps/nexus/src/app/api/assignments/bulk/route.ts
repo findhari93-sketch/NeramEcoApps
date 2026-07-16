@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAssignment } from '@neram/database';
+import {
+  createAssignment,
+  createDrawingQuestion,
+  createFileRecord,
+  getNextSortOrder,
+  addAssignmentAttachments,
+  ASSIGNMENT_ATTACHMENTS_FOLDER_ID,
+} from '@neram/database';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { validateAssignmentJSON } from '@/lib/assignment-bulk-schema';
+import { resolveShareUrlToItem } from '@/lib/sharepoint';
 
 /**
  * POST /api/assignments/bulk  (staff)
@@ -38,11 +46,30 @@ export async function POST(request: NextRequest) {
         skipped.push({ title: a.title || '(untitled)', reason: 'Missing title' });
         continue;
       }
+      const isDrawing = a.assignment_type === 'drawing';
       // Drop a still-embedded base64 image (client should have uploaded it).
-      const contentImageUrl =
-        a.content_image_url && !a.content_image_url.startsWith('data:') ? a.content_image_url : null;
+      // For drawing rows the reference image doubles as the inline content image.
+      const contentImageUrl = isDrawing
+        ? a.reference_image_url
+        : a.content_image_url && !a.content_image_url.startsWith('data:')
+          ? a.content_image_url
+          : null;
       // Personal deadline for on-time students = end of the due day (IST).
       const dueAt = a.due_date ? `${a.due_date}T23:59:59+05:30` : null;
+
+      // Drawing rows get a backing (is_active=false) drawing_questions row so the
+      // submissions can flow through the Drawing Review channel unchanged.
+      let drawingQuestionId: string | null = null;
+      if (isDrawing) {
+        const q = await createDrawingQuestion({
+          question_text: a.instructions || a.title,
+          category: a.drawing_category || '3d_composition',
+          sub_type: 'assignment',
+          reference_images: a.reference_image_url ? [{ url: a.reference_image_url }] : [],
+          is_active: false,
+        });
+        drawingQuestionId = q.id;
+      }
 
       const assignment = await createAssignment({
         classroom_id: classroomId,
@@ -50,7 +77,9 @@ export async function POST(request: NextRequest) {
         class_date: a.class_date,
         title: a.title,
         instructions: a.instructions || null,
-        submission_format: a.submission_format,
+        assignment_type: isDrawing ? 'drawing' : 'document',
+        drawing_question_id: drawingQuestionId,
+        submission_format: isDrawing ? 'image' : a.submission_format,
         max_marks: a.max_marks,
         due_at: dueAt,
         content_image_url: contentImageUrl,
@@ -61,6 +90,30 @@ export async function POST(request: NextRequest) {
         catchup_window_days: a.catchup_window_days,
         created_by: user.id,
       });
+
+      // Document rows may reference an existing OneDrive/SharePoint file by link.
+      if (!isDrawing && a.link_url) {
+        try {
+          const item = await resolveShareUrlToItem(a.link_url);
+          const sortOrder = await getNextSortOrder({ files: ASSIGNMENT_ATTACHMENTS_FOLDER_ID });
+          const record = await createFileRecord({
+            folder_id: ASSIGNMENT_ATTACHMENTS_FOLDER_ID,
+            title: item.name.replace(/\.[^.]+$/, ''),
+            file_name: item.name,
+            file_type: item.mimeType,
+            file_size_bytes: item.size,
+            sharepoint_item_id: item.id,
+            sharepoint_web_url: a.link_url,
+            link_url: a.link_url,
+            sort_order: sortOrder,
+            uploaded_by: user.id,
+          });
+          await addAssignmentAttachments(assignment.id, [{ study_file_id: record.id }]);
+        } catch (e) {
+          console.error('bulk link_url attach failed:', e);
+        }
+      }
+
       created.push({ id: assignment.id, title: assignment.title });
     }
 

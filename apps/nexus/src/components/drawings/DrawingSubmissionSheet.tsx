@@ -14,13 +14,15 @@ interface DrawingSubmissionSheetProps {
   open: boolean;
   onClose: () => void;
   questionId?: string;
-  sourceType: 'question_bank' | 'free_practice';
+  /** Set when submitting against a drawing-type class assignment. */
+  assignmentId?: string;
+  sourceType: 'question_bank' | 'free_practice' | 'assignment';
   getToken: () => Promise<string | null>;
   onSubmitted: () => void;
 }
 
 export default function DrawingSubmissionSheet({
-  open, onClose, questionId, sourceType, getToken, onSubmitted,
+  open, onClose, questionId, assignmentId, sourceType, getToken, onSubmitted,
 }: DrawingSubmissionSheetProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -88,6 +90,7 @@ export default function DrawingSubmissionSheet({
         },
         body: JSON.stringify({
           question_id: questionId || null,
+          assignment_id: assignmentId || null,
           source_type: sourceType,
           original_image_url: url,
           self_note: selfNote || null,

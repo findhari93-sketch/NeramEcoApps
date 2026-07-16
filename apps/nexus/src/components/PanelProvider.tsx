@@ -7,7 +7,6 @@ import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
-import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
@@ -125,10 +124,8 @@ const PANELS: PanelConfig[] = [
       { label: 'Class Recaps', path: '/teacher/class-recaps', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
-      { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
-      { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
-      { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Devices', path: '/teacher/devices', icon: <DevicesOutlinedIcon /> },
@@ -146,10 +143,8 @@ const PANELS: PanelConfig[] = [
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
-      { label: 'QB', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
       { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
-      { label: 'Tests', path: '/teacher/tests', icon: <QuizOutlinedIcon /> },
-      { label: 'Questions', path: '/teacher/questions', icon: <QuizOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },
     ],

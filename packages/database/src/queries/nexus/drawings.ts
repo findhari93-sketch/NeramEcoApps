@@ -291,6 +291,7 @@ export async function createDrawingSubmission(
   data: {
     student_id: string;
     question_id?: string | null;
+    assignment_id?: string | null;
     source_type: string;
     original_image_url: string;
     self_note?: string | null;
@@ -304,6 +305,7 @@ export async function createDrawingSubmission(
     .insert({
       student_id: data.student_id,
       question_id: data.question_id || null,
+      assignment_id: data.assignment_id || null,
       source_type: data.source_type,
       original_image_url: data.original_image_url,
       self_note: data.self_note || null,
@@ -314,6 +316,64 @@ export async function createDrawingSubmission(
 
   if (error) throw error;
   return submission as DrawingSubmission;
+}
+
+/**
+ * Create a backing drawing question for a drawing-type class assignment. Kept
+ * out of the student practice bank via is_active=false and sub_type='assignment';
+ * it exists only so the assignment's submissions can flow through the drawing
+ * channel's thread/redo/gallery/review-queue machinery unchanged.
+ */
+export async function createDrawingQuestion(
+  data: {
+    question_text: string;
+    category?: string;
+    sub_type?: string;
+    year?: number;
+    difficulty_tag?: string;
+    reference_images?: Array<{ url: string; caption?: string }>;
+    is_active?: boolean;
+  },
+  client?: TypedSupabaseClient
+): Promise<DrawingQuestion> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data: question, error } = await supabase
+    .from('drawing_questions' as any)
+    .insert({
+      question_text: data.question_text,
+      category: data.category || '3d_composition',
+      sub_type: data.sub_type || 'assignment',
+      year: data.year ?? new Date().getFullYear(),
+      difficulty_tag: data.difficulty_tag || 'medium',
+      reference_images: data.reference_images || [],
+      is_active: data.is_active ?? false,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return question as DrawingQuestion;
+}
+
+/**
+ * The student's latest drawing submission for a drawing-type class assignment
+ * (newest attempt in the thread), carrying the teacher's review so the student
+ * assignment page can render overlay / reference / annotations / rating / redo.
+ */
+export async function getStudentAssignmentDrawing(
+  studentId: string,
+  assignmentId: string,
+  client?: TypedSupabaseClient
+): Promise<DrawingSubmission | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('drawing_submissions' as any)
+    .select('*')
+    .eq('student_id', studentId)
+    .eq('assignment_id', assignmentId)
+    .order('submitted_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return ((data || [])[0] as DrawingSubmission) || null;
 }
 
 export async function getStudentDrawingSubmissions(
@@ -675,6 +735,7 @@ export async function createDrawingSubmissionWithThread(
   data: {
     student_id: string;
     question_id: string | null;
+    assignment_id?: string | null;
     source_type: string;
     original_image_url: string;
     self_note?: string | null;
@@ -706,6 +767,7 @@ export async function createDrawingSubmissionWithThread(
       .insert({
         student_id: data.student_id,
         question_id: data.question_id,
+        assignment_id: data.assignment_id || null,
         source_type: data.source_type,
         original_image_url: data.original_image_url,
         self_note: data.self_note || null,
@@ -750,6 +812,7 @@ export async function createDrawingSubmissionWithThread(
     .insert({
       student_id: data.student_id,
       question_id: data.question_id,
+      assignment_id: data.assignment_id || null,
       source_type: data.source_type,
       original_image_url: data.original_image_url,
       self_note: data.self_note || null,

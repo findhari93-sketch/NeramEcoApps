@@ -53,7 +53,36 @@ export async function getTestWithQuestionsForStaff(
     .select('*')
     .eq('test_id', test.id)
     .order('sort_order', { ascending: true });
-  return { test, questions: (data || []) as NexusStudyTestQuestion[] };
+  const questions = (data || []) as NexusStudyTestQuestion[];
+
+  // Recover each question's bank id from the composed mirror placement (positional match by
+  // sort_order) so re-saving a bank-sourced test re-links instead of duplicating in the bank.
+  try {
+    const { data: placement } = await supabase
+      .from('nexus_test_placements')
+      .select('test_id')
+      .eq('context_type', 'study_file')
+      .eq('context_id', fileId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (placement?.test_id) {
+      const { data: tqs } = await supabase
+        .from('nexus_test_questions')
+        .select('qb_question_id, sort_order')
+        .eq('test_id', placement.test_id)
+        .order('sort_order', { ascending: true });
+      const bankIds = (tqs || []).map((r: any) => r.qb_question_id);
+      if (bankIds.length === questions.length) {
+        questions.forEach((q, i) => {
+          (q as any).qb_question_id = bankIds[i] || null;
+        });
+      }
+    }
+  } catch {
+    /* best-effort: linkage recovery is non-fatal */
+  }
+
+  return { test, questions };
 }
 
 /** Student-safe test payload (no answers/explanations). Null if no published test. */
@@ -182,22 +211,30 @@ async function mirrorStudyTestToBank(
 async function removeStudyBankMirror(supabase: any, fileId: string): Promise<void> {
   const { data: priorPlacements } = await supabase
     .from('nexus_test_placements')
-    .select('id, test_id')
+    .select('id, test_id, gating')
     .eq('context_type', 'study_file')
     .eq('context_id', fileId)
     .eq('is_active', true);
 
   for (const p of priorPlacements || []) {
+    // Questions that were PICKED from the bank (not created by this mirror) are recorded on the
+    // placement's gating so we never delete a borrowed/standalone bank question on re-save.
+    const reused = new Set<string>(
+      Array.isArray(p.gating?.reused_qb_ids) ? p.gating.reused_qb_ids.filter(Boolean) : [],
+    );
+
     const { data: priorTqs } = await supabase
       .from('nexus_test_questions')
       .select('qb_question_id')
       .eq('test_id', p.test_id);
-    const priorQids = (priorTqs || []).map((r: any) => r.qb_question_id).filter(Boolean);
+    const priorQids = (priorTqs || [])
+      .map((r: any) => r.qb_question_id)
+      .filter((id: string | null) => id && !reused.has(id));
 
     // Delete the composed test (cascades its nexus_test_questions + placement).
     await supabase.from('nexus_tests').delete().eq('id', p.test_id);
 
-    // Remove bank questions that were exclusively owned by this composed test.
+    // Remove only mirror-created bank questions that are now exclusively owned by nothing.
     for (const qid of priorQids) {
       const { count } = await supabase
         .from('nexus_test_questions')
@@ -220,28 +257,53 @@ async function composeAndPlaceStudyBankTest(
     createdBy: string;
   },
 ): Promise<void> {
-  // 2. Create fresh bank questions (batch insert).
-  const bankRows = input.questions.map((q) => ({
-    question_text: q.question_text,
-    question_format: 'MCQ',
-    options: OPTION_KEYS
-      .filter((k) => (q as any)[`option_${k}`] != null && (q as any)[`option_${k}`] !== '')
-      .map((k) => ({ id: k, text: (q as any)[`option_${k}`] })),
-    correct_answer: q.correct_option,
-    explanation_brief: q.explanation || 'From a study-material test',
-    difficulty: 'MEDIUM',
-    exam_relevance: 'NATA',
-    categories: [],
-    status: 'active',
-    origin: 'authored',
-    answer_source: 'teacher_verified',
-    is_active: true,
-    created_by: input.createdBy,
-  }));
-  const { data: inserted, error: insErr } = await supabase.from('nexus_qb_questions').insert(bankRows).select('id');
-  if (insErr) throw insErr;
-  const bankIds = (inserted || []).map((r: any) => r.id);
-  if (bankIds.length !== input.questions.length) return; // safety: partial insert
+  // 2. Resolve each question to a bank id: reuse the picked one (qb_question_id) or create fresh.
+  //    Reused questions are LINKED, not duplicated, so a tagged bank question can seed many chapters.
+  const bankIds: (string | null)[] = new Array(input.questions.length).fill(null);
+  const reusedQbIds: string[] = [];
+  const toCreate: Array<{ idx: number; row: Record<string, unknown> }> = [];
+
+  input.questions.forEach((q, i) => {
+    if (q.qb_question_id) {
+      bankIds[i] = q.qb_question_id;
+      reusedQbIds.push(q.qb_question_id);
+      return;
+    }
+    toCreate.push({
+      idx: i,
+      row: {
+        question_text: q.question_text,
+        question_format: 'MCQ',
+        options: OPTION_KEYS
+          .filter((k) => (q as any)[`option_${k}`] != null && (q as any)[`option_${k}`] !== '')
+          .map((k) => ({ id: k, text: (q as any)[`option_${k}`] })),
+        correct_answer: q.correct_option,
+        explanation_brief: q.explanation || 'From a study-material test',
+        difficulty: 'MEDIUM',
+        exam_relevance: 'NATA',
+        categories: [],
+        status: 'active',
+        origin: 'authored',
+        answer_source: 'teacher_verified',
+        is_active: true,
+        created_by: input.createdBy,
+      },
+    });
+  });
+
+  if (toCreate.length > 0) {
+    const { data: inserted, error: insErr } = await supabase
+      .from('nexus_qb_questions')
+      .insert(toCreate.map((t) => t.row))
+      .select('id');
+    if (insErr) throw insErr;
+    const newIds = (inserted || []).map((r: any) => r.id);
+    if (newIds.length !== toCreate.length) return; // safety: partial insert
+    toCreate.forEach((t, j) => {
+      bankIds[t.idx] = newIds[j];
+    });
+  }
+  if (bankIds.some((id) => !id)) return; // safety: some question failed to resolve
 
   // 3. Compose a repository test + place onto the study file.
   const { data: test, error: testErr } = await supabase
@@ -274,6 +336,8 @@ async function composeAndPlaceStudyBankTest(
     context_type: 'study_file',
     context_id: input.fileId,
     passing_pct: input.passingPct,
+    // Record which questions were picked from the bank so teardown never deletes a borrowed row.
+    gating: reusedQbIds.length > 0 ? { reused_qb_ids: reusedQbIds } : {},
     created_by: input.createdBy,
   });
 }

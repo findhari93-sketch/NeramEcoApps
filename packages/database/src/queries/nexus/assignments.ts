@@ -7,6 +7,7 @@ import type {
   NexusAssignmentSubmission,
   NexusAssignmentSubmissionFile,
   NexusAssignmentFormat,
+  NexusAssignmentType,
   NexusAssignmentLink,
   NexusAssignmentRecordingSource,
 } from '../../types';
@@ -36,6 +37,8 @@ export async function createAssignment(
     class_date: string;
     title: string;
     instructions?: string | null;
+    assignment_type?: NexusAssignmentType;
+    drawing_question_id?: string | null;
     submission_format?: NexusAssignmentFormat;
     max_marks?: number;
     due_at?: string | null;
@@ -60,6 +63,8 @@ export async function createAssignment(
       class_date: input.class_date,
       title: input.title,
       instructions: input.instructions ?? null,
+      assignment_type: input.assignment_type ?? 'document',
+      drawing_question_id: input.drawing_question_id ?? null,
       submission_format: input.submission_format ?? 'pdf_or_image',
       max_marks: input.max_marks ?? 10,
       due_at: input.due_at ?? null,
@@ -85,6 +90,8 @@ export async function updateAssignment(
       NexusClassAssignment,
       | 'title'
       | 'instructions'
+      | 'assignment_type'
+      | 'drawing_question_id'
       | 'submission_format'
       | 'max_marks'
       | 'due_at'
@@ -187,7 +194,7 @@ export async function listAssignmentsForClassroom(
   if (opts?.status) query = query.eq('status', opts.status);
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []).map((a) => {
+  const list = (data || []).map((a) => {
     const { attachments, submissions, ...rest } = a;
     return {
       ...rest,
@@ -195,6 +202,26 @@ export async function listAssignmentsForClassroom(
       submitted_count: (submissions || []).length,
     };
   }) as AssignmentSummary[];
+
+  // Drawing-type assignments keep their submissions in drawing_submissions;
+  // count distinct students who submitted so the hub's "submitted" is accurate.
+  const drawingIds = list.filter((a) => a.assignment_type === 'drawing').map((a) => a.id);
+  if (drawingIds.length) {
+    const { data: ds } = await supabase
+      .from('drawing_submissions')
+      .select('assignment_id, student_id')
+      .in('assignment_id', drawingIds);
+    const studentsByAssignment = new Map<string, Set<string>>();
+    for (const r of ds || []) {
+      const set = studentsByAssignment.get(r.assignment_id) || new Set<string>();
+      set.add(r.student_id);
+      studentsByAssignment.set(r.assignment_id, set);
+    }
+    for (const a of list) {
+      if (a.assignment_type === 'drawing') a.submitted_count = studentsByAssignment.get(a.id)?.size ?? 0;
+    }
+  }
+  return list;
 }
 
 /** Assignments for a plan (optionally a specific set of class dates), with counts. */
@@ -346,6 +373,72 @@ export async function getAssignmentRoster(
   return { assignment, rows };
 }
 
+export interface AssignmentDrawingRosterRow {
+  student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
+  drawing: {
+    id: string;
+    status: string;
+    submitted_at: string;
+    tutor_rating: number | null;
+    attempt_number: number;
+  } | null;
+  bucket: 'submitted' | 'reviewed' | 'missing';
+}
+
+/**
+ * Roster for a DRAWING-type assignment. Like getAssignmentRoster, but each
+ * student's work comes from the Drawing channel (drawing_submissions keyed by
+ * assignment_id), latest attempt only. Buckets: submitted (awaiting/redo),
+ * reviewed (teacher completed), missing. The teacher opens the drawing id in
+ * the existing smart-evaluation screen.
+ */
+export async function getAssignmentDrawingRoster(
+  assignmentId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ assignment: NexusClassAssignment; rows: AssignmentDrawingRosterRow[] }> {
+  const supabase = client || getSupabaseAdminClient();
+  const assignment = await getAssignment(assignmentId, supabase);
+  if (!assignment) throw new Error('Assignment not found');
+
+  const { data: enrollments, error: enErr } = await supabase
+    .from('nexus_enrollments')
+    .select('user:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url, is_alumni)')
+    .eq('classroom_id', assignment.classroom_id)
+    .eq('role', 'student')
+    .eq('is_active', true);
+  if (enErr) throw enErr;
+
+  const { data: subs, error: sErr } = await supabase
+    .from('drawing_submissions')
+    .select('id, student_id, status, submitted_at, tutor_rating, attempt_number')
+    .eq('assignment_id', assignmentId)
+    .order('submitted_at', { ascending: false });
+  if (sErr) throw sErr;
+  // Latest attempt per student (rows already newest-first).
+  const latestByStudent = new Map<string, any>();
+  for (const s of subs || []) if (!latestByStudent.has(s.student_id)) latestByStudent.set(s.student_id, s);
+
+  const rows: AssignmentDrawingRosterRow[] = [];
+  const seen = new Set<string>();
+  for (const en of enrollments || []) {
+    const user = en.user as unknown as AssignmentDrawingRosterRow['student'] & { is_alumni?: boolean };
+    if (!user || user.is_alumni || seen.has(user.id)) continue;
+    seen.add(user.id);
+    const d = latestByStudent.get(user.id) || null;
+    let bucket: AssignmentDrawingRosterRow['bucket'] = 'missing';
+    if (d) bucket = d.status === 'completed' || d.status === 'reviewed' ? 'reviewed' : 'submitted';
+    rows.push({
+      student: { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
+      drawing: d
+        ? { id: d.id, status: d.status, submitted_at: d.submitted_at, tutor_rating: d.tutor_rating, attempt_number: d.attempt_number }
+        : null,
+      bucket,
+    });
+  }
+  rows.sort((a, b) => (a.student.name || '').localeCompare(b.student.name || ''));
+  return { assignment, rows };
+}
+
 // ------------------------------------------------------------------
 // Personal-clock helpers (day math). Canonical client-safe copy lives in
 // apps/nexus/src/lib/assignment-clock.ts; duplicated here (like
@@ -410,6 +503,8 @@ export async function resolveAssignmentRecording(
 
 export interface StudentAssignmentItem extends NexusClassAssignment {
   submission: NexusAssignmentSubmission | null;
+  /** For drawing assignments: the teacher's 1-5 rating (null until reviewed). */
+  drawing_rating?: number | null;
   /** The student's enrolment timestamp (drives the personal clock in the UI). */
   enrolled_at: string | null;
   /** Class recording for catch-up: the assignment's own, else the linked class. */
@@ -451,6 +546,26 @@ export async function listAssignmentsForStudent(
   const ids = list.map((a) => a.id);
   const subMap = await getMySubmissions(studentId, ids, supabase);
 
+  // Drawing assignments keep the student's work in drawing_submissions; synthesize
+  // a submission (status + rating) so the To do / Done tabs and chips work.
+  const drawingIds = list.filter((a) => a.assignment_type === 'drawing').map((a) => a.id);
+  const drawingByAssignment = new Map<string, { status: string; tutor_rating: number | null; submitted_at: string }>();
+  if (drawingIds.length) {
+    const { data: ds } = await supabase
+      .from('drawing_submissions')
+      .select('assignment_id, status, tutor_rating, submitted_at')
+      .eq('student_id', studentId)
+      .in('assignment_id', drawingIds)
+      .order('submitted_at', { ascending: false });
+    for (const r of ds || []) {
+      if (!drawingByAssignment.has(r.assignment_id)) {
+        drawingByAssignment.set(r.assignment_id, { status: r.status, tutor_rating: r.tutor_rating, submitted_at: r.submitted_at });
+      }
+    }
+  }
+  const mapDrawingStatus = (s: string): 'submitted' | 'reviewed' | 'redo' =>
+    s === 'completed' || s === 'reviewed' ? 'reviewed' : s === 'redo' ? 'redo' : 'submitted';
+
   // Resolve fallback recordings from the linked scheduled classes in one query.
   const entryIds = [...new Set(list.map((a) => a.plan_entry_id).filter(Boolean))] as string[];
   const recByEntry = new Map<string, { recording_url: string | null; youtube_url: string | null }>();
@@ -479,9 +594,19 @@ export async function listAssignmentsForStudent(
         recSrc = 'sharepoint';
       }
     }
+    let submission = subMap.get(a.id) ?? null;
+    let drawingRating: number | null = null;
+    if (a.assignment_type === 'drawing') {
+      const d = drawingByAssignment.get(a.id);
+      submission = d
+        ? ({ status: mapDrawingStatus(d.status), marks: null, submitted_at: d.submitted_at } as unknown as NexusAssignmentSubmission)
+        : null;
+      drawingRating = d ? d.tutor_rating : null;
+    }
     return {
       ...a,
-      submission: subMap.get(a.id) ?? null,
+      submission,
+      drawing_rating: drawingRating,
       enrolled_at: enrolledAt,
       resolved_recording_url: recUrl ?? null,
       resolved_recording_source: recUrl ? recSrc : null,
@@ -529,7 +654,7 @@ export async function getAssignmentEngagement(
 
   const { data: assignments, error: aErr } = await supabase
     .from(ASSIGNMENTS)
-    .select('id, class_date, due_at, catchup_window_days, max_marks')
+    .select('id, class_date, due_at, catchup_window_days, max_marks, assignment_type')
     .eq('classroom_id', classroomId)
     .eq('status', 'published');
   if (aErr) throw aErr;
@@ -539,6 +664,7 @@ export async function getAssignmentEngagement(
     due_at: string | null;
     catchup_window_days: number;
     max_marks: number;
+    assignment_type: string;
   }>;
   const assnById = new Map(assns.map((a) => [a.id, a]));
 
@@ -561,18 +687,45 @@ export async function getAssignmentEngagement(
     students.push({ id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url, enrolled_at: en.enrolled_at ?? null });
   }
 
-  // All submissions for these assignments, grouped by student.
-  const subsByStudent = new Map<string, NexusAssignmentSubmission[]>();
-  if (assns.length) {
-    const { data: subs, error: sErr } = await supabase
-      .from(SUBMISSIONS)
-      .select('*')
-      .in('assignment_id', assns.map((a) => a.id));
+  // All submissions for these assignments, grouped by student, normalized across
+  // document (nexus_assignment_submissions) and drawing (drawing_submissions).
+  type NormSub = { assignment_id: string; reviewed: boolean; submitted_at: string; marks_pct: number | null };
+  const subsByStudent = new Map<string, NormSub[]>();
+  const pushNorm = (studentId: string, s: NormSub) => {
+    const arr = subsByStudent.get(studentId) || [];
+    arr.push(s);
+    subsByStudent.set(studentId, arr);
+  };
+
+  const docIds = assns.filter((a) => a.assignment_type !== 'drawing').map((a) => a.id);
+  const drawIds = assns.filter((a) => a.assignment_type === 'drawing').map((a) => a.id);
+
+  if (docIds.length) {
+    const { data: subs, error: sErr } = await supabase.from(SUBMISSIONS).select('*').in('assignment_id', docIds);
     if (sErr) throw sErr;
     for (const s of subs || []) {
-      const arr = subsByStudent.get(s.student_id) || [];
-      arr.push(s as NexusAssignmentSubmission);
-      subsByStudent.set(s.student_id, arr);
+      const a = assnById.get(s.assignment_id);
+      const pct = s.marks != null && a && a.max_marks > 0 ? (s.marks / a.max_marks) * 100 : null;
+      pushNorm(s.student_id, { assignment_id: s.assignment_id, reviewed: s.status === 'reviewed', submitted_at: s.submitted_at, marks_pct: pct });
+    }
+  }
+
+  if (drawIds.length) {
+    const { data: ds, error: dErr } = await supabase
+      .from('drawing_submissions')
+      .select('assignment_id, student_id, status, tutor_rating, submitted_at')
+      .in('assignment_id', drawIds)
+      .order('submitted_at', { ascending: false });
+    if (dErr) throw dErr;
+    // Latest attempt only, per (student, assignment).
+    const seenPair = new Set<string>();
+    for (const r of ds || []) {
+      const key = `${r.student_id}_${r.assignment_id}`;
+      if (seenPair.has(key)) continue;
+      seenPair.add(key);
+      const reviewed = r.status === 'completed' || r.status === 'reviewed';
+      const pct = reviewed && r.tutor_rating != null ? (r.tutor_rating / 5) * 100 : null;
+      pushNorm(r.student_id, { assignment_id: r.assignment_id, reviewed, submitted_at: r.submitted_at, marks_pct: pct });
     }
   }
 
@@ -595,12 +748,11 @@ export async function getAssignmentEngagement(
     const marksPcts: number[] = [];
     for (const s of subs) {
       submitted += 1;
-      if (s.status === 'reviewed') reviewed += 1;
+      if (s.reviewed) reviewed += 1;
       const personalDue = dueByAssn.get(s.assignment_id) ?? null;
       if (!personalDue || s.submitted_at.slice(0, 10) <= personalDue) onTime += 1;
       if (!lastSubmittedAt || s.submitted_at > lastSubmittedAt) lastSubmittedAt = s.submitted_at;
-      const a = assnById.get(s.assignment_id);
-      if (s.marks != null && a && a.max_marks > 0) marksPcts.push((s.marks / a.max_marks) * 100);
+      if (s.marks_pct != null) marksPcts.push(s.marks_pct);
     }
     const overdue = Math.max(0, applicable - submitted); // rough: unmet applicable work
     const avgMarksPct = marksPcts.length ? Math.round(marksPcts.reduce((x, y) => x + y, 0) / marksPcts.length) : null;

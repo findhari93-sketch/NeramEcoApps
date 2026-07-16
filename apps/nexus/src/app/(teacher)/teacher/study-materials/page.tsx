@@ -118,6 +118,20 @@ function TeacherStudyMaterials() {
   // Class-recording link dialog (per file).
   const [videoFile, setVideoFile] = useState<FileDTO | null>(null);
 
+  // Deep-link from the Tests hub (?testFile=<id>&testTitle=<name>): open the authoring dialog,
+  // then strip the params so closing or refresh does not re-open it.
+  const deepLinkTestFile = searchParams.get('testFile');
+  useEffect(() => {
+    if (!deepLinkTestFile) return;
+    setTestFile({ id: deepLinkTestFile, title: searchParams.get('testTitle') || '' });
+    const sp = new URLSearchParams(Array.from(searchParams.entries()));
+    sp.delete('testFile');
+    sp.delete('testTitle');
+    const qs = sp.toString();
+    router.replace(`/teacher/study-materials${qs ? `?${qs}` : ''}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkTestFile]);
+
   // Drag-and-drop organise (Windows Explorer style): reorder within a group, or drop onto a
   // folder / breadcrumb to move an item into it. Native HTML5 DnD (desktop); the ... menu carries
   // the same actions for touch.

@@ -30,6 +30,8 @@ interface StudentAssignment {
   max_marks: number;
   catchup_window_days: number;
   enrolled_at: string | null;
+  assignment_type: 'drawing' | 'document';
+  drawing_rating: number | null;
   submission: Submission | null;
   resolved_recording_url: string | null;
   classroom_name: string | null;
@@ -77,9 +79,15 @@ export default function StudentAssignmentsPage() {
       due_at: a.due_at,
       catchup_window_days: a.catchup_window_days,
     });
-    // Reviewed work: show the mark instead of a deadline.
+    // Reviewed work: show the mark (or drawing rating) instead of a deadline.
     if (a.submission?.status === 'reviewed') {
-      return <Chip size="small" label={`${a.submission.marks ?? 0} / ${a.max_marks}`} sx={{ height: 22, fontWeight: 700, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20' }} />;
+      const label =
+        a.assignment_type === 'drawing'
+          ? a.drawing_rating != null
+            ? `★ ${a.drawing_rating}/5`
+            : 'Reviewed'
+          : `${a.submission.marks ?? 0} / ${a.max_marks}`;
+      return <Chip size="small" label={label} sx={{ height: 22, fontWeight: 700, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20' }} />;
     }
     if (a.submission && a.submission.status !== 'redo') return null;
     // Not submitted (or redo): show the personal clock.

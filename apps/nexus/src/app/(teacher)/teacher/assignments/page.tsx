@@ -16,15 +16,20 @@ import ContentPasteGoIcon from '@mui/icons-material/ContentPasteGo';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import AddIcon from '@mui/icons-material/Add';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PasteAssignmentsDialog from '@/components/assignments/bulk/PasteAssignmentsDialog';
+import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
 
 interface AssignmentRow {
   id: string;
   title: string;
   class_date: string;
   status: 'draft' | 'published' | 'closed';
+  assignment_type: 'drawing' | 'document';
   submission_format: 'pdf' | 'image' | 'pdf_or_image';
   max_marks: number;
   due_at: string | null;
@@ -47,6 +52,7 @@ export default function TeacherAssignmentsHub() {
   const [classroomId, setClassroomId] = useState<string>('');
   const [rows, setRows] = useState<AssignmentRow[] | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -156,10 +162,19 @@ export default function TeacherAssignmentsHub() {
       <Stack direction="row" spacing={1} sx={{ mb: 2.5 }} flexWrap="wrap" useFlexGap>
         <Button
           variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setNewOpen(true)}
+          disabled={!classroomId}
+          sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+        >
+          New assignment
+        </Button>
+        <Button
+          variant="outlined"
           startIcon={<ContentPasteGoIcon />}
           onClick={() => setPasteOpen(true)}
           disabled={!classroomId}
-          sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+          sx={{ minHeight: 48, textTransform: 'none' }}
         >
           Paste from AI
         </Button>
@@ -184,11 +199,16 @@ export default function TeacherAssignmentsHub() {
         <Box sx={{ textAlign: 'center', py: 6, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
           <Typography sx={{ fontWeight: 700 }}>No assignments yet</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-            Paste JSON from ChatGPT or Gemini to create your first one in seconds.
+            Create a drawing or document assignment, or paste JSON from ChatGPT/Gemini.
           </Typography>
-          <Button variant="contained" startIcon={<ContentPasteGoIcon />} onClick={() => setPasteOpen(true)} sx={{ minHeight: 44, textTransform: 'none' }}>
-            Paste from AI
-          </Button>
+          <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setNewOpen(true)} sx={{ minHeight: 44, textTransform: 'none' }}>
+              New assignment
+            </Button>
+            <Button variant="outlined" startIcon={<ContentPasteGoIcon />} onClick={() => setPasteOpen(true)} sx={{ minHeight: 44, textTransform: 'none' }}>
+              Paste from AI
+            </Button>
+          </Stack>
         </Box>
       ) : (
         <Stack spacing={2.5}>
@@ -227,7 +247,16 @@ export default function TeacherAssignmentsHub() {
                           size="small"
                           sx={{ height: 20, fontWeight: 700, textTransform: 'capitalize', bgcolor: alpha(STATUS_COLOR[a.status], 0.14), color: STATUS_COLOR[a.status] }}
                         />
-                        <Chip label={FORMAT_LABEL[a.submission_format]} size="small" variant="outlined" sx={{ height: 20 }} />
+                        <Chip
+                          icon={a.assignment_type === 'drawing' ? <BrushOutlinedIcon sx={{ fontSize: 13 }} /> : <DescriptionOutlinedIcon sx={{ fontSize: 13 }} />}
+                          label={a.assignment_type === 'drawing' ? 'Drawing' : 'Document'}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 20 }}
+                        />
+                        {a.assignment_type !== 'drawing' && (
+                          <Chip label={FORMAT_LABEL[a.submission_format]} size="small" variant="outlined" sx={{ height: 20 }} />
+                        )}
                         <Typography variant="caption" color="text.secondary">
                           {a.submitted_count} submitted · /{a.max_marks}
                           {a.due_at ? ` · due ${new Date(a.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
@@ -250,6 +279,15 @@ export default function TeacherAssignmentsHub() {
           ))}
         </Stack>
       )}
+
+      <NewAssignmentDialog
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        classroomId={classroomId}
+        authFetch={authFetch}
+        getToken={getTeacherToken}
+        onCreated={load}
+      />
 
       <PasteAssignmentsDialog
         open={pasteOpen}

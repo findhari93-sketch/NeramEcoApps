@@ -24,6 +24,7 @@ import { computeAssignmentClock } from '@/lib/assignment-clock';
 import { extractYouTubeId } from '@/lib/youtube';
 import SubmissionFiles from '@/components/assignments/SubmissionFiles';
 import AssignmentSubmitSheet from '@/components/assignments/AssignmentSubmitSheet';
+import DrawingAssignmentPanel, { type DrawingSubmissionView } from '@/components/assignments/DrawingAssignmentPanel';
 
 interface Attachment {
   id: string;
@@ -35,6 +36,7 @@ interface Detail {
   title: string;
   class_date: string;
   instructions: string | null;
+  assignment_type: 'drawing' | 'document';
   submission_format: 'pdf' | 'image' | 'pdf_or_image';
   max_marks: number;
   due_at: string | null;
@@ -60,6 +62,7 @@ export default function StudentAssignmentDetailPage() {
 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [submission, setSubmission] = useState<MySubmission | null>(null);
+  const [drawingSubmission, setDrawingSubmission] = useState<DrawingSubmissionView | null>(null);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
   const [recording, setRecording] = useState<{ url: string | null; source: string | null }>({ url: null, source: null });
   const [error, setError] = useState('');
@@ -71,6 +74,7 @@ export default function StudentAssignmentDetailPage() {
       const res = await authFetch(`/api/assignments/${id}`);
       setDetail(res.assignment as Detail);
       setSubmission((res.submission as MySubmission) ?? null);
+      setDrawingSubmission((res.drawing_submission as DrawingSubmissionView) ?? null);
       setEnrolledAt(res.enrolled_at ?? null);
       setRecording(res.recording ?? { url: null, source: null });
     } catch (err) {
@@ -97,7 +101,10 @@ export default function StudentAssignmentDetailPage() {
       })
     : null;
 
-  const canSubmit = !submission || submission.status === 'redo';
+  const isDrawing = detail?.assignment_type === 'drawing';
+  const canSubmit = isDrawing
+    ? !drawingSubmission || drawingSubmission.status === 'redo'
+    : !submission || submission.status === 'redo';
   const youtubeId = recording.url && recording.source === 'youtube' ? extractYouTubeId(recording.url) : null;
 
   if (error) {
@@ -277,56 +284,69 @@ export default function StudentAssignmentDetailPage() {
 
             <Divider />
 
-            {/* My submission */}
-            <Box>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
-                  Your submission
-                </Typography>
-                {submission?.status === 'redo' && (
-                  <Chip label="Redo requested" size="small" sx={{ bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
-                )}
-              </Stack>
-              {submission ? (
-                <Stack spacing={1.5}>
-                  <SubmissionFiles files={submission.files} />
-                  {submission.feedback && (
-                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                        Teacher feedback
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 0.25 }}>
-                        {submission.feedback}
-                      </Typography>
-                    </Box>
+            {isDrawing ? (
+              <DrawingAssignmentPanel
+                assignmentId={detail.id}
+                submission={drawingSubmission}
+                getToken={getToken}
+                onChanged={load}
+              />
+            ) : (
+              <>
+                {/* My submission */}
+                <Box>
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
+                      Your submission
+                    </Typography>
+                    {submission?.status === 'redo' && (
+                      <Chip label="Redo requested" size="small" sx={{ bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
+                    )}
+                  </Stack>
+                  {submission ? (
+                    <Stack spacing={1.5}>
+                      <SubmissionFiles files={submission.files} />
+                      {submission.feedback && (
+                        <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                            Teacher feedback
+                          </Typography>
+                          <Typography variant="body2" sx={{ mt: 0.25 }}>
+                            {submission.feedback}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" color="text.disabled">
+                      You have not submitted yet.
+                    </Typography>
                   )}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.disabled">
-                  You have not submitted yet.
-                </Typography>
-              )}
-            </Box>
+                </Box>
 
-            {canSubmit && (
-              <Button variant="contained" onClick={() => setSubmitOpen(true)} sx={{ minHeight: 48 }}>
-                {submission?.status === 'redo' ? 'Resubmit' : 'Submit your work'}
-              </Button>
+                {canSubmit && (
+                  <Button variant="contained" onClick={() => setSubmitOpen(true)} sx={{ minHeight: 48 }}>
+                    {submission?.status === 'redo' ? 'Resubmit' : 'Submit your work'}
+                  </Button>
+                )}
+              </>
             )}
           </Stack>
 
-          <AssignmentSubmitSheet
-            open={submitOpen}
-            onClose={() => setSubmitOpen(false)}
-            assignmentId={detail.id}
-            format={detail.submission_format}
-            redoFeedback={submission?.status === 'redo' ? submission.feedback : null}
-            authFetch={authFetch}
-            onSubmitted={() => {
-              setSubmitOpen(false);
-              load();
-            }}
-          />
+          {!isDrawing && (
+            <AssignmentSubmitSheet
+              open={submitOpen}
+              onClose={() => setSubmitOpen(false)}
+              assignmentId={detail.id}
+              format={detail.submission_format}
+              redoFeedback={submission?.status === 'redo' ? submission.feedback : null}
+              authFetch={authFetch}
+              onSubmitted={() => {
+                setSubmitOpen(false);
+                load();
+              }}
+            />
+          )}
         </>
       )}
     </Box>

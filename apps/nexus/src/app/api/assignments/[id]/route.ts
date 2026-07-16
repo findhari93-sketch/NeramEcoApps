@@ -3,6 +3,7 @@ import {
   getAssignment,
   getAssignmentDetail,
   getAssignmentRoster,
+  getAssignmentDrawingRoster,
   updateAssignment,
   addAssignmentAttachments,
   removeAssignmentAttachment,
@@ -14,6 +15,7 @@ import {
   getUserEnrollment,
   recordGamificationEvent,
   resolveAssignmentRecording,
+  getStudentAssignmentDrawing,
 } from '@neram/database';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
@@ -33,6 +35,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!detail) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 
     if (isStaff(user)) {
+      // Drawing-type assignments are graded in the Drawing Review screen; return
+      // a roster built from drawing_submissions with the drawing id to open.
+      if ((detail as any).assignment_type === 'drawing') {
+        const { rows } = await getAssignmentDrawingRoster(params.id);
+        const counts = rows.reduce(
+          (acc, r) => {
+            acc.total += 1;
+            acc[r.bucket] += 1;
+            return acc;
+          },
+          { total: 0, submitted: 0, reviewed: 0, missing: 0 } as Record<string, number>,
+        );
+        return NextResponse.json({ assignment: detail, drawing_roster: rows, counts, role: 'staff' });
+      }
+
       const { rows } = await getAssignmentRoster(params.id);
       const rosterWithUrls = await Promise.all(
         rows.map(async (r) => ({
@@ -60,11 +77,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const enrollment = await getUserEnrollment(user.id, detail.classroom_id);
     if (!enrollment) throw new ApiError('You are not enrolled in this class.', 403);
 
+    const recording = await resolveAssignmentRecording(detail);
+
+    // Drawing-type assignments keep their submission in the Drawing channel
+    // (drawing_submissions), so the student view renders the annotated review.
+    if ((detail as any).assignment_type === 'drawing') {
+      const drawing = await getStudentAssignmentDrawing(user.id, params.id);
+      return NextResponse.json({
+        assignment: detail,
+        drawing_submission: drawing,
+        enrolled_at: (enrollment as any)?.enrolled_at ?? null,
+        recording,
+        role: 'student',
+      });
+    }
+
     const submission = await getSubmission(params.id, user.id);
     const signed = submission
       ? { ...submission, files: await signSubmissionFiles(submission.files || []) }
       : null;
-    const recording = await resolveAssignmentRecording(detail);
     return NextResponse.json({
       assignment: detail,
       submission: signed,

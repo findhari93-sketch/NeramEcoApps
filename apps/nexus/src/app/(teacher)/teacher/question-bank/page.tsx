@@ -10,16 +10,66 @@ import {
   Skeleton,
   Tab,
   Tabs,
+  Card,
+  CardActionArea,
 } from '@neram/ui';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBOriginalPaper, QBExamType, QBProgressStats } from '@neram/database';
 import { QB_EXAM_TYPE_LABELS } from '@neram/database';
 import QBPaperCard from '@/components/question-bank/QBPaperCard';
 
 const EXAM_TABS: QBExamType[] = ['NATA', 'JEE_PAPER_2'];
+
+/** The hub's primary destinations, surfaced as cards so nothing is an orphan route. */
+const HUB_LINKS: {
+  key: string;
+  label: string;
+  desc: string;
+  href: string;
+  icon: React.ReactNode;
+  color: string;
+}[] = [
+  {
+    key: 'build',
+    label: 'Build a test',
+    desc: 'Assemble from bank questions',
+    href: '/teacher/question-bank/build',
+    icon: <AddTaskOutlinedIcon />,
+    color: '#6366F1',
+  },
+  {
+    key: 'tests',
+    label: 'Tests',
+    desc: 'By chapter, recap & source',
+    href: '/teacher/question-bank/tests',
+    icon: <FactCheckOutlinedIcon />,
+    color: '#0EA5E9',
+  },
+  {
+    key: 'tags',
+    label: 'Tags',
+    desc: 'Manage the question taxonomy',
+    href: '/teacher/question-bank/tags',
+    icon: <SellOutlinedIcon />,
+    color: '#F59E0B',
+  },
+  {
+    key: 'submissions',
+    label: 'Submissions',
+    desc: 'Review student questions',
+    href: '/teacher/questions',
+    icon: <RateReviewOutlinedIcon />,
+    color: '#10B981',
+  },
+];
 
 export default function QuestionBankDashboard() {
   const router = useRouter();
@@ -221,26 +271,92 @@ export default function QuestionBankDashboard() {
         )}
       </Box>
 
-      {/* Quick Actions */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<AddOutlinedIcon />}
-          onClick={() => router.push('/teacher/question-bank/new')}
-          sx={{ textTransform: 'none' }}
-        >
-          Add Question
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<UploadFileOutlinedIcon />}
-          onClick={() => router.push('/teacher/question-bank/bulk-upload')}
-          sx={{ textTransform: 'none' }}
-        >
-          Bulk Upload
-        </Button>
+      {/* Hub destinations (previously orphaned routes now reachable) */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
+          gap: { xs: 1, sm: 1.5 },
+          mb: 2.5,
+        }}
+      >
+        {HUB_LINKS.map((link) => (
+          <Card
+            key={link.key}
+            variant="outlined"
+            sx={{
+              borderRadius: 2,
+              transition: 'border-color 150ms, box-shadow 150ms',
+              '&:hover': { borderColor: link.color, boxShadow: 2 },
+            }}
+          >
+            <CardActionArea
+              onClick={() => router.push(link.href)}
+              aria-label={`${link.label}. ${link.desc}`}
+              sx={{ p: 1.5, height: '100%', minHeight: 96, alignItems: 'flex-start' }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 1.5,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: `${link.color}1A`,
+                    color: link.color,
+                    '& svg': { fontSize: 20 },
+                  }}
+                >
+                  {link.icon}
+                </Box>
+                <ChevronRightOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+              </Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                {link.label}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                {link.desc}
+              </Typography>
+            </CardActionArea>
+          </Card>
+        ))}
+      </Box>
+
+      {/* Papers browse */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          mb: 1,
+        }}
+      >
+        <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1, fontWeight: 700 }}>
+          Original papers
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AddOutlinedIcon />}
+            onClick={() => router.push('/teacher/question-bank/new')}
+            sx={{ textTransform: 'none' }}
+          >
+            Add Question
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<UploadFileOutlinedIcon />}
+            onClick={() => router.push('/teacher/question-bank/bulk-upload')}
+            sx={{ textTransform: 'none' }}
+          >
+            Bulk Upload
+          </Button>
+        </Box>
       </Box>
 
       {/* Exam Tabs */}

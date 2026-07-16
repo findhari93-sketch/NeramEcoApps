@@ -65,6 +65,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (!text || !a || !b || !['a', 'b', 'c', 'd'].includes(correct)) continue;
       if (correct === 'c' && !c) continue;
       if (correct === 'd' && !d) continue;
+      // Questions picked from the central bank carry their id so the mirror links (not duplicates).
+      const qbId = typeof q?.qb_question_id === 'string' && q.qb_question_id.trim() ? q.qb_question_id.trim() : null;
       questions.push({
         question_text: text,
         option_a: a,
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         option_d: d,
         correct_option: correct as 'a' | 'b' | 'c' | 'd',
         explanation: opt(q?.explanation),
+        qb_question_id: qbId,
       });
     }
     if (questions.length === 0) {

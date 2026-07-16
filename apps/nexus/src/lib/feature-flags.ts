@@ -94,7 +94,7 @@ export const FEATURES: FeatureDef[] = [
   { id: 'staff.class-recaps', label: 'Class Recaps', surface: 'staff', group: 'Management', paths: ['/teacher/class-recaps'], defaultEnabled: true },
   { id: 'staff.checklists', label: 'Checklists', surface: 'staff', group: 'Management', paths: ['/teacher/checklists'], defaultEnabled: true },
   { id: 'staff.documents', label: 'Documents', surface: 'staff', group: 'Management', paths: ['/teacher/documents'], defaultEnabled: true },
-  { id: 'staff.question-bank', label: 'QB', surface: 'staff', group: 'Management', paths: ['/teacher/question-bank'], defaultEnabled: true },
+  { id: 'staff.question-bank', label: 'Question Bank', surface: 'staff', group: 'Management', paths: ['/teacher/question-bank'], defaultEnabled: true },
   { id: 'staff.exam-recall', label: 'Recall', surface: 'staff', group: 'Management', paths: ['/teacher/exam-recall'], defaultEnabled: true },
   { id: 'staff.tests', label: 'Tests', surface: 'staff', group: 'Management', paths: ['/teacher/tests'], defaultEnabled: true },
   { id: 'staff.questions', label: 'Questions', surface: 'staff', group: 'Management', paths: ['/teacher/questions'], defaultEnabled: true },

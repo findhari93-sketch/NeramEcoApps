@@ -416,6 +416,8 @@ export async function createFileRecord(
     sharepoint_item_id?: string | null;
     sharepoint_web_url?: string | null;
     storage_path?: string | null;
+    /** External share URL when the file is a link (no uploaded bytes). */
+    link_url?: string | null;
     allow_download?: boolean | null;
     sort_order?: number;
     uploaded_by?: string | null;
@@ -435,6 +437,7 @@ export async function createFileRecord(
       sharepoint_item_id: input.sharepoint_item_id ?? null,
       sharepoint_web_url: input.sharepoint_web_url ?? null,
       storage_path: input.storage_path ?? null,
+      link_url: input.link_url ?? null,
       allow_download: input.allow_download ?? null,
       sort_order: input.sort_order ?? 0,
       uploaded_by: input.uploaded_by ?? null,

@@ -11,10 +11,20 @@
 import { istTodayStr } from './assignment-clock';
 import type { AssignmentFormat } from './assignment-format';
 
+export type BulkAssignmentType = 'drawing' | 'document';
+
 /** The AI-facing shape (what a teacher pastes). All fields except title optional. */
 export interface BulkAssignmentInput {
   title: string;
   instructions?: string;
+  /** 'drawing' (photos-only, smart review) or 'document' (solve a paper). */
+  assignment_type?: BulkAssignmentType;
+  /** Drawing only: 2d_composition | 3d_composition | kit_sculpture. */
+  drawing_category?: string;
+  /** Drawing only: reference/expected-output image URL. */
+  reference_image_url?: string;
+  /** Document only: link an existing OneDrive/SharePoint file by share URL. */
+  link_url?: string;
   submission_format?: AssignmentFormat;
   max_marks?: number;
   /** Class day the assignment belongs to (YYYY-MM-DD). Defaults to today. */
@@ -41,6 +51,10 @@ export interface BulkAssignmentInput {
 export interface ReviewAssignment {
   title: string;
   instructions: string;
+  assignment_type: BulkAssignmentType;
+  drawing_category: string | null;
+  reference_image_url: string | null;
+  link_url: string | null;
   submission_format: AssignmentFormat;
   max_marks: number;
   class_date: string;
@@ -87,11 +101,29 @@ function normalizeOne(raw: BulkAssignmentInput, today: string): ReviewAssignment
   const title = String(raw.title ?? '').trim();
   if (!title) errors.push('Missing title.');
 
+  const assignmentType: BulkAssignmentType = raw.assignment_type === 'drawing' ? 'drawing' : 'document';
+
+  // Drawing tasks are photos-only; ignore any submission_format they sent.
   let format = (raw.submission_format ?? 'pdf_or_image') as AssignmentFormat;
-  if (!FORMATS.includes(format)) {
+  if (assignmentType === 'drawing') {
+    format = 'image';
+  } else if (!FORMATS.includes(format)) {
     errors.push(`Unknown submission_format "${raw.submission_format}"; using pdf_or_image.`);
     format = 'pdf_or_image';
   }
+
+  const drawingCategory =
+    assignmentType === 'drawing'
+      ? ['2d_composition', '3d_composition', 'kit_sculpture'].includes(String(raw.drawing_category))
+        ? String(raw.drawing_category)
+        : '3d_composition'
+      : null;
+  const referenceImageUrl =
+    assignmentType === 'drawing' && raw.reference_image_url && isHttpUrl(String(raw.reference_image_url))
+      ? String(raw.reference_image_url)
+      : null;
+  const linkUrl =
+    assignmentType === 'document' && raw.link_url && isHttpUrl(String(raw.link_url)) ? String(raw.link_url) : null;
 
   let maxMarks = Number(raw.max_marks ?? 10);
   if (!Number.isFinite(maxMarks) || maxMarks <= 0) {
@@ -155,6 +187,10 @@ function normalizeOne(raw: BulkAssignmentInput, today: string): ReviewAssignment
   return {
     title,
     instructions: String(raw.instructions ?? '').trim(),
+    assignment_type: assignmentType,
+    drawing_category: drawingCategory,
+    reference_image_url: referenceImageUrl,
+    link_url: linkUrl,
     submission_format: format,
     max_marks: maxMarks,
     class_date: classDate,
@@ -216,23 +252,25 @@ export const ASSIGNMENT_JSON_EXAMPLE = {
   assignments: [
     {
       title: 'Recreate the JEE 2024 3D shape',
+      assignment_type: 'drawing',
       instructions:
         'Using pencil on A4, recreate the exact isometric shape from the JEE B.Arch 2024 question paper. Focus on proportion and clean line weight.',
-      submission_format: 'image',
+      drawing_category: '3d_composition',
+      reference_image_url: 'https://example.com/jee-2024-shape.png',
       max_marks: 10,
       class_date: '2026-07-14',
       due_offset_days: 3,
       catchup_window_days: 7,
-      content_image_url: 'https://example.com/jee-2024-shape.png',
-      links: [{ label: 'JEE 2024 Paper', url: 'https://example.com/jee-2024.pdf' }],
     },
     {
       title: 'Solve all maths PYQs (JEE 2023)',
+      assignment_type: 'document',
       instructions: 'Solve every maths question from the JEE 2023 paper. Scan your work into a single PDF and upload.',
       submission_format: 'pdf',
       max_marks: 20,
       class_date: '2026-07-14',
       due_offset_days: 5,
+      link_url: 'https://neramclasses.sharepoint.com/:b:/s/.../jee-2023.pdf',
     },
   ],
 };
@@ -247,13 +285,16 @@ Return ONLY valid JSON (no markdown, no commentary) in exactly this shape:
   "assignments": [
     {
       "title": "string (required, short)",
+      "assignment_type": "drawing | document",
       "instructions": "string (what the student must do)",
-      "submission_format": "pdf | image | pdf_or_image",
+      "drawing_category": "2d_composition | 3d_composition | kit_sculpture (drawing only)",
+      "reference_image_url": "https URL to the expected/model drawing (drawing only)",
+      "link_url": "https OneDrive/SharePoint share link to an existing paper (document only)",
+      "submission_format": "pdf | image | pdf_or_image (document only)",
       "max_marks": number,
       "class_date": "YYYY-MM-DD (the day this was taught)",
       "due_offset_days": number,          // OR "due_date": "YYYY-MM-DD"
       "catchup_window_days": 7,            // days a late joiner gets from their join date
-      "content_image_url": "https URL (optional)",
       "content_video_url": "https URL (optional)",
       "recording_url": "https URL to the class recording (optional)",
       "recording_source": "youtube | sharepoint (optional)",
@@ -263,7 +304,9 @@ Return ONLY valid JSON (no markdown, no commentary) in exactly this shape:
 }
 
 Rules:
-- submission_format: use "image" for drawing/sketch tasks (photos only), "pdf" for solved-problem sets, "pdf_or_image" if either is fine.
+- assignment_type: use "drawing" for sketch/drawing tasks (evaluated in the drawing review tool), "document" for solve-a-paper tasks.
+- For a "drawing" task, students submit photos; you may add a reference_image_url. submission_format is ignored.
+- For a "document" task, set submission_format ("pdf" for solved sets, "image" for photos, "pdf_or_image" for either). If the question paper already lives in OneDrive/SharePoint, put its share link in link_url.
 - Put one object per assignment. You may return one, or several for a week.
 - Only include fields you have real values for. Omit the rest.
 

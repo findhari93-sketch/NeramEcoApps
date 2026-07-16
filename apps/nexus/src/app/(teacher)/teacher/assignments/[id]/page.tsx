@@ -40,9 +40,18 @@ interface AssignmentInfo {
   due_at: string | null;
   submission_format: string;
   status: string;
+  assignment_type?: 'drawing' | 'document';
 }
 type Bucket = 'submitted' | 'late' | 'missing';
 const BUCKET_LABEL: Record<Bucket, string> = { submitted: 'Submitted', late: 'Late', missing: 'Not submitted' };
+
+interface DrawingRosterRow {
+  student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
+  drawing: { id: string; status: string; submitted_at: string; tutor_rating: number | null; attempt_number: number } | null;
+  bucket: 'submitted' | 'reviewed' | 'missing';
+}
+type DBucket = 'submitted' | 'reviewed' | 'missing';
+const D_BUCKET_LABEL: Record<DBucket, string> = { submitted: 'To review', reviewed: 'Reviewed', missing: 'Not submitted' };
 
 export default function AssignmentReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -52,8 +61,10 @@ export default function AssignmentReviewPage() {
 
   const [assignment, setAssignment] = useState<AssignmentInfo | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [drawingRows, setDrawingRows] = useState<DrawingRosterRow[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({ total: 0, submitted: 0, late: 0, missing: 0 });
   const [tab, setTab] = useState<Bucket>('submitted');
+  const [dTab, setDTab] = useState<DBucket>('submitted');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
@@ -78,7 +89,8 @@ export default function AssignmentReviewPage() {
     try {
       const res = await authFetch(`/api/assignments/${id}`);
       setAssignment(res.assignment as AssignmentInfo);
-      setRows(res.roster as ReviewRow[]);
+      setRows((res.roster as ReviewRow[]) || []);
+      setDrawingRows((res.drawing_roster as DrawingRosterRow[]) || []);
       setCounts(res.counts || {});
       setLoadError(null);
     } catch (err) {
@@ -90,7 +102,13 @@ export default function AssignmentReviewPage() {
     if (!authLoading) load();
   }, [authLoading, load]);
 
+  const isDrawing = assignment?.assignment_type === 'drawing';
   const bucketRows = useMemo(() => rows.filter((r) => r.bucket === tab), [rows, tab]);
+  const dBucketRows = useMemo(() => drawingRows.filter((r) => r.bucket === dTab), [drawingRows, dTab]);
+  const missingDrawingRecipients = useMemo(
+    () => drawingRows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name })),
+    [drawingRows],
+  );
 
   // Review navigation runs across the currently visible bucket.
   const openReview = (row: ReviewRow) => {
@@ -203,100 +221,196 @@ export default function AssignmentReviewPage() {
             )}
           </Stack>
 
-          <ToggleButtonGroup
-            value={tab}
-            exclusive
-            onChange={(_, v) => v && setTab(v)}
-            fullWidth
-            size="small"
-            sx={{ mb: 2 }}
-          >
-            {(['submitted', 'late', 'missing'] as Bucket[]).map((b) => (
-              <ToggleButton key={b} value={b} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
-                {BUCKET_LABEL[b]} ({counts[b] ?? 0})
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
+          {isDrawing ? (
+            <>
+              <ToggleButtonGroup
+                value={dTab}
+                exclusive
+                onChange={(_, v) => v && setDTab(v)}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              >
+                {(['submitted', 'reviewed', 'missing'] as DBucket[]).map((b) => (
+                  <ToggleButton key={b} value={b} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
+                    {D_BUCKET_LABEL[b]} ({counts[b] ?? 0})
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
 
-          <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-              {bucketRows.length} {bucketRows.length === 1 ? 'student' : 'students'}
-            </Typography>
-            {bucketRows.length > 0 && (
-              <Tooltip title="Copy names">
-                <Button size="small" startIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />} onClick={copyNames} sx={{ minHeight: 40 }}>
-                  Copy names
-                </Button>
-              </Tooltip>
-            )}
-            {tab === 'missing' && bucketRows.length > 0 && (
-              <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => setNudgeOpen(true)} sx={{ minHeight: 40 }}>
-                Message
-              </Button>
-            )}
-          </Stack>
+              <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                  {dBucketRows.length} {dBucketRows.length === 1 ? 'student' : 'students'}
+                </Typography>
+                {dTab === 'missing' && dBucketRows.length > 0 && (
+                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => setNudgeOpen(true)} sx={{ minHeight: 40 }}>
+                    Message
+                  </Button>
+                )}
+              </Stack>
 
-          {bucketRows.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
-              <Typography variant="body2" color="text.disabled">
-                {tab === 'missing' ? 'Everyone has submitted.' : 'No one here yet.'}
-              </Typography>
-            </Box>
+              {dBucketRows.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
+                  <Typography variant="body2" color="text.disabled">
+                    {dTab === 'missing' ? 'Everyone has submitted.' : 'No drawings here yet.'}
+                  </Typography>
+                </Box>
+              ) : (
+                <Stack spacing={1}>
+                  {dBucketRows.map((row) => {
+                    const clickable = !!row.drawing;
+                    return (
+                      <Box
+                        key={row.student.id}
+                        role={clickable ? 'button' : undefined}
+                        onClick={clickable ? () => router.push(`/teacher/drawing-reviews/${row.drawing!.id}`) : undefined}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1.25,
+                          p: 1.25,
+                          minHeight: 56,
+                          borderRadius: 2,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          cursor: clickable ? 'pointer' : 'default',
+                          '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
+                        }}
+                      >
+                        <Avatar src={row.student.avatar_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.dark' }}>
+                          {(row.student.name || '?').slice(0, 1).toUpperCase()}
+                        </Avatar>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                            {row.student.name || row.student.email}
+                          </Typography>
+                          {row.drawing && (
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(row.drawing.submitted_at).toLocaleString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                              {row.drawing.attempt_number > 1 ? ` · attempt ${row.drawing.attempt_number}` : ''}
+                            </Typography>
+                          )}
+                        </Box>
+                        {row.drawing?.status === 'redo' && (
+                          <Chip label="Redo" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
+                        )}
+                        {row.bucket === 'reviewed' && row.drawing?.tutor_rating != null && (
+                          <Chip
+                            label={`${row.drawing.tutor_rating}/5`}
+                            size="small"
+                            sx={{ height: 22, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20', fontWeight: 700 }}
+                          />
+                        )}
+                        {clickable && <ChevronRightIcon sx={{ color: 'text.disabled' }} />}
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              )}
+            </>
           ) : (
-            <Stack spacing={1}>
-              {bucketRows.map((row) => {
-                const clickable = row.bucket !== 'missing';
-                return (
-                  <Box
-                    key={row.student.id}
-                    role={clickable ? 'button' : undefined}
-                    onClick={clickable ? () => openReview(row) : undefined}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1.25,
-                      p: 1.25,
-                      minHeight: 56,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      cursor: clickable ? 'pointer' : 'default',
-                      '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
-                    }}
-                  >
-                    <Avatar src={row.student.avatar_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.dark' }}>
-                      {(row.student.name || '?').slice(0, 1).toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                        {row.student.name || row.student.email}
-                      </Typography>
-                      {row.submission && (
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(row.submission.submitted_at).toLocaleString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
-                        </Typography>
-                      )}
-                    </Box>
-                    {row.submission?.status === 'redo' && (
-                      <Chip label="Redo" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
-                    )}
-                    {row.submission?.marks != null && (
-                      <Chip
-                        label={`${row.submission.marks} / ${assignment.max_marks}`}
-                        size="small"
-                        sx={{ height: 22, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20', fontWeight: 700 }}
-                      />
-                    )}
-                    {clickable && <ChevronRightIcon sx={{ color: 'text.disabled' }} />}
-                  </Box>
-                );
-              })}
-            </Stack>
+            <>
+              <ToggleButtonGroup
+                value={tab}
+                exclusive
+                onChange={(_, v) => v && setTab(v)}
+                fullWidth
+                size="small"
+                sx={{ mb: 2 }}
+              >
+                {(['submitted', 'late', 'missing'] as Bucket[]).map((b) => (
+                  <ToggleButton key={b} value={b} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
+                    {BUCKET_LABEL[b]} ({counts[b] ?? 0})
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+
+              <Stack direction="row" alignItems="center" sx={{ mb: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                  {bucketRows.length} {bucketRows.length === 1 ? 'student' : 'students'}
+                </Typography>
+                {bucketRows.length > 0 && (
+                  <Tooltip title="Copy names">
+                    <Button size="small" startIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />} onClick={copyNames} sx={{ minHeight: 40 }}>
+                      Copy names
+                    </Button>
+                  </Tooltip>
+                )}
+                {tab === 'missing' && bucketRows.length > 0 && (
+                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => setNudgeOpen(true)} sx={{ minHeight: 40 }}>
+                    Message
+                  </Button>
+                )}
+              </Stack>
+
+              {bucketRows.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
+                  <Typography variant="body2" color="text.disabled">
+                    {tab === 'missing' ? 'Everyone has submitted.' : 'No one here yet.'}
+                  </Typography>
+                </Box>
+              ) : (
+                <Stack spacing={1}>
+                  {bucketRows.map((row) => {
+                    const clickable = row.bucket !== 'missing';
+                    return (
+                      <Box
+                        key={row.student.id}
+                        role={clickable ? 'button' : undefined}
+                        onClick={clickable ? () => openReview(row) : undefined}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1.25,
+                          p: 1.25,
+                          minHeight: 56,
+                          borderRadius: 2,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          cursor: clickable ? 'pointer' : 'default',
+                          '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
+                        }}
+                      >
+                        <Avatar src={row.student.avatar_url || undefined} sx={{ width: 36, height: 36, bgcolor: 'primary.dark' }}>
+                          {(row.student.name || '?').slice(0, 1).toUpperCase()}
+                        </Avatar>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                            {row.student.name || row.student.email}
+                          </Typography>
+                          {row.submission && (
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(row.submission.submitted_at).toLocaleString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </Typography>
+                          )}
+                        </Box>
+                        {row.submission?.status === 'redo' && (
+                          <Chip label="Redo" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
+                        )}
+                        {row.submission?.marks != null && (
+                          <Chip
+                            label={`${row.submission.marks} / ${assignment.max_marks}`}
+                            size="small"
+                            sx={{ height: 22, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20', fontWeight: 700 }}
+                          />
+                        )}
+                        {clickable && <ChevronRightIcon sx={{ color: 'text.disabled' }} />}
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              )}
+            </>
           )}
         </>
       )}
@@ -318,9 +432,11 @@ export default function AssignmentReviewPage() {
         <AssignmentNudgeDialog
           open={nudgeOpen}
           assignments={[{ id: assignment.id, title: assignment.title }]}
-          recipients={rows
-            .filter((r) => r.bucket === 'missing')
-            .map((r) => ({ id: r.student.id, name: r.student.name }))}
+          recipients={
+            isDrawing
+              ? missingDrawingRecipients
+              : rows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name }))
+          }
           getToken={getTeacherToken}
           onClose={() => setNudgeOpen(false)}
         />

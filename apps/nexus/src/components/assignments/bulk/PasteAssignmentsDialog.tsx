@@ -276,20 +276,28 @@ export default function PasteAssignmentsDialog({
                   </Typography>
                 )}
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
-                  <TextField
-                    select
-                    label="Upload"
-                    value={r.submission_format}
-                    onChange={(e) => update(i, { submission_format: e.target.value as any })}
+                  <Chip
                     size="small"
-                    sx={{ minWidth: 140 }}
-                  >
-                    {Object.entries(FORMAT_LABEL).map(([v, l]) => (
-                      <MenuItem key={v} value={v}>
-                        {l}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                    color={r.assignment_type === 'drawing' ? 'secondary' : 'default'}
+                    label={r.assignment_type === 'drawing' ? 'Drawing' : 'Document'}
+                    sx={{ alignSelf: 'center' }}
+                  />
+                  {r.assignment_type === 'document' && (
+                    <TextField
+                      select
+                      label="Upload"
+                      value={r.submission_format}
+                      onChange={(e) => update(i, { submission_format: e.target.value as any })}
+                      size="small"
+                      sx={{ minWidth: 140 }}
+                    >
+                      {Object.entries(FORMAT_LABEL).map(([v, l]) => (
+                        <MenuItem key={v} value={v}>
+                          {l}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  )}
                   <TextField
                     label="Marks"
                     value={String(r.max_marks)}
@@ -316,7 +324,9 @@ export default function PasteAssignmentsDialog({
                   />
                 </Stack>
                 <Stack direction="row" spacing={0.75} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
-                  {r.content_image_url && <Chip size="small" label="Image" />}
+                  {r.reference_image_url && <Chip size="small" label="Reference" />}
+                  {r.link_url && <Chip size="small" label="Linked doc" />}
+                  {r.content_image_url && !r.reference_image_url && <Chip size="small" label="Image" />}
                   {r.content_video_url && <Chip size="small" label="Video" />}
                   {r.recording_url && <Chip size="small" label="Recording" />}
                   {r.links.length > 0 && <Chip size="small" label={`${r.links.length} link(s)`} />}

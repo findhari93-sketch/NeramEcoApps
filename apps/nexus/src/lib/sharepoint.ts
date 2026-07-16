@@ -147,6 +147,43 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
   throw new Error('Could not resolve SharePoint URL to a streaming URL');
 }
 
+export interface ResolvedShareItem {
+  /** Graph driveItem id. */
+  id: string;
+  /** File name (with extension). */
+  name: string;
+  /** MIME type reported by Graph, when available. */
+  mimeType: string | null;
+  /** Size in bytes, when available. */
+  size: number | null;
+}
+
+/**
+ * Resolve a pasted OneDrive/SharePoint sharing URL to its Graph driveItem
+ * (id + name + mime + size), across any site/drive, via the /shares endpoint.
+ * Used to LINK an existing document into an assignment without re-uploading it.
+ * The bytes are later streamed on demand by getSharePointStreamUrl(shareUrl).
+ */
+export async function resolveShareUrlToItem(shareUrl: string): Promise<ResolvedShareItem> {
+  const token = await getAppOnlyToken();
+  const encoded = encodeSharingUrl(shareUrl);
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,file,size`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`Could not resolve the shared link: ${res.status} ${err}`);
+  }
+  const item = await res.json();
+  return {
+    id: item.id,
+    name: item.name || 'document',
+    mimeType: item.file?.mimeType || null,
+    size: typeof item.size === 'number' ? item.size : null,
+  };
+}
+
 interface SharePointUploadResult {
   /** SharePoint/OneDrive item ID (for deletion) */
   itemId: string;

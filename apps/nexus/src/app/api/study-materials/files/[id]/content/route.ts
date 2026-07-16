@@ -6,7 +6,7 @@ import {
   effectiveDownloadable,
   hasActiveDownloadGrant,
 } from '@neram/database';
-import { getSharePointDownloadUrl } from '@/lib/sharepoint';
+import { getSharePointDownloadUrl, getSharePointStreamUrl } from '@/lib/sharepoint';
 import { getRequestUser, isStaff, getStudentExamSet } from '@/lib/study-materials';
 
 /**
@@ -28,7 +28,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const user = await getRequestUser(tokenString);
 
     const file = await getFileById(params.id);
-    if (!file || !file.sharepoint_item_id) {
+    // A file is streamable if it has uploaded bytes (sharepoint_item_id) OR is an
+    // external link (link_url, e.g. a pasted OneDrive/SharePoint document).
+    if (!file || (!file.sharepoint_item_id && !file.link_url)) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
     const folder = await getFolderById(file.folder_id);
@@ -50,7 +52,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const downloadable = staff || effectiveDownloadable(file, folder) || granted;
     const wantDownload = request.nextUrl.searchParams.get('download') === '1' && downloadable;
 
-    const downloadUrl = await getSharePointDownloadUrl(file.sharepoint_item_id);
+    // Linked files (no uploaded bytes) resolve via the share URL, which works
+    // across any site/drive; uploaded files use the single-site item id.
+    const downloadUrl = file.link_url
+      ? await getSharePointStreamUrl(file.link_url)
+      : await getSharePointDownloadUrl(file.sharepoint_item_id as string);
     const upstream = await fetch(downloadUrl, { redirect: 'follow' });
     if (!upstream.ok) {
       return NextResponse.json({ error: 'Could not fetch file' }, { status: 502 });
