@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -14,17 +13,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress,
-  IconButton,
-  Alert,
+  ImageUploadField,
 } from '@neram/ui';
-import {
-  CloudUpload,
-  Delete,
-  PictureAsPdf,
-  Image as ImageIcon,
-  CurrencyRupee,
-} from '@mui/icons-material';
+import { CurrencyRupee } from '@mui/icons-material';
 import { getCurrentUser } from '@neram/auth';
 import type { PaymentDetailsData } from '@/components/apply/types';
 
@@ -55,64 +46,34 @@ export default function PaymentDetailsStep({
   linkData,
   token,
 }: PaymentDetailsStepProps) {
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const balanceDue = Math.max(0, linkData.finalFee - linkData.amountPaid);
   const showTransactionRef = payment.paymentMethod !== 'cash' && payment.paymentMethod !== '';
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Injected uploader: same endpoint/auth (Firebase idToken) + enroll token as before.
+  const uploadProof = async (file: File): Promise<{ url: string }> => {
+    const firebaseUser = getCurrentUser();
+    const idToken = await firebaseUser?.getIdToken();
 
-    // Reset input so same file can be re-selected
-    e.target.value = '';
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('token', token);
 
-    setUploadError(null);
-    setUploading(true);
-
-    try {
-      const firebaseUser = getCurrentUser();
-      const idToken = await firebaseUser?.getIdToken();
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('token', token);
-
-      const res = await fetch('/api/enroll/upload-proof', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Upload failed');
-      }
-
-      updatePayment({
-        paymentProofUrl: data.url,
-        paymentProofFileName: data.fileName || file.name,
-      });
-    } catch (err: any) {
-      setUploadError(err.message || 'Failed to upload file');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleRemoveProof = () => {
-    updatePayment({
-      paymentProofUrl: null,
-      paymentProofFileName: null,
+    const res = await fetch('/api/enroll/upload-proof', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}` },
+      body: formData,
     });
-  };
 
-  const isImage = payment.paymentProofFileName
-    ? /\.(jpe?g|png|webp)$/i.test(payment.paymentProofFileName)
-    : false;
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    // Keep the file name alongside the url (used elsewhere in the wizard).
+    updatePayment({ paymentProofFileName: data.fileName || file.name });
+    return { url: data.url };
+  };
 
   return (
     <Box>
@@ -266,126 +227,18 @@ export default function PaymentDetailsStep({
         Upload a screenshot or photo of your payment receipt (JPEG, PNG, or PDF, max 5MB)
       </Typography>
 
-      {uploadError && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setUploadError(null)}>
-          {uploadError}
-        </Alert>
-      )}
-
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        onChange={handleFileSelect}
-        style={{ display: 'none' }}
+      <ImageUploadField
+        value={payment.paymentProofUrl || null}
+        onChange={(url) =>
+          url
+            ? updatePayment({ paymentProofUrl: url })
+            : updatePayment({ paymentProofUrl: null, paymentProofFileName: null })
+        }
+        upload={uploadProof}
+        accept="image/*,.pdf"
+        maxSizeMB={5}
+        helperText="Tap to upload receipt"
       />
-
-      {!payment.paymentProofUrl ? (
-        /* Upload area */
-        <Box
-          onClick={() => !uploading && fileInputRef.current?.click()}
-          sx={{
-            border: '2px dashed',
-            borderColor: 'grey.400',
-            borderRadius: 2,
-            p: 3,
-            minHeight: 120,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: uploading ? 'default' : 'pointer',
-            bgcolor: 'grey.50',
-            transition: 'all 0.2s',
-            '&:hover': uploading ? {} : {
-              borderColor: 'primary.main',
-              bgcolor: 'primary.50',
-            },
-            '&:active': uploading ? {} : {
-              transform: 'scale(0.98)',
-            },
-          }}
-        >
-          {uploading ? (
-            <>
-              <CircularProgress size={32} sx={{ mb: 1 }} />
-              <Typography variant="body2" color="text.secondary">
-                Uploading...
-              </Typography>
-            </>
-          ) : (
-            <>
-              <CloudUpload sx={{ fontSize: 40, color: 'grey.500', mb: 1 }} />
-              <Typography variant="body2" fontWeight={500}>
-                Tap to upload receipt
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                JPEG, PNG, or PDF (max 5MB)
-              </Typography>
-            </>
-          )}
-        </Box>
-      ) : (
-        /* Uploaded file preview */
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            border: '1px solid',
-            borderColor: 'success.light',
-            borderRadius: 2,
-            bgcolor: 'success.50',
-          }}
-        >
-          <Box display="flex" alignItems="center" gap={2}>
-            {isImage ? (
-              <Box
-                component="img"
-                src={payment.paymentProofUrl}
-                alt="Payment proof"
-                sx={{
-                  width: 64,
-                  height: 64,
-                  objectFit: 'cover',
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              />
-            ) : (
-              <Box
-                sx={{
-                  width: 64,
-                  height: 64,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: 'error.50',
-                  borderRadius: 1,
-                }}
-              >
-                <PictureAsPdf sx={{ fontSize: 32, color: 'error.main' }} />
-              </Box>
-            )}
-            <Box flex={1} minWidth={0}>
-              <Typography variant="body2" fontWeight={600} noWrap>
-                {payment.paymentProofFileName || 'Payment proof'}
-              </Typography>
-              <Typography variant="caption" color="success.main">
-                Uploaded successfully
-              </Typography>
-            </Box>
-            <IconButton
-              onClick={handleRemoveProof}
-              size="small"
-              sx={{ color: 'error.main' }}
-            >
-              <Delete />
-            </IconButton>
-          </Box>
-        </Paper>
-      )}
     </Box>
   );
 }

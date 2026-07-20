@@ -20,7 +20,7 @@ import {
   CircularProgress,
   Container,
 } from '@neram/ui';
-import { DocumentUpload } from '@neram/ui';
+import { ImageUploadField } from '@neram/ui';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
@@ -852,12 +852,12 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <DocumentUpload
+                      <ImageUploadField
                         label="Payment Screenshot"
                         accept="image/*"
-                        maxSize={10}
-                        value={directPayDetails.screenshotUrl}
-                        onUpload={handleScreenshotUpload}
+                        maxSizeMB={10}
+                        value={directPayDetails.screenshotUrl || null}
+                        upload={async (file) => ({ url: await handleScreenshotUpload(file) })}
                         onChange={(url) => setDirectPayDetails((prev) => ({ ...prev, screenshotUrl: url || '' }))}
                         helperText="Upload clear screenshot showing transaction details"
                         required

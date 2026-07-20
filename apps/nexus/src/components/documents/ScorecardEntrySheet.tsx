@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Drawer,
   Box,
@@ -9,15 +9,14 @@ import {
   TextField,
   LinearProgress,
   CircularProgress,
-  alpha,
   useTheme,
   useMediaQuery,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  ImageUploadField,
 } from '@neram/ui';
-import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 
 interface ScorecardEntrySheetProps {
   open: boolean;
@@ -40,7 +39,6 @@ export default function ScorecardEntrySheet({
 }: ScorecardEntrySheetProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [aptitudeScore, setAptitudeScore] = useState('');
   const [drawingScore, setDrawingScore] = useState('');
   const [totalScore, setTotalScore] = useState('');
@@ -62,6 +60,15 @@ export default function ScorecardEntrySheet({
     resetForm();
     onClose();
   }, [resetForm, onClose]);
+
+  // The shared field only PICKS the optional scorecard file (paste / drop /
+  // choose / camera). The real submit stays in handleSubmit, so this just
+  // captures the File into state.
+  const pickFile = useCallback(async (f: File): Promise<{ url: string }> => {
+    setFile(f);
+    setError('');
+    return { url: '' };
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const apt = parseFloat(aptitudeScore);
@@ -193,34 +200,18 @@ export default function ScorecardEntrySheet({
         />
       </Box>
 
-      {/* File upload area */}
+      {/* File upload area — shared picker feeds the optional scorecard file */}
       {!file ? (
-        <Box
-          onClick={() => fileInputRef.current?.click()}
-          sx={{
-            borderRadius: 2,
-            border: `2px dashed ${theme.palette.divider}`,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 0.5,
-            cursor: 'pointer',
-            py: 3,
-            px: 2,
-            mb: 2,
-            '&:hover': {
-              borderColor: theme.palette.primary.main,
-              bgcolor: alpha(theme.palette.primary.main, 0.02),
-            },
-          }}
-        >
-          <UploadFileOutlinedIcon sx={{ fontSize: '1.5rem', color: 'text.secondary' }} />
-          <Typography variant="body2" color="text.secondary">
-            Upload Scorecard (optional)
-          </Typography>
-          <Typography variant="caption" color="text.disabled">
-            PDF or image, max 10 MB
-          </Typography>
+        <Box sx={{ mb: 2 }}>
+          <ImageUploadField
+            value={null}
+            onChange={() => { /* handled by pickFile → file state */ }}
+            upload={pickFile}
+            accept="image/*,.pdf"
+            camera
+            maxSizeMB={10}
+            helperText="Upload Scorecard (optional)"
+          />
         </Box>
       ) : (
         <Box
@@ -252,14 +243,6 @@ export default function ScorecardEntrySheet({
           </Button>
         </Box>
       )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,application/pdf"
-        hidden
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-      />
 
       {submitting && <LinearProgress variant="determinate" value={progress} sx={{ mb: 1, borderRadius: 1 }} />}
 

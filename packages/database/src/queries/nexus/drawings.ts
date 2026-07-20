@@ -354,6 +354,33 @@ export async function createDrawingQuestion(
   return question as DrawingQuestion;
 }
 
+/** Update a backing drawing question (used when a drawing assignment is edited). */
+export async function updateDrawingQuestion(
+  id: string,
+  updates: {
+    question_text?: string;
+    category?: string;
+    reference_images?: Array<{ url: string; caption?: string }>;
+  },
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const patch: Record<string, unknown> = {};
+  if (updates.question_text !== undefined) patch.question_text = updates.question_text;
+  if (updates.category !== undefined) patch.category = updates.category;
+  if (updates.reference_images !== undefined) patch.reference_images = updates.reference_images;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('drawing_questions' as any).update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+/** Delete a drawing question (used to clean up a drawing assignment's backing row). */
+export async function deleteDrawingQuestion(id: string, client?: TypedSupabaseClient): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.from('drawing_questions' as any).delete().eq('id', id);
+  if (error) throw error;
+}
+
 /**
  * The student's latest drawing submission for a drawing-type class assignment
  * (newest attempt in the thread), carrying the teacher's review so the student

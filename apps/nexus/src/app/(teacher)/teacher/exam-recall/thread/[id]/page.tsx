@@ -26,6 +26,7 @@ import {
   Collapse,
   alpha,
   useTheme,
+  ImageUploadField,
 } from '@neram/ui';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -34,7 +35,6 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
-import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import TransformOutlinedIcon from '@mui/icons-material/TransformOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -125,9 +125,6 @@ export default function ThreadModerationPage() {
   // Inline edit
   const [editingVersionId, setEditingVersionId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-
-  // Upload
-  const [uploading, setUploading] = useState(false);
 
   // Sections collapse
   const [showConfirmers, setShowConfirmers] = useState(false);
@@ -289,11 +286,9 @@ export default function ThreadModerationPage() {
   };
 
   // --- Upload teacher image ---
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setUploading(true);
+  // Shared uploader: same endpoint/auth/form fields the old inline handler used.
+  const uploadReferenceImage = useCallback(
+    async (file: File): Promise<{ url: string }> => {
       const token = await getToken();
       const formData = new FormData();
       formData.append('file', file);
@@ -304,14 +299,17 @@ export default function ThreadModerationPage() {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      if (!res.ok) throw new Error('Upload failed');
-      setSnackbar({ open: true, message: 'Image uploaded', severity: 'success' });
-      fetchThread();
-    } catch (err) {
-      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Upload failed', severity: 'error' });
-    } finally {
-      setUploading(false);
-    }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Upload failed');
+      return { url: json.public_url };
+    },
+    [getToken, threadId],
+  );
+
+  const handleReferenceUploaded = (url: string | null) => {
+    if (!url) return;
+    setSnackbar({ open: true, message: 'Image uploaded', severity: 'success' });
+    fetchThread();
   };
 
   // --- Vouch handler ---
@@ -939,29 +937,21 @@ export default function ThreadModerationPage() {
           <Typography variant="h6" fontWeight={600}>
             Uploads ({thread.uploads.length})
           </Typography>
-          <Stack direction="row" spacing={1}>
-            <Button
-              component="label"
-              size="small"
-              variant="outlined"
-              startIcon={<CloudUploadOutlinedIcon />}
-              disabled={uploading}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {uploading ? 'Uploading...' : 'Upload Cleaned Version'}
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleUpload}
-              />
-            </Button>
-            <IconButton size="small">
-              {showUploads ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            </IconButton>
-          </Stack>
+          <IconButton size="small">
+            {showUploads ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
         </Stack>
         <Collapse in={showUploads}>
+          <Box sx={{ mb: 2 }} onClick={(e) => e.stopPropagation()}>
+            <ImageUploadField
+              value={null}
+              onChange={handleReferenceUploaded}
+              upload={uploadReferenceImage}
+              maxSizeMB={1}
+              label="Upload cleaned version"
+              helperText="Paste, drop, or choose"
+            />
+          </Box>
           {thread.uploads.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 1 }}>
               No uploads yet.

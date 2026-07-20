@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Stack, Chip, Button, Skeleton, Snackbar, Alert, IconButton, TextField, MenuItem,
-  alpha,
+  Dialog, DialogTitle, DialogContent, DialogActions, alpha,
 } from '@neram/ui';
 import ContentPasteGoIcon from '@mui/icons-material/ContentPasteGo';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
@@ -19,6 +19,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import AddIcon from '@mui/icons-material/Add';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PasteAssignmentsDialog from '@/components/assignments/bulk/PasteAssignmentsDialog';
@@ -53,6 +54,8 @@ export default function TeacherAssignmentsHub() {
   const [rows, setRows] = useState<AssignmentRow[] | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [deleteRow, setDeleteRow] = useState<AssignmentRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -102,6 +105,32 @@ export default function TeacherAssignmentsHub() {
       load();
     } catch (err) {
       setSnack({ msg: err instanceof Error ? err.message : 'Could not publish', sev: 'error' });
+    }
+  };
+
+  const reopen = async (id: string) => {
+    try {
+      await authFetch(`/api/assignments/${id}`, { method: 'POST', body: JSON.stringify({ action: 'reopen' }) });
+      setSnack({ msg: 'Reopened. Students can see it again.', sev: 'success' });
+      load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not reopen', sev: 'error' });
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteRow) return;
+    setDeleting(true);
+    try {
+      await authFetch(`/api/assignments/${deleteRow.id}`, { method: 'DELETE' });
+      setSnack({ msg: 'Assignment deleted.', sev: 'success' });
+      setDeleteRow(null);
+      load();
+    } catch (err) {
+      setSnack({ msg: err instanceof Error ? err.message : 'Could not delete', sev: 'error' });
+      setDeleteRow(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -263,9 +292,16 @@ export default function TeacherAssignmentsHub() {
                         </Typography>
                       </Stack>
                     </Box>
+                    <IconButton onClick={() => setDeleteRow(a)} sx={{ width: 40, height: 40 }} aria-label="Delete">
+                      <DeleteOutlineIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    </IconButton>
                     {a.status === 'draft' ? (
                       <Button size="small" variant="contained" onClick={() => publish(a.id)} sx={{ minHeight: 40, textTransform: 'none' }}>
                         Publish
+                      </Button>
+                    ) : a.status === 'closed' ? (
+                      <Button size="small" variant="outlined" onClick={() => reopen(a.id)} sx={{ minHeight: 40, textTransform: 'none' }}>
+                        Reopen
                       </Button>
                     ) : (
                       <IconButton onClick={() => router.push(`/teacher/assignments/${a.id}`)} sx={{ width: 40, height: 40 }} aria-label="Open">
@@ -299,6 +335,21 @@ export default function TeacherAssignmentsHub() {
           load();
         }}
       />
+
+      <Dialog open={!!deleteRow} onClose={() => setDeleteRow(null)} PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 800 }}>Delete this assignment?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {deleteRow ? `"${deleteRow.title}" will be removed. ` : ''}This can&apos;t be undone. Assignments with submissions can&apos;t be deleted, close them instead.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setDeleteRow(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" color="error" disabled={deleting} onClick={confirmDelete} sx={{ textTransform: 'none' }}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={!!snack} autoHideDuration={3500} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity={snack?.sev || 'success'} onClose={() => setSnack(null)}>

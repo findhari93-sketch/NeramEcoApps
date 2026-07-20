@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import {
   Box, TextField, Button, Chip, Typography, Paper, Dialog, DialogTitle,
   DialogContent, IconButton, Tabs, Tab, CircularProgress, InputAdornment,
-  LinearProgress,
+  ImageUploadField,
 } from '@neram/ui';
 import SearchIcon from '@mui/icons-material/Search';
 import LinkIcon from '@mui/icons-material/Link';
@@ -14,10 +14,8 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import YouTubeIcon from '@mui/icons-material/YouTube';
-import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import type { TutorResource } from '@neram/database/types';
-import ClipboardPasteZone from './ClipboardPasteZone';
 
 interface ResourceLinkSearchProps {
   resources: TutorResource[];
@@ -49,10 +47,9 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
   const [ytPasteUrl, setYtPasteUrl] = useState('');
 
   // Image upload
-  const fileRef = useRef<HTMLInputElement>(null);
+  const pendingNameRef = useRef<string>('');
   const [imageUrl, setImageUrl] = useState('');
   const [imageTitle, setImageTitle] = useState('');
-  const [uploading, setUploading] = useState(false);
   const [lastUploadedUrl, setLastUploadedUrl] = useState<string | null>(null);
 
   const removeResource = (index: number) => {
@@ -114,34 +111,34 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
   };
 
   // --- Image upload ---
-  const handleImageUpload = async (file: File) => {
-    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) return;
-    setUploading(true);
-    try {
-      const token = await getToken();
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bucket', 'drawing-references');
-      const res = await fetch('/api/drawing/upload', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const { url } = await res.json();
-      addResource({
-        type: 'image',
-        url,
-        title: imageTitle || file.name.replace(/\.[^.]+$/, ''),
-        thumbnail_url: url,
-      });
-      setImageTitle('');
-      setLastUploadedUrl(url);
-    } catch {
-      // silent
-    } finally {
-      setUploading(false);
-    }
+  // Shared uploader: same endpoint/bucket/auth the old inline code used.
+  const uploadImage = async (file: File): Promise<{ url: string; path?: string }> => {
+    pendingNameRef.current = file.name.replace(/\.[^.]+$/, '');
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bucket', 'drawing-references');
+    const res = await fetch('/api/drawing/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    const { url, path } = await res.json();
+    return { url, path };
+  };
+
+  // Called once ImageUploadField finishes uploading: add it as a resource.
+  const handleImageUploaded = (url: string | null) => {
+    if (!url) return;
+    addResource({
+      type: 'image',
+      url,
+      title: imageTitle || pendingNameRef.current || 'Reference Image',
+      thumbnail_url: url,
+    });
+    setImageTitle('');
+    setLastUploadedUrl(url);
   };
 
   const addImageUrl = () => {
@@ -348,17 +345,6 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
           {/* === Image Tab === */}
           {tab === 2 && (
             <Box>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleImageUpload(file);
-                }}
-              />
-
               <TextField
                 placeholder="Title for the reference image (optional)"
                 size="small"
@@ -368,27 +354,17 @@ export default function ResourceLinkSearch({ resources, onChange, getToken }: Re
                 sx={{ mb: 2 }}
               />
 
-              <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<CloudUploadOutlinedIcon />}
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  sx={{ flex: 1, textTransform: 'none', minHeight: 48 }}
-                >
-                  {uploading ? 'Uploading...' : 'Upload Image'}
-                </Button>
+              <Box sx={{ mb: 1.5 }}>
+                <ImageUploadField
+                  value={null}
+                  onChange={handleImageUploaded}
+                  upload={uploadImage}
+                  maxSizeMB={10}
+                  helperText="Paste, drop, or choose"
+                />
               </Box>
 
-              <ClipboardPasteZone
-                onFile={handleImageUpload}
-                isUploading={uploading}
-                maxSizeMB={10}
-              />
-
-              {uploading && <LinearProgress sx={{ mt: 1.5, mb: 1 }} />}
-
-              {lastUploadedUrl && !uploading && (
+              {lastUploadedUrl && (
                 <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'success.50', border: '1px solid', borderColor: 'success.200', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Box
                     component="img"

@@ -9,6 +9,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import PhotoLibraryOutlinedIcon from '@mui/icons-material/PhotoLibraryOutlined';
 import ClipboardPasteZone from './ClipboardPasteZone';
+import { compressImage } from '@/utils/imageCompression';
 
 interface DrawingSubmissionSheetProps {
   open: boolean;
@@ -64,10 +65,21 @@ export default function DrawingSubmissionSheet({
         return;
       }
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bucket', 'drawing-uploads');
+      // Phone photos are routinely 5-9MB, which clears the client cap but
+      // exceeds Vercel's 4.5MB serverless body limit and gets rejected before
+      // the upload route runs. Downscale + re-encode to JPEG first so the body
+      // stays well under that limit (also much faster on mobile networks).
+      let toUpload: File;
+      try {
+        toUpload = await compressImage(file, 2400, 0.85, 'drawing.jpg');
+      } catch {
+        toUpload = file; // fall back to the original if the browser can't decode it
+      }
       setProgress(30);
+
+      const formData = new FormData();
+      formData.append('file', toUpload);
+      formData.append('bucket', 'drawing-uploads');
 
       const uploadRes = await fetch('/api/drawing/upload', {
         method: 'POST',
@@ -76,8 +88,11 @@ export default function DrawingSubmissionSheet({
       });
 
       if (!uploadRes.ok) {
+        if (uploadRes.status === 413) {
+          throw new Error('That image is too large to upload. Please try a smaller photo.');
+        }
         const errData = await uploadRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'Upload failed');
+        throw new Error(errData.error || 'Upload failed. Please check your connection and try again.');
       }
       const { url } = await uploadRes.json();
       setProgress(60);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -14,8 +14,8 @@ import {
   Paper,
   alpha,
   useTheme,
+  ImageUploadField,
 } from '@neram/ui';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
@@ -34,31 +34,35 @@ interface OCRPreviewProps {
 
 export default function OCRPreview({ onExtracted, uploadType }: OCRPreviewProps) {
   const theme = useTheme();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [questions, setQuestions] = useState<ExtractedQuestion[]>([]);
-  const [dragOver, setDragOver] = useState(false);
 
-  const handleFile = useCallback((file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 1024 * 1024) return; // max 1MB
-    setImageFile(file);
-    const url = URL.createObjectURL(file);
-    setImagePreview(url);
-    setQuestions([]);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
+  // Local "upload": keep the File for OCR and return a data URL for the preview.
+  // No server round-trip; the extract step below is where the File is consumed.
+  const stageFile = useCallback(
+    (file: File): Promise<{ url: string }> =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImageFile(file);
+          setQuestions([]);
+          resolve({ url: reader.result as string });
+        };
+        reader.onerror = () => reject(new Error('Could not read image'));
+        reader.readAsDataURL(file);
+      }),
+    [],
   );
+
+  const handleImageChange = useCallback((url: string | null) => {
+    setImageUrl(url);
+    if (!url) {
+      setImageFile(null);
+      setQuestions([]);
+    }
+  }, []);
 
   const handleExtract = async () => {
     if (!imageFile || extracting) return;
@@ -98,85 +102,18 @@ export default function OCRPreview({ onExtracted, uploadType }: OCRPreviewProps)
 
   return (
     <Stack spacing={2}>
-      {/* Dropzone / Preview */}
-      {!imagePreview ? (
-        <Box
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          sx={{
-            height: 160,
-            borderRadius: 2,
-            border: `2px dashed ${dragOver ? theme.palette.primary.main : theme.palette.divider}`,
-            bgcolor: dragOver ? alpha(theme.palette.primary.main, 0.04) : 'transparent',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 1,
-            cursor: 'pointer',
-            transition: 'all 150ms',
-            '&:hover': {
-              borderColor: theme.palette.primary.main,
-              bgcolor: alpha(theme.palette.primary.main, 0.02),
-            },
-          }}
-        >
-          <CloudUploadIcon sx={{ fontSize: '2rem', color: 'text.secondary' }} />
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            Drag & drop or click to upload an image
-          </Typography>
-          <Typography variant="caption" color="text.disabled">
-            Max 1MB, image files only
-          </Typography>
-        </Box>
-      ) : (
-        <Box sx={{ position: 'relative' }}>
-          <Box
-            component="img"
-            src={imagePreview}
-            alt="Uploaded photo"
-            sx={{
-              width: '100%',
-              maxHeight: 300,
-              objectFit: 'contain',
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'grey.200',
-            }}
-          />
-          <Button
-            size="small"
-            variant="text"
-            onClick={() => {
-              setImagePreview(null);
-              setImageFile(null);
-              setQuestions([]);
-            }}
-            sx={{ position: 'absolute', top: 4, right: 4, textTransform: 'none' }}
-          >
-            Remove
-          </Button>
-        </Box>
-      )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-        }}
+      {/* Image picker (shared component: click / drop / paste, max 1MB) */}
+      <ImageUploadField
+        value={imageUrl}
+        onChange={handleImageChange}
+        upload={stageFile}
+        maxSizeMB={1}
+        height={160}
+        helperText="Paste, drop, or choose"
       />
 
       {/* Extract button */}
-      {imagePreview && questions.length === 0 && (
+      {imageUrl && questions.length === 0 && (
         <Button
           variant="contained"
           onClick={handleExtract}
@@ -275,7 +212,7 @@ export default function OCRPreview({ onExtracted, uploadType }: OCRPreviewProps)
       )}
 
       {/* Empty state after extraction */}
-      {!extracting && imagePreview && questions.length === 0 && extracting === false && (
+      {!extracting && imageUrl && questions.length === 0 && extracting === false && (
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
           Upload a photo and click "Extract Questions" to use OCR.
         </Typography>

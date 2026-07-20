@@ -4,12 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Button, Chip, Paper, CircularProgress, IconButton, Skeleton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Alert,
-  ToggleButton, ToggleButtonGroup, ImageViewerDialog,
+  ToggleButton, ToggleButtonGroup, ImageViewerDialog, ImageUploadField,
 } from '@neram/ui';
 import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
 import CategoryBadge from './CategoryBadge';
 import type { DrawingReferenceImage } from '@neram/database/types';
 
@@ -38,7 +37,7 @@ export default function ReferenceLibrary({ getToken, teacherMode }: ReferenceLib
 
   // Add-reference dialog state (teacher only)
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [tagsInput, setTagsInput] = useState('');
@@ -67,24 +66,10 @@ export default function ReferenceLibrary({ getToken, teacherMode }: ReferenceLib
     fetchRefs();
   }, [fetchRefs]);
 
-  const resetDialog = () => {
-    setFile(null);
-    setTitle('');
-    setCategory('');
-    setTagsInput('');
-    setError('');
-  };
-
-  const handleSubmit = async () => {
-    if (!file || !title.trim()) {
-      setError('Pick an image and give it a title.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
+  // Shared uploader: same endpoint/bucket/auth the old inline code used.
+  const uploadImage = useCallback(
+    async (file: File): Promise<{ url: string; path?: string }> => {
       const token = await getToken();
-      // 1. Upload the image to a public drawings bucket.
       const fd = new FormData();
       fd.append('file', file);
       fd.append('bucket', 'drawing-submissions');
@@ -95,13 +80,34 @@ export default function ReferenceLibrary({ getToken, teacherMode }: ReferenceLib
       });
       const upData = await upRes.json();
       if (!upRes.ok) throw new Error(upData.error || 'Image upload failed');
+      return { url: upData.url, path: upData.path };
+    },
+    [getToken],
+  );
 
-      // 2. Create the reference row.
+  const resetDialog = () => {
+    setImageUrl(null);
+    setTitle('');
+    setCategory('');
+    setTagsInput('');
+    setError('');
+  };
+
+  const handleSubmit = async () => {
+    if (!imageUrl || !title.trim()) {
+      setError('Pick an image and give it a title.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const token = await getToken();
+      // Image is already uploaded by ImageUploadField; just create the reference row.
       const tags = tagsInput.split(',').map((t) => t.trim()).filter(Boolean);
       const res = await fetch('/api/drawing/references', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), category: category || null, tags, image_url: upData.url }),
+        body: JSON.stringify({ title: title.trim(), category: category || null, tags, image_url: imageUrl }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not save reference');
@@ -227,25 +233,16 @@ export default function ReferenceLibrary({ getToken, teacherMode }: ReferenceLib
               {error}
             </Alert>
           )}
-          <Button
-            component="label"
-            variant="outlined"
-            startIcon={<UploadFileIcon />}
-            fullWidth
-            sx={{ textTransform: 'none', mb: 2, justifyContent: 'flex-start' }}
-          >
-            {file ? file.name : 'Choose image'}
-            <input
-              hidden
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setFile(f);
-                e.target.value = '';
-              }}
+          <Box sx={{ mb: 2 }}>
+            <ImageUploadField
+              value={imageUrl}
+              onChange={setImageUrl}
+              upload={uploadImage}
+              enableGlobalPaste
+              disabled={saving}
+              helperText="Paste, drop, or choose"
             />
-          </Button>
+          </Box>
           <TextField
             fullWidth
             size="small"

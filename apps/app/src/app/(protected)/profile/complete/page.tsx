@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Container,
@@ -10,12 +10,10 @@ import {
   Button,
   Alert,
   CircularProgress,
-  IconButton,
 } from '@neram/ui';
+import { ImageUploadField } from '@neram/ui';
 import {
-  CloudUpload,
   CheckCircleOutlined,
-  DeleteOutlined,
   CreditCard,
   AccountBox,
   ArrowBack,
@@ -39,6 +37,15 @@ const initialUploadState: UploadState = {
   error: null,
 };
 
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Could not read the file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function CompleteProfilePage() {
   const { user } = useFirebaseAuth();
   const router = useRouter();
@@ -47,37 +54,17 @@ export default function CompleteProfilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const aadharInputRef = useRef<HTMLInputElement>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = useCallback((
-    event: React.ChangeEvent<HTMLInputElement>,
-    setter: React.Dispatch<React.SetStateAction<UploadState>>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Validate file
-    if (!file.type.startsWith('image/')) {
-      setter((prev) => ({ ...prev, error: 'Please select an image file (JPG, PNG)' }));
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setter((prev) => ({ ...prev, error: 'File size must be less than 5MB' }));
-      return;
-    }
-
-    const preview = URL.createObjectURL(file);
-    setter({ file, preview, uploading: false, uploaded: false, error: null });
-  }, []);
-
-  const handleRemove = useCallback((
-    setter: React.Dispatch<React.SetStateAction<UploadState>>,
-    inputRef: React.RefObject<HTMLInputElement>
-  ) => {
-    setter(initialUploadState);
-    if (inputRef.current) inputRef.current.value = '';
-  }, []);
+  // The shared ImageUploadField picks the file (click + drop + CLIPBOARD PASTE)
+  // and hands it to us. We keep the File in state for the batched submit below,
+  // and use a data URL as the field's preview value. Validation (image type +
+  // size) is handled by the field itself.
+  const pickInto =
+    (setter: React.Dispatch<React.SetStateAction<UploadState>>) =>
+    async (file: File): Promise<{ url: string }> => {
+      const preview = await readFileAsDataURL(file);
+      setter({ file, preview, uploading: false, uploaded: false, error: null });
+      return { url: preview };
+    };
 
   const handleSubmit = async () => {
     if (!user) return;
@@ -165,61 +152,14 @@ export default function CompleteProfilePage() {
           </Typography>
         </Box>
 
-        {aadhar.preview ? (
-          <Box position="relative" mb={1}>
-            <img
-              src={aadhar.preview}
-              alt="Aadhar card preview"
-              style={{
-                width: '100%',
-                maxHeight: 200,
-                objectFit: 'contain',
-                borderRadius: 8,
-                border: '1px solid #e0e0e0',
-              }}
-            />
-            <IconButton
-              size="small"
-              onClick={() => handleRemove(setAadhar, aadharInputRef)}
-              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'background.paper' }}
-            >
-              <DeleteOutlined fontSize="small" />
-            </IconButton>
-          </Box>
-        ) : (
-          <Box
-            onClick={() => aadharInputRef.current?.click()}
-            sx={{
-              border: '2px dashed',
-              borderColor: 'grey.300',
-              borderRadius: 2,
-              p: 4,
-              textAlign: 'center',
-              cursor: 'pointer',
-              '&:hover': { borderColor: 'primary.main', bgcolor: 'primary.50' },
-              transition: 'all 0.2s',
-            }}
-          >
-            <CloudUpload sx={{ fontSize: 40, color: 'grey.400', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">
-              Tap to upload Aadhar card (front side)
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              JPG, PNG - Max 5MB
-            </Typography>
-          </Box>
-        )}
-
-        <input
-          ref={aadharInputRef}
-          type="file"
+        <ImageUploadField
+          value={aadhar.preview}
+          onChange={(url) => { if (!url) setAadhar(initialUploadState); }}
+          upload={pickInto(setAadhar)}
           accept="image/*"
-          hidden
-          onChange={(e) => handleFileSelect(e, setAadhar)}
+          maxSizeMB={5}
+          helperText="Tap to upload Aadhar card (front side)"
         />
-        {aadhar.error && (
-          <Alert severity="error" sx={{ mt: 1 }}>{aadhar.error}</Alert>
-        )}
       </Paper>
 
       {/* Passport Photo Upload */}
@@ -234,61 +174,14 @@ export default function CompleteProfilePage() {
           </Typography>
         </Box>
 
-        {photo.preview ? (
-          <Box position="relative" mb={1} display="flex" justifyContent="center">
-            <img
-              src={photo.preview}
-              alt="Passport photo preview"
-              style={{
-                width: 150,
-                height: 200,
-                objectFit: 'cover',
-                borderRadius: 8,
-                border: '1px solid #e0e0e0',
-              }}
-            />
-            <IconButton
-              size="small"
-              onClick={() => handleRemove(setPhoto, photoInputRef)}
-              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'background.paper' }}
-            >
-              <DeleteOutlined fontSize="small" />
-            </IconButton>
-          </Box>
-        ) : (
-          <Box
-            onClick={() => photoInputRef.current?.click()}
-            sx={{
-              border: '2px dashed',
-              borderColor: 'grey.300',
-              borderRadius: 2,
-              p: 4,
-              textAlign: 'center',
-              cursor: 'pointer',
-              '&:hover': { borderColor: 'primary.main', bgcolor: 'primary.50' },
-              transition: 'all 0.2s',
-            }}
-          >
-            <CloudUpload sx={{ fontSize: 40, color: 'grey.400', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">
-              Tap to upload passport-sized photograph
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              JPG, PNG - Max 5MB
-            </Typography>
-          </Box>
-        )}
-
-        <input
-          ref={photoInputRef}
-          type="file"
+        <ImageUploadField
+          value={photo.preview}
+          onChange={(url) => { if (!url) setPhoto(initialUploadState); }}
+          upload={pickInto(setPhoto)}
           accept="image/*"
-          hidden
-          onChange={(e) => handleFileSelect(e, setPhoto)}
+          maxSizeMB={5}
+          helperText="Tap to upload passport-sized photograph"
         />
-        {photo.error && (
-          <Alert severity="error" sx={{ mt: 1 }}>{photo.error}</Alert>
-        )}
       </Paper>
 
       {/* Actions */}

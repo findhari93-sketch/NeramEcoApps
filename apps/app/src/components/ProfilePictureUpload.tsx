@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Avatar,
@@ -11,11 +11,11 @@ import {
   DialogActions,
   Slider,
   Typography,
-  IconButton,
   CircularProgress,
   useTheme,
   useMediaQuery,
 } from '@neram/ui';
+import { ImageUploadField } from '@neram/ui';
 import Cropper from 'react-easy-crop';
 import type { Area, Point } from 'react-easy-crop';
 
@@ -54,36 +54,22 @@ export default function ProfilePictureUpload({
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      alert('Please select a valid image file (JPEG, PNG, WebP, or GIF)');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
-      return;
-    }
-
-    // Read file and show cropper
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageSrc(reader.result as string);
-      setDialogOpen(true);
-      setCrop({ x: 0, y: 0 });
-      setZoom(1);
-    };
-    reader.readAsDataURL(file);
-
-    // Reset input
-    e.target.value = '';
+  // Picker feeds the existing cropper. The shared ImageUploadField gives us
+  // click + drop + CLIPBOARD PASTE, then hands us the File via `upload`. We read
+  // it into the cropper and open the crop dialog. No real upload happens here,
+  // the crop's `onUpload` still does the actual work, so the field stays empty.
+  const openCropperWithFile = useCallback(async (file: File): Promise<{ url: string }> => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Could not read the image'));
+      reader.readAsDataURL(file);
+    });
+    setImageSrc(dataUrl);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setDialogOpen(true);
+    return { url: dataUrl };
   }, []);
 
   const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
@@ -152,25 +138,7 @@ export default function ProfilePictureUpload({
             width: size,
             height: size,
             fontSize: size / 3,
-            cursor: editable ? 'pointer' : 'default',
-            '&:hover': editable
-              ? {
-                  opacity: 0.8,
-                  '&::after': {
-                    content: '"Change"',
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    color: 'white',
-                    borderRadius: '50%',
-                  },
-                }
-              : {},
           }}
-          onClick={editable ? () => fileInputRef.current?.click() : undefined}
         >
           {userName.charAt(0).toUpperCase()}
         </Avatar>
@@ -187,36 +155,31 @@ export default function ProfilePictureUpload({
         )}
       </Box>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        onChange={handleFileSelect}
-        style={{ display: 'none' }}
-      />
-
-      {/* Action buttons */}
+      {/* Picker: click + drop + paste, feeds the cropper */}
       {editable && (
-        <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'center' }}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => fileInputRef.current?.click()}
+        <Box sx={{ mt: 2, maxWidth: 280, mx: 'auto' }}>
+          <ImageUploadField
+            value={null}
+            onChange={() => {}}
+            upload={openCropperWithFile}
+            accept="image/*"
+            maxSizeMB={5}
+            height={110}
+            helperText="Paste, drop, or choose a photo"
             disabled={uploading}
-          >
-            Change
-          </Button>
+          />
           {currentAvatarUrl && onRemove && (
-            <Button
-              variant="text"
-              size="small"
-              color="error"
-              onClick={handleRemove}
-              disabled={uploading}
-            >
-              Remove
-            </Button>
+            <Box sx={{ mt: 1, textAlign: 'center' }}>
+              <Button
+                variant="text"
+                size="small"
+                color="error"
+                onClick={handleRemove}
+                disabled={uploading}
+              >
+                Remove photo
+              </Button>
+            </Box>
           )}
         </Box>
       )}

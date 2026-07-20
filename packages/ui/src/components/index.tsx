@@ -459,6 +459,11 @@ export function EmptyState({
 export { DocumentUpload } from './DocumentUpload';
 export type { DocumentUploadProps } from './DocumentUpload';
 
+export { ImageUploadField } from './ImageUploadField';
+export type { ImageUploadFieldProps } from './ImageUploadField';
+export { ImageUploadList } from './ImageUploadList';
+export type { ImageUploadListProps } from './ImageUploadList';
+
 // Chat Widget Component
 export { ChatWidget } from './ChatWidget';
 export type {

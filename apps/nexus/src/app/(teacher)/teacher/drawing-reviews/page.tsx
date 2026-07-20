@@ -182,6 +182,9 @@ export default function DrawingReviewsPage() {
                       <Typography variant="body2" fontWeight={600} noWrap>{s.student?.name || 'Student'}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 0.5, mb: 0.25, flexWrap: 'wrap' }}>
+                      {(s as any).source_type === 'assignment' && (
+                        <Chip label="Assignment" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                      )}
                       {!isCompact && s.question && <CategoryBadge category={s.question.category} />}
                       {(s as any).thread_info?.total_attempts > 1 && (
                         <Chip

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -15,6 +15,7 @@ import {
   useTheme,
   useMediaQuery,
   Alert,
+  ImageUploadField,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import CloudSyncIcon from '@mui/icons-material/CloudSync';
@@ -45,30 +46,20 @@ export default function ProfilePhotoUpload({
   const [uploading, setUploading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      alert('Please select a valid image file (JPEG, PNG, WebP, or GIF)');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageSrc(reader.result as string);
-      setCrop({ x: 0, y: 0 });
-      setZoom(1);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+  // The shared picker only SELECTS the file (paste / drop / choose); it does not
+  // upload here. We read it into a data URL to feed the existing cropper below.
+  // Type/size are validated by ImageUploadField (accept + maxSizeMB).
+  const pickImage = useCallback(async (file: File): Promise<{ url: string }> => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read image'));
+      reader.readAsDataURL(file);
+    });
+    setImageSrc(dataUrl);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    return { url: dataUrl };
   }, []);
 
   const onCropComplete = useCallback((_: Area, croppedPixels: Area) => {
@@ -156,46 +147,20 @@ export default function ProfilePhotoUpload({
 
       <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
         {!imageSrc ? (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: isMobile ? '50vh' : 300,
-              gap: 2,
-              p: 4,
-            }}
-          >
-            <Box
-              sx={{
-                width: 120,
-                height: 120,
-                borderRadius: '50%',
-                border: '3px dashed',
-                borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                mb: 1,
-              }}
-            >
-              <Typography variant="h4" color="text.secondary">+</Typography>
-            </Box>
-            <Typography variant="body1" sx={{ fontWeight: 500 }}>
-              Choose a photo
-            </Typography>
-            <Typography variant="body2" color="text.secondary" textAlign="center">
+          <Box sx={{ p: 3, minHeight: isMobile ? '50vh' : 300 }}>
+            <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 2 }}>
               JPEG, PNG, WebP or GIF. Max 5MB.
               {isMobile ? ' Use pinch to zoom after selecting.' : ' Use the slider to zoom after selecting.'}
             </Typography>
-            <Button
-              variant="contained"
-              onClick={() => fileInputRef.current?.click()}
-              sx={{ mt: 1, minWidth: 160, minHeight: 48 }}
-            >
-              Select Photo
-            </Button>
+            <ImageUploadField
+              value={null}
+              onChange={() => { /* handled by pickImage → cropper */ }}
+              upload={pickImage}
+              label="Choose a photo"
+              helperText="Paste, drop, or choose a photo"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              maxSizeMB={5}
+            />
           </Box>
         ) : (
           <>
@@ -251,14 +216,6 @@ export default function ProfilePhotoUpload({
             )}
           </>
         )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
       </DialogContent>
 
       {imageSrc && (

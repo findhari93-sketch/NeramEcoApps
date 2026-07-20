@@ -14,8 +14,8 @@ import {
   Chip,
   Divider,
   DownloadIcon,
-  UploadIcon,
 } from '@neram/ui';
+import { ImageUploadField } from '@neram/ui';
 
 type Mode = 'photograph' | 'signature';
 
@@ -70,7 +70,6 @@ export default function ImageCropPage() {
   const [mode, setMode] = useState<Mode>('photograph');
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
 
   // Crop controls (slider-based approach)
   const [zoom, setZoom] = useState(1);
@@ -86,7 +85,6 @@ export default function ImageCropPage() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const config = MODE_CONFIGS[mode];
 
@@ -122,24 +120,16 @@ export default function ImageCropPage() {
     [imageUrl, croppedUrl]
   );
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFileSelect(file);
+  // Feed the shared picker's File into the existing canvas cropper. The field
+  // handles click + drag/drop + CLIPBOARD PASTE; no upload happens (this tool is
+  // 100% client-side), so we just load the image and keep the field empty.
+  const handlePickImage = useCallback(
+    async (file: File): Promise<{ url: string }> => {
+      handleFileSelect(file);
+      return { url: '' };
     },
     [handleFileSelect]
   );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setDragOver(false);
-  }, []);
 
   // Draw preview whenever image, zoom, or offsets change
   useEffect(() => {
@@ -325,50 +315,15 @@ export default function ImageCropPage() {
         <Grid item xs={12} md={5}>
           {/* Upload Area */}
           {!image ? (
-            <Paper
-              sx={{
-                p: { xs: 3, md: 4 },
-                textAlign: 'center',
-                border: 2,
-                borderStyle: 'dashed',
-                borderColor: dragOver ? 'primary.main' : 'divider',
-                bgcolor: dragOver ? 'action.hover' : 'background.paper',
-                cursor: 'pointer',
-                transition: 'all 200ms',
-                minHeight: 200,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <UploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Upload {config.label}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Drag & drop or click to select
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Supports JPG, PNG, WEBP
-              </Typography>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileSelect(file);
-                  // Reset the input so the same file can be re-selected
-                  e.target.value = '';
-                }}
-              />
-            </Paper>
+            <ImageUploadField
+              value={null}
+              onChange={() => {}}
+              upload={handlePickImage}
+              accept="image/*"
+              height={200}
+              helperText={`Upload ${config.label}: drop, paste, or choose`}
+              enableGlobalPaste
+            />
           ) : (
             <Paper sx={{ p: { xs: 2, md: 3 } }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>

@@ -21,6 +21,7 @@ import {
   Switch,
   Chip,
   Skeleton,
+  ImageUploadField,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -87,8 +88,19 @@ export default function EditSocialProofPage() {
   const [success, setSuccess] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadingParentPhoto, setUploadingParentPhoto] = useState(false);
+
+  // Shared uploader for the ImageUploadField widgets (same endpoint/bucket as before).
+  const uploadSocialImage = async (file: File): Promise<{ url: string }> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', 'image');
+    const res = await fetch('/api/social-proofs/upload', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error || 'Upload failed');
+    }
+    return { url: json.url };
+  };
 
   const [formData, setFormData] = useState<FormData>({
     type: 'video',
@@ -468,43 +480,12 @@ export default function EditSocialProofPage() {
                     </Box>
 
                     <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Parent Photo (Optional)
-                      </Typography>
-                      {formData.parent_photo_url && (
-                        <Box sx={{ mb: 1 }}>
-                          <Box
-                            component="img"
-                            src={formData.parent_photo_url}
-                            alt="Parent photo"
-                            sx={{
-                              width: 120,
-                              height: 120,
-                              borderRadius: 1,
-                              objectFit: 'cover',
-                              border: '1px solid',
-                              borderColor: 'divider',
-                            }}
-                          />
-                        </Box>
-                      )}
-                      <Button
-                        variant="outlined"
-                        component="label"
-                        startIcon={uploadingParentPhoto ? <CircularProgress size={16} /> : <CloudUploadIcon />}
-                        disabled={uploadingParentPhoto}
-                      >
-                        {uploadingParentPhoto ? 'Uploading...' : formData.parent_photo_url ? 'Replace Photo' : 'Upload Photo'}
-                        <input
-                          type="file"
-                          hidden
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileUpload(file, 'image', setUploadingParentPhoto, 'parent_photo_url');
-                          }}
-                        />
-                      </Button>
+                      <ImageUploadField
+                        label="Parent Photo (Optional)"
+                        value={formData.parent_photo_url || null}
+                        onChange={(url) => handleChange('parent_photo_url', url || '')}
+                        upload={uploadSocialImage}
+                      />
                     </Box>
 
                     <TextField
@@ -527,42 +508,12 @@ export default function EditSocialProofPage() {
                     </Typography>
 
                     <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Screenshot Image
-                      </Typography>
-                      {formData.image_url && (
-                        <Box sx={{ mb: 1 }}>
-                          <Box
-                            component="img"
-                            src={formData.image_url}
-                            alt="Screenshot"
-                            sx={{
-                              width: '100%',
-                              maxWidth: 480,
-                              borderRadius: 1,
-                              border: '1px solid',
-                              borderColor: 'divider',
-                            }}
-                          />
-                        </Box>
-                      )}
-                      <Button
-                        variant="outlined"
-                        component="label"
-                        startIcon={uploadingImage ? <CircularProgress size={16} /> : <CloudUploadIcon />}
-                        disabled={uploadingImage}
-                      >
-                        {uploadingImage ? 'Uploading...' : formData.image_url ? 'Replace Image' : 'Upload Image'}
-                        <input
-                          type="file"
-                          hidden
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileUpload(file, 'image', setUploadingImage, 'image_url');
-                          }}
-                        />
-                      </Button>
+                      <ImageUploadField
+                        label="Screenshot Image"
+                        value={formData.image_url || null}
+                        onChange={(url) => handleChange('image_url', url || '')}
+                        upload={uploadSocialImage}
+                      />
                     </Box>
 
                     <TextField

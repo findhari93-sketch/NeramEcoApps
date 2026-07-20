@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Paper, Typography, TextField, MenuItem, Alert,
   Stepper, Step, StepLabel, CircularProgress, Divider, Chip,
+  ImageUploadField,
 } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -116,8 +116,23 @@ export default function CompleteProfilePage() {
   const [reportAmount, setReportAmount] = useState('');
   const [reportNotes, setReportNotes] = useState('');
   const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [reportingPayment, setReportingPayment] = useState(false);
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // The shared field only PICKS the receipt (paste / drop / choose). The file is
+  // uploaded to /api/student/fee-report on submit; here we just capture the File
+  // and return a data URL so the field can show a preview (image thumb or PDF icon).
+  const pickProof = useCallback(async (f: File): Promise<{ url: string }> => {
+    setProofFile(f);
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(f);
+    });
+    return { url: dataUrl };
+  }, []);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -300,6 +315,7 @@ export default function CompleteProfilePage() {
       setReportAmount('');
       setReportNotes('');
       setProofFile(null);
+      setProofPreview(null);
       fetchFees();
     } catch (err: any) {
       setError(err.message);
@@ -514,20 +530,17 @@ export default function CompleteProfilePage() {
                   onChange={(e) => setReportNotes(e.target.value)}
                   fullWidth size="small" placeholder="e.g. UPI transaction ID, bank reference"
                 />
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<CloudUploadIcon />}
-                  sx={{ textTransform: 'none', borderRadius: 1.5 }}
-                >
-                  {proofFile ? proofFile.name : 'Upload Payment Proof'}
-                  <input
-                    type="file"
-                    hidden
-                    accept="image/*,.pdf"
-                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                  />
-                </Button>
+                <ImageUploadField
+                  value={proofPreview}
+                  onChange={(url) => {
+                    setProofPreview(url);
+                    if (!url) setProofFile(null);
+                  }}
+                  upload={pickProof}
+                  accept="image/*,.pdf"
+                  helperText="Upload Payment Proof"
+                  maxSizeMB={10}
+                />
                 <Button
                   variant="contained"
                   onClick={handleReportPayment}

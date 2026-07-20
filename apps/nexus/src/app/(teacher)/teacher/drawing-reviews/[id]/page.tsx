@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, UserAvatar, Chip, Paper,
-  Button, useMediaQuery, useTheme, Switch, Snackbar,
+  Button, useMediaQuery, useTheme, Switch, Snackbar, alpha,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ReplayIcon from '@mui/icons-material/Replay';
@@ -27,10 +28,19 @@ import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 export default function DrawingReviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { getToken } = useNexusAuthContext();
   const { refreshBadges } = useNavBadges();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Where "Back" and post-review navigation return to. When this drawing was
+  // opened from a specific assignment (roster link carries ?assignment=<id>),
+  // return to that assignment instead of the shared Drawing Reviews queue.
+  const fromAssignmentId = searchParams.get('assignment');
+  const backHref = fromAssignmentId
+    ? `/teacher/assignments/${fromAssignmentId}`
+    : '/teacher/drawing-reviews';
 
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +83,8 @@ export default function DrawingReviewDetailPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Delete failed');
-      router.push('/teacher/drawing-reviews');
+      router.push(backHref);
+      router.refresh();
     } catch {
       setDeleting(false);
       setDeleteDialogOpen(false);
@@ -189,7 +200,9 @@ export default function DrawingReviewDetailPage() {
       if (!res.ok) throw new Error('Failed to save review');
 
       refreshBadges();
-      router.push('/teacher/drawing-reviews');
+      router.push(backHref);
+      // Refresh so the assignment roster / queue reflect the new reviewed state.
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -212,6 +225,38 @@ export default function DrawingReviewDetailPage() {
 
   const timeAgo = getTimeAgo(submission.submitted_at);
   const sub = submission as any;
+
+  // This drawing belongs to a class assignment when it was opened from one
+  // (?assignment=) or the submission itself carries an assignment_id. Show a
+  // context bar so the teacher knows they are grading an assignment, with a
+  // shortcut back into it (useful when reached from the shared queue).
+  const assignmentId: string | null = fromAssignmentId ?? (sub.assignment_id as string | null);
+  const assignmentContextBar = assignmentId ? (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        px: { xs: 1.5, md: 2 },
+        py: 0.75,
+        bgcolor: alpha(theme.palette.primary.main, 0.06),
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <AssignmentOutlinedIcon sx={{ fontSize: 18, color: 'primary.main' }} />
+      <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, color: 'primary.dark' }} noWrap>
+        Assignment submission
+      </Typography>
+      <Button
+        size="small"
+        onClick={() => router.push(`/teacher/assignments/${assignmentId}`)}
+        sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.72rem' }}
+      >
+        Open assignment
+      </Button>
+    </Box>
+  ) : null;
 
   // Action bar: fixed on mobile (above BottomNav), inline on desktop
   const actionBar = isEditMode ? (
@@ -377,7 +422,7 @@ export default function DrawingReviewDetailPage() {
             display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
             bgcolor: '#fff', borderBottom: '1px solid', borderColor: 'divider',
           }}>
-            <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small" sx={{ p: 0.5 }}>
+            <IconButton onClick={() => router.push(backHref)} size="small" sx={{ p: 0.5 }}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
             <UserAvatar
@@ -406,6 +451,8 @@ export default function DrawingReviewDetailPage() {
               <MoreVertIcon fontSize="small" />
             </IconButton>
           </Box>
+
+          {assignmentContextBar}
 
           {/* Image with toggle tabs + region annotations */}
           <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', px: 0.5, pt: 0.5, pb: 0.5 }}>
@@ -543,7 +590,7 @@ export default function DrawingReviewDetailPage() {
           px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
           bgcolor: 'background.paper', flexShrink: 0,
         }}>
-          <IconButton onClick={() => router.push('/teacher/drawing-reviews')} size="small">
+          <IconButton onClick={() => router.push(backHref)} size="small">
             <ArrowBackIcon />
           </IconButton>
           <UserAvatar
@@ -570,6 +617,8 @@ export default function DrawingReviewDetailPage() {
             <MoreVertIcon />
           </IconButton>
         </Box>
+
+        {assignmentContextBar}
 
         {/* Image with toggle + region annotations */}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5, bgcolor: '#e8e8e8' }}>

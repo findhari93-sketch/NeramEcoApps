@@ -4,10 +4,8 @@
 import { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, TextField, MenuItem, Alert, Box, Typography, IconButton,
+  Button, TextField, MenuItem, Alert, Box, ImageUploadField,
 } from '@neram/ui';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import DeleteIcon from '@mui/icons-material/Delete';
 import { EXPENSE_CATEGORIES } from './ExpenseConstants';
 
 interface AddExpenseDialogProps {
@@ -32,8 +30,7 @@ export default function AddExpenseDialog({
   const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
   const [assignmentId, setAssignmentId] = useState('');
   const [notes, setNotes] = useState('');
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
 
   useEffect(() => {
     if (editData) {
@@ -43,7 +40,7 @@ export default function AddExpenseDialog({
       setTransactionDate(editData.transaction_date || new Date().toISOString().split('T')[0]);
       setAssignmentId(editData.assignment_id || '');
       setNotes(editData.notes || '');
-      setReceiptPreview(editData.receipt_url || '');
+      setReceiptUrl(editData.receipt_url || '');
     } else {
       setCategory('');
       setAmount('');
@@ -51,17 +48,18 @@ export default function AddExpenseDialog({
       setTransactionDate(new Date().toISOString().split('T')[0]);
       setAssignmentId(preSelectedAssignment?.id || '');
       setNotes('');
-      setReceiptFile(null);
-      setReceiptPreview('');
+      setReceiptUrl('');
     }
   }, [editData, preSelectedAssignment, open]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setReceiptFile(file);
-      setReceiptPreview(URL.createObjectURL(file));
-    }
+  // Injected uploader: same endpoint/bucket as before, returns { url }.
+  const uploadReceipt = async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const uploadRes = await fetch('/api/expenses/upload-receipt', { method: 'POST', body: formData });
+    if (!uploadRes.ok) throw new Error('Failed to upload receipt');
+    const uploadData = await uploadRes.json();
+    return { url: uploadData.url };
   };
 
   const handleSubmit = async () => {
@@ -78,18 +76,6 @@ export default function AddExpenseDialog({
     setError('');
 
     try {
-      let receiptUrl = editData?.receipt_url || null;
-
-      // Upload receipt if new file selected
-      if (receiptFile) {
-        const formData = new FormData();
-        formData.append('file', receiptFile);
-        const uploadRes = await fetch('/api/expenses/upload-receipt', { method: 'POST', body: formData });
-        if (!uploadRes.ok) throw new Error('Failed to upload receipt');
-        const uploadData = await uploadRes.json();
-        receiptUrl = uploadData.url;
-      }
-
       const payload = {
         type: 'expense',
         category,
@@ -97,7 +83,7 @@ export default function AddExpenseDialog({
         description,
         transaction_date: transactionDate,
         assignment_id: assignmentId || null,
-        receipt_url: receiptUrl,
+        receipt_url: receiptUrl || null,
         notes: notes || null,
         created_by: adminId,
       };
@@ -146,20 +132,12 @@ export default function AddExpenseDialog({
 
         {/* Receipt upload */}
         <Box sx={{ mt: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Receipt (optional)</Typography>
-          {receiptPreview ? (
-            <Box sx={{ position: 'relative', display: 'inline-block' }}>
-              <img src={receiptPreview} alt="Receipt" style={{ maxWidth: 200, maxHeight: 150, borderRadius: 8 }} />
-              <IconButton size="small" sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'background.paper' }} onClick={() => { setReceiptFile(null); setReceiptPreview(''); }}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Box>
-          ) : (
-            <Button variant="outlined" component="label" startIcon={<CloudUploadIcon />} size="small">
-              Upload Receipt
-              <input type="file" hidden accept="image/*" onChange={handleFileChange} />
-            </Button>
-          )}
+          <ImageUploadField
+            label="Receipt (optional)"
+            value={receiptUrl || null}
+            onChange={(url) => setReceiptUrl(url || '')}
+            upload={uploadReceipt}
+          />
         </Box>
       </DialogContent>
       <DialogActions>

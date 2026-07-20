@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Typography,
@@ -10,17 +10,8 @@ import {
   Alert,
   CircularProgress,
   Chip,
-  IconButton,
-  LinearProgress,
+  ImageUploadField,
 } from '@neram/ui';
-import {
-  CloudUploadOutlined,
-  CheckCircleOutlined,
-  DeleteOutlined,
-  DescriptionOutlined,
-  ImageOutlined,
-  PictureAsPdfOutlined,
-} from '@mui/icons-material';
 
 interface UploadedDoc {
   url: string;
@@ -45,9 +36,6 @@ interface ScholarshipFormProps {
   /** Translation function */
   t: (key: string) => string;
 }
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'pdf'];
 
 interface DocumentField {
   key: 'school_id_card' | 'income_certificate' | 'aadhar_card' | 'mark_sheet';
@@ -83,13 +71,6 @@ const DOCUMENT_FIELDS: DocumentField[] = [
   },
 ];
 
-function getFileIcon(fileName: string) {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  if (ext === 'pdf') return <PictureAsPdfOutlined color="error" />;
-  if (['jpg', 'jpeg', 'png'].includes(ext || '')) return <ImageOutlined color="primary" />;
-  return <DescriptionOutlined color="action" />;
-}
-
 export default function ScholarshipForm({
   existingDocs,
   isResubmission = false,
@@ -113,85 +94,43 @@ export default function ScholarshipForm({
   });
 
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
-  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  const handleFileSelect = useCallback(
-    async (docType: string, file: File) => {
-      // Validate extension
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
-        setUploadErrors((prev) => ({
-          ...prev,
-          [docType]: t('invalidFormat'),
-        }));
-        return;
+  // Injected uploader factory for the shared ImageUploadField.
+  // Same endpoint/auth (Firebase idToken via getAuthToken) as before; returns { url }.
+  // We keep a per-field `uploading` flag so the submit button stays disabled mid-upload.
+  const makeUpload = (docType: string) => async (file: File): Promise<{ url: string }> => {
+    setUploading((prev) => ({ ...prev, [docType]: true }));
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Not authenticated');
       }
 
-      // Validate size
-      if (file.size > MAX_FILE_SIZE) {
-        setUploadErrors((prev) => ({
-          ...prev,
-          [docType]: t('fileTooLarge'),
-        }));
-        return;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', docType);
+
+      const response = await fetch('/api/scholarship/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed');
       }
 
-      // Clear errors
-      setUploadErrors((prev) => ({ ...prev, [docType]: '' }));
-      setUploading((prev) => ({ ...prev, [docType]: true }));
-
-      try {
-        const token = await getAuthToken();
-        if (!token) {
-          throw new Error('Not authenticated');
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('type', docType);
-
-        const response = await fetch('/api/scholarship/upload', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.error || 'Upload failed');
-        }
-
-        setUploads((prev) => ({
-          ...prev,
-          [docType]: {
-            url: result.url,
-            fileName: file.name,
-            type: docType,
-          },
-        }));
-      } catch (error: any) {
-        setUploadErrors((prev) => ({
-          ...prev,
-          [docType]: error.message || t('uploadError'),
-        }));
-      } finally {
-        setUploading((prev) => ({ ...prev, [docType]: false }));
-      }
-    },
-    [getAuthToken, t]
-  );
-
-  const handleRemoveDoc = (docType: string) => {
-    setUploads((prev) => ({ ...prev, [docType]: null }));
-    setUploadErrors((prev) => ({ ...prev, [docType]: '' }));
+      return { url: result.url };
+    } finally {
+      setUploading((prev) => ({ ...prev, [docType]: false }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -278,19 +217,13 @@ export default function ScholarshipForm({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
         {DOCUMENT_FIELDS.map((field) => {
           const doc = uploads[field.key];
-          const isFieldUploading = uploading[field.key];
-          const error = uploadErrors[field.key];
 
           return (
             <Card
               key={field.key}
               variant="outlined"
               sx={{
-                borderColor: error
-                  ? 'error.main'
-                  : doc
-                  ? 'success.main'
-                  : 'divider',
+                borderColor: doc ? 'success.main' : 'divider',
                 transition: 'border-color 0.2s',
               }}
             >
@@ -320,109 +253,19 @@ export default function ScholarshipForm({
                   </Box>
                 </Box>
 
-                {/* Upload progress */}
-                {isFieldUploading && (
-                  <Box sx={{ mb: 1.5 }}>
-                    <LinearProgress />
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                      {t('uploading')}
-                    </Typography>
-                  </Box>
-                )}
-
-                {/* Uploaded file */}
-                {doc && !isFieldUploading && (
-                  <Box
-                    display="flex"
-                    alignItems="center"
-                    gap={1}
-                    sx={{
-                      p: 1,
-                      borderRadius: 1,
-                      bgcolor: 'success.50',
-                      border: 1,
-                      borderColor: 'success.200',
-                      mb: 1,
-                    }}
-                  >
-                    {getFileIcon(doc.fileName)}
-                    <Box flex={1} minWidth={0}>
-                      <Typography
-                        variant="body2"
-                        fontWeight={500}
-                        noWrap
-                        title={doc.fileName}
-                      >
-                        {doc.fileName}
-                      </Typography>
-                      <Typography variant="caption" color="success.main">
-                        <CheckCircleOutlined sx={{ fontSize: 12, mr: 0.5, verticalAlign: 'middle' }} />
-                        {t('uploadSuccess')}
-                      </Typography>
-                    </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleRemoveDoc(field.key)}
-                      sx={{ color: 'text.secondary' }}
-                    >
-                      <DeleteOutlined fontSize="small" />
-                    </IconButton>
-                  </Box>
-                )}
-
-                {/* Error message */}
-                {error && (
-                  <Typography variant="caption" color="error" sx={{ mb: 1, display: 'block' }}>
-                    {error}
-                  </Typography>
-                )}
-
-                {/* Upload button */}
-                {!doc && !isFieldUploading && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<CloudUploadOutlined />}
-                    onClick={() => fileInputRefs.current[field.key]?.click()}
-                    fullWidth
-                    sx={{
-                      minHeight: 48,
-                      borderStyle: 'dashed',
-                      textTransform: 'none',
-                    }}
-                  >
-                    Upload {t(field.labelKey)}
-                  </Button>
-                )}
-
-                {/* Replace button when already uploaded */}
-                {doc && !isFieldUploading && (
-                  <Button
-                    variant="text"
-                    size="small"
-                    startIcon={<CloudUploadOutlined />}
-                    onClick={() => fileInputRefs.current[field.key]?.click()}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Replace
-                  </Button>
-                )}
-
-                {/* Hidden file input */}
-                <input
-                  ref={(el) => {
-                    fileInputRefs.current[field.key] = el;
-                  }}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  hidden
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleFileSelect(field.key, file);
-                      // Reset input so same file can be re-selected
-                      e.target.value = '';
-                    }
-                  }}
+                <ImageUploadField
+                  value={doc?.url || null}
+                  onChange={(url) =>
+                    setUploads((prev) => ({
+                      ...prev,
+                      [field.key]: url
+                        ? { url, fileName: t(field.labelKey), type: field.key }
+                        : null,
+                    }))
+                  }
+                  upload={makeUpload(field.key)}
+                  accept="image/*,.pdf"
+                  maxSizeMB={5}
                 />
               </CardContent>
             </Card>

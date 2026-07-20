@@ -17,13 +17,11 @@ import {
   Alert,
   InputAdornment,
   Select,
+  ImageUploadField,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import { IconButton, Chip } from '@neram/ui';
+import { IconButton } from '@neram/ui';
 
 interface FeeStructure {
   id: string;
@@ -110,9 +108,24 @@ export default function GenerateLinkDialog({
   // Notes
   const [adminNotes, setAdminNotes] = useState('');
 
-  // Payment proof
-  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
-  const [uploadingProof, setUploadingProof] = useState(false);
+  // Payment proof (uploaded immediately via the shared ImageUploadField)
+  const [paymentProofUrl, setPaymentProofUrl] = useState<string>('');
+
+  // Injected uploader: same endpoint/bucket as before, returns { url }.
+  const uploadPaymentProof = async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const uploadRes = await fetch('/api/direct-enrollment/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!uploadRes.ok) {
+      const errData = await uploadRes.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to upload payment proof');
+    }
+    const uploadData = await uploadRes.json();
+    return { url: uploadData.url };
+  };
 
   // Data
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
@@ -224,7 +237,7 @@ export default function GenerateLinkDialog({
     setTransactionReference('');
     setPaymentDate(getToday());
     setAdminNotes('');
-    setPaymentProofFile(null);
+    setPaymentProofUrl('');
     setError('');
     prevFinalFeeRef.current = 0;
   };
@@ -254,25 +267,6 @@ export default function GenerateLinkDialog({
     setError('');
 
     try {
-      // Upload payment proof first if attached
-      let paymentProofUrl: string | undefined;
-      if (paymentProofFile) {
-        setUploadingProof(true);
-        const formData = new FormData();
-        formData.append('file', paymentProofFile);
-        const uploadRes = await fetch('/api/direct-enrollment/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        if (!uploadRes.ok) {
-          const errData = await uploadRes.json().catch(() => ({}));
-          throw new Error(errData.error || 'Failed to upload payment proof');
-        }
-        const uploadData = await uploadRes.json();
-        paymentProofUrl = uploadData.url;
-        setUploadingProof(false);
-      }
-
       // Build full phone with country prefix
       const fullPhone = studentPhone.trim()
         ? `${selectedCountry.prefix}${studentPhone.trim()}`
@@ -297,7 +291,7 @@ export default function GenerateLinkDialog({
           transactionReference: transactionReference.trim() || undefined,
           paymentDate: paymentDate || undefined,
           adminNotes: adminNotes.trim() || undefined,
-          paymentProofUrl,
+          paymentProofUrl: paymentProofUrl || undefined,
         }),
       });
 
@@ -671,64 +665,14 @@ export default function GenerateLinkDialog({
             </Box>
 
             {/* Payment Proof Upload */}
-            {!paymentProofFile ? (
-              <Button
-                component="label"
-                variant="outlined"
-                fullWidth
-                startIcon={<CloudUploadIcon />}
-                sx={{
-                  borderRadius: 1,
-                  textTransform: 'none',
-                  borderStyle: 'dashed',
-                  color: 'text.secondary',
-                  py: 1.2,
-                }}
-              >
-                Attach Payment Proof (optional)
-                <input
-                  type="file"
-                  hidden
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > 5 * 1024 * 1024) {
-                        setError('File too large. Maximum 5MB.');
-                        return;
-                      }
-                      setPaymentProofFile(file);
-                    }
-                  }}
-                />
-              </Button>
-            ) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  p: 1,
-                  border: '1px solid',
-                  borderColor: 'success.light',
-                  borderRadius: 1,
-                  bgcolor: 'success.50',
-                }}
-              >
-                <InsertDriveFileIcon color="success" fontSize="small" />
-                <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {paymentProofFile.name}
-                </Typography>
-                <Chip
-                  label={`${(paymentProofFile.size / 1024).toFixed(0)} KB`}
-                  size="small"
-                  variant="outlined"
-                />
-                <IconButton size="small" onClick={() => setPaymentProofFile(null)}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            )}
+            <ImageUploadField
+              label="Payment Proof (optional)"
+              value={paymentProofUrl || null}
+              onChange={(url) => setPaymentProofUrl(url || '')}
+              upload={uploadPaymentProof}
+              accept="image/*,.pdf"
+              maxSizeMB={5}
+            />
           </Box>
 
           <Divider sx={{ mb: 2 }} />
@@ -764,7 +708,7 @@ export default function GenerateLinkDialog({
             startIcon={submitting ? <CircularProgress size={16} /> : null}
             sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none', minWidth: 160 }}
           >
-            {submitting ? (uploadingProof ? 'Uploading proof...' : 'Generating...') : 'Generate Link'}
+            {submitting ? 'Generating...' : 'Generate Link'}
           </Button>
         </DialogActions>
       </Dialog>

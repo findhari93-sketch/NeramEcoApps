@@ -19,8 +19,8 @@ import {
   Snackbar,
   Tabs,
   Tab,
-  Avatar,
   UserAvatar,
+  ImageUploadField,
   CircularProgress,
   Paper,
   Table,
@@ -36,7 +36,6 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import SearchIcon from '@mui/icons-material/Search';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import StarIcon from '@mui/icons-material/Star';
@@ -116,9 +115,6 @@ export default function StudentResultsPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Upload state
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [uploadingScorecard, setUploadingScorecard] = useState(false);
 
   // Bulk import dialog
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -335,86 +331,48 @@ export default function StudentResultsPage() {
   // FILE UPLOADS
   // ============================================
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Injected uploader for the student photo (public bucket). Same endpoint as before.
+  const uploadPhoto = async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', 'photo');
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setSnackbar({ open: true, message: 'Invalid file type. Use JPEG, PNG, or WebP.', severity: 'error' });
-      return;
+    const res = await fetch('/api/admin/student-results/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setSnackbar({ open: true, message: 'File too large. Maximum 5MB.', severity: 'error' });
-      return;
-    }
 
-    try {
-      setUploadingPhoto(true);
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'photo');
-
-      const res = await fetch('/api/admin/student-results/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
-      }
-
-      const { photo_url } = await res.json();
-      setForm((prev) => ({ ...prev, photo_url }));
-      setSnackbar({ open: true, message: 'Photo uploaded', severity: 'success' });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Photo upload failed';
-      setSnackbar({ open: true, message: msg, severity: 'error' });
-    } finally {
-      setUploadingPhoto(false);
-      e.target.value = '';
-    }
+    const { photo_url } = await res.json();
+    return { url: photo_url };
   };
 
-  const handleScorecardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Injected uploader for the scorecard. The server writes the ORIGINAL to the private
+  // bucket and a WATERMARKED copy to the public bucket, returning both urls. We keep both
+  // on the form (only the picker UI changed); the field previews the watermarked copy.
+  const uploadScorecard = async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', 'scorecard');
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setSnackbar({ open: true, message: 'Invalid file type. Use JPEG, PNG, or WebP.', severity: 'error' });
-      return;
+    const res = await fetch('/api/admin/student-results/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setSnackbar({ open: true, message: 'File too large. Maximum 5MB.', severity: 'error' });
-      return;
-    }
 
-    try {
-      setUploadingScorecard(true);
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'scorecard');
-
-      const res = await fetch('/api/admin/student-results/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
-      }
-
-      const { scorecard_url, scorecard_watermarked_url } = await res.json();
-      setForm((prev) => ({ ...prev, scorecard_url, scorecard_watermarked_url }));
-      setSnackbar({ open: true, message: 'Scorecard uploaded and watermarked', severity: 'success' });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Scorecard upload failed';
-      setSnackbar({ open: true, message: msg, severity: 'error' });
-    } finally {
-      setUploadingScorecard(false);
-      e.target.value = '';
-    }
+    const { scorecard_url, scorecard_watermarked_url } = await res.json();
+    setForm((prev) => ({ ...prev, scorecard_url, scorecard_watermarked_url }));
+    setSnackbar({ open: true, message: 'Scorecard uploaded and watermarked', severity: 'success' });
+    return { url: scorecard_watermarked_url };
   };
 
   // ============================================
@@ -848,94 +806,30 @@ export default function StudentResultsPage() {
 
             {/* Photo Upload */}
             <Box sx={{ gridColumn: { md: '1 / -1' } }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Student Photo
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                {form.photo_url && (
-                  <Avatar
-                    src={form.photo_url}
-                    alt="Student photo"
-                    sx={{ width: 64, height: 64 }}
-                  />
-                )}
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={uploadingPhoto ? <CircularProgress size={16} /> : <CloudUploadIcon />}
-                  disabled={uploadingPhoto}
-                >
-                  {uploadingPhoto ? 'Uploading...' : form.photo_url ? 'Change Photo' : 'Upload Photo'}
-                  <input
-                    type="file"
-                    hidden
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handlePhotoUpload}
-                  />
-                </Button>
-                {form.photo_url && (
-                  <Button
-                    size="small"
-                    color="error"
-                    onClick={() => setForm((prev) => ({ ...prev, photo_url: '' }))}
-                  >
-                    Remove
-                  </Button>
-                )}
-              </Box>
+              <ImageUploadField
+                label="Student Photo"
+                value={form.photo_url || null}
+                onChange={(url) => setForm((prev) => ({ ...prev, photo_url: url || '' }))}
+                upload={uploadPhoto}
+                maxSizeMB={5}
+              />
             </Box>
 
-            {/* Scorecard Upload */}
+            {/* Scorecard Upload (original -> private bucket, watermarked -> public bucket) */}
             <Box sx={{ gridColumn: { md: '1 / -1' } }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Scorecard Image (will be watermarked automatically)
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                {form.scorecard_watermarked_url && (
-                  <Box
-                    component="img"
-                    src={form.scorecard_watermarked_url}
-                    alt="Watermarked scorecard"
-                    sx={{
-                      width: 100,
-                      height: 70,
-                      objectFit: 'cover',
-                      borderRadius: 1,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                    }}
-                  />
-                )}
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={uploadingScorecard ? <CircularProgress size={16} /> : <CloudUploadIcon />}
-                  disabled={uploadingScorecard}
-                >
-                  {uploadingScorecard ? 'Processing...' : form.scorecard_url ? 'Change Scorecard' : 'Upload Scorecard'}
-                  <input
-                    type="file"
-                    hidden
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={handleScorecardUpload}
-                  />
-                </Button>
-                {form.scorecard_url && (
-                  <Button
-                    size="small"
-                    color="error"
-                    onClick={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        scorecard_url: '',
-                        scorecard_watermarked_url: '',
-                      }))
-                    }
-                  >
-                    Remove
-                  </Button>
-                )}
-              </Box>
+              <ImageUploadField
+                label="Scorecard Image (will be watermarked automatically)"
+                value={form.scorecard_watermarked_url || null}
+                onChange={(url) => {
+                  // The upload() side-effect already sets both urls; here we only need to
+                  // clear BOTH the private original and the public watermarked copy on remove.
+                  if (!url) {
+                    setForm((prev) => ({ ...prev, scorecard_url: '', scorecard_watermarked_url: '' }));
+                  }
+                }}
+                upload={uploadScorecard}
+                maxSizeMB={5}
+              />
             </Box>
 
             {/* Switches */}

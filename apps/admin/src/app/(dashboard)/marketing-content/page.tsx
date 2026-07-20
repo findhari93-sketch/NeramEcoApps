@@ -20,13 +20,11 @@ import {
   Snackbar,
   Tabs,
   Tab,
+  ImageUploadField,
 } from '@neram/ui';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import ClearIcon from '@mui/icons-material/Clear';
-import { Avatar, CircularProgress, LinearProgress } from '@neram/ui';
 import CropIcon from '@mui/icons-material/Crop';
 import Image from 'next/image';
 import DataTable from '@/components/DataTable';
@@ -156,7 +154,6 @@ export default function MarketingContentPage() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [tabIndex, setTabIndex] = useState(0);
-  const [uploading, setUploading] = useState(false);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [imageCrops, setImageCrops] = useState<ImageCropsResult | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -185,51 +182,28 @@ export default function MarketingContentPage() {
     fetchItems();
   }, [fetchItems]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Injected uploader for the shared ImageUploadField (same endpoint/bucket as before).
+  const uploadContentImage = async (file: File): Promise<{ url: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
 
-    // Validate on client side
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      setSnackbar({ open: true, message: 'Invalid file type. Use JPEG, PNG, WebP, or GIF.', severity: 'error' });
-      return;
+    const res = await fetch('/api/marketing-content/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setSnackbar({ open: true, message: 'File too large. Maximum 5MB.', severity: 'error' });
-      return;
+
+    const { url } = await res.json();
+    setSnackbar({ open: true, message: 'Image uploaded successfully', severity: 'success' });
+    // Auto-open crop dialog for achievements (same behaviour as before)
+    if (form.type === 'achievement') {
+      setCropDialogOpen(true);
     }
-
-    try {
-      setUploading(true);
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/marketing-content/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Upload failed (HTTP ${res.status})`);
-      }
-
-      const { url } = await res.json();
-      setForm((prev) => ({ ...prev, image_url: url }));
-      setSnackbar({ open: true, message: 'Image uploaded successfully', severity: 'success' });
-      // Auto-open crop dialog for achievements
-      if (form.type === 'achievement') {
-        setCropDialogOpen(true);
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Upload failed';
-      setSnackbar({ open: true, message: msg, severity: 'error' });
-    } finally {
-      setUploading(false);
-      // Reset the input so the same file can be re-selected
-      e.target.value = '';
-    }
+    return { url };
   };
 
   const validate = (): boolean => {
@@ -683,55 +657,14 @@ export default function MarketingContentPage() {
 
             {/* Image Upload */}
             <Box>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Image
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                {form.image_url ? (
-                  <Box sx={{ position: 'relative' }}>
-                    <Box sx={{ width: 80, height: 80, borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
-                      <Image src={form.image_url} alt="Content image" fill sizes="80px" style={{ objectFit: 'cover' }} />
-                    </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => setForm({ ...form, image_url: '' })}
-                      sx={{
-                        position: 'absolute',
-                        top: -8,
-                        right: -8,
-                        bgcolor: 'error.main',
-                        color: 'white',
-                        '&:hover': { bgcolor: 'error.dark' },
-                        width: 24,
-                        height: 24,
-                      }}
-                    >
-                      <ClearIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                  </Box>
-                ) : null}
-                <Box sx={{ flexGrow: 1 }}>
-                  <Button
-                    variant="outlined"
-                    component="label"
-                    startIcon={uploading ? <CircularProgress size={18} /> : <CloudUploadIcon />}
-                    disabled={uploading}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    {uploading ? 'Uploading...' : form.image_url ? 'Change Image' : 'Upload Image'}
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      onChange={handleImageUpload}
-                    />
-                  </Button>
-                  <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.5 }}>
-                    JPEG, PNG, WebP or GIF. Max 5MB.
-                  </Typography>
-                </Box>
-              </Box>
-              {uploading && <LinearProgress sx={{ mt: 1 }} />}
+              <ImageUploadField
+                label="Image"
+                value={form.image_url || null}
+                onChange={(url) => setForm((prev) => ({ ...prev, image_url: url || '' }))}
+                upload={uploadContentImage}
+                maxSizeMB={5}
+                helperText="JPEG, PNG, WebP or GIF. Max 5MB."
+              />
 
               {/* Crop button + previews for achievements */}
               {form.type === 'achievement' && form.image_url && (

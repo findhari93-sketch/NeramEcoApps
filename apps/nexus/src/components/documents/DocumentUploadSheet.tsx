@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Drawer,
   Box,
@@ -8,16 +8,14 @@ import {
   Button,
   LinearProgress,
   CircularProgress,
-  alpha,
   useTheme,
   useMediaQuery,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  ImageUploadField,
 } from '@neram/ui';
-import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
-import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface Template {
@@ -49,15 +47,21 @@ export default function DocumentUploadSheet({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { getToken } = useNexusAuthContext();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
 
   const maxSizeMb = template?.max_file_size_mb || 10;
-  const accept = template?.allowed_file_types?.join(',') || 'image/jpeg,image/png,application/pdf';
+
+  // The shared field is used only to PICK the file (paste / drop / choose /
+  // camera). The actual submit still happens in handleUpload with the document
+  // metadata, so this closure just captures the File into state.
+  const pickFile = useCallback(async (f: File): Promise<{ url: string }> => {
+    setFile(f);
+    setError('');
+    return { url: '' };
+  }, []);
 
   const handleUpload = useCallback(async () => {
     if (!file || !template) return;
@@ -136,40 +140,15 @@ export default function DocumentUploadSheet({
       )}
 
       {!file ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          <Box
-            onClick={() => fileInputRef.current?.click()}
-            sx={{
-              borderRadius: 2,
-              border: `2px dashed ${theme.palette.divider}`,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 0.5,
-              cursor: 'pointer',
-              py: 4,
-              px: 2,
-              '&:hover': { borderColor: theme.palette.primary.main, bgcolor: alpha(theme.palette.primary.main, 0.02) },
-            }}
-          >
-            <UploadFileOutlinedIcon sx={{ fontSize: '1.5rem', color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
-              Choose File
-            </Typography>
-            <Typography variant="caption" color="text.disabled">
-              Max {maxSizeMb} MB
-            </Typography>
-          </Box>
-          <Button
-            variant="outlined"
-            fullWidth
-            startIcon={<CameraAltOutlinedIcon />}
-            onClick={() => cameraInputRef.current?.click()}
-            sx={{ textTransform: 'none', minHeight: 48 }}
-          >
-            Take Photo
-          </Button>
-        </Box>
+        <ImageUploadField
+          value={null}
+          onChange={() => { /* handled by pickFile → file state */ }}
+          upload={pickFile}
+          accept="image/*,.pdf"
+          camera
+          maxSizeMB={maxSizeMb}
+          helperText="Choose File"
+        />
       ) : (
         <Box>
           <Box
@@ -218,22 +197,6 @@ export default function DocumentUploadSheet({
           </Box>
         </Box>
       )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={accept}
-        hidden
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        hidden
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-      />
     </Box>
   );
 

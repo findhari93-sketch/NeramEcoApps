@@ -16,6 +16,8 @@ import {
   recordGamificationEvent,
   resolveAssignmentRecording,
   getStudentAssignmentDrawing,
+  updateDrawingQuestion,
+  deleteDrawingQuestion,
 } from '@neram/database';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 /**
  * POST /api/assignments/[id]  (staff)
  * body { action: 'update', ...fields }
- * body { action: 'publish' } | { action: 'close' }
+ * body { action: 'publish' } | { action: 'close' } | { action: 'reopen' }
  * body { action: 'add_attachment', study_file_id }
  * body { action: 'remove_attachment', attachment_id }
  * body { action: 'attach_topic_drills' }
@@ -171,6 +173,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           if (Number.isFinite(w) && w >= 0) updates.catchup_window_days = Math.round(w);
         }
         const updated = await updateAssignment(params.id, updates);
+
+        // Keep a drawing assignment's backing question in sync so the Drawing
+        // Review screen shows the current brief + reference image.
+        if ((assignment as any).assignment_type === 'drawing' && (assignment as any).drawing_question_id) {
+          const qUpdate: { question_text?: string; reference_images?: Array<{ url: string }> } = {};
+          if (body.instructions !== undefined) qUpdate.question_text = (body.instructions || updated.title) as string;
+          if (body.content_image_url !== undefined) {
+            qUpdate.reference_images = body.content_image_url ? [{ url: String(body.content_image_url) }] : [];
+          }
+          if (Object.keys(qUpdate).length) {
+            await updateDrawingQuestion((assignment as any).drawing_question_id, qUpdate).catch((e) =>
+              console.error('updateDrawingQuestion failed:', e),
+            );
+          }
+        }
         return NextResponse.json({ assignment: updated });
       }
 
@@ -190,6 +207,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       case 'close': {
         const updated = await updateAssignment(params.id, { status: 'closed' });
+        return NextResponse.json({ assignment: updated });
+      }
+
+      case 'reopen': {
+        // Flip a closed assignment back to published so students can see and
+        // submit it again. Unlike 'publish' this keeps published_at intact and
+        // does NOT re-notify students (they were already notified originally).
+        const updated = await updateAssignment(params.id, { status: 'published' });
         return NextResponse.json({ assignment: updated });
       }
 
@@ -300,6 +325,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       );
     }
     await deleteAssignment(params.id);
+    // Clean up the orphan backing drawing question (FK is ON DELETE SET NULL, so
+    // deleting the assignment does not cascade to it).
+    if (assignment && (assignment as any).assignment_type === 'drawing' && (assignment as any).drawing_question_id) {
+      await deleteDrawingQuestion((assignment as any).drawing_question_id).catch((e) =>
+        console.error('deleteDrawingQuestion cleanup failed:', e),
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     return errorResponse(err, 'Failed to delete');

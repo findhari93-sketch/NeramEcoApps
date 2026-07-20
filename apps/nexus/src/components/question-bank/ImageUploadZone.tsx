@@ -1,11 +1,7 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { Box, Typography, IconButton, CircularProgress, alpha, useTheme } from '@neram/ui';
-import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import { useCallback, useRef } from 'react';
+import { ImageUploadField } from '@neram/ui';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 
 interface ImageUploadZoneProps {
@@ -26,29 +22,15 @@ interface ImageUploadZoneProps {
 }
 
 /**
- * Convert a base64 data URL to a blob URL for safe rendering.
- * Browsers fail on large data URLs in <img src> (ERR_INVALID_URL).
+ * Question-bank image upload zone. Thin wrapper over the shared
+ * {@link ImageUploadField} that keeps this component's original public prop
+ * signature (ImageState in/out) so every existing caller keeps working.
+ *
+ * The upload closure below hits the SAME endpoint/auth as before
+ * (`/api/question-bank/upload-image` with the caller's `getToken` + `subfolder`)
+ * and returns `{ url, path }` for the shared widget. Clipboard paste, drag/drop
+ * and click-to-choose all come from the shared field.
  */
-function base64ToBlobUrl(dataUrl: string): string | null {
-  try {
-    const [header, data] = dataUrl.split(',');
-    if (!data) return null;
-    const mimeMatch = header.match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-    // Clean whitespace/newlines that AI tools sometimes include in base64
-    const cleaned = data.replace(/\s/g, '');
-    const binary = atob(cleaned);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: mime });
-    return URL.createObjectURL(blob);
-  } catch {
-    return null;
-  }
-}
-
 export default function ImageUploadZone({
   image,
   onChange,
@@ -58,47 +40,15 @@ export default function ImageUploadZone({
   enableGlobalPaste = false,
   subfolder,
 }: ImageUploadZoneProps) {
-  const theme = useTheme();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState('');
-  const lastFileRef = useRef<File | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
+  // Remember the storage path returned for the last uploaded URL so we can
+  // reconstruct the full ImageState (callers may read `storagePath`).
+  const lastUploadRef = useRef<{ url: string; path?: string } | null>(null);
 
-  // Convert base64 data URLs to blob URLs for safe rendering
-  const displayUrl = useMemo(() => {
-    if (!image?.url) return null;
-    if (!image.url.startsWith('data:')) return image.url;
-    // Convert base64 to blob URL (revoke old one first)
-    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-    const blobUrl = base64ToBlobUrl(image.url);
-    blobUrlRef.current = blobUrl;
-    return blobUrl;
-  }, [image?.url]);
-
-  // Cleanup blob URL on unmount
-  useEffect(() => {
-    return () => {
-      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-    };
-  }, []);
-
-  const uploadFile = useCallback(async (file: File) => {
-    setError('');
-    setUploading(true);
-    lastFileRef.current = file;
-
-    // Show local preview immediately
-    const previewUrl = URL.createObjectURL(file);
-    onChange({ url: previewUrl, file, uploaded: false });
-
-    try {
+  const upload = useCallback(
+    async (file: File): Promise<{ url: string; path?: string }> => {
       const token = await getToken();
       if (!token) {
-        setError('Auth expired. Please refresh the page and try again.');
-        onChange(undefined);
-        return;
+        throw new Error('Auth expired. Please refresh the page and try again.');
       }
 
       const formData = new FormData();
@@ -111,237 +61,43 @@ export default function ImageUploadZone({
         body: formData,
       });
 
-      let json;
+      let json: { url?: string; path?: string; error?: string };
       try {
         json = await res.json();
       } catch {
-        console.error('[ImageUpload] Failed to parse response, status:', res.status);
-        setError(`Server error (${res.status}). Try again.`);
+        throw new Error(`Server error (${res.status}). Try again.`);
+      }
+
+      if (!res.ok || !json.url) {
+        throw new Error(json.error || `Upload failed (${res.status})`);
+      }
+
+      lastUploadRef.current = { url: json.url, path: json.path };
+      return { url: json.url, path: json.path };
+    },
+    [getToken, subfolder],
+  );
+
+  const handleChange = useCallback(
+    (url: string | null) => {
+      if (!url) {
         onChange(undefined);
         return;
       }
+      const path = lastUploadRef.current?.url === url ? lastUploadRef.current.path : undefined;
+      onChange({ url, uploaded: true, storagePath: path });
+    },
+    [onChange],
+  );
 
-      if (!res.ok) {
-        console.error('[ImageUpload] Server error:', res.status, json.error);
-        setError(json.error || `Upload failed (${res.status})`);
-        onChange(undefined);
-        return;
-      }
-
-      // Replace blob URL with remote URL
-      URL.revokeObjectURL(previewUrl);
-      onChange({ url: json.url, uploaded: true, storagePath: json.path });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[ImageUpload] Network/fetch error:', detail);
-      setError(
-        detail.includes('Failed to fetch') || detail.includes('NetworkError')
-          ? 'Network error. Check your connection and try again.'
-          : `Upload failed: ${detail}`,
-      );
-      onChange(undefined);
-    } finally {
-      setUploading(false);
-    }
-  }, [getToken, onChange, subfolder]);
-
-  const handleRetry = useCallback(() => {
-    if (lastFileRef.current) {
-      uploadFile(lastFileRef.current);
-    }
-  }, [uploadFile]);
-
-  const handleFileSelect = useCallback((files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const file = files[0];
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
-      return;
-    }
-    uploadFile(file);
-  }, [uploadFile]);
-
-  const handlePaste = useCallback((e: ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) uploadFile(file);
-        return;
-      }
-    }
-  }, [uploadFile]);
-
-  // Global paste listener (for review panel — paste anywhere to add image)
-  useEffect(() => {
-    if (!enableGlobalPaste) return;
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
-  }, [enableGlobalPaste, handlePaste]);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    handleFileSelect(e.dataTransfer.files);
-  }, [handleFileSelect]);
-
-  const handleRemove = useCallback(() => {
-    if (image?.url && !image.uploaded) {
-      URL.revokeObjectURL(image.url);
-    }
-    onChange(undefined);
-    setError('');
-  }, [image, onChange]);
-
-  // If we have an image, show preview with replace/delete buttons
-  if (image) {
-    return (
-      <Box
-        sx={{
-          position: 'relative',
-          height,
-          borderRadius: 2,
-          overflow: 'hidden',
-          border: `1px solid ${theme.palette.divider}`,
-          bgcolor: alpha(theme.palette.primary.main, 0.02),
-        }}
-      >
-        <Box
-          component="img"
-          src={displayUrl || image.url}
-          alt="Question image"
-          sx={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            opacity: uploading ? 0.4 : 1,
-          }}
-        />
-        {uploading && (
-          <CircularProgress
-            size={24}
-            sx={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              mt: -1.5,
-              ml: -1.5,
-            }}
-          />
-        )}
-        {!uploading && (
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
-              display: 'flex',
-              gap: 0.5,
-            }}
-          >
-            <IconButton
-              size="small"
-              onClick={() => fileInputRef.current?.click()}
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.85)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,1)' },
-              }}
-              title="Replace image"
-            >
-              <RefreshIcon sx={{ fontSize: '1rem' }} />
-            </IconButton>
-            <IconButton
-              size="small"
-              onClick={handleRemove}
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.85)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,1)' },
-              }}
-              title="Remove image"
-            >
-              <DeleteOutlineIcon sx={{ fontSize: '1rem' }} />
-            </IconButton>
-          </Box>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => handleFileSelect(e.target.files)}
-        />
-      </Box>
-    );
-  }
-
-  // Empty state — drop zone
   return (
-    <Box>
-      <Box
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        onPaste={(e) => handlePaste(e.nativeEvent)}
-        tabIndex={0}
-        sx={{
-          height,
-          borderRadius: 2,
-          border: `2px dashed ${dragOver ? theme.palette.primary.main : theme.palette.divider}`,
-          bgcolor: dragOver ? alpha(theme.palette.primary.main, 0.04) : 'transparent',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 0.5,
-          cursor: 'pointer',
-          transition: 'all 150ms',
-          '&:hover': {
-            borderColor: theme.palette.primary.main,
-            bgcolor: alpha(theme.palette.primary.main, 0.02),
-          },
-        }}
-      >
-        {uploading ? (
-          <CircularProgress size={24} />
-        ) : (
-          <>
-            <Box sx={{ display: 'flex', gap: 0.5, color: 'text.secondary' }}>
-              <AddPhotoAlternateOutlinedIcon sx={{ fontSize: '1.25rem' }} />
-              <ContentPasteIcon sx={{ fontSize: '1rem', opacity: 0.6 }} />
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', px: 1 }}>
-              {label}
-            </Typography>
-          </>
-        )}
-      </Box>
-      {error && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-          <Typography variant="caption" color="error" sx={{ flex: 1 }}>
-            {error}
-          </Typography>
-          {lastFileRef.current && (
-            <Typography
-              variant="caption"
-              color="primary"
-              sx={{ cursor: 'pointer', textDecoration: 'underline', flexShrink: 0 }}
-              onClick={(e) => { e.stopPropagation(); handleRetry(); }}
-            >
-              Retry
-            </Typography>
-          )}
-        </Box>
-      )}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => handleFileSelect(e.target.files)}
-      />
-    </Box>
+    <ImageUploadField
+      value={image?.url ?? null}
+      onChange={handleChange}
+      upload={upload}
+      helperText={label}
+      height={typeof height === 'number' ? height : 120}
+      enableGlobalPaste={enableGlobalPaste}
+    />
   );
 }
