@@ -150,13 +150,17 @@ export interface AssignmentAttachmentDetail extends NexusAssignmentAttachment {
 export async function getAssignmentDetail(
   id: string,
   client?: TypedSupabaseClient,
-): Promise<(NexusClassAssignment & { attachments: AssignmentAttachmentDetail[] }) | null> {
+): Promise<
+  | (NexusClassAssignment & { attachments: AssignmentAttachmentDetail[]; reference_images: string[] })
+  | null
+> {
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from(ASSIGNMENTS)
     .select(
       '*, attachments:nexus_assignment_attachments(*, ' +
-        'file:nexus_study_files(id, title, file_name, file_type, file_size_bytes))',
+        'file:nexus_study_files(id, title, file_name, file_type, file_size_bytes)), ' +
+        'drawing_question:drawing_questions(reference_images)',
     )
     .eq('id', id)
     .maybeSingle();
@@ -165,7 +169,17 @@ export async function getAssignmentDetail(
   data.attachments = (data.attachments || []).sort(
     (a: AssignmentAttachmentDetail, b: AssignmentAttachmentDetail) => a.sort_order - b.sort_order,
   );
-  return data as NexusClassAssignment & { attachments: AssignmentAttachmentDetail[] };
+  // Flatten the backing drawing question's reference_images ([{url}]) to a plain
+  // string[] so every consumer (student + teacher) can render a reference gallery.
+  const rawRefs = data.drawing_question?.reference_images || [];
+  data.reference_images = rawRefs
+    .map((r: any) => (typeof r === 'string' ? r : r?.url))
+    .filter((u: any): u is string => typeof u === 'string' && u.length > 0);
+  delete data.drawing_question;
+  return data as NexusClassAssignment & {
+    attachments: AssignmentAttachmentDetail[];
+    reference_images: string[];
+  };
 }
 
 export interface AssignmentSummary extends NexusClassAssignment {

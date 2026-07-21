@@ -43,7 +43,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const body = await request.json();
-    const { context_type, context_id, passing_pct, min_questions_to_pass, sort_order, is_visible, gating } = body || {};
+    const {
+      context_type,
+      context_id,
+      passing_pct,
+      min_questions_to_pass,
+      sort_order,
+      is_visible,
+      gating,
+      available_from,
+      available_until,
+    } = body || {};
 
     if (!CONTEXTS.includes(context_type)) {
       return NextResponse.json({ error: `context_type must be one of ${CONTEXTS.join(', ')}` }, { status: 400 });
@@ -60,6 +70,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       minQuestionsToPass: min_questions_to_pass ?? null,
       sortOrder: typeof sort_order === 'number' ? sort_order : 0,
       isVisible: is_visible ?? true,
+      availableFrom: typeof available_from === 'string' && available_from ? available_from : null,
+      availableUntil: typeof available_until === 'string' && available_until ? available_until : null,
       gating: gating ?? {},
       createdBy: access.caller.id,
     });

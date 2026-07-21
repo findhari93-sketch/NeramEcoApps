@@ -42,6 +42,7 @@ interface Detail {
   due_at: string | null;
   catchup_window_days: number;
   content_image_url: string | null;
+  reference_images?: string[] | null;
   content_video_url: string | null;
   links: { label: string; url: string }[];
   attachments: Attachment[];
@@ -106,6 +107,15 @@ export default function StudentAssignmentDetailPage() {
     ? !drawingSubmission || drawingSubmission.status === 'redo'
     : !submission || submission.status === 'redo';
   const youtubeId = recording.url && recording.source === 'youtube' ? extractYouTubeId(recording.url) : null;
+  // Reference / expected-output images: prefer the multi-image set, fall back to the
+  // single legacy content image so older assignments still render.
+  const refImages = detail
+    ? detail.reference_images?.length
+      ? detail.reference_images
+      : detail.content_image_url
+        ? [detail.content_image_url]
+        : []
+    : [];
 
   if (error) {
     return (
@@ -208,14 +218,41 @@ export default function StudentAssignmentDetailPage() {
               </Box>
             )}
 
-            {/* Inline image */}
-            {detail.content_image_url && (
-              <Box
-                component="img"
-                src={detail.content_image_url}
-                alt=""
-                sx={{ width: '100%', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
-              />
+            {/* Reference / expected-output images */}
+            {refImages.length > 0 && (
+              <Box>
+                {refImages.length > 1 && (
+                  <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Reference ({refImages.length})
+                  </Typography>
+                )}
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns:
+                      refImages.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(140px, 1fr))',
+                    gap: 1,
+                  }}
+                >
+                  {refImages.map((src, i) => (
+                    <Box
+                      key={`${src}-${i}`}
+                      component="img"
+                      src={src}
+                      alt={refImages.length > 1 ? `Reference ${i + 1}` : ''}
+                      onClick={() => window.open(src, '_blank', 'noopener')}
+                      sx={{
+                        width: '100%',
+                        ...(refImages.length === 1 ? {} : { aspectRatio: '1 / 1', objectFit: 'cover' }),
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
             )}
 
             {/* Instructions */}

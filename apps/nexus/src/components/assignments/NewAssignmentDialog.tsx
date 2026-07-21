@@ -48,6 +48,7 @@ interface AssignmentDetail {
   due_at: string | null;
   catchup_window_days: number;
   content_image_url: string | null;
+  reference_images?: string[] | null;
   recording_url: string | null;
   attachments: AttachmentRow[];
 }
@@ -98,7 +99,7 @@ export default function NewAssignmentDialog({
       format: a.submission_format,
       maxMarks: String(a.max_marks ?? 10),
       category: '3d_composition',
-      refImageUrl: a.content_image_url,
+      refImageUrls: a.reference_images?.length ? a.reference_images : a.content_image_url ? [a.content_image_url] : [],
       recordingUrl: a.recording_url || '',
       catchupDays: String(a.catchup_window_days ?? 7),
     });
@@ -146,14 +147,31 @@ export default function NewAssignmentDialog({
     [getToken],
   );
 
-  // Edit mode syncs the reference image immediately so it can't be forgotten.
-  const onReferenceChange = (url: string | null) => {
-    patch({ refImageUrl: url });
+  // Injected resolver for a pasted OneDrive/SharePoint image link.
+  const linkReference = useCallback(
+    async (url: string): Promise<{ url: string }> => {
+      const token = await getToken();
+      if (!token) throw new Error('Your session expired. Sign in again.');
+      const res = await fetch('/api/drawing/link-reference', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not import that link');
+      return { url: data.url as string };
+    },
+    [getToken],
+  );
+
+  // Edit mode syncs the reference images immediately so they can't be forgotten.
+  const onReferenceChange = (urls: string[]) => {
+    patch({ refImageUrls: urls });
     if (isEdit && assignmentId) {
       authFetch(`/api/assignments/${assignmentId}`, {
         method: 'POST',
-        body: JSON.stringify({ action: 'update', content_image_url: url }),
-      }).catch((e) => setError(e instanceof Error ? e.message : 'Could not save the image.'));
+        body: JSON.stringify({ action: 'update', reference_image_urls: urls }),
+      }).catch((e) => setError(e instanceof Error ? e.message : 'Could not save the images.'));
     }
   };
 
@@ -178,7 +196,7 @@ export default function NewAssignmentDialog({
           catchup_window_days: Number(draft.catchupDays) || 7,
           recording_url: draft.recordingUrl.trim() || null,
           ...(draft.type === 'drawing'
-            ? { drawing_category: draft.category, reference_image_url: draft.refImageUrl }
+            ? { drawing_category: draft.category, reference_image_urls: draft.refImageUrls }
             : { submission_format: draft.format, max_marks: Number(draft.maxMarks) || 10 }),
         }),
       });
@@ -211,7 +229,7 @@ export default function NewAssignmentDialog({
           catchup_window_days: Number(draft.catchupDays) || 7,
           recording_url: draft.recordingUrl.trim() || null,
           ...(draft.type === 'drawing'
-            ? { content_image_url: draft.refImageUrl }
+            ? { reference_image_urls: draft.refImageUrls }
             : { submission_format: draft.format, max_marks: Number(draft.maxMarks) || 10 }),
         }),
       });
@@ -375,6 +393,7 @@ export default function NewAssignmentDialog({
       value={draft}
       onChange={patch}
       uploadReference={uploadReference}
+      linkReference={linkReference}
       onReferenceChange={onReferenceChange}
       lockType={isEdit}
       showCategory={!isEdit}

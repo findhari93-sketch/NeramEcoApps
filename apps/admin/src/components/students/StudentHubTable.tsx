@@ -37,6 +37,8 @@ export interface StudentRow {
   classroom_email: string | null;
   classroom_email_status?: 'org' | 'onmicrosoft' | 'personal' | 'none';
   personal_email: string | null;
+  /** Microsoft org identity; null = personal-only (Gmail) row that Nexus hides. */
+  ms_oid?: string | null;
   ms_teams_email: string | null;
   phone: string;
   interest_course: string | null;

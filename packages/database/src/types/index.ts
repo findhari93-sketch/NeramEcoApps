@@ -6446,10 +6446,21 @@ export interface NexusQBQuestionWithSources extends NexusQBQuestion {
   topic: NexusQBTopic | null;
 }
 
+/** Compact registry tag shape attached to teacher question lists. */
+export interface NexusQBQuestionTagChip {
+  id: string;
+  label: string;
+  slug: string;
+  group_type: NexusQBTagGroup;
+  color: string | null;
+}
+
 export interface NexusQBQuestionListItem extends NexusQBQuestion {
   sources: NexusQBQuestionSource[];
   topic: NexusQBTopic | null;
   attempt_summary: QBAttemptSummary | null;
+  /** Managed registry tags (teacher lists only; absent in student payloads). */
+  tags?: NexusQBQuestionTagChip[];
 }
 
 export interface NexusQBQuestionDetail extends NexusQBQuestionWithSources {

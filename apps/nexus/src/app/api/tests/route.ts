@@ -75,10 +75,64 @@ export async function GET(request: NextRequest) {
 
       if (custErr) throw custErr;
 
-      const tests = [...(customTests || []), ...(publishedTests || [])];
+      // Placement-sourced tests (unified engine): teacher assignments + the practice
+      // pool for this classroom. Legacy tests key off nexus_tests.classroom_id, the
+      // builder places via nexus_test_placements, so both sources must be merged.
+      // nexus_test_placements is not in the generated types yet (see test-repository.ts).
+      const { data: placements } = await (supabase as any)
+        .from('nexus_test_placements')
+        .select('id, test_id, context_type, passing_pct, available_from, available_until')
+        .eq('context_id', classroomId)
+        .in('context_type', ['classroom_assignment', 'student_practice'])
+        .eq('is_active', true)
+        .eq('is_visible', true)
+        .order('created_at', { ascending: false });
+
+      const placementByTest = new Map<string, any>();
+      for (const p of placements || []) {
+        const existing = placementByTest.get(p.test_id);
+        // classroom_assignment (mandatory) wins if a test is placed as both.
+        if (!existing || (existing.context_type === 'student_practice' && p.context_type === 'classroom_assignment')) {
+          placementByTest.set(p.test_id, p);
+        }
+      }
+      const placedIds = [...placementByTest.keys()];
+      let placedTests: any[] = [];
+      if (placedIds.length > 0) {
+        const { data: placed } = await supabase
+          .from('nexus_tests')
+          .select('*, questions:nexus_test_questions(count)')
+          .in('id', placedIds)
+          .eq('is_published', true)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+        placedTests = placed || [];
+      }
+
+      // Merge + dedupe by test id (placement info attaches either way).
+      const byId = new Map<string, any>();
+      for (const t of [...(customTests || []), ...(publishedTests || []), ...placedTests]) {
+        if (!byId.has(t.id)) byId.set(t.id, t);
+      }
+      const tests = [...byId.values()].map((t: any) => {
+        const p = placementByTest.get(t.id);
+        return {
+          ...t,
+          question_count: Array.isArray(t.questions) ? t.questions[0]?.count ?? 0 : 0,
+          assignment: p
+            ? {
+                placement_id: p.id,
+                context_type: p.context_type,
+                available_from: p.available_from,
+                available_until: p.available_until,
+                passing_pct: p.passing_pct,
+              }
+            : null,
+        };
+      });
 
       // Get student's attempts for these tests
-      const testIds = (tests || []).map((t: any) => t.id);
+      const testIds = tests.map((t: any) => t.id);
       const { data: attempts } = testIds.length > 0
         ? await supabase
             .from('nexus_test_attempts')
@@ -87,7 +141,7 @@ export async function GET(request: NextRequest) {
             .in('test_id', testIds)
         : { data: [] };
 
-      const testsWithAttempts = (tests || []).map((test: any) => ({
+      const testsWithAttempts = tests.map((test: any) => ({
         ...test,
         myAttempt: (attempts || []).find((a: any) => a.test_id === test.id) || null,
       }));

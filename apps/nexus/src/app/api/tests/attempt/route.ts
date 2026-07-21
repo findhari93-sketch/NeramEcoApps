@@ -48,37 +48,79 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Test has expired' }, { status: 403 });
     }
 
-    // Get questions with details (don't expose correct_answer during test)
-    // Custom tests use qb_question_id → nexus_qb_questions, regular tests use question_id → nexus_verified_questions
-    const isCustomTest = !!(test as any).is_custom;
-
-    let testQuestions: any[] = [];
-
-    if (isCustomTest) {
-      const { data } = await (supabase as any)
-        .from('nexus_test_questions')
-        .select('id, sort_order, marks, negative_marks, qb_question_id, qb:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, question_text, question_image_url, question_format, options)')
-        .eq('test_id', testId)
-        .order('sort_order', { ascending: true });
-      // Normalize qb questions to match the expected `question` shape
-      testQuestions = (data || []).map((tq: any) => ({
-        ...tq,
-        question: tq.qb ? {
-          id: tq.qb.id,
-          question_text: tq.qb.question_text,
-          question_image_url: tq.qb.question_image_url,
-          question_type: tq.qb.question_format || 'mcq',
-          options: tq.qb.options,
-        } : null,
-      }));
-    } else {
-      const { data } = await supabase
-        .from('nexus_test_questions')
-        .select('id, sort_order, marks, negative_marks, question_id, question:nexus_verified_questions(id, question_text, question_image_url, question_type, options)')
-        .eq('test_id', testId)
-        .order('sort_order', { ascending: true });
-      testQuestions = data || [];
+    // When opened through a placement (assigned/practice), enforce that
+    // placement's own window and visibility too.
+    const placementId = request.nextUrl.searchParams.get('placement_id');
+    if (placementId) {
+      const { data: placement } = await (supabase as any)
+        .from('nexus_test_placements')
+        .select('id, test_id, is_active, is_visible, available_from, available_until')
+        .eq('id', placementId)
+        .maybeSingle();
+      if (placement && placement.test_id === testId) {
+        if (!placement.is_active || !placement.is_visible) {
+          return NextResponse.json({ error: 'This test is not available' }, { status: 403 });
+        }
+        if (placement.available_from && new Date(placement.available_from) > now) {
+          return NextResponse.json({ error: 'This test is not open yet' }, { status: 403 });
+        }
+        if (placement.available_until && new Date(placement.available_until) < now) {
+          return NextResponse.json({ error: 'This test has closed' }, { status: 403 });
+        }
+      }
     }
+
+    // Get questions with details (don't expose correct_answer during test).
+    // Resolved per ROW, not per test: composed tests reference the bank via
+    // qb_question_id while legacy rows use question_id -> nexus_verified_questions.
+    // (Branching on is_custom broke teacher-built repository tests, which are
+    // not custom but are composed entirely of bank questions.)
+    const { data: tqRows } = await (supabase as any)
+      .from('nexus_test_questions')
+      .select('id, sort_order, marks, negative_marks, qb_question_id, question_id')
+      .eq('test_id', testId)
+      .order('sort_order', { ascending: true });
+    const rows = tqRows || [];
+    const qbIds = rows.filter((r: any) => r.qb_question_id).map((r: any) => r.qb_question_id);
+    const vIds = rows.filter((r: any) => !r.qb_question_id && r.question_id).map((r: any) => r.question_id);
+
+    const qbMap = new Map<string, any>();
+    if (qbIds.length > 0) {
+      const { data } = await (supabase as any)
+        .from('nexus_qb_questions')
+        .select('id, question_text, question_image_url, question_format, options')
+        .in('id', qbIds);
+      for (const q of data || []) qbMap.set(q.id, q);
+    }
+    const vMap = new Map<string, any>();
+    if (vIds.length > 0) {
+      const { data } = await supabase
+        .from('nexus_verified_questions')
+        .select('id, question_text, question_image_url, question_type, options')
+        .in('id', vIds);
+      for (const q of data || []) vMap.set(q.id, q);
+    }
+
+    const testQuestions: any[] = rows.map((tq: any) => {
+      const src = tq.qb_question_id ? qbMap.get(tq.qb_question_id) : vMap.get(tq.question_id);
+      return {
+        id: tq.id,
+        sort_order: tq.sort_order,
+        marks: tq.marks,
+        negative_marks: tq.negative_marks,
+        qb_question_id: tq.qb_question_id || null,
+        question_id: tq.question_id || null,
+        question: src
+          ? {
+              id: src.id,
+              question_text: src.question_text,
+              question_image_url: src.question_image_url,
+              question_type: src.question_format || src.question_type || 'mcq',
+              options: src.options,
+            }
+          : null,
+      };
+    });
 
     // Check if already submitted
     const { data: submittedAttempt } = await supabase
@@ -229,29 +271,40 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'submit') {
-      // Calculate score
-      const test = attempt.test as any;
-      const isCustom = !!test?.is_custom;
+      // Calculate score. Same per-row dual resolution as the GET: a row grades
+      // against the bank when it has qb_question_id, else the legacy verified table.
+      const { data: tqRows } = await (supabase as any)
+        .from('nexus_test_questions')
+        .select('qb_question_id, question_id, marks, negative_marks')
+        .eq('test_id', attempt.test_id);
+      const rows = tqRows || [];
+      const qbIds = rows.filter((r: any) => r.qb_question_id).map((r: any) => r.qb_question_id);
+      const vIds = rows.filter((r: any) => !r.qb_question_id && r.question_id).map((r: any) => r.question_id);
 
-      let testQuestions: any[] = [];
-
-      if (isCustom) {
+      const qbMap = new Map<string, any>();
+      if (qbIds.length > 0) {
         const { data } = await (supabase as any)
-          .from('nexus_test_questions')
-          .select('qb_question_id, marks, negative_marks, qb:nexus_qb_questions!nexus_test_questions_qb_question_id_fkey(id, correct_answer)')
-          .eq('test_id', attempt.test_id);
-        // Normalize to match expected shape
-        testQuestions = (data || []).map((tq: any) => ({
-          ...tq,
-          question: tq.qb ? { id: tq.qb.id, correct_answer: tq.qb.correct_answer } : null,
-        }));
-      } else {
-        const { data } = await supabase
-          .from('nexus_test_questions')
-          .select('question_id, marks, negative_marks, question:nexus_verified_questions(correct_answer)')
-          .eq('test_id', attempt.test_id);
-        testQuestions = data || [];
+          .from('nexus_qb_questions')
+          .select('id, correct_answer')
+          .in('id', qbIds);
+        for (const q of data || []) qbMap.set(q.id, q);
       }
+      const vMap = new Map<string, any>();
+      if (vIds.length > 0) {
+        const { data } = await supabase
+          .from('nexus_verified_questions')
+          .select('id, correct_answer')
+          .in('id', vIds);
+        for (const q of data || []) vMap.set(q.id, q);
+      }
+
+      const testQuestions: any[] = rows.map((tq: any) => {
+        const src = tq.qb_question_id ? qbMap.get(tq.qb_question_id) : vMap.get(tq.question_id);
+        return {
+          ...tq,
+          question: src ? { id: src.id, correct_answer: src.correct_answer } : null,
+        };
+      });
 
       let score = 0;
       let totalMarks = 0;

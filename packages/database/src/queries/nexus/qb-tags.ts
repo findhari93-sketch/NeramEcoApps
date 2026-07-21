@@ -177,6 +177,100 @@ export async function setQuestionTags(
   }
 }
 
+/**
+ * ADD tags to many questions without touching their existing tags (bulk tagging).
+ * Idempotent upsert on the (question_id, tag_id) primary key. Never use the
+ * delete-reinsert setQuestionTags for bulk-add, it would wipe existing tags.
+ */
+export async function addQuestionTags(
+  questionIds: string[],
+  tagIds: string[],
+  createdBy?: string | null,
+  client?: TypedSupabaseClient,
+): Promise<{ inserted: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const qids = [...new Set(questionIds)].filter(Boolean);
+  const tids = [...new Set(tagIds)].filter(Boolean);
+  if (qids.length === 0 || tids.length === 0) return { inserted: 0 };
+  const rows: Array<{ question_id: string; tag_id: string; created_by: string | null }> = [];
+  for (const question_id of qids) {
+    for (const tag_id of tids) {
+      rows.push({ question_id, tag_id, created_by: createdBy ?? null });
+    }
+  }
+  // Chunk to keep each request modest (cross-product can get large).
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await supabase
+      .from(QUESTION_TAGS)
+      .upsert(rows.slice(i, i + 500), { onConflict: 'question_id,tag_id', ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  return { inserted: rows.length };
+}
+
+/**
+ * Per-question additive tagging (pairs mode): each question gets its own tag set
+ * added on top of whatever it already has. Used by the tagging assistant commit.
+ */
+export async function addQuestionTagPairs(
+  pairs: Array<{ question_id: string; tag_ids: string[] }>,
+  createdBy?: string | null,
+  client?: TypedSupabaseClient,
+): Promise<{ inserted: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const rows: Array<{ question_id: string; tag_id: string; created_by: string | null }> = [];
+  for (const p of pairs) {
+    if (!p?.question_id) continue;
+    for (const tag_id of [...new Set(p.tag_ids || [])]) {
+      if (tag_id) rows.push({ question_id: p.question_id, tag_id, created_by: createdBy ?? null });
+    }
+  }
+  if (rows.length === 0) return { inserted: 0 };
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await supabase
+      .from(QUESTION_TAGS)
+      .upsert(rows.slice(i, i + 500), { onConflict: 'question_id,tag_id', ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  return { inserted: rows.length };
+}
+
+/**
+ * Page through ACTIVE questions that carry no registry tags at all (the tagging
+ * assistant's default scope). Diffed in JS: an id-only scan of both tables stays
+ * small (a few thousand rows) and avoids a giant not-in URL against PostgREST.
+ */
+export async function getUntaggedQuestionsPage(
+  page: number,
+  pageSize: number,
+  client?: TypedSupabaseClient,
+): Promise<{ questions: Array<{ id: string; question_text: string | null; options: unknown }>; total: number }> {
+  const supabase = client || getSupabaseAdminClient();
+  const [allRes, taggedRes] = await Promise.all([
+    supabase
+      .from('nexus_qb_questions')
+      .select('id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .range(0, 99999),
+    supabase.from(QUESTION_TAGS).select('question_id').range(0, 99999),
+  ]);
+  if (allRes.error) throw allRes.error;
+  if (taggedRes.error) throw taggedRes.error;
+  const tagged = new Set((taggedRes.data || []).map((r: any) => r.question_id));
+  const untaggedIds = (allRes.data || []).map((r: any) => r.id).filter((id: string) => !tagged.has(id));
+  const total = untaggedIds.length;
+  const pageIds = untaggedIds.slice((page - 1) * pageSize, page * pageSize);
+  if (pageIds.length === 0) return { questions: [], total };
+  const { data, error } = await supabase
+    .from('nexus_qb_questions')
+    .select('id, question_text, options')
+    .in('id', pageIds);
+  if (error) throw error;
+  const byId = new Map<string, any>((data || []).map((q: any) => [q.id, q]));
+  return { questions: pageIds.map((id: string) => byId.get(id)).filter(Boolean), total };
+}
+
 // ============================================
 // DEDUPE
 // ============================================

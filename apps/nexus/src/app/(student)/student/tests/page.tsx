@@ -15,6 +15,9 @@ import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import FitnessCenterOutlinedIcon from '@mui/icons-material/FitnessCenterOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useRouter } from 'next/navigation';
 
@@ -28,6 +31,14 @@ interface TestAttempt {
   submitted_at?: string | null;
 }
 
+interface TestAssignment {
+  placement_id: string;
+  context_type: 'classroom_assignment' | 'student_practice';
+  available_from: string | null;
+  available_until: string | null;
+  passing_pct: number | null;
+}
+
 interface Test {
   id: string;
   title: string;
@@ -37,7 +48,27 @@ interface Test {
   total_marks: number;
   published_at: string | null;
   is_custom?: boolean;
+  assignment?: TestAssignment | null;
   myAttempt: TestAttempt | null;
+}
+
+type WindowState = 'open' | 'not_yet' | 'closed';
+
+function windowState(test: Test): WindowState {
+  const a = test.assignment;
+  if (!a) return 'open';
+  const now = Date.now();
+  if (a.available_from && new Date(a.available_from).getTime() > now) return 'not_yet';
+  if (a.available_until && new Date(a.available_until).getTime() < now) return 'closed';
+  return 'open';
+}
+
+function fmtWhen(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
 }
 
 export default function StudentTestsPage() {
@@ -104,8 +135,49 @@ export default function StudentTestsPage() {
     }
   }
 
+  /** Due / opens / closed chip for assigned tests. */
+  function getWindowChip(test: Test) {
+    const a = test.assignment;
+    if (!a) return null;
+    const state = windowState(test);
+    if (state === 'not_yet' && a.available_from) {
+      return (
+        <Chip
+          icon={<EventOutlinedIcon sx={{ fontSize: 14 }} />}
+          label={`Opens ${fmtWhen(a.available_from)}`}
+          size="small"
+          variant="outlined"
+          sx={{ fontSize: '0.7rem' }}
+        />
+      );
+    }
+    if (state === 'closed') {
+      return <Chip label="Closed" size="small" color="error" variant="outlined" sx={{ fontSize: '0.7rem' }} />;
+    }
+    if (a.available_until) {
+      const soon = new Date(a.available_until).getTime() - Date.now() < 24 * 60 * 60 * 1000;
+      return (
+        <Chip
+          icon={<EventOutlinedIcon sx={{ fontSize: 14 }} />}
+          label={`Due ${fmtWhen(a.available_until)}`}
+          size="small"
+          color={soon ? 'warning' : 'default'}
+          variant="outlined"
+          sx={{ fontSize: '0.7rem' }}
+        />
+      );
+    }
+    return null;
+  }
+
+  function takeUrl(test: Test): string {
+    const base = `/student/tests/take?test_id=${test.id}`;
+    return test.assignment ? `${base}&placement_id=${test.assignment.placement_id}` : base;
+  }
+
   function getActionButton(test: Test) {
     const status = getStatus(test);
+    const state = windowState(test);
     switch (status) {
       case 'not_started':
         return (
@@ -113,10 +185,11 @@ export default function StudentTestsPage() {
             variant="contained"
             size="small"
             startIcon={<PlayArrowOutlinedIcon />}
-            onClick={() => router.push(`/student/tests/take?test_id=${test.id}`)}
+            disabled={state !== 'open'}
+            onClick={() => router.push(takeUrl(test))}
             sx={{ textTransform: 'none', minHeight: 44, minWidth: 120 }}
           >
-            Start Test
+            {state === 'not_yet' ? 'Not open yet' : state === 'closed' ? 'Closed' : 'Start Test'}
           </Button>
         );
       case 'in_progress':
@@ -126,7 +199,8 @@ export default function StudentTestsPage() {
             color="warning"
             size="small"
             startIcon={<PlayArrowOutlinedIcon />}
-            onClick={() => router.push(`/student/tests/take?test_id=${test.id}`)}
+            disabled={state === 'not_yet'}
+            onClick={() => router.push(takeUrl(test))}
             sx={{ textTransform: 'none', minHeight: 44, minWidth: 120 }}
           >
             Resume Test
@@ -202,6 +276,7 @@ export default function StudentTestsPage() {
               {test.is_custom && (
                 <Chip label="Custom" size="small" color="secondary" variant="outlined" sx={{ fontSize: '0.7rem' }} />
               )}
+              {getWindowChip(test)}
               {getStatusChip(test)}
             </Box>
           </Box>
@@ -249,6 +324,40 @@ export default function StudentTestsPage() {
     );
   }
 
+  function renderSection(
+    title: string,
+    subtitle: string,
+    icon: React.ReactNode,
+    sectionTests: Test[],
+  ) {
+    if (sectionTests.length === 0) return null;
+    return (
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+          {icon}
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            {title}
+          </Typography>
+          <Chip label={sectionTests.length} size="small" sx={{ height: 20, fontWeight: 600 }} />
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+          {subtitle}
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {sectionTests.map((test) => renderTestCard(test))}
+        </Box>
+      </Box>
+    );
+  }
+
+  // Assigned: teacher-placed classroom assignments, plus legacy published tests
+  // without a placement (they were always mandatory-classroom tests).
+  const assigned = tests.filter(
+    (t) => !t.is_custom && (t.assignment ? t.assignment.context_type === 'classroom_assignment' : true),
+  );
+  const practice = tests.filter((t) => !t.is_custom && t.assignment?.context_type === 'student_practice');
+  const custom = tests.filter((t) => t.is_custom);
+
   return (
     <Box>
       <Box sx={{ mb: 2 }}>
@@ -270,33 +379,28 @@ export default function StudentTestsPage() {
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">
-            No tests available yet.
+            No tests yet. Tests your teacher assigns will appear here.
           </Typography>
         </Paper>
       ) : (
         <>
-          {/* My Custom Tests section */}
-          {tests.filter((t) => t.is_custom).length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
-                My Custom Tests
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {tests.filter((t) => t.is_custom).map((test) => renderTestCard(test))}
-              </Box>
-            </Box>
+          {renderSection(
+            'Assigned by your teacher',
+            'Complete these tests, they count for your class.',
+            <SchoolOutlinedIcon sx={{ fontSize: 20, color: 'primary.main' }} />,
+            assigned,
           )}
-
-          {/* Published Tests section */}
-          {tests.filter((t) => !t.is_custom).length > 0 && (
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
-                Published Tests
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {tests.filter((t) => !t.is_custom).map((test) => renderTestCard(test))}
-              </Box>
-            </Box>
+          {renderSection(
+            'Practice',
+            'Optional practice from your teacher, attempt any time.',
+            <FitnessCenterOutlinedIcon sx={{ fontSize: 20, color: 'success.main' }} />,
+            practice,
+          )}
+          {renderSection(
+            'My custom tests',
+            'Tests you built for yourself from the question bank.',
+            <QuizOutlinedIcon sx={{ fontSize: 20, color: 'secondary.main' }} />,
+            custom,
           )}
         </>
       )}

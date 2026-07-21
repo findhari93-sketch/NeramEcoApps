@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       // Drop a still-embedded base64 image (client should have uploaded it).
       // For drawing rows the reference image doubles as the inline content image.
       const contentImageUrl = isDrawing
-        ? a.reference_image_url
+        ? a.reference_image_urls[0] ?? null
         : a.content_image_url && !a.content_image_url.startsWith('data:')
           ? a.content_image_url
           : null;
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
           question_text: a.instructions || a.title,
           category: a.drawing_category || '3d_composition',
           sub_type: 'assignment',
-          reference_images: a.reference_image_url ? [{ url: a.reference_image_url }] : [],
+          reference_images: a.reference_image_urls.map((url) => ({ url })),
           is_active: false,
         });
         drawingQuestionId = q.id;

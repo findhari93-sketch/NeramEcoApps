@@ -211,6 +211,66 @@ export async function listTestsGroupedByContext(
     for (const c of crs || []) classroomNameMap.set(c.id, c.name);
   }
 
+  // Section names for the remaining contexts. context_id is the SECTION id in all
+  // three (the backfill placed per quiz-question section_id): foundation_section ->
+  // nexus_foundation_sections, module_item -> nexus_module_item_sections,
+  // class_recap_section -> nexus_class_recap_sections. Labels read "{parent} · {section}".
+  const ctxIds = (ctx: string) => [
+    ...new Set((placements || []).filter((p: any) => p.context_type === ctx).map((p: any) => p.context_id)),
+  ];
+  const sectionLabelMap = new Map<string, string>();
+  const foundationSecIds = ctxIds('foundation_section');
+  if (foundationSecIds.length > 0) {
+    const { data: secs } = await supabase
+      .from('nexus_foundation_sections')
+      .select('id, title, chapter_id')
+      .in('id', foundationSecIds);
+    const chapterIds = [...new Set((secs || []).map((s: any) => s.chapter_id).filter(Boolean))];
+    const chapterMap = new Map<string, string>();
+    if (chapterIds.length > 0) {
+      const { data: chs } = await supabase.from('nexus_foundation_chapters').select('id, title').in('id', chapterIds);
+      for (const c of chs || []) chapterMap.set(c.id, c.title);
+    }
+    for (const s of secs || []) {
+      const parent = s.chapter_id ? chapterMap.get(s.chapter_id) : null;
+      sectionLabelMap.set(s.id, parent ? `${parent} · ${s.title}` : s.title);
+    }
+  }
+  const moduleSecIds = ctxIds('module_item');
+  if (moduleSecIds.length > 0) {
+    const { data: secs } = await supabase
+      .from('nexus_module_item_sections')
+      .select('id, title, module_item_id')
+      .in('id', moduleSecIds);
+    const itemIds = [...new Set((secs || []).map((s: any) => s.module_item_id).filter(Boolean))];
+    const itemMap = new Map<string, string>();
+    if (itemIds.length > 0) {
+      const { data: items } = await supabase.from('nexus_module_items').select('id, title').in('id', itemIds);
+      for (const i of items || []) itemMap.set(i.id, i.title);
+    }
+    for (const s of secs || []) {
+      const parent = s.module_item_id ? itemMap.get(s.module_item_id) : null;
+      sectionLabelMap.set(s.id, parent ? `${parent} · ${s.title}` : s.title);
+    }
+  }
+  const recapSecIds = ctxIds('class_recap_section');
+  if (recapSecIds.length > 0) {
+    const { data: secs } = await supabase
+      .from('nexus_class_recap_sections')
+      .select('id, title, recap_id')
+      .in('id', recapSecIds);
+    const recapIds = [...new Set((secs || []).map((s: any) => s.recap_id).filter(Boolean))];
+    const recapMap = new Map<string, string>();
+    if (recapIds.length > 0) {
+      const { data: recaps } = await supabase.from('nexus_class_recaps').select('id, title').in('id', recapIds);
+      for (const r of recaps || []) recapMap.set(r.id, r.title);
+    }
+    for (const s of secs || []) {
+      const parent = s.recap_id ? recapMap.get(s.recap_id) : null;
+      sectionLabelMap.set(s.id, parent ? `${parent} · ${s.title}` : s.title);
+    }
+  }
+
   // 5. Categorize each test into a group (+ folder subgroup for study chapters).
   const GROUP_ORDER: { key: NexusTestOverviewGroupKey; label: string }[] = [
     { key: 'study_materials', label: 'Study Materials' },
@@ -251,10 +311,13 @@ export async function listTestsGroupedByContext(
       if (!studySub.has(folderKey)) studySub.set(folderKey, { label: folderLabel, tests: [] });
       studySub.get(folderKey)!.tests.push(base);
     } else if (ctx === 'class_recap_section') {
+      base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'class_recaps', base);
     } else if (ctx === 'foundation_section') {
+      base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'foundation', base);
     } else if (ctx === 'module_item') {
+      base.context_label = sectionLabelMap.get(p.context_id) || null;
       pushFlat(flat, 'modules', base);
     } else if (ctx === 'classroom_assignment') {
       base.context_label = classroomNameMap.get(p.context_id) || 'Classroom';
@@ -356,10 +419,53 @@ export async function getTestMeta(testId: string, client?: TypedSupabaseClient):
   const supabase = client || getSupabaseAdminClient();
   const { data } = await supabase
     .from(TESTS)
-    .select('id, title, description, test_type, duration_minutes, per_question_seconds, total_marks, passing_marks, is_published, is_active, shuffle_questions, is_repository')
+    .select('id, title, description, test_type, duration_minutes, per_question_seconds, total_marks, passing_marks, is_published, is_active, shuffle_questions, is_repository, created_from, created_at')
     .eq('id', testId)
     .maybeSingle();
   return data || null;
+}
+
+/** Whitelisted staff edits on a test row (title/description/publish state/pass marks). */
+export interface UpdateTestMetaInput {
+  title?: string;
+  description?: string | null;
+  isPublished?: boolean;
+  passingMarks?: number | null;
+}
+
+export async function updateTestMeta(
+  testId: string,
+  updates: UpdateTestMetaInput,
+  client?: TypedSupabaseClient,
+): Promise<any | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof updates.title === 'string' && updates.title.trim()) patch.title = updates.title.trim();
+  if (updates.description !== undefined) patch.description = updates.description;
+  if (typeof updates.isPublished === 'boolean') patch.is_published = updates.isPublished;
+  if (updates.passingMarks !== undefined) patch.passing_marks = updates.passingMarks;
+  const { data, error } = await supabase.from(TESTS).update(patch).eq('id', testId).select('*').maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/** Soft-delete a test: deactivates the row AND its placements (frees single-test contexts). */
+export async function softDeleteTest(testId: string, client?: TypedSupabaseClient): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  const { error } = await supabase.from(TESTS).update({ is_active: false }).eq('id', testId);
+  if (error) throw error;
+  const { error: pErr } = await supabase.from(PLACEMENTS).update({ is_active: false }).eq('test_id', testId);
+  if (pErr) throw pErr;
+}
+
+export async function countTestAttempts(testId: string, client?: TypedSupabaseClient): Promise<number> {
+  const supabase = client || getSupabaseAdminClient();
+  const { count, error } = await supabase
+    .from(ATTEMPTS)
+    .select('id', { count: 'exact', head: true })
+    .eq('test_id', testId);
+  if (error) throw error;
+  return count || 0;
 }
 
 // ============================================

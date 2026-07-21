@@ -13,6 +13,8 @@ import {
   IconButton,
   Snackbar,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
   useTheme,
   useMediaQuery,
   alpha,
@@ -20,6 +22,9 @@ import {
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import DensitySmallOutlinedIcon from '@mui/icons-material/DensitySmallOutlined';
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
+import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GraphAvatar from '@/components/GraphAvatar';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import AvailableStudentsSection from '@/components/AvailableStudentsSection';
@@ -65,6 +70,244 @@ function Meter({ label, value, color }: { label: string; value: number; color: s
   );
 }
 
+/** Density modes for the roster: dense scan list, avatar card grid, or roomy rows. */
+type ViewMode = 'compact' | 'cards' | 'detailed';
+const VIEW_STORAGE_KEY = 'nexus:students:view';
+
+/** Compact colored pill showing a single percentage stat (used in the dense list). */
+function StatPill({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <Box
+      sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.85, height: 22, borderRadius: 1.5, bgcolor: alpha(color, 0.12), flexShrink: 0 }}
+    >
+      <Typography component="span" sx={{ fontSize: '0.58rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.3px', lineHeight: 1 }}>
+        {label}
+      </Typography>
+      <Typography component="span" sx={{ fontSize: '0.72rem', fontWeight: 800, color, lineHeight: 1 }}>
+        {value}%
+      </Typography>
+    </Box>
+  );
+}
+
+/** Copy-email icon button shared by every view mode. */
+function CopyEmailButton({ email, title, onCopy }: { email: string; title: string; onCopy: (e: React.MouseEvent, email: string) => void }) {
+  return (
+    <Tooltip title={title} arrow>
+      <IconButton
+        size="small"
+        aria-label="Copy email"
+        onClick={(e) => onCopy(e, email)}
+        sx={{
+          flexShrink: 0,
+          width: 40,
+          height: 40,
+          color: 'primary.main',
+          bgcolor: (t) => alpha(t.palette.primary.main, 0.06),
+          '&:hover': { bgcolor: (t) => alpha(t.palette.primary.main, 0.14) },
+        }}
+      >
+        <ContentCopyOutlinedIcon sx={{ fontSize: '1rem' }} />
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+interface StudentRowProps {
+  student: EnrolledStudent;
+  checklistPct: number;
+  attColor: string;
+  doneColor: string;
+  presenceStatus?: string | null;
+  isMobile: boolean;
+  onOpen: () => void;
+  onCopy: (e: React.MouseEvent, email: string) => void;
+}
+
+/** Compact: single-line scan row. Small avatar, name, muted email, tiny stat pills. */
+function CompactRow({ student, checklistPct, attColor, doneColor, presenceStatus, onOpen, onCopy }: StudentRowProps) {
+  return (
+    <Paper
+      variant="outlined"
+      onClick={onOpen}
+      sx={{
+        px: 1.5,
+        py: 1,
+        cursor: 'pointer',
+        minHeight: 56,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.25,
+        borderRadius: 2,
+        transition: 'background-color .2s, border-color .2s',
+        '&:hover': { backgroundColor: 'action.hover', borderColor: (t) => alpha(t.palette.primary.main, 0.4) },
+        '&:active': { backgroundColor: 'action.selected' },
+      }}
+    >
+      <GraphAvatar msOid={student.ms_oid} name={student.name} size={36} tapToView={false} presenceStatus={presenceStatus} />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+          <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
+            {student.name}
+          </Typography>
+          {student.exam_batch && (
+            <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 18, fontSize: '0.62rem', fontFamily: 'monospace', flexShrink: 0 }} />
+          )}
+          <EmailDomainFlag status={student.email_status} />
+        </Box>
+        {student.email && (
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.72rem', lineHeight: 1.3 }}>
+            {student.email}
+          </Typography>
+        )}
+      </Box>
+      <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 0.75, flexShrink: 0 }}>
+        <StatPill label="Att" value={student.attendance.percentage} color={attColor} />
+        <StatPill label="List" value={checklistPct} color={doneColor} />
+      </Box>
+      {student.email && <CopyEmailButton email={student.email} title="Copy email" onCopy={onCopy} />}
+      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
+        <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
+      </Box>
+    </Paper>
+  );
+}
+
+/** Cards: avatar tile with chips + both progress meters, laid out in a grid. */
+function StudentCard({ student, checklistPct, attColor, doneColor, presenceStatus, onOpen, onCopy }: StudentRowProps) {
+  return (
+    <Paper
+      variant="outlined"
+      onClick={onOpen}
+      sx={{
+        p: 2,
+        cursor: 'pointer',
+        borderRadius: 2.5,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.25,
+        transition: 'background-color .2s, border-color .2s, box-shadow .2s',
+        '&:hover': {
+          backgroundColor: 'action.hover',
+          borderColor: (t) => alpha(t.palette.primary.main, 0.4),
+          boxShadow: (t) => `0 4px 14px ${alpha(t.palette.primary.main, 0.1)}`,
+        },
+        '&:active': { backgroundColor: 'action.selected' },
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <GraphAvatar msOid={student.ms_oid} name={student.name} size={48} tapToView={false} presenceStatus={presenceStatus} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography noWrap sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
+            {student.name}
+          </Typography>
+          {student.email && (
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+              {student.email}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+            {student.exam_batch && (
+              <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 20, fontSize: '0.68rem', fontFamily: 'monospace' }} />
+            )}
+            {student.batch && <Chip label={student.batch.name} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.68rem' }} />}
+            <EmailDomainFlag status={student.email_status} />
+          </Box>
+        </Box>
+      </Box>
+      <Box sx={{ display: 'flex', gap: 2, mt: 'auto', pt: 0.5 }}>
+        <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
+        <Meter label="Checklist" value={checklistPct} color={doneColor} />
+      </Box>
+      <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center' }}>
+        {student.email && <CopyEmailButton email={student.email} title="Copy email" onCopy={onCopy} />}
+        <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
+      </Box>
+    </Paper>
+  );
+}
+
+/** Detailed: the roomy two-row layout (avatar + chips on top, full meters below). */
+function DetailedRow({ student, checklistPct, attColor, doneColor, presenceStatus, isMobile, onOpen, onCopy }: StudentRowProps) {
+  return (
+    <Paper
+      variant="outlined"
+      onClick={onOpen}
+      sx={{
+        p: 2,
+        cursor: 'pointer',
+        minHeight: 48,
+        borderRadius: 2,
+        transition: 'background-color .2s, border-color .2s, box-shadow .2s',
+        '&:hover': {
+          backgroundColor: 'action.hover',
+          borderColor: (t) => alpha(t.palette.primary.main, 0.4),
+          boxShadow: (t) => `0 2px 10px ${alpha(t.palette.primary.main, 0.08)}`,
+        },
+        '&:active': { backgroundColor: 'action.selected' },
+      }}
+    >
+      {/* Top row: Avatar + Name + actions */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <GraphAvatar msOid={student.ms_oid} name={student.name} size={isMobile ? 44 : 48} tapToView={false} presenceStatus={presenceStatus} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+            <Typography variant="body1" sx={{ fontWeight: 700, fontSize: { xs: '0.92rem', sm: '1rem' } }} noWrap>
+              {student.name}
+            </Typography>
+            {student.exam_batch && (
+              <Chip label={student.exam_batch} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, fontFamily: 'monospace' }} />
+            )}
+            {student.batch && <Chip label={student.batch.name} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }} />}
+            <EmailDomainFlag status={student.email_status} />
+          </Box>
+          {student.email && !isMobile && (
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {student.email}
+            </Typography>
+          )}
+        </Box>
+        {student.email && <CopyEmailButton email={student.email} title={isMobile ? student.email : 'Copy email'} onCopy={onCopy} />}
+        <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
+          <ViewAsStudentButton studentId={student.id} reason={`Student list: ${student.name}`} iconOnly />
+        </Box>
+      </Box>
+      {/* Bottom row: progress meters */}
+      <Box sx={{ display: 'flex', gap: 2, mt: 1.25, ml: { xs: 0, sm: 7.5 }, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
+        <Meter label="Checklist" value={checklistPct} color={doneColor} />
+        {student.email && isMobile && (
+          <Typography variant="caption" color="text.disabled" noWrap sx={{ ml: 'auto', maxWidth: 130, fontSize: '0.65rem' }}>
+            {student.email}
+          </Typography>
+        )}
+      </Box>
+    </Paper>
+  );
+}
+
+/** Per-view loading skeleton (shape matches the chosen density). */
+function StudentListSkeleton({ viewMode }: { viewMode: ViewMode }) {
+  if (viewMode === 'cards') {
+    return (
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Skeleton key={i} variant="rectangular" height={158} sx={{ borderRadius: 2.5 }} />
+        ))}
+      </Box>
+    );
+  }
+  const h = viewMode === 'compact' ? 56 : 92;
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Skeleton key={i} variant="rectangular" height={h} sx={{ borderRadius: 2 }} />
+      ))}
+    </Box>
+  );
+}
+
 export default function TeacherStudents() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -86,6 +329,28 @@ export default function TeacherStudents() {
   const [examBatchFilter, setExamBatchFilter] = useState<string>('current');
   const [currentBatch, setCurrentBatch] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  // Density mode for the roster. Default 'compact' (best for scanning a long
+  // list); restored from localStorage after mount to avoid SSR hydration drift.
+  const [viewMode, setViewMode] = useState<ViewMode>('compact');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+      if (saved === 'compact' || saved === 'cards' || saved === 'detailed') setViewMode(saved);
+    } catch {
+      /* localStorage unavailable, keep default */
+    }
+  }, []);
+
+  const handleViewModeChange = useCallback((_e: React.MouseEvent<HTMLElement>, next: ViewMode | null) => {
+    if (!next) return; // ignore de-select (a mode is always active)
+    setViewMode(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
 
   // Load the exam-year batch list once (for the filter dropdown).
   useEffect(() => {
@@ -253,16 +518,54 @@ export default function TeacherStudents() {
               />
             </Box>
           )}
+
+          {/* Density switch: dense scan list / avatar cards / roomy rows */}
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={handleViewModeChange}
+            size="small"
+            aria-label="Student list layout"
+            sx={{
+              ml: { sm: 'auto' },
+              bgcolor: 'background.paper',
+              borderRadius: 2,
+              '& .MuiToggleButton-root': {
+                minWidth: 44,
+                minHeight: 40,
+                px: 1.25,
+                borderRadius: 2,
+                color: 'text.secondary',
+              },
+              '& .Mui-selected': {
+                bgcolor: (t) => alpha(t.palette.primary.main, 0.14),
+                color: 'primary.main',
+                '&:hover': { bgcolor: (t) => alpha(t.palette.primary.main, 0.2) },
+              },
+            }}
+          >
+            <ToggleButton value="compact" aria-label="Compact list">
+              <Tooltip title="Compact" arrow>
+                <DensitySmallOutlinedIcon fontSize="small" />
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="cards" aria-label="Card grid">
+              <Tooltip title="Cards" arrow>
+                <GridViewOutlinedIcon fontSize="small" />
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="detailed" aria-label="Detailed rows">
+              <Tooltip title="Detailed" arrow>
+                <ViewAgendaOutlinedIcon fontSize="small" />
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Box>
       </Box>
 
       {/* Student List */}
       {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} variant="rectangular" height={92} sx={{ borderRadius: 2 }} />
-          ))}
-        </Box>
+        <StudentListSkeleton viewMode={viewMode} />
       ) : filteredStudents.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 5, textAlign: 'center', borderRadius: 2, borderStyle: 'dashed' }}>
           <PeopleOutlinedIcon sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
@@ -282,131 +585,35 @@ export default function TeacherStudents() {
           </Typography>
         </Paper>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Box
+          sx={
+            viewMode === 'cards'
+              ? { display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1.5 }
+              : { display: 'flex', flexDirection: 'column', gap: viewMode === 'compact' ? 1 : 1.5 }
+          }
+        >
           {filteredStudents.map((student) => {
             const checklistPct = student.checklist.total > 0
               ? Math.round((student.checklist.completed / student.checklist.total) * 100)
               : 0;
             const attColor = student.attendance.percentage >= 75 ? theme.palette.success.main : theme.palette.warning.main;
             const doneColor = checklistPct >= 50 ? theme.palette.info.main : theme.palette.text.disabled;
+            const presenceStatus = student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined;
 
-            return (
-              <Paper
-                key={student.id}
-                variant="outlined"
-                onClick={() => router.push(`/teacher/students/${student.id}`)}
-                sx={{
-                  p: 2,
-                  cursor: 'pointer',
-                  minHeight: 48,
-                  borderRadius: 2,
-                  transition: 'background-color .2s, border-color .2s, box-shadow .2s',
-                  '&:hover': { backgroundColor: 'action.hover', borderColor: alpha(theme.palette.primary.main, 0.4), boxShadow: `0 2px 10px ${alpha(theme.palette.primary.main, 0.08)}` },
-                  '&:active': { backgroundColor: 'action.selected' },
-                }}
-              >
-                {/* Top row: Avatar + Name + actions */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <GraphAvatar
-                    msOid={student.ms_oid}
-                    name={student.name}
-                    size={isMobile ? 44 : 48}
-                    tapToView={false}
-                    presenceStatus={student.ms_oid ? presenceMap[student.ms_oid]?.availability : undefined}
-                  />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                      <Typography
-                        variant="body1"
-                        sx={{ fontWeight: 700, fontSize: { xs: '0.92rem', sm: '1rem' } }}
-                        noWrap
-                      >
-                        {student.name}
-                      </Typography>
-                      {student.exam_batch && (
-                        <Chip
-                          label={student.exam_batch}
-                          size="small"
-                          color="primary"
-                          sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, fontFamily: 'monospace' }}
-                        />
-                      )}
-                      {student.batch && (
-                        <Chip
-                          label={student.batch.name}
-                          size="small"
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
-                        />
-                      )}
-                      <EmailDomainFlag status={student.email_status} />
-                    </Box>
+            const rowProps = {
+              student,
+              checklistPct,
+              attColor,
+              doneColor,
+              presenceStatus,
+              isMobile,
+              onOpen: () => router.push(`/teacher/students/${student.id}`),
+              onCopy: handleCopyEmail,
+            };
 
-                    {/* Email: visible on desktop, hidden on mobile */}
-                    {student.email && !isMobile && (
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        {student.email}
-                      </Typography>
-                    )}
-                  </Box>
-
-                  {/* Copy email */}
-                  {student.email && (
-                    <Tooltip title={isMobile ? student.email : 'Copy email'} arrow>
-                      <IconButton
-                        size="small"
-                        aria-label="Copy email"
-                        onClick={(e) => handleCopyEmail(e, student.email!)}
-                        sx={{
-                          flexShrink: 0,
-                          width: 40,
-                          height: 40,
-                          color: 'primary.main',
-                          bgcolor: alpha(theme.palette.primary.main, 0.06),
-                          '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.14) },
-                        }}
-                      >
-                        <ContentCopyOutlinedIcon sx={{ fontSize: '1rem' }} />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-
-                  {/* View as this student (stop card navigation) */}
-                  <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
-                    <ViewAsStudentButton
-                      studentId={student.id}
-                      reason={`Student list: ${student.name}`}
-                      iconOnly
-                    />
-                  </Box>
-                </Box>
-
-                {/* Bottom row: progress meters */}
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: 2,
-                    mt: 1.25,
-                    ml: { xs: 0, sm: 7.5 },
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <Meter label="Attendance" value={student.attendance.percentage} color={attColor} />
-                  <Meter label="Checklist" value={checklistPct} color={doneColor} />
-                  {student.email && isMobile && (
-                    <Typography
-                      variant="caption"
-                      color="text.disabled"
-                      noWrap
-                      sx={{ ml: 'auto', maxWidth: 130, fontSize: '0.65rem' }}
-                    >
-                      {student.email}
-                    </Typography>
-                  )}
-                </Box>
-              </Paper>
-            );
+            if (viewMode === 'compact') return <CompactRow key={student.id} {...rowProps} />;
+            if (viewMode === 'cards') return <StudentCard key={student.id} {...rowProps} />;
+            return <DetailedRow key={student.id} {...rowProps} />;
           })}
         </Box>
       )}

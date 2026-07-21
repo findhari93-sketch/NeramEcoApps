@@ -55,6 +55,10 @@ interface Stats {
   // many of those have lost their Nexus access.
   pastBatchActive?: number;
   pastBatchNoAccess?: number;
+  // Personal-only (Gmail, no Microsoft org identity) students, hidden from Nexus,
+  // and how many of those still hold a Nexus enrollment.
+  personalOnly?: number;
+  personalOnlyEnrolled?: number;
 }
 
 interface YearRevenue {
@@ -260,6 +264,8 @@ export default function StudentsPage() {
     totalPending: 0,
     pastBatchActive: 0,
     pastBatchNoAccess: 0,
+    personalOnly: 0,
+    personalOnlyEnrolled: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -289,6 +295,9 @@ export default function StudentsPage() {
   // banner). It narrows the already-loaded rows and never touches the global batch
   // switcher, so the exam-batch chip and other banners are unaffected.
   const [pastBatchFilter, setPastBatchFilter] = useState(false);
+  // Client-side "show only personal-only accounts" filter (Gmail, no Microsoft org
+  // identity). These are hidden from Nexus and need linking/merging in the drawer.
+  const [personalOnlyFilter, setPersonalOnlyFilter] = useState(false);
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
@@ -328,6 +337,7 @@ export default function StudentsPage() {
     setError('');
     // A batch switch reloads a different cohort, so never carry a stale filter over.
     setPastBatchFilter(false);
+    setPersonalOnlyFilter(false);
 
     try {
       const params = new URLSearchParams();
@@ -433,11 +443,15 @@ export default function StudentsPage() {
     [supabaseUserId, currentBatch, fetchStudents, fetchRevenue, view]
   );
 
-  // Rows handed to the grid: narrowed to past-batch actives when the banner filter is on.
-  const visibleStudents = useMemo(
-    () => (pastBatchFilter ? students.filter((s) => s.past_batch) : students),
-    [students, pastBatchFilter]
-  );
+  // Rows handed to the grid: narrowed by the banner filters (composable). Past-batch
+  // = active students on an older exam batch; personal-only = Gmail rows with no
+  // Microsoft org identity (hidden from Nexus, need linking).
+  const visibleStudents = useMemo(() => {
+    let rows = students;
+    if (pastBatchFilter) rows = rows.filter((s) => s.past_batch);
+    if (personalOnlyFilter) rows = rows.filter((s) => !s.ms_oid);
+    return rows;
+  }, [students, pastBatchFilter, personalOnlyFilter]);
 
   // Bulk: move to the Software course program (leaves the architecture list).
   const moveToSoftware = useCallback(
@@ -919,6 +933,31 @@ export default function StudentsPage() {
         </Alert>
       )}
 
+      {/* Personal-only banner: students with only a Gmail (no Microsoft org identity).
+          Nexus hides these, so link the Gmail to the student's @neramclasses.com
+          account (or merge a duplicate) from the row-click drawer. */}
+      {(stats.personalOnly ?? 0) > 0 && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2, borderRadius: 1 }}
+          action={
+            personalOnlyFilter ? (
+              <Button color="info" size="small" variant="text" onClick={() => setPersonalOnlyFilter(false)} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                Show all
+              </Button>
+            ) : (
+              <Button color="info" size="small" variant="contained" onClick={() => setPersonalOnlyFilter(true)} sx={{ textTransform: 'none', fontWeight: 600 }}>
+                Review them
+              </Button>
+            )
+          }
+        >
+          <strong>{stats.personalOnly} students</strong> have no organisation account (personal Gmail only), so they don&apos;t appear in Nexus.
+          Open a student to link the Gmail to their @neramclasses.com account, or merge a duplicate.
+          {(stats.personalOnlyEnrolled ?? 0) > 0 && ` ${stats.personalOnlyEnrolled} still hold a Nexus enrollment.`}
+        </Alert>
+      )}
+
       {/* Active exam-batch scope. The switch is GLOBAL (profile menu, bottom-left);
           this chip just shows what you're viewing. Columns filter client-side. */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -935,6 +974,15 @@ export default function StudentsPage() {
             variant="filled"
             size="small"
             onDelete={() => setPastBatchFilter(false)}
+          />
+        )}
+        {personalOnlyFilter && (
+          <Chip
+            label="Showing personal-only students"
+            color="info"
+            variant="filled"
+            size="small"
+            onDelete={() => setPersonalOnlyFilter(false)}
           />
         )}
         <Typography variant="caption" color="text.secondary">

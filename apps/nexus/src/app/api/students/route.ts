@@ -20,6 +20,12 @@ export async function GET(request: NextRequest) {
     const search = request.nextUrl.searchParams.get('search');
     const batchFilter = request.nextUrl.searchParams.get('batch');
     const examBatchParam = request.nextUrl.searchParams.get('examBatch');
+    // Nexus is an organisation (Microsoft-only) app: by default the roster shows
+    // only students who hold a real org identity (ms_oid => @neramclasses.com or the
+    // pending .onmicrosoft.com). Gmail-only self-enrolled shells (firebase_uid, no
+    // ms_oid) can't even log into Nexus, so they are hidden here (Admin keeps them
+    // visible for linking/merge). Pass includeNonOrg=1 to opt out (tests/admin).
+    const includeNonOrg = request.nextUrl.searchParams.get('includeNonOrg') === '1';
 
     if (!classroomId) {
       return NextResponse.json({ error: 'Missing classroom parameter' }, { status: 400 });
@@ -41,6 +47,12 @@ export async function GET(request: NextRequest) {
       .eq('role', 'student')
       .eq('is_active', true)
       .eq('users.is_alumni', false);
+
+    // Org-identity gate (see includeNonOrg above). Same rule already applied to
+    // staff in lib/nexus-members.ts (isLicensedStaff requires a real ms_oid).
+    if (!includeNonOrg) {
+      enrollmentQuery = enrollmentQuery.not('users.ms_oid', 'is', null);
+    }
 
     if (search) {
       enrollmentQuery = enrollmentQuery.ilike('users.name', `%${search}%`);

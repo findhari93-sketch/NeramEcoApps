@@ -10,13 +10,12 @@ import {
   Button,
   TextField,
   MenuItem,
-  IconButton,
 } from '@neram/ui';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
-import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { compressImage } from '@/utils/imageCompression';
+import PhotoCapturePdf from '@/components/upload/PhotoCapturePdf';
 
 interface Submission {
   id: string;
@@ -46,8 +45,7 @@ export default function StudentQuestions() {
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [difficulty, setDifficulty] = useState('medium');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [qImages, setQImages] = useState<File[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
@@ -84,26 +82,13 @@ export default function StudentQuestions() {
     });
   }
 
-  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  function removeImage() {
-    setImageFile(null);
-    setImagePreview(null);
-  }
-
   async function uploadImage(token: string): Promise<string | undefined> {
-    if (!imageFile) return undefined;
+    if (!qImages.length) return undefined;
     setUploadingImage(true);
     try {
+      const compressed = await compressImage(qImages[0], 2000, 0.8, 'question.jpg');
       const formData = new FormData();
-      formData.append('file', imageFile);
+      formData.append('file', compressed);
       formData.append('exercise_id', 'question-submission');
 
       const res = await fetch('/api/drawings/upload', {
@@ -131,8 +116,7 @@ export default function StudentQuestions() {
     setOptions(['', '', '', '']);
     setCorrectAnswer('');
     setDifficulty('medium');
-    setImageFile(null);
-    setImagePreview(null);
+    setQImages([]);
   }
 
   async function handleSubmit() {
@@ -143,7 +127,7 @@ export default function StudentQuestions() {
       if (!token) return;
 
       let image_url: string | undefined;
-      if (imageFile) {
+      if (qImages.length) {
         image_url = await uploadImage(token);
       }
 
@@ -294,45 +278,18 @@ export default function StudentQuestions() {
             ))}
           </TextField>
 
-          {/* Image upload */}
-          {imagePreview ? (
-            <Paper variant="outlined" sx={{ p: 1, mb: 1.5, position: 'relative' }}>
-              <IconButton
-                size="small"
-                onClick={removeImage}
-                sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper' }}
-              >
-                <CloseOutlinedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-              <Box
-                component="img"
-                src={imagePreview}
-                alt="Question image"
-                sx={{
-                  width: '100%',
-                  maxHeight: 200,
-                  objectFit: 'contain',
-                  borderRadius: 1,
-                }}
-              />
-            </Paper>
-          ) : (
-            <Button
-              variant="outlined"
-              size="small"
-              component="label"
-              startIcon={<ImageOutlinedIcon />}
-              sx={{ textTransform: 'none', mb: 1.5 }}
-            >
-              Attach Image
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleImageSelect}
-              />
-            </Button>
-          )}
+          {/* Image attach (optional) */}
+          <Box sx={{ mb: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              Attach a photo (optional)
+            </Typography>
+            <PhotoCapturePdf
+              value={qImages}
+              onChange={setQImages}
+              maxFiles={1}
+              disabled={submitting || uploadingImage}
+            />
+          </Box>
 
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button

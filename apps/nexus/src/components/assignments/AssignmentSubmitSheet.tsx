@@ -5,29 +5,39 @@
  * or photos, or one PDF when "Images or PDF"). Files upload straight to storage
  * via signed URLs (the bytes never pass through our server), then the submission
  * is recorded. Redo state shows the teacher's feedback up top.
+ *
+ * Two students-first touches:
+ * - Presentation adapts: bottom sheet on phones, right-hand drawer on desktop
+ *   (ResponsiveActionSheet).
+ * - When a PDF is the deliverable, students can take photos of their work and we
+ *   build the single PDF for them (imagesToPdf) so they never need a converter
+ *   app. Choosing an existing PDF stays available. Photos are always compressed.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Box,
-  Drawer,
   Stack,
   Typography,
-  IconButton,
   Button,
   LinearProgress,
   ToggleButtonGroup,
   ToggleButton,
+  Divider,
+  IconButton,
   alpha,
 } from '@neram/ui';
 import { getSupabaseBrowserClient } from '@neram/database';
-import CloseIcon from '@mui/icons-material/Close';
-import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { ASSIGNMENT_SUBMISSIONS_BUCKET } from '@/lib/assignment-constants';
+import { compressImage } from '@/utils/imageCompression';
+import { imagesToPdf } from '@/utils/imagesToPdf';
+import ResponsiveActionSheet from '@/components/upload/ResponsiveActionSheet';
+import PhotoCapturePdf from '@/components/upload/PhotoCapturePdf';
 
 type Format = 'pdf' | 'image' | 'pdf_or_image';
-const MAX_FILES = 12;
+const MAX_IMAGES = 12;
+const MAX_PDF_PAGES = 20;
 
 interface AssignmentSubmitSheetProps {
   open: boolean;
@@ -48,53 +58,59 @@ export default function AssignmentSubmitSheet({
   authFetch,
   onSubmitted,
 }: AssignmentSubmitSheetProps) {
-  const photoRef = useRef<HTMLInputElement>(null);
-  const pdfRef = useRef<HTMLInputElement>(null);
+  const existingPdfRef = useRef<HTMLInputElement>(null);
   // For "Images or PDF" the student picks a mode so we can enforce no-mixing.
   const [mode, setMode] = useState<'images' | 'pdf'>(format === 'pdf' ? 'pdf' : 'images');
-  const [files, setFiles] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
 
   const effectiveMode = format === 'pdf' ? 'pdf' : mode;
 
-  const addFiles = (list: FileList | null) => {
-    if (!list) return;
-    const incoming = Array.from(list);
+  const resetInputs = () => {
+    setPhotos([]);
+    setPdfFile(null);
     setError('');
-    if (effectiveMode === 'pdf') {
-      const pdf = incoming.find((f) => f.type === 'application/pdf');
-      if (!pdf) {
-        setError('Choose a PDF file.');
-        return;
-      }
-      setFiles([pdf]);
-    } else {
-      const images = incoming.filter((f) => f.type.startsWith('image/'));
-      const merged = [...files, ...images].slice(0, MAX_FILES);
-      setFiles(merged);
-    }
   };
 
-  const removeFile = (idx: number) => setFiles((f) => f.filter((_, i) => i !== idx));
+  const canSubmit = effectiveMode === 'pdf' ? Boolean(pdfFile) || photos.length > 0 : photos.length > 0;
 
   const submit = async () => {
-    if (!files.length) {
+    if (!canSubmit) {
       setError('Add your work first.');
       return;
     }
     setBusy(true);
     setError('');
-    setProgress(5);
+    setProgress(4);
     try {
+      // Build the file(s) to upload from the staged input.
+      let uploadFiles: File[];
+      if (effectiveMode === 'pdf') {
+        if (pdfFile) {
+          uploadFiles = [pdfFile];
+        } else {
+          setProgress(8);
+          uploadFiles = [await imagesToPdf(photos, { fileName: 'submission.pdf' })];
+        }
+      } else {
+        // Images: compress each photo before uploading it separately.
+        setProgress(8);
+        uploadFiles = await Promise.all(
+          photos.map((f, i) => compressImage(f, 2000, 0.8, `image-${i + 1}.jpg`)),
+        );
+      }
+      setProgress(15);
+
       // 1. Ask the server for signed upload URLs (validates the format lock).
       const { uploads } = await authFetch('/api/student/assignments', {
         method: 'POST',
         body: JSON.stringify({
           action: 'create_upload_urls',
           assignment_id: assignmentId,
-          files: files.map((f) => ({ name: f.name, mime: f.type, size_bytes: f.size })),
+          files: uploadFiles.map((f) => ({ name: f.name, mime: f.type, size_bytes: f.size })),
         }),
       });
 
@@ -102,11 +118,11 @@ export default function AssignmentSubmitSheet({
       const storage = getSupabaseBrowserClient().storage.from(ASSIGNMENT_SUBMISSIONS_BUCKET);
       for (let i = 0; i < uploads.length; i++) {
         const u = uploads[i];
-        const { error: upErr } = await storage.uploadToSignedUrl(u.path, u.token, files[i], {
-          contentType: files[i].type,
+        const { error: upErr } = await storage.uploadToSignedUrl(u.path, u.token, uploadFiles[i], {
+          contentType: uploadFiles[i].type,
         });
         if (upErr) throw new Error(upErr.message || 'Upload failed');
-        setProgress(10 + Math.round(((i + 1) / uploads.length) * 80));
+        setProgress(20 + Math.round(((i + 1) / uploads.length) * 70));
       }
 
       // 3. Record the submission.
@@ -124,7 +140,7 @@ export default function AssignmentSubmitSheet({
         }),
       });
       setProgress(100);
-      setFiles([]);
+      resetInputs();
       onSubmitted();
       onClose();
     } catch (err) {
@@ -135,165 +151,125 @@ export default function AssignmentSubmitSheet({
     }
   };
 
-  const previews = useMemo(
-    () => files.map((f) => ({ file: f, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null })),
-    [files],
+  const footer = (
+    <>
+      {busy && <LinearProgress variant="determinate" value={progress} sx={{ mb: 1.5, borderRadius: 1 }} />}
+      {error && (
+        <Typography color="error" variant="body2" sx={{ mb: 1.5 }}>
+          {error}
+        </Typography>
+      )}
+      <Button variant="contained" fullWidth disabled={busy || !canSubmit} onClick={submit} sx={{ minHeight: 48 }}>
+        {busy ? (effectiveMode === 'pdf' && !pdfFile ? 'Building PDF…' : 'Submitting…') : 'Submit'}
+      </Button>
+    </>
   );
 
   return (
-    <Drawer
-      anchor="bottom"
-      open={open}
-      onClose={onClose}
-      PaperProps={{ sx: { maxHeight: '92vh', borderTopLeftRadius: 20, borderTopRightRadius: 20 } }}
-    >
-      <Box sx={{ p: 2.5, overflowY: 'auto' }}>
-        <Stack direction="row" alignItems="center" sx={{ mb: 2 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', flex: 1 }}>Submit your work</Typography>
-          <IconButton onClick={onClose} sx={{ minWidth: 44, minHeight: 44 }}>
-            <CloseIcon />
-          </IconButton>
-        </Stack>
+    <ResponsiveActionSheet open={open} onClose={onClose} title="Submit your work" footer={footer}>
+      {redoFeedback && (
+        <Box
+          sx={{
+            p: 1.5,
+            mb: 2,
+            borderRadius: 2,
+            bgcolor: alpha('#EF6C00', 0.1),
+            border: `1px solid ${alpha('#EF6C00', 0.3)}`,
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 700, color: '#B54700' }}>
+            Your teacher asked for a redo
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.25 }}>
+            {redoFeedback}
+          </Typography>
+        </Box>
+      )}
 
-        {redoFeedback && (
-          <Box sx={{ p: 1.5, mb: 2, borderRadius: 2, bgcolor: alpha('#EF6C00', 0.1), border: `1px solid ${alpha('#EF6C00', 0.3)}` }}>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: '#B54700' }}>
-              Your teacher asked for a redo
+      {format === 'pdf_or_image' && (
+        <ToggleButtonGroup
+          value={mode}
+          exclusive
+          onChange={(_, v) => {
+            if (v) {
+              setMode(v);
+              resetInputs();
+            }
+          }}
+          fullWidth
+          size="small"
+          sx={{ mb: 2 }}
+        >
+          <ToggleButton value="images" sx={{ minHeight: 44, textTransform: 'none' }}>
+            Photos
+          </ToggleButton>
+          <ToggleButton value="pdf" sx={{ minHeight: 44, textTransform: 'none' }}>
+            One PDF
+          </ToggleButton>
+        </ToggleButtonGroup>
+      )}
+
+      {/* Hidden picker for students who already have a PDF. */}
+      <input
+        ref={existingPdfRef}
+        type="file"
+        accept="application/pdf"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) {
+            setPhotos([]);
+            setPdfFile(f);
+            setError('');
+          }
+          e.target.value = '';
+        }}
+      />
+
+      {effectiveMode === 'images' ? (
+        <PhotoCapturePdf value={photos} onChange={setPhotos} maxFiles={MAX_IMAGES} disabled={busy} />
+      ) : pdfFile ? (
+        // An existing PDF was chosen.
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        >
+          <PictureAsPdfOutlinedIcon sx={{ fontSize: 30, color: '#C62828' }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap>
+              {pdfFile.name}
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.25 }}>
-              {redoFeedback}
+            <Typography variant="caption" color="text.secondary">
+              {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
             </Typography>
           </Box>
-        )}
-
-        {format === 'pdf_or_image' && (
-          <ToggleButtonGroup
-            value={mode}
-            exclusive
-            onChange={(_, v) => {
-              if (v) {
-                setMode(v);
-                setFiles([]);
-              }
-            }}
-            fullWidth
-            size="small"
-            sx={{ mb: 2 }}
-          >
-            <ToggleButton value="images" sx={{ minHeight: 44, textTransform: 'none' }}>
-              Photos
-            </ToggleButton>
-            <ToggleButton value="pdf" sx={{ minHeight: 44, textTransform: 'none' }}>
-              One PDF
-            </ToggleButton>
-          </ToggleButtonGroup>
-        )}
-
-        <input
-          ref={photoRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          hidden
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-        <input
-          ref={pdfRef}
-          type="file"
-          accept="application/pdf"
-          hidden
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-
-        {/* File chips / previews */}
-        {files.length > 0 && (
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-            {previews.map((p, i) => (
-              <Box key={i} sx={{ position: 'relative' }}>
-                {p.url ? (
-                  <Box
-                    component="img"
-                    src={p.url}
-                    alt={p.file.name}
-                    sx={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
-                  />
-                ) : (
-                  <Box
-                    sx={{
-                      width: 84,
-                      height: 84,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: 'action.hover',
-                    }}
-                  >
-                    <PictureAsPdfOutlinedIcon sx={{ fontSize: 26, color: '#C62828' }} />
-                    <Typography variant="caption" noWrap sx={{ maxWidth: 76, px: 0.5 }}>
-                      PDF
-                    </Typography>
-                  </Box>
-                )}
-                <IconButton
-                  size="small"
-                  onClick={() => removeFile(i)}
-                  sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', width: 26, height: 26 }}
-                >
-                  <DeleteOutlineIcon sx={{ fontSize: 15 }} />
-                </IconButton>
-              </Box>
-            ))}
-          </Stack>
-        )}
-
-        <Stack direction="row" spacing={1.5} sx={{ mb: 2 }}>
-          {effectiveMode === 'images' ? (
-            <Button
-              variant="outlined"
-              fullWidth
-              startIcon={<PhotoCameraOutlinedIcon />}
-              onClick={() => photoRef.current?.click()}
-              disabled={busy}
-              sx={{ minHeight: 48 }}
-            >
-              {files.length ? 'Add more photos' : 'Add photos'}
-            </Button>
-          ) : (
-            <Button
-              variant="outlined"
-              fullWidth
-              startIcon={<PictureAsPdfOutlinedIcon />}
-              onClick={() => pdfRef.current?.click()}
-              disabled={busy}
-              sx={{ minHeight: 48 }}
-            >
-              {files.length ? 'Change PDF' : 'Choose PDF'}
-            </Button>
-          )}
+          <IconButton aria-label="Remove PDF" onClick={() => setPdfFile(null)} disabled={busy} sx={{ minWidth: 44, minHeight: 44 }}>
+            <DeleteOutlineIcon />
+          </IconButton>
         </Stack>
-
-        {busy && <LinearProgress variant="determinate" value={progress} sx={{ mb: 1.5, borderRadius: 1 }} />}
-        {error && (
-          <Typography color="error" variant="body2" sx={{ mb: 1.5 }}>
-            {error}
-          </Typography>
-        )}
-
-        <Button variant="contained" fullWidth disabled={busy || !files.length} onClick={submit} sx={{ minHeight: 48 }}>
-          {busy ? 'Submitting...' : 'Submit'}
-        </Button>
-      </Box>
-    </Drawer>
+      ) : (
+        // Build a PDF from photos (primary), or fall back to choosing a PDF.
+        <>
+          <PhotoCapturePdf value={photos} onChange={setPhotos} maxFiles={MAX_PDF_PAGES} disabled={busy} />
+          {photos.length === 0 && (
+            <>
+              <Divider sx={{ my: 2, color: 'text.disabled', fontSize: '0.8rem' }}>or</Divider>
+              <Button
+                variant="text"
+                fullWidth
+                startIcon={<PictureAsPdfOutlinedIcon />}
+                onClick={() => existingPdfRef.current?.click()}
+                disabled={busy}
+                sx={{ minHeight: 44, textTransform: 'none' }}
+              >
+                Already have a PDF? Choose file
+              </Button>
+            </>
+          )}
+        </>
+      )}
+    </ResponsiveActionSheet>
   );
 }

@@ -82,6 +82,8 @@ export default function TakeTestPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const testId = searchParams.get('test_id');
+  const placementId = searchParams.get('placement_id');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Core state
   const [test, setTest] = useState<TestInfo | null>(null);
@@ -129,12 +131,14 @@ export default function TakeTestPage() {
       if (!token) return;
       tokenRef.current = token;
 
-      const res = await fetch(`/api/tests/attempt?test_id=${testId}`, {
+      const res = await fetch(`/api/tests/attempt?test_id=${testId}${placementId ? `&placement_id=${placementId}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) {
         console.error('Failed to load test:', res.status);
+        const j = await res.json().catch(() => ({}));
+        if (j?.error) setLoadError(j.error);
         return;
       }
 
@@ -516,7 +520,7 @@ export default function TakeTestPage() {
       <Box sx={{ position: 'fixed', inset: 0, zIndex: 1200, p: 3, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
         <Box>
           <Typography variant="body1" color="text.secondary">
-            Unable to load test. Please go back and try again.
+            {loadError || 'Unable to load test. Please go back and try again.'}
           </Typography>
           <Button
             variant="outlined"

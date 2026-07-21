@@ -130,6 +130,10 @@ export async function GET(request: NextRequest) {
         classroom_email,
         classroom_email_status: classifyDomain(classroom_email),
         personal_email,
+        // Microsoft org identity. Null = no @neramclasses.com/Entra account, i.e. a
+        // personal-only (Gmail) row that Nexus now hides. Drives the admin "Personal-only"
+        // filter (the exact inverse of the Nexus org gate).
+        ms_oid: s.ms_oid,
         phone: s.phone || '',
         avatar_url: s.avatar_url,
         academic_year: s.academic_year,
@@ -172,6 +176,10 @@ export async function GET(request: NextRequest) {
       // Active students stuck on a past batch, and how many of those have lost Nexus access.
       pastBatchActive: students.filter((s) => s.past_batch).length,
       pastBatchNoAccess: students.filter((s) => s.past_batch && !s.has_nexus_access).length,
+      // Personal-only (Gmail, no Microsoft org identity) students: hidden from Nexus,
+      // and how many still hold a Nexus enrollment (the phantom rows to link/merge).
+      personalOnly: students.filter((s) => !s.ms_oid).length,
+      personalOnlyEnrolled: students.filter((s) => !s.ms_oid && s.has_nexus_access).length,
       // Have Nexus access but have never opened the Nexus app, the ones to chase.
       accessNeverOpened: students.filter((s) => s.has_nexus_access && !s.nexus_first_login_at).length,
     };

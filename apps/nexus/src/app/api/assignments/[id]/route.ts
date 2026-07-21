@@ -23,6 +23,22 @@ import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { notifyAssignmentPublished, notifyAssignmentReviewed } from '@/lib/timetable-notifications';
 
+/** Trimmed, deduped, capped list of valid https reference-image URLs. */
+function sanitizeRefUrls(input: unknown): string[] {
+  const raw = Array.isArray(input) ? input : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of raw) {
+    const s = String(v || '').trim();
+    if (/^https?:\/\//i.test(s) && !seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+      if (out.length >= 6) break;
+    }
+  }
+  return out;
+}
+
 /**
  * GET /api/assignments/[id]
  * Staff: full assignment + attachments + roster matrix (each submission's files
@@ -149,6 +165,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (body.due_at !== undefined) updates.due_at = body.due_at || null;
         if (body.class_date !== undefined) updates.class_date = body.class_date;
         if (body.content_image_url !== undefined) updates.content_image_url = body.content_image_url || null;
+        // Multi-image reference path (drawing): the assignment keeps the first image
+        // for its thumbnail; the full set syncs to the backing question below.
+        let refUrls: string[] | null = null;
+        if (body.reference_image_urls !== undefined) {
+          refUrls = sanitizeRefUrls(body.reference_image_urls);
+          updates.content_image_url = refUrls[0] ?? null;
+        }
         if (body.content_video_url !== undefined) updates.content_video_url = body.content_video_url || null;
         if (body.links !== undefined && Array.isArray(body.links)) {
           updates.links = body.links
@@ -179,7 +202,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if ((assignment as any).assignment_type === 'drawing' && (assignment as any).drawing_question_id) {
           const qUpdate: { question_text?: string; reference_images?: Array<{ url: string }> } = {};
           if (body.instructions !== undefined) qUpdate.question_text = (body.instructions || updated.title) as string;
-          if (body.content_image_url !== undefined) {
+          if (refUrls !== null) {
+            qUpdate.reference_images = refUrls.map((url) => ({ url }));
+          } else if (body.content_image_url !== undefined) {
             qUpdate.reference_images = body.content_image_url ? [{ url: String(body.content_image_url) }] : [];
           }
           if (Object.keys(qUpdate).length) {

@@ -16,10 +16,12 @@ import {
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import AddTaskOutlinedIcon from '@mui/icons-material/AddTaskOutlined';
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBOriginalPaper, QBExamType, QBProgressStats } from '@neram/database';
@@ -38,19 +40,19 @@ const HUB_LINKS: {
   color: string;
 }[] = [
   {
-    key: 'build',
-    label: 'Build a test',
-    desc: 'Assemble from bank questions',
-    href: '/teacher/question-bank/build',
-    icon: <AddTaskOutlinedIcon />,
+    key: 'questions',
+    label: 'Questions',
+    desc: 'Browse, filter and tag everything',
+    href: '/teacher/question-bank/questions',
+    icon: <QuizOutlinedIcon />,
     color: '#6366F1',
   },
   {
-    key: 'tests',
-    label: 'Tests',
-    desc: 'By chapter, recap & source',
-    href: '/teacher/question-bank/tests',
-    icon: <FactCheckOutlinedIcon />,
+    key: 'sets',
+    label: 'Custom sets',
+    desc: 'Named question collections',
+    href: '/teacher/question-bank/sets',
+    icon: <CollectionsBookmarkOutlinedIcon />,
     color: '#0EA5E9',
   },
   {
@@ -68,6 +70,14 @@ const HUB_LINKS: {
     href: '/teacher/questions',
     icon: <RateReviewOutlinedIcon />,
     color: '#10B981',
+  },
+  {
+    key: 'tagging',
+    label: 'Tagging assistant',
+    desc: 'Bulk-tag questions with AI help',
+    href: '/teacher/question-bank/tagging-assistant',
+    icon: <AutoAwesomeOutlinedIcon />,
+    color: '#8B5CF6',
   },
 ];
 
@@ -271,11 +281,29 @@ export default function QuestionBankDashboard() {
         )}
       </Box>
 
+      {/* Tests moved out of the Question Bank into their own section */}
+      <Card
+        variant="outlined"
+        sx={{ borderRadius: 2, mb: 1.5, transition: 'border-color 150ms', '&:hover': { borderColor: 'primary.main' } }}
+      >
+        <CardActionArea
+          onClick={() => router.push('/teacher/tests')}
+          aria-label="Open the Tests section"
+          sx={{ p: 1.25, display: 'flex', alignItems: 'center', gap: 1, minHeight: 48 }}
+        >
+          <FactCheckOutlinedIcon color="primary" sx={{ fontSize: 20 }} />
+          <Typography variant="body2" sx={{ flex: 1, fontWeight: 600 }}>
+            Looking for tests? Build and manage them in the Tests section.
+          </Typography>
+          <ChevronRightOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+        </CardActionArea>
+      </Card>
+
       {/* Hub destinations (previously orphaned routes now reachable) */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
+          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(3, 1fr)', lg: 'repeat(5, 1fr)' },
           gap: { xs: 1, sm: 1.5 },
           mb: 2.5,
         }}

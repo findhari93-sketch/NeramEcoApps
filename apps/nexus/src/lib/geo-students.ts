@@ -97,7 +97,11 @@ export async function getActiveGeoStudents(): Promise<ActiveGeoStudent[]> {
     .eq('role', 'student')
     .in('classroom_id', classroomIds)
     .eq('users.is_alumni', false)
-    .eq('users.user_type', 'student');
+    .eq('users.user_type', 'student')
+    // Org-identity gate: keep parity with the teacher students list (/api/students),
+    // which shows only students holding a real Microsoft org identity. Gmail-only
+    // shells (no ms_oid) can't log into Nexus and are excluded from the geo view too.
+    .not('users.ms_oid', 'is', null);
 
   if (enrErr) {
     console.error('getActiveGeoStudents: enrollments query failed', enrErr);

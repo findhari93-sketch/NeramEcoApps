@@ -29,6 +29,7 @@ import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
 
@@ -125,6 +126,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Tests', path: '/teacher/tests', icon: <FactCheckOutlinedIcon /> },
       { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
       { label: 'Library', path: '/teacher/library/review', icon: <VideoLibraryOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
@@ -144,6 +146,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
       { label: 'Documents', path: '/teacher/documents', icon: <DescriptionOutlinedIcon /> },
       { label: 'Question Bank', path: '/teacher/question-bank', icon: <LibraryBooksOutlinedIcon /> },
+      { label: 'Tests', path: '/teacher/tests', icon: <FactCheckOutlinedIcon /> },
       { label: 'Recall', path: '/teacher/exam-recall', icon: <HistoryEduOutlinedIcon /> },
       { label: 'Issues', path: '/teacher/issues', icon: <BugReportOutlinedIcon /> },
       { label: 'Guide', path: '/teacher/management-guide', icon: <HelpOutlineOutlinedIcon /> },

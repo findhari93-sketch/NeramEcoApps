@@ -28,6 +28,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import TuneIcon from '@mui/icons-material/Tune';
 import type { ExamRecallDrawingType } from '@neram/database';
+import { compressImage } from '@/utils/imageCompression';
 
 interface ContributeDrawingProps {
   examDate: string;
@@ -191,6 +192,7 @@ function NoteCard({
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             multiple
             hidden
             onChange={handleImageAdd}
@@ -427,8 +429,9 @@ export default function ContributeDrawing({
 
     setSubmitting(true);
     try {
-      await onSubmit(
-        filled.map((d, i) => ({
+      // Compress the attached paper photo before it leaves the device.
+      const drawings = await Promise.all(
+        filled.map(async (d, i) => ({
           question_number: i + 1,
           drawing_type: d.drawingType,
           prompt_text_en: d.notes.trim() || null,
@@ -437,13 +440,14 @@ export default function ContributeDrawing({
           constraints: d.constraints,
           theme: d.constraints.themeRequired ? d.theme.trim() : null,
           marks: d.marks,
-          paper_photo: d.images[0] || null,
+          paper_photo: d.images[0] ? await compressImage(d.images[0], 2000, 0.82, 'paper.jpg') : null,
           attempt_photo: null,
           exam_date: examDate,
           session_number: sessionNumber,
           classroom_id: classroomId,
         }))
       );
+      await onSubmit(drawings);
     } finally {
       setSubmitting(false);
     }

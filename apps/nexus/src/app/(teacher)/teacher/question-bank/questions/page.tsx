@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -18,6 +18,12 @@ import {
   Tooltip,
   ToggleButton,
   ToggleButtonGroup,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  useMediaQuery,
+  useTheme,
 } from '@neram/ui';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
@@ -27,8 +33,9 @@ import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import type { NexusQBQuestionListItem } from '@neram/database';
+import type { NexusQBQuestionListItem, NexusQBQuestionTagChip } from '@neram/database';
 import {
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
@@ -38,9 +45,13 @@ import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
 import MathText from '@/components/common/MathText';
 import TeacherFilterBar from '@/components/question-bank/TeacherFilterBar';
+import TagPicker from '@/components/question-bank/TagPicker';
 
-export default function QuestionsListPage() {
+function QuestionsListContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const theme = useTheme();
+  const fullScreenDialog = useMediaQuery(theme.breakpoints.down('sm'));
   const { getToken } = useNexusAuthContext();
 
   const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
@@ -53,17 +64,26 @@ export default function QuestionsListPage() {
   // Language toggle
   const [lang, setLang] = useState<'en' | 'hi'>('en');
 
-  // Filters
+  // Filters (tag_ids can arrive via deep-link from the Custom sets page)
   const [search, setSearch] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [category, setCategory] = useState('');
   const [examRelevance, setExamRelevance] = useState('');
   const [questionStatus, setQuestionStatus] = useState('');
   const [solutionFilter, setSolutionFilter] = useState('');
+  const [tagIds, setTagIds] = useState<string[]>(() => {
+    const raw = searchParams?.get('tag_ids');
+    return raw ? raw.split(',').filter(Boolean) : [];
+  });
+
+  // Registry lookup for optimistic tag-chip updates after a bulk add.
+  const [tagInfo, setTagInfo] = useState<Map<string, NexusQBQuestionTagChip>>(new Map());
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [addTagsOpen, setAddTagsOpen] = useState(false);
+  const [addTagsSel, setAddTagsSel] = useState<string[]>([]);
 
   // Debounce search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +123,7 @@ export default function QuestionsListPage() {
         if (examRelevance) params.set('exam_relevance', examRelevance);
         if (questionStatus) params.set('question_status', questionStatus);
         if (solutionFilter) params.set('solution_filter', solutionFilter);
+        if (tagIds.length > 0) params.set('tag_ids', tagIds.join(','));
 
         const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -127,14 +148,39 @@ export default function QuestionsListPage() {
         setLoadingMore(false);
       }
     },
-    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter]
+    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, tagIds]
   );
 
   // Reset page and fetch when filters change
   useEffect(() => {
     setPage(1);
     fetchQuestions(1, false);
-  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, fetchQuestions]);
+  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, tagIds, fetchQuestions]);
+
+  // Load the tag registry once (labels/colors for chips + optimistic bulk-add updates).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const res = await fetch('/api/question-bank/tags', { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const map = new Map<string, NexusQBQuestionTagChip>();
+        for (const t of json.data || []) {
+          map.set(t.id, { id: t.id, label: t.label, slug: t.slug, group_type: t.group_type, color: t.color ?? null });
+        }
+        setTagInfo(map);
+      } catch {
+        // chips just render without registry colors
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
   function handleLoadMore() {
     const nextPage = page + 1;
@@ -168,7 +214,7 @@ export default function QuestionsListPage() {
         );
         setSnackbar({
           open: true,
-          message: !currentActive ? 'Question activated — now visible to students' : 'Question deactivated',
+          message: !currentActive ? 'Question activated, now visible to students' : 'Question deactivated',
           severity: 'success',
         });
       } else {
@@ -246,6 +292,45 @@ export default function QuestionsListPage() {
     } catch (err) {
       console.error('Bulk update failed:', err);
       setSnackbar({ open: true, message: 'Bulk update failed', severity: 'error' });
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function handleBulkAddTags() {
+    if (selectedIds.size === 0 || addTagsSel.length === 0) return;
+    setBulkLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/question-bank/questions/bulk-update', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_tags', question_ids: Array.from(selectedIds), tag_ids: addTagsSel }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Failed to add tags');
+
+      // Optimistic: append the new tag chips to the selected rows (dedup by id).
+      const added = addTagsSel.map((id) => tagInfo.get(id)).filter(Boolean) as NexusQBQuestionTagChip[];
+      setQuestions((prev) =>
+        prev.map((q) => {
+          if (!selectedIds.has(q.id)) return q;
+          const existing = q.tags || [];
+          const existingIds = new Set(existing.map((t) => t.id));
+          return { ...q, tags: [...existing, ...added.filter((t) => !existingIds.has(t.id))] };
+        }),
+      );
+      const n = selectedIds.size;
+      setAddTagsOpen(false);
+      setAddTagsSel([]);
+      setSelectedIds(new Set());
+      setSnackbar({ open: true, message: `Tags added to ${n} question${n !== 1 ? 's' : ''}`, severity: 'success' });
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to add tags',
+        severity: 'error',
+      });
     } finally {
       setBulkLoading(false);
     }
@@ -331,6 +416,11 @@ export default function QuestionsListPage() {
         onSolutionFilterChange={setSolutionFilter}
       />
 
+      {/* Tag filter (managed registry, OR semantics) */}
+      <Box sx={{ mb: 1.5 }}>
+        <TagPicker value={tagIds} onChange={setTagIds} getToken={getToken} label="Filter by tags" />
+      </Box>
+
       {/* Bulk Action Bar */}
       {someSelected && (
         <Paper
@@ -373,6 +463,16 @@ export default function QuestionsListPage() {
               Deactivate
             </Button>
           )}
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<SellOutlinedIcon sx={{ fontSize: 16 }} />}
+            disabled={bulkLoading}
+            onClick={() => setAddTagsOpen(true)}
+            sx={{ textTransform: 'none', minHeight: 36 }}
+          >
+            Add tags
+          </Button>
           <Button
             size="small"
             variant="text"
@@ -490,6 +590,30 @@ export default function QuestionsListPage() {
                       <DifficultyChip difficulty={q.difficulty} size="small" />
                       <CategoryChips categories={q.categories.slice(0, 2)} size="small" />
 
+                      {/* Registry tags (up to 3 + overflow count) */}
+                      {(q.tags || []).slice(0, 3).map((t) => (
+                        <Chip
+                          key={t.id}
+                          label={t.label}
+                          size="small"
+                          sx={{
+                            height: 22,
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                            bgcolor: (t.color || '#64748B') + '20',
+                            color: t.color || '#64748B',
+                          }}
+                        />
+                      ))}
+                      {(q.tags || []).length > 3 && (
+                        <Chip
+                          label={`+${(q.tags || []).length - 3}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 22, fontSize: '0.65rem' }}
+                        />
+                      )}
+
                       {q.status && q.status !== 'active' && (
                         <Chip
                           label={QB_QUESTION_STATUS_LABELS[q.status as keyof typeof QB_QUESTION_STATUS_LABELS] || q.status}
@@ -547,8 +671,8 @@ export default function QuestionsListPage() {
                           !hasAnswer
                             ? 'Add answer key before activating'
                             : isActive
-                              ? 'Visible to students — click to hide'
-                              : 'Hidden from students — click to show'
+                              ? 'Visible to students, click to hide'
+                              : 'Hidden from students, click to show'
                         }
                         arrow
                       >
@@ -607,6 +731,38 @@ export default function QuestionsListPage() {
         </Box>
       )}
 
+      {/* Bulk add-tags dialog (additive: existing tags are kept) */}
+      <Dialog
+        open={addTagsOpen}
+        onClose={() => !bulkLoading && setAddTagsOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        fullScreen={fullScreenDialog}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Add tags to {selectedIds.size} question{selectedIds.size !== 1 ? 's' : ''}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Selected tags are added on top of each question&apos;s existing tags. Nothing is removed.
+          </Typography>
+          <TagPicker value={addTagsSel} onChange={setAddTagsSel} getToken={getToken} allowCreate label="Tags to add" />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setAddTagsOpen(false)} disabled={bulkLoading} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleBulkAddTags}
+            disabled={bulkLoading || addTagsSel.length === 0}
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            {bulkLoading ? 'Adding...' : 'Add tags'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
@@ -624,5 +780,19 @@ export default function QuestionsListPage() {
         </Alert>
       </Snackbar>
     </Box>
+  );
+}
+
+export default function QuestionsListPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
+          <Skeleton variant="rounded" height={400} />
+        </Box>
+      }
+    >
+      <QuestionsListContent />
+    </Suspense>
   );
 }

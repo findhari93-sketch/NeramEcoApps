@@ -63,7 +63,7 @@ function toDraft(r: ReviewAssignment): PreviewDraft {
     format: r.submission_format,
     maxMarks: String(r.max_marks),
     category: r.drawing_category || '3d_composition',
-    refImageUrl: r.reference_image_url,
+    refImageUrls: r.reference_image_urls,
     recordingUrl: r.recording_url || '',
     catchupDays: String(r.catchup_window_days),
     linkUrl: r.link_url || '',
@@ -83,7 +83,7 @@ function toBulkRow(d: PreviewDraft) {
     instructions: d.instructions.trim(),
     assignment_type: d.type,
     drawing_category: isDrawing ? d.category : null,
-    reference_image_url: isDrawing ? d.refImageUrl : null,
+    reference_image_urls: isDrawing ? d.refImageUrls : [],
     link_url: isDrawing ? null : d.linkUrl.trim() || null,
     submission_format: d.format,
     max_marks: Number(d.maxMarks) || 10,
@@ -164,6 +164,23 @@ export default function PasteAssignmentsDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Upload failed');
+      return { url: data.url as string };
+    },
+    [getToken],
+  );
+
+  // Injected resolver for a pasted OneDrive/SharePoint image link -> a public url.
+  const linkReference = useCallback(
+    async (url: string): Promise<{ url: string }> => {
+      const token = await getToken();
+      if (!token) throw new Error('Your session expired. Sign in again.');
+      const res = await fetch('/api/drawing/link-reference', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not import that link');
       return { url: data.url as string };
     },
     [getToken],
@@ -451,6 +468,7 @@ export default function PasteAssignmentsDialog({
                       value={d}
                       onChange={(patch) => update(i, patch)}
                       uploadReference={uploadReference}
+                      linkReference={linkReference}
                       showCategory
                       showAdvanced={!!advanced[i]}
                       onToggleAdvanced={() => setAdvanced((a) => ({ ...a, [i]: !a[i] }))}

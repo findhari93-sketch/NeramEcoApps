@@ -71,6 +71,7 @@ export default function StudentAssignmentsPage() {
     [items, tab],
   );
   const todoCount = useMemo(() => (items || []).filter(isTodo).length, [items]);
+  const doneCount = useMemo(() => (items || []).filter((a) => !isTodo(a)).length, [items]);
 
   const clockChip = (a: StudentAssignment) => {
     const clock = computeAssignmentClock({
@@ -133,7 +134,7 @@ export default function StudentAssignmentsPage() {
           To do ({todoCount})
         </ToggleButton>
         <ToggleButton value="done" sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
-          Done
+          Done ({doneCount})
         </ToggleButton>
       </ToggleButtonGroup>
 

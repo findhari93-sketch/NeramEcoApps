@@ -2,21 +2,22 @@
 
 import { useState, useCallback } from 'react';
 import {
-  Drawer,
   Box,
   Typography,
   Button,
   LinearProgress,
-  CircularProgress,
-  useTheme,
-  useMediaQuery,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  ToggleButtonGroup,
+  ToggleButton,
+  IconButton,
   ImageUploadField,
 } from '@neram/ui';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { compressImage } from '@/utils/imageCompression';
+import { imagesToPdf } from '@/utils/imagesToPdf';
+import ResponsiveActionSheet from '@/components/upload/ResponsiveActionSheet';
+import PhotoCapturePdf from '@/components/upload/PhotoCapturePdf';
 
 interface Template {
   id: string;
@@ -44,9 +45,11 @@ export default function DocumentUploadSheet({
   onClose,
   onUploaded,
 }: DocumentUploadSheetProps) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { getToken } = useNexusAuthContext();
+  // Two ways to provide the document: photograph it (combined into one PDF for
+  // the student) or upload a file they already have.
+  const [mode, setMode] = useState<'photos' | 'file'>('photos');
+  const [photos, setPhotos] = useState<File[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -54,33 +57,59 @@ export default function DocumentUploadSheet({
 
   const maxSizeMb = template?.max_file_size_mb || 10;
 
-  // The shared field is used only to PICK the file (paste / drop / choose /
-  // camera). The actual submit still happens in handleUpload with the document
-  // metadata, so this closure just captures the File into state.
+  // ImageUploadField is used only to PICK the file (paste / drop / choose /
+  // camera); the closure just captures the File into state.
   const pickFile = useCallback(async (f: File): Promise<{ url: string }> => {
     setFile(f);
     setError('');
     return { url: '' };
   }, []);
 
+  const canUpload = mode === 'photos' ? photos.length > 0 : Boolean(file);
+
   const handleUpload = useCallback(async () => {
-    if (!file || !template) return;
+    if (!template) return;
     setUploading(true);
     setError('');
-    setProgress(0);
-
-    if (file.size > maxSizeMb * 1024 * 1024) {
-      setError(`File too large (max ${maxSizeMb} MB)`);
-      setUploading(false);
-      return;
-    }
+    setProgress(4);
 
     try {
+      // Build the file to upload from whichever input the student used.
+      let finalFile: File;
+      if (mode === 'photos') {
+        if (!photos.length) {
+          setError('Add at least one photo.');
+          setUploading(false);
+          return;
+        }
+        setProgress(10);
+        finalFile = await imagesToPdf(photos, { fileName: `${template.category || 'document'}.pdf` });
+      } else {
+        if (!file) {
+          setUploading(false);
+          return;
+        }
+        // Compress standalone images; leave PDFs untouched.
+        finalFile = file.type.startsWith('image/')
+          ? await compressImage(file, 2200, 0.82, `${file.name.replace(/\.[^.]+$/, '')}.jpg`)
+          : file;
+      }
+
+      if (finalFile.size > maxSizeMb * 1024 * 1024) {
+        setError(`File too large (max ${maxSizeMb} MB)`);
+        setUploading(false);
+        setProgress(0);
+        return;
+      }
+
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        setUploading(false);
+        return;
+      }
 
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', finalFile);
       formData.append('template_id', template.id);
       formData.append('classroom_id', classroomId);
       formData.append('title', template.name);
@@ -103,35 +132,59 @@ export default function DocumentUploadSheet({
       setProgress(100);
 
       if (!res.ok) {
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
         setError(json.error || 'Upload failed');
         return;
       }
 
       setFile(null);
+      setPhotos([]);
       onUploaded();
       onClose();
-    } catch {
-      setError('Upload failed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       setProgress(0);
     }
-  }, [file, template, classroomId, examAttemptId, maxSizeMb, getToken, onUploaded, onClose]);
+  }, [mode, photos, file, template, classroomId, examAttemptId, maxSizeMb, getToken, onUploaded, onClose]);
 
-  const content = (
-    <Box sx={{ p: isMobile ? 2 : 0 }}>
+  const footer = (
+    <>
+      {uploading && <LinearProgress variant="determinate" value={progress} sx={{ mb: 1.5, borderRadius: 1 }} />}
+      {error && (
+        <Typography variant="body2" color="error" sx={{ mb: 1.5 }}>
+          {error}
+        </Typography>
+      )}
+      <Button
+        variant="contained"
+        fullWidth
+        onClick={handleUpload}
+        disabled={uploading || !canUpload}
+        sx={{ minHeight: 48, textTransform: 'none' }}
+      >
+        {uploading ? (mode === 'photos' ? 'Building PDF…' : 'Uploading…') : 'Upload'}
+      </Button>
+    </>
+  );
+
+  return (
+    <ResponsiveActionSheet open={open} onClose={onClose} title="Upload document" footer={footer}>
       {template && (
         <>
           <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
             {template.name}
           </Typography>
           {template.description && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2, '& a': { color: 'primary.main', textDecoration: 'underline' } }}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mb: 2, '& a': { color: 'primary.main', textDecoration: 'underline' } }}
               dangerouslySetInnerHTML={{
                 __html: template.description.replace(
                   /(https?:\/\/[^\s]+)/g,
-                  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+                  '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
                 ),
               }}
             />
@@ -139,83 +192,67 @@ export default function DocumentUploadSheet({
         </>
       )}
 
-      {!file ? (
+      <ToggleButtonGroup
+        value={mode}
+        exclusive
+        onChange={(_, v) => {
+          if (v) {
+            setMode(v);
+            setError('');
+          }
+        }}
+        fullWidth
+        size="small"
+        sx={{ mb: 2 }}
+      >
+        <ToggleButton value="photos" sx={{ minHeight: 44, textTransform: 'none' }}>
+          Take photos
+        </ToggleButton>
+        <ToggleButton value="file" sx={{ minHeight: 44, textTransform: 'none' }}>
+          Upload a file
+        </ToggleButton>
+      </ToggleButtonGroup>
+
+      {mode === 'photos' ? (
+        <PhotoCapturePdf value={photos} onChange={setPhotos} maxFiles={20} maxSizeMB={maxSizeMb} disabled={uploading} />
+      ) : !file ? (
         <ImageUploadField
           value={null}
-          onChange={() => { /* handled by pickFile → file state */ }}
+          onChange={() => {
+            /* handled by pickFile → file state */
+          }}
           upload={pickFile}
           accept="image/*,.pdf"
           camera
           maxSizeMB={maxSizeMb}
-          helperText="Choose File"
+          helperText="Choose file"
         />
       ) : (
-        <Box>
-          <Box
-            sx={{
-              p: 1.5,
-              borderRadius: 1,
-              border: `1px solid ${theme.palette.divider}`,
-              mb: 1.5,
-            }}
-          >
-            <Typography variant="body2" fontWeight={500} noWrap>
+        <Box
+          sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1.5 }}
+        >
+          <PictureAsPdfOutlinedIcon sx={{ fontSize: 30, color: '#C62828' }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap>
               {file.name}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {(file.size / 1024 / 1024).toFixed(2)} MB
             </Typography>
           </Box>
-
-          {uploading && <LinearProgress variant="determinate" value={progress} sx={{ mb: 1, borderRadius: 1 }} />}
-
-          {error && (
-            <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
-              {error}
-            </Typography>
-          )}
-
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => { setFile(null); setError(''); }}
-              disabled={uploading}
-              sx={{ textTransform: 'none', flex: 1 }}
-            >
-              Change
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleUpload}
-              disabled={uploading}
-              sx={{ textTransform: 'none', flex: 1 }}
-            >
-              {uploading ? <CircularProgress size={18} /> : 'Upload'}
-            </Button>
-          </Box>
+          <IconButton
+            aria-label="Remove file"
+            onClick={() => {
+              setFile(null);
+              setError('');
+            }}
+            disabled={uploading}
+            sx={{ minWidth: 44, minHeight: 44 }}
+          >
+            <DeleteOutlineIcon />
+          </IconButton>
         </Box>
       )}
-    </Box>
-  );
-
-  if (isMobile) {
-    return (
-      <Drawer anchor="bottom" open={open} onClose={onClose} PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}>
-        <Box sx={{ width: 40, height: 4, bgcolor: 'grey.300', borderRadius: 2, mx: 'auto', mt: 1 }} />
-        {content}
-      </Drawer>
-    );
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700 }}>Upload Document</DialogTitle>
-      <DialogContent>{content}</DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
-      </DialogActions>
-    </Dialog>
+    </ResponsiveActionSheet>
   );
 }

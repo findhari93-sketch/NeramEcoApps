@@ -9,6 +9,7 @@ import {
   Snackbar,
   Alert,
   Skeleton,
+  Paper,
 } from '@neram/ui';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -19,6 +20,7 @@ import type {
   NexusQBQuestionDetail,
 } from '@neram/database';
 import QuestionFormWizard from '@/components/question-bank/QuestionFormWizard';
+import TagPicker from '@/components/question-bank/TagPicker';
 
 export default function EditQuestionPage() {
   const router = useRouter();
@@ -27,6 +29,7 @@ export default function EditQuestionPage() {
   const { getToken } = useNexusAuthContext();
 
   const [question, setQuestion] = useState<NexusQBQuestionDetail | null>(null);
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [topics, setTopics] = useState<NexusQBTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +61,10 @@ export default function EditQuestionPage() {
 
         if (questionRes.ok) {
           const questionJson = await questionRes.json();
-          if (!cancelled) setQuestion(questionJson.data);
+          if (!cancelled) {
+            setQuestion(questionJson.data);
+            setTagIds(Array.isArray(questionJson.data?.tag_ids) ? questionJson.data.tag_ids : []);
+          }
         } else {
           console.error('Failed to fetch question:', questionRes.status);
         }
@@ -93,7 +99,7 @@ export default function EditQuestionPage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(questionData),
+        body: JSON.stringify({ ...questionData, tag_ids: tagIds }),
       });
 
       if (!res.ok) {
@@ -148,14 +154,25 @@ export default function EditQuestionPage() {
           </Typography>
         </Box>
       ) : (
-        <QuestionFormWizard
-          initialData={question}
-          sources={question.sources}
-          topics={topics}
-          onSubmit={handleSubmit}
-          loading={submitting}
-          getToken={getToken}
-        />
+        <>
+          <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.25 }}>
+              Tags
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              Saved together with the question when you submit below.
+            </Typography>
+            <TagPicker value={tagIds} onChange={setTagIds} getToken={getToken} allowCreate label="Tags" />
+          </Paper>
+          <QuestionFormWizard
+            initialData={question}
+            sources={question.sources}
+            topics={topics}
+            onSubmit={handleSubmit}
+            loading={submitting}
+            getToken={getToken}
+          />
+        </>
       )}
 
       {/* Snackbar */}

@@ -1726,11 +1726,34 @@ export async function getTeacherQBQuestions(
     }
   }
 
+  // Fetch managed registry tags for the page (shown as chips in the teacher list).
+  const { data: tagLinks } = await supabase
+    .from('nexus_qb_question_tags' as any)
+    .select('question_id, tag_id')
+    .in('question_id', questionIds);
+  const linkTagIds = [...new Set((tagLinks || []).map((r: any) => r.tag_id))];
+  const tagInfoMap = new Map<string, any>();
+  if (linkTagIds.length > 0) {
+    const { data: tagRows } = await supabase
+      .from('nexus_qb_tags' as any)
+      .select('id, label, slug, group_type, color')
+      .in('id', linkTagIds);
+    for (const t of (tagRows || []) as any[]) tagInfoMap.set(t.id, t);
+  }
+  const tagsByQuestion = new Map<string, any[]>();
+  for (const link of (tagLinks || []) as any[]) {
+    const tag = tagInfoMap.get(link.tag_id);
+    if (!tag) continue;
+    if (!tagsByQuestion.has(link.question_id)) tagsByQuestion.set(link.question_id, []);
+    tagsByQuestion.get(link.question_id)!.push(tag);
+  }
+
   const result: NexusQBQuestionListItem[] = questions.map((q) => ({
     ...q,
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: null,
+    tags: tagsByQuestion.get(q.id) || [],
   }));
 
   return { questions: result, total: count || 0 };

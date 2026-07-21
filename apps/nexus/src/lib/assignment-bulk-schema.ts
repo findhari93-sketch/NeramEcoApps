@@ -23,6 +23,8 @@ export interface BulkAssignmentInput {
   drawing_category?: string;
   /** Drawing only: reference/expected-output image URL. */
   reference_image_url?: string;
+  /** Drawing only: several reference/expected-output image URLs. */
+  reference_image_urls?: string[];
   /** Document only: link an existing OneDrive/SharePoint file by share URL. */
   link_url?: string;
   submission_format?: AssignmentFormat;
@@ -54,6 +56,7 @@ export interface ReviewAssignment {
   assignment_type: BulkAssignmentType;
   drawing_category: string | null;
   reference_image_url: string | null;
+  reference_image_urls: string[];
   link_url: string | null;
   submission_format: AssignmentFormat;
   max_marks: number;
@@ -122,6 +125,25 @@ function normalizeOne(raw: BulkAssignmentInput, today: string): ReviewAssignment
     assignmentType === 'drawing' && raw.reference_image_url && isHttpUrl(String(raw.reference_image_url))
       ? String(raw.reference_image_url)
       : null;
+  // Multiple reference images: the preview grid (and SharePoint links) can add
+  // several. Fall back to the single AI-provided reference_image_url. Deduped, capped.
+  const referenceImageUrls: string[] = [];
+  if (assignmentType === 'drawing') {
+    const rawRefs = Array.isArray(raw.reference_image_urls)
+      ? raw.reference_image_urls
+      : referenceImageUrl
+        ? [referenceImageUrl]
+        : [];
+    const seen = new Set<string>();
+    for (const v of rawRefs) {
+      const s = String(v || '').trim();
+      if (isHttpUrl(s) && !seen.has(s)) {
+        seen.add(s);
+        referenceImageUrls.push(s);
+        if (referenceImageUrls.length >= 6) break;
+      }
+    }
+  }
   const linkUrl =
     assignmentType === 'document' && raw.link_url && isHttpUrl(String(raw.link_url)) ? String(raw.link_url) : null;
 
@@ -189,7 +211,8 @@ function normalizeOne(raw: BulkAssignmentInput, today: string): ReviewAssignment
     instructions: String(raw.instructions ?? '').trim(),
     assignment_type: assignmentType,
     drawing_category: drawingCategory,
-    reference_image_url: referenceImageUrl,
+    reference_image_url: referenceImageUrls[0] ?? null,
+    reference_image_urls: referenceImageUrls,
     link_url: linkUrl,
     submission_format: format,
     max_marks: maxMarks,

@@ -12,13 +12,15 @@
  * editing one. Document "materials" (upload / pick / link) live OUTSIDE this
  * component because they need an existing assignment id.
  */
+import { useState } from 'react';
 import {
   Box, Typography, TextField, Stack, ToggleButtonGroup, ToggleButton, Collapse,
-  MenuItem, Button, ImageUploadField,
+  MenuItem, Button, ImageUploadList,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LinkIcon from '@mui/icons-material/Link';
 import type { AssignmentFormat } from '@/lib/assignment-format';
 
 export type AssignmentType = 'drawing' | 'document';
@@ -32,7 +34,7 @@ export interface AssignmentDraft {
   format: AssignmentFormat;
   maxMarks: string;
   category: string;
-  refImageUrl: string | null;
+  refImageUrls: string[];
   recordingUrl: string;
   catchupDays: string;
 }
@@ -54,7 +56,7 @@ export function blankDraft(classDate: string): AssignmentDraft {
     format: 'pdf_or_image',
     maxMarks: '10',
     category: '3d_composition',
-    refImageUrl: null,
+    refImageUrls: [],
     recordingUrl: '',
     catchupDays: '7',
   };
@@ -63,17 +65,19 @@ export function blankDraft(classDate: string): AssignmentDraft {
 interface AssignmentFormFieldsProps {
   value: AssignmentDraft;
   onChange: (patch: Partial<AssignmentDraft>) => void;
-  /** Injected uploader for the drawing reference image (auth/bucket stay per-caller). */
+  /** Injected uploader for a drawing reference image (auth/bucket stay per-caller). */
   uploadReference: (file: File) => Promise<{ url: string }>;
+  /** Injected resolver for a pasted OneDrive/SharePoint image link -> a public url. */
+  linkReference: (url: string) => Promise<{ url: string }>;
   /** Lock the type toggle (true only when editing an existing assignment). */
   lockType?: boolean;
   /** Show the drawing-category select (create / preview only, hidden on edit). */
   showCategory?: boolean;
   /**
-   * Optional: run when the reference image changes (e.g. edit mode syncs it to the
-   * server immediately). Defaults to patching `refImageUrl` on the draft.
+   * Optional: run when the reference images change (e.g. edit mode syncs them to the
+   * server immediately). Defaults to patching `refImageUrls` on the draft.
    */
-  onReferenceChange?: (url: string | null) => void;
+  onReferenceChange?: (urls: string[]) => void;
   showAdvanced: boolean;
   onToggleAdvanced: () => void;
   /** Autofocus the title (only when a single form is on screen). */
@@ -84,6 +88,7 @@ export default function AssignmentFormFields({
   value,
   onChange,
   uploadReference,
+  linkReference,
   lockType = false,
   showCategory = true,
   onReferenceChange,
@@ -92,8 +97,28 @@ export default function AssignmentFormFields({
   autoFocusTitle = false,
 }: AssignmentFormFieldsProps) {
   const { type } = value;
-  const handleReference = (url: string | null) =>
-    onReferenceChange ? onReferenceChange(url) : onChange({ refImageUrl: url });
+  const MAX_REFS = 6;
+  const handleReference = (urls: string[]) =>
+    onReferenceChange ? onReferenceChange(urls) : onChange({ refImageUrls: urls });
+
+  const [linkInput, setLinkInput] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState('');
+  const addLink = async () => {
+    const u = linkInput.trim();
+    if (!u || value.refImageUrls.length >= MAX_REFS) return;
+    setLinking(true);
+    setLinkError('');
+    try {
+      const { url } = await linkReference(u);
+      handleReference([...value.refImageUrls, url]);
+      setLinkInput('');
+    } catch (e) {
+      setLinkError(e instanceof Error ? e.message : 'Could not import that link.');
+    } finally {
+      setLinking(false);
+    }
+  };
 
   return (
     <Stack spacing={2}>
@@ -150,15 +175,43 @@ export default function AssignmentFormFields({
               ))}
             </TextField>
           )}
-          <ImageUploadField
+          <ImageUploadList
             label="Reference / expected output (optional)"
-            value={value.refImageUrl}
+            values={value.refImageUrls}
             onChange={handleReference}
             upload={uploadReference}
-            helperText="Paste, drop, or choose the reference"
-            enableGlobalPaste
+            helperText="Paste, drop, or choose"
+            maxFiles={MAX_REFS}
             camera
           />
+          <Box>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <TextField
+                size="small"
+                fullWidth
+                value={linkInput}
+                onChange={(e) => setLinkInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLink(); } }}
+                placeholder="Or paste a OneDrive/SharePoint image link"
+                disabled={linking || value.refImageUrls.length >= MAX_REFS}
+                InputProps={{ startAdornment: <LinkIcon sx={{ fontSize: 18, mr: 0.5, color: 'text.disabled' }} /> }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={addLink}
+                disabled={linking || !linkInput.trim() || value.refImageUrls.length >= MAX_REFS}
+                sx={{ minHeight: 40, whiteSpace: 'nowrap' }}
+              >
+                {linking ? 'Adding...' : 'Add link'}
+              </Button>
+            </Stack>
+            {linkError && (
+              <Typography color="error" variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+                {linkError}
+              </Typography>
+            )}
+          </Box>
         </Stack>
       ) : (
         <Box>

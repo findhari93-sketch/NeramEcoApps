@@ -6,6 +6,31 @@ import { istTodayStr } from '@/lib/assignment-clock';
 
 const FORMATS = ['pdf', 'image', 'pdf_or_image'] as const;
 const DRAWING_CATEGORIES = ['2d_composition', '3d_composition', 'kit_sculpture'] as const;
+const MAX_REF_IMAGES = 6;
+
+/**
+ * Collect valid https reference-image URLs from a create/update body. Accepts the
+ * new `reference_image_urls` array and falls back to the legacy single
+ * `reference_image_url`. Deduped, trimmed, and capped.
+ */
+function sanitizeRefUrls(body: any): string[] {
+  const raw: unknown[] = Array.isArray(body?.reference_image_urls)
+    ? body.reference_image_urls
+    : body?.reference_image_url
+      ? [body.reference_image_url]
+      : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of raw) {
+    const s = String(v || '').trim();
+    if (/^https?:\/\//i.test(s) && !seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+      if (out.length >= MAX_REF_IMAGES) break;
+    }
+  }
+  return out;
+}
 
 /**
  * GET /api/assignments?classroom=<id>[&status=draft|published|closed]  (staff)
@@ -82,20 +107,22 @@ export async function POST(request: NextRequest) {
 
     let drawingQuestionId: string | null = null;
     let submissionFormat: 'pdf' | 'image' | 'pdf_or_image';
+    let contentImageUrl: string | null = null;
 
     if (type === 'drawing') {
       submissionFormat = 'image'; // drawings are photos-only
       const category = DRAWING_CATEGORIES.includes(body?.drawing_category)
         ? body.drawing_category
         : '3d_composition';
-      const refUrl = body?.reference_image_url && /^https?:\/\//i.test(String(body.reference_image_url))
-        ? String(body.reference_image_url).trim()
-        : null;
+      const refUrls = sanitizeRefUrls(body);
+      // Keep the first image on the assignment too (thumbnail + back-compat); the
+      // full set lives on the backing question's reference_images array.
+      contentImageUrl = refUrls[0] ?? null;
       const question = await createDrawingQuestion({
         question_text: instructions || title,
         category,
         sub_type: 'assignment',
-        reference_images: refUrl ? [{ url: refUrl }] : [],
+        reference_images: refUrls.map((url) => ({ url })),
         is_active: false,
       });
       drawingQuestionId = question.id;
@@ -110,6 +137,7 @@ export async function POST(request: NextRequest) {
       instructions,
       assignment_type: type,
       drawing_question_id: drawingQuestionId,
+      content_image_url: contentImageUrl,
       submission_format: submissionFormat,
       max_marks: type === 'drawing' ? 10 : Number(body?.max_marks) > 0 ? Number(body.max_marks) : 10,
       due_at: dueAt,

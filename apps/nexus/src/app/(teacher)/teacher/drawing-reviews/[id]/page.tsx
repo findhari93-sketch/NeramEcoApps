@@ -352,6 +352,41 @@ export default function DrawingReviewDetailPage() {
   // Question text (for prompt context)
   const questionText = submission.question?.question_text || '';
 
+  // Reference / expected-output images the teacher set on the assignment (may be
+  // several). These live on the backing question; the review screen never showed
+  // them before, so the teacher could not see what they had asked the student for.
+  const referenceImages: string[] = ((submission.question as any)?.reference_images || [])
+    .map((r: any) => (typeof r === 'string' ? r : r?.url))
+    .filter((u: any): u is string => typeof u === 'string' && u.length > 0);
+  const referenceStrip = referenceImages.length > 0 ? (
+    <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
+        Reference{referenceImages.length > 1 ? ` (${referenceImages.length})` : ''}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', pb: 0.5 }}>
+        {referenceImages.map((src, i) => (
+          <Box
+            key={`${src}-${i}`}
+            component="img"
+            src={src}
+            alt={`Reference ${i + 1}`}
+            onClick={() => window.open(src, '_blank', 'noopener')}
+            sx={{
+              width: 72,
+              height: 72,
+              flexShrink: 0,
+              objectFit: 'cover',
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              cursor: 'pointer',
+            }}
+          />
+        ))}
+      </Box>
+    </Box>
+  ) : null;
+
   // Workspace + comments panel content
   const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -453,6 +488,7 @@ export default function DrawingReviewDetailPage() {
           </Box>
 
           {assignmentContextBar}
+          {referenceStrip}
 
           {/* Image with toggle tabs + region annotations */}
           <Box sx={{ height: '50vh', bgcolor: '#1a1a1a', px: 0.5, pt: 0.5, pb: 0.5 }}>
@@ -619,6 +655,7 @@ export default function DrawingReviewDetailPage() {
         </Box>
 
         {assignmentContextBar}
+        {referenceStrip}
 
         {/* Image with toggle + region annotations */}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5, bgcolor: '#e8e8e8' }}>

@@ -6,6 +6,8 @@ import {
   getQBQuestionDetail,
   updateQBQuestion,
   softDeleteQBQuestion,
+  getQuestionTagIds,
+  setQuestionTags,
 } from '@neram/database';
 import { getLinkedDrawingQuestionId } from '@neram/database/queries/nexus';
 
@@ -34,7 +36,9 @@ export async function GET(
       drawing_question_id = await getLinkedDrawingQuestionId(id);
     }
 
-    return NextResponse.json({ data: { ...data, drawing_question_id } }, { status: 200 });
+    const tag_ids = await getQuestionTagIds(id);
+
+    return NextResponse.json({ data: { ...data, drawing_question_id, tag_ids } }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', message);
@@ -68,6 +72,11 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // Tags travel separately from the question row (junction table). Replace
+    // semantics is correct here: the edit form shows the full tag set.
+    const tagIds: string[] | null = Array.isArray(body.tag_ids) ? body.tag_ids : null;
+    delete body.tag_ids;
+
     // When activating (is_active=true), also promote status to 'active'
     // if the question has an answer key (answer_keyed or complete)
     if (body.is_active === true) {
@@ -83,6 +92,7 @@ export async function PATCH(
     }
 
     const data = await updateQBQuestion(id, body);
+    if (tagIds) await setQuestionTags(id, tagIds, caller.id);
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (err) {
