@@ -64,6 +64,7 @@ interface AssignmentInfo {
   assignment_type?: 'drawing' | 'document';
   instructions?: string | null;
   content_image_url?: string | null;
+  reference_images?: string[] | null;
   links?: { label: string; url: string }[];
   attachments?: AttachmentRow[];
 }
@@ -180,6 +181,17 @@ export default function AssignmentReviewPage() {
   }, [authLoading, load]);
 
   const isDrawing = assignment?.assignment_type === 'drawing';
+  // Reference / expected-output images: prefer the multi-image set (the canonical
+  // store is the backing question's reference_images), fall back to the single
+  // legacy content image so older assignments still render. Same rule the student
+  // detail screen uses, so both sides show the identical set.
+  const refImages = assignment
+    ? assignment.reference_images?.length
+      ? assignment.reference_images
+      : assignment.content_image_url
+        ? [assignment.content_image_url]
+        : []
+    : [];
   // A document resubmission still awaiting the teacher: attempt > 1 and not yet reviewed.
   const isDocResubmission = (r: ReviewRow) =>
     !!r.submission && (r.submission.attempt_number || 1) > 1 && r.submission.status === 'submitted';
@@ -378,24 +390,50 @@ export default function AssignmentReviewPage() {
           )}
 
           {/* What the teacher set up (brief / reference / paper / links) */}
-          {(assignment.instructions || assignment.content_image_url || (assignment.attachments && assignment.attachments.length > 0) || (assignment.links && assignment.links.length > 0)) && (
+          {(assignment.instructions || refImages.length > 0 || (assignment.attachments && assignment.attachments.length > 0) || (assignment.links && assignment.links.length > 0)) && (
             <Box sx={{ mb: 2.5, p: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
               {assignment.instructions && (
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: assignment.content_image_url ? 1.5 : 0 }}>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: refImages.length > 0 ? 1.5 : 0 }}>
                   {assignment.instructions}
                 </Typography>
               )}
-              {assignment.content_image_url && (
+              {refImages.length > 0 && (
                 <Box>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                     {assignment.assignment_type === 'drawing' ? 'Reference / expected output' : 'Image'}
+                    {refImages.length > 1 ? ` (${refImages.length})` : ''}
                   </Typography>
+                  {/* One image fills the width; several tile into a square grid that
+                      stays touch-friendly at 375px. Tap opens the full-size file. */}
                   <Box
-                    component="img"
-                    src={assignment.content_image_url}
-                    alt="reference"
-                    sx={{ display: 'block', mt: 0.5, maxWidth: '100%', maxHeight: 240, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
-                  />
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: refImages.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(140px, 1fr))',
+                      gap: 1,
+                      mt: 0.5,
+                    }}
+                  >
+                    {refImages.map((src, i) => (
+                      <Box
+                        key={`${src}-${i}`}
+                        component="img"
+                        src={src}
+                        alt={refImages.length > 1 ? `Reference ${i + 1}` : 'reference'}
+                        onClick={() => window.open(src, '_blank', 'noopener')}
+                        sx={{
+                          display: 'block',
+                          width: '100%',
+                          cursor: 'pointer',
+                          ...(refImages.length === 1
+                            ? { maxWidth: '100%', maxHeight: 240, objectFit: 'contain', justifySelf: 'start' }
+                            : { aspectRatio: '1 / 1', objectFit: 'cover' }),
+                          borderRadius: 2,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                        }}
+                      />
+                    ))}
+                  </Box>
                 </Box>
               )}
               {assignment.attachments && assignment.attachments.length > 0 && (
