@@ -8,8 +8,10 @@ import type {
   NexusAssignmentSubmissionFile,
   NexusAssignmentFormat,
   NexusAssignmentType,
+  NexusAssignmentEvaluationType,
   NexusAssignmentLink,
   NexusAssignmentRecordingSource,
+  GalleryReactionType,
 } from '../../types';
 import { getTopicDrillFiles } from './curriculum';
 
@@ -40,6 +42,7 @@ export async function createAssignment(
     assignment_type?: NexusAssignmentType;
     drawing_question_id?: string | null;
     submission_format?: NexusAssignmentFormat;
+    evaluation_type?: NexusAssignmentEvaluationType;
     max_marks?: number;
     due_at?: string | null;
     content_image_url?: string | null;
@@ -66,7 +69,9 @@ export async function createAssignment(
       assignment_type: input.assignment_type ?? 'document',
       drawing_question_id: input.drawing_question_id ?? null,
       submission_format: input.submission_format ?? 'pdf_or_image',
-      max_marks: input.max_marks ?? 10,
+      evaluation_type: input.evaluation_type ?? 'marks',
+      // Stars are stored on the marks column against a max of 5.
+      max_marks: input.evaluation_type === 'stars' ? 5 : input.max_marks ?? 10,
       due_at: input.due_at ?? null,
       content_image_url: input.content_image_url ?? null,
       content_video_url: input.content_video_url ?? null,
@@ -93,6 +98,7 @@ export async function updateAssignment(
       | 'assignment_type'
       | 'drawing_question_id'
       | 'submission_format'
+      | 'evaluation_type'
       | 'max_marks'
       | 'due_at'
       | 'status'
@@ -394,7 +400,12 @@ export interface AssignmentDrawingRosterRow {
     status: string;
     submitted_at: string;
     tutor_rating: number | null;
+    tutor_marks: number | null;
     attempt_number: number;
+    /** Total submissions this student made for the assignment (real count, not the stored attempt_number). */
+    attempt_count: number;
+    /** Latest attempt is a resubmission still awaiting the teacher (count > 1 and not yet reviewed). */
+    is_resubmission: boolean;
   } | null;
   bucket: 'submitted' | 'reviewed' | 'missing';
 }
@@ -424,13 +435,18 @@ export async function getAssignmentDrawingRoster(
 
   const { data: subs, error: sErr } = await supabase
     .from('drawing_submissions')
-    .select('id, student_id, status, submitted_at, tutor_rating, attempt_number')
+    .select('id, student_id, status, submitted_at, tutor_rating, tutor_marks, attempt_number')
     .eq('assignment_id', assignmentId)
     .order('submitted_at', { ascending: false });
   if (sErr) throw sErr;
-  // Latest attempt per student (rows already newest-first).
+  // Latest attempt per student (rows already newest-first) plus a real count of
+  // attempts, so the roster can flag resubmissions and show "attempt N of M".
   const latestByStudent = new Map<string, any>();
-  for (const s of subs || []) if (!latestByStudent.has(s.student_id)) latestByStudent.set(s.student_id, s);
+  const countByStudent = new Map<string, number>();
+  for (const s of subs || []) {
+    countByStudent.set(s.student_id, (countByStudent.get(s.student_id) || 0) + 1);
+    if (!latestByStudent.has(s.student_id)) latestByStudent.set(s.student_id, s);
+  }
 
   const rows: AssignmentDrawingRosterRow[] = [];
   const seen = new Set<string>();
@@ -439,12 +455,22 @@ export async function getAssignmentDrawingRoster(
     if (!user || user.is_alumni || seen.has(user.id)) continue;
     seen.add(user.id);
     const d = latestByStudent.get(user.id) || null;
+    const count = countByStudent.get(user.id) || 0;
     let bucket: AssignmentDrawingRosterRow['bucket'] = 'missing';
     if (d) bucket = d.status === 'completed' || d.status === 'reviewed' ? 'reviewed' : 'submitted';
     rows.push({
       student: { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url },
       drawing: d
-        ? { id: d.id, status: d.status, submitted_at: d.submitted_at, tutor_rating: d.tutor_rating, attempt_number: d.attempt_number }
+        ? {
+            id: d.id,
+            status: d.status,
+            submitted_at: d.submitted_at,
+            tutor_rating: d.tutor_rating,
+            tutor_marks: d.tutor_marks,
+            attempt_number: d.attempt_number,
+            attempt_count: count,
+            is_resubmission: count > 1 && d.status !== 'completed' && d.status !== 'reviewed',
+          }
         : null,
       bucket,
     });
@@ -519,6 +545,10 @@ export interface StudentAssignmentItem extends NexusClassAssignment {
   submission: NexusAssignmentSubmission | null;
   /** For drawing assignments: the teacher's 1-5 rating (null until reviewed). */
   drawing_rating?: number | null;
+  /** For marks-graded drawing assignments: the numeric mark (null until reviewed). */
+  drawing_marks?: number | null;
+  /** For drawing assignments: the teacher's encouraging reaction (null until sent). */
+  drawing_reaction?: GalleryReactionType | null;
   /** The student's enrolment timestamp (drives the personal clock in the UI). */
   enrolled_at: string | null;
   /** Class recording for catch-up: the assignment's own, else the linked class. */
@@ -563,17 +593,27 @@ export async function listAssignmentsForStudent(
   // Drawing assignments keep the student's work in drawing_submissions; synthesize
   // a submission (status + rating) so the To do / Done tabs and chips work.
   const drawingIds = list.filter((a) => a.assignment_type === 'drawing').map((a) => a.id);
-  const drawingByAssignment = new Map<string, { status: string; tutor_rating: number | null; submitted_at: string }>();
+  const drawingByAssignment = new Map<
+    string,
+    { status: string; tutor_rating: number | null; tutor_marks: number | null; reaction: GalleryReactionType | null; tutor_feedback: string | null; submitted_at: string }
+  >();
   if (drawingIds.length) {
     const { data: ds } = await supabase
       .from('drawing_submissions')
-      .select('assignment_id, status, tutor_rating, submitted_at')
+      .select('assignment_id, status, tutor_rating, tutor_marks, reaction, tutor_feedback, submitted_at')
       .eq('student_id', studentId)
       .in('assignment_id', drawingIds)
       .order('submitted_at', { ascending: false });
     for (const r of ds || []) {
       if (!drawingByAssignment.has(r.assignment_id)) {
-        drawingByAssignment.set(r.assignment_id, { status: r.status, tutor_rating: r.tutor_rating, submitted_at: r.submitted_at });
+        drawingByAssignment.set(r.assignment_id, {
+          status: r.status,
+          tutor_rating: r.tutor_rating,
+          tutor_marks: r.tutor_marks,
+          reaction: r.reaction,
+          tutor_feedback: r.tutor_feedback,
+          submitted_at: r.submitted_at,
+        });
       }
     }
   }
@@ -610,17 +650,29 @@ export async function listAssignmentsForStudent(
     }
     let submission = subMap.get(a.id) ?? null;
     let drawingRating: number | null = null;
+    let drawingMarks: number | null = null;
+    let drawingReaction: GalleryReactionType | null = null;
     if (a.assignment_type === 'drawing') {
       const d = drawingByAssignment.get(a.id);
       submission = d
-        ? ({ status: mapDrawingStatus(d.status), marks: null, submitted_at: d.submitted_at } as unknown as NexusAssignmentSubmission)
+        ? ({
+            status: mapDrawingStatus(d.status),
+            marks: d.tutor_marks,
+            reaction: d.reaction,
+            feedback: d.tutor_feedback,
+            submitted_at: d.submitted_at,
+          } as unknown as NexusAssignmentSubmission)
         : null;
       drawingRating = d ? d.tutor_rating : null;
+      drawingMarks = d ? d.tutor_marks : null;
+      drawingReaction = d ? d.reaction : null;
     }
     return {
       ...a,
       submission,
       drawing_rating: drawingRating,
+      drawing_marks: drawingMarks,
+      drawing_reaction: drawingReaction,
       enrolled_at: enrolledAt,
       resolved_recording_url: recUrl ?? null,
       resolved_recording_source: recUrl ? recSrc : null,
@@ -904,7 +956,13 @@ export async function upsertSubmission(
 
 export async function reviewSubmission(
   submissionId: string,
-  review: { marks: number | null; feedback: string | null; action: 'complete' | 'redo'; reviewed_by: string },
+  review: {
+    marks: number | null;
+    feedback: string | null;
+    action: 'complete' | 'redo';
+    reviewed_by: string;
+    reaction?: GalleryReactionType | null;
+  },
   client?: TypedSupabaseClient,
 ): Promise<NexusAssignmentSubmission> {
   const supabase = client || getSupabaseAdminClient();
@@ -914,6 +972,7 @@ export async function reviewSubmission(
       marks: review.marks,
       feedback: review.feedback,
       status: review.action === 'redo' ? 'redo' : 'reviewed',
+      reaction: review.reaction ?? null,
       reviewed_by: review.reviewed_by,
       reviewed_at: new Date().toISOString(),
     })
@@ -1064,4 +1123,74 @@ export async function signSubmissionFiles(
     if (row.path && row.signedUrl) urlByPath.set(row.path, row.signedUrl);
   }
   return files.map((f) => ({ ...f, url: urlByPath.get(f.path) ?? null }));
+}
+
+// ============================================================
+// Assignment reminders (sent-log): who was reminded, when, by whom
+// ============================================================
+
+const REMINDERS = 'nexus_assignment_reminders';
+
+/** Per-student reminder rollup for one assignment. */
+export interface AssignmentReminderSummary {
+  count: number;
+  last_sent_at: string;
+}
+
+/**
+ * Record one reminder send for a (assignment, student) pair. Best-effort: the
+ * caller has already delivered the message, so a logging failure must never
+ * break the send flow.
+ */
+export async function recordAssignmentReminder(
+  input: {
+    assignment_id: string;
+    student_id: string;
+    sent_by?: string | null;
+    channel?: string | null;
+    template?: string | null;
+  },
+  client?: TypedSupabaseClient,
+): Promise<void> {
+  const supabase = client || getSupabaseAdminClient();
+  try {
+    await supabase.from(REMINDERS).insert({
+      assignment_id: input.assignment_id,
+      student_id: input.student_id,
+      sent_by: input.sent_by ?? null,
+      channel: input.channel ?? null,
+      template: input.template ?? null,
+    });
+  } catch (err) {
+    console.error('recordAssignmentReminder failed:', err);
+  }
+}
+
+/**
+ * Per-student reminder summary for one assignment: how many reminders each student
+ * has received and when the most recent one went out. Drives the "Reminded 2d ago
+ * · x2" hint on the not-submitted list so staff don't double-nag.
+ */
+export async function getAssignmentReminderSummary(
+  assignmentId: string,
+  client?: TypedSupabaseClient,
+): Promise<Record<string, AssignmentReminderSummary>> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase
+    .from(REMINDERS)
+    .select('student_id, sent_at')
+    .eq('assignment_id', assignmentId)
+    .order('sent_at', { ascending: false });
+
+  const out: Record<string, AssignmentReminderSummary> = {};
+  for (const row of (data as { student_id: string; sent_at: string }[]) || []) {
+    const existing = out[row.student_id];
+    if (!existing) {
+      // Rows arrive newest-first, so the first one seen is the latest send.
+      out[row.student_id] = { count: 1, last_sent_at: row.sent_at };
+    } else {
+      existing.count += 1;
+    }
+  }
+  return out;
 }

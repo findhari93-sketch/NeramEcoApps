@@ -8,10 +8,13 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  Box, Typography, Stack, Chip, Button, Rating, ToggleButtonGroup, ToggleButton, alpha,
+  Box, Typography, Stack, Chip, Button, ToggleButtonGroup, ToggleButton, alpha,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import type { GalleryReactionType } from '@neram/database/types';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
+import GradeDisplay from './GradeDisplay';
+import ReactionAppreciation from './ReactionAppreciation';
 
 export interface DrawingSubmissionView {
   id: string;
@@ -19,6 +22,8 @@ export interface DrawingSubmissionView {
   reviewed_image_url: string | null;
   corrected_image_url: string | null;
   tutor_rating: number | null;
+  tutor_marks: number | null;
+  reaction: GalleryReactionType | null;
   tutor_feedback: string | null;
   status: string; // submitted | under_review | redo | completed | reviewed
   ai_overlay_annotations: Array<{ area?: string; label?: string; severity?: string }> | null;
@@ -36,11 +41,15 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
 export default function DrawingAssignmentPanel({
   assignmentId,
   submission,
+  evaluationType = 'stars',
+  maxMarks = 5,
   getToken,
   onChanged,
 }: {
   assignmentId: string;
   submission: DrawingSubmissionView | null;
+  evaluationType?: 'marks' | 'stars';
+  maxMarks?: number;
   getToken: () => Promise<string | null>;
   onChanged: () => void;
 }) {
@@ -113,14 +122,22 @@ export default function DrawingAssignmentPanel({
             />
           )}
 
-          {isReviewed && submission.tutor_rating != null && (
+          {isReviewed && (evaluationType === 'marks' ? submission.tutor_marks != null : submission.tutor_rating != null) && (
             <Stack direction="row" alignItems="center" spacing={1}>
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                Rating
+                {evaluationType === 'marks' ? 'Marks' : 'Rating'}
               </Typography>
-              <Rating value={submission.tutor_rating} max={5} readOnly size="small" />
+              <GradeDisplay
+                evaluationType={evaluationType}
+                value={evaluationType === 'marks' ? submission.tutor_marks : submission.tutor_rating}
+                maxMarks={maxMarks}
+                size="small"
+                showStarLabel
+              />
             </Stack>
           )}
+
+          {isReviewed && <ReactionAppreciation reaction={submission.reaction} />}
 
           {annotations.length > 0 && (
             <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
@@ -170,6 +187,8 @@ export default function DrawingAssignmentPanel({
         onClose={() => setOpen(false)}
         assignmentId={assignmentId}
         sourceType="assignment"
+        redoFeedback={submission?.status === 'redo' ? submission.tutor_feedback : null}
+        referenceImageUrl={submission?.status === 'redo' ? submission.corrected_image_url : null}
         getToken={getToken}
         onSubmitted={onChanged}
       />

@@ -38,6 +38,9 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   foundation_issue_delegated: '#ff9800',
   foundation_issue_reopened: '#f44336',
   foundation_issue_closed: '#4caf50',
+  assignment_nudge: '#7c3aed',
+  assignment_reviewed: '#2E7D32',
+  study_material_nudge: '#0ea5e9',
 };
 
 function getNavigationUrl(
@@ -67,6 +70,24 @@ function getNavigationUrl(
       return `/${nexusRole || 'student'}/issues`;
     case 'foundation_issue_reported':
       return `/${nexusRole || 'teacher'}/issues`;
+    // Assignment reminder → open the assignment it was about.
+    case 'assignment_nudge': {
+      const ids = notification.metadata?.assignment_ids as string[] | undefined;
+      const assignmentId = Array.isArray(ids) ? ids[0] : undefined;
+      return assignmentId
+        ? `/${nexusRole || 'student'}/assignments/${assignmentId}`
+        : `/${nexusRole || 'student'}/assignments`;
+    }
+    // Study-material reminder → open the study materials space.
+    case 'study_material_nudge':
+      return `/${nexusRole || 'student'}/study-materials`;
+    // Assignment reviewed → open the graded assignment.
+    case 'assignment_reviewed': {
+      const assignmentId = notification.metadata?.assignment_id as string | undefined;
+      return assignmentId
+        ? `/${nexusRole || 'student'}/assignments/${assignmentId}`
+        : `/${nexusRole || 'student'}/assignments`;
+    }
     default:
       return null;
   }

@@ -28,6 +28,43 @@ function encodeSharingUrl(url: string): string {
 }
 
 /**
+ * Resolve a Graph /shares-encoded sharing link (ANY type: /:v:/ video, /:b:/
+ * document, /:w:/ word, …) or a direct webUrl to a pre-authenticated download
+ * URL. Returns null when it cannot be resolved so the caller can try another
+ * strategy before giving up.
+ *
+ * IMPORTANT: the driveItem is requested WITHOUT `$select`. Microsoft Graph
+ * strips the `@microsoft.graph.downloadUrl` instance annotation whenever it is
+ * named in `$select` (the same gotcha getSharePointDownloadUrl documents and
+ * works around). The old `?$select=id,@microsoft.graph.downloadUrl` call is
+ * exactly why document (/:b:/) links silently returned no download URL and the
+ * caller threw "Could not resolve SharePoint URL to a streaming URL". If the
+ * annotation is still absent, /content 302-redirects to the download URL.
+ */
+async function shareDownloadUrl(encoded: string, token: string): Promise<string | null> {
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (res.ok) {
+    const data = await res.json();
+    if (data['@microsoft.graph.downloadUrl']) {
+      return data['@microsoft.graph.downloadUrl'];
+    }
+  }
+
+  // Fallback: /content 302-redirects to a short-lived pre-authenticated download URL.
+  const contentRes = await fetch(
+    `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content`,
+    { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
+  );
+  if (contentRes.status === 302) {
+    return contentRes.headers.get('Location');
+  }
+  return null;
+}
+
+/**
  * Resolve a SharePoint video URL to a temporary streaming URL.
  * Works with sharing links, stream.aspx URLs, and direct webUrls.
  * Returns a pre-authenticated download URL that can be used in <video> elements.
@@ -36,30 +73,10 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
   const token = await getAppOnlyToken();
   const u = new URL(sharepointUrl);
 
-  // For sharing links (/:v:/), use the /shares endpoint
+  // For sharing links (/:v:/ videos), use the /shares endpoint.
   if (u.pathname.match(/\/:v:\//)) {
-    const encoded = encodeSharingUrl(sharepointUrl);
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,@microsoft.graph.downloadUrl`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data['@microsoft.graph.downloadUrl']) {
-        return data['@microsoft.graph.downloadUrl'];
-      }
-    }
-
-    // If /shares fails, try resolving the driveItem content URL
-    const contentRes = await fetch(
-      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content`,
-      { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
-    );
-    if (contentRes.status === 302) {
-      const location = contentRes.headers.get('Location');
-      if (location) return location;
-    }
+    const dl = await shareDownloadUrl(encodeSharingUrl(sharepointUrl), token);
+    if (dl) return dl;
   }
 
   // For stream.aspx or embed.aspx URLs, extract the file path and use site drive
@@ -128,20 +145,12 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
     }
   }
 
-  // For direct file webUrls (e.g., .../Shared Documents/file.mp4)
+  // For direct SharePoint webUrls AND non-video sharing links (/:b:/ documents,
+  // /:w:/ word, /:x:/ excel, /:p:/ powerpoint, /:i:/ image, …). This is the
+  // path a pasted PDF/document reference takes.
   if (u.hostname.includes('sharepoint.com') && !u.pathname.includes('_layouts')) {
-    const encoded = encodeSharingUrl(sharepointUrl);
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,@microsoft.graph.downloadUrl`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data['@microsoft.graph.downloadUrl']) {
-        return data['@microsoft.graph.downloadUrl'];
-      }
-    }
+    const dl = await shareDownloadUrl(encodeSharingUrl(sharepointUrl), token);
+    if (dl) return dl;
   }
 
   throw new Error('Could not resolve SharePoint URL to a streaming URL');

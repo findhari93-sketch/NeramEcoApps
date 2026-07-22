@@ -378,22 +378,57 @@ export async function getUserProfile(userId: string): Promise<Record<string, any
 }
 
 /**
+ * Result of an app-only Graph photo read. The `status` on failure lets a caller
+ * tell a genuine "no photo" (404) apart from a permission (401/403) or throttle
+ * (429) problem, instead of collapsing them all to null. `status: 0` means a
+ * network error / timeout (the request never got an HTTP response).
+ */
+export type UserPhotoResult =
+  | { ok: true; buffer: Buffer; contentType: string }
+  | { ok: false; status: number; retryAfterMs?: number };
+
+/**
+ * Fetch a Microsoft user's profile photo bytes with the failure status exposed.
+ * App-only read access (User.Read.All) suffices. Never throws.
+ *
+ * NOTE: app-only `GET /users/{id}/photo/$value` returns 404 for a sizeable share
+ * of users (e.g. no Exchange mailbox) even when the photo is readable via a
+ * delegated token. The `status` split here is what lets a sync distinguish that
+ * real limitation from a permission/throttle failure.
+ */
+export async function getUserPhotoResult(userId: string): Promise<UserPhotoResult> {
+  try {
+    const res = await graphFetch(`/users/${encodeURIComponent(userId)}/photo/$value`);
+    if (!res.ok) {
+      let retryAfterMs: number | undefined;
+      if (res.status === 429) {
+        const ra = parseInt(res.headers.get('retry-after') || '', 10);
+        if (Number.isFinite(ra)) retryAfterMs = ra * 1000;
+      }
+      return { ok: false, status: res.status, retryAfterMs };
+    }
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const arrayBuffer = await res.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      return { ok: false, status: 404 }; // 200 with empty body = treat as no photo
+    }
+    return { ok: true, buffer: Buffer.from(arrayBuffer), contentType };
+  } catch {
+    return { ok: false, status: 0 }; // network error / timeout
+  }
+}
+
+/**
  * Fetch a Microsoft user's profile photo bytes. Returns null when there is no
  * photo (404) or on any error. App-only read access (User.Read.All) suffices.
+ * Thin wrapper over {@link getUserPhotoResult} for callers that don't need the
+ * failure status (offboarding capture, etc.).
  */
 export async function getUserPhoto(
   userId: string,
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
-  try {
-    const res = await graphFetch(`/users/${encodeURIComponent(userId)}/photo/$value`);
-    if (!res.ok) return null; // 404 = no photo set
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
-    const arrayBuffer = await res.arrayBuffer();
-    if (!arrayBuffer || arrayBuffer.byteLength === 0) return null;
-    return { buffer: Buffer.from(arrayBuffer), contentType };
-  } catch {
-    return null;
-  }
+  const result = await getUserPhotoResult(userId);
+  return result.ok ? { buffer: result.buffer, contentType: result.contentType } : null;
 }
 
 /** Low-level assignLicense action (add and/or remove SKUs). */
@@ -560,6 +595,15 @@ export async function addStudentToClassroomTeams(
     result.groupChat = { success: false, reason: err instanceof Error ? err.message : 'unknown_error' };
   }
 
+  // 3) Install the "Neram Assistant" Teams app in the student's personal scope so
+  //    assignment/study reminders can reach their Teams Activity feed. Best-effort
+  //    and no-op until TEAMS_APP_CATALOG_ID is configured. The reminder send path
+  //    also lazily installs on demand, so this is just an optimization.
+  const reminderAppId = process.env.TEAMS_APP_CATALOG_ID;
+  if (reminderAppId) {
+    await ensureTeamsAppInstalledForUser(email, reminderAppId);
+  }
+
   return result;
 }
 
@@ -612,5 +656,119 @@ export async function addMemberToGroupChat(
     return { success: false, reason: error instanceof Error ? error.message : 'Unknown error' };
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+// ============================================================
+// Teams Activity-feed notifications ("Neram Assistant", app-only)
+//
+// Delivers a reminder to a user's Teams "Activity" feed (the bell) instead of a
+// chat, so templated reminders never clutter a real 1:1 conversation. This is the
+// clean-channel path the assignment reminders use.
+//
+// One-time admin setup this depends on:
+//   - Application permission TeamsActivity.Send (admin consent) — to notify.
+//   - Application permission TeamsAppInstallation.ReadWriteForUser.All (admin
+//     consent) — to install the app in each student's personal scope, which is a
+//     prerequisite for notifying them.
+//   - A "Neram Assistant" Teams app uploaded to the org catalog whose
+//     webApplicationInfo.id equals AZ_CLIENT_ID (so this app-only token is
+//     authorized to notify on its behalf). Its catalog id is passed as
+//     `catalogAppId` (env TEAMS_APP_CATALOG_ID).
+//
+// Everything is best-effort and never throws; callers fall back to in-app + email.
+// ============================================================
+
+export interface TeamsActivityResult {
+  ok: boolean;
+  /** HTTP status (0 = network error / not attempted). */
+  status: number;
+  reason?: string;
+}
+
+/**
+ * Ensure the "Neram Assistant" Teams app is installed in a user's personal scope.
+ * sendActivityNotification requires the app to be installed for the recipient, so
+ * the sender calls this first (and retries the send once after a fresh install).
+ * Returns { ok: true } when already installed or newly installed. Never throws.
+ */
+export async function ensureTeamsAppInstalledForUser(
+  userMsOid: string,
+  catalogAppId: string,
+): Promise<{ ok: boolean; alreadyInstalled?: boolean; reason?: string }> {
+  if (!userMsOid || !catalogAppId) return { ok: false, reason: 'missing_oid_or_app_id' };
+  try {
+    // Already installed? List personal-scope apps and match the catalog id in code
+    // (filtering on an expanded nav property is unreliable across tenants).
+    const listRes = await graphFetch(
+      `/users/${encodeURIComponent(userMsOid)}/teamwork/installedApps?$expand=teamsApp`,
+    );
+    if (listRes.ok) {
+      const data = await listRes.json().catch(() => null);
+      const found =
+        Array.isArray(data?.value) &&
+        data.value.some(
+          (a: any) => a?.teamsApp?.id === catalogAppId || a?.teamsApp?.externalId === catalogAppId,
+        );
+      if (found) return { ok: true, alreadyInstalled: true };
+    }
+    // Install it.
+    const installRes = await graphFetch(
+      `/users/${encodeURIComponent(userMsOid)}/teamwork/installedApps`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          'teamsApp@odata.bind': `https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/${catalogAppId}`,
+        }),
+      },
+    );
+    if (installRes.ok || installRes.status === 201) return { ok: true, alreadyInstalled: false };
+    if (installRes.status === 409) return { ok: true, alreadyInstalled: true }; // race: already installed
+    const errText = await installRes.text().catch(() => '');
+    return { ok: false, reason: `install ${installRes.status}: ${errText}` };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : 'unknown_error' };
+  }
+}
+
+/**
+ * Send a Teams Activity-feed notification to a user (app-only). Lands in their
+ * Teams "Activity" (bell), separate from all chats. `webUrl` deep-links the
+ * notification (e.g. the Nexus assignment). Ensures the app is installed first and
+ * retries once on a "not installed" (404/403) failure. Never throws.
+ *
+ * Uses the reserved `systemDefault` activity type, which needs no manifest
+ * `activities` declaration; the free text goes in templateParameters.systemDefaultText.
+ */
+export async function sendTeamsActivityNotification(
+  userMsOid: string,
+  opts: { title: string; text: string; webUrl: string; catalogAppId: string },
+): Promise<TeamsActivityResult> {
+  if (!userMsOid || !opts.catalogAppId) return { ok: false, status: 0, reason: 'missing_oid_or_app_id' };
+
+  const post = (): Promise<Response> =>
+    graphFetch(`/users/${encodeURIComponent(userMsOid)}/teamwork/sendActivityNotification`, {
+      method: 'POST',
+      body: JSON.stringify({
+        topic: { source: 'text', value: opts.title.slice(0, 150), webUrl: opts.webUrl },
+        activityType: 'systemDefault',
+        previewText: { content: opts.text.slice(0, 150) },
+        teamsAppId: opts.catalogAppId,
+        templateParameters: [{ name: 'systemDefaultText', value: opts.text.slice(0, 150) }],
+      }),
+    });
+
+  try {
+    let res = await post();
+    // 404/403 usually means the app isn't installed for this user yet — install then retry once.
+    if (!res.ok && (res.status === 404 || res.status === 403)) {
+      const install = await ensureTeamsAppInstalledForUser(userMsOid, opts.catalogAppId);
+      if (install.ok) res = await post();
+    }
+    if (res.ok || res.status === 204) return { ok: true, status: res.status };
+    const errText = await res.text().catch(() => '');
+    return { ok: false, status: res.status, reason: `sendActivityNotification ${res.status}: ${errText}` };
+  } catch (error) {
+    return { ok: false, status: 0, reason: error instanceof Error ? error.message : 'unknown_error' };
   }
 }

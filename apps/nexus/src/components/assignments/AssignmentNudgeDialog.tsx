@@ -72,7 +72,13 @@ export default function AssignmentNudgeDialog({
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const [results, setResults] = useState<{ viaTeams: number; total: number } | null>(null);
+  const [results, setResults] = useState<{
+    total: number;
+    teams: number;
+    inapp: number;
+    email: number;
+    failed: number;
+  } | null>(null);
 
   const what = label(assignments);
 
@@ -108,11 +114,19 @@ export default function AssignmentNudgeDialog({
           assignmentIds: assignments.map((a) => a.id),
           subject,
           body,
+          template,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to send');
-      setResults({ viaTeams: data.viaTeams || 0, total: (data.results || []).length });
+      const total = data.counts?.total ?? (data.results || []).length;
+      setResults({
+        total,
+        teams: data.counts?.teams ?? data.viaTeams ?? 0,
+        inapp: data.counts?.inapp ?? 0,
+        email: data.counts?.email ?? 0,
+        failed: data.counts?.failed ?? 0,
+      });
     } catch (e: any) {
       setError(e?.message || 'Failed to send the message');
     } finally {
@@ -148,14 +162,23 @@ export default function AssignmentNudgeDialog({
       <DialogContent sx={{ pt: 2 }}>
         {results ? (
           <Box sx={{ py: 1 }}>
-            <Alert severity="success" sx={{ mb: 2 }}>
-              Message sent to {results.total} student{results.total === 1 ? '' : 's'}.
+            <Alert severity={results.failed >= results.total && results.total > 0 ? 'warning' : 'success'} sx={{ mb: 2 }}>
+              {results.failed > 0
+                ? `Reminder sent to ${results.total - results.failed} of ${results.total} student${results.total === 1 ? '' : 's'}.`
+                : `Reminder sent to ${results.total} student${results.total === 1 ? '' : 's'}.`}
             </Alert>
             <Typography variant="body2" color="text.secondary">
-              {results.viaTeams > 0
-                ? `${results.viaTeams} delivered via Microsoft Teams; the rest via in-app notification and email.`
-                : 'Delivered via in-app notification and email. (Teams direct messages need a one-time Microsoft admin setup; once enabled, messages go to Teams automatically.)'}
+              {results.teams > 0
+                ? results.teams === results.total
+                  ? 'Delivered to their Microsoft Teams activity feed and saved to their in-app notifications.'
+                  : `${results.teams} reached on Microsoft Teams; the rest by in-app notification and email.`
+                : 'Saved to their in-app notifications and emailed. (Microsoft Teams delivery turns on automatically once the one-time Teams setup is done.)'}
             </Typography>
+            {results.failed > 0 && (
+              <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 1 }}>
+                {results.failed} could not be reached on any channel.
+              </Typography>
+            )}
           </Box>
         ) : (
           <>

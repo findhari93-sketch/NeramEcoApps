@@ -17,6 +17,7 @@ import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternate
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
 
 interface PhotoCapturePdfProps {
   value: File[];
@@ -40,6 +41,9 @@ export default function PhotoCapturePdf({
   const [urls, setUrls] = useState<string[]>([]);
   const [error, setError] = useState('');
   const single = maxFiles === 1;
+  // "Take photo" only makes sense where the camera can actually be opened
+  // (phones/tablets). On laptops it would just re-open the file dialog.
+  const canCapture = useCanCapturePhoto();
 
   // Build (and revoke) object URLs for previews as the staged list changes.
   useEffect(() => {
@@ -118,16 +122,18 @@ export default function PhotoCapturePdf({
       />
 
       <Stack direction="row" spacing={1.5} sx={{ mb: value.length ? 1.5 : 0.5 }}>
-        <Button
-          variant="outlined"
-          fullWidth
-          startIcon={<PhotoCameraOutlinedIcon />}
-          onClick={() => cameraRef.current?.click()}
-          disabled={disabled || atMax}
-          sx={{ minHeight: 48, textTransform: 'none' }}
-        >
-          Take photo
-        </Button>
+        {canCapture && (
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<PhotoCameraOutlinedIcon />}
+            onClick={() => cameraRef.current?.click()}
+            disabled={disabled || atMax}
+            sx={{ minHeight: 48, textTransform: 'none' }}
+          >
+            Take photo
+          </Button>
+        )}
         <Button
           variant="outlined"
           fullWidth
@@ -136,15 +142,19 @@ export default function PhotoCapturePdf({
           disabled={disabled || atMax}
           sx={{ minHeight: 48, textTransform: 'none' }}
         >
-          {single ? 'Choose image' : 'Add images'}
+          {single ? 'Choose image' : canCapture ? 'Add images' : 'Choose images'}
         </Button>
       </Stack>
 
       {!value.length && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
           {single
-            ? 'Take a photo or choose an image. You can also paste (Ctrl/Cmd+V).'
-            : 'Snap each page, we combine them into one PDF and shrink it automatically. Paste works too (Ctrl/Cmd+V).'}
+            ? canCapture
+              ? 'Take a photo or choose an image. You can also paste (Ctrl/Cmd+V).'
+              : 'Choose an image, or paste it (Ctrl/Cmd+V).'
+            : canCapture
+              ? 'Snap each page, we combine them into one PDF and shrink it automatically. Paste works too (Ctrl/Cmd+V).'
+              : 'Add each page, we combine them into one PDF and shrink it automatically. Paste works too (Ctrl/Cmd+V).'}
         </Typography>
       )}
 

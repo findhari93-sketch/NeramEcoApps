@@ -28,6 +28,8 @@ export interface BulkAssignmentInput {
   /** Document only: link an existing OneDrive/SharePoint file by share URL. */
   link_url?: string;
   submission_format?: AssignmentFormat;
+  /** Grading scale: 'marks' out of max_marks, or 'stars' (1-5, no number). */
+  evaluation_type?: 'marks' | 'stars';
   max_marks?: number;
   /** Class day the assignment belongs to (YYYY-MM-DD). Defaults to today. */
   class_date?: string;
@@ -59,6 +61,7 @@ export interface ReviewAssignment {
   reference_image_urls: string[];
   link_url: string | null;
   submission_format: AssignmentFormat;
+  evaluation_type: 'marks' | 'stars';
   max_marks: number;
   class_date: string;
   due_date: string | null;
@@ -147,10 +150,26 @@ function normalizeOne(raw: BulkAssignmentInput, today: string): ReviewAssignment
   const linkUrl =
     assignmentType === 'document' && raw.link_url && isHttpUrl(String(raw.link_url)) ? String(raw.link_url) : null;
 
-  let maxMarks = Number(raw.max_marks ?? 10);
-  if (!Number.isFinite(maxMarks) || maxMarks <= 0) {
-    errors.push('max_marks must be a positive number; using 10.');
-    maxMarks = 10;
+  // Grading scale: default by type (drawings on stars, documents on marks).
+  const evaluationType: 'marks' | 'stars' =
+    raw.evaluation_type === 'stars'
+      ? 'stars'
+      : raw.evaluation_type === 'marks'
+        ? 'marks'
+        : assignmentType === 'drawing'
+          ? 'stars'
+          : 'marks';
+
+  // Stars are stored against a max of 5; otherwise a positive numeric ceiling.
+  let maxMarks: number;
+  if (evaluationType === 'stars') {
+    maxMarks = 5;
+  } else {
+    maxMarks = Number(raw.max_marks ?? 10);
+    if (!Number.isFinite(maxMarks) || maxMarks <= 0) {
+      errors.push('max_marks must be a positive number; using 10.');
+      maxMarks = 10;
+    }
   }
 
   let classDate = String(raw.class_date ?? '').slice(0, 10);
@@ -215,6 +234,7 @@ function normalizeOne(raw: BulkAssignmentInput, today: string): ReviewAssignment
     reference_image_urls: referenceImageUrls,
     link_url: linkUrl,
     submission_format: format,
+    evaluation_type: evaluationType,
     max_marks: maxMarks,
     class_date: classDate,
     due_date: dueDate,
@@ -314,6 +334,7 @@ Return ONLY valid JSON (no markdown, no commentary) in exactly this shape:
       "reference_image_url": "https URL to the expected/model drawing (drawing only)",
       "link_url": "https OneDrive/SharePoint share link to an existing paper (document only)",
       "submission_format": "pdf | image | pdf_or_image (document only)",
+      "evaluation_type": "marks | stars (how it is graded; stars = 1-5, no number)",
       "max_marks": number,
       "class_date": "YYYY-MM-DD (the day this was taught)",
       "due_offset_days": number,          // OR "due_date": "YYYY-MM-DD"
@@ -330,6 +351,7 @@ Rules:
 - assignment_type: use "drawing" for sketch/drawing tasks (evaluated in the drawing review tool), "document" for solve-a-paper tasks.
 - For a "drawing" task, students submit photos; you may add a reference_image_url. submission_format is ignored.
 - For a "document" task, set submission_format ("pdf" for solved sets, "image" for photos, "pdf_or_image" for either). If the question paper already lives in OneDrive/SharePoint, put its share link in link_url.
+- evaluation_type: "marks" grades out of max_marks (10, 100, etc.); "stars" is a 1-5 rating with no number. Omit to default (drawings use stars, documents use marks).
 - Put one object per assignment. You may return one, or several for a week.
 - Only include fields you have real values for. Omit the rest.
 

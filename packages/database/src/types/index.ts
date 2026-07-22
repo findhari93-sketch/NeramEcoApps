@@ -2590,6 +2590,7 @@ export type NotificationEventType =
   | 'foundation_issue_reopened'
   | 'foundation_issue_closed'
   | 'study_material_comment_added'
+  | 'assignment_reviewed'
   | 'auto_first_touch_sent';
 
 // Classroom access request types
@@ -5025,6 +5026,13 @@ export type NexusAssignmentFormat = 'pdf' | 'image' | 'pdf_or_image';
 export type NexusAssignmentType = 'drawing' | 'document';
 export type NexusAssignmentStatus = 'draft' | 'published' | 'closed';
 export type NexusAssignmentSubmissionStatus = 'submitted' | 'reviewed' | 'redo';
+/**
+ * How an assignment is graded (teacher's choice, changeable):
+ *  - 'marks' : a numeric mark out of max_marks (10, 100, or any value).
+ *  - 'stars' : a 1-5 star rating shown to the student without a number.
+ *              Stored on the same marks column with max_marks pinned to 5.
+ */
+export type NexusAssignmentEvaluationType = 'marks' | 'stars';
 /** Where an attached class recording is hosted (null when none attached). */
 export type NexusAssignmentRecordingSource = 'youtube' | 'sharepoint';
 
@@ -5066,6 +5074,9 @@ export interface NexusClassAssignment {
   /** Backing drawing_questions row for a drawing-type assignment (else null). */
   drawing_question_id: string | null;
   submission_format: NexusAssignmentFormat;
+  /** Grading scale: numeric marks out of max_marks, or a 1-5 star rating. */
+  evaluation_type: NexusAssignmentEvaluationType;
+  /** Marks ceiling for 'marks' grading; pinned to 5 when evaluation_type is 'stars'. */
   max_marks: number;
   due_at: string | null;
   status: NexusAssignmentStatus;
@@ -5104,6 +5115,8 @@ export interface NexusAssignmentSubmission {
   attempt_number: number;
   marks: number | null;
   feedback: string | null;
+  /** Teacher's encouraging reaction sent while grading (one of the 5 gallery emojis). */
+  reaction: GalleryReactionType | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
   submitted_at: string;
@@ -5898,6 +5911,20 @@ export type FoundationIssueAction =
   | 'confirmed'
   | 'auto_closed';
 
+/**
+ * A single captured log/error entry attached to a reported issue (staff-only).
+ * Covers console errors/warnings, uncaught errors, unhandled rejections, and
+ * failed fetch responses (url + status set for those).
+ */
+export interface FoundationIssueLogEntry {
+  level: 'error' | 'warn' | 'log';
+  message: string;
+  stack?: string | null;
+  url?: string | null;
+  status?: number | null;
+  at: string;
+}
+
 export interface NexusFoundationIssue {
   id: string;
   student_id: string;
@@ -5918,6 +5945,11 @@ export interface NexusFoundationIssue {
   screenshot_urls: string[] | null;
   page_url: string | null;
   auto_close_at: string | null;
+  // Auto-captured technical context (staff-only; never shown to the student).
+  console_logs: FoundationIssueLogEntry[] | null;
+  device_info: Record<string, unknown> | null;
+  /** Which app the report came from: 'nexus' | 'app'. */
+  source_app: string;
   created_at: string;
   updated_at: string;
 }
@@ -7941,8 +7973,12 @@ export interface DrawingSubmission {
     progress_note?: string | null;
   } | null;
   tutor_rating: number | null;
+  /** Numeric grade when the parent assignment grades on 'marks' (else null; stars use tutor_rating). */
+  tutor_marks: number | null;
   tutor_feedback: string | null;
   tutor_resources: TutorResource[];
+  /** Teacher's encouraging reaction sent while grading (one of the 5 gallery emojis). */
+  reaction: GalleryReactionType | null;
   status: DrawingSubmissionStatus;
   thread_id: string | null;
   attempt_number: number;
@@ -7992,6 +8028,19 @@ export interface DrawingSubmissionWithDetails extends DrawingSubmission {
     academic_year?: string | null;
   };
   tags?: DrawingTag[];
+  /**
+   * Parent class assignment when this drawing answers a drawing-type assignment
+   * (source_type='assignment'). Drives the grading scale (marks vs stars) on the
+   * review screen and the deep-link for the student's "reviewed" notification.
+   * Null for previous-year practice / question-bank drawings.
+   */
+  assignment?: {
+    id: string;
+    title: string;
+    classroom_id: string;
+    evaluation_type: NexusAssignmentEvaluationType;
+    max_marks: number;
+  } | null;
 }
 
 // Thread & Comments

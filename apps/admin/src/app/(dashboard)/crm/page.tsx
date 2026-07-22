@@ -220,8 +220,12 @@ export default function CRMPage() {
         throw new Error(data.configError?.message || data.error || 'Failed to sync Microsoft photos');
       }
       const failed = data.failures?.length ? `, ${data.failures.length} failed` : '';
+      // permissionDenied/throttled = Microsoft blocked the app-only photo read
+      // (not "no photo"); surface it so low coverage is explainable.
+      const blocked = (data.permissionDenied || 0) + (data.throttled || 0);
+      const blockedNote = blocked ? `, ${blocked} blocked by Microsoft` : '';
       setNotice(
-        `Microsoft photos synced: ${data.synced} updated, ${data.unchanged} unchanged, ${data.noPhoto} without a photo${failed}.`
+        `Microsoft photos synced: ${data.synced} updated, ${data.unchanged} unchanged, ${data.noPhoto} without a photo${blockedNote}${failed}.`
       );
       await fetchUsers();
     } catch (err: any) {

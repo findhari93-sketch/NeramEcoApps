@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Box, Container } from '@neram/ui';
 import RoleGuard from '@/components/RoleGuard';
 import TopBar from '@/components/TopBar';
@@ -12,6 +13,8 @@ import DeviceRegistrationProvider from '@/components/DeviceRegistrationProvider'
 import WelcomeOrientation from '@/components/WelcomeOrientation';
 import StudentZoneProvider, { useStudentZoneContext } from '@/components/StudentZoneProvider';
 import FeatureGate from '@/components/FeatureGate';
+import ReportIssueFab from '@/components/ReportIssueFab';
+import { installErrorCapture } from '@/lib/error-buffer';
 
 /**
  * Inner shell — consumes the active student zone (Classroom / Study Zone) and renders the
@@ -21,6 +24,12 @@ function StudentShell({ children }: { children: React.ReactNode }) {
   const { sidebarWidth } = useSidebarContext();
   const { currentNavGroups, currentBottomNavItems, currentOverflowItems, currentHomePath } =
     useStudentZoneContext();
+
+  // Start passively capturing console/network errors so a later "Report a
+  // problem" ticket can include what actually went wrong (staff-only).
+  useEffect(() => {
+    installErrorCapture();
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -59,6 +68,7 @@ function StudentShell({ children }: { children: React.ReactNode }) {
         </Box>
         <BottomNav items={currentBottomNavItems} overflowItems={currentOverflowItems} />
       </Box>
+      <ReportIssueFab />
     </Box>
   );
 }

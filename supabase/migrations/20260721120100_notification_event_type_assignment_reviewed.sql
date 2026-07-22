@@ -1,0 +1,13 @@
+-- ============================================
+-- NOTIFICATION EVENT TYPE: assignment reviewed
+-- When a teacher grades an assignment (marks or stars) and sends an encouraging
+-- reaction, the student gets an in-app row in `user_notifications` so it shows in
+-- the always-visible top-bar bell (not only the per-classroom timetable bell).
+-- That table's `event_type` is the enum `notification_event_type`, which had no
+-- 'assignment_reviewed' value, so a raw insert would throw and be swallowed.
+--
+-- Isolated in its own migration (like 20260721100000_notification_event_type_nudge)
+-- because ALTER TYPE ADD VALUE cannot share a transaction with code that uses the
+-- new value. Additive + idempotent.
+-- ============================================
+ALTER TYPE notification_event_type ADD VALUE IF NOT EXISTS 'assignment_reviewed';

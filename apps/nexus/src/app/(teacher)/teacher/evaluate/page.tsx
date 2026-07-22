@@ -20,7 +20,7 @@ import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import GradeOutlinedIcon from '@mui/icons-material/GradeOutlined';
 import CreateOutlinedIcon from '@mui/icons-material/CreateOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import SketchpadOverlay from '@/components/SketchpadOverlay';
+import SketchOverCanvas from '@/components/drawings/SketchOverCanvas';
 
 interface SubmissionForReview {
   id: string;
@@ -123,12 +123,11 @@ export default function TeacherEvaluate() {
     }
   }
 
-  const handleSketchpadSave = async (dataUrl: string) => {
+  const handleSketchpadSave = async (blob: Blob) => {
     try {
       const token = await getToken();
       if (!token) return;
 
-      const blob = await fetch(dataUrl).then((r) => r.blob());
       const file = new File([blob], `correction-${Date.now()}.png`, { type: 'image/png' });
       const formData = new FormData();
       formData.append('file', file);
@@ -375,7 +374,7 @@ export default function TeacherEvaluate() {
 
       {/* Sketchpad Overlay */}
       {showSketchpad && selected && (
-        <SketchpadOverlay
+        <SketchOverCanvas
           imageUrl={selected.submission_url}
           onSave={handleSketchpadSave}
           onClose={() => setShowSketchpad(false)}

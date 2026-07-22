@@ -9,10 +9,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Box, Typography, Stack, Chip, Button, Skeleton, Divider, IconButton, alpha,
+  Box, Typography, Stack, Chip, Button, Skeleton, Divider, IconButton, alpha, Snackbar, Alert,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import LinkIcon from '@mui/icons-material/Link';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
@@ -25,6 +26,13 @@ import { extractYouTubeId } from '@/lib/youtube';
 import SubmissionFiles from '@/components/assignments/SubmissionFiles';
 import AssignmentSubmitSheet from '@/components/assignments/AssignmentSubmitSheet';
 import DrawingAssignmentPanel, { type DrawingSubmissionView } from '@/components/assignments/DrawingAssignmentPanel';
+import GradeDisplay from '@/components/assignments/GradeDisplay';
+import ReactionAppreciation from '@/components/assignments/ReactionAppreciation';
+import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistoryTimeline';
+import { documentSubmissionToViews, drawingAttemptsToViews } from '@/lib/submission-history';
+import { captureScreenshot } from '@/lib/capture-screenshot';
+import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
+import type { DrawingSubmission, GalleryReactionType, NexusAssignmentSubmissionHistoryEntry } from '@neram/database/types';
 
 interface Attachment {
   id: string;
@@ -38,6 +46,7 @@ interface Detail {
   instructions: string | null;
   assignment_type: 'drawing' | 'document';
   submission_format: 'pdf' | 'image' | 'pdf_or_image';
+  evaluation_type: 'marks' | 'stars';
   max_marks: number;
   due_at: string | null;
   catchup_window_days: number;
@@ -48,11 +57,16 @@ interface Detail {
   attachments: Attachment[];
 }
 interface MySubmission {
+  id?: string;
   files: { path: string; name: string; mime: string; url?: string | null }[];
   status: 'submitted' | 'reviewed' | 'redo';
+  attempt_number?: number;
   marks: number | null;
   feedback: string | null;
+  reaction?: GalleryReactionType | null;
   submitted_at: string;
+  /** Prior rounds, appended on each redo-resubmit. */
+  history?: NexusAssignmentSubmissionHistoryEntry[];
 }
 
 export default function StudentAssignmentDetailPage() {
@@ -64,10 +78,14 @@ export default function StudentAssignmentDetailPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [submission, setSubmission] = useState<MySubmission | null>(null);
   const [drawingSubmission, setDrawingSubmission] = useState<DrawingSubmissionView | null>(null);
+  const [drawingAttempts, setDrawingAttempts] = useState<DrawingSubmission[]>([]);
   const [enrolledAt, setEnrolledAt] = useState<string | null>(null);
   const [recording, setRecording] = useState<{ url: string | null; source: string | null }>({ url: null, source: null });
   const [error, setError] = useState('');
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [attachmentError, setAttachmentError] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportShot, setReportShot] = useState<File | null>(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -76,6 +94,7 @@ export default function StudentAssignmentDetailPage() {
       setDetail(res.assignment as Detail);
       setSubmission((res.submission as MySubmission) ?? null);
       setDrawingSubmission((res.drawing_submission as DrawingSubmissionView) ?? null);
+      setDrawingAttempts((res.drawing_attempts as DrawingSubmission[]) ?? []);
       setEnrolledAt(res.enrolled_at ?? null);
       setRecording(res.recording ?? { url: null, source: null });
     } catch (err) {
@@ -90,7 +109,24 @@ export default function StudentAssignmentDetailPage() {
   const openAttachment = async (studyFileId: string) => {
     const token = await getToken();
     if (!token) return;
-    window.open(`/api/study-materials/files/${studyFileId}/content?token=${encodeURIComponent(token)}`, '_blank', 'noopener');
+    const url = `/api/study-materials/files/${studyFileId}/content?token=${encodeURIComponent(token)}`;
+    // Open the tab synchronously (popup-blocker safe), then verify the response
+    // before navigating it. On failure, close it and offer an in-app report
+    // instead of dumping a raw error page on the student.
+    const tab = window.open('', '_blank');
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`content ${res.status}`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      if (tab) tab.location.href = blobUrl;
+      else window.open(blobUrl, '_blank', 'noopener');
+    } catch {
+      if (tab) tab.close();
+      const shot = await captureScreenshot();
+      setReportShot(shot);
+      setAttachmentError(true);
+    }
   };
 
   const clock = detail
@@ -116,6 +152,22 @@ export default function StudentAssignmentDetailPage() {
         ? [detail.content_image_url]
         : []
     : [];
+
+  // Prior attempts (everything before the current one) so a student sent back for
+  // a redo can revisit their earlier work and the feedback that came with it.
+  const priorAttemptViews = !detail
+    ? []
+    : isDrawing
+      ? drawingAttemptsToViews(drawingAttempts, {
+          evaluationType: detail.evaluation_type,
+          maxMarks: detail.max_marks,
+        }).slice(0, -1)
+      : submission
+        ? documentSubmissionToViews(submission as any, {
+            evaluationType: detail.evaluation_type,
+            maxMarks: detail.max_marks,
+          }).slice(0, -1)
+        : [];
 
   if (error) {
     return (
@@ -149,10 +201,10 @@ export default function StudentAssignmentDetailPage() {
           </Typography>
           <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 0.5, mb: 2 }} flexWrap="wrap" useFlexGap>
             <Typography variant="body2" color="text.secondary">
-              Class {new Date(detail.class_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · out of {detail.max_marks}
+              Class {new Date(detail.class_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {detail.evaluation_type === 'stars' ? '1-5 stars' : `out of ${detail.max_marks}`}
             </Typography>
             {submission?.status === 'reviewed' && submission.marks != null ? (
-              <Chip size="small" label={`${submission.marks} / ${detail.max_marks}`} sx={{ fontWeight: 700, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20' }} />
+              <GradeDisplay evaluationType={detail.evaluation_type} value={submission.marks} maxMarks={detail.max_marks} size="small" showStarLabel />
             ) : clock && canSubmit && clock.personal_due ? (
               <Chip
                 size="small"
@@ -325,11 +377,27 @@ export default function StudentAssignmentDetailPage() {
               <DrawingAssignmentPanel
                 assignmentId={detail.id}
                 submission={drawingSubmission}
+                evaluationType={detail.evaluation_type}
+                maxMarks={detail.max_marks}
                 getToken={getToken}
                 onChanged={load}
               />
             ) : (
               <>
+                {/* Redo banner: what the teacher asked to fix, up top so it is not missed. */}
+                {submission?.status === 'redo' && (
+                  <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: alpha('#EF6C00', 0.1), border: `1px solid ${alpha('#EF6C00', 0.3)}` }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#B54700' }}>
+                      Your teacher asked for a redo
+                    </Typography>
+                    {submission.feedback && (
+                      <Typography variant="body2" sx={{ mt: 0.25 }}>
+                        {submission.feedback}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+
                 {/* My submission */}
                 <Box>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
@@ -343,6 +411,7 @@ export default function StudentAssignmentDetailPage() {
                   {submission ? (
                     <Stack spacing={1.5}>
                       <SubmissionFiles files={submission.files} />
+                      {submission.status === 'reviewed' && <ReactionAppreciation reaction={submission.reaction} />}
                       {submission.feedback && (
                         <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
                           <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
@@ -368,6 +437,14 @@ export default function StudentAssignmentDetailPage() {
                 )}
               </>
             )}
+
+            {/* Your previous attempts (redo history) */}
+            {priorAttemptViews.length > 0 && (
+              <Box>
+                <Divider sx={{ mb: 2 }} />
+                <SubmissionHistoryTimeline attempts={priorAttemptViews} title="Your previous attempts" />
+              </Box>
+            )}
           </Stack>
 
           {!isDrawing && (
@@ -386,6 +463,50 @@ export default function StudentAssignmentDetailPage() {
           )}
         </>
       )}
+
+      {/* A reference material failed to open — offer a one-tap report instead of
+          dumping a raw error page in a new tab. */}
+      <Snackbar
+        open={attachmentError}
+        autoHideDuration={8000}
+        onClose={() => setAttachmentError(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="error"
+          onClose={() => setAttachmentError(false)}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<BugReportOutlinedIcon sx={{ fontSize: '1rem !important' }} />}
+              onClick={() => {
+                setAttachmentError(false);
+                setReportOpen(true);
+              }}
+              sx={{ textTransform: 'none' }}
+            >
+              Report
+            </Button>
+          }
+        >
+          This file couldn&apos;t be opened.
+        </Alert>
+      </Snackbar>
+
+      <ReportIssueDialog
+        open={reportOpen}
+        onClose={() => {
+          setReportOpen(false);
+          setReportShot(null);
+        }}
+        getToken={getToken}
+        initialScreenshotFile={reportShot}
+        prefill={{
+          category: 'bug',
+          title: 'Reference material would not open',
+        }}
+      />
     </Box>
   );
 }

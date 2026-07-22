@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getFileById, sendEmail } from '@neram/database';
+import { sendTeamsActivityNotification } from '@neram/auth';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
-import { extractBearerToken } from '@/lib/ms-verify';
-import { sendTeamsChatMessage } from '@/lib/teams-messaging';
+import { errorResponse } from '@/lib/api-errors';
 
 /**
  * POST /api/study-materials/files/[id]/nudge  (staff)
- * Send a message to selected students about this study file. Tries a Teams DM (delegated teacher
- * token); on any failure falls back per-recipient to an in-app notification + a Resend email.
- * Body: { studentIds: string[], subject?: string, body: string }. Returns per-recipient delivery.
+ * Remind selected students about this study file. Delivery per recipient:
+ *   1. A Microsoft Teams Activity-feed ping ("Neram Assistant") when configured and
+ *      the student has a Microsoft identity (lands in the Teams Activity feed, not a
+ *      chat, so it never clutters a real conversation).
+ *   2. Always an in-app notification.
+ *   3. An email backstop, only when the Teams ping did not land.
+ * Body: { studentIds: string[], subject?: string, body: string }. Returns per-channel counts.
  */
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -19,7 +23,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const auth = request.headers.get('Authorization');
     const user = await getRequestUser(auth);
     assertStaff(user);
-    const authToken = extractBearerToken(auth);
 
     const body = await request.json();
     const studentIds: string[] = Array.isArray(body?.studentIds) ? body.studentIds.filter((x: any) => typeof x === 'string') : [];
@@ -31,41 +34,44 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const subject = String(body?.subject || '').trim() || `About: ${file?.title || 'your study material'}`;
     const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111">${escapeHtml(text).replace(/\n/g, '<br/>')}</div>`;
 
+    const origin = new URL(request.url).origin;
+    const studyUrl = `${origin}/student/study-materials`;
+    const catalogAppId = process.env.TEAMS_APP_CATALOG_ID || null;
+
     const supabase = getSupabaseAdminClient() as any;
     const [{ data: users }, { data: profiles }] = await Promise.all([
-      supabase.from('users').select('id, name, email').in('id', studentIds),
+      supabase.from('users').select('id, name, email, ms_oid').in('id', studentIds),
       supabase.from('student_profiles').select('user_id, ms_teams_email').in('user_id', studentIds),
     ]);
-    const usersBy = new Map<string, { id: string; name: string | null; email: string | null }>(
+    const usersBy = new Map<string, { id: string; name: string | null; email: string | null; ms_oid: string | null }>(
       (users || []).map((u: any) => [u.id, u]),
     );
     const teamsBy = new Map<string, string | null>(
       (profiles || []).map((p: any) => [p.user_id, p.ms_teams_email]),
     );
 
-    const results: { studentId: string; name: string | null; channel: string; ok: boolean }[] = [];
-    for (const sid of studentIds) {
-      const u = usersBy.get(sid);
-      if (!u) {
-        results.push({ studentId: sid, name: null, channel: 'none', ok: false });
-        continue;
-      }
-      const upn = teamsBy.get(sid);
-      let channel = '';
-      let ok = false;
-
-      if (upn && authToken) {
-        const sent = await sendTeamsChatMessage(authToken, upn, html);
-        if (sent) {
-          ok = true;
-          channel = 'teams';
+    const results = await Promise.all(
+      studentIds.map(async (sid) => {
+        const u = usersBy.get(sid);
+        if (!u) {
+          return { studentId: sid, name: null, teams: false, inapp: false, email: false, ok: false, channel: 'none' };
         }
-      }
 
-      if (!ok) {
-        // Fallback: always record an in-app notification, plus email when we have an address.
+        let teams = false;
+        const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
+        if (catalogAppId && teamsUserId) {
+          const r = await sendTeamsActivityNotification(teamsUserId, {
+            title: file?.title || 'Study material',
+            text: subject,
+            webUrl: studyUrl,
+            catalogAppId,
+          });
+          teams = r.ok;
+        }
+
+        let inapp = false;
         try {
-          await supabase.from('user_notifications').insert({
+          const { error } = await supabase.from('user_notifications').insert({
             user_id: sid,
             event_type: 'study_material_nudge',
             title: subject,
@@ -73,26 +79,40 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             metadata: { file_id: params.id },
             is_read: false,
           });
-        } catch {
-          /* table may be unavailable; email is still attempted */
+          if (error) console.error('study_material_nudge notification insert failed:', error.message);
+          else inapp = true;
+        } catch (e) {
+          console.error('study_material_nudge notification insert threw:', e);
         }
-        let emailed = false;
-        if (u.email) {
+
+        let email = false;
+        if (!teams && u.email) {
           const r = await sendEmail({ to: u.email, subject, html }).catch(() => ({ success: false }));
-          emailed = !!r.success;
+          email = !!r.success;
         }
-        ok = true;
-        channel = emailed ? 'inapp+email' : 'inapp';
-      }
 
-      results.push({ studentId: sid, name: u.name, channel, ok });
-    }
+        const parts = [teams ? 'teams' : '', inapp ? 'inapp' : '', email ? 'email' : ''].filter(Boolean);
+        return {
+          studentId: sid,
+          name: u.name,
+          teams,
+          inapp,
+          email,
+          ok: parts.length > 0,
+          channel: parts.length ? parts.join('+') : 'failed',
+        };
+      }),
+    );
 
-    const viaTeams = results.filter((r) => r.channel === 'teams').length;
-    return NextResponse.json({ results, viaTeams });
+    const counts = {
+      total: results.length,
+      teams: results.filter((r) => r.teams).length,
+      inapp: results.filter((r) => r.inapp).length,
+      email: results.filter((r) => r.email).length,
+      failed: results.filter((r) => !r.ok).length,
+    };
+    return NextResponse.json({ results, counts, viaTeams: counts.teams });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to send message';
-    const status = message === 'Not authorized' ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return errorResponse(err, 'Failed to send message');
   }
 }

@@ -3082,6 +3082,7 @@ export type Database = {
           ai_draft_status: string | null
           ai_feedback: Json | null
           ai_overlay_annotations: Json | null
+          assignment_id: string | null
           attempt_number: number | null
           corrected_image_url: string | null
           homework_id: string | null
@@ -3096,8 +3097,10 @@ export type Database = {
           status: string
           student_id: string
           submitted_at: string | null
+          reaction: string | null
           thread_id: string | null
           tutor_feedback: string | null
+          tutor_marks: number | null
           tutor_rating: number | null
           tutor_resources: Json | null
         }
@@ -3106,6 +3109,7 @@ export type Database = {
           ai_draft_status?: string | null
           ai_feedback?: Json | null
           ai_overlay_annotations?: Json | null
+          assignment_id?: string | null
           attempt_number?: number | null
           corrected_image_url?: string | null
           homework_id?: string | null
@@ -3120,8 +3124,10 @@ export type Database = {
           status?: string
           student_id: string
           submitted_at?: string | null
+          reaction?: string | null
           thread_id?: string | null
           tutor_feedback?: string | null
+          tutor_marks?: number | null
           tutor_rating?: number | null
           tutor_resources?: Json | null
         }
@@ -3130,6 +3136,7 @@ export type Database = {
           ai_draft_status?: string | null
           ai_feedback?: Json | null
           ai_overlay_annotations?: Json | null
+          assignment_id?: string | null
           attempt_number?: number | null
           corrected_image_url?: string | null
           homework_id?: string | null
@@ -3144,8 +3151,10 @@ export type Database = {
           status?: string
           student_id?: string
           submitted_at?: string | null
+          reaction?: string | null
           thread_id?: string | null
           tutor_feedback?: string | null
+          tutor_marks?: number | null
           tutor_rating?: number | null
           tutor_resources?: Json | null
         }
@@ -8240,8 +8249,10 @@ export type Database = {
           auto_close_at: string | null
           category: string
           chapter_id: string | null
+          console_logs: Json | null
           created_at: string
           description: string
+          device_info: Json | null
           id: string
           page_url: string | null
           priority: string
@@ -8250,6 +8261,7 @@ export type Database = {
           resolved_by: string | null
           screenshot_urls: string[] | null
           section_id: string | null
+          source_app: string
           status: string
           student_id: string
           ticket_number: string | null
@@ -8263,8 +8275,10 @@ export type Database = {
           auto_close_at?: string | null
           category?: string
           chapter_id?: string | null
+          console_logs?: Json | null
           created_at?: string
           description?: string
+          device_info?: Json | null
           id?: string
           page_url?: string | null
           priority?: string
@@ -8273,6 +8287,7 @@ export type Database = {
           resolved_by?: string | null
           screenshot_urls?: string[] | null
           section_id?: string | null
+          source_app?: string
           status?: string
           student_id: string
           ticket_number?: string | null
@@ -8286,8 +8301,10 @@ export type Database = {
           auto_close_at?: string | null
           category?: string
           chapter_id?: string | null
+          console_logs?: Json | null
           created_at?: string
           description?: string
+          device_info?: Json | null
           id?: string
           page_url?: string | null
           priority?: string
@@ -8296,6 +8313,7 @@ export type Database = {
           resolved_by?: string | null
           screenshot_urls?: string[] | null
           section_id?: string | null
+          source_app?: string
           status?: string
           student_id?: string
           ticket_number?: string | null
@@ -16225,6 +16243,8 @@ export type Database = {
         | "foundation_issue_awaiting_confirmation"
         | "foundation_issue_reopened"
         | "foundation_issue_closed"
+        | "assignment_nudge"
+        | "study_material_nudge"
       notification_recipient_role: "admin" | "team_lead" | "team_member"
       onboarding_question_type: "single_select" | "multi_select" | "scale"
       onboarding_session_status:
@@ -16547,6 +16567,8 @@ export const Constants = {
         "foundation_issue_awaiting_confirmation",
         "foundation_issue_reopened",
         "foundation_issue_closed",
+        "assignment_nudge",
+        "study_material_nudge",
       ],
       notification_recipient_role: ["admin", "team_lead", "team_member"],
       onboarding_question_type: ["single_select", "multi_select", "scale"],

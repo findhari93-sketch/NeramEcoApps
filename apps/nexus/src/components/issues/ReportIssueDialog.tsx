@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -28,6 +28,9 @@ import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import ScreenshotUploader from './ScreenshotUploader';
 import type { FoundationIssueCategory } from '@neram/database/types';
+import { collectDeviceInfo } from '@/lib/device-collector';
+import { getRecentErrors } from '@/lib/error-buffer';
+import { compressImage } from '@/lib/image-compress';
 
 const CATEGORIES: { value: FoundationIssueCategory; label: string; icon: React.ReactNode }[] = [
   { value: 'bug', label: 'Bug / Something Broken', icon: <BugReportOutlinedIcon fontSize="small" /> },
@@ -47,6 +50,10 @@ interface ReportIssueDialogProps {
   chapterId?: string;
   sectionId?: string;
   onSuccess?: () => void;
+  /** Auto-captured screenshot of the page (taken before this dialog opened). */
+  initialScreenshotFile?: File | null;
+  /** Pre-fill the form (used when opened from an error surface). */
+  prefill?: { title?: string; description?: string; category?: FoundationIssueCategory };
 }
 
 export default function ReportIssueDialog({
@@ -58,6 +65,8 @@ export default function ReportIssueDialog({
   chapterId,
   sectionId,
   onSuccess,
+  initialScreenshotFile,
+  prefill,
 }: ReportIssueDialogProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -73,6 +82,9 @@ export default function ReportIssueDialog({
     severity: 'success',
   });
 
+  const [autoHandled, setAutoHandled] = useState(false);
+  const [autoUploading, setAutoUploading] = useState(false);
+
   const resetForm = () => {
     setCategory(defaultCategory || 'bug');
     setTitle('');
@@ -80,12 +92,71 @@ export default function ReportIssueDialog({
     setScreenshots([]);
   };
 
+  // Apply the prefill (from an error surface) once, when the dialog opens.
+  useEffect(() => {
+    if (!open) {
+      setAutoHandled(false);
+      return;
+    }
+    if (prefill) {
+      if (prefill.category) setCategory(prefill.category);
+      if (prefill.title) setTitle((t) => t || prefill.title || '');
+      if (prefill.description) setDescription((d) => d || prefill.description || '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Upload the auto-captured screenshot once, when the dialog opens. Best-effort:
+  // failures are swallowed so the student can still file the report manually.
+  useEffect(() => {
+    if (!open || !initialScreenshotFile || autoHandled) return;
+    setAutoHandled(true);
+    let cancelled = false;
+    (async () => {
+      setAutoUploading(true);
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const compressed = await compressImage(initialScreenshotFile);
+        const fd = new FormData();
+        fd.append('file', compressed, 'auto-screenshot.jpg');
+        const res = await fetch('/api/foundation/issues/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        if (!res.ok) return;
+        const { path } = await res.json();
+        if (!cancelled && path) {
+          setScreenshots((prev) => (prev.includes(path) ? prev : [path, ...prev]));
+        }
+      } catch {
+        /* auto-screenshot is best-effort */
+      } finally {
+        if (!cancelled) setAutoUploading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialScreenshotFile, autoHandled]);
+
   const handleSubmit = async () => {
     if (!title.trim() || !category) return;
     setSubmitting(true);
     try {
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
+
+      // Auto-captured technical context (staff-only; never shown to the student).
+      let deviceInfo: ReturnType<typeof collectDeviceInfo> | undefined;
+      try {
+        deviceInfo = collectDeviceInfo();
+      } catch {
+        deviceInfo = undefined;
+      }
+      const consoleLogs = getRecentErrors();
 
       const res = await fetch('/api/foundation/issues', {
         method: 'POST',
@@ -98,6 +169,9 @@ export default function ReportIssueDialog({
           chapter_id: chapterId || undefined,
           section_id: sectionId || undefined,
           screenshot_urls: screenshots.length > 0 ? screenshots : undefined,
+          device_info: deviceInfo,
+          console_logs: consoleLogs.length > 0 ? consoleLogs : undefined,
+          source_app: 'nexus',
         }),
       });
 
@@ -176,11 +250,15 @@ export default function ReportIssueDialog({
         getToken={getToken}
       />
 
-      {pageUrl && (
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
-          Page: {pageUrl}
+      {autoUploading && (
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+          Attaching a screenshot of this page…
         </Typography>
       )}
+      <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
+        Technical details (page, device, recent errors) are attached automatically so we can fix this faster.
+        {pageUrl ? ` Page: ${pageUrl}` : ''}
+      </Typography>
     </Box>
   );
 

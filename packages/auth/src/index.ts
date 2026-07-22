@@ -70,10 +70,13 @@ export {
   addMemberToTeam,
   addMemberToGroupChat,
   addStudentToClassroomTeams,
+  ensureTeamsAppInstalledForUser,
+  sendTeamsActivityNotification,
   getUserAssignedLicenses,
   getUserMsStatus,
   getUserProfile,
   getUserPhoto,
+  getUserPhotoResult,
   removeAllLicenses,
   addLicenses,
   setAccountEnabled,
@@ -82,7 +85,7 @@ export {
   userExists,
   findUserOidByEmail,
 } from './graph';
-export type { UserLicenseInfo, GraphErrorInfo, ClassroomTeamsSyncResult } from './graph';
+export type { UserLicenseInfo, GraphErrorInfo, ClassroomTeamsSyncResult, UserPhotoResult, TeamsActivityResult } from './graph';
 
 // Hooks
 export {

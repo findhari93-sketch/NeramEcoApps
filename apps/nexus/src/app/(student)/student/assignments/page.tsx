@@ -17,21 +17,28 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { computeAssignmentClock } from '@/lib/assignment-clock';
+import { reactionEmoji } from '@/lib/assignment-reactions';
+import type { GalleryReactionType } from '@neram/database/types';
 
 interface Submission {
   status: 'submitted' | 'reviewed' | 'redo';
   marks: number | null;
+  reaction?: GalleryReactionType | null;
+  feedback?: string | null;
 }
 interface StudentAssignment {
   id: string;
   title: string;
   class_date: string;
   due_at: string | null;
+  evaluation_type: 'marks' | 'stars';
   max_marks: number;
   catchup_window_days: number;
   enrolled_at: string | null;
   assignment_type: 'drawing' | 'document';
   drawing_rating: number | null;
+  drawing_marks: number | null;
+  drawing_reaction?: GalleryReactionType | null;
   submission: Submission | null;
   resolved_recording_url: string | null;
   classroom_name: string | null;
@@ -80,15 +87,29 @@ export default function StudentAssignmentsPage() {
       due_at: a.due_at,
       catchup_window_days: a.catchup_window_days,
     });
-    // Reviewed work: show the mark (or drawing rating) instead of a deadline.
+    // Reviewed work: show the grade in its scale (stars or marks) instead of a
+    // deadline, plus the teacher's reaction emoji when one was sent.
     if (a.submission?.status === 'reviewed') {
-      const label =
-        a.assignment_type === 'drawing'
+      const isStars = a.evaluation_type === 'stars';
+      const reaction = a.assignment_type === 'drawing' ? a.drawing_reaction : a.submission.reaction;
+      let grade: string;
+      if (a.assignment_type === 'drawing') {
+        grade = isStars
           ? a.drawing_rating != null
             ? `★ ${a.drawing_rating}/5`
             : 'Reviewed'
+          : a.drawing_marks != null
+            ? `${a.drawing_marks} / ${a.max_marks}`
+            : 'Reviewed';
+      } else {
+        grade = isStars
+          ? a.submission.marks != null
+            ? `★ ${a.submission.marks}/5`
+            : 'Reviewed'
           : `${a.submission.marks ?? 0} / ${a.max_marks}`;
-      return <Chip size="small" label={label} sx={{ height: 22, fontWeight: 700, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20' }} />;
+      }
+      const emoji = reactionEmoji(reaction);
+      return <Chip size="small" label={emoji ? `${grade} ${emoji}` : grade} sx={{ height: 22, fontWeight: 700, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20' }} />;
     }
     if (a.submission && a.submission.status !== 'redo') return null;
     // Not submitted (or redo): show the personal clock.
@@ -152,7 +173,9 @@ export default function StudentAssignmentsPage() {
         </Box>
       ) : (
         <Stack spacing={1}>
-          {visible.map((a) => (
+          {visible.map((a) => {
+            const isRedo = a.submission?.status === 'redo';
+            return (
             <Box
               key={a.id}
               role="button"
@@ -165,9 +188,13 @@ export default function StudentAssignmentsPage() {
                 minHeight: 72,
                 borderRadius: 2,
                 border: '1px solid',
-                borderColor: 'divider',
+                borderColor: isRedo ? alpha(STATUS_COLOR.redo, 0.4) : 'divider',
+                borderLeft: isRedo ? `4px solid ${STATUS_COLOR.redo}` : '1px solid',
+                borderLeftColor: isRedo ? STATUS_COLOR.redo : 'divider',
+                bgcolor: isRedo ? alpha(STATUS_COLOR.redo, 0.05) : 'transparent',
                 cursor: 'pointer',
-                '&:hover': { borderColor: 'primary.light', bgcolor: 'action.hover' },
+                transition: 'background-color 200ms ease, border-color 200ms ease',
+                '&:hover': { borderColor: isRedo ? STATUS_COLOR.redo : 'primary.light', bgcolor: isRedo ? alpha(STATUS_COLOR.redo, 0.09) : 'action.hover' },
               }}
             >
               <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -178,18 +205,34 @@ export default function StudentAssignmentsPage() {
                   <Typography variant="caption" color="text.secondary">
                     Class {formatDay(a.class_date)} · /{a.max_marks}
                   </Typography>
-                  {a.submission?.status === 'redo' && (
-                    <Chip label="Redo" size="small" sx={{ height: 20, fontWeight: 700, bgcolor: alpha(STATUS_COLOR.redo, 0.14), color: STATUS_COLOR.redo }} />
+                  {isRedo && (
+                    <Chip label="Redo requested" size="small" sx={{ height: 20, fontWeight: 700, bgcolor: alpha(STATUS_COLOR.redo, 0.14), color: STATUS_COLOR.redo }} />
                   )}
                   {a.resolved_recording_url && (
                     <Chip icon={<PlayCircleOutlineIcon sx={{ fontSize: 15 }} />} label="Recording" size="small" variant="outlined" sx={{ height: 20 }} />
                   )}
                 </Stack>
+                {isRedo && a.submission?.feedback && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 1,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      color: STATUS_COLOR.redo,
+                      mt: 0.5,
+                    }}
+                  >
+                    {a.submission.feedback}
+                  </Typography>
+                )}
               </Box>
               {clockChip(a)}
               <ChevronRightIcon sx={{ color: 'text.disabled' }} />
             </Box>
-          ))}
+            );
+          })}
         </Stack>
       )}
     </Box>

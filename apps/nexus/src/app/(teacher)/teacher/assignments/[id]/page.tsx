@@ -21,12 +21,17 @@ import {
   ToggleButton,
   IconButton,
   Tooltip,
+  Breadcrumbs,
+  Link as MuiLink,
   alpha,
 } from '@neram/ui';
+import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SendIcon from '@mui/icons-material/Send';
+import ReplayIcon from '@mui/icons-material/Replay';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -35,9 +40,12 @@ import LinkIcon from '@mui/icons-material/Link';
 import { Dialog, DialogTitle, DialogContent, DialogActions } from '@neram/ui';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import type { GalleryReactionType } from '@neram/database/types';
 import SubmissionReviewSheet, { type ReviewRow } from '@/components/assignments/SubmissionReviewSheet';
+import GradeDisplay from '@/components/assignments/GradeDisplay';
 import AssignmentNudgeDialog from '@/components/assignments/AssignmentNudgeDialog';
 import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
+import { remindedAgo } from '@/lib/relative-time';
 
 interface AttachmentRow {
   id: string;
@@ -48,6 +56,7 @@ interface AssignmentInfo {
   id: string;
   title: string;
   class_date: string;
+  evaluation_type: 'marks' | 'stars';
   max_marks: number;
   due_at: string | null;
   submission_format: string;
@@ -63,11 +72,25 @@ const BUCKET_LABEL: Record<Bucket, string> = { submitted: 'Submitted', late: 'La
 
 interface DrawingRosterRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
-  drawing: { id: string; status: string; submitted_at: string; tutor_rating: number | null; attempt_number: number } | null;
+  drawing: {
+    id: string;
+    status: string;
+    submitted_at: string;
+    tutor_rating: number | null;
+    tutor_marks: number | null;
+    attempt_number: number;
+    attempt_count?: number;
+    is_resubmission?: boolean;
+  } | null;
   bucket: 'submitted' | 'reviewed' | 'missing';
 }
 type DBucket = 'submitted' | 'reviewed' | 'missing';
 const D_BUCKET_LABEL: Record<DBucket, string> = { submitted: 'To review', reviewed: 'Reviewed', missing: 'Not submitted' };
+
+interface ReminderSummary {
+  count: number;
+  last_sent_at: string;
+}
 
 export default function AssignmentReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -86,6 +109,10 @@ export default function AssignmentReviewPage() {
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [nudgeOpen, setNudgeOpen] = useState(false);
+  // When set, the reminder dialog targets a single student; null = the whole
+  // not-submitted bucket (the bulk "Message" button).
+  const [nudgeRecipient, setNudgeRecipient] = useState<{ id: string; name: string | null } | null>(null);
+  const [reminders, setReminders] = useState<Record<string, ReminderSummary>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -141,6 +168,7 @@ export default function AssignmentReviewPage() {
       setRows((res.roster as ReviewRow[]) || []);
       setDrawingRows((res.drawing_roster as DrawingRosterRow[]) || []);
       setCounts(res.counts || {});
+      setReminders((res.reminders as Record<string, ReminderSummary>) || {});
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load assignment');
@@ -152,8 +180,40 @@ export default function AssignmentReviewPage() {
   }, [authLoading, load]);
 
   const isDrawing = assignment?.assignment_type === 'drawing';
-  const bucketRows = useMemo(() => rows.filter((r) => r.bucket === tab), [rows, tab]);
-  const dBucketRows = useMemo(() => drawingRows.filter((r) => r.bucket === dTab), [drawingRows, dTab]);
+  // A document resubmission still awaiting the teacher: attempt > 1 and not yet reviewed.
+  const isDocResubmission = (r: ReviewRow) =>
+    !!r.submission && (r.submission.attempt_number || 1) > 1 && r.submission.status === 'submitted';
+
+  const bucketRows = useMemo(() => {
+    const list = rows.filter((r) => r.bucket === tab);
+    // In "Submitted", surface resubmissions (a redo came back) at the top, newest first.
+    if (tab === 'submitted') {
+      return [...list].sort((a, b) => {
+        const ar = isDocResubmission(a) ? 1 : 0;
+        const br = isDocResubmission(b) ? 1 : 0;
+        if (ar !== br) return br - ar;
+        return (b.submission?.submitted_at || '').localeCompare(a.submission?.submitted_at || '');
+      });
+    }
+    return list;
+  }, [rows, tab]);
+  const dBucketRows = useMemo(() => {
+    const list = drawingRows.filter((r) => r.bucket === dTab);
+    if (dTab === 'submitted') {
+      return [...list].sort((a, b) => {
+        const ar = a.drawing?.is_resubmission ? 1 : 0;
+        const br = b.drawing?.is_resubmission ? 1 : 0;
+        if (ar !== br) return br - ar;
+        return (b.drawing?.submitted_at || '').localeCompare(a.drawing?.submitted_at || '');
+      });
+    }
+    return list;
+  }, [drawingRows, dTab]);
+  const dResubmitCount = useMemo(
+    () => drawingRows.filter((r) => r.bucket === 'submitted' && r.drawing?.is_resubmission).length,
+    [drawingRows],
+  );
+  const docResubmitCount = useMemo(() => rows.filter((r) => r.bucket === 'submitted' && isDocResubmission(r)).length, [rows]);
   const missingDrawingRecipients = useMemo(
     () => drawingRows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name })),
     [drawingRows],
@@ -180,6 +240,7 @@ export default function AssignmentReviewPage() {
     marks: number | null,
     feedback: string,
     action: 'complete' | 'redo',
+    reaction: GalleryReactionType | null,
   ) => {
     setBusy(true);
     try {
@@ -192,6 +253,7 @@ export default function AssignmentReviewPage() {
           student_id: row?.student.id,
           marks,
           feedback,
+          reaction,
           review_action: action,
         }),
       });
@@ -223,7 +285,7 @@ export default function AssignmentReviewPage() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => router.back()}
+        onClick={() => router.push('/teacher/assignments')}
         sx={{ mb: 1, minHeight: 44, color: 'text.secondary', fontWeight: 600 }}
       >
         Back
@@ -236,6 +298,34 @@ export default function AssignmentReviewPage() {
         </Stack>
       ) : (
         <>
+          <Breadcrumbs
+            separator={<NavigateNextIcon sx={{ fontSize: '0.9rem' }} />}
+            sx={{ mb: 0.75 }}
+          >
+            <MuiLink
+              component={NextLink}
+              href="/teacher/assignments"
+              underline="hover"
+              color="text.secondary"
+              variant="caption"
+              sx={{ fontWeight: 500 }}
+            >
+              Assignments
+            </MuiLink>
+            <Typography
+              variant="caption"
+              color="text.primary"
+              sx={{
+                fontWeight: 600,
+                maxWidth: { xs: 200, sm: 360 },
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {assignment.title}
+            </Typography>
+          </Breadcrumbs>
           <Typography variant="h5" sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem' } }}>
             {assignment.title}
           </Typography>
@@ -245,7 +335,7 @@ export default function AssignmentReviewPage() {
               day: 'numeric',
               month: 'short',
             })}{' '}
-            · out of {assignment.max_marks}
+            · {assignment.evaluation_type === 'stars' ? '1-5 stars' : `out of ${assignment.max_marks}`}
             {assignment.due_at
               ? ` · due ${new Date(assignment.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
               : ''}
@@ -367,11 +457,32 @@ export default function AssignmentReviewPage() {
                   {dBucketRows.length} {dBucketRows.length === 1 ? 'student' : 'students'}
                 </Typography>
                 {dTab === 'missing' && dBucketRows.length > 0 && (
-                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => setNudgeOpen(true)} sx={{ minHeight: 40 }}>
-                    Message
+                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 40 }}>
+                    Message all
                   </Button>
                 )}
               </Stack>
+
+              {dTab === 'submitted' && dResubmitCount > 0 && (
+                <Box
+                  sx={{
+                    mb: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderRadius: 2,
+                    bgcolor: alpha('#EF6C00', 0.1),
+                    border: `1px solid ${alpha('#EF6C00', 0.3)}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <ReplayIcon sx={{ fontSize: 18, color: '#B54700' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#B54700' }}>
+                    {dResubmitCount} resubmission{dResubmitCount > 1 ? 's' : ''} waiting for re-review
+                  </Typography>
+                </Box>
+              )}
 
               {dBucketRows.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
@@ -409,21 +520,57 @@ export default function AssignmentReviewPage() {
                             {row.student.name || row.student.email}
                           </Typography>
                           {row.drawing && (
-                            <Typography variant="caption" color="text.secondary">
-                              {new Date(row.drawing.submitted_at).toLocaleString('en-IN', {
-                                day: 'numeric',
-                                month: 'short',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                              })}
-                              {row.drawing.attempt_number > 1 ? ` · attempt ${row.drawing.attempt_number}` : ''}
+                            <Typography variant="caption" color={row.drawing.is_resubmission ? '#B54700' : 'text.secondary'} sx={{ fontWeight: row.drawing.is_resubmission ? 700 : 400 }}>
+                              {row.drawing.is_resubmission
+                                ? `Resubmitted ${remindedAgo(row.drawing.submitted_at)}`
+                                : new Date(row.drawing.submitted_at).toLocaleString('en-IN', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                              {(row.drawing.attempt_count ?? row.drawing.attempt_number) > 1
+                                ? ` · attempt ${row.drawing.attempt_count ?? row.drawing.attempt_number}`
+                                : ''}
+                            </Typography>
+                          )}
+                          {row.bucket === 'missing' && reminders[row.student.id] && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              Reminded {remindedAgo(reminders[row.student.id].last_sent_at)}
+                              {reminders[row.student.id].count > 1 ? ` · ×${reminders[row.student.id].count}` : ''}
                             </Typography>
                           )}
                         </Box>
+                        {row.bucket === 'missing' && (
+                          <Tooltip title="Send reminder">
+                            <IconButton
+                              size="small"
+                              aria-label={`Send reminder to ${row.student.name || 'student'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNudgeRecipient({ id: row.student.id, name: row.student.name });
+                                setNudgeOpen(true);
+                              }}
+                              sx={{ width: 44, height: 44, color: 'primary.main' }}
+                            >
+                              <SendIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {row.drawing?.is_resubmission && (
+                          <Chip icon={<ReplayIcon sx={{ fontSize: 15 }} />} label="Resubmitted" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700, '& .MuiChip-icon': { color: '#B54700' } }} />
+                        )}
                         {row.drawing?.status === 'redo' && (
                           <Chip label="Redo" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
                         )}
-                        {row.bucket === 'reviewed' && row.drawing?.tutor_rating != null && (
+                        {row.bucket === 'reviewed' && assignment.evaluation_type === 'marks' && row.drawing?.tutor_marks != null && (
+                          <Chip
+                            label={`${row.drawing.tutor_marks} / ${assignment.max_marks}`}
+                            size="small"
+                            sx={{ height: 22, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20', fontWeight: 700 }}
+                          />
+                        )}
+                        {row.bucket === 'reviewed' && assignment.evaluation_type !== 'marks' && row.drawing?.tutor_rating != null && (
                           <Chip
                             label={`${row.drawing.tutor_rating}/5`}
                             size="small"
@@ -466,11 +613,32 @@ export default function AssignmentReviewPage() {
                   </Tooltip>
                 )}
                 {tab === 'missing' && bucketRows.length > 0 && (
-                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => setNudgeOpen(true)} sx={{ minHeight: 40 }}>
-                    Message
+                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 40 }}>
+                    Message all
                   </Button>
                 )}
               </Stack>
+
+              {tab === 'submitted' && docResubmitCount > 0 && (
+                <Box
+                  sx={{
+                    mb: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderRadius: 2,
+                    bgcolor: alpha('#EF6C00', 0.1),
+                    border: `1px solid ${alpha('#EF6C00', 0.3)}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <ReplayIcon sx={{ fontSize: 18, color: '#B54700' }} />
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#B54700' }}>
+                    {docResubmitCount} resubmission{docResubmitCount > 1 ? 's' : ''} waiting for re-review
+                  </Typography>
+                </Box>
+              )}
 
               {bucketRows.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
@@ -508,24 +676,53 @@ export default function AssignmentReviewPage() {
                             {row.student.name || row.student.email}
                           </Typography>
                           {row.submission && (
-                            <Typography variant="caption" color="text.secondary">
-                              {new Date(row.submission.submitted_at).toLocaleString('en-IN', {
-                                day: 'numeric',
-                                month: 'short',
-                                hour: 'numeric',
-                                minute: '2-digit',
-                              })}
+                            <Typography variant="caption" color={isDocResubmission(row) ? '#B54700' : 'text.secondary'} sx={{ fontWeight: isDocResubmission(row) ? 700 : 400 }}>
+                              {isDocResubmission(row)
+                                ? `Resubmitted ${remindedAgo(row.submission.submitted_at)}`
+                                : new Date(row.submission.submitted_at).toLocaleString('en-IN', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                              {(row.submission.attempt_number || 1) > 1 ? ` · attempt ${row.submission.attempt_number}` : ''}
+                            </Typography>
+                          )}
+                          {row.bucket === 'missing' && reminders[row.student.id] && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              Reminded {remindedAgo(reminders[row.student.id].last_sent_at)}
+                              {reminders[row.student.id].count > 1 ? ` · ×${reminders[row.student.id].count}` : ''}
                             </Typography>
                           )}
                         </Box>
+                        {row.bucket === 'missing' && (
+                          <Tooltip title="Send reminder">
+                            <IconButton
+                              size="small"
+                              aria-label={`Send reminder to ${row.student.name || 'student'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNudgeRecipient({ id: row.student.id, name: row.student.name });
+                                setNudgeOpen(true);
+                              }}
+                              sx={{ width: 44, height: 44, color: 'primary.main' }}
+                            >
+                              <SendIcon sx={{ fontSize: 18 }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {isDocResubmission(row) && (
+                          <Chip icon={<ReplayIcon sx={{ fontSize: 15 }} />} label="Resubmitted" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700, '& .MuiChip-icon': { color: '#B54700' } }} />
+                        )}
                         {row.submission?.status === 'redo' && (
                           <Chip label="Redo" size="small" sx={{ height: 22, bgcolor: alpha('#EF6C00', 0.14), color: '#B54700', fontWeight: 700 }} />
                         )}
                         {row.submission?.marks != null && (
-                          <Chip
-                            label={`${row.submission.marks} / ${assignment.max_marks}`}
+                          <GradeDisplay
+                            evaluationType={assignment.evaluation_type}
+                            value={row.submission.marks}
+                            maxMarks={assignment.max_marks}
                             size="small"
-                            sx={{ height: 22, bgcolor: alpha('#2E7D32', 0.12), color: '#1B5E20', fontWeight: 700 }}
                           />
                         )}
                         {clickable && <ChevronRightIcon sx={{ color: 'text.disabled' }} />}
@@ -543,6 +740,7 @@ export default function AssignmentReviewPage() {
         open={reviewIndex != null}
         row={reviewIndex != null ? bucketRows[reviewIndex] ?? null : null}
         maxMarks={assignment?.max_marks ?? 0}
+        evaluationType={assignment?.evaluation_type ?? 'marks'}
         busy={busy}
         onClose={() => setReviewIndex(null)}
         onReview={review}
@@ -557,12 +755,19 @@ export default function AssignmentReviewPage() {
           open={nudgeOpen}
           assignments={[{ id: assignment.id, title: assignment.title }]}
           recipients={
-            isDrawing
-              ? missingDrawingRecipients
-              : rows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name }))
+            nudgeRecipient
+              ? [nudgeRecipient]
+              : isDrawing
+                ? missingDrawingRecipients
+                : rows.filter((r) => r.bucket === 'missing').map((r) => ({ id: r.student.id, name: r.student.name }))
           }
           getToken={getTeacherToken}
-          onClose={() => setNudgeOpen(false)}
+          onClose={() => {
+            setNudgeOpen(false);
+            setNudgeRecipient(null);
+            // Refresh the "already reminded" hints after a send.
+            load();
+          }}
         />
       )}
 

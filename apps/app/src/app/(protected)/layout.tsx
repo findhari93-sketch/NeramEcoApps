@@ -9,6 +9,8 @@ import { OnboardingWizard } from '@/components/onboarding';
 import AppShell from '@/components/shell/AppShell';
 import { SidebarProvider } from '@/contexts/SidebarContext';
 import { GlobalErrorLogger } from '@/components/ErrorBoundary';
+import ReportProblemFab from '@/components/ReportProblemFab';
+import { installErrorCapture } from '@/lib/error-buffer';
 import InstallPromptBanner from '@/components/InstallPromptBanner';
 import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
 import { useDeviceRegistration } from '@/hooks/useDeviceRegistration';
@@ -56,6 +58,11 @@ function ProtectedLayoutInner({
   const [idToken, setIdToken] = useState<string | null>(null);
   const [diagnosticSessionId, setDiagnosticSessionId] = useState<string | null>(null);
   const sso = useSSOToken();
+
+  // Passively capture console/network errors for "Report a problem" tickets.
+  useEffect(() => {
+    installErrorCapture();
+  }, []);
 
   // Device registration: auto-register current device on login
   const {
@@ -391,6 +398,9 @@ function ProtectedLayoutInner({
     <>
       {/* Global error/crash logger */}
       <GlobalErrorLogger idToken={idToken} sessionId={diagnosticSessionId} />
+
+      {/* Persistent "Report a problem" button on every authenticated page */}
+      <ReportProblemFab />
 
       <AppShell
         userName={user.name || 'Student'}

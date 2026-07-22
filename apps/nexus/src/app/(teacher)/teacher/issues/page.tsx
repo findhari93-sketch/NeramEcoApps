@@ -736,6 +736,70 @@ export default function TeacherIssuesPage() {
         </Typography>
       )}
 
+      {/* Technical details (staff-only): source app, device info, and the
+          auto-captured console/network errors. Never shown to the student. */}
+      {(() => {
+        const di = (selectedIssue.device_info as Record<string, unknown> | null) || null;
+        const logs = selectedIssue.console_logs || [];
+        const str = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v));
+        const deviceBits = di
+          ? [
+              str(di.device_type),
+              [str(di.browser), str(di.browser_version)].filter(Boolean).join(' ') || null,
+              [str(di.os), str(di.os_version)].filter(Boolean).join(' ') || null,
+              di.screen_width && di.screen_height ? `${di.screen_width}×${di.screen_height}` : null,
+              str(di.connection_type),
+              di.is_pwa ? 'PWA' : null,
+            ].filter(Boolean)
+          : [];
+        if (!di && logs.length === 0 && !selectedIssue.source_app) return null;
+        return (
+          <Box component="details" sx={{ mt: 1.5 }}>
+            <Box
+              component="summary"
+              sx={{ cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', userSelect: 'none' }}
+            >
+              Technical details{logs.length ? ` · ${logs.length} log${logs.length > 1 ? 's' : ''}` : ''}
+            </Box>
+            <Box sx={{ mt: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              <Chip size="small" variant="outlined" label={`app: ${selectedIssue.source_app || 'nexus'}`} />
+              {deviceBits.map((b, i) => (
+                <Chip key={i} size="small" variant="outlined" label={b} />
+              ))}
+            </Box>
+            {logs.length > 0 && (
+              <Box
+                sx={{
+                  mt: 1,
+                  p: 1,
+                  borderRadius: 1,
+                  bgcolor: alpha(theme.palette.text.primary, 0.04),
+                  maxHeight: 220,
+                  overflow: 'auto',
+                  fontFamily: 'monospace',
+                  fontSize: '0.7rem',
+                }}
+              >
+                {logs.map((log, i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      mb: 0.5,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      color: log.level === 'error' ? 'error.main' : log.level === 'warn' ? 'warning.main' : 'text.secondary',
+                    }}
+                  >
+                    [{log.level}] {log.message}
+                    {log.stack ? `\n${log.stack}` : ''}
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        );
+      })()}
+
       <Divider sx={{ mb: 2, mt: 2 }} />
 
       {/* Actions */}

@@ -105,6 +105,19 @@ export async function POST(request: NextRequest) {
             : 'sharepoint';
     }
 
+    // Grading scale (teacher's choice): 'marks' out of max_marks, or 'stars' (1-5).
+    // Default by type: drawings start on stars, documents on marks. Stars are stored
+    // against a max of 5.
+    const evaluationType: 'marks' | 'stars' =
+      body?.evaluation_type === 'stars'
+        ? 'stars'
+        : body?.evaluation_type === 'marks'
+          ? 'marks'
+          : type === 'drawing'
+            ? 'stars'
+            : 'marks';
+    const maxMarks = evaluationType === 'stars' ? 5 : Number(body?.max_marks) > 0 ? Number(body.max_marks) : 10;
+
     let drawingQuestionId: string | null = null;
     let submissionFormat: 'pdf' | 'image' | 'pdf_or_image';
     let contentImageUrl: string | null = null;
@@ -139,7 +152,8 @@ export async function POST(request: NextRequest) {
       drawing_question_id: drawingQuestionId,
       content_image_url: contentImageUrl,
       submission_format: submissionFormat,
-      max_marks: type === 'drawing' ? 10 : Number(body?.max_marks) > 0 ? Number(body.max_marks) : 10,
+      evaluation_type: evaluationType,
+      max_marks: maxMarks,
       due_at: dueAt,
       catchup_window_days: Math.round(windowDays),
       recording_url: recordingUrl,

@@ -14,6 +14,8 @@ import type {
   NexusFoundationIssue,
   NexusFoundationIssueWithDetails,
   NexusFoundationIssueActivity,
+  FoundationIssueLogEntry,
+  Json,
   FoundationReactionType,
   FoundationIssueStatus,
   FoundationIssueAction,
@@ -706,6 +708,10 @@ export async function createFoundationIssue(
     category?: FoundationIssueCategory;
     page_url?: string;
     screenshot_urls?: string[];
+    // Auto-captured technical context (staff-only).
+    console_logs?: FoundationIssueLogEntry[];
+    device_info?: Record<string, unknown>;
+    source_app?: string;
   },
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssue> {
@@ -721,6 +727,9 @@ export async function createFoundationIssue(
       category: data.category || 'other',
       page_url: data.page_url || null,
       screenshot_urls: data.screenshot_urls || null,
+      console_logs: (data.console_logs ?? null) as unknown as Json,
+      device_info: (data.device_info ?? null) as unknown as Json,
+      source_app: data.source_app || 'nexus',
     })
     .select()
     .single();

@@ -74,7 +74,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to stream file';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Log the real error server-side for debugging, but never leak internal
+    // resolver messages to the student — this URL opens directly in a new tab.
+    console.error('[study-materials/content] failed to stream file:', err);
+    return NextResponse.json(
+      { error: "This file can't be opened right now. Please report it so we can fix it." },
+      { status: 500 },
+    );
   }
 }

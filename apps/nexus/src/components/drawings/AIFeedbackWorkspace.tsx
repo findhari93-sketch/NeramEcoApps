@@ -12,10 +12,11 @@ import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
-import type { DrawingSubmission, TutorResource } from '@neram/database/types';
+import type { DrawingSubmission, TutorResource, GalleryReactionType } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import { compressImage } from '@/utils/imageCompression';
+import ReactionPicker from '@/components/assignments/ReactionPicker';
 
 export interface WorkspaceData {
   overlayAnnotations: null; // kept for backwards compat, no longer used for zone chips
@@ -24,6 +25,10 @@ export interface WorkspaceData {
   tutorFeedback: string;
   resources: TutorResource[];
   rating: number;
+  /** Numeric mark when the parent assignment grades on 'marks' (else null). */
+  marks: number | null;
+  /** Teacher's encouraging reaction (assignment drawings). */
+  reaction: GalleryReactionType | null;
   regionAnnotations?: RegionAnnotation[];
 }
 
@@ -36,18 +41,27 @@ interface AIFeedbackWorkspaceProps {
   defaultCollapsed?: boolean;
   readOnly?: boolean;
   sketchTrigger?: number;
+  /** Grading scale from the parent assignment (defaults to stars for practice drawings). */
+  evaluationType?: 'marks' | 'stars';
+  /** Marks ceiling when evaluationType is 'marks'. */
+  maxMarks?: number;
 }
 
 export default function AIFeedbackWorkspace({
   submission, getToken, onChange, defaultCollapsed = false, readOnly = false,
-  sketchTrigger = 0,
+  sketchTrigger = 0, evaluationType = 'stars', maxMarks = 5,
 }: AIFeedbackWorkspaceProps) {
+  const isMarks = evaluationType === 'marks';
   // Workspace state
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
   const [correctedImageUrl, setCorrectedImageUrl] = useState<string | null>((submission as any).corrected_image_url || null);
   const [tutorFeedback, setTutorFeedback] = useState(submission.tutor_feedback || '');
   const [resources, setResources] = useState<TutorResource[]>(submission.tutor_resources || []);
   const [rating, setRating] = useState(submission.tutor_rating || 0);
+  const [marks, setMarks] = useState(
+    (submission as any).tutor_marks != null ? String((submission as any).tutor_marks) : '',
+  );
+  const [reaction, setReaction] = useState<GalleryReactionType | null>((submission as any).reaction ?? null);
 
   // UI state
   const [sketchOpen, setSketchOpen] = useState(false);
@@ -68,9 +82,11 @@ export default function AIFeedbackWorkspace({
       tutorFeedback,
       resources,
       rating,
+      marks: marks.trim() === '' ? null : Number(marks),
+      reaction,
       ...overrides,
     });
-  }, [correctedImageUrl, onChange, overlayImageUrl, rating, resources, tutorFeedback]);
+  }, [correctedImageUrl, onChange, overlayImageUrl, rating, marks, reaction, resources, tutorFeedback]);
 
   // ─── Upload handlers ────────────────────────────────────────────────────────
 
@@ -333,27 +349,41 @@ export default function AIFeedbackWorkspace({
           onClick={() => setFeedbackExpanded(!feedbackExpanded)}
         >
           <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, fontSize: '0.85rem' }}>
-            Feedback & Rating
+            {isMarks ? 'Feedback & Marks' : 'Feedback & Rating'}
           </Typography>
-          {rating > 0 && (
-            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
-              {rating}/5 {RATING_LABELS[rating] || ''}
-            </Typography>
-          )}
+          {isMarks
+            ? marks.trim() !== '' && (
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
+                  {marks}/{maxMarks}
+                </Typography>
+              )
+            : rating > 0 && (
+                <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mr: 1 }}>
+                  {rating}/5 {RATING_LABELS[rating] || ''}
+                </Typography>
+              )}
           {feedbackExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </Box>
         <Collapse in={feedbackExpanded}>
           <Box sx={{ p: isMobile ? 1.5 : 2 }}>
             {readOnly ? (
               <Box>
-                {rating > 0 && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                    <Rating value={rating} readOnly size="medium" />
-                    <Typography variant="body2" fontWeight={600} color="text.secondary">
-                      {RATING_LABELS[rating] || ''}
-                    </Typography>
-                  </Box>
-                )}
+                {isMarks
+                  ? marks.trim() !== '' && (
+                      <Box sx={{ mb: 1.5 }}>
+                        <Typography variant="body2" fontWeight={700} color="text.secondary">
+                          Marks: {marks} / {maxMarks}
+                        </Typography>
+                      </Box>
+                    )
+                  : rating > 0 && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                        <Rating value={rating} readOnly size="medium" />
+                        <Typography variant="body2" fontWeight={600} color="text.secondary">
+                          {RATING_LABELS[rating] || ''}
+                        </Typography>
+                      </Box>
+                    )}
                 {tutorFeedback ? (
                   <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, mb: resources.length ? 2 : 0 }}>
                     {tutorFeedback}
@@ -386,25 +416,43 @@ export default function AIFeedbackWorkspace({
               </Box>
             ) : (
               <Box>
-                {/* Rating with label */}
+                {/* Grade: numeric marks or a 1-5 star rating, per the assignment. */}
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    RATING
+                    {isMarks ? 'MARKS' : 'RATING'}
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Rating
-                      value={rating}
-                      onChange={(_, v) => { setRating(v || 0); notify({ rating: v || 0 }); }}
-                      size="large"
-                    />
-                    <Typography
-                      variant="body2"
-                      fontWeight={600}
-                      color={rating >= 4 ? 'success.main' : rating >= 3 ? 'primary.main' : rating >= 1 ? 'warning.main' : 'text.disabled'}
-                    >
-                      {rating > 0 ? RATING_LABELS[rating] : 'Tap to rate'}
-                    </Typography>
-                  </Box>
+                  {isMarks ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TextField
+                        value={marks}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/[^0-9.]/g, '');
+                          setMarks(v);
+                          notify({ marks: v.trim() === '' ? null : Number(v) });
+                        }}
+                        inputProps={{ inputMode: 'decimal' }}
+                        size="small"
+                        sx={{ width: 100 }}
+                        placeholder="0"
+                      />
+                      <Typography color="text.secondary">out of {maxMarks}</Typography>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Rating
+                        value={rating}
+                        onChange={(_, v) => { setRating(v || 0); notify({ rating: v || 0 }); }}
+                        size="large"
+                      />
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        color={rating >= 4 ? 'success.main' : rating >= 3 ? 'primary.main' : rating >= 1 ? 'warning.main' : 'text.disabled'}
+                      >
+                        {rating > 0 ? RATING_LABELS[rating] : 'Tap to rate'}
+                      </Typography>
+                    </Box>
+                  )}
                 </Box>
 
                 {/* Written feedback */}
@@ -436,6 +484,11 @@ export default function AIFeedbackWorkspace({
                   onChange={(r) => { setResources(r); notify({ resources: r }); }}
                   getToken={getToken}
                 />
+
+                {/* Encouraging reaction sent to the student */}
+                <Box sx={{ mt: 2 }}>
+                  <ReactionPicker value={reaction} onChange={(v) => { setReaction(v); notify({ reaction: v }); }} />
+                </Box>
               </Box>
             )}
           </Box>

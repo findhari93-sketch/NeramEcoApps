@@ -1,9 +1,13 @@
 /**
- * Best-effort Microsoft Teams 1:1 chat message from the signed-in teacher (delegated token).
+ * @deprecated Superseded by the app-only Teams Activity-feed path
+ * (`sendTeamsActivityNotification` in @neram/auth). This posts to the teacher's
+ * real 1:1 chat, which clutters genuine conversations with templated reminders,
+ * exactly what the reminder feature was built to avoid. Kept only for reference;
+ * no route imports it. Do not re-wire it for reminders.
  *
+ * Best-effort Microsoft Teams 1:1 chat message from the signed-in teacher (delegated token).
  * Requires the teacher's Graph token to carry delegated Chat.Create + ChatMessage.Send with tenant
- * admin consent. Until that consent is in place these calls return 403 and the caller falls back to
- * in-app + email. Written so it "just works" once the scopes are granted, and never throws.
+ * admin consent. Never throws.
  */
 export async function sendTeamsChatMessage(
   userAccessToken: string,

@@ -97,6 +97,11 @@ export async function POST(request: NextRequest) {
       category: body.category,
       page_url: body.page_url || undefined,
       screenshot_urls: body.screenshot_urls || undefined,
+      // Auto-captured technical context (staff-only).
+      console_logs: Array.isArray(body.console_logs) ? body.console_logs : undefined,
+      device_info:
+        body.device_info && typeof body.device_info === 'object' ? body.device_info : undefined,
+      source_app: body.source_app === 'app' ? 'app' : 'nexus',
     });
 
     // Notify teachers/admins about the new issue

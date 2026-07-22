@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getDrawingSubmissionById } from '@neram/database/queries/nexus';
+import { getDrawingSubmissionById, getAssignmentDrawingHistory } from '@neram/database/queries/nexus';
 import { getSupabaseAdminClient } from '@neram/database';
 
 export async function GET(
@@ -16,7 +16,17 @@ export async function GET(
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ submission });
+    // For an assignment drawing, also return every prior attempt so the review
+    // screen can show the redo history (image + feedback per round). Practice
+    // drawings (no assignment_id) have no assignment-scoped history.
+    let attempts: unknown[] = [];
+    const assignmentId = (submission as any).assignment_id;
+    const studentId = (submission as any).student_id;
+    if (assignmentId && studentId) {
+      attempts = await getAssignmentDrawingHistory(assignmentId, studentId);
+    }
+
+    return NextResponse.json({ submission, attempts });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load submission';
     console.error('Submission GET error:', message);

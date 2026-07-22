@@ -43,6 +43,7 @@ interface AssignmentDetail {
   assignment_type: AssignmentType;
   instructions: string | null;
   submission_format: AssignmentFormat;
+  evaluation_type: 'marks' | 'stars';
   max_marks: number;
   class_date: string;
   due_at: string | null;
@@ -97,6 +98,7 @@ export default function NewAssignmentDialog({
       classDate: a.class_date,
       dueDate: a.due_at ? a.due_at.slice(0, 10) : '',
       format: a.submission_format,
+      evaluationType: a.evaluation_type ?? (a.assignment_type === 'drawing' ? 'stars' : 'marks'),
       maxMarks: String(a.max_marks ?? 10),
       category: '3d_composition',
       refImageUrls: a.reference_images?.length ? a.reference_images : a.content_image_url ? [a.content_image_url] : [],
@@ -195,9 +197,11 @@ export default function NewAssignmentDialog({
           due_date: draft.dueDate || undefined,
           catchup_window_days: Number(draft.catchupDays) || 7,
           recording_url: draft.recordingUrl.trim() || null,
+          evaluation_type: draft.evaluationType,
+          max_marks: draft.evaluationType === 'stars' ? 5 : Number(draft.maxMarks) || 10,
           ...(draft.type === 'drawing'
             ? { drawing_category: draft.category, reference_image_urls: draft.refImageUrls }
-            : { submission_format: draft.format, max_marks: Number(draft.maxMarks) || 10 }),
+            : { submission_format: draft.format }),
         }),
       });
       await reloadDetail(res.assignment.id);
@@ -228,9 +232,11 @@ export default function NewAssignmentDialog({
           due_at: draft.dueDate ? `${draft.dueDate}T23:59:59+05:30` : null,
           catchup_window_days: Number(draft.catchupDays) || 7,
           recording_url: draft.recordingUrl.trim() || null,
+          evaluation_type: draft.evaluationType,
+          max_marks: draft.evaluationType === 'stars' ? 5 : Number(draft.maxMarks) || 10,
           ...(draft.type === 'drawing'
             ? { reference_image_urls: draft.refImageUrls }
-            : { submission_format: draft.format, max_marks: Number(draft.maxMarks) || 10 }),
+            : { submission_format: draft.format }),
         }),
       });
       onCreated();

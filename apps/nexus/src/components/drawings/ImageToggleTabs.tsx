@@ -401,6 +401,7 @@ export default function ImageToggleTabs({
             <IconButton
               onClick={annotateMode ? () => setAnnotateMode(false) : (e) => setPencilMenuAnchor(e.currentTarget)}
               size="small"
+              aria-label={annotateMode ? 'Exit annotate' : 'Markup tools'}
               sx={{
                 position: 'absolute', bottom: 8, left: 8, zIndex: 6,
                 bgcolor: annotateMode ? '#1976d2' : 'rgba(0,0,0,0.55)',

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "df4f6b2d-ea18-46d1-8934-f508ac248e6c",
+  "packageName": "com.neramclasses.assistant",
+  "developer": {
+    "name": "Neram Classes",
+    "websiteUrl": "https://neramclasses.com",
+    "privacyUrl": "https://neramclasses.com/privacy",
+    "termsOfUseUrl": "https://neramclasses.com/terms"
+  },
+  "name": {
+    "short": "Neram Assistant",
+    "full": "Neram Classes Assistant"
+  },
+  "description": {
+    "short": "Reminders and updates from Neram Classes.",
+    "full": "Neram Assistant delivers your assignment and study reminders to your Teams activity feed and links you straight to your work in Nexus, without cluttering your chats."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#6D28D9",
+  "staticTabs": [
+    {
+      "entityId": "nexusAssignments",
+      "name": "My Work",
+      "contentUrl": "https://nexus.neramclasses.com/student/assignments",
+      "websiteUrl": "https://nexus.neramclasses.com/student/assignments",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity"],
+  "validDomains": ["nexus.neramclasses.com"],
+  "webApplicationInfo": {
+    "id": "aa039c70-50d2-4c91-bd0e-5675df5e50ff",
+    "resource": "api://nexus.neramclasses.com/aa039c70-50d2-4c91-bd0e-5675df5e50ff"
+  }
+}

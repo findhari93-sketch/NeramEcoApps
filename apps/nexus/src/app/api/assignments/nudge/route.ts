@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, sendEmail } from '@neram/database';
+import { getSupabaseAdminClient, sendEmail, recordAssignmentReminder } from '@neram/database';
+import { sendTeamsActivityNotification } from '@neram/auth';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
-import { extractBearerToken } from '@/lib/ms-verify';
-import { sendTeamsChatMessage } from '@/lib/teams-messaging';
+import { errorResponse } from '@/lib/api-errors';
 
 /**
  * POST /api/assignments/nudge  (staff)
- * Message selected students about one or more assignments. Tries a Teams DM
- * (delegated teacher token); on any failure falls back per-recipient to an
- * in-app notification + a Resend email. The selected assignment links are
- * appended to the message so students can jump straight to the work.
+ * Remind selected students about one or more assignments. Delivery per recipient:
+ *   1. A Microsoft Teams Activity-feed ping ("Neram Assistant") when configured and
+ *      the student has a Microsoft identity. This lands in the Teams Activity feed
+ *      (the bell), NOT in a 1:1 chat, so templated reminders never clutter a real
+ *      conversation.
+ *   2. Always an in-app notification (the persistent record + the in-Nexus bell).
+ *   3. An email backstop, only when the Teams ping did not land (so Teams-reachable
+ *      students are not double-messaged; and it is the sole external channel until
+ *      the Teams bot admin setup is done).
+ * Every send is logged to nexus_assignment_reminders so any staff member can see
+ * who was already reminded, when, and by whom (no double-nagging).
  *
- * Body: { studentIds: string[], assignmentIds?: string[], subject?: string, body: string }
- * Returns per-recipient delivery + how many went via Teams.
+ * Body: { studentIds: string[], assignmentIds?: string[], subject?: string, body: string, template?: string }
+ * Returns per-recipient delivery + per-channel counts.
  */
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -23,7 +30,6 @@ export async function POST(request: NextRequest) {
     const auth = request.headers.get('Authorization');
     const user = await getRequestUser(auth);
     assertStaff(user);
-    const authToken = extractBearerToken(auth);
 
     const body = await request.json();
     const studentIds: string[] = Array.isArray(body?.studentIds)
@@ -32,16 +38,24 @@ export async function POST(request: NextRequest) {
     const assignmentIds: string[] = Array.isArray(body?.assignmentIds)
       ? body.assignmentIds.filter((x: any) => typeof x === 'string')
       : [];
+    const template = typeof body?.template === 'string' ? body.template : null;
     const text = String(body?.body || '').trim();
     if (studentIds.length === 0) return NextResponse.json({ error: 'No recipients selected' }, { status: 400 });
     if (!text) return NextResponse.json({ error: 'Message is empty' }, { status: 400 });
 
     const supabase = getSupabaseAdminClient() as any;
-
-    // Resolve assignment titles for the link section (absolute URLs for Teams).
     const origin = new URL(request.url).origin;
+    // The "Neram Assistant" Teams app catalog id. When unset the Teams tier is
+    // skipped and delivery is in-app + email (Part A behaviour), which lets the
+    // reminder feature work before the one-time Teams admin setup is complete.
+    const catalogAppId = process.env.TEAMS_APP_CATALOG_ID || null;
+
+    // Resolve assignment titles for the link section (absolute URLs) and a primary
+    // deep link for the Teams ping.
     let linksHtml = '';
     let linksText = '';
+    let primaryUrl = `${origin}/student/assignments`;
+    let primaryTitle = 'your assignments';
     if (assignmentIds.length) {
       const { data: assns } = await supabase
         .from('nexus_class_assignments')
@@ -49,6 +63,8 @@ export async function POST(request: NextRequest) {
         .in('id', assignmentIds);
       const rows = (assns || []) as { id: string; title: string }[];
       if (rows.length) {
+        primaryUrl = `${origin}/student/assignments/${rows[0].id}`;
+        primaryTitle = rows.length === 1 ? rows[0].title : `${rows.length} assignments`;
         linksHtml =
           '<div style="margin-top:12px"><strong>Assignment' +
           (rows.length > 1 ? 's' : '') +
@@ -72,38 +88,42 @@ export async function POST(request: NextRequest) {
     const plain = text + linksText;
 
     const [{ data: users }, { data: profiles }] = await Promise.all([
-      supabase.from('users').select('id, name, email').in('id', studentIds),
+      supabase.from('users').select('id, name, email, ms_oid').in('id', studentIds),
       supabase.from('student_profiles').select('user_id, ms_teams_email').in('user_id', studentIds),
     ]);
-    const usersBy = new Map<string, { id: string; name: string | null; email: string | null }>(
+    const usersBy = new Map<string, { id: string; name: string | null; email: string | null; ms_oid: string | null }>(
       (users || []).map((u: any) => [u.id, u]),
     );
     const teamsBy = new Map<string, string | null>(
       (profiles || []).map((p: any) => [p.user_id, p.ms_teams_email]),
     );
 
-    const results: { studentId: string; name: string | null; channel: string; ok: boolean }[] = [];
-    for (const sid of studentIds) {
-      const u = usersBy.get(sid);
-      if (!u) {
-        results.push({ studentId: sid, name: null, channel: 'none', ok: false });
-        continue;
-      }
-      const upn = teamsBy.get(sid);
-      let channel = '';
-      let ok = false;
-
-      if (upn && authToken) {
-        const sent = await sendTeamsChatMessage(authToken, upn, html);
-        if (sent) {
-          ok = true;
-          channel = 'teams';
+    // Process recipients in parallel to stay within the serverless time budget.
+    const results = await Promise.all(
+      studentIds.map(async (sid) => {
+        const u = usersBy.get(sid);
+        if (!u) {
+          return { studentId: sid, name: null, teams: false, inapp: false, email: false, ok: false, channel: 'none' };
         }
-      }
 
-      if (!ok) {
+        // 1) Teams Activity-feed ping (clean channel). ms_oid is preferred; the UPN
+        //    (ms_teams_email) is a fallback identifier when the oid is missing.
+        let teams = false;
+        const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
+        if (catalogAppId && teamsUserId) {
+          const r = await sendTeamsActivityNotification(teamsUserId, {
+            title: primaryTitle,
+            text: subject,
+            webUrl: primaryUrl,
+            catalogAppId,
+          });
+          teams = r.ok;
+        }
+
+        // 2) Always record the in-app notification (persistent record + Nexus bell).
+        let inapp = false;
         try {
-          await supabase.from('user_notifications').insert({
+          const { error } = await supabase.from('user_notifications').insert({
             user_id: sid,
             event_type: 'assignment_nudge',
             title: subject,
@@ -111,26 +131,48 @@ export async function POST(request: NextRequest) {
             metadata: { assignment_ids: assignmentIds },
             is_read: false,
           });
-        } catch {
-          /* table may be unavailable; email is still attempted */
+          if (error) console.error('assignment_nudge notification insert failed:', error.message);
+          else inapp = true;
+        } catch (e) {
+          console.error('assignment_nudge notification insert threw:', e);
         }
-        let emailed = false;
-        if (u.email) {
+
+        // 3) Email backstop, only when the Teams ping did not land.
+        let email = false;
+        if (!teams && u.email) {
           const r = await sendEmail({ to: u.email, subject, html }).catch(() => ({ success: false }));
-          emailed = !!r.success;
+          email = !!r.success;
         }
-        ok = true;
-        channel = emailed ? 'inapp+email' : 'inapp';
-      }
 
-      results.push({ studentId: sid, name: u.name, channel, ok });
-    }
+        const parts = [teams ? 'teams' : '', inapp ? 'inapp' : '', email ? 'email' : ''].filter(Boolean);
+        const channel = parts.length ? parts.join('+') : 'failed';
+        const ok = parts.length > 0;
 
-    const viaTeams = results.filter((r) => r.channel === 'teams').length;
-    return NextResponse.json({ results, viaTeams });
+        // Log one reminder row per (assignment, student) so staff see prior nudges.
+        for (const aid of assignmentIds) {
+          await recordAssignmentReminder({
+            assignment_id: aid,
+            student_id: sid,
+            sent_by: user.id,
+            channel,
+            template,
+          });
+        }
+
+        return { studentId: sid, name: u.name, teams, inapp, email, ok, channel };
+      }),
+    );
+
+    const counts = {
+      total: results.length,
+      teams: results.filter((r) => r.teams).length,
+      inapp: results.filter((r) => r.inapp).length,
+      email: results.filter((r) => r.email).length,
+      failed: results.filter((r) => !r.ok).length,
+    };
+    // viaTeams kept for backward compatibility with older clients.
+    return NextResponse.json({ results, counts, viaTeams: counts.teams });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to send message';
-    const status = message === 'Not authorized' ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return errorResponse(err, 'Failed to send message');
   }
 }

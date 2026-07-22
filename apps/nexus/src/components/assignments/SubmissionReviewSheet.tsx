@@ -17,6 +17,7 @@ import {
   Avatar,
   Chip,
   Divider,
+  Rating,
   alpha,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
@@ -24,7 +25,12 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import RedoIcon from '@mui/icons-material/Redo';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import type { GalleryReactionType, NexusAssignmentSubmissionHistoryEntry } from '@neram/database/types';
+import { RATING_LABELS } from '@/lib/drawing-prompt-templates';
 import SubmissionFiles, { type SubmissionFile } from './SubmissionFiles';
+import ReactionPicker from './ReactionPicker';
+import SubmissionHistoryTimeline from './SubmissionHistoryTimeline';
+import { documentSubmissionToViews } from '@/lib/submission-history';
 
 export interface ReviewRow {
   student: { id: string; name: string | null; email: string | null; avatar_url: string | null };
@@ -35,7 +41,10 @@ export interface ReviewRow {
     attempt_number: number;
     marks: number | null;
     feedback: string | null;
+    reaction?: GalleryReactionType | null;
     submitted_at: string;
+    /** Prior attempts appended on each redo-resubmit (files + marks + feedback per round). */
+    history?: NexusAssignmentSubmissionHistoryEntry[];
   } | null;
   bucket: 'submitted' | 'late' | 'missing';
 }
@@ -44,9 +53,17 @@ interface SubmissionReviewSheetProps {
   open: boolean;
   row: ReviewRow | null;
   maxMarks: number;
+  /** Grading scale: numeric marks out of maxMarks, or a 1-5 star rating. */
+  evaluationType: 'marks' | 'stars';
   busy: boolean;
   onClose: () => void;
-  onReview: (submissionId: string, marks: number | null, feedback: string, action: 'complete' | 'redo') => Promise<void>;
+  onReview: (
+    submissionId: string,
+    marks: number | null,
+    feedback: string,
+    action: 'complete' | 'redo',
+    reaction: GalleryReactionType | null,
+  ) => Promise<void>;
   onPrev: () => void;
   onNext: () => void;
   hasPrev: boolean;
@@ -57,6 +74,7 @@ export default function SubmissionReviewSheet({
   open,
   row,
   maxMarks,
+  evaluationType,
   busy,
   onClose,
   onReview,
@@ -65,37 +83,56 @@ export default function SubmissionReviewSheet({
   hasPrev,
   hasNext,
 }: SubmissionReviewSheetProps) {
+  const isStars = evaluationType === 'stars';
   const [marks, setMarks] = useState('');
+  const [stars, setStars] = useState(0);
   const [feedback, setFeedback] = useState('');
+  const [reaction, setReaction] = useState<GalleryReactionType | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setMarks(row?.submission?.marks != null ? String(row.submission.marks) : '');
+    const m = row?.submission?.marks;
+    setMarks(m != null ? String(m) : '');
+    setStars(m != null ? Math.round(m) : 0);
     setFeedback(row?.submission?.feedback || '');
+    setReaction(row?.submission?.reaction ?? null);
     setError('');
   }, [row?.submission?.id]);
 
   const submission = row?.submission ?? null;
+  // Prior rounds (everything before the current attempt) so the teacher can see
+  // what was submitted and what they asked for last time before re-grading.
+  const priorViews = submission
+    ? documentSubmissionToViews(submission as any, { evaluationType, maxMarks }).slice(0, -1)
+    : [];
 
   const submit = async (action: 'complete' | 'redo') => {
     if (!submission) return;
     let marksVal: number | null = null;
     if (action === 'complete') {
-      if (marks.trim() === '') {
-        setError('Enter marks, or use Request redo.');
-        return;
+      if (isStars) {
+        if (stars < 1) {
+          setError('Tap to give a star rating, or use Request redo.');
+          return;
+        }
+        marksVal = stars;
+      } else {
+        if (marks.trim() === '') {
+          setError('Enter marks, or use Request redo.');
+          return;
+        }
+        const m = Number(marks);
+        if (!Number.isFinite(m) || m < 0 || m > maxMarks) {
+          setError(`Marks must be between 0 and ${maxMarks}.`);
+          return;
+        }
+        marksVal = m;
       }
-      const m = Number(marks);
-      if (!Number.isFinite(m) || m < 0 || m > maxMarks) {
-        setError(`Marks must be between 0 and ${maxMarks}.`);
-        return;
-      }
-      marksVal = m;
     } else {
-      marksVal = marks.trim() === '' ? null : Number(marks);
+      marksVal = isStars ? (stars >= 1 ? stars : null) : marks.trim() === '' ? null : Number(marks);
     }
     setError('');
-    await onReview(submission.id, marksVal, feedback.trim(), action);
+    await onReview(submission.id, marksVal, feedback.trim(), action, reaction);
   };
 
   return (
@@ -155,23 +192,48 @@ export default function SubmissionReviewSheet({
             )}
             <SubmissionFiles files={submission.files} />
 
+            {priorViews.length > 0 && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  bgcolor: alpha('#EF6C00', 0.06),
+                  border: `1px solid ${alpha('#EF6C00', 0.2)}`,
+                }}
+              >
+                <SubmissionHistoryTimeline attempts={priorViews} title="Previous attempts" />
+              </Box>
+            )}
+
             <Divider />
 
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>
-                Marks
+                {isStars ? 'Rating' : 'Marks'}
               </Typography>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <TextField
-                  value={marks}
-                  onChange={(e) => setMarks(e.target.value.replace(/[^0-9.]/g, ''))}
-                  inputProps={{ inputMode: 'decimal' }}
-                  size="small"
-                  sx={{ width: 100 }}
-                  placeholder="0"
-                />
-                <Typography color="text.secondary">out of {maxMarks}</Typography>
-              </Stack>
+              {isStars ? (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+                  <Rating value={stars} onChange={(_, v) => setStars(v || 0)} size="large" />
+                  <Typography
+                    color={stars >= 4 ? 'success.main' : stars >= 3 ? 'primary.main' : stars >= 1 ? 'warning.main' : 'text.disabled'}
+                    sx={{ fontWeight: 600 }}
+                  >
+                    {stars > 0 ? RATING_LABELS[stars] : 'Tap to rate'}
+                  </Typography>
+                </Stack>
+              ) : (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <TextField
+                    value={marks}
+                    onChange={(e) => setMarks(e.target.value.replace(/[^0-9.]/g, ''))}
+                    inputProps={{ inputMode: 'decimal' }}
+                    size="small"
+                    sx={{ width: 100 }}
+                    placeholder="0"
+                  />
+                  <Typography color="text.secondary">out of {maxMarks}</Typography>
+                </Stack>
+              )}
             </Box>
 
             <TextField
@@ -183,6 +245,8 @@ export default function SubmissionReviewSheet({
               rows={3}
               placeholder="What was good, what to fix..."
             />
+
+            <ReactionPicker value={reaction} onChange={setReaction} disabled={busy} />
 
             {error && (
               <Typography color="error" variant="body2">

@@ -18,6 +18,7 @@ import { compressImage } from '@/utils/imageCompression';
 import { imagesToPdf } from '@/utils/imagesToPdf';
 import ResponsiveActionSheet from '@/components/upload/ResponsiveActionSheet';
 import PhotoCapturePdf from '@/components/upload/PhotoCapturePdf';
+import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
 
 interface Template {
   id: string;
@@ -46,6 +47,7 @@ export default function DocumentUploadSheet({
   onUploaded,
 }: DocumentUploadSheetProps) {
   const { getToken } = useNexusAuthContext();
+  const canCapture = useCanCapturePhoto();
   // Two ways to provide the document: photograph it (combined into one PDF for
   // the student) or upload a file they already have.
   const [mode, setMode] = useState<'photos' | 'file'>('photos');
@@ -206,7 +208,7 @@ export default function DocumentUploadSheet({
         sx={{ mb: 2 }}
       >
         <ToggleButton value="photos" sx={{ minHeight: 44, textTransform: 'none' }}>
-          Take photos
+          {canCapture ? 'Take photos' : 'Photos to PDF'}
         </ToggleButton>
         <ToggleButton value="file" sx={{ minHeight: 44, textTransform: 'none' }}>
           Upload a file

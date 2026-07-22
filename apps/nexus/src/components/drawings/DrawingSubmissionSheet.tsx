@@ -3,13 +3,14 @@
 import { useState, useRef } from 'react';
 import {
   Box, Button, Typography, TextField, Paper, IconButton,
-  LinearProgress, Drawer,
+  LinearProgress, Drawer, alpha,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import PhotoLibraryOutlinedIcon from '@mui/icons-material/PhotoLibraryOutlined';
 import ClipboardPasteZone from './ClipboardPasteZone';
 import { compressImage } from '@/utils/imageCompression';
+import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
 
 interface DrawingSubmissionSheetProps {
   open: boolean;
@@ -18,14 +19,19 @@ interface DrawingSubmissionSheetProps {
   /** Set when submitting against a drawing-type class assignment. */
   assignmentId?: string;
   sourceType: 'question_bank' | 'free_practice' | 'assignment';
+  /** When resubmitting after a redo, the teacher's ask, shown up top. */
+  redoFeedback?: string | null;
+  /** Teacher's corrected reference from the last review, shown as a reminder. */
+  referenceImageUrl?: string | null;
   getToken: () => Promise<string | null>;
   onSubmitted: () => void;
 }
 
 export default function DrawingSubmissionSheet({
-  open, onClose, questionId, assignmentId, sourceType, getToken, onSubmitted,
+  open, onClose, questionId, assignmentId, sourceType, redoFeedback, referenceImageUrl, getToken, onSubmitted,
 }: DrawingSubmissionSheetProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const canCapture = useCanCapturePhoto();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [selfNote, setSelfNote] = useState('');
@@ -141,6 +147,38 @@ export default function DrawingSubmissionSheet({
           <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
         </Box>
 
+        {redoFeedback && (
+          <Box
+            sx={{
+              p: 1.5,
+              mb: 2,
+              borderRadius: 2,
+              bgcolor: alpha('#EF6C00', 0.1),
+              border: `1px solid ${alpha('#EF6C00', 0.3)}`,
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 700, color: '#B54700' }}>
+              Your teacher asked for a redo
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.25, whiteSpace: 'pre-wrap' }}>
+              {redoFeedback}
+            </Typography>
+            {referenceImageUrl && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                  Reference to aim for
+                </Typography>
+                <Box
+                  component="img"
+                  src={referenceImageUrl}
+                  alt="Teacher reference"
+                  sx={{ width: 88, height: 88, objectFit: 'cover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+                />
+              </Box>
+            )}
+          </Box>
+        )}
+
         <input
           ref={fileRef}
           type="file"
@@ -153,21 +191,23 @@ export default function DrawingSubmissionSheet({
         {!preview ? (
           <Box sx={{ mb: 2 }}>
             <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
-              <Button
-                variant="outlined"
-                startIcon={<CameraAltOutlinedIcon />}
-                onClick={() => { if (fileRef.current) { fileRef.current.capture = 'environment'; fileRef.current.click(); } }}
-                sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
-              >
-                Camera
-              </Button>
+              {canCapture && (
+                <Button
+                  variant="outlined"
+                  startIcon={<CameraAltOutlinedIcon />}
+                  onClick={() => { if (fileRef.current) { fileRef.current.capture = 'environment'; fileRef.current.click(); } }}
+                  sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
+                >
+                  Camera
+                </Button>
+              )}
               <Button
                 variant="outlined"
                 startIcon={<PhotoLibraryOutlinedIcon />}
                 onClick={() => { if (fileRef.current) { fileRef.current.removeAttribute('capture'); fileRef.current.click(); } }}
                 sx={{ flex: 1, minHeight: 48, textTransform: 'none' }}
               >
-                Gallery
+                {canCapture ? 'Gallery' : 'Choose image'}
               </Button>
             </Box>
             <ClipboardPasteZone

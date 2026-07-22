@@ -13,15 +13,25 @@ import {
   signSubmissionFiles,
   deleteAssignment,
   getUserEnrollment,
+  getAssignmentReminderSummary,
   recordGamificationEvent,
   resolveAssignmentRecording,
   getStudentAssignmentDrawing,
+  getAssignmentDrawingHistory,
   updateDrawingQuestion,
   deleteDrawingQuestion,
+  createUserNotification,
 } from '@neram/database';
+import type { GalleryReactionType } from '@neram/database/types';
 import { getRequestUser, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { notifyAssignmentPublished, notifyAssignmentReviewed } from '@/lib/timetable-notifications';
+import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
+
+const REACTION_TYPES: GalleryReactionType[] = ['heart', 'clap', 'fire', 'star', 'wow'];
+function parseReaction(input: unknown): GalleryReactionType | null {
+  return REACTION_TYPES.includes(input as GalleryReactionType) ? (input as GalleryReactionType) : null;
+}
 
 /** Trimmed, deduped, capped list of valid https reference-image URLs. */
 function sanitizeRefUrls(input: unknown): string[] {
@@ -40,6 +50,24 @@ function sanitizeRefUrls(input: unknown): string[] {
 }
 
 /**
+ * Sign a submission's current files AND every history[] snapshot's files, so the
+ * "Previous attempts" timeline can open prior-round documents too.
+ */
+async function signSubmissionWithHistory(submission: any): Promise<any> {
+  if (!submission) return null;
+  const files = await signSubmissionFiles(submission.files || []);
+  const history = Array.isArray(submission.history)
+    ? await Promise.all(
+        submission.history.map(async (h: any) => ({
+          ...h,
+          files: await signSubmissionFiles(h.files || []),
+        })),
+      )
+    : submission.history;
+  return { ...submission, files, history };
+}
+
+/**
  * GET /api/assignments/[id]
  * Staff: full assignment + attachments + roster matrix (each submission's files
  *   carry short-TTL signed read URLs).
@@ -53,6 +81,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!detail) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 
     if (isStaff(user)) {
+      // Shared "already reminded" history so staff don't double-nag (per student:
+      // how many reminders + when the last one went out).
+      const reminders = await getAssignmentReminderSummary(params.id);
+
       // Drawing-type assignments are graded in the Drawing Review screen; return
       // a roster built from drawing_submissions with the drawing id to open.
       if ((detail as any).assignment_type === 'drawing') {
@@ -65,16 +97,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           },
           { total: 0, submitted: 0, reviewed: 0, missing: 0 } as Record<string, number>,
         );
-        return NextResponse.json({ assignment: detail, drawing_roster: rows, counts, role: 'staff' });
+        return NextResponse.json({ assignment: detail, drawing_roster: rows, counts, reminders, role: 'staff' });
       }
 
       const { rows } = await getAssignmentRoster(params.id);
       const rosterWithUrls = await Promise.all(
         rows.map(async (r) => ({
           ...r,
-          submission: r.submission
-            ? { ...r.submission, files: await signSubmissionFiles(r.submission.files || []) }
-            : null,
+          submission: await signSubmissionWithHistory(r.submission),
         })),
       );
       const counts = rosterWithUrls.reduce(
@@ -85,7 +115,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         },
         { total: 0, submitted: 0, late: 0, missing: 0 } as Record<string, number>,
       );
-      return NextResponse.json({ assignment: detail, roster: rosterWithUrls, counts, role: 'staff' });
+      return NextResponse.json({ assignment: detail, roster: rosterWithUrls, counts, reminders, role: 'staff' });
     }
 
     // Student branch: must be published and enrolled in the classroom.
@@ -100,10 +130,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // Drawing-type assignments keep their submission in the Drawing channel
     // (drawing_submissions), so the student view renders the annotated review.
     if ((detail as any).assignment_type === 'drawing') {
-      const drawing = await getStudentAssignmentDrawing(user.id, params.id);
+      const [drawing, attempts] = await Promise.all([
+        getStudentAssignmentDrawing(user.id, params.id),
+        getAssignmentDrawingHistory(params.id, user.id),
+      ]);
       return NextResponse.json({
         assignment: detail,
         drawing_submission: drawing,
+        drawing_attempts: attempts,
         enrolled_at: (enrollment as any)?.enrolled_at ?? null,
         recording,
         role: 'student',
@@ -111,9 +145,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const submission = await getSubmission(params.id, user.id);
-    const signed = submission
-      ? { ...submission, files: await signSubmissionFiles(submission.files || []) }
-      : null;
+    const signed = await signSubmissionWithHistory(submission);
     return NextResponse.json({
       assignment: detail,
       submission: signed,
@@ -161,6 +193,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             return NextResponse.json({ error: 'Max marks must be greater than 0' }, { status: 400 });
           }
           updates.max_marks = m;
+        }
+        // Grading scale change: stars pin max_marks to 5 (they store 1-5 on marks).
+        if (body.evaluation_type === 'marks' || body.evaluation_type === 'stars') {
+          updates.evaluation_type = body.evaluation_type;
+          if (body.evaluation_type === 'stars') updates.max_marks = 5;
         }
         if (body.due_at !== undefined) updates.due_at = body.due_at || null;
         if (body.class_date !== undefined) updates.class_date = body.class_date;
@@ -278,23 +315,30 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           return NextResponse.json({ error: 'submission_id is required' }, { status: 400 });
         }
         const reviewAction = body.review_action === 'redo' ? 'redo' : 'complete';
+        const isStars = (assignment as any).evaluation_type === 'stars';
         let marks: number | null = null;
         if (body.marks !== null && body.marks !== undefined && body.marks !== '') {
           const m = Number(body.marks);
           if (!Number.isFinite(m) || m < 0 || m > assignment.max_marks) {
             return NextResponse.json(
-              { error: `Marks must be between 0 and ${assignment.max_marks}.` },
+              {
+                error: isStars
+                  ? 'Rating must be between 1 and 5 stars.'
+                  : `Marks must be between 0 and ${assignment.max_marks}.`,
+              },
               { status: 400 },
             );
           }
-          marks = m;
+          marks = isStars ? Math.round(m) : m;
         }
+        const reaction = parseReaction(body.reaction);
         const submission = await getSubmission(params.id, body.student_id ?? '');
         const reviewed = await reviewSubmission(body.submission_id, {
           marks,
           feedback: body.feedback ? String(body.feedback) : null,
           action: reviewAction,
           reviewed_by: user.id,
+          reaction,
         });
         // Notify the owning student (student_id from the submission row).
         const studentId = reviewed.student_id || submission?.student_id;
@@ -306,6 +350,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             params.id,
             reviewAction,
           ).catch((e) => console.error('notifyAssignmentReviewed failed:', e));
+
+          // Always-visible top-bar bell: a warm "reviewed" ping carrying the grade
+          // and the teacher's reaction, deep-linking to the student's assignment.
+          if (reviewAction === 'complete') {
+            const gradeText = isStars
+              ? marks != null
+                ? `${marks}/5 stars`
+                : 'a star rating'
+              : marks != null
+                ? `${marks}/${assignment.max_marks} marks`
+                : 'your marks';
+            const emoji = reactionEmoji(reaction);
+            createUserNotification({
+              user_id: studentId,
+              event_type: 'assignment_reviewed',
+              title: `Assignment reviewed: ${assignment.title}`,
+              message: `You got ${gradeText}. ${emoji ? emoji + ' ' : ''}${praiseFor(reaction)}`.trim(),
+              metadata: { assignment_id: params.id },
+            }).catch((e) => console.error('assignment_reviewed bell notify failed:', e));
+          }
 
           // Marks feed the leaderboard: up to 20 pts scaled by the score, awarded
           // once per assignment (first completed review). Redo requests award none.

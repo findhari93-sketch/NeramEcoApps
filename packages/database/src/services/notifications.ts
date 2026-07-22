@@ -712,6 +712,7 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     foundation_issue_reopened: null, // In-app only (Nexus)
     foundation_issue_closed: null, // In-app only (Nexus)
     study_material_comment_added: null, // In-app only (Nexus)
+    assignment_reviewed: null, // In-app only (Nexus student bell)
     auto_first_touch_sent: null, // Auto-messaging only (no team email)
   };
 

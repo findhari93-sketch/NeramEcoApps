@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Box, IconButton, Skeleton, Typography, UserAvatar, Chip, Paper,
   Button, useMediaQuery, useTheme, Switch, Snackbar, alpha,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Breadcrumbs, Link as MuiLink,
 } from '@neram/ui';
+import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -21,8 +24,10 @@ import ImageToggleTabs from '@/components/drawings/ImageToggleTabs';
 import AIFeedbackWorkspace, { type WorkspaceData } from '@/components/drawings/AIFeedbackWorkspace';
 import CommentSection from '@/components/drawings/CommentSection';
 import TagEditor from '@/components/drawings/TagEditor';
+import SubmissionHistoryTimeline from '@/components/assignments/SubmissionHistoryTimeline';
+import { drawingAttemptsToViews } from '@/lib/submission-history';
 import { useNavBadges } from '@/components/NavBadgeProvider';
-import type { DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
+import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 
 export default function DrawingReviewDetailPage() {
@@ -43,6 +48,7 @@ export default function DrawingReviewDetailPage() {
     : '/teacher/drawing-reviews';
 
   const [submission, setSubmission] = useState<DrawingSubmissionWithDetails | null>(null);
+  const [attempts, setAttempts] = useState<DrawingSubmission[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Workspace data managed by AIFeedbackWorkspace, mirrored here for submission
@@ -53,6 +59,8 @@ export default function DrawingReviewDetailPage() {
     tutorFeedback: '',
     resources: [],
     rating: 0,
+    marks: null,
+    reaction: null,
   });
   const [workspaceData, setWorkspaceData] = useState<WorkspaceData>(workspaceRef.current);
 
@@ -102,11 +110,13 @@ export default function DrawingReviewDetailPage() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tutor_rating: ws.rating || null,
+          tutor_marks: ws.marks,
           tutor_feedback: ws.tutorFeedback || null,
           reviewed_image_url: ws.overlayImageUrl,
           corrected_image_url: ws.correctedImageUrl,
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
+          reaction: ws.reaction,
           tag_labels: tagLabels,
           action: 'draft',
         }),
@@ -130,8 +140,10 @@ export default function DrawingReviewDetailPage() {
       });
       const data = await res.json();
       setSubmission(data.submission || null);
+      setAttempts(Array.isArray(data.attempts) ? data.attempts : []);
     } catch {
       setSubmission(null);
+      setAttempts([]);
     } finally {
       setLoading(false);
     }
@@ -149,6 +161,8 @@ export default function DrawingReviewDetailPage() {
       tutorFeedback: submission.tutor_feedback || '',
       resources: (submission.tutor_resources as any) || [],
       rating: submission.tutor_rating || 0,
+      marks: (submission as any).tutor_marks ?? null,
+      reaction: (submission as any).reaction ?? null,
     };
     workspaceRef.current = initial;
     setWorkspaceData(initial);
@@ -187,11 +201,13 @@ export default function DrawingReviewDetailPage() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tutor_rating: ws.rating || null,
+          tutor_marks: ws.marks,
           tutor_feedback: ws.tutorFeedback || null,
           reviewed_image_url: ws.overlayImageUrl,
           corrected_image_url: ws.correctedImageUrl,
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
+          reaction: ws.reaction,
           is_gallery_visible: showInGallery,
           tag_labels: tagLabels,
           action: reviewAction,
@@ -210,6 +226,17 @@ export default function DrawingReviewDetailPage() {
     }
   };
 
+  // Every prior attempt of this student's drawing for the same assignment, so the
+  // teacher can scroll the redo history while grading the latest.
+  const attemptViews = useMemo(() => {
+    if (attempts.length < 2) return [];
+    const asg = (submission as any)?.assignment;
+    return drawingAttemptsToViews(attempts, {
+      evaluationType: (asg?.evaluation_type as any) ?? 'stars',
+      maxMarks: asg?.max_marks ?? 5,
+    });
+  }, [attempts, submission]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', gap: 2, p: 2, height: '80vh' }}>
@@ -227,11 +254,13 @@ export default function DrawingReviewDetailPage() {
   const sub = submission as any;
 
   // This drawing belongs to a class assignment when it was opened from one
-  // (?assignment=) or the submission itself carries an assignment_id. Show a
-  // context bar so the teacher knows they are grading an assignment, with a
-  // shortcut back into it (useful when reached from the shared queue).
+  // (?assignment=) or the submission itself carries an assignment_id. A breadcrumb
+  // bar shows where this submission sits in the hierarchy and lets the teacher jump
+  // to any parent. When reached from the shared queue instead, the trail roots at
+  // Drawing Reviews rather than a specific assignment.
   const assignmentId: string | null = fromAssignmentId ?? (sub.assignment_id as string | null);
-  const assignmentContextBar = assignmentId ? (
+  const assignmentTitle: string = sub.assignment?.title || 'Assignment';
+  const assignmentContextBar = (
     <Box
       sx={{
         display: 'flex',
@@ -244,19 +273,47 @@ export default function DrawingReviewDetailPage() {
         borderColor: 'divider',
       }}
     >
-      <AssignmentOutlinedIcon sx={{ fontSize: 18, color: 'primary.main' }} />
-      <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, color: 'primary.dark' }} noWrap>
-        Assignment submission
-      </Typography>
-      <Button
-        size="small"
-        onClick={() => router.push(`/teacher/assignments/${assignmentId}`)}
-        sx={{ textTransform: 'none', minHeight: 32, fontSize: '0.72rem' }}
+      <AssignmentOutlinedIcon sx={{ fontSize: 18, color: 'primary.main', flexShrink: 0 }} />
+      <Breadcrumbs
+        separator={<NavigateNextIcon sx={{ fontSize: '0.85rem' }} />}
+        sx={{ flex: 1, minWidth: 0 }}
       >
-        Open assignment
-      </Button>
+        <MuiLink
+          component={NextLink}
+          href={assignmentId ? '/teacher/assignments' : '/teacher/drawing-reviews'}
+          underline="hover"
+          color="text.secondary"
+          variant="caption"
+          sx={{ fontWeight: 500 }}
+        >
+          {assignmentId ? 'Assignments' : 'Drawing Reviews'}
+        </MuiLink>
+        {assignmentId && (
+          <MuiLink
+            component={NextLink}
+            href={`/teacher/assignments/${assignmentId}`}
+            underline="hover"
+            color="text.secondary"
+            variant="caption"
+            sx={{
+              fontWeight: 500,
+              display: 'inline-block',
+              maxWidth: { xs: 150, sm: 280 },
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              verticalAlign: 'bottom',
+            }}
+          >
+            {assignmentTitle}
+          </MuiLink>
+        )}
+        <Typography variant="caption" color="primary.dark" sx={{ fontWeight: 700 }}>
+          Review
+        </Typography>
+      </Breadcrumbs>
     </Box>
-  ) : null;
+  );
 
   // Action bar: fixed on mobile (above BottomNav), inline on desktop
   const actionBar = isEditMode ? (
@@ -387,6 +444,13 @@ export default function DrawingReviewDetailPage() {
     </Box>
   ) : null;
 
+  // Previous attempts of this redo, shown while grading the latest one.
+  const previousAttemptsPanel = attemptViews.length > 1 ? (
+    <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 }, mt: 2, borderRadius: 2 }}>
+      <SubmissionHistoryTimeline attempts={attemptViews} title="Submission history" />
+    </Paper>
+  ) : null;
+
   // Workspace + comments panel content
   const reviewPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -428,7 +492,11 @@ export default function DrawingReviewDetailPage() {
           defaultCollapsed={isMobile}
           readOnly={!isEditMode}
           sketchTrigger={sketchTrigger}
+          evaluationType={submission.assignment?.evaluation_type ?? 'stars'}
+          maxMarks={submission.assignment?.max_marks ?? 5}
         />
+
+        {previousAttemptsPanel}
 
         {isEditMode && (
           <Box sx={{ mt: 2 }}>
@@ -481,6 +549,9 @@ export default function DrawingReviewDetailPage() {
                 </Typography>
               )}
             </Box>
+            {attempts.length > 1 && (
+              <Chip label={`Attempt ${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ height: 22, fontWeight: 700 }} />
+            )}
             {submission.question && <CategoryBadge category={submission.question.category} />}
             <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
               <MoreVertIcon fontSize="small" />
@@ -544,7 +615,11 @@ export default function DrawingReviewDetailPage() {
                 defaultCollapsed={false}
                 readOnly={!isEditMode}
                 sketchTrigger={sketchTrigger}
+                evaluationType={submission.assignment?.evaluation_type ?? 'stars'}
+                maxMarks={submission.assignment?.max_marks ?? 5}
               />
+
+              {previousAttemptsPanel}
 
               {isEditMode && (
                 <Box sx={{ mt: 1.5 }}>
@@ -646,8 +721,8 @@ export default function DrawingReviewDetailPage() {
             )}
           </Box>
           {submission.question && <CategoryBadge category={submission.question.category} />}
-          {submission.attempt_number > 1 && (
-            <Chip label={`Attempt #${submission.attempt_number}`} size="small" variant="outlined" />
+          {attempts.length > 1 && (
+            <Chip label={`Attempt ${attempts.length}`} size="small" color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
           )}
           <IconButton size="small" onClick={(e) => setMenuAnchor(e.currentTarget)}>
             <MoreVertIcon />

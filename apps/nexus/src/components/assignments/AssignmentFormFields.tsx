@@ -15,7 +15,7 @@
 import { useState } from 'react';
 import {
   Box, Typography, TextField, Stack, ToggleButtonGroup, ToggleButton, Collapse,
-  MenuItem, Button, ImageUploadList,
+  MenuItem, Button, Chip, ImageUploadList,
 } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
@@ -24,6 +24,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import type { AssignmentFormat } from '@/lib/assignment-format';
 
 export type AssignmentType = 'drawing' | 'document';
+export type AssignmentEvaluation = 'marks' | 'stars';
 
 export interface AssignmentDraft {
   type: AssignmentType;
@@ -32,6 +33,8 @@ export interface AssignmentDraft {
   classDate: string;
   dueDate: string;
   format: AssignmentFormat;
+  /** How the work is graded: numeric marks (out of maxMarks) or a 1-5 star rating. */
+  evaluationType: AssignmentEvaluation;
   maxMarks: string;
   category: string;
   refImageUrls: string[];
@@ -54,6 +57,7 @@ export function blankDraft(classDate: string): AssignmentDraft {
     classDate,
     dueDate: '',
     format: 'pdf_or_image',
+    evaluationType: 'stars', // drawings default to a 1-5 star rating
     maxMarks: '10',
     category: '3d_composition',
     refImageUrls: [],
@@ -104,6 +108,8 @@ export default function AssignmentFormFields({
   const [linkInput, setLinkInput] = useState('');
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState('');
+  // "Custom" is active when the max is not one of the quick presets.
+  const [customMarks, setCustomMarks] = useState(() => !['10', '100'].includes(value.maxMarks));
   const addLink = async () => {
     const u = linkInput.trim();
     if (!u || value.refImageUrls.length >= MAX_REFS) return;
@@ -126,7 +132,9 @@ export default function AssignmentFormFields({
       <ToggleButtonGroup
         value={type}
         exclusive
-        onChange={(_, v) => v && !lockType && onChange({ type: v })}
+        onChange={(_, v) =>
+          v && !lockType && onChange({ type: v, evaluationType: v === 'drawing' ? 'stars' : 'marks' })
+        }
         fullWidth
         size="small"
         disabled={lockType}
@@ -224,6 +232,59 @@ export default function AssignmentFormFields({
         </Box>
       )}
 
+      {/* How the work is graded (applies to both drawing and document). */}
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>How will you grade this?</Typography>
+        <ToggleButtonGroup
+          value={value.evaluationType}
+          exclusive
+          onChange={(_, v) => v && onChange({ evaluationType: v })}
+          fullWidth
+          size="small"
+        >
+          <ToggleButton value="marks" sx={{ minHeight: 48, textTransform: 'none' }}>Marks</ToggleButton>
+          <ToggleButton value="stars" sx={{ minHeight: 48, textTransform: 'none' }}>Star rating</ToggleButton>
+        </ToggleButtonGroup>
+        {value.evaluationType === 'marks' ? (
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.25, flexWrap: 'wrap', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">Out of</Typography>
+            {['10', '100'].map((preset) => (
+              <Chip
+                key={preset}
+                label={preset}
+                clickable
+                color={!customMarks && value.maxMarks === preset ? 'primary' : 'default'}
+                variant={!customMarks && value.maxMarks === preset ? 'filled' : 'outlined'}
+                onClick={() => { setCustomMarks(false); onChange({ maxMarks: preset }); }}
+                sx={{ minHeight: 40, px: 0.5, fontWeight: 700 }}
+              />
+            ))}
+            <Chip
+              label="Custom"
+              clickable
+              color={customMarks ? 'primary' : 'default'}
+              variant={customMarks ? 'filled' : 'outlined'}
+              onClick={() => setCustomMarks(true)}
+              sx={{ minHeight: 40, px: 0.5, fontWeight: 700 }}
+            />
+            {customMarks && (
+              <TextField
+                label="Max marks"
+                value={value.maxMarks}
+                onChange={(e) => onChange({ maxMarks: e.target.value.replace(/[^0-9.]/g, '') })}
+                inputProps={{ inputMode: 'decimal' }}
+                size="small"
+                sx={{ width: 110 }}
+              />
+            )}
+          </Stack>
+        ) : (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Students see a 1 to 5 star rating, no number.
+          </Typography>
+        )}
+      </Box>
+
       <Stack direction="row" spacing={2}>
         <TextField label="Class date" type="date" value={value.classDate} onChange={(e) => onChange({ classDate: e.target.value })} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
         <TextField label="Due (optional)" type="date" value={value.dueDate} onChange={(e) => onChange({ dueDate: e.target.value })} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
@@ -238,15 +299,6 @@ export default function AssignmentFormFields({
       </Button>
       <Collapse in={showAdvanced}>
         <Stack spacing={2}>
-          {type === 'document' && (
-            <TextField
-              label="Max marks"
-              value={value.maxMarks}
-              onChange={(e) => onChange({ maxMarks: e.target.value.replace(/[^0-9.]/g, '') })}
-              inputProps={{ inputMode: 'decimal' }}
-              sx={{ width: 140 }}
-            />
-          )}
           <TextField
             label="Catch-up window (days for late joiners)"
             value={value.catchupDays}

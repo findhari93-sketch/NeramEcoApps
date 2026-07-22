@@ -13,6 +13,7 @@ import type {
   DrawingThreadView,
   DrawingThreadAttempt,
   DrawingTag,
+  GalleryReactionType,
 } from '../../types';
 
 // ============================================================
@@ -403,6 +404,30 @@ export async function getStudentAssignmentDrawing(
   return ((data || [])[0] as DrawingSubmission) || null;
 }
 
+/**
+ * Every drawing attempt a student made against one drawing-type class assignment,
+ * oldest first, each carrying the teacher's review (image, overlay, corrected
+ * reference, annotations, rating/marks, feedback, reaction). Assignment drawings
+ * are not threaded, so we key on (assignment_id, student_id) rather than a thread.
+ * Powers the "Previous attempts" timeline on both the teacher review and the
+ * student assignment page.
+ */
+export async function getAssignmentDrawingHistory(
+  assignmentId: string,
+  studentId: string,
+  client?: TypedSupabaseClient
+): Promise<DrawingSubmission[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('drawing_submissions' as any)
+    .select('*')
+    .eq('assignment_id', assignmentId)
+    .eq('student_id', studentId)
+    .order('submitted_at', { ascending: true });
+  if (error) throw error;
+  return (data as DrawingSubmission[]) || [];
+}
+
 export async function getStudentDrawingSubmissions(
   studentId: string,
   filters?: {
@@ -441,7 +466,10 @@ export async function getDrawingSubmissionById(
 
   const { data, error } = await supabase
     .from('drawing_submissions' as any)
-    .select('*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url)')
+    .select(
+      '*, question:drawing_questions(*), student:users!drawing_submissions_student_id_fkey(id, name, email, avatar_url), ' +
+        'assignment:nexus_class_assignments!drawing_submissions_assignment_id_fkey(id, title, classroom_id, evaluation_type, max_marks)',
+    )
     .eq('id', id)
     .single();
 
@@ -771,12 +799,25 @@ export async function createDrawingSubmissionWithThread(
 ): Promise<{ submission: DrawingSubmission; isRedo: boolean; attemptNumber: number }> {
   const supabase = client || getSupabaseAdminClient();
 
-  // If no question_id, create a simple submission (no thread)
+  // If no question_id, create a simple submission (no thread). Assignment
+  // drawings take this path (they carry assignment_id, not question_id), so we
+  // number attempts by counting prior submissions for the same (assignment,
+  // student). That way a redo resubmission reads as attempt #2, #3, ... instead
+  // of a hardcoded 1, and the roster/history can show a real count.
   if (!data.question_id) {
     const submission = await createDrawingSubmission(data, supabase);
-    // Update thread_id to self
-    await supabase.from('drawing_submissions' as any).update({ thread_id: submission.id, attempt_number: 1 }).eq('id', submission.id);
-    return { submission: { ...submission, thread_id: submission.id, attempt_number: 1 }, isRedo: false, attemptNumber: 1 };
+    let attemptNumber = 1;
+    if (data.assignment_id) {
+      const { count } = await supabase
+        .from('drawing_submissions' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('assignment_id', data.assignment_id)
+        .eq('student_id', data.student_id);
+      // count includes the row we just inserted, so it is the attempt number.
+      attemptNumber = count && count > 0 ? count : 1;
+    }
+    await supabase.from('drawing_submissions' as any).update({ thread_id: submission.id, attempt_number: attemptNumber }).eq('id', submission.id);
+    return { submission: { ...submission, thread_id: submission.id, attempt_number: attemptNumber }, isRedo: attemptNumber > 1, attemptNumber };
   }
 
   // Check if a thread exists for this student+question
@@ -873,11 +914,15 @@ export async function saveDrawingReviewWithAction(
   submissionId: string,
   review: {
     tutor_rating?: number | null;
+    /** Numeric grade when the parent assignment uses the 'marks' scale (else null). */
+    tutor_marks?: number | null;
     tutor_feedback?: string | null;
     reviewed_image_url?: string | null;
     corrected_image_url?: string | null;
     ai_overlay_annotations?: Array<{ area: string; label: string; severity: string }> | null;
     tutor_resources?: Array<{ type: string; url: string; title: string }>;
+    /** Teacher's encouraging reaction sent while grading (one of the 5 gallery emojis). */
+    reaction?: GalleryReactionType | null;
     /**
      * Whether this submission should appear in the unified gallery. Undefined
      * means "use default": default is ON when the teacher provides both a
@@ -904,11 +949,13 @@ export async function saveDrawingReviewWithAction(
     .from('drawing_submissions' as any)
     .update({
       tutor_rating: review.tutor_rating || null,
+      tutor_marks: review.tutor_marks ?? null,
       tutor_feedback: review.tutor_feedback || null,
       reviewed_image_url: review.reviewed_image_url || null,
       corrected_image_url: review.corrected_image_url || null,
       ai_overlay_annotations: review.ai_overlay_annotations || null,
       tutor_resources: review.tutor_resources || [],
+      reaction: review.reaction ?? null,
       status: submissionStatus,
       is_gallery_visible: visibility,
       reviewed_at: new Date().toISOString(),
