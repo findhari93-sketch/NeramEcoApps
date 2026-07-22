@@ -404,6 +404,7 @@ export default function NewAssignmentDialog({
       lockType={isEdit}
       showCategory={!isEdit}
       autoFocusTitle={!isEdit}
+      enableReferencePaste
       showAdvanced={showAdvanced}
       onToggleAdvanced={() => setShowAdvanced((s) => !s)}
     />

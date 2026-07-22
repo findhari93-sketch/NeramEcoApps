@@ -472,6 +472,7 @@ export default function PasteAssignmentsDialog({
                       uploadReference={uploadReference}
                       linkReference={linkReference}
                       showCategory
+                      enableReferencePaste={expanded === i}
                       showAdvanced={!!advanced[i]}
                       onToggleAdvanced={() => setAdvanced((a) => ({ ...a, [i]: !a[i] }))}
                     />

@@ -86,6 +86,13 @@ interface AssignmentFormFieldsProps {
   onToggleAdvanced: () => void;
   /** Autofocus the title (only when a single form is on screen). */
   autoFocusTitle?: boolean;
+  /**
+   * Catch a pasted image for the reference uploader anywhere in the surface.
+   * Enable only when THIS form is the sole image target on screen (the single
+   * create/edit dialog, or the currently-expanded card in the paste-preview list),
+   * otherwise every mounted form would grab the same paste.
+   */
+  enableReferencePaste?: boolean;
 }
 
 export default function AssignmentFormFields({
@@ -99,6 +106,7 @@ export default function AssignmentFormFields({
   showAdvanced,
   onToggleAdvanced,
   autoFocusTitle = false,
+  enableReferencePaste = false,
 }: AssignmentFormFieldsProps) {
   const { type } = value;
   const MAX_REFS = 6;
@@ -190,6 +198,7 @@ export default function AssignmentFormFields({
             upload={uploadReference}
             helperText="Paste, drop, or choose"
             maxFiles={MAX_REFS}
+            enableGlobalPaste={enableReferencePaste}
             camera
           />
           <Box>

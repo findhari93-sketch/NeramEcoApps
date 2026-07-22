@@ -26,6 +26,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import { useCanCapturePhoto } from '../hooks';
 
 export interface ImageUploadFieldProps {
   /** Current image (or file) URL, or null when empty. */
@@ -41,7 +42,7 @@ export interface ImageUploadFieldProps {
   maxSizeMB?: number;
   /** MIME/extension accept string. Default 'image/*'. Add ',.pdf' for docs. */
   accept?: string;
-  /** Show a Camera button (mobile capture). */
+  /** Offer a Camera button on touch devices (phones/tablets); hidden on desktop where `capture` is ignored. */
   camera?: boolean;
   /** Also listen for paste on the whole document (single-field dialogs only). */
   enableGlobalPaste?: boolean;
@@ -70,6 +71,12 @@ export function ImageUploadField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Only surface the Camera button where it can actually open a camera (touch
+  // devices). On desktop `capture` is ignored and it would just re-open the file
+  // dialog, so we hide it there. Hook is called unconditionally per rules-of-hooks.
+  const canCapturePhoto = useCanCapturePhoto();
+  const showCamera = camera && canCapturePhoto;
 
   const acceptsPdf = /pdf/i.test(accept);
 
@@ -215,7 +222,7 @@ export function ImageUploadField({
               <Typography variant="caption" color="text.secondary">
                 {acceptsPdf ? 'Image or PDF' : 'Image'} · up to {maxSizeMB} MB
               </Typography>
-              {camera && (
+              {showCamera && (
                 <Button
                   size="small"
                   startIcon={<PhotoCameraOutlinedIcon sx={{ fontSize: 18 }} />}

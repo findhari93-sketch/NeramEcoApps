@@ -34,8 +34,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const subject = String(body?.subject || '').trim() || `About: ${file?.title || 'your study material'}`;
     const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111">${escapeHtml(text).replace(/\n/g, '<br/>')}</div>`;
 
-    const origin = new URL(request.url).origin;
-    const studyUrl = `${origin}/student/study-materials`;
     const catalogAppId = process.env.TEAMS_APP_CATALOG_ID || null;
 
     const supabase = getSupabaseAdminClient() as any;
@@ -60,12 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         let teams = false;
         const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
         if (catalogAppId && teamsUserId) {
-          const r = await sendTeamsActivityNotification(teamsUserId, {
-            title: file?.title || 'Study material',
-            text: subject,
-            webUrl: studyUrl,
-            catalogAppId,
-          });
+          const r = await sendTeamsActivityNotification(teamsUserId, { text: subject, catalogAppId });
           teams = r.ok;
         }
 

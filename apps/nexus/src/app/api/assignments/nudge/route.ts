@@ -50,11 +50,9 @@ export async function POST(request: NextRequest) {
     // reminder feature work before the one-time Teams admin setup is complete.
     const catalogAppId = process.env.TEAMS_APP_CATALOG_ID || null;
 
-    // Resolve assignment titles for the link section (absolute URLs) and a primary
-    // deep link for the Teams ping.
+    // Resolve assignment titles for the email link section and the Teams ping text.
     let linksHtml = '';
     let linksText = '';
-    let primaryUrl = `${origin}/student/assignments`;
     let primaryTitle = 'your assignments';
     if (assignmentIds.length) {
       const { data: assns } = await supabase
@@ -63,7 +61,6 @@ export async function POST(request: NextRequest) {
         .in('id', assignmentIds);
       const rows = (assns || []) as { id: string; title: string }[];
       if (rows.length) {
-        primaryUrl = `${origin}/student/assignments/${rows[0].id}`;
         primaryTitle = rows.length === 1 ? rows[0].title : `${rows.length} assignments`;
         linksHtml =
           '<div style="margin-top:12px"><strong>Assignment' +
@@ -82,6 +79,8 @@ export async function POST(request: NextRequest) {
     }
 
     const subject = String(body?.subject || '').trim() || 'About your assignments';
+    // Concise line for the Teams activity feed (bell). Names the assignment when known.
+    const teamsText = assignmentIds.length ? `${subject}: ${primaryTitle}` : subject;
     const html =
       `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111">${escapeHtml(text).replace(/\n/g, '<br/>')}</div>` +
       linksHtml;
@@ -111,12 +110,7 @@ export async function POST(request: NextRequest) {
         let teams = false;
         const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
         if (catalogAppId && teamsUserId) {
-          const r = await sendTeamsActivityNotification(teamsUserId, {
-            title: primaryTitle,
-            text: subject,
-            webUrl: primaryUrl,
-            catalogAppId,
-          });
+          const r = await sendTeamsActivityNotification(teamsUserId, { text: teamsText, catalogAppId });
           teams = r.ok;
         }
 

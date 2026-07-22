@@ -687,32 +687,40 @@ export interface TeamsActivityResult {
 }
 
 /**
+ * Find the personal-scope installation id of the "Neram Assistant" app for a user,
+ * or null if it is not installed. The installation id (not the catalog id) is what
+ * the activity-notification entityUrl topic must reference. Matching is done in
+ * code (filtering on an expanded nav property is unreliable across tenants).
+ */
+async function findInstalledAppId(userMsOid: string, catalogAppId: string): Promise<string | null> {
+  const res = await graphFetch(
+    `/users/${encodeURIComponent(userMsOid)}/teamwork/installedApps?$expand=teamsApp`,
+  );
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  if (!Array.isArray(data?.value)) return null;
+  const match = data.value.find(
+    (a: any) => a?.teamsApp?.id === catalogAppId || a?.teamsApp?.externalId === catalogAppId,
+  );
+  return match?.id ?? null;
+}
+
+/**
  * Ensure the "Neram Assistant" Teams app is installed in a user's personal scope.
- * sendActivityNotification requires the app to be installed for the recipient, so
- * the sender calls this first (and retries the send once after a fresh install).
- * Returns { ok: true } when already installed or newly installed. Never throws.
+ * sendActivityNotification requires the app to be installed for the recipient (and
+ * its per-user installation id), so the sender calls this first. Returns
+ * { ok: true, installationId } when already installed or newly installed (the POST
+ * install returns no body, so the id is fetched by re-listing). Never throws.
  */
 export async function ensureTeamsAppInstalledForUser(
   userMsOid: string,
   catalogAppId: string,
-): Promise<{ ok: boolean; alreadyInstalled?: boolean; reason?: string }> {
+): Promise<{ ok: boolean; alreadyInstalled?: boolean; installationId?: string; reason?: string }> {
   if (!userMsOid || !catalogAppId) return { ok: false, reason: 'missing_oid_or_app_id' };
   try {
-    // Already installed? List personal-scope apps and match the catalog id in code
-    // (filtering on an expanded nav property is unreliable across tenants).
-    const listRes = await graphFetch(
-      `/users/${encodeURIComponent(userMsOid)}/teamwork/installedApps?$expand=teamsApp`,
-    );
-    if (listRes.ok) {
-      const data = await listRes.json().catch(() => null);
-      const found =
-        Array.isArray(data?.value) &&
-        data.value.some(
-          (a: any) => a?.teamsApp?.id === catalogAppId || a?.teamsApp?.externalId === catalogAppId,
-        );
-      if (found) return { ok: true, alreadyInstalled: true };
-    }
-    // Install it.
+    const existing = await findInstalledAppId(userMsOid, catalogAppId);
+    if (existing) return { ok: true, alreadyInstalled: true, installationId: existing };
+
     const installRes = await graphFetch(
       `/users/${encodeURIComponent(userMsOid)}/teamwork/installedApps`,
       {
@@ -722,8 +730,12 @@ export async function ensureTeamsAppInstalledForUser(
         }),
       },
     );
-    if (installRes.ok || installRes.status === 201) return { ok: true, alreadyInstalled: false };
-    if (installRes.status === 409) return { ok: true, alreadyInstalled: true }; // race: already installed
+    // 201 Created returns no body, and 409 = race (already installed). Either way,
+    // re-list to get the installation id.
+    if (installRes.ok || installRes.status === 201 || installRes.status === 409) {
+      const id = await findInstalledAppId(userMsOid, catalogAppId);
+      return { ok: true, alreadyInstalled: installRes.status === 409, installationId: id ?? undefined };
+    }
     const errText = await installRes.text().catch(() => '');
     return { ok: false, reason: `install ${installRes.status}: ${errText}` };
   } catch (error) {
@@ -733,38 +745,42 @@ export async function ensureTeamsAppInstalledForUser(
 
 /**
  * Send a Teams Activity-feed notification to a user (app-only). Lands in their
- * Teams "Activity" (bell), separate from all chats. `webUrl` deep-links the
- * notification (e.g. the Nexus assignment). Ensures the app is installed first and
- * retries once on a "not installed" (404/403) failure. Never throws.
+ * Teams "Activity" (bell), separate from all chats. Clicking it opens the Neram
+ * Assistant personal tab (the student's Nexus assignments). Ensures the app is
+ * installed first (that also yields the per-user installation id the entityUrl
+ * topic needs). Never throws.
  *
- * Uses the reserved `systemDefault` activity type, which needs no manifest
- * `activities` declaration; the free text goes in templateParameters.systemDefaultText.
+ * Uses the reserved `systemDefault` activity type (no manifest `activities`
+ * declaration needed); the free text goes in templateParameters.systemDefaultText.
+ * The topic MUST be an entityUrl pointing at the installed app: Graph rejects a
+ * plain `text` topic whose webUrl is not a teams.microsoft.com/l/ deep link.
  */
 export async function sendTeamsActivityNotification(
   userMsOid: string,
-  opts: { title: string; text: string; webUrl: string; catalogAppId: string },
+  opts: { text: string; catalogAppId: string },
 ): Promise<TeamsActivityResult> {
   if (!userMsOid || !opts.catalogAppId) return { ok: false, status: 0, reason: 'missing_oid_or_app_id' };
-
-  const post = (): Promise<Response> =>
-    graphFetch(`/users/${encodeURIComponent(userMsOid)}/teamwork/sendActivityNotification`, {
-      method: 'POST',
-      body: JSON.stringify({
-        topic: { source: 'text', value: opts.title.slice(0, 150), webUrl: opts.webUrl },
-        activityType: 'systemDefault',
-        previewText: { content: opts.text.slice(0, 150) },
-        teamsAppId: opts.catalogAppId,
-        templateParameters: [{ name: 'systemDefaultText', value: opts.text.slice(0, 150) }],
-      }),
-    });
-
   try {
-    let res = await post();
-    // 404/403 usually means the app isn't installed for this user yet — install then retry once.
-    if (!res.ok && (res.status === 404 || res.status === 403)) {
-      const install = await ensureTeamsAppInstalledForUser(userMsOid, opts.catalogAppId);
-      if (install.ok) res = await post();
+    const install = await ensureTeamsAppInstalledForUser(userMsOid, opts.catalogAppId);
+    if (!install.ok || !install.installationId) {
+      return { ok: false, status: 0, reason: install.reason || 'not_installed' };
     }
+    const text = opts.text.slice(0, 150);
+    const res = await graphFetch(
+      `/users/${encodeURIComponent(userMsOid)}/teamwork/sendActivityNotification`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          topic: {
+            source: 'entityUrl',
+            value: `https://graph.microsoft.com/v1.0/users/${userMsOid}/teamwork/installedApps/${install.installationId}`,
+          },
+          activityType: 'systemDefault',
+          previewText: { content: text },
+          templateParameters: [{ name: 'systemDefaultText', value: text }],
+        }),
+      },
+    );
     if (res.ok || res.status === 204) return { ok: true, status: res.status };
     const errText = await res.text().catch(() => '');
     return { ok: false, status: res.status, reason: `sendActivityNotification ${res.status}: ${errText}` };

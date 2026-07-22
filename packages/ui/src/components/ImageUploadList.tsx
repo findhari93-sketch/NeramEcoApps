@@ -6,6 +6,12 @@
  * reached, the shared single ImageUploadField as the "add" tile. Inherits click +
  * drop + CLIPBOARD PASTE from ImageUploadField. Endpoint/auth-agnostic via the
  * injected `upload(file) => {url, path?}`.
+ *
+ * Paste note: the add-tile only catches Ctrl/⌘+V once it has focus, which is hard
+ * to reach on desktop (clicking it opens the file dialog). Pass `enableGlobalPaste`
+ * when this is the only image target on screen so an image on the clipboard is
+ * caught anywhere in the surface. It ignores non-image pastes, so text fields keep
+ * working. Do NOT enable it for two mounted lists at once, both would grab the paste.
  */
 import React from 'react';
 import { Box, Typography, IconButton } from '@mui/material';
@@ -22,6 +28,8 @@ export interface ImageUploadListProps {
   maxSizeMB?: number;
   accept?: string;
   camera?: boolean;
+  /** Catch an image pasted anywhere on the surface. Only for a single list on screen. */
+  enableGlobalPaste?: boolean;
   disabled?: boolean;
   error?: string;
 }
@@ -36,6 +44,7 @@ export function ImageUploadList({
   maxSizeMB = 10,
   accept = 'image/*',
   camera = false,
+  enableGlobalPaste = false,
   disabled = false,
   error,
 }: ImageUploadListProps): JSX.Element {
@@ -91,6 +100,7 @@ export function ImageUploadList({
               maxSizeMB={maxSizeMB}
               accept={accept}
               camera={camera}
+              enableGlobalPaste={enableGlobalPaste}
               disabled={disabled}
             />
           </Box>
