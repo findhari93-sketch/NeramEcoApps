@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { tallyReasons } from '@/lib/rsvp-reasons';
 
 /**
  * GET /api/timetable/rsvp-dashboard?classroom_id={id}&class_id={id}
  * OR
  * GET /api/timetable/rsvp-dashboard?classroom_id={id}&start={date}&end={date}
  *
- * Teacher-only. Returns full RSVP breakdown with student names, responses, and reasons.
+ * Teacher-only. Splits the roster into attending and opted out, with the reason
+ * behind each opt-out and a tally by reason code.
+ *
+ * On the default-attending model there is no "no response" bucket: a student
+ * with no RSVP row is attending.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -62,13 +67,11 @@ export async function GET(request: NextRequest) {
     }));
 
     if (classId) {
-      // Single class RSVP breakdown
-      const breakdown = await getClassRsvpBreakdown(supabase, classId, allStudents);
-      return NextResponse.json(breakdown);
+      const byClass = await fetchOptOuts(supabase, [classId]);
+      return NextResponse.json(buildBreakdown(byClass.get(classId) || [], allStudents));
     }
 
     if (start && end) {
-      // Aggregate across date range
       const { data: classes } = await supabase
         .from('nexus_scheduled_classes')
         .select('id, title, scheduled_date, start_time, end_time, batch_id, status')
@@ -79,21 +82,21 @@ export async function GET(request: NextRequest) {
         .order('scheduled_date', { ascending: true })
         .order('start_time', { ascending: true });
 
-      const breakdowns = await Promise.all(
-        (classes || []).map(async (cls: any) => {
-          const breakdown = await getClassRsvpBreakdown(supabase, cls.id, allStudents);
-          return {
-            class_id: cls.id,
-            title: cls.title,
-            scheduled_date: cls.scheduled_date,
-            start_time: cls.start_time,
-            end_time: cls.end_time,
-            batch_id: cls.batch_id,
-            status: cls.status,
-            ...breakdown,
-          };
-        })
-      );
+      // One query for the whole week rather than one per class. A six-class
+      // week used to cost six round trips to build the same answer.
+      const classIds = (classes || []).map((c: any) => c.id);
+      const byClass = await fetchOptOuts(supabase, classIds);
+
+      const breakdowns = (classes || []).map((cls: any) => ({
+        class_id: cls.id,
+        title: cls.title,
+        scheduled_date: cls.scheduled_date,
+        start_time: cls.start_time,
+        end_time: cls.end_time,
+        batch_id: cls.batch_id,
+        status: cls.status,
+        ...buildBreakdown(byClass.get(cls.id) || [], allStudents),
+      }));
 
       return NextResponse.json({ classes: breakdowns });
     }
@@ -105,48 +108,68 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function getClassRsvpBreakdown(
-  supabase: any,
-  classId: string,
-  allStudents: Array<{ id: string; name: string; avatar_url: string | null; batch_id: string | null }>
-) {
-  const { data: rsvps } = await supabase
-    .from('nexus_class_rsvp')
-    .select('student_id, response, reason, responded_at')
-    .eq('scheduled_class_id', classId);
+interface StudentRow {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  batch_id: string | null;
+}
 
-  const rsvpMap = new Map<string, any>();
-  for (const r of rsvps || []) {
-    rsvpMap.set(r.student_id, r);
+/** Every opt-out for the given classes, grouped by class id. One query. */
+async function fetchOptOuts(supabase: any, classIds: string[]): Promise<Map<string, any[]>> {
+  const byClass = new Map<string, any[]>();
+  if (classIds.length === 0) return byClass;
+
+  const { data } = await supabase
+    .from('nexus_class_rsvp')
+    .select('scheduled_class_id, student_id, reason, reason_code, wants_catchup, responded_at')
+    .in('scheduled_class_id', classIds)
+    .eq('response', 'not_attending');
+
+  for (const row of data || []) {
+    const list = byClass.get(row.scheduled_class_id) || [];
+    list.push(row);
+    byClass.set(row.scheduled_class_id, list);
   }
+  return byClass;
+}
+
+/**
+ * Split the roster into attending and opted out.
+ *
+ * There is deliberately no third bucket. A student with no RSVP row has not
+ * "failed to respond", they are attending, which is what the default means. The
+ * old no_response bucket made every class look half-unanswered and gave
+ * teachers a list to chase that should never have existed.
+ */
+function buildBreakdown(optOutRows: any[], allStudents: StudentRow[]) {
+  const optOutById = new Map<string, any>(optOutRows.map((r) => [r.student_id, r]));
 
   const attending: any[] = [];
   const notAttending: any[] = [];
-  const noResponse: any[] = [];
 
   for (const student of allStudents) {
-    const rsvp = rsvpMap.get(student.id);
-    if (!rsvp) {
-      noResponse.push({ ...student });
-    } else if (rsvp.response === 'attending') {
-      attending.push({ ...student, responded_at: rsvp.responded_at });
-    } else {
+    const optOut = optOutById.get(student.id);
+    if (optOut) {
       notAttending.push({
         ...student,
-        reason: rsvp.reason || null,
-        responded_at: rsvp.responded_at,
+        reason: optOut.reason || null,
+        reason_code: optOut.reason_code || null,
+        wants_catchup: optOut.wants_catchup !== false,
+        responded_at: optOut.responded_at,
       });
+    } else {
+      attending.push({ ...student });
     }
   }
 
   return {
     attending,
     not_attending: notAttending,
-    no_response: noResponse,
+    reason_tally: tallyReasons(notAttending),
     summary: {
       attending: attending.length,
       not_attending: notAttending.length,
-      no_response: noResponse.length,
       total: allStudents.length,
     },
   };

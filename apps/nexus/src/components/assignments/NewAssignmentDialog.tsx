@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box, Button, Typography, TextField, Drawer, IconButton, Stack,
-  Chip, LinearProgress, Divider, useMediaQuery, useTheme,
+  Chip, LinearProgress, Divider, useMediaQuery, useTheme, alpha,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
@@ -26,6 +26,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import LinkIcon from '@mui/icons-material/Link';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import { ASSIGNMENT_ATTACHMENTS_FOLDER_ID } from '@/lib/assignment-constants';
 import { istTodayStr } from '@/lib/assignment-clock';
 import type { AssignmentFormat } from '@/lib/assignment-format';
@@ -62,15 +63,26 @@ export default function NewAssignmentDialog({
   getToken,
   onCreated,
   assignmentId,
+  scheduledClassId,
+  classContextLabel,
 }: {
   open: boolean;
   onClose: () => void;
   classroomId: string;
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
   getToken: () => Promise<string | null>;
-  onCreated: () => void;
+  /** The id is passed so a caller that opened this from a class can react. */
+  onCreated: (assignmentId?: string) => void;
   /** When set, the dialog edits this assignment instead of creating one. */
   assignmentId?: string | null;
+  /**
+   * Opened from a timetable class: the new assignment is attached to it on
+   * creation. Assignments are still standalone by default, so this stays
+   * optional and unset everywhere else.
+   */
+  scheduledClassId?: string | null;
+  /** Human label for that class, shown so the link is never a surprise. */
+  classContextLabel?: string;
 }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
@@ -190,6 +202,7 @@ export default function NewAssignmentDialog({
         body: JSON.stringify({
           action: 'create',
           classroom_id: classroomId,
+          ...(scheduledClassId ? { scheduled_class_id: scheduledClassId } : {}),
           assignment_type: draft.type,
           title: draft.title.trim(),
           instructions: draft.instructions.trim() || null,
@@ -205,7 +218,7 @@ export default function NewAssignmentDialog({
         }),
       });
       await reloadDetail(res.assignment.id);
-      onCreated();
+      onCreated(res.assignment.id as string);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the assignment.');
     } finally {
@@ -329,7 +342,7 @@ export default function NewAssignmentDialog({
         method: 'POST',
         body: JSON.stringify({ action: 'publish' }),
       });
-      onCreated();
+      onCreated(created.id);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not publish.');
@@ -439,6 +452,28 @@ export default function NewAssignmentDialog({
             <CloseIcon />
           </IconButton>
         </Stack>
+
+        {/* Opened from the timetable: say so, because an assignment that belongs
+            to a class behaves differently from a standalone one. */}
+        {!isEdit && scheduledClassId && classContextLabel && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 1.25,
+              mb: 2,
+              borderRadius: 2,
+              bgcolor: (t) => alpha(t.palette.primary.main, 0.08),
+            }}
+          >
+            <EventOutlinedIcon sx={{ fontSize: 18, color: 'primary.dark' }} />
+            <Typography variant="body2" sx={{ color: 'primary.dark', fontWeight: 600 }}>
+              Links to {classContextLabel}
+            </Typography>
+          </Box>
+        )}
 
         {isEdit ? (
           /* ---------- EDIT: one combined form ---------- */

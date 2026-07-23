@@ -44,6 +44,7 @@ import PlanShell from '@/components/course-plan/PlanShell';
 import { usePlanData } from '@/components/course-plan/usePlanData';
 import RepositoryPanel from '@/components/course-plan/RepositoryPanel';
 import FlowList from '@/components/course-plan/FlowList';
+import ClassHoursEditor from '@/components/course-plan/ClassHoursEditor';
 import { entryTitle, entrySpan, fmtShortDow, ENTRY_STATUS, type Entry } from '@/components/course-plan/common';
 
 type Placing = { kind: 'topic'; id: string; title: string } | { kind: 'entry'; id: string; title: string };
@@ -755,25 +756,22 @@ export default function PlanBuilderPage() {
             </DialogActions>
           </Dialog>
 
-          {/* Schedule settings */}
-          <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="xs" fullWidth>
+          {/* Schedule settings. Class hours live here, not in a separate
+              Seasons dialog: this plan already has the dates that bound the
+              season, so its hours belong beside them. */}
+          <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
             <DialogTitle sx={{ pb: 0.5 }}>Schedule settings</DialogTitle>
             <DialogContent>
-              <Stack spacing={2} sx={{ mt: 1 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={plan.saturday_classes ?? true}
-                      onChange={(e) => patch({ saturday_classes: e.target.checked }, 'Saved. Dates recalculated.')}
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.88rem' }}>Saturday classes</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Sundays are always off
-                      </Typography>
-                    </Box>
+              <Stack spacing={2.5} sx={{ mt: 1 }}>
+                <ClassHoursEditor
+                  bands={(plan as unknown as Record<string, unknown>).class_bands}
+                  days={(plan as unknown as Record<string, unknown>).class_days}
+                  saving={busy}
+                  onSave={(bands, days) =>
+                    patch(
+                      { class_bands: bands, class_days: days },
+                      'Class hours saved. The timetable follows this plan.',
+                    )
                   }
                 />
                 <TextField

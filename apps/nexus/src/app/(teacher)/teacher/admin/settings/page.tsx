@@ -21,6 +21,7 @@ import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useRouter } from 'next/navigation';
+import TimetableWindowCard from '@/components/admin/TimetableWindowCard';
 
 export default function AdminSettingsPage() {
   const { isAdmin, loading, getToken } = useNexusAuthContext();
@@ -216,6 +217,11 @@ export default function AdminSettingsPage() {
           </>
         )}
       </Paper>
+
+      {/* Timetable window */}
+      <Box sx={{ mt: 3 }}>
+        <TimetableWindowCard getToken={getToken} />
+      </Box>
     </Box>
   );
 }

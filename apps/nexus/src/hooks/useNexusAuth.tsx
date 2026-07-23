@@ -8,6 +8,11 @@ import {
   isFeatureEnabled as checkFeatureEnabled,
   type FlagMap,
 } from '@/lib/feature-flags';
+import {
+  cloneDefaultWindow,
+  parseWindow,
+  type TimetableWindow,
+} from '@/lib/timetable-window';
 
 // Types for Nexus auth context
 interface NexusUser {
@@ -71,6 +76,13 @@ interface NexusAuthState {
   featureFlags: FlagMap;
   /** Convenience: is a given feature id enabled for this user right now? */
   isFeatureEnabled: (id: string) => boolean;
+
+  /**
+   * The evening class window the timetable draws (admin-configured, from
+   * /api/auth/me). Classes outside it still show: the grid expands to fit.
+   * See @/lib/timetable-window.
+   */
+  timetableWindow: TimetableWindow;
 
   // Combined loading
   loading: boolean;
@@ -144,6 +156,7 @@ export function useNexusAuth(): NexusAuthState {
   const [accessEnded, setAccessEnded] = useState<{ reason: string; message: string } | null>(null);
   // Default to registry defaults (student features off, staff on) until /me loads.
   const [featureFlags, setFeatureFlags] = useState<FlagMap>(() => resolveFlags({}));
+  const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() => cloneDefaultWindow());
 
   // "View as Student" (impersonation) state, persisted in sessionStorage so it
   // survives reloads within the tab but auto-clears when the tab closes.
@@ -171,6 +184,19 @@ export function useNexusAuth(): NexusAuthState {
     // While impersonating, hand out the impersonation token so the entire app
     // (reads and writes) acts as the student.
     if (impersonationToken) return impersonationToken;
+
+    // E2E test-mode bypass: the harness injects a `test_`-prefixed token that
+    // verifyMsToken accepts in non-production only. Without this fallback, a
+    // page under the bypass renders its chrome but never fetches anything,
+    // because MSAL has no session in the test browser, so tests can only ever
+    // assert on layout and never on real data. Mirrors the same fallback in
+    // startImpersonation below. Inert in production: no test token is ever set
+    // there, and the server rejects one anyway.
+    if (typeof window !== 'undefined') {
+      const injected = localStorage.getItem('nexus_test_token');
+      if (injected) return injected;
+    }
+
     return getAccessToken(loginScopes.nexus);
   }, [impersonationToken]);
 
@@ -294,6 +320,9 @@ export function useNexusAuth(): NexusAuthState {
         setNexusRole(data.nexusRole);
         setClassrooms(data.classrooms || []);
         setFeatureFlags(data.featureFlags || resolveFlags({}));
+        // parseWindow again on the client: /me already sanitises, but this keeps
+        // the grid safe if the response shape ever drifts.
+        setTimetableWindow(parseWindow(data.timetableWindow));
 
         // Restore active classroom from localStorage or use first one. /api/auth/me
         // returns non-archived classrooms with the current academic-year one first,
@@ -432,6 +461,7 @@ export function useNexusAuth(): NexusAuthState {
     setActiveClassroom,
     featureFlags,
     isFeatureEnabled: (id: string) => checkFeatureEnabled(id, featureFlags),
+    timetableWindow,
     loading: testMode ? dbLoading : msLoading || dbLoading,
     error,
     accessEnded,

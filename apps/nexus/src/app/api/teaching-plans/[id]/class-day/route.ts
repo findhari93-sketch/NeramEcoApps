@@ -17,7 +17,7 @@ import type { NexusTeachingPlanEntryDetail } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { computeFlow, toFlowEntries, istToday } from '@/lib/plan-flow';
 import { errorResponse } from '@/lib/api-errors';
-import { extractYouTubeId, isValidYouTubeUrl } from '@/lib/youtube';
+import { buildClassLinkPatch } from '@/lib/class-links';
 
 /** The scheduled class linked to this entry on this specific date (spillover-safe). */
 function matchedClass(
@@ -318,24 +318,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (!body.class_id) {
           return NextResponse.json({ error: 'class_id is required' }, { status: 400 });
         }
-        const patch: { recording_url?: string | null; youtube_url?: string | null } = {};
-        if (body.recording_url !== undefined) {
-          patch.recording_url = body.recording_url ? String(body.recording_url).trim() : null;
-        }
-        if (body.youtube_url !== undefined) {
-          const yt = body.youtube_url ? String(body.youtube_url).trim() : '';
-          if (yt && !isValidYouTubeUrl(yt)) {
-            return NextResponse.json(
-              { error: 'That does not look like a YouTube link. Paste a youtube.com or youtu.be URL.' },
-              { status: 400 },
-            );
-          }
-          // Store the canonical watch URL so the player and validation agree.
-          const id = extractYouTubeId(yt);
-          patch.youtube_url = id ? `https://www.youtube.com/watch?v=${id}` : null;
-        }
-        await updateScheduledClassLinks(body.class_id, patch);
-        return NextResponse.json({ ok: true, ...patch });
+        // Shared with the timetable's wrap-up, so both write the same shape.
+        const result = buildClassLinkPatch(body);
+        if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+        await updateScheduledClassLinks(body.class_id, result.patch);
+        return NextResponse.json({ ok: true, ...result.patch });
       }
 
       case 'create_assignment': {

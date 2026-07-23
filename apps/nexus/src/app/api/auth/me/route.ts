@@ -3,6 +3,12 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting, getCurrentBatch } from '@neram/database';
 import { getUserProfile } from '@neram/auth';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
+import {
+  TIMETABLE_WINDOW_KEY,
+  parseWindow,
+  cloneDefaultWindow,
+  type TimetableWindow,
+} from '@/lib/timetable-window';
 
 /**
  * GET /api/auth/me
@@ -169,13 +175,22 @@ export async function GET(request: NextRequest) {
     // items and pages are available (student features default off; staff on).
     // One cheap read on an already-dynamic route. Never let a settings error
     // break auth — fall back to registry defaults.
-    let featureFlags: FlagMap;
-    try {
-      const setting = await getNexusSetting(FEATURE_FLAGS_KEY);
-      featureFlags = resolveFlags((setting?.value as FlagMap) || {});
-    } catch {
-      featureFlags = resolveFlags({});
-    }
+    // Both settings are fetched together so the timetable's evening window costs
+    // no extra round trip on top of the flags read. Neither may break auth, so
+    // each falls back to its own default independently.
+    const [flagsResult, windowResult] = await Promise.allSettled([
+      getNexusSetting(FEATURE_FLAGS_KEY),
+      getNexusSetting(TIMETABLE_WINDOW_KEY),
+    ]);
+
+    const featureFlags: FlagMap = resolveFlags(
+      flagsResult.status === 'fulfilled' ? ((flagsResult.value?.value as FlagMap) || {}) : {},
+    );
+
+    const timetableWindow: TimetableWindow =
+      windowResult.status === 'fulfilled'
+        ? parseWindow(windowResult.value?.value)
+        : cloneDefaultWindow();
 
     return NextResponse.json({
       user: {
@@ -192,6 +207,7 @@ export async function GET(request: NextRequest) {
         enrollmentRole: e.role,
       })),
       featureFlags,
+      timetableWindow,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Authentication failed';

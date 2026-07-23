@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Stack, Chip, Button, Skeleton, Snackbar, Alert, IconButton, TextField, MenuItem,
-  Dialog, DialogTitle, DialogContent, DialogActions, alpha,
+  Dialog, DialogTitle, DialogContent, DialogActions, alpha, ToggleButton, ToggleButtonGroup,
 } from '@neram/ui';
 import ContentPasteGoIcon from '@mui/icons-material/ContentPasteGo';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
@@ -20,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import PasteAssignmentsDialog from '@/components/assignments/bulk/PasteAssignmentsDialog';
@@ -36,7 +37,19 @@ interface AssignmentRow {
   due_at: string | null;
   attachment_count: number;
   submitted_count: number;
+  /** Set when the assignment was given in a timetable class. Null is normal:
+   *  most assignments are standalone and stay that way. */
+  scheduled_class_id: string | null;
+  scheduled_class?: {
+    id: string;
+    title: string;
+    scheduled_date: string;
+    start_time: string;
+  } | null;
 }
+
+/** The three ways a teacher wants to look at this list. */
+type SourceFilter = 'all' | 'class' | 'standalone';
 
 const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', image: 'Photos', pdf_or_image: 'PDF/Photos' };
 const STATUS_COLOR: Record<string, string> = { draft: '#8E8E93', published: '#2E7D32', closed: '#B54700' };
@@ -54,6 +67,7 @@ export default function TeacherAssignmentsHub() {
   const [rows, setRows] = useState<AssignmentRow[] | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [source, setSource] = useState<SourceFilter>('all');
   const [deleteRow, setDeleteRow] = useState<AssignmentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
@@ -88,15 +102,28 @@ export default function TeacherAssignmentsHub() {
     };
   }, [rows]);
 
+  const sourceCounts = useMemo(() => {
+    const r = rows || [];
+    const fromClass = r.filter((a) => !!a.scheduled_class_id).length;
+    return { all: r.length, class: fromClass, standalone: r.length - fromClass };
+  }, [rows]);
+
+  const visible = useMemo(() => {
+    const r = rows || [];
+    if (source === 'class') return r.filter((a) => !!a.scheduled_class_id);
+    if (source === 'standalone') return r.filter((a) => !a.scheduled_class_id);
+    return r;
+  }, [rows, source]);
+
   const grouped = useMemo(() => {
     const byDate = new Map<string, AssignmentRow[]>();
-    for (const a of rows || []) {
+    for (const a of visible) {
       const arr = byDate.get(a.class_date) || [];
       arr.push(a);
       byDate.set(a.class_date, arr);
     }
     return [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [rows]);
+  }, [visible]);
 
   const publish = async (id: string) => {
     try {
@@ -217,6 +244,37 @@ export default function TeacherAssignmentsHub() {
         </Button>
       </Stack>
 
+      {/* Where the work came from. An assignment set inside a class is the one a
+          late joiner must still finish; a standalone one is not tied to a
+          session at all. Same list, two very different meanings. */}
+      {(rows?.length ?? 0) > 0 && (
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={source}
+          onChange={(_, v: SourceFilter | null) => v && setSource(v)}
+          aria-label="Filter assignments by source"
+          sx={{ mb: 2, flexWrap: 'wrap' }}
+        >
+          {([
+            { value: 'all', label: 'All', count: sourceCounts.all },
+            { value: 'class', label: 'From a class', count: sourceCounts.class },
+            { value: 'standalone', label: 'Standalone', count: sourceCounts.standalone },
+          ] as const).map((o) => (
+            <ToggleButton
+              key={o.value}
+              value={o.value}
+              sx={{ textTransform: 'none', minHeight: 44, px: 2, fontWeight: 600 }}
+            >
+              {o.label}
+              <Box component="span" sx={{ ml: 0.75, color: 'text.secondary', fontWeight: 500 }}>
+                {o.count}
+              </Box>
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      )}
+
       {/* List */}
       {rows === null ? (
         <Stack spacing={1}>
@@ -238,6 +296,24 @@ export default function TeacherAssignmentsHub() {
               Paste from AI
             </Button>
           </Stack>
+        </Box>
+      ) : visible.length === 0 ? (
+        <Box sx={{ textAlign: 'center', py: 5, border: '1.5px dashed', borderColor: 'divider', borderRadius: 3 }}>
+          <Typography sx={{ fontWeight: 700 }}>
+            {source === 'class' ? 'Nothing came from a class yet' : 'Nothing standalone yet'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
+            {source === 'class'
+              ? 'Open a class in the timetable and attach work to it, either new or one of these.'
+              : 'Every assignment here is attached to a class. A standalone one is not tied to a session.'}
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={() => setSource('all')}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
+            Show all
+          </Button>
         </Box>
       ) : (
         <Stack spacing={2.5}>
@@ -285,6 +361,25 @@ export default function TeacherAssignmentsHub() {
                         />
                         {a.assignment_type !== 'drawing' && (
                           <Chip label={FORMAT_LABEL[a.submission_format]} size="small" variant="outlined" sx={{ height: 20 }} />
+                        )}
+                        {a.scheduled_class && (
+                          <Chip
+                            icon={<EventOutlinedIcon sx={{ fontSize: 13 }} />}
+                            label={a.scheduled_class.title}
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push('/teacher/timetable');
+                            }}
+                            sx={{
+                              height: 20,
+                              maxWidth: 200,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              bgcolor: (t) => alpha(t.palette.primary.main, 0.1),
+                              color: 'primary.dark',
+                            }}
+                          />
                         )}
                         <Typography variant="caption" color="text.secondary">
                           {a.submitted_count} submitted · /{a.max_marks}

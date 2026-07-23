@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listAssignmentsForClassroom, createAssignment, createDrawingQuestion } from '@neram/database';
+import {
+  listAssignmentsForClassroom,
+  createAssignment,
+  createDrawingQuestion,
+  getSupabaseAdminClient,
+} from '@neram/database';
 import { getRequestUser, assertStaff, isStaff } from '@/lib/study-materials';
 import { errorResponse, ApiError } from '@/lib/api-errors';
 import { istTodayStr } from '@/lib/assignment-clock';
@@ -36,6 +41,10 @@ function sanitizeRefUrls(body: any): string[] {
  * GET /api/assignments?classroom=<id>[&status=draft|published|closed]  (staff)
  * Classroom-anchored assignment list for the Assignments hub, newest class first,
  * each with attachment + submission counts.
+ *
+ * Rows created from the timetable also carry the class they belong to, so the
+ * hub can separate work that was set in a session from standalone work. That
+ * split is what tells a late joiner which classes they still owe.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -52,10 +61,34 @@ export async function GET(request: NextRequest) {
       classroomId,
       status ? { status } : undefined,
     );
-    return NextResponse.json({ assignments });
+
+    // Resolved here rather than in the shared query, because touching
+    // packages/database rebuilds all four apps for a label on one page.
+    const withClass = await attachClassLabels(assignments as any[]);
+
+    return NextResponse.json({ assignments: withClass });
   } catch (err) {
     return errorResponse(err, 'Failed to load assignments');
   }
+}
+
+/** One batched lookup for the class titles, whatever the assignment count. */
+async function attachClassLabels(rows: any[]): Promise<any[]> {
+  const ids = [...new Set(rows.map((a) => a.scheduled_class_id).filter(Boolean))] as string[];
+  if (ids.length === 0) return rows;
+
+  const supabase = getSupabaseAdminClient() as any;
+  const { data } = await supabase
+    .from('nexus_scheduled_classes')
+    .select('id, title, scheduled_date, start_time')
+    .in('id', ids);
+
+  const byId = new Map<string, any>((data || []).map((c: any) => [c.id, c]));
+  return rows.map((a) =>
+    a.scheduled_class_id && byId.has(a.scheduled_class_id)
+      ? { ...a, scheduled_class: byId.get(a.scheduled_class_id) }
+      : a,
+  );
 }
 
 /**
@@ -83,6 +116,10 @@ export async function POST(request: NextRequest) {
 
     const type = body?.assignment_type === 'drawing' ? 'drawing' : 'document';
     const instructions = body?.instructions ? String(body.instructions).trim() : null;
+
+    // When created from the timetable, the assignment is pinned to the class it
+    // was given in and inherits that class's date, so the two can never drift.
+    const scheduledClassId = String(body?.scheduled_class_id || '').trim() || null;
 
     let classDate = String(body?.class_date || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(classDate)) classDate = istTodayStr();
@@ -145,6 +182,7 @@ export async function POST(request: NextRequest) {
 
     const assignment = await createAssignment({
       classroom_id: classroomId,
+      scheduled_class_id: scheduledClassId,
       class_date: classDate,
       title,
       instructions,

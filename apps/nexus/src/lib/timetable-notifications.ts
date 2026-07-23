@@ -10,7 +10,8 @@ type TimetableEventType =
   | 'recording_available'
   | 'review_submitted'
   | 'assignment_published'
-  | 'assignment_reviewed';
+  | 'assignment_reviewed'
+  | 'week_published';
 
 interface NotifyParams {
   classroomId: string;
@@ -72,6 +73,36 @@ export async function notifyClassCreated(
     title: 'New Class Scheduled',
     message: `"${classTitle}" has been scheduled for ${scheduledDate}.`,
     metadata: { class_id: classId },
+    recipientUserIds: studentIds,
+  });
+}
+
+/**
+ * Notify all enrolled students that a week's schedule is now live.
+ *
+ * One notification for the whole week, replacing one per class. A five-class
+ * week used to fire five separate "New Class Scheduled" alerts as the teacher
+ * built it, which is exactly the noise that trains students to ignore the bell.
+ */
+export async function notifyWeekPublished(
+  classroomId: string,
+  weekStart: string,
+  classCount: number,
+) {
+  const studentIds = await getEnrolledUsers(classroomId, 'student');
+  const label = new Date(`${weekStart}T00:00:00`).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+  });
+  await insertNotifications({
+    classroomId,
+    eventType: 'week_published',
+    title: 'This week is ready',
+    message:
+      classCount === 1
+        ? `1 class is scheduled for the week of ${label}. Open your timetable to see it.`
+        : `${classCount} classes are scheduled for the week of ${label}. Open your timetable to see them.`,
+    metadata: { week_start: weekStart, class_count: classCount },
     recipientUserIds: studentIds,
   });
 }

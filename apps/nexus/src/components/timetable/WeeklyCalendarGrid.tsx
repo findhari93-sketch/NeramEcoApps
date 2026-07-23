@@ -8,10 +8,10 @@ import TodayIcon from '@mui/icons-material/Today';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import ClassCard, { type ClassCardData } from './ClassCard';
 
-export interface HolidayInfo {
-  title: string;
-  description?: string | null;
-}
+// Lives in date-utils now (the new Agenda/Grid views are its main consumers).
+// Re-exported here so existing importers keep working.
+export type { HolidayInfo } from './date-utils';
+import type { HolidayInfo } from './date-utils';
 
 interface WeeklyCalendarGridProps {
   classes: ClassCardData[];

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyClassCreated, notifyClassCancelled } from '@/lib/timetable-notifications';
+import { loadPlanShapes } from '@/lib/plan-shape-query';
+import { notifyStudents } from '@/lib/notify-students';
 import { generateRecurrenceDates } from './recurrence';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
@@ -87,8 +89,11 @@ export async function GET(request: NextRequest) {
       .order('scheduled_date', { ascending: true })
       .order('start_time', { ascending: true });
 
-    // For students: filter by their batch (show classroom-wide + their batch)
+    // For students: filter by their batch (show classroom-wide + their batch),
+    // and hide anything the teacher has not published yet. Staff see drafts so
+    // they can plan the week before releasing it.
     if (effectiveRole === 'student') {
+      query = query.eq('publish_state', 'published');
       if (enrollment?.batch_id) {
         // Show classes where batch_id is null (classroom-wide) OR matches student's batch
         query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
@@ -107,7 +112,19 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ classes: data || [], role: effectiveRole, archived: !!classroom.is_archived });
+    // The course plans covering this range decide the shape of the day: evening
+    // only during the regular year, mornings too once the crash course starts.
+    // Fetched here so the calendar reshapes itself without a second call, and
+    // treated as optional: a failure should narrow the calendar to the global
+    // window, never blank the week.
+    const planShapes = await loadPlanShapes(supabase, [classroomId], start, end).catch(() => []);
+
+    return NextResponse.json({
+      classes: data || [],
+      role: effectiveRole,
+      archived: !!classroom.is_archived,
+      planShapes,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load timetable';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -165,6 +182,7 @@ export async function POST(request: NextRequest) {
       classroom_id, title, scheduled_date, start_time, end_time,
       topic_id, batch_id, teams_meeting_scope, target_scope, description,
       lobby_bypass, allowed_presenters, recurrence_rule, recurrence_end_date,
+      publish_state,
     } = body;
 
     if (!classroom_id || !title || !scheduled_date || !start_time || !end_time) {
@@ -188,7 +206,12 @@ export async function POST(request: NextRequest) {
       lobby_bypass: lobby_bypass || 'organization',
       allowed_presenters: allowed_presenters || 'organizer',
       status: 'scheduled',
+      // Callers must opt IN to drafting. Everything that existed before the
+      // planner (including the Teams sync) keeps publishing immediately.
+      publish_state: publish_state === 'draft' ? 'draft' : 'published',
+      published_at: publish_state === 'draft' ? null : new Date().toISOString(),
     };
+    const isDraft = baseData.publish_state === 'draft';
 
     // Handle recurrence: generate multiple dates
     if (recurrence_rule && recurrence_end_date) {
@@ -215,9 +238,10 @@ export async function POST(request: NextRequest) {
 
       if (error) throw error;
 
-      // Notify for first class only (avoid spam)
+      // Notify for first class only (avoid spam). Drafts stay silent: students
+      // hear about them once, at publish.
       try {
-        if (data && data.length > 0) {
+        if (!isDraft && data && data.length > 0) {
           await notifyClassCreated(classroom_id, `${title} (${data.length} classes)`, scheduled_date, data[0].id);
         }
       } catch {
@@ -238,9 +262,9 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // Notify students
+    // Notify students, unless this is a draft the teacher is still planning.
     try {
-      if (data) {
+      if (!isDraft && data) {
         await notifyClassCreated(classroom_id, title, scheduled_date, data.id);
       }
     } catch {
@@ -263,6 +287,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
+    const token = extractBearerToken(request.headers.get('Authorization'));
     const body = await request.json();
     const { id, classroom_id, ...updates } = body;
 
@@ -278,12 +303,32 @@ export async function PATCH(request: NextRequest) {
       'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'status',
       'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url', 'teams_meeting_scope',
       'batch_id', 'recording_url', 'transcript_url', 'notes', 'description', 'target_scope',
-      'lobby_bypass', 'allowed_presenters',
+      'lobby_bypass', 'allowed_presenters', 'auto_sync_recording', 'rescheduled_to',
     ];
     const safeUpdates: Record<string, unknown> = {};
     for (const key of allowedFields) {
       if (key in updates) safeUpdates[key] = updates[key];
     }
+
+    // What the class looked like before, so a move can be recognised and
+    // described rather than just announced. Untyped: publish_state is newer
+    // than the generated Database type, like the other recent Nexus columns.
+    const { data: before } = (await (supabase as any)
+      .from('nexus_scheduled_classes')
+      .select('title, scheduled_date, start_time, end_time, teams_meeting_id, teams_meeting_scope, publish_state')
+      .eq('id', id)
+      .eq('classroom_id', classroom_id)
+      .single()) as {
+      data: {
+        title: string;
+        scheduled_date: string;
+        start_time: string;
+        end_time: string;
+        teams_meeting_id: string | null;
+        teams_meeting_scope: string | null;
+        publish_state: string | null;
+      } | null;
+    };
 
     const { data, error } = await supabase
       .from('nexus_scheduled_classes')
@@ -295,7 +340,44 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ class: data });
+    // A class moved in Nexus used to leave its Teams meeting behind, so students
+    // saw one time in the app and another in their calendar. Push the change.
+    const moved =
+      !!before &&
+      (('scheduled_date' in safeUpdates && safeUpdates.scheduled_date !== before.scheduled_date) ||
+        ('start_time' in safeUpdates && safeUpdates.start_time !== before.start_time) ||
+        ('end_time' in safeUpdates && safeUpdates.end_time !== before.end_time));
+
+    let teamsWarning: string | undefined;
+    if (moved && before?.teams_meeting_id && token) {
+      const result = await updateTeamsEvent(token, supabase, classroom_id, before.teams_meeting_id, before.teams_meeting_scope, {
+        date: (safeUpdates.scheduled_date as string) ?? before.scheduled_date,
+        start: (safeUpdates.start_time as string) ?? before.start_time,
+        end: (safeUpdates.end_time as string) ?? before.end_time,
+        title: (safeUpdates.title as string) ?? before.title,
+      });
+      if (!result.success) teamsWarning = result.error;
+    }
+
+    // Tell the students, but only for a class they can already see. Moving a
+    // draft around while planning is not news.
+    if (moved && before?.publish_state !== 'draft') {
+      await notifyStudents({
+        classroomId: classroom_id,
+        eventType: 'class_rescheduled',
+        title: 'Class moved',
+        message: `"${(safeUpdates.title as string) ?? before?.title}" has moved to ${formatWhen(
+          (safeUpdates.scheduled_date as string) ?? before!.scheduled_date,
+          (safeUpdates.start_time as string) ?? before!.start_time,
+        )}.`,
+        teamsText: 'A class has been moved',
+        metadata: { class_id: id },
+      }).catch(() => {
+        /* the class is already moved; a failed announcement must not undo it */
+      });
+    }
+
+    return NextResponse.json({ class: data, ...(teamsWarning && { teamsWarning }), moved });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update class';
     const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
@@ -379,6 +461,97 @@ export async function DELETE(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'Failed to cancel class';
     const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
+  }
+}
+
+/** "Wed 22 Jul at 7:00 PM", built in IST so a 9 PM class is not shifted a day. */
+function formatWhen(date: string, time: string): string {
+  const d = new Date(`${date}T${time}+05:30`);
+  if (Number.isNaN(d.getTime())) return `${date} at ${time}`;
+  return d.toLocaleString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+/**
+ * Move a Teams meeting to a new time (best-effort, non-blocking).
+ *
+ * Mirrors cancelTeamsEvent: a channel meeting is a group calendar event, a
+ * standalone one is an online meeting, and the two take different payloads.
+ * Failure returns a warning rather than throwing, because the class HAS moved
+ * in Nexus by this point and rolling that back over a Graph hiccup would be
+ * worse than a calendar entry that needs fixing by hand.
+ */
+async function updateTeamsEvent(
+  token: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  classroomId: string,
+  meetingId: string,
+  scope: string | null,
+  when: { date: string; start: string; end: string; title: string },
+): Promise<{ success: boolean; error?: string }> {
+  // Graph wants a local time plus a named zone, not an offset.
+  const startDateTime = `${when.date}T${when.start.slice(0, 8).padEnd(8, ':00')}`;
+  const endDateTime = `${when.date}T${when.end.slice(0, 8).padEnd(8, ':00')}`;
+  const TZ = 'India Standard Time';
+
+  try {
+    if (scope === 'channel_meeting') {
+      const { data: classroom } = await supabase
+        .from('nexus_classrooms')
+        .select('ms_team_id')
+        .eq('id', classroomId)
+        .single();
+
+      if (!classroom?.ms_team_id) {
+        return { success: false, error: 'This classroom has no Team, so the meeting could not be moved' };
+      }
+
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/groups/${classroom.ms_team_id}/calendar/events/${meetingId}`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: when.title,
+            start: { dateTime: startDateTime, timeZone: TZ },
+            end: { dateTime: endDateTime, timeZone: TZ },
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.error('Failed to move group calendar event:', res.status, errText);
+        return { success: false, error: `The class moved here, but Teams still shows the old time (${res.status})` };
+      }
+      return { success: true };
+    }
+
+    // Standalone online meeting: ISO instants, no timezone object.
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: when.title,
+        startDateTime: new Date(`${when.date}T${when.start}+05:30`).toISOString(),
+        endDateTime: new Date(`${when.date}T${when.end}+05:30`).toISOString(),
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.error('Failed to move online meeting:', res.status, errText);
+      return { success: false, error: `The class moved here, but Teams still shows the old time (${res.status})` };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Error moving Teams meeting:', err);
+    return { success: false, error: 'The class moved here, but Teams could not be updated' };
   }
 }
 

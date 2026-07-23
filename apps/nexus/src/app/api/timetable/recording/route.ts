@@ -142,7 +142,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       recording: updated,
       found: !!recordingUrl,
-      message: recordingUrl ? 'Recording synced successfully' : 'No recording found yet — it may still be processing',
+      message: recordingUrl
+        ? 'Recording synced successfully'
+        : 'No recording found yet. It may still be processing.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to sync recording';

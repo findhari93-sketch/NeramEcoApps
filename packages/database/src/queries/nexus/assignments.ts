@@ -36,6 +36,11 @@ export async function createAssignment(
     plan_id?: string | null;
     plan_entry_id?: string | null;
     topic_id?: string | null;
+    /**
+     * The timetable class this assignment was given in. Optional: assignments
+     * can still be created from the course plan with no class attached.
+     */
+    scheduled_class_id?: string | null;
     class_date: string;
     title: string;
     instructions?: string | null;
@@ -60,6 +65,7 @@ export async function createAssignment(
     .from(ASSIGNMENTS)
     .insert({
       classroom_id: input.classroom_id,
+      scheduled_class_id: input.scheduled_class_id ?? null,
       plan_id: input.plan_id ?? null,
       plan_entry_id: input.plan_entry_id ?? null,
       topic_id: input.topic_id ?? null,

@@ -58,7 +58,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         let teams = false;
         const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
         if (catalogAppId && teamsUserId) {
-          const r = await sendTeamsActivityNotification(teamsUserId, { text: subject, catalogAppId });
+          // headline = the subject line, preview = the staff member's own message.
+          const r = await sendTeamsActivityNotification(teamsUserId, {
+            text: subject,
+            preview: text,
+            catalogAppId,
+          });
           teams = r.ok;
         }
 

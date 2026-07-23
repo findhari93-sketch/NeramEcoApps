@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogActions,
   UserAvatar,
-  Chip,
   LinearProgress,
   Accordion,
   AccordionSummary,
@@ -20,17 +19,21 @@ import {
   ListItemAvatar,
   ListItemText,
   Skeleton,
+  alpha,
+  useTheme,
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CancelIcon from '@mui/icons-material/Cancel';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { RSVP_REASONS, describeReason, reasonShortLabel, type RsvpReasonCode } from '@/lib/rsvp-reasons';
+import { tagSx } from './timetable-theme';
+import { formatTime } from './date-utils';
 
 interface StudentInfo {
   id: string;
   name: string;
   avatar_url: string | null;
   reason?: string | null;
+  reason_code?: string | null;
   responded_at?: string;
 }
 
@@ -43,8 +46,8 @@ interface ClassBreakdown {
   status: string;
   attending: StudentInfo[];
   not_attending: StudentInfo[];
-  no_response: StudentInfo[];
-  summary: { attending: number; not_attending: number; no_response: number; total: number };
+  reason_tally?: Record<RsvpReasonCode, number>;
+  summary: { attending: number; not_attending: number; total: number };
 }
 
 interface RsvpDashboardProps {
@@ -59,126 +62,117 @@ interface RsvpDashboardProps {
   endDate?: string;
 }
 
-function formatTime(time: string) {
-  const [h, m] = time.split(':');
-  const hour = parseInt(h);
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  return `${hour % 12 || 12}:${m} ${ampm}`;
-}
-
-function StudentList({ students, color }: { students: StudentInfo[]; color: 'success' | 'error' | 'default' }) {
-  if (students.length === 0) {
-    return (
-      <Typography variant="caption" color="text.disabled" sx={{ pl: 2 }}>
-        None
-      </Typography>
-    );
-  }
-
-  return (
-    <List dense disablePadding>
-      {students.map((s) => (
-        <ListItem key={s.id} sx={{ px: 0 }}>
-          <ListItemAvatar sx={{ minWidth: 36 }}>
-            <UserAvatar src={s.avatar_url} name={s.name} size={28} />
-          </ListItemAvatar>
-          <ListItemText
-            primary={s.name}
-            secondary={
-              color === 'error' && s.reason ? (
-                <Typography variant="caption" color="error.main" component="span">
-                  Reason: {s.reason}
-                </Typography>
-              ) : undefined
-            }
-            primaryTypographyProps={{ variant: 'body2' }}
-          />
-        </ListItem>
-      ))}
-    </List>
-  );
-}
-
+/**
+ * Who is coming to each class this week.
+ *
+ * Everyone attends by default, so the interesting number is the small one: who
+ * stepped out and why. Attending is shown as a headline count rather than a
+ * roll call, because listing thirty names nobody needs to read buries the four
+ * that matter.
+ */
 function ClassRsvpCard({ breakdown }: { breakdown: ClassBreakdown }) {
+  const theme = useTheme();
   const { summary } = breakdown;
-  const attendPct = summary.total > 0 ? Math.round((summary.attending / summary.total) * 100) : 0;
+  const attendPct = summary.total > 0 ? Math.round((summary.attending / summary.total) * 100) : 100;
+  const optedOut = breakdown.not_attending || [];
+  const tally = breakdown.reason_tally;
 
   return (
-    <Accordion defaultExpanded={false}>
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+    <Accordion defaultExpanded={false} disableGutters>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 56 }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75, pr: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
               {breakdown.title}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {formatTime(breakdown.start_time)} - {formatTime(breakdown.end_time)}
+            {breakdown.start_time && (
+              <Typography variant="caption" color="text.secondary">
+                {formatTime(breakdown.start_time)} to {formatTime(breakdown.end_time)}
+              </Typography>
+            )}
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: 'success.dark' }}>
+              {summary.attending} of {summary.total} attending
             </Typography>
+            {optedOut.length > 0 && (
+              <Box component="span" sx={tagSx(theme, 'error')}>
+                {optedOut.length} stepped out
+              </Box>
+            )}
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Chip
-              icon={<CheckCircleIcon sx={{ fontSize: '14px !important' }} />}
-              label={summary.attending}
-              size="small"
-              color="success"
-              variant="outlined"
-              sx={{ height: 22, fontSize: '0.7rem' }}
-            />
-            <Chip
-              icon={<CancelIcon sx={{ fontSize: '14px !important' }} />}
-              label={summary.not_attending}
-              size="small"
-              color="error"
-              variant="outlined"
-              sx={{ height: 22, fontSize: '0.7rem' }}
-            />
-            <Chip
-              icon={<HelpOutlineIcon sx={{ fontSize: '14px !important' }} />}
-              label={summary.no_response}
-              size="small"
-              variant="outlined"
-              sx={{ height: 22, fontSize: '0.7rem' }}
-            />
-          </Box>
+
           <LinearProgress
             variant="determinate"
             value={attendPct}
+            aria-label={`${attendPct}% attending`}
             sx={{
               height: 6,
               borderRadius: 3,
-              bgcolor: 'error.100',
+              bgcolor: alpha(theme.palette.error.main, 0.15),
               '& .MuiLinearProgress-bar': { bgcolor: 'success.main', borderRadius: 3 },
-              mt: 0.5,
             }}
           />
         </Box>
       </AccordionSummary>
+
       <AccordionDetails>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {/* Attending */}
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: 'success.main' }}>
-              Attending ({summary.attending})
+        {optedOut.length === 0 ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
+            <CheckCircleIcon sx={{ fontSize: 18, color: 'success.main' }} />
+            <Typography variant="body2" color="text.secondary">
+              The whole class is in. Nobody has stepped out.
             </Typography>
-            <StudentList students={breakdown.attending} color="success" />
           </Box>
+        ) : (
+          <>
+            {tally && (
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1.5 }}>
+                {RSVP_REASONS.filter((r) => (tally[r.code] || 0) > 0).map((r) => (
+                  <Box key={r.code} component="span" sx={tagSx(theme, 'neutral')}>
+                    {r.shortLabel}: {tally[r.code]}
+                  </Box>
+                ))}
+              </Box>
+            )}
 
-          {/* Not attending */}
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.main' }}>
-              Not Attending ({summary.not_attending})
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 700, color: 'error.dark', display: 'block', mb: 0.5 }}
+            >
+              Not attending ({optedOut.length})
             </Typography>
-            <StudentList students={breakdown.not_attending} color="error" />
-          </Box>
 
-          {/* No response */}
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-              No Response ({summary.no_response})
-            </Typography>
-            <StudentList students={breakdown.no_response} color="default" />
-          </Box>
-        </Box>
+            <List dense disablePadding>
+              {optedOut.map((s) => (
+                <ListItem key={s.id} sx={{ px: 0, alignItems: 'flex-start' }}>
+                  <ListItemAvatar sx={{ minWidth: 40 }}>
+                    <UserAvatar src={s.avatar_url} name={s.name} size={28} />
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {s.name}
+                        </Typography>
+                        <Box component="span" sx={tagSx(theme, 'neutral')}>
+                          {reasonShortLabel(s.reason_code)}
+                        </Box>
+                      </Box>
+                    }
+                    secondary={
+                      <Typography variant="caption" color="text.secondary">
+                        {describeReason(s.reason_code, s.reason)}
+                      </Typography>
+                    }
+                    secondaryTypographyProps={{ component: 'div' }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </>
+        )}
       </AccordionDetails>
     </Accordion>
   );
@@ -205,28 +199,32 @@ export default function RsvpDashboard({
         const token = await getToken();
         if (!token) return;
 
-        let url: string;
-        if (classId) {
-          url = `/api/timetable/rsvp-dashboard?classroom_id=${classroomId}&class_id=${classId}`;
-        } else {
-          url = `/api/timetable/rsvp-dashboard?classroom_id=${classroomId}&start=${startDate}&end=${endDate}`;
-        }
+        const url = classId
+          ? `/api/timetable/rsvp-dashboard?classroom_id=${classroomId}&class_id=${classId}`
+          : `/api/timetable/rsvp-dashboard?classroom_id=${classroomId}&start=${startDate}&end=${endDate}`;
 
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
         if (res.ok) {
           const data = await res.json();
           if (classId) {
-            // Single class response — wrap it
-            setBreakdowns([{ class_id: classId, title: '', scheduled_date: '', start_time: '', end_time: '', status: '', ...data }]);
+            setBreakdowns([
+              {
+                class_id: classId,
+                title: 'This class',
+                scheduled_date: '',
+                start_time: '',
+                end_time: '',
+                status: '',
+                ...data,
+              },
+            ]);
           } else {
             setBreakdowns(data.classes || []);
           }
         }
       } catch {
-        // ignore
+        // Leave the list empty; the dialog shows its empty state.
       } finally {
         setLoading(false);
       }
@@ -237,28 +235,35 @@ export default function RsvpDashboard({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>RSVP Dashboard</DialogTitle>
+      <DialogTitle sx={{ pb: 0.5 }}>
+        Who is coming
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 400 }}>
+          Everyone is attending by default. These are the students who stepped out.
+        </Typography>
+      </DialogTitle>
       <DialogContent>
         {loading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} variant="rectangular" height={60} sx={{ borderRadius: 1 }} />
             ))}
           </Box>
         ) : breakdowns.length === 0 ? (
           <Typography variant="body2" color="text.disabled" sx={{ textAlign: 'center', py: 4 }}>
-            No classes found for this period
+            No classes scheduled in this range.
           </Typography>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ pt: 1 }}>
             {breakdowns.map((b) => (
               <ClassRsvpCard key={b.class_id} breakdown={b} />
             ))}
           </Box>
         )}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} sx={{ minHeight: 48 }}>Close</Button>
+      <DialogActions>
+        <Button onClick={onClose} sx={{ minHeight: 44, textTransform: 'none' }}>
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );

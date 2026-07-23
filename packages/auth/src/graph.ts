@@ -754,10 +754,14 @@ export async function ensureTeamsAppInstalledForUser(
  * declaration needed); the free text goes in templateParameters.systemDefaultText.
  * The topic MUST be an entityUrl pointing at the installed app: Graph rejects a
  * plain `text` topic whose webUrl is not a teams.microsoft.com/l/ deep link.
+ *
+ * The feed card renders `text` as the bold headline and `preview` as the grey
+ * second line, so pass two different strings (headline = what and which item,
+ * preview = the actual message). Passing one string for both just prints it twice.
  */
 export async function sendTeamsActivityNotification(
   userMsOid: string,
-  opts: { text: string; catalogAppId: string },
+  opts: { text: string; preview?: string; catalogAppId: string },
 ): Promise<TeamsActivityResult> {
   if (!userMsOid || !opts.catalogAppId) return { ok: false, status: 0, reason: 'missing_oid_or_app_id' };
   try {
@@ -766,6 +770,8 @@ export async function sendTeamsActivityNotification(
       return { ok: false, status: 0, reason: install.reason || 'not_installed' };
     }
     const text = opts.text.slice(0, 150);
+    // Collapse newlines: the feed renders the preview as a single truncated line.
+    const preview = (opts.preview || opts.text).replace(/\s+/g, ' ').trim().slice(0, 150);
     const res = await graphFetch(
       `/users/${encodeURIComponent(userMsOid)}/teamwork/sendActivityNotification`,
       {
@@ -776,7 +782,7 @@ export async function sendTeamsActivityNotification(
             value: `https://graph.microsoft.com/v1.0/users/${userMsOid}/teamwork/installedApps/${install.installationId}`,
           },
           activityType: 'systemDefault',
-          previewText: { content: text },
+          previewText: { content: preview },
           templateParameters: [{ name: 'systemDefaultText', value: text }],
         }),
       },

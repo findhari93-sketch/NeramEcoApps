@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Typography,
@@ -38,6 +39,7 @@ interface ClassAttendanceState {
 }
 
 export default function TeacherAttendance() {
+  const router = useRouter();
   const { activeClassroom, getToken } = useNexusAuthContext();
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
@@ -269,6 +271,19 @@ export default function TeacherAttendance() {
                     {state?.submitted && (
                       <Chip label="Saved" size="small" color="success" />
                     )}
+                    {/* Marking a register by hand and reconciling against Teams
+                        are different jobs. This is the second one. */}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/teacher/attendance/${cls.id}`);
+                      }}
+                      sx={{ textTransform: 'none', minHeight: 40, whiteSpace: 'nowrap' }}
+                    >
+                      Reconcile
+                    </Button>
                     <Typography variant="body2" color="text.secondary">
                       {isExpanded ? '▲' : '▼'}
                     </Typography>

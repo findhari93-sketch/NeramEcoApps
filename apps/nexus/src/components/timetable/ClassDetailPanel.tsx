@@ -26,6 +26,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -308,28 +309,58 @@ export default function ClassDetailPanel({
 
         {/* Action Buttons */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {/* Student RSVP */}
+          {/* Student RSVP. Everyone attends by default, so this states the
+              default as settled fact with one quiet way out, rather than posing
+              it as an open question with two competing buttons. */}
           {role === 'student' && isUpcoming && !isCancelled && onRsvp && (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                fullWidth
-                variant={myRsvp === 'attending' ? 'contained' : 'outlined'}
-                color="success"
-                onClick={() => onRsvp(cls.id, 'attending')}
-                sx={{ minHeight: 48, textTransform: 'none' }}
+            myRsvp === 'not_attending' ? (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 1.5,
+                  bgcolor: 'error.50',
+                  border: '1px solid',
+                  borderColor: 'error.light',
+                }}
               >
-                Will Attend
-              </Button>
-              <Button
-                fullWidth
-                variant={myRsvp === 'not_attending' ? 'contained' : 'outlined'}
-                color="error"
-                onClick={() => onRsvp(cls.id, 'not_attending')}
-                sx={{ minHeight: 48, textTransform: 'none' }}
-              >
-                Can&apos;t Attend
-              </Button>
-            </Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: 'error.dark', mb: 0.5 }}>
+                  You are not attending this class
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  We will keep the recording and the assignment for you.
+                </Typography>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="success"
+                  onClick={() => onRsvp(cls.id, 'attending')}
+                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+                >
+                  Actually, I will attend
+                </Button>
+              </Box>
+            ) : (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <CheckCircleIcon sx={{ fontSize: 18, color: 'success.main' }} />
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    You are attending
+                  </Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Everyone is in by default. Something came up?
+                </Typography>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="error"
+                  onClick={() => onRsvp(cls.id, 'not_attending')}
+                  sx={{ minHeight: 48, textTransform: 'none' }}
+                >
+                  I cannot make it
+                </Button>
+              </Box>
+            )
           )}
 
           {/* Join meeting + Copy Link */}

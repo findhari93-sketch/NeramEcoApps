@@ -20,6 +20,12 @@ import type { NexusPlanAuditAction } from '@neram/database';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
 import { computeFlow, toFlowEntries, istToday } from '@/lib/plan-flow';
 import { errorResponse } from '@/lib/api-errors';
+import {
+  DEFAULT_REGULAR_BANDS,
+  describeBands,
+  validatePlanShape,
+  type TimeBand,
+} from '@/lib/plan-shape';
 
 /** Label used in audit rows: the entry's topic title, test title, or free label. */
 function entryLabel(entry: {
@@ -112,6 +118,29 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       if (key in body) updates[key] = body[key];
     }
     if (updates.status === 'active') updates.activated_at = new Date().toISOString();
+
+    // Class hours and days. The plan owns the shape of the teaching day, which
+    // is what makes a plan a season: evening only during the regular year,
+    // mornings too once the crash course starts. Validated strictly so a bad
+    // band is reported rather than silently repaired into something else.
+    let shapeChanged = false;
+    if ('class_bands' in body || 'class_days' in body) {
+      const check = validatePlanShape({
+        bands: body.class_bands ?? DEFAULT_REGULAR_BANDS,
+        days: body.class_days,
+      });
+      if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+      updates.class_bands = check.value!.bands;
+      updates.class_days = check.value!.days;
+      // Keep the flow engine in step. computeFlow still asks the older
+      // `saturday_classes` question, so derive it here rather than leave two
+      // controls that can disagree about whether Saturday is a class day.
+      // Sunday stays a plan-flow exception: isClassDay refuses it outright, so
+      // a Sunday crash class is added as a makeup day, as it always was.
+      updates.saturday_classes = check.value!.days.includes(6);
+      shapeChanged = true;
+    }
+
     const plan = await updateTeachingPlan(params.id, updates);
     await logPlanAudit({
       plan_id: params.id,
@@ -127,7 +156,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
                 ? 'archived the plan'
                 : updates.status === 'draft'
                   ? 'restored the plan'
-                  : 'edited the plan details',
+                  : shapeChanged
+                    ? `set class hours to ${describeBands(updates.class_bands as TimeBand[])}`
+                    : 'edited the plan details',
       },
     });
     return NextResponse.json({ plan });

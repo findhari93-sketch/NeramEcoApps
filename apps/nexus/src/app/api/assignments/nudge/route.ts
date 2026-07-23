@@ -110,7 +110,12 @@ export async function POST(request: NextRequest) {
         let teams = false;
         const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
         if (catalogAppId && teamsUserId) {
-          const r = await sendTeamsActivityNotification(teamsUserId, { text: teamsText, catalogAppId });
+          // headline = what + which assignment, preview = the staff member's own message.
+          const r = await sendTeamsActivityNotification(teamsUserId, {
+            text: teamsText,
+            preview: text,
+            catalogAppId,
+          });
           teams = r.ok;
         }
 
