@@ -15,6 +15,20 @@ on:
         options:
           - staging
           - production
+      # A push touching packages/ sets the `shared` filter and redeploys all
+      # four apps, which is right for a genuinely shared change but wasteful
+      # when only one app needs the new code. Pick that one app here.
+      apps:
+        description: 'Which app to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - marketing
+          - app
+          - nexus
+          - admin
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -149,9 +163,17 @@ jobs:
       always() &&
       (needs.detect-changes.result == 'success') &&
       (
-        github.event_name == 'workflow_dispatch' ||
-        needs.detect-changes.outputs.marketing == 'true' ||
-        needs.detect-changes.outputs.shared == 'true'
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.apps == 'all' || github.event.inputs.apps == 'marketing')
+        ) ||
+        (
+          github.event_name != 'workflow_dispatch' &&
+          (
+            needs.detect-changes.outputs.marketing == 'true' ||
+            needs.detect-changes.outputs.shared == 'true'
+          )
+        )
       )
     env:
       VERCEL_PROJECT_ID: prj_kCLOVjMqr99PfKvbdiZdM8vHpNST
@@ -221,9 +243,17 @@ jobs:
       always() &&
       (needs.detect-changes.result == 'success') &&
       (
-        github.event_name == 'workflow_dispatch' ||
-        needs.detect-changes.outputs.app == 'true' ||
-        needs.detect-changes.outputs.shared == 'true'
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.apps == 'all' || github.event.inputs.apps == 'app')
+        ) ||
+        (
+          github.event_name != 'workflow_dispatch' &&
+          (
+            needs.detect-changes.outputs.app == 'true' ||
+            needs.detect-changes.outputs.shared == 'true'
+          )
+        )
       )
     env:
       VERCEL_PROJECT_ID: prj_n1hKWpSZezUx3m3ui0i2eLKq13OR
@@ -293,9 +323,17 @@ jobs:
       always() &&
       (needs.detect-changes.result == 'success') &&
       (
-        github.event_name == 'workflow_dispatch' ||
-        needs.detect-changes.outputs.nexus == 'true' ||
-        needs.detect-changes.outputs.shared == 'true'
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.apps == 'all' || github.event.inputs.apps == 'nexus')
+        ) ||
+        (
+          github.event_name != 'workflow_dispatch' &&
+          (
+            needs.detect-changes.outputs.nexus == 'true' ||
+            needs.detect-changes.outputs.shared == 'true'
+          )
+        )
       )
     env:
       VERCEL_PROJECT_ID: prj_CFjPrGMaAA5dzVwU54GaGBE6AKLX
@@ -365,9 +403,17 @@ jobs:
       always() &&
       (needs.detect-changes.result == 'success') &&
       (
-        github.event_name == 'workflow_dispatch' ||
-        needs.detect-changes.outputs.admin == 'true' ||
-        needs.detect-changes.outputs.shared == 'true'
+        (
+          github.event_name == 'workflow_dispatch' &&
+          (github.event.inputs.apps == 'all' || github.event.inputs.apps == 'admin')
+        ) ||
+        (
+          github.event_name != 'workflow_dispatch' &&
+          (
+            needs.detect-changes.outputs.admin == 'true' ||
+            needs.detect-changes.outputs.shared == 'true'
+          )
+        )
       )
     env:
       VERCEL_PROJECT_ID: prj_QoCOUGXPvDYAfOXHYFpF62f57hWV
