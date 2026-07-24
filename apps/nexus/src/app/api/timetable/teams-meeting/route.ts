@@ -102,13 +102,31 @@ export async function POST(request: NextRequest) {
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
       // ── CHANNEL MEETING: proper group calendar event (shows in Teams channel + sends invites) ──
-      const result = await createGroupCalendarEvent(
-        supabase, token, classroom.ms_team_id, classroom_id,
-        scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
-      );
-      meetingId = result.meetingId;
-      joinUrl = result.joinUrl;
-      extras.attendeeCount = result.attendeeCount;
+      // Writing to the team's group calendar requires the organizer to be a
+      // member/owner of that M365 group. If that call is denied (403
+      // ErrorAccessDenied) or otherwise fails, we don't want the teacher left
+      // with no meeting: fall back to a standalone meeting link (uses
+      // OnlineMeetings.ReadWrite, which is not membership-gated) and still
+      // announce it in the channel.
+      try {
+        const result = await createGroupCalendarEvent(
+          supabase, token, classroom.ms_team_id, classroom_id,
+          scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
+        );
+        meetingId = result.meetingId;
+        joinUrl = result.joinUrl;
+        extras.attendeeCount = result.attendeeCount;
+      } catch (err) {
+        console.error('Group calendar event failed, falling back to standalone meeting:', err);
+        const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
+        meetingId = meeting.id;
+        joinUrl = meeting.joinWebUrl;
+        // The stored scope reflects what was actually created.
+        scope = 'calendar_event';
+        extras.degraded = true;
+        extras.note =
+          'Created a standalone Teams meeting link because the team calendar was not writable (you may not be a member of the team). To get a native channel meeting, ask an admin to add you to the team.';
+      }
 
       // Enable auto-record on the linked online meeting (best-effort, non-blocking).
       // The group calendar event does not take recordAutomatically directly, so we
@@ -122,7 +140,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Post to Teams channel (best-effort, non-blocking)
+      // Post to Teams channel (best-effort, non-blocking). Worth doing on the
+      // fallback path too so the standalone link still appears in the channel.
       try {
         await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl });
         extras.channelPosted = true;
@@ -181,9 +200,14 @@ export async function POST(request: NextRequest) {
       ...extras,
     });
   } catch (err) {
+    // Reaching here means even the standalone fallback failed. Keep the raw Graph
+    // text in the server logs, but show the teacher a clear, actionable message.
     const message = err instanceof Error ? err.message : 'Failed to create Teams meeting';
     console.error('Teams meeting creation error:', message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const friendly = /access.?denied|forbidden|403|unauthor|invalid.*token|401/i.test(message)
+      ? 'Could not create a Teams meeting: Microsoft denied access. Sign out of Nexus and sign back in, then try again. If it keeps failing, make sure your account is a member of the class team.'
+      : 'Could not create a Teams meeting right now. Please try again in a moment.';
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }
 
@@ -199,25 +223,35 @@ async function createStandaloneMeeting(
   const startDateTime = `${scheduledClass.scheduled_date}T${ensureSec(scheduledClass.start_time as string)}+05:30`;
   const endDateTime = `${scheduledClass.scheduled_date}T${ensureSec(scheduledClass.end_time as string)}+05:30`;
 
-  const res = await fetch('https://graph.microsoft.com/v1.0/me/onlineMeetings', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      subject: scheduledClass.title,
-      startDateTime,
-      endDateTime,
-      // Auto-record so the class becomes a gated catch-up recap with no manual
-      // step (only takes effect if the organizer's Teams policy allows it).
-      recordAutomatically: true,
-      lobbyBypassSettings: {
-        scope: (scheduledClass.lobby_bypass as string) || 'organization',
+  const post = (body: Record<string, unknown>) =>
+    fetch('https://graph.microsoft.com/v1.0/me/onlineMeetings', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      allowedPresenters: (scheduledClass.allowed_presenters as string) || 'organizer',
-    }),
+      body: JSON.stringify(body),
+    });
+
+  // First try the full body: auto-record + lobby/presenter options. Some tenant
+  // meeting policies reject these extras with a 4xx, so on a client error we
+  // retry with just the essentials rather than hard-failing (auto-record is then
+  // re-applied best-effort by enableAutoRecord after the meeting exists).
+  let res = await post({
+    subject: scheduledClass.title,
+    startDateTime,
+    endDateTime,
+    recordAutomatically: true,
+    lobbyBypassSettings: {
+      scope: (scheduledClass.lobby_bypass as string) || 'organization',
+    },
+    allowedPresenters: (scheduledClass.allowed_presenters as string) || 'organizer',
   });
+
+  if (!res.ok && res.status >= 400 && res.status < 500) {
+    console.error(`Standalone meeting rejected extras (${res.status}); retrying with a minimal body`);
+    res = await post({ subject: scheduledClass.title, startDateTime, endDateTime });
+  }
 
   if (!res.ok) {
     const errText = await res.text().catch(() => 'Unknown error');

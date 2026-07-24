@@ -65,6 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             catalogAppId,
           });
           teams = r.ok;
+          if (!r.ok) console.error(`study_material_nudge teams send failed for ${sid}:`, r.reason);
         }
 
         let inapp = false;

@@ -117,6 +117,9 @@ export async function POST(request: NextRequest) {
             catalogAppId,
           });
           teams = r.ok;
+          // Never swallow a Teams failure: without this, a student who got only
+          // the in-app row (channel 'inapp') gives no clue why Teams didn't land.
+          if (!r.ok) console.error(`assignment_nudge teams send failed for ${sid}:`, r.reason);
         }
 
         // 2) Always record the in-app notification (persistent record + Nexus bell).

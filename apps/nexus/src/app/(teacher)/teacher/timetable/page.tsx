@@ -654,11 +654,15 @@ export default function TeacherTimetable() {
 
       const data = await res.json();
       if (res.ok) {
-        setSnackbar({
-          open: true,
-          message: data.alreadyExists ? 'Meeting already exists' : 'Teams meeting created!',
-          severity: 'success',
-        });
+        setSnackbar(
+          data.degraded
+            ? { open: true, message: data.note || 'Meeting link created (standalone).', severity: 'info' }
+            : {
+                open: true,
+                message: data.alreadyExists ? 'Meeting already exists' : 'Teams meeting created!',
+                severity: 'success',
+              },
+        );
         fetchClasses();
       } else {
         setSnackbar({ open: true, message: data.error || 'Failed to create meeting', severity: 'error' });
@@ -700,7 +704,11 @@ export default function TeacherTimetable() {
       });
       const data = await res.json();
       if (res.ok) {
-        setSnackbar({ open: true, message: 'Teams meeting created!', severity: 'success' });
+        setSnackbar(
+          data.degraded
+            ? { open: true, message: data.note || 'Meeting link created (standalone).', severity: 'info' }
+            : { open: true, message: 'Teams meeting created!', severity: 'success' },
+        );
         fetchClasses();
       } else {
         setSnackbar({ open: true, message: data.error || 'Failed to create Teams meeting', severity: 'error' });
