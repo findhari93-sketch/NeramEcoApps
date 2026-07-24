@@ -22,6 +22,17 @@ interface TimetableToolbarProps {
 }
 
 /**
+ * Name the plans shaping the week without letting the line run away. One or two
+ * plans read fine spelled out; beyond that (a classroom mid-changeover, or stray
+ * draft plans overlapping the same dates) the honest, readable thing is a count,
+ * not a paragraph of joined titles.
+ */
+function summarisePlanNames(names: string[]): string {
+  if (names.length <= 2) return names.join(' and ');
+  return `${names.length} course plans`;
+}
+
+/**
  * Week navigation, view switch and the density toggle.
  *
  * The band note under the toolbar is the honesty mechanism for the compact
@@ -150,7 +161,7 @@ export default function TimetableToolbar({
                 // suddenly grows a morning reads as "the crash course started",
                 // not as a bug.
                 activePlanNames.length > 0
-                  ? `${activePlanNames.join(' and ')}: ${describeBands(
+                  ? `${summarisePlanNames(activePlanNames)}: ${describeBands(
                       band.segments.map((s) => ({
                         start: `${String(Math.floor(s.startMin / 60)).padStart(2, '0')}:${String(s.startMin % 60).padStart(2, '0')}`,
                         end: `${String(Math.floor(s.endMin / 60)).padStart(2, '0')}:${String(s.endMin % 60).padStart(2, '0')}`,

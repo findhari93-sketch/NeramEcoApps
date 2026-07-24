@@ -11,7 +11,7 @@ import { getAppOnlyToken } from '@/lib/graph-app-token';
 export async function POST(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
-    const { classroom_id, quick } = await request.json();
+    const { classroom_id, quick, past_days, future_days } = await request.json();
 
     if (!classroom_id) {
       return NextResponse.json({ error: 'classroom_id is required' }, { status: 400 });
@@ -52,13 +52,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Classroom has no linked Teams team' }, { status: 400 });
     }
 
-    // Fetch online meeting events from the group calendar
-    // In quick mode (background auto-sync), use a smaller window and limit
+    // Fetch online meeting events from the group calendar.
+    //
+    // Two very different callers:
+    //  - quick=true is the silent background auto-sync: a tight window is enough,
+    //    it runs constantly and only needs to catch the next class or two.
+    //  - the manual "Import from Teams" button is a backfill. Teachers expect it
+    //    to pull the whole history of classes already run in the channel, not
+    //    just the last week, so it defaults to a wide look-back (a full term) and
+    //    accepts an even wider range from the caller. Anything older than this is
+    //    almost certainly not worth importing as a fresh class.
     const token = await getAppOnlyToken();
     const now = new Date();
-    const pastDays = quick ? 1 : 7;
-    const futureDays = quick ? 14 : 30;
-    const maxEvents = quick ? 20 : 100;
+    const clampDays = (v: unknown, fallback: number) =>
+      Math.min(Math.max(Math.round(Number(v)) || fallback, 1), 365);
+    const pastDays = quick ? 1 : clampDays(past_days, 180);
+    const futureDays = quick ? 14 : clampDays(future_days, 60);
+    const maxEvents = quick ? 20 : 300;
     const pastDate = new Date(now.getTime() - pastDays * 24 * 60 * 60 * 1000).toISOString();
     const futureDate = new Date(now.getTime() + futureDays * 24 * 60 * 60 * 1000).toISOString();
 

@@ -8,7 +8,6 @@ import {
   type IsoWeekday,
 } from '@/lib/timetable-window';
 import {
-  effectiveWeekdays,
   formatDateISO,
   getWeekDates,
   resolveBand,
@@ -164,12 +163,13 @@ export function useTimetableView(
 
   const hasPlanShape = resolved.bands.length > 0;
 
-  // Columns: the plan's days (or the global window's), plus any day that
-  // actually has a class, so a one-off Sunday session is never hidden.
-  const weekdays = useMemo<IsoWeekday[]>(
-    () => effectiveWeekdays(hasPlanShape ? resolved.days : configuredWindow.days, classes),
-    [hasPlanShape, resolved.days, configuredWindow.days, classes],
-  );
+  // Columns: every day of the week, always. Neram schedules classes on any day,
+  // Sunday included, so the planner must offer all seven as schedulable slots.
+  // Narrowing to the plan's/window's class_days used to drop Sunday entirely,
+  // which left no way to schedule a Sunday class inline (the empty "Schedule a
+  // class" row never appeared). The time band still comes from the plan/window,
+  // so the day stays evening-only; only the set of day columns is now full.
+  const weekdays = useMemo<IsoWeekday[]>(() => [1, 2, 3, 4, 5, 6, 7], []);
 
   const week = useMemo(() => getWeekDates(weekOffset, weekdays), [weekOffset, weekdays]);
 

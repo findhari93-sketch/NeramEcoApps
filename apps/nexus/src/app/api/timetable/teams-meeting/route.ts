@@ -142,9 +142,15 @@ export async function POST(request: NextRequest) {
 
       // Post to Teams channel (best-effort, non-blocking). Worth doing on the
       // fallback path too so the standalone link still appears in the channel.
+      // Keep the channel + message IDs so cancelling the class can later remove
+      // this announcement, instead of leaving a dead card in the channel.
       try {
-        await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl });
+        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl });
         extras.channelPosted = true;
+        if (posted) {
+          extras.teams_channel_id = posted.channelId;
+          extras.teams_channel_message_id = posted.messageId;
+        }
       } catch (err) {
         console.error('Channel post failed (non-blocking):', err);
       }
@@ -172,22 +178,30 @@ export async function POST(request: NextRequest) {
     // linked group chat. The teacher's delegated token must carry ChatMessage.Send.
     if (joinUrl && classroom?.ms_group_chat_id) {
       try {
-        await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl));
+        const chatMessageId = await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl));
         extras.groupChatPosted = true;
+        if (chatMessageId) extras.teams_group_chat_message_id = chatMessageId;
       } catch (err) {
         console.error('Group chat post failed (non-blocking):', err);
       }
     }
 
-    // Update the scheduled class with meeting info
+    // Update the scheduled class with meeting info. Cast to any: the channel/chat
+    // message-ID columns are newer than the generated Database type, like the
+    // other recent Nexus timetable columns.
+    const meetingUpdate: Record<string, unknown> = {
+      teams_meeting_id: meetingId,
+      teams_meeting_url: joinUrl,
+      teams_meeting_join_url: joinUrl,
+      teams_meeting_scope: scope,
+    };
+    if (extras.teams_channel_id) meetingUpdate.teams_channel_id = extras.teams_channel_id;
+    if (extras.teams_channel_message_id) meetingUpdate.teams_channel_message_id = extras.teams_channel_message_id;
+    if (extras.teams_group_chat_message_id) meetingUpdate.teams_group_chat_message_id = extras.teams_group_chat_message_id;
+
     const { data: updated, error: updateError } = await supabase
       .from('nexus_scheduled_classes')
-      .update({
-        teams_meeting_id: meetingId,
-        teams_meeting_url: joinUrl,
-        teams_meeting_join_url: joinUrl,
-        teams_meeting_scope: scope,
-      })
+      .update(meetingUpdate as never)
       .eq('id', class_id)
       .select('*')
       .single();
@@ -476,7 +490,7 @@ async function postToTeamsChannel(
   scheduledClass: Record<string, unknown>,
   meeting: Record<string, unknown>,
   channelName: string = MEETING_CHANNEL_NAME,
-) {
+): Promise<{ channelId: string; messageId: string } | null> {
   // Resolve the target channel by display name, falling back to General.
   const findChannel = async (name: string) => {
     const res = await fetch(
@@ -489,7 +503,7 @@ async function postToTeamsChannel(
   };
 
   const channel = (await findChannel(channelName)) || (await findChannel('General'));
-  if (!channel) return;
+  if (!channel) return null;
 
   const messageBody = {
     body: {
@@ -498,7 +512,7 @@ async function postToTeamsChannel(
     },
   };
 
-  await fetch(
+  const res = await fetch(
     `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`,
     {
       method: 'POST',
@@ -509,6 +523,12 @@ async function postToTeamsChannel(
       body: JSON.stringify(messageBody),
     }
   );
+
+  if (!res.ok) return null;
+  // Return the channel + message IDs so the class can later softDelete this card.
+  const posted = await res.json().catch(() => null);
+  if (!posted?.id) return null;
+  return { channelId: channel.id as string, messageId: posted.id as string };
 }
 
 /**
@@ -521,7 +541,7 @@ async function postToTeamsGroupChat(
   token: string,
   chatId: string,
   html: string,
-) {
+): Promise<string | null> {
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/chats/${chatId}/messages`,
     {
@@ -538,4 +558,8 @@ async function postToTeamsGroupChat(
     const errText = await res.text().catch(() => 'Unknown error');
     throw new Error(`Failed to post to group chat: ${res.status} ${errText}`);
   }
+
+  // Return the message ID so the class can later softDelete this announcement.
+  const posted = await res.json().catch(() => null);
+  return (posted?.id as string) || null;
 }

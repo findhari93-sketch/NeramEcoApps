@@ -402,13 +402,23 @@ export async function DELETE(request: NextRequest) {
     await verifyTeacherRole(msUser.oid, classroom_id);
     const supabase = getSupabaseAdminClient();
 
-    // Fetch the class first to get Teams meeting info for cancellation
-    const { data: classToDelete } = await supabase
+    // Fetch the class first to get Teams meeting + announcement info for cleanup.
+    // The channel/chat message-ID columns are newer than the generated Database
+    // type, so read through an untyped client like the other recent columns.
+    const { data: classToDelete } = (await (supabase as any)
       .from('nexus_scheduled_classes')
-      .select('teams_meeting_id, teams_meeting_scope')
+      .select('teams_meeting_id, teams_meeting_scope, teams_channel_id, teams_channel_message_id, teams_group_chat_message_id')
       .eq('id', id)
       .eq('classroom_id', classroom_id)
-      .single();
+      .single()) as {
+      data: {
+        teams_meeting_id: string | null;
+        teams_meeting_scope: string | null;
+        teams_channel_id: string | null;
+        teams_channel_message_id: string | null;
+        teams_group_chat_message_id: string | null;
+      } | null;
+    };
 
     let teamsWarning: string | undefined;
 
@@ -417,6 +427,12 @@ export async function DELETE(request: NextRequest) {
       if (classToDelete?.teams_meeting_id && token) {
         const result = await cancelTeamsEvent(token, supabase, classroom_id, classToDelete.teams_meeting_id, classToDelete.teams_meeting_scope);
         if (!result.success) teamsWarning = result.error;
+      }
+
+      // Remove the channel/chat announcement cards too, so a deleted class does
+      // not leave a dead "Join Meeting" post behind (best-effort).
+      if (token) {
+        await removeTeamsAnnouncements(token, supabase, classroom_id, classToDelete);
       }
 
       const { error } = await supabase
@@ -445,6 +461,12 @@ export async function DELETE(request: NextRequest) {
     if (classToDelete?.teams_meeting_id && token) {
       const result = await cancelTeamsEvent(token, supabase, classroom_id, classToDelete.teams_meeting_id, classToDelete.teams_meeting_scope);
       if (!result.success) teamsWarning = result.error;
+    }
+
+    // Remove the channel/chat announcement cards too (best-effort), so a
+    // cancelled class does not keep advertising a "Join Meeting" link.
+    if (token) {
+      await removeTeamsAnnouncements(token, supabase, classroom_id, classToDelete);
     }
 
     // Notify students
@@ -552,6 +574,64 @@ async function updateTeamsEvent(
   } catch (err) {
     console.error('Error moving Teams meeting:', err);
     return { success: false, error: 'The class moved here, but Teams could not be updated' };
+  }
+}
+
+/**
+ * Remove the Teams announcement cards a class posted (best-effort, non-blocking).
+ *
+ * Cancelling the meeting removes the calendar/online-meeting entry, but the
+ * "Join Meeting" post in the "Class Meeting Details" channel (and the group
+ * chat) is a separate message that has to be soft-deleted by ID. Channel and
+ * chat messages cannot be hard-deleted via Graph; softDelete removes them from
+ * view. Uses the teacher's delegated token, so it succeeds when the same teacher
+ * who posted the card cancels the class; any failure is swallowed with a log.
+ */
+async function removeTeamsAnnouncements(
+  token: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  classroomId: string,
+  cls: {
+    teams_channel_id: string | null;
+    teams_channel_message_id: string | null;
+    teams_group_chat_message_id: string | null;
+  } | null,
+): Promise<void> {
+  if (!cls) return;
+  const needsChannel = !!(cls.teams_channel_id && cls.teams_channel_message_id);
+  const needsChat = !!cls.teams_group_chat_message_id;
+  if (!needsChannel && !needsChat) return;
+
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('ms_team_id, ms_group_chat_id')
+    .eq('id', classroomId)
+    .single();
+
+  const softDelete = async (url: string, label: string) => {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.error(`softDelete ${label} failed (non-blocking):`, res.status, errText);
+      }
+    } catch (err) {
+      console.error(`softDelete ${label} errored (non-blocking):`, err);
+    }
+  };
+
+  if (needsChannel && classroom?.ms_team_id) {
+    await softDelete(
+      `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_channel_message_id}/softDelete`,
+      'channel post',
+    );
+  }
+
+  if (needsChat && classroom?.ms_group_chat_id) {
+    await softDelete(
+      `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_group_chat_message_id}/softDelete`,
+      'group chat post',
+    );
   }
 }
 
