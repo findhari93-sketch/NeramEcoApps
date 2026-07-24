@@ -74,6 +74,7 @@ export const loginScopes = {
     'Sites.ReadWrite.All',
     'Calendars.ReadWrite',
     'ChannelMessage.Send',
+    'ChatMessage.Send',
     'Team.ReadBasic.All',
     'Channel.ReadBasic.All',
     'TeamMember.ReadWrite.All',

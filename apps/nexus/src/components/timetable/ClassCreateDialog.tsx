@@ -33,8 +33,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import TuneIcon from '@mui/icons-material/Tune';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import { type ClassCardData } from './ClassCard';
 import { type HolidayInfo } from './WeeklyCalendarGrid';
+import { buildClassDraftPrompt, parseClassDraft } from '@/lib/class-ai-draft';
 
 interface TopicOption {
   id: string;
@@ -228,6 +232,36 @@ export default function ClassCreateDialog({
   const [holidayConflict, setHolidayConflict] = useState<{ date: string; title: string } | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // ── AI draft (copy-prompt / paste-back bridge) ──
+  const [showAiDraft, setShowAiDraft] = useState(false);
+  const [aiIdea, setAiIdea] = useState('');
+  const [aiPaste, setAiPaste] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPromptCopied, setAiPromptCopied] = useState(false);
+
+  const handleCopyAiPrompt = () => {
+    navigator.clipboard.writeText(buildClassDraftPrompt(aiIdea)).then(() => {
+      setAiPromptCopied(true);
+      setTimeout(() => setAiPromptCopied(false), 2000);
+    });
+  };
+
+  const handleApplyAiDraft = () => {
+    const result = parseClassDraft(aiPaste);
+    if (!result.valid || !result.data) {
+      setAiError(result.errors[0] || 'Could not read that. Paste the JSON the AI gave you.');
+      return;
+    }
+    setAiError(null);
+    setFormData((f) => ({
+      ...f,
+      title: result.data!.title || f.title,
+      description: result.data!.description || f.description,
+    }));
+    setAiPaste('');
+    setShowAiDraft(false);
+  };
+
   // Populate form when editing or opening
   useEffect(() => {
     if (editingClass) {
@@ -270,6 +304,11 @@ export default function ClassCreateDialog({
     }
     setError(null);
     setShowAdvanced(false);
+    setShowAiDraft(false);
+    setAiIdea('');
+    setAiPaste('');
+    setAiError(null);
+    setAiPromptCopied(false);
   }, [editingClass, open, defaultTarget]);
 
   const { classroomId: selectedClassroomId, batchId: selectedBatchId, scope } = parseTarget(formData.target);
@@ -674,7 +713,76 @@ export default function ClassCreateDialog({
                 ]);
               })()}
             </Select>
+            {topics.length === 0 && (
+              <FormHelperText>
+                No saved topics yet. Use Draft with AI below to fill the Title and Description.
+              </FormHelperText>
+            )}
           </FormControl>
+
+          {/* ─── Draft with AI (copy-prompt / paste-back bridge) ─── */}
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: showAiDraft ? 'primary.main' : 'divider',
+              borderRadius: 1,
+              bgcolor: showAiDraft ? 'primary.50' : 'transparent',
+              transition: 'all 0.15s',
+            }}
+          >
+            <Button
+              onClick={() => setShowAiDraft((v) => !v)}
+              startIcon={<AutoAwesomeIcon />}
+              endIcon={showAiDraft ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              sx={{ textTransform: 'none', color: 'text.secondary', minHeight: 48, width: '100%', justifyContent: 'flex-start', px: 1.5 }}
+            >
+              Draft Title &amp; Description with AI
+            </Button>
+            <Collapse in={showAiDraft}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 1.5, pt: 0 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Describe the class in one line, copy the prompt into ChatGPT, Gemini or Claude, then paste the JSON it returns back here.
+                </Typography>
+                {aiError && <Alert severity="error" onClose={() => setAiError(null)}>{aiError}</Alert>}
+                <TextField
+                  label="Your class idea"
+                  fullWidth
+                  size="small"
+                  value={aiIdea}
+                  onChange={(e) => setAiIdea(e.target.value)}
+                  placeholder="e.g. Isometric drawing basics for beginners"
+                  inputProps={{ style: { minHeight: 24 } }}
+                />
+                <Button
+                  variant="outlined"
+                  onClick={handleCopyAiPrompt}
+                  startIcon={aiPromptCopied ? <CheckIcon /> : <ContentCopyIcon />}
+                  color={aiPromptCopied ? 'success' : 'primary'}
+                  sx={{ minHeight: 48, textTransform: 'none', alignSelf: 'flex-start' }}
+                >
+                  {aiPromptCopied ? 'Prompt copied!' : 'Copy AI prompt'}
+                </Button>
+                <TextField
+                  label="Paste AI result (JSON)"
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  maxRows={6}
+                  value={aiPaste}
+                  onChange={(e) => setAiPaste(e.target.value)}
+                  placeholder='{ "title": "...", "description": "..." }'
+                />
+                <Button
+                  variant="contained"
+                  onClick={handleApplyAiDraft}
+                  disabled={!aiPaste.trim()}
+                  sx={{ minHeight: 48, textTransform: 'none', alignSelf: 'flex-start' }}
+                >
+                  Apply to Title &amp; Description
+                </Button>
+              </Box>
+            </Collapse>
+          </Box>
 
           <TextField
             label="Description"

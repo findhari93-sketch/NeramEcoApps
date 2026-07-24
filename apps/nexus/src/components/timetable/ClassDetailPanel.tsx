@@ -21,6 +21,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -33,6 +34,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import { type ClassCardData } from './ClassCard';
 import MeetingRecap from './MeetingRecap';
+import ClassCaptureView from './ClassCaptureView';
+import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
 
 interface ClassDetailPanelProps {
   cls: ClassCardData | null;
@@ -110,6 +113,7 @@ export default function ClassDetailPanel({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [waCopied, setWaCopied] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'cancel' | 'delete' | null>(null);
 
   if (!cls) return null;
@@ -141,6 +145,18 @@ export default function ClassDetailPanel({
     if (meetingUrl) {
       navigator.clipboard.writeText(meetingUrl).then(() => setCopied(true));
     }
+  };
+
+  const handleCopyWhatsApp = () => {
+    const message = buildClassWhatsAppMessage({
+      title: cls.title,
+      scheduled_date: cls.scheduled_date,
+      start_time: cls.start_time,
+      end_time: cls.end_time,
+      joinUrl: meetingUrl,
+      description: cls.description,
+    });
+    navigator.clipboard.writeText(message).then(() => setWaCopied(true));
   };
 
   const drawerContent = (
@@ -392,6 +408,19 @@ export default function ClassDetailPanel({
             </Box>
           )}
 
+          {/* Copy a ready-to-paste announcement for the WhatsApp group (teacher) */}
+          {role === 'teacher' && isUpcoming && !isCancelled && (
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={handleCopyWhatsApp}
+              startIcon={<ChatBubbleOutlineIcon />}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+            >
+              Copy for WhatsApp
+            </Button>
+          )}
+
           {/* Watch recording */}
           {isCompleted && hasRecording && (
             <Button
@@ -509,6 +538,14 @@ export default function ClassDetailPanel({
           )}
         </Box>
 
+        {/* What the class turned out to be: bullets, tags, and the drawings. */}
+        {isCompleted && (
+          <>
+            <Divider />
+            <ClassCaptureView classId={cls.id} getToken={getToken} />
+          </>
+        )}
+
         {/* Expand/Collapse for recap */}
         {isCompleted && (
           <>
@@ -585,13 +622,22 @@ export default function ClassDetailPanel({
 
   // Snackbar for "Copied!" feedback
   const snackbarElement = (
-    <Snackbar
-      open={copied}
-      autoHideDuration={2000}
-      onClose={() => setCopied(false)}
-      message="Meeting link copied!"
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-    />
+    <>
+      <Snackbar
+        open={copied}
+        autoHideDuration={2000}
+        onClose={() => setCopied(false)}
+        message="Meeting link copied!"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+      <Snackbar
+        open={waCopied}
+        autoHideDuration={2500}
+        onClose={() => setWaCopied(false)}
+        message="Announcement copied. Paste it in the WhatsApp group."
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+    </>
   );
 
   if (isMobile) {

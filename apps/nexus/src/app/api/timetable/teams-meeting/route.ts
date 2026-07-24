@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Get classroom info (need ms_team_id for scope determination)
     const { data: classroom } = await supabase
       .from('nexus_classrooms')
-      .select('ms_team_id, name')
+      .select('ms_team_id, ms_group_chat_id, name')
       .eq('id', classroom_id)
       .single();
 
@@ -146,6 +146,18 @@ export async function POST(request: NextRequest) {
       const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
       meetingId = meeting.id;
       joinUrl = meeting.joinWebUrl;
+    }
+
+    // Post the meeting to the class Teams group chat (best-effort, non-blocking).
+    // Works for any scope as long as we have a join URL and the classroom has a
+    // linked group chat. The teacher's delegated token must carry ChatMessage.Send.
+    if (joinUrl && classroom?.ms_group_chat_id) {
+      try {
+        await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl));
+        extras.groupChatPosted = true;
+      } catch (err) {
+        console.error('Group chat post failed (non-blocking):', err);
+      }
     }
 
     // Update the scheduled class with meeting info
@@ -405,9 +417,23 @@ async function getEnrolledAttendees(
     }));
 }
 
+/** Default channel to announce scheduled meetings in (falls back to General). */
+const MEETING_CHANNEL_NAME = 'Class Meeting Details';
+
+/** Shared HTML body for the channel post and the group-chat post. */
+function buildMeetingHtml(scheduledClass: Record<string, unknown>, joinUrl: string): string {
+  const desc = (scheduledClass.description as string | null | undefined)?.trim();
+  return `<h3>📅 ${scheduledClass.title}</h3>
+<p><strong>Date:</strong> ${scheduledClass.scheduled_date}<br/>
+<strong>Time:</strong> ${scheduledClass.start_time} to ${scheduledClass.end_time} (IST)</p>
+${desc ? `<p>${desc.replace(/\n/g, '<br/>')}</p>` : ''}
+<p><a href="${joinUrl}">🔗 Join Meeting</a></p>`;
+}
+
 /**
- * Post a meeting notification to the Teams General channel (fallback).
- * Used when group calendar event creation fails.
+ * Post a meeting announcement to a Teams channel. Targets the dedicated
+ * "Class Meeting Details" channel by name and falls back to General when it does
+ * not exist, so teams without the channel keep working.
  */
 async function postToTeamsChannel(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
@@ -415,31 +441,31 @@ async function postToTeamsChannel(
   teamId: string,
   scheduledClass: Record<string, unknown>,
   meeting: Record<string, unknown>,
+  channelName: string = MEETING_CHANNEL_NAME,
 ) {
-  // Get the General channel
-  const channelsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq 'General'`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  // Resolve the target channel by display name, falling back to General.
+  const findChannel = async (name: string) => {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq '${name.replace(/'/g, "''")}'`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.value?.[0] ?? null;
+  };
 
-  if (!channelsRes.ok) return;
-
-  const channelsData = await channelsRes.json();
-  const generalChannel = channelsData.value?.[0];
-  if (!generalChannel) return;
+  const channel = (await findChannel(channelName)) || (await findChannel('General'));
+  if (!channel) return;
 
   const messageBody = {
     body: {
       contentType: 'html',
-      content: `<h3>📅 ${scheduledClass.title}</h3>
-<p><strong>Date:</strong> ${scheduledClass.scheduled_date}<br/>
-<strong>Time:</strong> ${scheduledClass.start_time} – ${scheduledClass.end_time}</p>
-<p><a href="${meeting.joinWebUrl}">🔗 Join Meeting</a></p>`,
+      content: buildMeetingHtml(scheduledClass, (meeting.joinWebUrl as string) || ''),
     },
   };
 
   await fetch(
-    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${generalChannel.id}/messages`,
+    `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`,
     {
       method: 'POST',
       headers: {
@@ -449,4 +475,33 @@ async function postToTeamsChannel(
       body: JSON.stringify(messageBody),
     }
   );
+}
+
+/**
+ * Post a meeting announcement to a Teams group chat.
+ * Uses the teacher's delegated token (they are a member of the chat); requires
+ * the delegated ChatMessage.Send scope. Best-effort, throws on failure so the
+ * caller can log and continue.
+ */
+async function postToTeamsGroupChat(
+  token: string,
+  chatId: string,
+  html: string,
+) {
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/chats/${chatId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Failed to post to group chat: ${res.status} ${errText}`);
+  }
 }

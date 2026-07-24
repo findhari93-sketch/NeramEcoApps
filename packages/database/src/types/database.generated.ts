@@ -6347,6 +6347,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_archived: boolean | null
+          ms_group_chat_id: string | null
           ms_team_id: string | null
           ms_team_name: string | null
           ms_team_sync_enabled: boolean | null

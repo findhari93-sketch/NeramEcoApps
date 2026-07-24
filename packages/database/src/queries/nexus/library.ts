@@ -37,7 +37,16 @@ export async function getPublishedVideos(
   if (filters?.language) query = query.eq('language', filters.language);
   if (filters?.difficulty) query = query.eq('difficulty', filters.difficulty);
   if (filters?.search) {
-    query = query.ilike('original_title', `%${filters.search}%`);
+    // Full-text over title + description + topics: the search_vector trigger
+    // folds all three in, so a tag/keyword query surfaces class recordings, not
+    // just title substrings. Sanitize first so a stray tsquery operator can't
+    // throw. If nothing usable remains, fall back to a title substring match.
+    const safe = filters.search.replace(/[(),:&|!*'"]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (safe) {
+      query = query.textSearch('search_vector', safe, { type: 'websearch', config: 'english' });
+    } else {
+      query = query.ilike('original_title', `%${filters.search}%`);
+    }
   }
 
   const sortBy = filters?.sortBy || 'published_at';

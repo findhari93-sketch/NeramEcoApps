@@ -260,7 +260,48 @@ async function syncTeamsAttendance(
     synced++;
   }
 
-  return NextResponse.json({ message: `Synced ${synced} attendance records`, synced });
+  // Derive no-shows: enrolled students with no "attended" row become
+  // nexus_class_absences of kind no_show, so the catch-up loop can chase them.
+  // A student who actually attended loses any stale absence row. An existing
+  // opted_out row (with its reason) is left untouched via ignoreDuplicates.
+  const [{ data: enrolled }, { data: attRows }] = await Promise.all([
+    supabase.from('nexus_enrollments').select('user_id, role').eq('classroom_id', classroomId).eq('is_active', true),
+    supabase.from('nexus_attendance').select('student_id, attended').eq('scheduled_class_id', classId),
+  ]);
+  const studentIds = (enrolled || []).filter((e: any) => e.role === 'student').map((e: any) => e.user_id);
+  const attendedIds = (attRows || []).filter((a: any) => a.attended).map((a: any) => a.student_id);
+  const attendedSet = new Set(attendedIds);
+  const noShows = studentIds.filter((id: string) => !attendedSet.has(id));
+
+  if (attendedIds.length > 0) {
+    await supabase
+      .from('nexus_class_absences')
+      .delete()
+      .eq('scheduled_class_id', classId)
+      .in('student_id', attendedIds);
+  }
+  if (noShows.length > 0) {
+    await supabase.from('nexus_class_absences').upsert(
+      noShows.map((student_id: string) => ({
+        scheduled_class_id: classId,
+        student_id,
+        classroom_id: classroomId,
+        kind: 'no_show',
+      })),
+      { onConflict: 'scheduled_class_id,student_id', ignoreDuplicates: true },
+    );
+  }
+
+  await supabase
+    .from('nexus_scheduled_classes')
+    .update({ attendance_synced_at: new Date().toISOString() })
+    .eq('id', classId);
+
+  return NextResponse.json({
+    message: `Synced ${synced} attendance records`,
+    synced,
+    no_shows: noShows.length,
+  });
 }
 
 /**

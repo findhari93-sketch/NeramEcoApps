@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { buildClassLinkPatch } from '@/lib/class-links';
+import { syncClassToLibrary } from '@/lib/class-library-bridge';
 
 /**
  * Wrap up a class after it has happened.
@@ -26,7 +27,7 @@ interface Ctx {
 }
 
 const CLASS_COLS =
-  'id, classroom_id, title, description, notes, scheduled_date, start_time, end_time, topic_id, plan_entry_id, recording_url, youtube_url';
+  'id, classroom_id, title, description, notes, summary_bullets, scheduled_date, start_time, end_time, topic_id, plan_entry_id, recording_url, youtube_url';
 
 async function resolveAccess(supabase: any, msOid: string, classId: string) {
   const { data: user } = await supabase
@@ -159,6 +160,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.topic_id !== undefined) {
       updates.topic_id = body.topic_id || null;
     }
+    if (body.summary_bullets !== undefined) {
+      const bullets = Array.isArray(body.summary_bullets)
+        ? body.summary_bullets.map((b: unknown) => String(b || '').trim()).filter(Boolean).slice(0, 20)
+        : [];
+      updates.summary_bullets = bullets.length ? bullets : null;
+    }
 
     const links = buildClassLinkPatch(body);
     if (!links.ok) return NextResponse.json({ error: links.error }, { status: 400 });
@@ -190,6 +197,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
           );
         }
       }
+    }
+
+    // Mirror the recording into the student Library so its tags make it
+    // searchable there. Best-effort: a Library hiccup must not fail the wrap-up.
+    try {
+      await syncClassToLibrary(supabase, params.classId);
+    } catch (bridgeErr) {
+      console.error('Class -> Library sync failed:', bridgeErr);
     }
 
     const { data: updated } = await supabase
