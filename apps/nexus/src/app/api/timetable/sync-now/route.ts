@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
-import { notifyRecordingAvailable } from '@/lib/timetable-notifications';
+import { notifyRecordingAvailable, notifyClassCancelled } from '@/lib/timetable-notifications';
+import { syncClassroomMeetings } from '@/lib/teams-meeting-sync';
+import { announceCancellationToTeams } from '@/lib/teams-class-announcements';
 
 /**
  * POST /api/timetable/sync-now
@@ -90,7 +92,20 @@ export async function POST(request: NextRequest) {
         totalCancelled += result.cancelled;
         syncedCount++;
 
-        // Sync completed for this classroom
+        // A class the reconciler cancelled was cancelled from within Teams, so the
+        // calendar already reflects it. Post a "Cancelled" card (best-effort,
+        // app-only) and tell the students in-app.
+        for (const cancelled of result.cancelledClasses) {
+          await announceCancellationToTeams(appToken, supabase, cancelled.classroom_id, cancelled, cancelled).catch(
+            () => {},
+          );
+          await notifyClassCancelled(
+            cancelled.classroom_id,
+            cancelled.title,
+            cancelled.scheduled_date,
+            cancelled.id,
+          ).catch(() => {});
+        }
       } catch (err) {
         console.error(`[sync-now] Meeting sync failed for classroom ${classroom.id}:`, err);
       }
@@ -231,174 +246,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// ─── Meeting sync helpers (mirrors cron/sync-teams-meetings logic) ─────────────
-
-async function syncClassroomMeetings(
-  supabase: ReturnType<typeof getSupabaseAdminClient>,
-  token: string,
-  classroom: { id: string; ms_team_id: string },
-  pastDate: string,
-  futureDate: string,
-): Promise<{ imported: number; updated: number; cancelled: number }> {
-  const teamsEvents = await fetchGroupCalendarView(token, classroom.ms_team_id, pastDate, futureDate);
-
-  const teamsEventMap = new Map<string, any>();
-  for (const event of teamsEvents) {
-    teamsEventMap.set(event.id, event);
-  }
-
-  // Existing Nexus classes for this classroom in the date window (ALL statuses to prevent re-importing completed classes)
-  const { data: nexusClasses } = await supabase
-    .from('nexus_scheduled_classes')
-    .select('id, teams_meeting_id, teams_meeting_url, title, scheduled_date, start_time, end_time, status')
-    .eq('classroom_id', classroom.id)
-    .not('teams_meeting_id', 'is', null)
-    .gte('scheduled_date', pastDate.substring(0, 10))
-    .lte('scheduled_date', futureDate.substring(0, 10));
-
-  const existingMeetingIds = new Set(
-    (nexusClasses || []).map((c: any) => c.teams_meeting_id).filter(Boolean)
-  );
-  const existingJoinUrls = new Set(
-    (nexusClasses || []).map((c: any) => c.teams_meeting_url).filter(Boolean)
-  );
-
-  let imported = 0;
-  let updated = 0;
-  let cancelled = 0;
-
-  // Import new Teams events not yet in Nexus
-  for (const event of teamsEvents) {
-    const joinUrl = event.onlineMeeting?.joinUrl;
-    if (!joinUrl) continue;
-    if (existingMeetingIds.has(event.id) || existingJoinUrls.has(joinUrl)) continue;
-
-    try {
-      const startStr = event.start.dateTime as string;
-      const endStr = event.end.dateTime as string;
-
-      let teacherId: string | null = null;
-      const organizerName = event.organizer?.emailAddress?.name || null;
-      if (event.organizer?.emailAddress?.address) {
-        const { data: organizer } = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', event.organizer.emailAddress.address)
-          .single();
-        if (organizer) teacherId = organizer.id;
-      }
-
-      let description: string | null = null;
-      if (event.body?.content) {
-        description = event.body.content
-          .replace(/<[^>]*>/g, '')
-          .replace(/&nbsp;/g, ' ')
-          .trim()
-          .substring(0, 500) || null;
-      }
-
-      const { error } = await supabase.from('nexus_scheduled_classes').insert({
-        classroom_id: classroom.id,
-        title: event.subject || 'Teams Meeting',
-        scheduled_date: startStr.substring(0, 10),
-        start_time: startStr.substring(11, 16),
-        end_time: endStr.substring(11, 16),
-        teacher_id: teacherId,
-        organizer_name: organizerName,
-        description,
-        teams_meeting_id: event.id,
-        teams_meeting_url: joinUrl,
-        teams_meeting_join_url: joinUrl,
-        teams_meeting_scope: 'channel_meeting',
-        target_scope: 'classroom',
-        status: 'scheduled',
-      });
-
-      if (!error) {
-        imported++;
-        existingMeetingIds.add(event.id);
-        existingJoinUrls.add(joinUrl);
-      }
-    } catch {
-      // ignore individual import errors
-    }
-  }
-
-  // Cancel Nexus classes whose Teams event no longer exists
-  for (const nexusClass of nexusClasses || []) {
-    if (!nexusClass.teams_meeting_id || nexusClass.status !== 'scheduled') continue;
-    if (!teamsEventMap.has(nexusClass.teams_meeting_id)) {
-      const { error } = await supabase
-        .from('nexus_scheduled_classes')
-        .update({ status: 'cancelled' })
-        .eq('id', nexusClass.id);
-      if (!error) cancelled++;
-    }
-  }
-
-  // Update changed titles or times
-  for (const nexusClass of nexusClasses || []) {
-    if (!nexusClass.teams_meeting_id || nexusClass.status !== 'scheduled') continue;
-    const teamsEvent = teamsEventMap.get(nexusClass.teams_meeting_id);
-    if (!teamsEvent) continue;
-
-    const startStr = teamsEvent.start.dateTime as string;
-    const endStr = teamsEvent.end.dateTime as string;
-    const teamsTitle = teamsEvent.subject || 'Teams Meeting';
-    const teamsDate = startStr.substring(0, 10);
-    const teamsStart = startStr.substring(11, 16);
-    const teamsEnd = endStr.substring(11, 16);
-
-    const changed =
-      nexusClass.title !== teamsTitle ||
-      nexusClass.scheduled_date !== teamsDate ||
-      nexusClass.start_time.substring(0, 5) !== teamsStart ||
-      nexusClass.end_time.substring(0, 5) !== teamsEnd;
-
-    if (changed) {
-      const { error } = await supabase
-        .from('nexus_scheduled_classes')
-        .update({ title: teamsTitle, scheduled_date: teamsDate, start_time: teamsStart, end_time: teamsEnd })
-        .eq('id', nexusClass.id);
-      if (!error) updated++;
-    }
-  }
-
-  return { imported, updated, cancelled };
-}
-
-async function fetchGroupCalendarView(
-  token: string,
-  groupId: string,
-  startDateTime: string,
-  endDateTime: string,
-): Promise<any[]> {
-  const url =
-    `https://graph.microsoft.com/v1.0/groups/${groupId}/calendarView` +
-    `?startDateTime=${encodeURIComponent(startDateTime)}` +
-    `&endDateTime=${encodeURIComponent(endDateTime)}` +
-    `&$top=50` +
-    `&$orderby=start/dateTime desc` +
-    `&$select=id,subject,start,end,onlineMeeting,organizer,body,isOnlineMeeting,isCancelled`;
-
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Prefer: 'outlook.timezone="Asia/Kolkata"',
-    },
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch group calendar: ${res.status} ${errText}`);
-  }
-
-  const data = await res.json();
-  return (data.value || []).filter(
-    (e: any) => e.isOnlineMeeting && e.onlineMeeting?.joinUrl && !e.isCancelled
-  );
 }
 
 // ─── SharePoint recording helpers ───────────────────────────────────────────

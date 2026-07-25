@@ -1,0 +1,282 @@
+/**
+ * Teams announcement + calendar-cleanup helpers for a scheduled class.
+ *
+ * These were previously private to app/api/timetable/route.ts. They live here so
+ * the timetable DELETE handler AND the Teams reconcilers (sync-now, cron) can share
+ * one implementation for "mark this class cancelled in Teams".
+ *
+ * A cancellation touches two separate things in Teams:
+ *   1. The calendar/online-meeting entry  -> cancelTeamsEvent (Graph DELETE)
+ *   2. The "Join Meeting" card in the channel + group chat -> announceCancellationToTeams
+ *      (Graph cannot edit a message body in place, so we soft-delete the old card and
+ *       post a fresh "Cancelled" one).
+ */
+
+import { getAppOnlyToken } from '@/lib/graph-app-token';
+import { getSupabaseAdminClient } from '@neram/database';
+
+type AdminClient = ReturnType<typeof getSupabaseAdminClient>;
+
+/** Default channel scheduled-meeting announcements are posted to (falls back to General). */
+export const MEETING_CHANNEL_NAME = 'Class Meeting Details';
+
+/** The Teams reference columns a cancellation reads off a class row. */
+export interface TeamsAnnouncementRefs {
+  teams_channel_id: string | null;
+  teams_channel_message_id: string | null;
+  teams_group_chat_message_id: string | null;
+}
+
+/** Card shown in the channel/chat once a class is cancelled. Carries no join link. */
+export function buildCancelledHtml(cls: {
+  title: string;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+}): string {
+  return `<h3>❌ Cancelled: ${cls.title}</h3>
+<p><strong>Was:</strong> ${cls.scheduled_date}, ${cls.start_time} to ${cls.end_time} (IST)</p>
+<p>This class has been cancelled, you do not need to join. We will let you know if it is rescheduled.</p>`;
+}
+
+/** Post an HTML message to a Teams channel; returns the new message ID or null. */
+export async function postChannelMessage(
+  token: string,
+  teamId: string,
+  channelId: string,
+  html: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+      },
+    );
+    if (!res.ok) return null;
+    const posted = await res.json().catch(() => null);
+    return (posted?.id as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Post an HTML message to a Teams group chat; returns the new message ID or null. */
+export async function postChatMessage(token: string, chatId: string, html: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://graph.microsoft.com/v1.0/chats/${chatId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+    });
+    if (!res.ok) return null;
+    const posted = await res.json().catch(() => null);
+    return (posted?.id as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the channel a meeting card should live in: the "Class Meeting Details"
+ * channel by display name, falling back to General. Returns the channel id or null.
+ * Used when a class has no stored channel id but we still want to post a notice.
+ */
+async function resolveMeetingChannelId(token: string, teamId: string): Promise<string | null> {
+  const findChannel = async (name: string): Promise<string | null> => {
+    try {
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq '${name.replace(/'/g, "''")}'`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      return (data.value?.[0]?.id as string) ?? null;
+    } catch {
+      return null;
+    }
+  };
+  return (await findChannel(MEETING_CHANNEL_NAME)) || (await findChannel('General'));
+}
+
+/**
+ * Remove the Teams announcement cards a class posted (best-effort, non-blocking).
+ *
+ * Channel and chat messages cannot be hard-deleted via Graph; softDelete removes
+ * them from view. Any failure is swallowed with a log.
+ */
+export async function removeTeamsAnnouncements(
+  token: string,
+  supabase: AdminClient,
+  classroomId: string,
+  cls: TeamsAnnouncementRefs | null,
+): Promise<void> {
+  if (!cls) return;
+  const needsChannel = !!(cls.teams_channel_id && cls.teams_channel_message_id);
+  const needsChat = !!cls.teams_group_chat_message_id;
+  if (!needsChannel && !needsChat) return;
+
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('ms_team_id, ms_group_chat_id')
+    .eq('id', classroomId)
+    .single();
+
+  const softDelete = async (url: string, label: string) => {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.error(`softDelete ${label} failed (non-blocking):`, res.status, errText);
+      }
+    } catch (err) {
+      console.error(`softDelete ${label} errored (non-blocking):`, err);
+    }
+  };
+
+  if (needsChannel && classroom?.ms_team_id) {
+    await softDelete(
+      `https://graph.microsoft.com/v1.0/teams/${classroom.ms_team_id}/channels/${cls.teams_channel_id}/messages/${cls.teams_channel_message_id}/softDelete`,
+      'channel post',
+    );
+  }
+
+  if (needsChat && classroom?.ms_group_chat_id) {
+    await softDelete(
+      `https://graph.microsoft.com/v1.0/chats/${classroom.ms_group_chat_id}/messages/${cls.teams_group_chat_message_id}/softDelete`,
+      'group chat post',
+    );
+  }
+}
+
+/**
+ * Mark a cancelled class in Teams: remove any old "Join Meeting" card(s) and post a
+ * "Cancelled" notice to the channel + group chat.
+ *
+ * Unlike before, this ALWAYS posts a notice when the classroom has a linked group
+ * chat and/or meeting channel, even if the class never had a prior card, so a
+ * cancelled class always shows up as cancelled in Teams (not just a vanished card).
+ * If a prior card exists it is soft-deleted first. Returns the new message IDs (so a
+ * later permanent delete can remove the notice too), or null when the classroom has
+ * no Teams targets at all. Best-effort throughout.
+ */
+export async function announceCancellationToTeams(
+  token: string,
+  supabase: AdminClient,
+  classroomId: string,
+  oldRefs: TeamsAnnouncementRefs | null,
+  cls: { title: string; scheduled_date: string; start_time: string; end_time: string },
+): Promise<{ channelMessageId: string | null; chatMessageId: string | null } | null> {
+  // Remove the stale "Join Meeting" card(s) first, if any were tracked.
+  if (oldRefs) {
+    await removeTeamsAnnouncements(token, supabase, classroomId, oldRefs);
+  }
+
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('ms_team_id, ms_group_chat_id')
+    .eq('id', classroomId)
+    .single();
+
+  if (!classroom?.ms_team_id && !classroom?.ms_group_chat_id) return null;
+
+  const html = buildCancelledHtml(cls);
+  let channelMessageId: string | null = null;
+  let chatMessageId: string | null = null;
+
+  // Channel: reuse the class's own channel if known, else resolve the meeting channel.
+  if (classroom?.ms_team_id) {
+    const channelId = oldRefs?.teams_channel_id || (await resolveMeetingChannelId(token, classroom.ms_team_id));
+    if (channelId) {
+      channelMessageId = await postChannelMessage(token, classroom.ms_team_id, channelId, html);
+    }
+  }
+
+  if (classroom?.ms_group_chat_id) {
+    chatMessageId = await postChatMessage(token, classroom.ms_group_chat_id, html);
+  }
+
+  return { channelMessageId, chatMessageId };
+}
+
+/**
+ * A Teams delete is idempotent: 404 (Not Found) and 410 (Gone) both mean the
+ * event/meeting is already absent, which is exactly the end state we want, so
+ * they count as success. 204/200 are the normal success codes.
+ */
+export function isDeleteSettled(status: number): boolean {
+  return status === 204 || status === 200 || status === 404 || status === 410;
+}
+
+/**
+ * Cancel/delete a Teams meeting event (best-effort, non-blocking).
+ *
+ * For channel_meeting (group calendar events): DELETE /groups/{teamId}/calendar/events/{eventId},
+ *   retried with the app-only token (Group.ReadWrite.All) when the teacher's delegated
+ *   token lacks group-calendar access, then a standalone-meeting delete as a legacy fallback.
+ * For standalone meetings: DELETE /me/onlineMeetings/{meetingId}.
+ *
+ * A 404/410 at any step means the meeting is already gone, so it resolves as success.
+ */
+export async function cancelTeamsEvent(
+  token: string,
+  supabase: AdminClient,
+  classroomId: string,
+  meetingId: string,
+  scope: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  const deleteAt = async (url: string, bearer: string): Promise<number> => {
+    const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${bearer}` } });
+    if (!res.ok && !isDeleteSettled(res.status)) {
+      const errText = await res.text().catch(() => '');
+      console.error(`Teams delete failed (${res.status}) for ${url}:`, errText);
+    }
+    return res.status;
+  };
+
+  try {
+    if (scope === 'channel_meeting') {
+      const { data: classroom } = await supabase
+        .from('nexus_classrooms')
+        .select('ms_team_id')
+        .eq('id', classroomId)
+        .single();
+
+      if (!classroom?.ms_team_id) return { success: true };
+      const eventUrl = `https://graph.microsoft.com/v1.0/groups/${classroom.ms_team_id}/calendar/events/${meetingId}`;
+
+      // 1) Delegated teacher token.
+      let status = await deleteAt(eventUrl, token);
+      if (isDeleteSettled(status)) return { success: true };
+
+      // 2) App-only token (reliably has group-calendar write even when the teacher
+      //    is owner-but-not-member of the team).
+      try {
+        const appToken = await getAppOnlyToken();
+        status = await deleteAt(eventUrl, appToken);
+        if (isDeleteSettled(status)) return { success: true };
+      } catch (appErr) {
+        console.error('App-only group calendar delete failed:', appErr);
+      }
+
+      // 3) Legacy fallback: the record may hold a standalone online-meeting ID.
+      const fallbackStatus = await deleteAt(
+        `https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`,
+        token,
+      );
+      if (isDeleteSettled(fallbackStatus)) return { success: true };
+
+      return { success: false, error: `Could not remove meeting from Teams (${status})` };
+    }
+
+    // Standalone online meeting or personal calendar event.
+    const status = await deleteAt(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, token);
+    if (isDeleteSettled(status)) return { success: true };
+    return { success: false, error: `Could not remove meeting from Teams (${status})` };
+  } catch (err) {
+    console.error('Failed to cancel Teams event:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error cancelling Teams event' };
+  }
+}

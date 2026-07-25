@@ -1,0 +1,138 @@
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { syncClassroomMeetings } from './teams-meeting-sync';
+
+/**
+ * These tests pin down the ONLY safe cancellation rule: a Nexus channel-meeting
+ * class is cancelled solely when its matching Teams event is explicitly
+ * isCancelled. Mere absence from the fetched window, and any non-channel scope,
+ * must never cancel, that was the bug that silently killed freshly-created classes.
+ */
+
+const JOIN_URL = 'https://teams.microsoft.com/l/meetup-join/abc';
+const PAST = '2020-01-01T00:00:00.000Z';
+const FUTURE = '2020-02-01T00:00:00.000Z';
+const OLD_CREATED = '2020-01-01T00:00:00.000Z'; // well outside the 30-min grace window
+
+/** Minimal chainable Supabase mock that records updates/inserts. */
+function makeSupabase(nexusClasses: any[]) {
+  const updates: Array<{ table: string; vals: any; id?: string }> = [];
+  const inserts: Array<{ table: string; row: any }> = [];
+
+  const from = (table: string) => {
+    const state: any = { table };
+    const chain: any = {
+      select: () => chain,
+      insert: (row: any) => {
+        inserts.push({ table, row });
+        return Promise.resolve({ error: null });
+      },
+      update: (vals: any) => {
+        state.updateVals = vals;
+        return chain;
+      },
+      eq: (col: string, val: string) => {
+        if (state.updateVals) {
+          updates.push({ table, vals: state.updateVals, id: val });
+          return Promise.resolve({ error: null });
+        }
+        return chain;
+      },
+      not: () => chain,
+      gte: () => chain,
+      lte: () => chain,
+      single: () => Promise.resolve({ data: null }),
+      // The class list query is awaited directly (no .single()).
+      then: (resolve: (v: any) => void) =>
+        resolve({ data: table === 'nexus_scheduled_classes' ? nexusClasses : [] }),
+    };
+    return chain;
+  };
+
+  return { from, __updates: updates, __inserts: inserts } as any;
+}
+
+/** Stub Graph calendarView to return exactly these events. */
+function mockCalendarView(events: any[]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        value: events.map((e) => ({
+          id: e.id,
+          subject: e.subject ?? 'Class',
+          start: { dateTime: e.start ?? '2020-01-15T19:00:00' },
+          end: { dateTime: e.end ?? '2020-01-15T20:30:00' },
+          onlineMeeting: { joinUrl: e.joinUrl },
+          organizer: { emailAddress: { name: 'T', address: 't@x.com' } },
+          isOnlineMeeting: true,
+          isCancelled: !!e.isCancelled,
+        })),
+      }),
+    })) as any,
+  );
+}
+
+const channelClass = (over: Partial<any> = {}) => ({
+  id: 'c1',
+  classroom_id: 'room1',
+  teams_meeting_id: 'evt-create-id',
+  teams_meeting_url: JOIN_URL,
+  teams_meeting_join_url: JOIN_URL,
+  teams_meeting_scope: 'channel_meeting',
+  title: 'Class',
+  scheduled_date: '2020-01-15',
+  start_time: '19:00:00',
+  end_time: '20:30:00',
+  status: 'scheduled',
+  created_at: OLD_CREATED,
+  teams_channel_id: null,
+  teams_channel_message_id: null,
+  teams_group_chat_message_id: null,
+  ...over,
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe('syncClassroomMeetings cancel-detect', () => {
+  it('does NOT cancel a channel meeting whose event is present and not cancelled', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: false }]);
+    const sb = makeSupabase([channelClass()]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(0);
+    expect(sb.__updates.filter((u: any) => u.vals.status === 'cancelled')).toHaveLength(0);
+  });
+
+  it('cancels a channel meeting only when its matching event is explicitly isCancelled', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: true }]);
+    const sb = makeSupabase([channelClass()]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(1);
+    expect(r.cancelledClasses[0].id).toBe('c1');
+    expect(sb.__updates).toContainEqual({ table: 'nexus_scheduled_classes', vals: { status: 'cancelled' }, id: 'c1' });
+  });
+
+  it('never cancels a non-channel scope class even if a cancelled event matches', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: true }]);
+    const sb = makeSupabase([channelClass({ teams_meeting_scope: 'calendar_event' })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(0);
+  });
+
+  it('does NOT cancel a channel meeting merely absent from the fetched window', async () => {
+    mockCalendarView([]); // event not returned at all
+    const sb = makeSupabase([channelClass()]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(0);
+  });
+
+  it('does NOT cancel a class created within the grace window', async () => {
+    mockCalendarView([{ id: 'x', joinUrl: JOIN_URL, isCancelled: true }]);
+    const sb = makeSupabase([channelClass({ created_at: new Date().toISOString() })]);
+    const r = await syncClassroomMeetings(sb, 'tok', { id: 'room1', ms_team_id: 'team1' }, PAST, FUTURE);
+    expect(r.cancelled).toBe(0);
+  });
+});
