@@ -279,6 +279,86 @@ export async function createTeamForClassroom(
   return teamId;
 }
 
+// ============================================
+// CHANNEL CREATION
+// ============================================
+
+/**
+ * Create a standard channel inside the classroom's linked team and link it to the
+ * classroom (writes ms_channel_id / ms_channel_name). Under the "one Team per
+ * cohort, one channel per classroom" model, scheduled-meeting announcements for
+ * this classroom then target this channel.
+ *
+ * Uses the app-only token (Application Group.ReadWrite.All). A duplicate display
+ * name (409 NameAlreadyExists) is resolved to the existing channel instead of failing.
+ */
+export async function createChannelForClassroom(
+  classroomId: string,
+  teamId: string,
+  name: string,
+  description = ''
+): Promise<{ channelId: string; channelName: string }> {
+  const token = await getAppOnlyToken();
+
+  const findChannelByName = async (displayName: string): Promise<{ id: string } | null> => {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq '${displayName.replace(/'/g, "''")}'`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.value?.[0] ?? null;
+  };
+
+  let channelId: string;
+
+  const res = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      displayName: name,
+      description: description || `Nexus classroom channel: ${name}`,
+      membershipType: 'standard',
+    }),
+  });
+
+  if (res.ok) {
+    const body = await res.json();
+    channelId = body.id;
+  } else if (res.status === 409) {
+    // Channel with this name already exists — reuse it.
+    const existing = await findChannelByName(name);
+    if (!existing?.id) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Channel name already exists but could not be resolved: ${err}`);
+    }
+    channelId = existing.id;
+  } else {
+    const err = await res.text().catch(() => '');
+    throw new Error(`Failed to create channel: ${res.status} ${err}`);
+  }
+
+  // Link channel to classroom in Supabase
+  const supabase = getSupabaseAdminClient();
+  await (supabase as any)
+    .from('nexus_classrooms')
+    .update({ ms_channel_id: channelId, ms_channel_name: name })
+    .eq('id', classroomId);
+
+  // Log the creation (reuse the Teams sync log)
+  await (supabase as any).from('nexus_teams_sync_log').insert({
+    classroom_id: classroomId,
+    action: 'create_channel',
+    status: 'success',
+    details: { channelId, channelName: name, teamId },
+  });
+
+  return { channelId, channelName: name };
+}
+
 /**
  * Poll a Teams creation operation until the team is ready.
  */

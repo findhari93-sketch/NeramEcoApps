@@ -5,6 +5,7 @@ import { notifyClassCreated, notifyClassCancelled } from '@/lib/timetable-notifi
 import { loadPlanShapes } from '@/lib/plan-shape-query';
 import { notifyStudents } from '@/lib/notify-students';
 import { generateRecurrenceDates } from './recurrence';
+import { getAppOnlyToken } from '@/lib/graph-app-token';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
@@ -140,7 +141,7 @@ async function verifyTeacherRole(msOid: string, classroomId: string) {
 
   const { data: user } = await supabase
     .from('users')
-    .select('id')
+    .select('id, user_type')
     .eq('ms_oid', msOid)
     .single();
 
@@ -157,15 +158,19 @@ async function verifyTeacherRole(msOid: string, classroomId: string) {
     throw new Error('This classroom is archived and read-only');
   }
 
-  const { data: enrollment } = await supabase
-    .from('nexus_enrollments')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('classroom_id', classroomId)
-    .single();
+  // Admins manage any classroom (they schedule across cohorts). Teachers must hold a
+  // teacher enrollment in the specific classroom.
+  if (user.user_type !== 'admin') {
+    const { data: enrollment } = await supabase
+      .from('nexus_enrollments')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('classroom_id', classroomId)
+      .single();
 
-  if (!enrollment || enrollment.role !== 'teacher') {
-    throw new Error('Only teachers can manage the timetable');
+    if (!enrollment || enrollment.role !== 'teacher') {
+      throw new Error('Only teachers can manage the timetable');
+    }
   }
 
   return user.id;
@@ -670,13 +675,27 @@ async function removeTeamsAnnouncements(
 }
 
 /**
+ * A Teams delete is idempotent: 404 (Not Found) and 410 (Gone) both mean the
+ * event/meeting is already absent, which is exactly the end state we want, so
+ * they count as success, not a warning. 204/200 are the normal success codes.
+ */
+function isDeleteSettled(status: number): boolean {
+  return status === 204 || status === 200 || status === 404 || status === 410;
+}
+
+/**
  * Cancel/delete a Teams meeting event (best-effort, non-blocking).
  *
- * For channel_meeting (group calendar events): DELETE /groups/{teamId}/calendar/events/{eventId}
- *   - Falls back to DELETE /me/onlineMeetings/{meetingId} for legacy records
- * For standalone meetings: DELETE /me/onlineMeetings/{meetingId}
+ * For channel_meeting (group calendar events): DELETE /groups/{teamId}/calendar/events/{eventId}.
+ *   The teacher's delegated token may lack group-calendar access (they can be an
+ *   owner but not a member of the class team), so on any failure we retry the
+ *   same delete with the app-only token, which holds Group.ReadWrite.All. A
+ *   standalone-meeting delete is the last fallback for legacy records that stored
+ *   an online-meeting ID under this scope.
+ * For standalone meetings: DELETE /me/onlineMeetings/{meetingId}.
  *
- * Returns { success, error? } so the caller can surface warnings.
+ * A 404/410 at any step means the meeting is already gone, so it resolves as
+ * success. Returns { success, error? } so the caller can surface real warnings only.
  */
 async function cancelTeamsEvent(
   token: string,
@@ -685,54 +704,58 @@ async function cancelTeamsEvent(
   meetingId: string,
   scope: string | null,
 ): Promise<{ success: boolean; error?: string }> {
+  const deleteAt = async (url: string, bearer: string): Promise<number> => {
+    const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${bearer}` } });
+    if (!res.ok && !isDeleteSettled(res.status)) {
+      const errText = await res.text().catch(() => '');
+      console.error(`Teams delete failed (${res.status}) for ${url}:`, errText);
+    }
+    return res.status;
+  };
+
   try {
     if (scope === 'channel_meeting') {
-      // Group calendar event — need teamId
+      // Group calendar event — need the team (group) ID.
       const { data: classroom } = await supabase
         .from('nexus_classrooms')
         .select('ms_team_id')
         .eq('id', classroomId)
         .single();
 
-      if (classroom?.ms_team_id) {
-        const res = await fetch(
-          `https://graph.microsoft.com/v1.0/groups/${classroom.ms_team_id}/calendar/events/${meetingId}`,
-          { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!res.ok) {
-          // Fallback for legacy records: meetingId might be a standalone online meeting ID
-          // (before the fix, channel_meeting scope stored standalone meeting IDs)
-          if (res.status === 404 || res.status === 400) {
-            console.warn('Group calendar delete failed, trying standalone meeting fallback...');
-            const fallbackRes = await fetch(
-              `https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`,
-              { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (!fallbackRes.ok) {
-              const errText = await fallbackRes.text().catch(() => '');
-              console.error('Fallback standalone meeting delete also failed:', fallbackRes.status, errText);
-              return { success: false, error: `Could not remove meeting from Teams (${fallbackRes.status})` };
-            }
-          } else {
-            const errText = await res.text().catch(() => '');
-            console.error('Failed to cancel group calendar event:', res.status, errText);
-            return { success: false, error: `Could not remove meeting from Teams (${res.status})` };
-          }
-        }
+      if (!classroom?.ms_team_id) return { success: true };
+      const eventUrl = `https://graph.microsoft.com/v1.0/groups/${classroom.ms_team_id}/calendar/events/${meetingId}`;
+
+      // 1) Delegated teacher token.
+      let status = await deleteAt(eventUrl, token);
+      if (isDeleteSettled(status)) return { success: true };
+
+      // 2) App-only token (reliably has group-calendar write even when the
+      //    teacher is owner-but-not-member of the team).
+      try {
+        const appToken = await getAppOnlyToken();
+        status = await deleteAt(eventUrl, appToken);
+        if (isDeleteSettled(status)) return { success: true };
+      } catch (appErr) {
+        console.error('App-only group calendar delete failed:', appErr);
       }
-    } else {
-      // Standalone online meeting or personal calendar event
-      const res = await fetch(
+
+      // 3) Legacy fallback: the record may hold a standalone online-meeting ID.
+      const fallbackStatus = await deleteAt(
         `https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`,
-        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+        token,
       );
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.error('Failed to cancel online meeting:', res.status, errText);
-        return { success: false, error: `Could not remove meeting from Teams (${res.status})` };
-      }
+      if (isDeleteSettled(fallbackStatus)) return { success: true };
+
+      return { success: false, error: `Could not remove meeting from Teams (${status})` };
     }
-    return { success: true };
+
+    // Standalone online meeting or personal calendar event.
+    const status = await deleteAt(
+      `https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`,
+      token,
+    );
+    if (isDeleteSettled(status)) return { success: true };
+    return { success: false, error: `Could not remove meeting from Teams (${status})` };
   } catch (err) {
     console.error('Failed to cancel Teams event:', err);
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error cancelling Teams event' };

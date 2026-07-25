@@ -6347,6 +6347,8 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_archived: boolean | null
+          ms_channel_id: string | null
+          ms_channel_name: string | null
           ms_group_chat_id: string | null
           ms_team_id: string | null
           ms_team_name: string | null
@@ -6365,6 +6367,9 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_archived?: boolean | null
+          ms_channel_id?: string | null
+          ms_channel_name?: string | null
+          ms_group_chat_id?: string | null
           ms_team_id?: string | null
           ms_team_name?: string | null
           ms_team_sync_enabled?: boolean | null
@@ -6382,6 +6387,9 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_archived?: boolean | null
+          ms_channel_id?: string | null
+          ms_channel_name?: string | null
+          ms_group_chat_id?: string | null
           ms_team_id?: string | null
           ms_team_name?: string | null
           ms_team_sync_enabled?: boolean | null

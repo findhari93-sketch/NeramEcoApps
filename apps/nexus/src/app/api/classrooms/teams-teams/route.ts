@@ -11,7 +11,34 @@ export async function GET(request: NextRequest) {
     await verifyMsToken(request.headers.get('Authorization'));
     const token = extractBearerToken(request.headers.get('Authorization'));
 
-    // Fetch joined teams from Microsoft Graph
+    // ?team_id={id} → list that team's channels (for classroom → channel mapping).
+    const teamId = request.nextUrl.searchParams.get('team_id');
+    if (teamId) {
+      const chRes = await fetch(
+        `https://graph.microsoft.com/v1.0/teams/${encodeURIComponent(teamId)}/channels`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!chRes.ok) {
+        const errText = await chRes.text().catch(() => 'Unknown error');
+        return NextResponse.json(
+          { error: `Failed to fetch channels: ${chRes.status} ${errText}` },
+          { status: chRes.statusText === 'Forbidden' ? 403 : 500 }
+        );
+      }
+
+      const chData = await chRes.json();
+      const channels = (chData.value || []).map(
+        (c: { id: string; displayName: string; membershipType?: string }) => ({
+          id: c.id,
+          displayName: c.displayName,
+          membershipType: c.membershipType ?? 'standard',
+        })
+      );
+      return NextResponse.json({ channels });
+    }
+
+    // Default: fetch the teacher's joined teams from Microsoft Graph
     const graphRes = await fetch('https://graph.microsoft.com/v1.0/me/joinedTeams', {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -39,8 +66,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 401 });
   }
 }
-
-/**
- * GET /api/classrooms/teams-teams?team_id={id}
- * Returns channels for a specific team (for future batch → channel mapping).
- */

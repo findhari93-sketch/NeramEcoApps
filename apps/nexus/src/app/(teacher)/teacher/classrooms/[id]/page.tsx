@@ -20,6 +20,8 @@ import {
   Switch,
   CircularProgress,
   Dialog,
+  TextField,
+  Autocomplete,
 } from '@neram/ui';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
@@ -48,6 +50,9 @@ import GraphAvatar from '@/components/GraphAvatar';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import SortIcon from '@mui/icons-material/Sort';
 import ChecklistIcon from '@mui/icons-material/Checklist';
+import TagIcon from '@mui/icons-material/Tag';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import { parseTeamsChatId } from '@/lib/teams-ids';
 
 interface ClassroomDetail {
   id: string;
@@ -60,6 +65,9 @@ interface ClassroomDetail {
   ms_team_id: string | null;
   ms_team_name: string | null;
   ms_team_sync_enabled: boolean;
+  ms_channel_id: string | null;
+  ms_channel_name: string | null;
+  ms_group_chat_id: string | null;
   created_at: string;
 }
 
@@ -126,6 +134,13 @@ export default function ClassroomDetailPage() {
   const [teamsCreating, setTeamsCreating] = useState(false);
   const [teamsLinking, setTeamsLinking] = useState(false);
   const [availableTeams, setAvailableTeams] = useState<{ id: string; displayName: string }[]>([]);
+  // Channel + group-chat linking state
+  const [availableChannels, setAvailableChannels] = useState<{ id: string; displayName: string }[]>([]);
+  const [channelsLoading, setChannelsLoading] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [creatingChannel, setCreatingChannel] = useState(false);
+  const [groupChatInput, setGroupChatInput] = useState('');
+  const [savingGroupChat, setSavingGroupChat] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
     open: false, message: '', severity: 'success',
   });
@@ -343,6 +358,125 @@ export default function ClassroomDetailPage() {
       setSnackbar({ open: true, severity: 'error', message: 'Failed to load Teams teams' });
     }
   };
+
+  // Teams: Load the linked team's channels (for the channel picker)
+  const handleFetchChannels = useCallback(async (teamId: string) => {
+    setChannelsLoading(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/classrooms/teams-teams?team_id=${encodeURIComponent(teamId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableChannels(data.channels || []);
+      } else {
+        setSnackbar({ open: true, severity: 'error', message: 'Failed to load channels' });
+      }
+    } catch {
+      setSnackbar({ open: true, severity: 'error', message: 'Failed to load channels' });
+    } finally {
+      setChannelsLoading(false);
+    }
+  }, [getToken]);
+
+  // Teams: Link an existing channel to this classroom
+  const handleLinkChannel = async (channelId: string | null, channelName: string | null) => {
+    const token = await getToken();
+    if (!token) return;
+    const res = await fetch(`/api/classrooms/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ms_channel_id: channelId, ms_channel_name: channelName }),
+    });
+    if (res.ok) {
+      setSnackbar({
+        open: true,
+        severity: channelId ? 'success' : 'info',
+        message: channelId ? `Class meetings will post to "${channelName}"` : 'Channel unlinked',
+      });
+      await fetchClassroom();
+    }
+  };
+
+  // Teams: Create a new channel in the linked team and link it
+  const handleCreateChannel = async () => {
+    const name = newChannelName.trim();
+    if (!name) return;
+    setCreatingChannel(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/classrooms/${id}/teams-channel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSnackbar({ open: true, severity: 'success', message: `Channel "${data.channelName}" created and linked` });
+        setNewChannelName('');
+        await fetchClassroom();
+        if (classroom?.ms_team_id) await handleFetchChannels(classroom.ms_team_id);
+      } else {
+        setSnackbar({ open: true, severity: 'error', message: data.error || 'Failed to create channel' });
+      }
+    } catch {
+      setSnackbar({ open: true, severity: 'error', message: 'Failed to create channel' });
+    } finally {
+      setCreatingChannel(false);
+    }
+  };
+
+  // Teams: Save the group-chat link/id (parsed to a thread id)
+  const handleSaveGroupChat = async () => {
+    const chatId = parseTeamsChatId(groupChatInput);
+    if (!chatId) {
+      setSnackbar({ open: true, severity: 'error', message: 'Could not find a chat id. Paste the Teams group-chat link or its 19:...@thread.v2 id.' });
+      return;
+    }
+    setSavingGroupChat(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/classrooms/${id}`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ms_group_chat_id: chatId }),
+      });
+      if (res.ok) {
+        setSnackbar({ open: true, severity: 'success', message: 'Group chat linked' });
+        setGroupChatInput('');
+        await fetchClassroom();
+      } else {
+        setSnackbar({ open: true, severity: 'error', message: 'Failed to link group chat' });
+      }
+    } finally {
+      setSavingGroupChat(false);
+    }
+  };
+
+  // Teams: Clear the linked group chat
+  const handleClearGroupChat = async () => {
+    const token = await getToken();
+    if (!token) return;
+    const res = await fetch(`/api/classrooms/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ms_group_chat_id: null }),
+    });
+    if (res.ok) {
+      setSnackbar({ open: true, severity: 'info', message: 'Group chat unlinked' });
+      await fetchClassroom();
+    }
+  };
+
+  // Load channels whenever a team is linked so the picker is ready
+  useEffect(() => {
+    if (classroom?.ms_team_id) handleFetchChannels(classroom.ms_team_id);
+    else setAvailableChannels([]);
+  }, [classroom?.ms_team_id, handleFetchChannels]);
 
   useEffect(() => {
     fetchClassroom();
@@ -680,6 +814,112 @@ export default function ClassroomDetailPage() {
                   >
                     Open in Teams
                   </Button>
+                </Box>
+
+                {/* Channel: where this classroom's scheduled-meeting cards post */}
+                <Box sx={{ pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                    <TagIcon fontSize="small" color="action" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Meeting channel</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    Scheduled class meetings for this classroom post to this channel. Leave unset to use "Class Meeting Details".
+                  </Typography>
+                  <Autocomplete
+                    size="small"
+                    options={availableChannels}
+                    loading={channelsLoading}
+                    value={
+                      availableChannels.find((c) => c.id === classroom.ms_channel_id) ||
+                      (classroom.ms_channel_id
+                        ? { id: classroom.ms_channel_id, displayName: classroom.ms_channel_name || 'Linked channel' }
+                        : null)
+                    }
+                    getOptionLabel={(o) => o.displayName}
+                    isOptionEqualToValue={(o, v) => o.id === v.id}
+                    onChange={(_e, val) => handleLinkChannel(val?.id ?? null, val?.displayName ?? null)}
+                    renderInput={(paramsIn) => (
+                      <TextField
+                        {...paramsIn}
+                        placeholder="Select a channel"
+                        InputProps={{
+                          ...paramsIn.InputProps,
+                          endAdornment: (
+                            <>
+                              {channelsLoading ? <CircularProgress size={16} /> : null}
+                              {paramsIn.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                    sx={{ mb: 1 }}
+                  />
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="New channel name (e.g. NATA)"
+                      value={newChannelName}
+                      onChange={(e) => setNewChannelName(e.target.value)}
+                      inputProps={{ maxLength: 50 }}
+                    />
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={creatingChannel ? <CircularProgress size={16} /> : <AddCircleOutlineIcon />}
+                      onClick={handleCreateChannel}
+                      disabled={creatingChannel || !newChannelName.trim()}
+                      sx={{ textTransform: 'none', whiteSpace: 'nowrap', minHeight: 40 }}
+                    >
+                      Create
+                    </Button>
+                  </Box>
+                </Box>
+
+                {/* Group chat: where meeting announcements are posted for students */}
+                <Box sx={{ pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                    <ForumOutlinedIcon fontSize="small" color="action" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Class group chat</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    The class group chat that meeting announcements are posted to.
+                  </Typography>
+                  {classroom.ms_group_chat_id ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Chip label="Group chat linked" color="success" variant="outlined" size="small" />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<LinkOffIcon />}
+                        onClick={handleClearGroupChat}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Unlink
+                      </Button>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        placeholder="Paste Teams group-chat link or id"
+                        value={groupChatInput}
+                        onChange={(e) => setGroupChatInput(e.target.value)}
+                      />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={handleSaveGroupChat}
+                        disabled={savingGroupChat || !groupChatInput.trim()}
+                        sx={{ textTransform: 'none', minHeight: 40 }}
+                      >
+                        {savingGroupChat ? 'Saving...' : 'Save'}
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               </Box>
             ) : (

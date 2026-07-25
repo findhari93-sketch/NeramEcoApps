@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     // Get classroom info (need ms_team_id for scope determination)
     const { data: classroom } = await supabase
       .from('nexus_classrooms')
-      .select('ms_team_id, ms_group_chat_id, name')
+      .select('ms_team_id, ms_group_chat_id, ms_channel_id, name')
       .eq('id', classroom_id)
       .single();
 
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       // Keep the channel + message IDs so cancelling the class can later remove
       // this announcement, instead of leaving a dead card in the channel.
       try {
-        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl });
+        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl }, MEETING_CHANNEL_NAME, classroom.ms_channel_id ?? null);
         extras.channelPosted = true;
         if (posted) {
           extras.teams_channel_id = posted.channelId;
@@ -504,9 +504,10 @@ ${desc ? `<p>${desc.replace(/\n/g, '<br/>')}</p>` : ''}
 }
 
 /**
- * Post a meeting announcement to a Teams channel. Targets the dedicated
- * "Class Meeting Details" channel by name and falls back to General when it does
- * not exist, so teams without the channel keep working.
+ * Post a meeting announcement to a Teams channel. When the classroom has an
+ * explicitly linked channel (channelId), post there directly. Otherwise resolve
+ * the dedicated "Class Meeting Details" channel by name, falling back to General,
+ * so teams without the linked channel keep working.
  */
 async function postToTeamsChannel(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
@@ -515,6 +516,7 @@ async function postToTeamsChannel(
   scheduledClass: Record<string, unknown>,
   meeting: Record<string, unknown>,
   channelName: string = MEETING_CHANNEL_NAME,
+  channelId: string | null = null,
 ): Promise<{ channelId: string; messageId: string } | null> {
   // Resolve the target channel by display name, falling back to General.
   const findChannel = async (name: string) => {
@@ -527,7 +529,10 @@ async function postToTeamsChannel(
     return data.value?.[0] ?? null;
   };
 
-  const channel = (await findChannel(channelName)) || (await findChannel('General'));
+  // Prefer the classroom's explicitly linked channel; else resolve by name.
+  const channel = channelId
+    ? { id: channelId }
+    : (await findChannel(channelName)) || (await findChannel('General'));
   if (!channel) return null;
 
   const messageBody = {

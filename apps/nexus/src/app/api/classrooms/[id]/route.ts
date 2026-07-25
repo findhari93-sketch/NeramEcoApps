@@ -92,7 +92,12 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, type, description, ms_team_id, ms_team_name, ms_team_sync_enabled, is_active } = body;
+    const {
+      name, type, description,
+      ms_team_id, ms_team_name, ms_team_sync_enabled,
+      ms_channel_id, ms_channel_name, ms_group_chat_id,
+      is_active,
+    } = body;
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
@@ -101,7 +106,16 @@ export async function PUT(
     if (ms_team_id !== undefined) updateData.ms_team_id = ms_team_id;
     if (ms_team_name !== undefined) updateData.ms_team_name = ms_team_name;
     if (ms_team_sync_enabled !== undefined) updateData.ms_team_sync_enabled = ms_team_sync_enabled;
+    if (ms_channel_id !== undefined) updateData.ms_channel_id = ms_channel_id;
+    if (ms_channel_name !== undefined) updateData.ms_channel_name = ms_channel_name;
+    if (ms_group_chat_id !== undefined) updateData.ms_group_chat_id = ms_group_chat_id;
     if (is_active !== undefined) updateData.is_active = is_active;
+
+    // Clearing the team link should also clear its dependent channel link.
+    if (ms_team_id === null) {
+      updateData.ms_channel_id = null;
+      updateData.ms_channel_name = null;
+    }
 
     const { data: classroom, error } = await supabase
       .from('nexus_classrooms')

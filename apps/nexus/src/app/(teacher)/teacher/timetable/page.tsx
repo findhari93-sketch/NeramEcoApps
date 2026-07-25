@@ -331,20 +331,53 @@ export default function TeacherTimetable() {
     }
   };
 
-  // Classroom options for the Add Class dialog's multi-select (common first, then the rest).
-  // Batch granularity was dropped; the dialog loads its own Course Plan topics per selection.
+  // Classroom options for the Add Class dialog's multi-select. Load ALL active
+  // classrooms (not just the ones the user is enrolled in) so an admin/teacher can
+  // target individual cohorts; fall back to the enrolled list if the fetch fails.
+  // Common cohort first, then the rest by name. Batch granularity was dropped; the
+  // dialog loads its own Course Plan topics per selection.
   useEffect(() => {
-    const common = classrooms.filter((c) => c.type === 'common');
-    const others = classrooms.filter((c) => c.type !== 'common');
-    setClassroomOptions(
-      [...common, ...others].map((c) => ({
-        id: c.id,
-        name: c.name,
-        type: c.type,
-        ms_team_id: c.ms_team_id,
-      })),
-    );
-  }, [classrooms]);
+    let cancelled = false;
+    const orderCommonFirst = (list: ClassroomOption[]) =>
+      [...list].sort((a, b) => {
+        if ((a.type === 'common') !== (b.type === 'common')) return a.type === 'common' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    const fallback: ClassroomOption[] = classrooms.map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      ms_team_id: c.ms_team_id,
+    }));
+
+    async function loadClassrooms() {
+      try {
+        const token = await getToken();
+        if (!token) {
+          if (!cancelled) setClassroomOptions(orderCommonFirst(fallback));
+          return;
+        }
+        const res = await fetch('/api/classrooms', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          if (!cancelled) setClassroomOptions(orderCommonFirst(fallback));
+          return;
+        }
+        const data = await res.json();
+        const all: ClassroomOption[] = (data.classrooms || []).map((c: {
+          id: string; name: string; type: string; ms_team_id?: string | null;
+        }) => ({ id: c.id, name: c.name, type: c.type, ms_team_id: c.ms_team_id }));
+        if (!cancelled) setClassroomOptions(orderCommonFirst(all.length ? all : fallback));
+      } catch {
+        if (!cancelled) setClassroomOptions(orderCommonFirst(fallback));
+      }
+    }
+    loadClassrooms();
+    return () => {
+      cancelled = true;
+    };
+  }, [classrooms, getToken]);
 
   // Auto-sync from Teams when page loads (background, non-blocking, 5-min cooldown)
   useEffect(() => {

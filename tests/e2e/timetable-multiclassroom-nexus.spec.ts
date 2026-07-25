@@ -108,6 +108,30 @@ test.describe('Nexus Timetable — multi-classroom + plan topics', () => {
     expect(res.status()).toBe(400);
   });
 
+  test('teacher cannot target a classroom they are not enrolled in (403)', async ({ request }) => {
+    // Find an active classroom the teacher does NOT manage. Admins bypass this; teachers don't.
+    const all = await request.get('/api/classrooms', {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+    });
+    expect(all.status()).toBe(200);
+    const rows: Array<{ id: string }> = (await all.json()).classrooms || [];
+    const foreign = rows.find((c) => c.id !== E2E_CLASSROOM_ID);
+    test.skip(!foreign, 'no second classroom available to test the boundary');
+
+    const res = await request.post('/api/timetable', {
+      headers: { Authorization: `Bearer ${teacherToken}` },
+      data: {
+        classroom_ids: [E2E_CLASSROOM_ID, foreign!.id],
+        title: 'Boundary attempt',
+        scheduled_date: '2026-06-27',
+        start_time: '10:00',
+        end_time: '11:00',
+      },
+      failOnStatusCode: false,
+    });
+    expect(res.status()).toBe(403);
+  });
+
   // ─── PLAN TOPICS ───
 
   test('teacher can fetch plan topics for a classroom', async ({ request }) => {
