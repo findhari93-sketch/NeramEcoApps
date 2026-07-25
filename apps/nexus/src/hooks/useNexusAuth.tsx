@@ -13,6 +13,7 @@ import {
   parseWindow,
   type TimetableWindow,
 } from '@/lib/timetable-window';
+import { DEFAULT_PHOTO_GATE, type PhotoGateState } from '@/lib/photo-gate';
 
 // Types for Nexus auth context
 interface NexusUser {
@@ -83,6 +84,19 @@ interface NexusAuthState {
    * See @/lib/timetable-window.
    */
   timetableWindow: TimetableWindow;
+
+  /**
+   * Mandatory profile-photo state, from /api/auth/me. When `required` is true
+   * the app renders the full-screen PhotoRequiredGate instead of any route.
+   * Students only, never while impersonating. See @/lib/photo-gate.
+   */
+  photoGate: PhotoGateState;
+
+  /**
+   * Re-fetch /api/auth/me. Used by the photo blocker so a successful upload
+   * lifts the block in one round trip instead of a full page reload.
+   */
+  refreshAuth: () => Promise<void>;
 
   // Combined loading
   loading: boolean;
@@ -157,6 +171,9 @@ export function useNexusAuth(): NexusAuthState {
   // Default to registry defaults (student features off, staff on) until /me loads.
   const [featureFlags, setFeatureFlags] = useState<FlagMap>(() => resolveFlags({}));
   const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() => cloneDefaultWindow());
+  // Default never blocks: a gate that defaults to "blocked" would flash the
+  // blocker on every page load for every compliant student.
+  const [photoGate, setPhotoGate] = useState<PhotoGateState>(DEFAULT_PHOTO_GATE);
 
   // "View as Student" (impersonation) state, persisted in sessionStorage so it
   // survives reloads within the tab but auto-clears when the tab closes.
@@ -245,27 +262,15 @@ export function useNexusAuth(): NexusAuthState {
     }
   }, [testMode, impersonationToken]);
 
-  // Fetch DB user after MS auth succeeds. Also runs while impersonating (even
-  // under the test-mode bypass) so identity swaps to the student via /me.
-  useEffect(() => {
-    // Skip MSAL auth fetch if test token bypass is active and not impersonating
-    if (testMode && !impersonationToken) return;
-
-    if (!impersonationToken && (!msUser || msLoading)) {
-      setUser(null);
-      setNexusRole(null);
-      setClassrooms([]);
-      setActiveClassroomState(null);
-      setFeatureFlags(resolveFlags({}));
-      // Only clear dbLoading if MS auth is definitively done (not loading)
-      // so we don't briefly show loading=false with user=null
-      if (!msLoading) setDbLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function fetchNexusUser() {
+  /**
+   * Load identity, role, classrooms, flags and the photo gate from
+   * /api/auth/me. Extracted from the effect below so `refreshAuth` can re-run
+   * exactly the same load without duplicating the impersonation and error
+   * handling. `isCancelled` lets the effect abandon an in-flight load on
+   * unmount; the manual refresh path passes a predicate that never cancels.
+   */
+  const loadNexusUser = useCallback(
+    async (isCancelled: () => boolean) => {
       setDbLoading(true);
       setError(null);
       setAccessEnded(null);
@@ -274,7 +279,7 @@ export function useNexusAuth(): NexusAuthState {
         // While impersonating, /api/auth/me is called with the impersonation
         // token so it returns the STUDENT's identity, role, and classrooms.
         const token = impersonationToken || (await getAccessToken(loginScopes.default));
-        if (!token || cancelled) return;
+        if (!token || isCancelled()) return;
 
         const response = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
@@ -283,7 +288,7 @@ export function useNexusAuth(): NexusAuthState {
         if (!response.ok) {
           // An expired/invalid impersonation token: drop it and let this effect
           // re-run with the real teacher/admin token (graceful auto-exit).
-          if (impersonationToken && !cancelled) {
+          if (impersonationToken && !isCancelled()) {
             clearImpersonation();
             return;
           }
@@ -293,9 +298,11 @@ export function useNexusAuth(): NexusAuthState {
           // dedicated state so the UI shows a friendly "you've graduated"
           // screen instead of an error. (Students who simply aren't enrolled
           // in a classroom get a 200 with classrooms: [] and see the
-          // NoClassroomWelcome screen via RoleGuard, not a 403.)
+          // NoClassroomWelcome screen via RoleGuard, not a 403. Students
+          // missing an approved photo also get a 200, with photoGate.required
+          // set, and see PhotoRequiredGate.)
           if (response.status === 403 && data?.error === 'alumni') {
-            if (!cancelled) {
+            if (!isCancelled()) {
               setAccessEnded({
                 reason: data.error,
                 message:
@@ -307,6 +314,7 @@ export function useNexusAuth(): NexusAuthState {
               setClassrooms([]);
               setActiveClassroomState(null);
               setFeatureFlags(resolveFlags({}));
+              setPhotoGate(DEFAULT_PHOTO_GATE);
             }
             return;
           }
@@ -314,7 +322,7 @@ export function useNexusAuth(): NexusAuthState {
         }
 
         const data = await response.json();
-        if (cancelled) return;
+        if (isCancelled()) return;
 
         setUser(data.user);
         setNexusRole(data.nexusRole);
@@ -323,6 +331,9 @@ export function useNexusAuth(): NexusAuthState {
         // parseWindow again on the client: /me already sanitises, but this keeps
         // the grid safe if the response shape ever drifts.
         setTimetableWindow(parseWindow(data.timetableWindow));
+        // Missing field (older server, or a response-shape drift) must never
+        // block: fall back to the never-blocking default.
+        setPhotoGate(data.photoGate || DEFAULT_PHOTO_GATE);
 
         // Restore active classroom from localStorage or use first one. /api/auth/me
         // returns non-archived classrooms with the current academic-year one first,
@@ -338,20 +349,51 @@ export function useNexusAuth(): NexusAuthState {
         }
         setActiveClassroomState(savedClassroom || data.classrooms?.[0] || null);
       } catch (err) {
-        if (!cancelled) {
+        if (!isCancelled()) {
           setError(err instanceof Error ? err.message : 'Failed to load user data');
           console.error('Nexus auth error:', err);
         }
       } finally {
-        if (!cancelled) {
+        if (!isCancelled()) {
           setDbLoading(false);
         }
       }
+    },
+    [impersonationToken, clearImpersonation]
+  );
+
+  // Fetch DB user after MS auth succeeds. Also runs while impersonating (even
+  // under the test-mode bypass) so identity swaps to the student via /me.
+  useEffect(() => {
+    // Skip MSAL auth fetch if test token bypass is active and not impersonating
+    if (testMode && !impersonationToken) return;
+
+    if (!impersonationToken && (!msUser || msLoading)) {
+      setUser(null);
+      setNexusRole(null);
+      setClassrooms([]);
+      setActiveClassroomState(null);
+      setFeatureFlags(resolveFlags({}));
+      setPhotoGate(DEFAULT_PHOTO_GATE);
+      // Only clear dbLoading if MS auth is definitively done (not loading)
+      // so we don't briefly show loading=false with user=null
+      if (!msLoading) setDbLoading(false);
+      return;
     }
 
-    fetchNexusUser();
+    let cancelled = false;
+    loadNexusUser(() => cancelled);
     return () => { cancelled = true; };
-  }, [msUser, msLoading, impersonationToken, clearImpersonation, testMode]);
+  }, [msUser, msLoading, impersonationToken, testMode, loadNexusUser]);
+
+  /**
+   * Manual re-fetch. The photo blocker calls this after a successful upload so
+   * the gate lifts without a full page reload. Never cancels: the caller is an
+   * explicit user action, not a mount lifecycle.
+   */
+  const refreshAuth = useCallback(async () => {
+    await loadNexusUser(() => false);
+  }, [loadNexusUser]);
 
   // Auto-exit impersonation when the token expires, returning to teacher view.
   useEffect(() => {
@@ -444,6 +486,7 @@ export function useNexusAuth(): NexusAuthState {
     setActiveClassroomState(null);
     setAccessEnded(null);
     setFeatureFlags(resolveFlags({}));
+    setPhotoGate(DEFAULT_PHOTO_GATE);
     localStorage.removeItem(ACTIVE_CLASSROOM_KEY);
     clearImpersonation();
     await msSignOut();
@@ -462,6 +505,8 @@ export function useNexusAuth(): NexusAuthState {
     featureFlags,
     isFeatureEnabled: (id: string) => checkFeatureEnabled(id, featureFlags),
     timetableWindow,
+    photoGate,
+    refreshAuth,
     loading: testMode ? dbLoading : msLoading || dbLoading,
     error,
     accessEnded,

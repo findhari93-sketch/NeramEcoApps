@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { resolveOnlineMeeting } from '@/lib/teams-online-meeting';
 
 /**
  * GET /api/timetable/attendance-report?class_id={id}&classroom_id={id}
@@ -42,20 +43,48 @@ export async function GET(request: NextRequest) {
     }
 
     if (enrollment.role === 'teacher') {
-      const { data, error } = await supabase
-        .from('nexus_attendance')
-        .select('*, student:users!nexus_attendance_student_id_fkey(id, name, email, avatar_url)')
-        .eq('scheduled_class_id', classId)
-        .order('created_at', { ascending: true });
+      // Return the FULL enrolled roster, not just students who already have an
+      // attendance row. Imported/channel classes often have zero rows (Teams sync
+      // can't read a group-organized meeting), so the teacher needs every student
+      // listed with a present/absent toggle to mark attendance manually.
+      const [{ data: roster }, { data: attRows, error: attErr }] = await Promise.all([
+        supabase
+          .from('nexus_enrollments')
+          .select('user_id, student:users!nexus_enrollments_user_id_fkey(id, name, email, avatar_url)')
+          .eq('classroom_id', classroomId)
+          .eq('role', 'student')
+          .eq('is_active', true),
+        supabase
+          .from('nexus_attendance')
+          .select('*, student:users!nexus_attendance_student_id_fkey(id, name, email, avatar_url)')
+          .eq('scheduled_class_id', classId),
+      ]);
 
-      if (error) throw error;
+      if (attErr) throw attErr;
 
-      const present = (data || []).filter((a: any) => a.attended).length;
-      const absent = (data || []).filter((a: any) => !a.attended).length;
+      const attByStudent = new Map<string, any>((attRows || []).map((a: any) => [a.student_id, a]));
+      // One row per enrolled student, carrying their attendance state (unmarked =
+      // treated as absent) so the sheet can render a switch for everyone.
+      const merged = (roster || []).map((r: any) => {
+        const a = attByStudent.get(r.user_id);
+        return {
+          id: a?.id ?? null,
+          student_id: r.user_id,
+          attended: a?.attended ?? false,
+          joined_at: a?.joined_at ?? null,
+          left_at: a?.left_at ?? null,
+          duration_minutes: a?.duration_minutes ?? null,
+          source: a?.source ?? null,
+          student: a?.student ?? r.student,
+        };
+      });
+
+      const present = merged.filter((a) => a.attended).length;
+      const total = merged.length;
 
       return NextResponse.json({
-        attendance: data || [],
-        summary: { present, absent, total: (data || []).length },
+        attendance: merged,
+        summary: { present, absent: total - present, total },
       });
     } else {
       // Student sees only their own attendance
@@ -154,7 +183,7 @@ async function syncTeamsAttendance(
   // Get the scheduled class to find the meeting ID and organizer
   const { data: cls } = await supabase
     .from('nexus_scheduled_classes')
-    .select('teams_meeting_id, teacher_id')
+    .select('teams_meeting_id, teams_meeting_join_url, teams_meeting_url, teacher_id')
     .eq('id', classId)
     .single();
 
@@ -173,16 +202,35 @@ async function syncTeamsAttendance(
     return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
   }
 
-  // Fetch attendance reports using delegated token
+  // The stored teams_meeting_id is an Outlook event id for channel/group meetings,
+  // not an onlineMeeting id, and those meetings are organized by the Team (not the
+  // teacher), so resolve the real onlineMeeting, delegated if the caller organized
+  // it, else app-only on behalf of the organizer.
+  const resolved = await resolveOnlineMeeting({
+    delegatedToken: token,
+    teamsMeetingId: cls.teams_meeting_id,
+    joinUrl: cls.teams_meeting_join_url || cls.teams_meeting_url || null,
+    organizerOid: teacher.ms_oid,
+  });
+
+  if (!resolved) {
+    return NextResponse.json({
+      error: 'Could not find this class’s Teams online meeting. It may not have taken place yet, or Nexus does not have permission to read its attendance.',
+    }, { status: 400 });
+  }
+
+  // Fetch attendance reports (delegated or app-only, whichever resolved).
   const reportsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/me/onlineMeetings/${cls.teams_meeting_id}/attendanceReports`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/attendanceReports`,
+    { headers: { Authorization: `Bearer ${resolved.token}` } }
   );
 
   if (!reportsRes.ok) {
+    // Keep the raw Graph text in server logs, but show the teacher a clean message.
     const errText = await reportsRes.text().catch(() => '');
+    console.error('Attendance reports fetch failed:', reportsRes.status, errText);
     return NextResponse.json({
-      error: `Failed to fetch attendance reports: ${reportsRes.status} ${errText}`,
+      error: 'Teams did not return an attendance report for this class yet. Attendance is available a little while after the meeting ends.',
     }, { status: 502 });
   }
 
@@ -198,8 +246,8 @@ async function syncTeamsAttendance(
 
   // Fetch attendance records
   const recordsRes = await fetch(
-    `https://graph.microsoft.com/v1.0/me/onlineMeetings/${cls.teams_meeting_id}/attendanceReports/${latestReport.id}/attendanceRecords`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/attendanceReports/${latestReport.id}/attendanceRecords`,
+    { headers: { Authorization: `Bearer ${resolved.token}` } }
   );
 
   if (!recordsRes.ok) {
@@ -235,13 +283,16 @@ async function syncTeamsAttendance(
 
     if (!studentEnrollment) continue;
 
-    // Calculate duration
-    const joinedAt = record.attendanceIntervals?.[0]?.joinDateTime;
-    const leftAt = record.attendanceIntervals?.[record.attendanceIntervals.length - 1]?.leaveDateTime;
+    // Calculate duration. Keep the FULL interval list too: >1 segment means the
+    // student left and rejoined, which the insights view surfaces as a mid-class drop.
+    const intervals = Array.isArray(record.attendanceIntervals) ? record.attendanceIntervals : [];
+    const joinedAt = intervals[0]?.joinDateTime;
+    const leftAt = intervals[intervals.length - 1]?.leaveDateTime;
     const totalSeconds = record.totalAttendanceInSeconds || 0;
     const durationMinutes = Math.round(totalSeconds / 60);
 
-    // Upsert attendance record
+    // Upsert attendance record. attendance_intervals only spread in when present so
+    // the write still works before that column's migration is applied.
     await supabase
       .from('nexus_attendance')
       .upsert(
@@ -253,6 +304,7 @@ async function syncTeamsAttendance(
           left_at: leftAt || null,
           duration_minutes: durationMinutes,
           source: 'teams',
+          ...(intervals.length ? { attendance_intervals: intervals } : {}),
         },
         { onConflict: 'scheduled_class_id,student_id' }
       );

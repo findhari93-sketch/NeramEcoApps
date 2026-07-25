@@ -10,8 +10,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Box, Typography, Stack, Chip, Button, Skeleton, Divider, IconButton, alpha, Snackbar, Alert,
+  Breadcrumbs, Link as MuiLink,
 } from '@neram/ui';
+import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
@@ -74,6 +77,17 @@ export default function StudentAssignmentDetailPage() {
   const router = useRouter();
   const authFetch = useAuthFetch();
   const { loading: authLoading, getToken } = useNexusAuthContext();
+
+  // Go back to wherever the student came from (the timetable, the assignments
+  // list, a notification), rather than always dumping them on the list. If they
+  // landed here directly (no in-app history), fall back to the Assignments list.
+  const goBack = useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/student/assignments');
+    }
+  }, [router]);
 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [submission, setSubmission] = useState<MySubmission | null>(null);
@@ -185,8 +199,8 @@ export default function StudentAssignmentDetailPage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 640, mx: 'auto' }}>
-      <Button startIcon={<ArrowBackIcon />} onClick={() => router.push('/student/assignments')} sx={{ mb: 1, minHeight: 44, color: 'text.secondary', fontWeight: 600 }}>
-        Assignments
+      <Button startIcon={<ArrowBackIcon />} onClick={goBack} sx={{ mb: 1, minHeight: 44, color: 'text.secondary', fontWeight: 600 }}>
+        Back
       </Button>
 
       {!detail ? (
@@ -196,6 +210,27 @@ export default function StudentAssignmentDetailPage() {
         </Stack>
       ) : (
         <>
+          {/* Parent-folder trail, so the student can always jump to the full
+              Assignments list even when they arrived here from the timetable. */}
+          <Breadcrumbs separator={<NavigateNextIcon sx={{ fontSize: '0.9rem' }} />} sx={{ mb: 0.75 }}>
+            <MuiLink
+              component={NextLink}
+              href="/student/assignments"
+              underline="hover"
+              color="text.secondary"
+              variant="caption"
+              sx={{ fontWeight: 500 }}
+            >
+              Assignments
+            </MuiLink>
+            <Typography
+              variant="caption"
+              color="text.primary"
+              sx={{ fontWeight: 600, maxWidth: { xs: 200, sm: 360 }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {detail.title}
+            </Typography>
+          </Breadcrumbs>
           <Typography variant="h5" sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem' }, fontWeight: 800 }}>
             {detail.title}
           </Typography>

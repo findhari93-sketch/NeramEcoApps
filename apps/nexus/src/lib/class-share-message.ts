@@ -13,6 +13,8 @@ export interface ClassShareInput {
   end_time: string;
   joinUrl?: string | null;
   description?: string | null;
+  /** One-tap RSVP link (the student RSVP page). Students are attending by default. */
+  rsvpUrl?: string | null;
 }
 
 /** "18:30" or "18:30:00" -> "6:30 PM" */
@@ -53,6 +55,12 @@ export function buildClassWhatsAppMessage(input: ClassShareInput): string {
   if (input.joinUrl) {
     lines.push('');
     lines.push(`🔗 Join on Teams: ${input.joinUrl}`);
+  }
+
+  if (input.rsvpUrl) {
+    lines.push('');
+    lines.push(`✋ Can't make it? Tap to RSVP: ${input.rsvpUrl}`);
+    lines.push('(You are marked attending by default.)');
   }
 
   lines.push('');

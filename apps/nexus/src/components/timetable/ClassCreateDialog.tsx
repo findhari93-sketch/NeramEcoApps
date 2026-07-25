@@ -58,8 +58,23 @@ interface ClassroomOption {
   name: string;
   type: string;
   ms_team_id?: string | null;
+  /** Academic year for cohort classrooms (e.g. "2026-27"), shown to distinguish yearly batches. */
+  academic_year?: string | null;
   /** Batch granularity was dropped from the classroom picker; kept optional for legacy callers. */
   batches?: BatchOption[];
+}
+
+/**
+ * Label for a classroom option. Under the classroom-per-year model every cohort is
+ * a `common`-type classroom, so we show its real name (e.g. "JEE B.Arch Session 1")
+ * rather than the old generic "All Students (Common)" mask. The academic year, when
+ * present, disambiguates one year's cohort from the next.
+ */
+function classroomSubtitle(cls: ClassroomOption): string {
+  if (cls.type === 'common') {
+    return cls.academic_year ? `Whole ${cls.academic_year} cohort` : 'All students in this cohort';
+  }
+  return `Students in ${cls.name}`;
 }
 
 interface ClassFormData {
@@ -516,11 +531,7 @@ export default function ClassCreateDialog({
                 const ids = selected as string[];
                 if (ids.length === 0) return <em>-- Select Classrooms --</em>;
                 const names = ids
-                  .map((id) => {
-                    const c = effectiveClassrooms.find((x) => x.id === id);
-                    if (!c) return null;
-                    return c.type === 'common' ? 'All Students (Common)' : c.name;
-                  })
+                  .map((id) => effectiveClassrooms.find((x) => x.id === id)?.name || null)
                   .filter(Boolean);
                 return (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -542,8 +553,8 @@ export default function ClassCreateDialog({
                     ? <PeopleAltIcon sx={{ fontSize: 20, mr: 1, color: typeColors.common }} />
                     : <SchoolIcon sx={{ fontSize: 20, mr: 1, color: typeColors[cls.type] || 'text.secondary' }} />}
                   <ListItemText
-                    primary={cls.type === 'common' ? 'All Students' : cls.name}
-                    secondary={cls.type === 'common' ? 'Visible across all classrooms' : `All students in ${cls.name}`}
+                    primary={cls.name}
+                    secondary={classroomSubtitle(cls)}
                     primaryTypographyProps={{ variant: 'body2', sx: { fontWeight: 600, lineHeight: 1.2 } }}
                     secondaryTypographyProps={{ variant: 'caption', sx: { fontSize: '0.7rem' } }}
                   />
@@ -551,9 +562,8 @@ export default function ClassCreateDialog({
               ))}
             </Select>
             <FormHelperText>
-              {formData.classroom_ids.length === 0 && 'Choose who will see this class'}
-              {formData.classroom_ids.length > 0 && isCommon && 'This class will be visible to all students across all classrooms'}
-              {formData.classroom_ids.length > 0 && !isCommon &&
+              {formData.classroom_ids.length === 0 && 'Choose which classrooms get this class'}
+              {formData.classroom_ids.length > 0 &&
                 `Visible to students in: ${selectedClassrooms.map((c) => c.name).join(', ')}`}
             </FormHelperText>
           </FormControl>

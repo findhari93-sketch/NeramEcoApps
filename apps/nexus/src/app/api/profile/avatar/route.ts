@@ -23,6 +23,20 @@ export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('Authorization');
     const msUser = await verifyMsToken(authHeader);
 
+    // An impersonation token carries the STUDENT's oid, so without this guard a
+    // teacher in "View as Student" could upload a face photo as that student.
+    // The audited staff path is POST /api/photo-review/upload instead.
+    if (msUser.impersonatorUserId) {
+      return NextResponse.json(
+        {
+          error: 'impersonation_not_allowed',
+          message:
+            'You cannot upload a photo while viewing as a student. Use Photo Review to upload on their behalf.',
+        },
+        { status: 403 }
+      );
+    }
+
     // Look up Supabase user by ms_oid
     const supabase = getSupabaseAdminClient();
     const { data: user, error: userError } = await (supabase
@@ -92,9 +106,21 @@ export async function POST(req: NextRequest) {
       crop_data: cropData,
     });
 
-    // Update user avatar_url
+    // Update user avatar_url, and put the photo into the teacher review queue.
+    // 'pending' deliberately does NOT block: a student who uploads at 11pm must
+    // not sit locked out until a teacher wakes up. Any previous rejection is
+    // cleared, so re-uploading is always a way back in.
     await (supabase.from('users') as any)
-      .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+      .update({
+        avatar_url: publicUrl,
+        photo_status: 'pending',
+        photo_submitted_at: new Date().toISOString(),
+        photo_avatar_id: avatar.id,
+        photo_reviewed_by: null,
+        photo_reviewed_at: null,
+        photo_rejection_reason: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', user.id);
 
     // Attempt Microsoft Graph photo sync (non-blocking)
@@ -155,9 +181,19 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Clear avatar_url
+    // Clear avatar_url and drop back to 'missing'. When the photo gate is on
+    // this re-blocks the student, which is correct: they have chosen to have no
+    // photo. The profile UI warns them before they get here.
     await (supabase.from('users') as any)
-      .update({ avatar_url: null, updated_at: new Date().toISOString() })
+      .update({
+        avatar_url: null,
+        photo_status: 'missing',
+        photo_avatar_id: null,
+        photo_reviewed_by: null,
+        photo_reviewed_at: null,
+        photo_rejection_reason: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', user.id);
 
     // Mark current avatars as not current

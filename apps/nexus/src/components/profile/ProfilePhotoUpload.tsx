@@ -28,6 +28,12 @@ interface ProfilePhotoUploadProps {
   onClose: () => void;
   onUploadComplete: (newUrl: string, teamsSynced: boolean) => void;
   getToken: () => Promise<string | null>;
+  /**
+   * Mandatory mode: hide the close X and Cancel, and disable backdrop dismiss.
+   * Used by the full-screen photo gate, where there is nothing to go back to,
+   * so an escape route would just drop the student on a blank blocker.
+   */
+  mandatory?: boolean;
 }
 
 export default function ProfilePhotoUpload({
@@ -35,6 +41,7 @@ export default function ProfilePhotoUpload({
   onClose,
   onUploadComplete,
   getToken,
+  mandatory = false,
 }: ProfilePhotoUploadProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -128,7 +135,7 @@ export default function ProfilePhotoUpload({
   return (
     <Dialog
       open={open}
-      onClose={uploading ? undefined : handleClose}
+      onClose={uploading || mandatory ? undefined : handleClose}
       maxWidth="sm"
       fullWidth
       fullScreen={isMobile}
@@ -140,9 +147,11 @@ export default function ProfilePhotoUpload({
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
           {imageSrc ? 'Crop Photo' : 'Upload Photo'}
         </Typography>
-        <IconButton onClick={handleClose} disabled={uploading} size="small">
-          <CloseIcon />
-        </IconButton>
+        {!mandatory && (
+          <IconButton onClick={handleClose} disabled={uploading} size="small">
+            <CloseIcon />
+          </IconButton>
+        )}
       </DialogTitle>
 
       <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
@@ -160,6 +169,10 @@ export default function ProfilePhotoUpload({
               helperText="Paste, drop, or choose a photo"
               accept="image/jpeg,image/png,image/webp,image/gif"
               maxSizeMB={5}
+              // Surfaces a Camera button on touch devices only, so a student on
+              // a phone can take the photo right here instead of hunting for
+              // one in their gallery. Harmless on desktop, where it is hidden.
+              camera
             />
           </Box>
         ) : (
@@ -224,9 +237,11 @@ export default function ProfilePhotoUpload({
             Change
           </Button>
           <Box sx={{ flex: 1 }} />
-          <Button onClick={handleClose} disabled={uploading}>
-            Cancel
-          </Button>
+          {!mandatory && (
+            <Button onClick={handleClose} disabled={uploading}>
+              Cancel
+            </Button>
+          )}
           <Button
             variant="contained"
             onClick={handleSave}

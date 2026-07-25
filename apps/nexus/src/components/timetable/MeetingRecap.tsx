@@ -15,7 +15,6 @@ import {
   Divider,
   Skeleton,
 } from '@neram/ui';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 
@@ -90,34 +89,20 @@ export default function MeetingRecap({ classId, classroomId, getToken, role }: M
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* Recording + Transcript */}
-      {(data.recording_url || data.transcript_url) && (
+      {/* Transcript only. The panel already shows a "Watch Recording" button
+          above, so we don't repeat it here, we just add the transcript link. */}
+      {data.transcript_url && (
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          {data.recording_url && (
-            <Button
-              variant="contained"
-              size="small"
-              href={data.recording_url}
-              target="_blank"
-              startIcon={<PlayCircleOutlineIcon />}
-              sx={{ minHeight: 40, textTransform: 'none' }}
-            >
-              Watch Recording
-              {data.recording_duration_minutes != null && ` (${data.recording_duration_minutes}m)`}
-            </Button>
-          )}
-          {data.transcript_url && (
-            <Button
-              variant="outlined"
-              size="small"
-              href={data.transcript_url}
-              target="_blank"
-              startIcon={<DescriptionIcon />}
-              sx={{ minHeight: 40, textTransform: 'none' }}
-            >
-              Transcript
-            </Button>
-          )}
+          <Button
+            variant="outlined"
+            size="small"
+            href={data.transcript_url}
+            target="_blank"
+            startIcon={<DescriptionIcon />}
+            sx={{ minHeight: 40, textTransform: 'none' }}
+          >
+            Transcript
+          </Button>
         </Box>
       )}
 

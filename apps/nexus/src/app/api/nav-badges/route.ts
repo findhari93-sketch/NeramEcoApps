@@ -41,6 +41,18 @@ export async function GET(request: NextRequest) {
         .eq('status', 'submitted');
 
       badges.drawing_reviews = drawingCount ?? 0;
+
+      // Profile photos waiting for a human decision. Deliberately classroom
+      // agnostic: this is a "there is work waiting" signal, and joining
+      // enrollments would cost more than the badge is worth. Served by the
+      // partial index idx_users_photo_status_open.
+      const { count: photoCount } = await supabase
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('photo_status', 'pending')
+        .eq('is_alumni', false);
+
+      badges.photo_review = photoCount ?? 0;
     } else {
       // Student: count their own open + in_progress issues
       const { count } = await supabase

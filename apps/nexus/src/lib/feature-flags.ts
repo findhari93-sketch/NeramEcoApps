@@ -72,6 +72,12 @@ export const FEATURES: FeatureDef[] = [
   { id: 'student.self-learning', label: 'Self-learning', surface: 'student', group: 'Study Zone', paths: ['/student/self-learning'], defaultEnabled: false },
   { id: 'student.class-recaps', label: 'Class Recaps', surface: 'student', group: 'Study Zone', paths: ['/student/class-recaps', '/student/class-recap'], defaultEnabled: false },
 
+  // Access rules. Not a page: `paths: []` can never match in featureForPath, so
+  // this is a pure on/off switch with no page-gating side effect. It arms the
+  // full-screen photo blocker in AccessGate, which is why it must be turnable
+  // off from the admin panel without a deploy.
+  { id: 'student.photo-gate', label: 'Require an approved photo to enter', surface: 'student', group: 'Access', paths: [], defaultEnabled: false },
+
   // ── Staff: Teaching panel ─────────────────────────────────────────────────
   { id: 'staff.dashboard', label: 'Dashboard', surface: 'staff', group: 'Teaching', paths: ['/teacher/dashboard'], defaultEnabled: true, core: true },
   { id: 'staff.timetable', label: 'Timetable', surface: 'staff', group: 'Teaching', paths: ['/teacher/timetable'], defaultEnabled: true },
@@ -87,6 +93,12 @@ export const FEATURES: FeatureDef[] = [
   // ── Staff: Management panel ───────────────────────────────────────────────
   { id: 'staff.classrooms', label: 'Classrooms', surface: 'staff', group: 'Management', paths: ['/teacher/classrooms'], defaultEnabled: true },
   { id: 'staff.students', label: 'Students', surface: 'staff', group: 'Management', paths: ['/teacher/students'], defaultEnabled: true },
+  // Longer path wins in featureForPath, so this correctly beats staff.students
+  // for the sub-route and can be switched off independently of the roster.
+  // Defaults ON like every other staff feature (the registry invariant); to
+  // dark-launch it, switch it off from /teacher/admin/features before shipping.
+  { id: 'staff.students-watchlist', label: 'Inactivity Watchlist', surface: 'staff', group: 'Management', paths: ['/teacher/students/watchlist'], defaultEnabled: true },
+  { id: 'staff.photo-review', label: 'Photo Review', surface: 'staff', group: 'Management', paths: ['/teacher/photo-review'], defaultEnabled: true },
   { id: 'staff.reviews', label: 'Reviews', surface: 'staff', group: 'Management', paths: ['/teacher/reviews'], defaultEnabled: true },
   { id: 'staff.modules', label: 'Modules', surface: 'staff', group: 'Management', paths: ['/teacher/modules'], defaultEnabled: true },
   { id: 'staff.study-materials', label: 'Study Materials', surface: 'staff', group: 'Management', paths: ['/teacher/study-materials'], defaultEnabled: true },

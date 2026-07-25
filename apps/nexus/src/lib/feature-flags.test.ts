@@ -128,3 +128,54 @@ describe('isPathEnabled', () => {
     expect(isPathEnabled('/teacher/admin/features', flags)).toBe(true); // core
   });
 });
+
+describe('student.photo-gate', () => {
+  const flag = FEATURES.find((f) => f.id === 'student.photo-gate');
+
+  it('is registered so it appears as a switch on the admin Features page', () => {
+    expect(flag).toBeDefined();
+    expect(flag?.surface).toBe('student');
+  });
+
+  it('defaults to OFF, so applying the migration alone locks nobody out', () => {
+    expect(flag?.defaultEnabled).toBe(false);
+    expect(resolveFlags({})['student.photo-gate']).toBe(false);
+  });
+
+  it('is not core, so an admin can always switch it back off', () => {
+    expect(flag?.core).toBeFalsy();
+    expect(resolveFlags({ 'student.photo-gate': false })['student.photo-gate']).toBe(false);
+  });
+
+  it('has no paths, so it can never gate a page by accident', () => {
+    expect(flag?.paths).toEqual([]);
+    // It must never be the owner of any route, including its own name.
+    expect(featureForPath('/student/photo-gate')).toBeUndefined();
+    expect(featureForPath('/student/dashboard')?.id).not.toBe('student.photo-gate');
+  });
+});
+
+describe('staff.students-watchlist', () => {
+  const flag = FEATURES.find((f) => f.id === 'staff.students-watchlist');
+
+  it('follows the staff convention (defaults ON) but stays switchable off', () => {
+    expect(flag?.defaultEnabled).toBe(true);
+    expect(flag?.core).toBeFalsy();
+    expect(resolveFlags({ 'staff.students-watchlist': false })['staff.students-watchlist']).toBe(
+      false,
+    );
+  });
+
+  it('beats staff.students for its own sub-path (longest prefix wins)', () => {
+    expect(featureForPath('/teacher/students/watchlist')?.id).toBe('staff.students-watchlist');
+    expect(featureForPath('/teacher/students')?.id).toBe('staff.students');
+    expect(featureForPath('/teacher/students/city-wise')?.id).toBe('staff.students');
+  });
+});
+
+describe('staff.photo-review', () => {
+  it('defaults to ON so staff can clear the queue before the gate goes live', () => {
+    expect(FEATURES.find((f) => f.id === 'staff.photo-review')?.defaultEnabled).toBe(true);
+    expect(featureForPath('/teacher/photo-review')?.id).toBe('staff.photo-review');
+  });
+});

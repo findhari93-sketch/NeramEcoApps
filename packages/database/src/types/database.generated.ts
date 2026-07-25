@@ -5719,6 +5719,7 @@ export type Database = {
       }
       nexus_attendance: {
         Row: {
+          attendance_intervals: Json | null
           attended: boolean | null
           created_at: string | null
           duration_minutes: number | null
@@ -5730,6 +5731,7 @@ export type Database = {
           student_id: string
         }
         Insert: {
+          attendance_intervals?: Json | null
           attended?: boolean | null
           created_at?: string | null
           duration_minutes?: number | null
@@ -5741,6 +5743,7 @@ export type Database = {
           student_id: string
         }
         Update: {
+          attendance_intervals?: Json | null
           attended?: boolean | null
           created_at?: string | null
           duration_minutes?: number | null
@@ -15368,6 +15371,12 @@ export type Database = {
           onboarding_completed: boolean | null
           onboarding_completed_at: string | null
           password_updated_at: string | null
+          photo_avatar_id: string | null
+          photo_rejection_reason: string | null
+          photo_reviewed_at: string | null
+          photo_reviewed_by: string | null
+          photo_status: string
+          photo_submitted_at: string | null
           phone: string | null
           phone_verified: boolean | null
           preferred_language: string | null
@@ -15410,6 +15419,12 @@ export type Database = {
           onboarding_completed?: boolean | null
           onboarding_completed_at?: string | null
           password_updated_at?: string | null
+          photo_avatar_id?: string | null
+          photo_rejection_reason?: string | null
+          photo_reviewed_at?: string | null
+          photo_reviewed_by?: string | null
+          photo_status?: string
+          photo_submitted_at?: string | null
           phone?: string | null
           phone_verified?: boolean | null
           preferred_language?: string | null
@@ -15452,6 +15467,12 @@ export type Database = {
           onboarding_completed?: boolean | null
           onboarding_completed_at?: string | null
           password_updated_at?: string | null
+          photo_avatar_id?: string | null
+          photo_rejection_reason?: string | null
+          photo_reviewed_at?: string | null
+          photo_reviewed_by?: string | null
+          photo_status?: string
+          photo_submitted_at?: string | null
           phone?: string | null
           phone_verified?: boolean | null
           preferred_language?: string | null

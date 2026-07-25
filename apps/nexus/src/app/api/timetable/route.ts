@@ -502,10 +502,31 @@ export async function DELETE(request: NextRequest) {
       if (!result.success) teamsWarning = result.error;
     }
 
-    // Remove the channel/chat announcement cards too (best-effort), so a
-    // cancelled class does not keep advertising a "Join Meeting" link.
-    if (token) {
-      await removeTeamsAnnouncements(token, supabase, classroom_id, classToDelete);
+    // Replace the announcement cards with a cancellation notice, so the group
+    // sees the class is off instead of a stale "Join Meeting" card. Graph cannot
+    // edit a message in place (only policyViolation is patchable), so we soft-
+    // delete the old card and post a fresh "Cancelled" one to the same targets.
+    // Best-effort: a Graph hiccup must not undo the cancellation.
+    if (token && data) {
+      const reposted = await announceCancellationToTeams(token, supabase, classroom_id, classToDelete, {
+        title: data.title,
+        scheduled_date: data.scheduled_date,
+        start_time: data.start_time,
+        end_time: data.end_time,
+      });
+      // Point the stored message IDs at the new "Cancelled" card so a later
+      // permanent delete removes the notice too (and we do not try to re-delete
+      // the original card, which is already gone).
+      if (reposted) {
+        await (supabase as any)
+          .from('nexus_scheduled_classes')
+          .update({
+            teams_channel_message_id: reposted.channelMessageId,
+            teams_group_chat_message_id: reposted.chatMessageId,
+          })
+          .eq('id', id)
+          .eq('classroom_id', classroom_id);
+      }
     }
 
     // Notify students
@@ -672,6 +693,101 @@ async function removeTeamsAnnouncements(
       'group chat post',
     );
   }
+}
+
+/** Card shown in the channel/chat once a class is cancelled. Carries no join link. */
+function buildCancelledHtml(cls: {
+  title: string;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+}): string {
+  return `<h3>❌ Cancelled: ${cls.title}</h3>
+<p><strong>Was:</strong> ${cls.scheduled_date}, ${cls.start_time} to ${cls.end_time} (IST)</p>
+<p>This class has been cancelled, you do not need to join. We will let you know if it is rescheduled.</p>`;
+}
+
+/** Post an HTML message to a Teams channel; returns the new message ID or null. */
+async function postChannelMessage(token: string, teamId: string, channelId: string, html: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+      },
+    );
+    if (!res.ok) return null;
+    const posted = await res.json().catch(() => null);
+    return (posted?.id as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Post an HTML message to a Teams group chat; returns the new message ID or null. */
+async function postChatMessage(token: string, chatId: string, html: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/chats/${chatId}/messages`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: { contentType: 'html', content: html } }),
+      },
+    );
+    if (!res.ok) return null;
+    const posted = await res.json().catch(() => null);
+    return (posted?.id as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mark a cancelled class in Teams: remove the old "Join Meeting" card(s) and post
+ * a "Cancelled" notice in their place, but only where a card was posted before.
+ * Returns the new message IDs so the caller can point the class row at them (a
+ * later permanent delete then removes the notice too). Returns null when the
+ * class never had any Teams announcement. Best-effort throughout.
+ */
+async function announceCancellationToTeams(
+  token: string,
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  classroomId: string,
+  oldRefs: {
+    teams_channel_id: string | null;
+    teams_channel_message_id: string | null;
+    teams_group_chat_message_id: string | null;
+  } | null,
+  cls: { title: string; scheduled_date: string; start_time: string; end_time: string },
+): Promise<{ channelMessageId: string | null; chatMessageId: string | null } | null> {
+  if (!oldRefs) return null;
+  const hadChannel = !!(oldRefs.teams_channel_id && oldRefs.teams_channel_message_id);
+  const hadChat = !!oldRefs.teams_group_chat_message_id;
+  if (!hadChannel && !hadChat) return null;
+
+  // Remove the stale "Join Meeting" cards first.
+  await removeTeamsAnnouncements(token, supabase, classroomId, oldRefs);
+
+  const { data: classroom } = await supabase
+    .from('nexus_classrooms')
+    .select('ms_team_id, ms_group_chat_id')
+    .eq('id', classroomId)
+    .single();
+
+  const html = buildCancelledHtml(cls);
+  let channelMessageId: string | null = null;
+  let chatMessageId: string | null = null;
+
+  if (hadChannel && classroom?.ms_team_id && oldRefs.teams_channel_id) {
+    channelMessageId = await postChannelMessage(token, classroom.ms_team_id, oldRefs.teams_channel_id, html);
+  }
+  if (hadChat && classroom?.ms_group_chat_id) {
+    chatMessageId = await postChatMessage(token, classroom.ms_group_chat_id, html);
+  }
+  return { channelMessageId, chatMessageId };
 }
 
 /**

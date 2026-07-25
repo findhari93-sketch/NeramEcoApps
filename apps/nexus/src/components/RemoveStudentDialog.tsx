@@ -46,6 +46,13 @@ interface RemoveStudentDialogProps {
   classroomId: string;
   onRemoved: () => void;
   getToken: () => Promise<string | null>;
+  /**
+   * Pre-select a reason. The inactivity watchlist uses this so the reason
+   * recorded on the enrollment is the actual evidence rather than a bare
+   * "inactive" the teacher has to retype. Still fully editable.
+   */
+  defaultReasonCategory?: RemovalReasonCategory;
+  defaultNotes?: string;
 }
 
 export default function RemoveStudentDialog({
@@ -55,9 +62,13 @@ export default function RemoveStudentDialog({
   classroomId,
   onRemoved,
   getToken,
+  defaultReasonCategory,
+  defaultNotes,
 }: RemoveStudentDialogProps) {
-  const [reasonCategory, setReasonCategory] = useState<RemovalReasonCategory | ''>('');
-  const [notes, setNotes] = useState('');
+  const [reasonCategory, setReasonCategory] = useState<RemovalReasonCategory | ''>(
+    defaultReasonCategory ?? '',
+  );
+  const [notes, setNotes] = useState(defaultNotes ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,8 +114,8 @@ export default function RemoveStudentDialog({
 
   const handleClose = () => {
     if (submitting) return;
-    setReasonCategory('');
-    setNotes('');
+    setReasonCategory(defaultReasonCategory ?? '');
+    setNotes(defaultNotes ?? '');
     setError(null);
     onClose();
   };

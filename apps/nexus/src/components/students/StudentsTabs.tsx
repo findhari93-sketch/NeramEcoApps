@@ -3,11 +3,21 @@
 import { Box, Typography, useTheme, alpha } from '@neram/ui';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { usePathname, useRouter } from 'next/navigation';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+
+const WATCHLIST_HREF = '/teacher/students/watchlist';
 
 const TABS = [
-  { label: 'All Students', href: '/teacher/students', Icon: PeopleOutlinedIcon },
-  { label: 'City-Wise', href: '/teacher/students/city-wise', Icon: MapOutlinedIcon },
+  { label: 'All Students', href: '/teacher/students', Icon: PeopleOutlinedIcon, feature: null },
+  { label: 'City-Wise', href: '/teacher/students/city-wise', Icon: MapOutlinedIcon, feature: null },
+  {
+    label: 'Watchlist',
+    href: WATCHLIST_HREF,
+    Icon: WarningAmberOutlinedIcon,
+    feature: 'staff.students-watchlist',
+  },
 ];
 
 /**
@@ -22,9 +32,10 @@ export default function StudentsTabs() {
   const pathname = usePathname();
   const router = useRouter();
   const theme = useTheme();
+  const { isFeatureEnabled } = useNexusAuthContext();
 
-  const onTopLevel =
-    pathname === '/teacher/students' || pathname === '/teacher/students/city-wise';
+  const tabs = TABS.filter((t) => !t.feature || isFeatureEnabled(t.feature));
+  const onTopLevel = tabs.some((t) => t.href === pathname);
   if (!onTopLevel) return null;
 
   return (
@@ -46,7 +57,7 @@ export default function StudentsTabs() {
           maxWidth: '100%',
         }}
       >
-        {TABS.map(({ label, href, Icon }) => {
+        {tabs.map(({ label, href, Icon }) => {
           const active = pathname === href;
           return (
             <Box

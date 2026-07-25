@@ -560,6 +560,8 @@ export interface StudentAssignmentItem extends NexusClassAssignment {
   /** Class recording for catch-up: the assignment's own, else the linked class. */
   resolved_recording_url: string | null;
   resolved_recording_source: 'youtube' | 'sharepoint' | null;
+  /** How many reminders have been sent to THIS student for THIS assignment. */
+  reminder_count: number;
 }
 
 /**
@@ -626,6 +628,23 @@ export async function listAssignmentsForStudent(
   const mapDrawingStatus = (s: string): 'submitted' | 'reviewed' | 'redo' =>
     s === 'completed' || s === 'reviewed' ? 'reviewed' : s === 'redo' ? 'redo' : 'submitted';
 
+  // How many reminders this student has received per assignment, in one query,
+  // so the timetable panel can show "Reminded xN" without an extra round-trip.
+  const reminderCountByAssignment = new Map<string, number>();
+  {
+    const { data: reminders } = await supabase
+      .from(REMINDERS)
+      .select('assignment_id')
+      .eq('student_id', studentId)
+      .in('assignment_id', ids);
+    for (const r of (reminders as { assignment_id: string }[]) || []) {
+      reminderCountByAssignment.set(
+        r.assignment_id,
+        (reminderCountByAssignment.get(r.assignment_id) ?? 0) + 1,
+      );
+    }
+  }
+
   // Resolve fallback recordings from the linked scheduled classes in one query.
   const entryIds = [...new Set(list.map((a) => a.plan_entry_id).filter(Boolean))] as string[];
   const recByEntry = new Map<string, { recording_url: string | null; youtube_url: string | null }>();
@@ -682,6 +701,7 @@ export async function listAssignmentsForStudent(
       enrolled_at: enrolledAt,
       resolved_recording_url: recUrl ?? null,
       resolved_recording_source: recUrl ? recSrc : null,
+      reminder_count: reminderCountByAssignment.get(a.id) ?? 0,
     } as StudentAssignmentItem;
   });
 }

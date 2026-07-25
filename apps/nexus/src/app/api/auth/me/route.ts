@@ -4,6 +4,12 @@ import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting, getCurren
 import { getUserProfile } from '@neram/auth';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
 import {
+  PHOTO_GATE_FEATURE,
+  shouldBlockForPhoto,
+  toPhotoStatus,
+  type PhotoGateState,
+} from '@/lib/photo-gate';
+import {
   TIMETABLE_WINDOW_KEY,
   parseWindow,
   cloneDefaultWindow,
@@ -192,6 +198,30 @@ export async function GET(request: NextRequest) {
         ? parseWindow(windowResult.value?.value)
         : cloneDefaultWindow();
 
+    // Mandatory face-visible profile photo (students only).
+    //
+    // Returned as a field in the 200 payload rather than as a 403 like the
+    // alumni gate above, for two reasons. First, "pending is allowed in" means
+    // the server is no longer making a binary access decision, so a 403 would
+    // be dishonest: this IS a valid, enrolled user. Second, the blocker screen
+    // has to upload a photo, which needs a live auth context, and the 403 path
+    // deliberately nulls out user/nexusRole/classrooms on the client.
+    //
+    // Costs zero extra reads: photo_status rides the select('*') on users above,
+    // and the kill switch rides the feature-flags read we just did.
+    const photoStatus = toPhotoStatus(user.photo_status);
+    const photoGate: PhotoGateState = {
+      status: photoStatus,
+      reason: photoStatus === 'rejected' ? user.photo_rejection_reason || null : null,
+      required: shouldBlockForPhoto({
+        flagEnabled: featureFlags[PHOTO_GATE_FEATURE] === true,
+        nexusRole,
+        impersonating: !!msUser.impersonatorUserId,
+        classroomCount: activeEnrollments.length,
+        photoStatus,
+      }),
+    };
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -208,6 +238,7 @@ export async function GET(request: NextRequest) {
       })),
       featureFlags,
       timetableWindow,
+      photoGate,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Authentication failed';

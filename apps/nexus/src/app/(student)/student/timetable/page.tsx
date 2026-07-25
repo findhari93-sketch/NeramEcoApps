@@ -10,7 +10,7 @@ import AgendaView from '@/components/timetable/views/AgendaView';
 import GridView from '@/components/timetable/views/GridView';
 import TimetableToolbar from '@/components/timetable/views/TimetableToolbar';
 import ClassReviewForm from '@/components/timetable/ClassReviewForm';
-import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
+import ClassDetailPanel, { type PanelAssignment } from '@/components/timetable/ClassDetailPanel';
 import RsvpReasonDialog, { type RsvpDeclinePayload } from '@/components/timetable/RsvpReasonDialog';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
@@ -50,6 +50,9 @@ export default function StudentTimetable() {
   const [myRsvps, setMyRsvps] = useState<Record<string, 'attending' | 'not_attending'>>({});
   const [myRsvpReasons, setMyRsvpReasons] = useState<Record<string, string | null>>({});
   const [myAttendance, setMyAttendance] = useState<Record<string, boolean>>({});
+  // Assignments grouped by the class they were set in, so the class detail can
+  // show a student the work owed for that session (attached before or after it).
+  const [classAssignments, setClassAssignments] = useState<Record<string, PanelAssignment[]>>({});
   const [holidays, setHolidays] = useState<Record<string, HolidayInfo>>({});
   // Terms decide the shape of the day: evenings only during the regular year,
   // mornings too once the crash course starts.
@@ -147,6 +150,48 @@ export default function StudentTimetable() {
   useEffect(() => {
     fetchSchedule();
   }, [fetchSchedule]);
+
+  // Load the student's assignments once and group them by their class, so opening
+  // any class detail can show the work set in that session. Cheap: one request,
+  // reused across every class card.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch('/api/student/assignments', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const byClass: Record<string, PanelAssignment[]> = {};
+        for (const a of (data.assignments || []) as Array<PanelAssignment & { scheduled_class_id?: string | null }>) {
+          if (!a.scheduled_class_id) continue;
+          (byClass[a.scheduled_class_id] ||= []).push({
+            id: a.id,
+            title: a.title,
+            assignment_type: a.assignment_type,
+            due_at: a.due_at,
+            instructions: a.instructions,
+            submission: a.submission,
+            evaluation_type: a.evaluation_type,
+            max_marks: a.max_marks,
+            drawing_rating: a.drawing_rating,
+            drawing_marks: a.drawing_marks,
+            drawing_reaction: a.drawing_reaction,
+            reminder_count: a.reminder_count,
+          });
+        }
+        if (!cancelled) setClassAssignments(byClass);
+      } catch {
+        // Non-fatal: the class detail simply shows no assignment section.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
   // Pull new Teams meetings and recordings, then refresh. Rate-limited to once
   // per 5 minutes per tab: this route makes several MS Graph calls, and it used
@@ -495,6 +540,8 @@ export default function StudentTimetable() {
         getToken={getToken}
         myRsvp={selectedClass ? myRsvps[selectedClass.id] : null}
         myAttended={selectedClass ? (myAttendance[selectedClass.id] ?? null) : null}
+        assignments={selectedClass ? classAssignments[selectedClass.id] : undefined}
+        onOpenAssignment={(id) => router.push(`/student/assignments/${id}`)}
         onRsvp={handleRsvp}
         onRate={handleOpenRate}
       />

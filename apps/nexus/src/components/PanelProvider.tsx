@@ -30,6 +30,7 @@ import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined';
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import FaceRetouchingNaturalOutlinedIcon from '@mui/icons-material/FaceRetouchingNaturalOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
 
@@ -118,6 +119,7 @@ const PANELS: PanelConfig[] = [
     sidebarItems: [
       { label: 'Classrooms', path: '/teacher/classrooms', icon: <SchoolOutlinedIcon /> },
       { label: 'Students', path: '/teacher/students', icon: <PeopleOutlinedIcon /> },
+      { label: 'Photo Review', path: '/teacher/photo-review', icon: <FaceRetouchingNaturalOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
       { label: 'Study Materials', path: '/teacher/study-materials', icon: <FolderOutlinedIcon /> },
@@ -141,6 +143,7 @@ const PANELS: PanelConfig[] = [
       { label: 'Modules', path: '/teacher/modules', icon: <ViewModuleOutlinedIcon /> },
     ],
     overflowItems: [
+      { label: 'Photo Review', path: '/teacher/photo-review', icon: <FaceRetouchingNaturalOutlinedIcon /> },
       { label: 'Reviews', path: '/teacher/reviews', icon: <CampaignOutlinedIcon /> },
       { label: 'Checklists', path: '/teacher/checklists', icon: <PlaylistAddCheckOutlinedIcon /> },
       { label: 'Engagement', path: '/teacher/library/engagement', icon: <BarChartOutlinedIcon /> },
@@ -194,8 +197,9 @@ function detectPanelFromPath(pathname: string): PanelId | null {
   if (pathname.startsWith('/teacher/exam-schedule')) return 'teaching';
   if (pathname.startsWith('/teacher/exams')) return 'teaching';
   if (pathname.startsWith('/teacher/admin/')) return 'admin';
-  // City-wise student pages
-  if (pathname.startsWith('/teacher/students/city-wise')) return 'management';
+  // Student sub-pages: city-wise drill-down, inactivity watchlist, detail
+  if (pathname.startsWith('/teacher/students')) return 'management';
+  if (pathname.startsWith('/teacher/photo-review')) return 'management';
   // Review campaign pages
   if (pathname.startsWith('/teacher/reviews')) return 'management';
   // Foundation pages are still accessible via Module Library (management panel)

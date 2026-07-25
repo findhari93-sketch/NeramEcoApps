@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { notifyRecordingAvailable } from '@/lib/timetable-notifications';
+import { resolveOnlineMeeting } from '@/lib/teams-online-meeting';
 
 /**
  * GET /api/timetable/recording?class_id={id}
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     // Get class details
     const { data: cls } = await supabase
       .from('nexus_scheduled_classes')
-      .select('teams_meeting_id, title')
+      .select('teams_meeting_id, teams_meeting_join_url, teams_meeting_url, title, teacher_id')
       .eq('id', class_id)
       .single();
 
@@ -82,10 +83,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No Teams meeting linked to this class' }, { status: 400 });
     }
 
+    // Organizer's ms_oid, for the app-only path used by channel/group meetings.
+    const { data: organizer } = cls.teacher_id
+      ? await supabase.from('users').select('ms_oid').eq('id', cls.teacher_id).maybeSingle()
+      : { data: null };
+
+    // The stored teams_meeting_id is an Outlook event id for channel/group meetings,
+    // not an onlineMeeting id, so resolve the real onlineMeeting (delegated if the
+    // caller organized it, else app-only on behalf of the organizer).
+    const resolved = await resolveOnlineMeeting({
+      delegatedToken: token!,
+      teamsMeetingId: cls.teams_meeting_id,
+      joinUrl: cls.teams_meeting_join_url || cls.teams_meeting_url || null,
+      organizerOid: organizer?.ms_oid ?? null,
+    });
+
+    if (!resolved) {
+      return NextResponse.json({
+        error: 'Could not find this class’s Teams online meeting. It may not have taken place yet, or Nexus does not have permission to read its recording.',
+      }, { status: 400 });
+    }
+
     // Fetch recordings via Graph API
     const recordingsRes = await fetch(
-      `https://graph.microsoft.com/v1.0/me/onlineMeetings/${cls.teams_meeting_id}/recordings`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/recordings`,
+      { headers: { Authorization: `Bearer ${resolved.token}` } }
     );
 
     let recordingUrl: string | null = null;
@@ -102,8 +124,8 @@ export async function POST(request: NextRequest) {
 
     // Fetch transcripts via Graph API
     const transcriptsRes = await fetch(
-      `https://graph.microsoft.com/v1.0/me/onlineMeetings/${cls.teams_meeting_id}/transcripts`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      `https://graph.microsoft.com/v1.0/${resolved.artifactBase}/transcripts`,
+      { headers: { Authorization: `Bearer ${resolved.token}` } }
     );
 
     if (transcriptsRes.ok) {

@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       // Keep the channel + message IDs so cancelling the class can later remove
       // this announcement, instead of leaving a dead card in the channel.
       try {
-        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl }, MEETING_CHANNEL_NAME, classroom.ms_channel_id ?? null);
+        const posted = await postToTeamsChannel(supabase, token, classroom.ms_team_id, scheduledClass, { joinWebUrl: joinUrl }, MEETING_CHANNEL_NAME, classroom.ms_channel_id ?? null, buildRsvpUrl(request, scheduledClass.id));
         extras.channelPosted = true;
         if (posted) {
           extras.teams_channel_id = posted.channelId;
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
     // linked group chat. The teacher's delegated token must carry ChatMessage.Send.
     if (joinUrl && classroom?.ms_group_chat_id) {
       try {
-        const chatMessageId = await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl));
+        const chatMessageId = await postToTeamsGroupChat(token, classroom.ms_group_chat_id, buildMeetingHtml(scheduledClass, joinUrl, buildRsvpUrl(request, scheduledClass.id)));
         extras.groupChatPosted = true;
         if (chatMessageId) extras.teams_group_chat_message_id = chatMessageId;
       } catch (err) {
@@ -494,13 +494,24 @@ async function getEnrolledAttendees(
 const MEETING_CHANNEL_NAME = 'Class Meeting Details';
 
 /** Shared HTML body for the channel post and the group-chat post. */
-function buildMeetingHtml(scheduledClass: Record<string, unknown>, joinUrl: string): string {
+function buildMeetingHtml(scheduledClass: Record<string, unknown>, joinUrl: string, rsvpUrl?: string): string {
   const desc = (scheduledClass.description as string | null | undefined)?.trim();
   return `<h3>📅 ${scheduledClass.title}</h3>
 <p><strong>Date:</strong> ${scheduledClass.scheduled_date}<br/>
 <strong>Time:</strong> ${scheduledClass.start_time} to ${scheduledClass.end_time} (IST)</p>
 ${desc ? `<p>${desc.replace(/\n/g, '<br/>')}</p>` : ''}
-<p><a href="${joinUrl}">🔗 Join Meeting</a></p>`;
+<p><a href="${joinUrl}">🔗 Join Meeting</a></p>${
+    rsvpUrl
+      ? `\n<p>✋ Can't make it? <a href="${rsvpUrl}">Tap to RSVP</a> (you're marked attending by default).</p>`
+      : ''
+  }`;
+}
+
+/** Absolute URL of the student RSVP page for a class, shared into Teams/WhatsApp. */
+function buildRsvpUrl(request: NextRequest, classId: unknown): string {
+  if (!classId) return '';
+  const base = process.env.NEXT_PUBLIC_NEXUS_URL || request.nextUrl.origin;
+  return `${base.replace(/\/$/, '')}/student/rsvp/${classId}`;
 }
 
 /**
@@ -517,6 +528,7 @@ async function postToTeamsChannel(
   meeting: Record<string, unknown>,
   channelName: string = MEETING_CHANNEL_NAME,
   channelId: string | null = null,
+  rsvpUrl?: string,
 ): Promise<{ channelId: string; messageId: string } | null> {
   // Resolve the target channel by display name, falling back to General.
   const findChannel = async (name: string) => {
@@ -538,7 +550,7 @@ async function postToTeamsChannel(
   const messageBody = {
     body: {
       contentType: 'html',
-      content: buildMeetingHtml(scheduledClass, (meeting.joinWebUrl as string) || ''),
+      content: buildMeetingHtml(scheduledClass, (meeting.joinWebUrl as string) || '', rsvpUrl),
     },
   };
 

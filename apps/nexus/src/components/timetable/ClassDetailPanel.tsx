@@ -7,6 +7,9 @@ import {
   Button,
   IconButton,
   Chip,
+  Collapse,
+  Rating,
+  Link,
   SwipeableDrawer,
   Drawer,
   Divider,
@@ -27,15 +30,47 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import InsightsIcon from '@mui/icons-material/Insights';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import ReplayIcon from '@mui/icons-material/Replay';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { type ClassCardData } from './ClassCard';
 import MeetingRecap from './MeetingRecap';
 import ClassCaptureView from './ClassCaptureView';
 import { buildClassWhatsAppMessage } from '@/lib/class-share-message';
+import { reactionEmoji } from '@/lib/assignment-reactions';
+import type { GalleryReactionType } from '@neram/database/types';
+
+/** A class-attached assignment, trimmed to what the panel shows. */
+export interface PanelAssignment {
+  id: string;
+  title: string;
+  assignment_type?: string | null;
+  due_at?: string | null;
+  instructions?: string | null;
+  submission?: { status?: string | null; feedback?: string | null; marks?: number | null } | null;
+  /** Grading scale, so a reviewed grade renders as stars or marks. */
+  evaluation_type?: 'marks' | 'stars' | null;
+  max_marks?: number | null;
+  /** Reviewed grade + reaction (drawing assignments carry these directly). */
+  drawing_rating?: number | null;
+  drawing_marks?: number | null;
+  drawing_reaction?: string | null;
+  /** How many reminders this student has been sent for this assignment. */
+  reminder_count?: number | null;
+}
 
 interface ClassDetailPanelProps {
   cls: ClassCardData | null;
@@ -49,6 +84,10 @@ interface ClassDetailPanelProps {
   myRsvp?: 'attending' | 'not_attending' | null;
   averageRating?: number | null;
   myAttended?: boolean | null;
+  /** Assignments attached to this class, so a student sees the work set in it. */
+  assignments?: PanelAssignment[];
+  /** Open a specific assignment (student). Omitted for teacher usage. */
+  onOpenAssignment?: (assignmentId: string) => void;
   // Actions
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
@@ -56,6 +95,7 @@ interface ClassDetailPanelProps {
   onRsvp?: (classId: string, response: 'attending' | 'not_attending') => void;
   onRate?: (cls: ClassCardData) => void;
   onViewAttendance?: (cls: ClassCardData) => void;
+  onViewInsights?: (cls: ClassCardData) => void;
   onSyncRecording?: (cls: ClassCardData) => void;
   onCreateMeeting?: (cls: ClassCardData) => void;
   onViewRsvpDashboard?: (classId: string) => void;
@@ -89,6 +129,46 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+type AssignmentStatusKey = 'todo' | 'submitted' | 'redo' | 'reviewed';
+
+/**
+ * Turn a class-attached assignment into a precise, self-explanatory status the
+ * student can read at a glance, colour is a reinforcement, never the only signal
+ * (each state carries its own icon + words). A reviewed assignment also surfaces
+ * the grade (stars or marks) and the teacher's reaction emoji.
+ */
+function assignmentStatus(a: PanelAssignment): {
+  key: AssignmentStatusKey;
+  label: string;
+  color: 'warning' | 'info' | 'error' | 'success';
+  Icon: typeof RadioButtonUncheckedIcon;
+  grade: string | null;
+  reaction: string;
+} {
+  const status = a.submission?.status ?? null;
+  const reaction = reactionEmoji(a.drawing_reaction as GalleryReactionType | null | undefined);
+
+  if (status === 'reviewed') {
+    // Stars scale stores the grade as a 1-5 value; marks scale as n / max_marks.
+    let grade: string | null = null;
+    if (a.evaluation_type === 'stars') {
+      const stars = a.drawing_rating ?? a.drawing_marks ?? a.submission?.marks ?? null;
+      grade = stars != null ? `${stars}/5` : null;
+    } else {
+      const marks = a.drawing_marks ?? a.submission?.marks ?? null;
+      grade = marks != null ? `${marks}${a.max_marks ? `/${a.max_marks}` : ''}` : null;
+    }
+    return { key: 'reviewed', label: 'Reviewed', color: 'success', Icon: TaskAltIcon, grade, reaction };
+  }
+  if (status === 'redo') {
+    return { key: 'redo', label: 'Redo requested', color: 'error', Icon: ReplayIcon, grade: null, reaction };
+  }
+  if (status === 'submitted') {
+    return { key: 'submitted', label: 'Submitted, in review', color: 'info', Icon: HourglassEmptyIcon, grade: null, reaction };
+  }
+  return { key: 'todo', label: 'To do', color: 'warning', Icon: RadioButtonUncheckedIcon, grade: null, reaction };
+}
+
 export default function ClassDetailPanel({
   cls,
   open,
@@ -99,12 +179,16 @@ export default function ClassDetailPanel({
   rsvpSummary,
   myRsvp,
   myAttended,
+  averageRating,
+  assignments,
+  onOpenAssignment,
   onEdit,
   onDelete,
   onDeletePermanent,
   onRsvp,
   onRate,
   onViewAttendance,
+  onViewInsights,
   onSyncRecording,
   onCreateMeeting,
   onViewRsvpDashboard,
@@ -115,13 +199,26 @@ export default function ClassDetailPanel({
   const [copied, setCopied] = useState(false);
   const [waCopied, setWaCopied] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'cancel' | 'delete' | null>(null);
+  const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
 
   if (!cls) return null;
 
-  const isUpcoming = cls.status === 'scheduled' || cls.status === 'live';
+  const ensureSec = (t: string) => (t && t.length === 5 ? `${t}:00` : t);
+  const classEndMs = new Date(`${cls.scheduled_date}T${ensureSec(cls.end_time)}+05:30`).getTime();
+  // A class whose end time has passed is historical, even if its status was never
+  // flipped to 'completed' (that transition depends on a Teams sync that can lag
+  // or never run). Time is the honest signal for "this class already happened".
+  const hasEnded = !Number.isNaN(classEndMs) && Date.now() > classEndMs;
   const isLive = cls.status === 'live';
   const isCompleted = cls.status === 'completed';
   const isCancelled = cls.status === 'cancelled';
+  // Historical: finished by the clock or explicitly completed (never a cancelled one).
+  const isPast = !isCancelled && (isCompleted || hasEnded);
+  // Upcoming: still to come or running, and neither historical nor cancelled.
+  const isUpcoming = !isCancelled && !isPast;
+  // What the status chip and header accent should say: a past class reads as
+  // "Completed" even if its stored status is still "scheduled".
+  const displayStatus = isCancelled ? 'cancelled' : isPast ? 'completed' : cls.status;
   const meetingUrl = cls.teams_meeting_join_url || cls.teams_meeting_url;
   const hasRecording = !!cls.recording_url;
 
@@ -148,6 +245,9 @@ export default function ClassDetailPanel({
   };
 
   const handleCopyWhatsApp = () => {
+    // The RSVP link is a deep link into the student app; origin is this Nexus host.
+    const rsvpUrl =
+      typeof window !== 'undefined' ? `${window.location.origin}/student/rsvp/${cls.id}` : undefined;
     const message = buildClassWhatsAppMessage({
       title: cls.title,
       scheduled_date: cls.scheduled_date,
@@ -155,6 +255,7 @@ export default function ClassDetailPanel({
       end_time: cls.end_time,
       joinUrl: meetingUrl,
       description: cls.description,
+      rsvpUrl,
     });
     navigator.clipboard.writeText(message).then(() => setWaCopied(true));
   };
@@ -174,7 +275,7 @@ export default function ClassDetailPanel({
         sx={{
           p: 2,
           borderBottom: '3px solid',
-          borderBottomColor: statusColors[cls.status] || 'primary.main',
+          borderBottomColor: statusColors[displayStatus] || 'primary.main',
           bgcolor: 'background.paper',
         }}
       >
@@ -185,9 +286,9 @@ export default function ClassDetailPanel({
             </Typography>
             <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
               <Chip
-                label={cls.status}
+                label={displayStatus === 'completed' && !isCompleted ? 'Done' : displayStatus}
                 size="small"
-                color={statusChipColor[cls.status] || 'default'}
+                color={statusChipColor[displayStatus] || 'default'}
                 variant="outlined"
                 sx={{ textTransform: 'capitalize' }}
               />
@@ -315,7 +416,7 @@ export default function ClassDetailPanel({
         )}
 
         {/* Student attendance badge */}
-        {isCompleted && role === 'student' && myAttended != null && (
+        {isPast && role === 'student' && myAttended != null && (
           <Chip
             label={myAttended ? 'You attended this class' : 'You missed this class'}
             color={myAttended ? 'success' : 'error'}
@@ -424,7 +525,7 @@ export default function ClassDetailPanel({
           )}
 
           {/* Watch recording */}
-          {isCompleted && hasRecording && (
+          {isPast && hasRecording && (
             <Button
               variant="contained"
               color="success"
@@ -438,14 +539,14 @@ export default function ClassDetailPanel({
               Watch Recording
             </Button>
           )}
-          {isCompleted && !hasRecording && cls.teams_meeting_id && (
+          {isPast && !hasRecording && cls.teams_meeting_id && (
             <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', display: 'block', py: 0.5 }}>
               Recording not yet available
             </Typography>
           )}
 
           {/* Rate class (student) */}
-          {role === 'student' && isCompleted && onRate && (
+          {role === 'student' && isPast && onRate && (
             <Button
               variant="outlined"
               fullWidth
@@ -459,7 +560,7 @@ export default function ClassDetailPanel({
           {/* Teacher actions */}
           {role === 'teacher' && (
             <Box sx={{ display: 'flex', gap: 1 }}>
-              {isCompleted && onViewAttendance && (
+              {isPast && onViewAttendance && (
                 <Button
                   variant="outlined"
                   fullWidth
@@ -470,7 +571,18 @@ export default function ClassDetailPanel({
                   Attendance
                 </Button>
               )}
-              {isCompleted && cls.teams_meeting_id && !hasRecording && onSyncRecording && (
+              {isPast && onViewInsights && (
+                <Button
+                  variant="contained"
+                  fullWidth
+                  startIcon={<InsightsIcon />}
+                  onClick={() => onViewInsights(cls)}
+                  sx={{ minHeight: 48, textTransform: 'none' }}
+                >
+                  Insights
+                </Button>
+              )}
+              {isPast && cls.teams_meeting_id && !hasRecording && onSyncRecording && (
                 <Button
                   variant="outlined"
                   fullWidth
@@ -540,26 +652,228 @@ export default function ClassDetailPanel({
           )}
         </Box>
 
+        {/* Work set in this class: attached assignments the student can open and
+            submit, kept visible after the class so a late joiner still owes it.
+            Tapping a row opens a quick overview in place (status, grade, reminders,
+            instructions) rather than navigating away and losing the timetable. */}
+        {assignments && assignments.length > 0 && (
+          <Box sx={{ pb: 1 }}>
+            <Divider sx={{ mb: 1.5 }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <AssignmentOutlinedIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                {assignments.length > 1 ? 'Assignments' : 'Assignment'}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {assignments.map((a) => {
+                const st = assignmentStatus(a);
+                const isOpen = openAssignmentId === a.id;
+                const reminders = a.reminder_count ?? 0;
+                const typeLabel = a.assignment_type === 'drawing' ? 'Drawing' : 'Document';
+                const TypeIcon = a.assignment_type === 'drawing' ? BrushOutlinedIcon : DescriptionOutlinedIcon;
+                return (
+                  <Box
+                    key={a.id}
+                    sx={{
+                      border: '1px solid',
+                      borderColor: isOpen ? 'primary.light' : 'divider',
+                      borderRadius: 1.5,
+                      overflow: 'hidden',
+                      transition: 'border-color 150ms ease, background-color 150ms ease',
+                    }}
+                  >
+                    {/* Collapsed summary row (tap toggles the overview). */}
+                    <Box
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenAssignmentId(isOpen ? null : a.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setOpenAssignmentId(isOpen ? null : a.id);
+                        }
+                      }}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        p: 1.25,
+                        minHeight: 48,
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.hover' },
+                        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+                      }}
+                    >
+                      <st.Icon sx={{ fontSize: 20, color: `${st.color}.main`, flexShrink: 0 }} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                          {a.title}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                          <Typography variant="caption" color={`${st.color}.main`} sx={{ fontWeight: 600 }}>
+                            {st.label}
+                            {st.key === 'reviewed' && st.grade ? ` · ${st.grade}` : ''}
+                            {st.key === 'reviewed' && st.reaction ? ` ${st.reaction}` : ''}
+                          </Typography>
+                          {reminders > 0 && (
+                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                              <NotificationsActiveOutlinedIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                              <Typography variant="caption" color="text.disabled">
+                                Reminded ×{reminders}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </Box>
+                      {isOpen ? (
+                        <ExpandLessIcon sx={{ color: 'text.secondary' }} />
+                      ) : (
+                        <ExpandMoreIcon sx={{ color: 'text.secondary' }} />
+                      )}
+                    </Box>
+
+                    {/* Expanded overview: enough to know what the work is, without
+                        leaving the page. "Open full assignment" is there for those
+                        who actually want to submit or read the full brief. */}
+                    <Collapse in={isOpen} unmountOnExit>
+                      <Box sx={{ px: 1.25, pb: 1.5, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Chip
+                            size="small"
+                            icon={<TypeIcon sx={{ fontSize: '15px !important' }} />}
+                            label={typeLabel}
+                            variant="outlined"
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {a.due_at ? `Due ${formatDate(a.due_at.slice(0, 10))}` : 'No due date'}
+                          </Typography>
+                        </Box>
+
+                        {a.instructions && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 4,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              whiteSpace: 'pre-line',
+                            }}
+                          >
+                            {a.instructions}
+                          </Typography>
+                        )}
+
+                        {st.key === 'redo' && a.submission?.feedback && (
+                          <Box
+                            sx={{
+                              p: 1,
+                              borderRadius: 1,
+                              bgcolor: 'error.50',
+                              border: '1px solid',
+                              borderColor: 'error.light',
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'error.dark', display: 'block' }}>
+                              Redo requested
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {a.submission.feedback}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {onOpenAssignment && (
+                          <Link
+                            component="button"
+                            type="button"
+                            onClick={() => onOpenAssignment(a.id)}
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                              alignSelf: 'flex-start',
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            Open full assignment
+                            <ArrowForwardIcon sx={{ fontSize: 16 }} />
+                          </Link>
+                        )}
+                      </Box>
+                    </Collapse>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+
         {/* What the class turned out to be: bullets, tags, and the drawings. */}
-        {isCompleted && (
+        {isPast && (
           <>
             <Divider />
             <ClassCaptureView classId={cls.id} getToken={getToken} />
           </>
         )}
 
-        {/* Expand/Collapse for recap */}
-        {isCompleted && (
+        {/* Class feedback + attendance (teacher). Student ratings from the "Rate
+            Class" flow land in nexus_class_reviews; this is where a teacher reads
+            them, average, per-student stars and comments, alongside attendance.
+            Students don't get a recap toggle: "What we did" above plus their
+            attendance badge and Rate Class already cover the after-class view. */}
+        {isPast && role === 'teacher' && (
           <>
-            <Button
+            <Divider />
+            <Box
+              role="button"
+              tabIndex={0}
+              aria-expanded={expanded}
               onClick={() => setExpanded(!expanded)}
-              endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              sx={{ textTransform: 'none', alignSelf: 'center' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpanded(!expanded);
+                }
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                py: 1,
+                minHeight: 48,
+                cursor: 'pointer',
+                borderRadius: 1,
+                '&:hover': { bgcolor: 'action.hover' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+              }}
             >
-              {expanded ? 'Hide Recap' : 'View Recap'}
-            </Button>
+              <StarRoundedIcon sx={{ color: 'warning.main' }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  Class feedback
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {averageRating != null
+                    ? `${averageRating}/5 average · tap for reviews & attendance`
+                    : 'No student ratings yet · tap for attendance'}
+                </Typography>
+              </Box>
+              {averageRating != null && (
+                <Rating value={averageRating} precision={0.1} size="small" readOnly />
+              )}
+              {expanded ? (
+                <ExpandLessIcon sx={{ color: 'text.secondary' }} />
+              ) : (
+                <ExpandMoreIcon sx={{ color: 'text.secondary' }} />
+              )}
+            </Box>
 
-            {expanded && (
+            <Collapse in={expanded} unmountOnExit>
               <Box sx={{ mt: 1 }}>
                 <MeetingRecap
                   classId={cls.id}
@@ -568,7 +882,7 @@ export default function ClassDetailPanel({
                   role={role}
                 />
               </Box>
-            )}
+            </Collapse>
           </>
         )}
 

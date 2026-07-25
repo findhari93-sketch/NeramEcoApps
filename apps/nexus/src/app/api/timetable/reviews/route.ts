@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
     // Verify the class belongs to this classroom
     const { data: classCheck } = await supabase
       .from('nexus_scheduled_classes')
-      .select('id, status')
+      .select('id, status, scheduled_date, end_time')
       .eq('id', class_id)
       .eq('classroom_id', classroom_id)
       .single();
@@ -133,8 +133,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
     }
 
-    if (classCheck.status !== 'completed') {
-      return NextResponse.json({ error: 'Can only review completed classes' }, { status: 400 });
+    // A class can be reviewed once it is over. Prefer the DB status, but that flip
+    // to 'completed' depends on a Teams sync that can lag or never run, so also
+    // accept any class whose end time (IST) has already passed, the same honest
+    // "past" signal ClassDetailPanel uses to offer the Rate Class button.
+    const ensureSec = (t: string) => (t && t.length === 5 ? `${t}:00` : t);
+    const endMs = new Date(`${classCheck.scheduled_date}T${ensureSec(classCheck.end_time)}+05:30`).getTime();
+    const hasEnded = !Number.isNaN(endMs) && Date.now() > endMs;
+    if (classCheck.status !== 'completed' && !hasEnded) {
+      return NextResponse.json({ error: 'You can rate this class once it has finished.' }, { status: 400 });
     }
 
     // Upsert review

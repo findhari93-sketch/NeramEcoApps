@@ -40,4 +40,15 @@ describe('buildClassWhatsAppMessage', () => {
     const msg = buildClassWhatsAppMessage({ ...base, joinUrl: 'https://x', description: 'a\nb' });
     expect(msg).not.toContain('—');
   });
+
+  it('includes the RSVP link when present', () => {
+    const msg = buildClassWhatsAppMessage({ ...base, rsvpUrl: 'https://nexus.neramclasses.com/student/rsvp/abc' });
+    expect(msg).toContain('Tap to RSVP: https://nexus.neramclasses.com/student/rsvp/abc');
+    expect(msg).toContain('attending by default');
+  });
+
+  it('omits the RSVP line when there is no URL', () => {
+    const msg = buildClassWhatsAppMessage(base);
+    expect(msg).not.toContain('Tap to RSVP');
+  });
 });

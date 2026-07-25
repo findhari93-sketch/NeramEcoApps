@@ -16,6 +16,7 @@ import {
   Alert,
 } from '@neram/ui';
 import SyncIcon from '@mui/icons-material/Sync';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 
 interface AttendanceRecord {
   id: string;
@@ -56,6 +57,7 @@ export default function AttendanceSheet({
   const [summary, setSummary] = useState({ present: 0, absent: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [savingAll, setSavingAll] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const fetchAttendance = async () => {
@@ -155,6 +157,40 @@ export default function AttendanceSheet({
     }
   };
 
+  // Bulk fallback: mark every enrolled student present in one go. Handy when the
+  // whole class showed up but Teams could not report it (imported/group meetings).
+  const handleMarkAllPresent = async () => {
+    if (records.length === 0) return;
+    setSavingAll(true);
+    setMessage(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch('/api/timetable/attendance-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          class_id: classId,
+          classroom_id: classroomId,
+          action: 'manual_mark',
+          records: records.map((r) => ({ student_id: r.student_id, attended: true })),
+        }),
+      });
+      if (res.ok) {
+        setRecords((prev) => prev.map((r) => ({ ...r, attended: true, source: 'manual' })));
+        setSummary((prev) => ({ ...prev, present: prev.total, absent: 0 }));
+        setMessage('Marked everyone present.');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMessage(data.error || 'Could not save attendance');
+      }
+    } catch {
+      setMessage('Could not save attendance');
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
   const formatDuration = (minutes: number | null) => {
     if (!minutes) return '-';
     if (minutes < 60) return `${minutes}m`;
@@ -196,19 +232,37 @@ export default function AttendanceSheet({
           <Chip label={`Total: ${summary.total}`} size="small" />
         </Box>
 
-        {/* Sync from Teams button */}
-        {teamsMeetingId && (
+        {/* Actions: pull from Teams if we can, and always allow marking by hand.
+            For imported/channel classes Teams often can't report attendance, so
+            manual marking is the reliable fallback, hence it's always offered. */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+          {teamsMeetingId && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<SyncIcon />}
+              onClick={handleSyncTeams}
+              disabled={syncing || savingAll}
+              sx={{ textTransform: 'none', minHeight: 40 }}
+            >
+              {syncing ? 'Syncing...' : 'Sync from Teams'}
+            </Button>
+          )}
           <Button
             variant="outlined"
             size="small"
-            startIcon={<SyncIcon />}
-            onClick={handleSyncTeams}
-            disabled={syncing}
-            sx={{ mb: 2, textTransform: 'none', minHeight: 36 }}
+            color="success"
+            startIcon={<DoneAllIcon />}
+            onClick={handleMarkAllPresent}
+            disabled={savingAll || loading || records.length === 0}
+            sx={{ textTransform: 'none', minHeight: 40 }}
           >
-            {syncing ? 'Syncing...' : 'Sync from Teams'}
+            {savingAll ? 'Saving...' : 'Mark all present'}
           </Button>
-        )}
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+          Toggle any student to mark them present or absent, changes save instantly.
+        </Typography>
 
         {/* Attendance list */}
         {loading ? (
@@ -219,7 +273,7 @@ export default function AttendanceSheet({
           </Box>
         ) : records.length === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
-            No attendance records yet
+            No students enrolled in this classroom yet
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -233,7 +287,9 @@ export default function AttendanceSheet({
                   py: 1,
                   px: 1,
                   borderRadius: 1,
-                  bgcolor: record.attended ? 'success.50' : 'error.50',
+                  // Green when present, red only when explicitly marked absent,
+                  // neutral while still unmarked so a fresh roster isn't all red.
+                  bgcolor: record.attended ? 'success.50' : record.source ? 'error.50' : 'action.hover',
                 }}
               >
                 <UserAvatar
@@ -246,9 +302,9 @@ export default function AttendanceSheet({
                     {record.student?.name || 'Unknown'}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {record.source === 'teams' ? 'Teams' : 'Manual'}
+                    {record.source === 'teams' ? 'Teams' : record.source === 'manual' ? 'Marked by you' : 'Not marked'}
                     {record.joined_at && ` · Joined ${formatTime(record.joined_at)}`}
-                    {record.duration_minutes && ` · ${formatDuration(record.duration_minutes)}`}
+                    {record.duration_minutes ? ` · ${formatDuration(record.duration_minutes)}` : ''}
                   </Typography>
                 </Box>
                 <Switch

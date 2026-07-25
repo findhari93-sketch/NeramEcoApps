@@ -27,6 +27,7 @@ import NewAssignmentDialog from '@/components/assignments/NewAssignmentDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
 import AttendanceSheet from '@/components/timetable/AttendanceSheet';
+import ClassAttendanceInsights from '@/components/timetable/ClassAttendanceInsights';
 import ClassDetailPanel from '@/components/timetable/ClassDetailPanel';
 import HolidayManager from '@/components/timetable/HolidayManager';
 import RsvpDashboard from '@/components/timetable/RsvpDashboard';
@@ -40,6 +41,7 @@ interface ClassroomOption {
   name: string;
   type: string;
   ms_team_id?: string | null;
+  academic_year?: string | null;
 }
 
 /** "Mon, 20 Jul". Built in IST so a late-evening class does not shift a day. */
@@ -88,6 +90,7 @@ export default function TeacherTimetable() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassCardData | null>(null);
   const [attendanceClass, setAttendanceClass] = useState<ClassCardData | null>(null);
+  const [insightsClass, setInsightsClass] = useState<ClassCardData | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassCardData | null>(null);
   const [holidayManagerOpen, setHolidayManagerOpen] = useState(false);
   const [rsvpDashboardOpen, setRsvpDashboardOpen] = useState(false);
@@ -348,6 +351,7 @@ export default function TeacherTimetable() {
       name: c.name,
       type: c.type,
       ms_team_id: c.ms_team_id,
+      academic_year: (c as unknown as { academic_year?: string | null }).academic_year ?? null,
     }));
 
     async function loadClassrooms() {
@@ -366,8 +370,8 @@ export default function TeacherTimetable() {
         }
         const data = await res.json();
         const all: ClassroomOption[] = (data.classrooms || []).map((c: {
-          id: string; name: string; type: string; ms_team_id?: string | null;
-        }) => ({ id: c.id, name: c.name, type: c.type, ms_team_id: c.ms_team_id }));
+          id: string; name: string; type: string; ms_team_id?: string | null; academic_year?: string | null;
+        }) => ({ id: c.id, name: c.name, type: c.type, ms_team_id: c.ms_team_id, academic_year: c.academic_year ?? null }));
         if (!cancelled) setClassroomOptions(orderCommonFirst(all.length ? all : fallback));
       } catch {
         if (!cancelled) setClassroomOptions(orderCommonFirst(fallback));
@@ -1036,6 +1040,7 @@ export default function TeacherTimetable() {
         onDelete={handleDelete}
         onDeletePermanent={handleDeletePermanent}
         onViewAttendance={setAttendanceClass}
+        onViewInsights={setInsightsClass}
         onSyncRecording={handleSyncRecording}
         onViewRsvpDashboard={handleViewRsvpDashboard}
         onCreateMeeting={handleCreateMeeting}
@@ -1104,6 +1109,17 @@ export default function TeacherTimetable() {
           classTitle={attendanceClass.title}
           classroomId={activeClassroom?.id || ''}
           teamsMeetingId={attendanceClass.teams_meeting_id}
+          getToken={getToken}
+        />
+      )}
+
+      {insightsClass && (
+        <ClassAttendanceInsights
+          open={!!insightsClass}
+          onClose={() => setInsightsClass(null)}
+          classId={insightsClass.id}
+          classroomId={insightsClass.classroom?.id || activeClassroom?.id || ''}
+          classTitle={insightsClass.title}
           getToken={getToken}
         />
       )}

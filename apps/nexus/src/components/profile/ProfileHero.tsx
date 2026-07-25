@@ -12,8 +12,13 @@ import {
 } from '@neram/ui';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import CloudDoneIcon from '@mui/icons-material/CloudDone';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import GraphAvatar from '@/components/GraphAvatar';
 import ProfilePhotoUpload from './ProfilePhotoUpload';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import type { PhotoStatus } from '@/lib/photo-gate';
 
 interface ProfileHeroProps {
   userName: string;
@@ -22,7 +27,33 @@ interface ProfileHeroProps {
   getToken: () => Promise<string | null>;
 }
 
+/** Chip shown next to the role, so a student always knows where their photo stands. */
+const PHOTO_CHIP: Record<
+  PhotoStatus,
+  { label: string; color: 'success' | 'info' | 'warning'; icon: React.ReactElement } | null
+> = {
+  approved: {
+    label: 'Photo approved',
+    color: 'success',
+    icon: <CheckCircleOutlineIcon sx={{ fontSize: 16 }} />,
+  },
+  pending: {
+    label: 'Waiting for teacher approval',
+    color: 'info',
+    icon: <HourglassEmptyIcon sx={{ fontSize: 16 }} />,
+  },
+  rejected: {
+    label: 'Photo needs a change',
+    color: 'warning',
+    icon: <ErrorOutlineIcon sx={{ fontSize: 16 }} />,
+  },
+  // Nothing to report when there is no photo at all: the empty avatar and the
+  // camera badge already say it, and a scolding chip on top adds nothing.
+  missing: null,
+};
+
 export default function ProfileHero({ userName, userEmail, userType, getToken }: ProfileHeroProps) {
+  const { photoGate, refreshAuth } = useNexusAuthContext();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [customPhotoUrl, setCustomPhotoUrl] = useState<string | null>(null);
   const [teamsSynced, setTeamsSynced] = useState(false);
@@ -30,7 +61,11 @@ export default function ProfileHero({ userName, userEmail, userType, getToken }:
   const handleUploadComplete = (newUrl: string, synced: boolean) => {
     setCustomPhotoUrl(newUrl);
     setTeamsSynced(synced);
+    // Pull the new 'pending' status so the chip below updates without a reload.
+    void refreshAuth();
   };
+
+  const photoChip = PHOTO_CHIP[photoGate.status];
 
   return (
     <>
@@ -142,6 +177,26 @@ export default function ProfileHero({ userName, userEmail, userType, getToken }:
                 color="primary"
                 sx={{ textTransform: 'capitalize', fontWeight: 500 }}
               />
+              {photoChip && (
+                <Tooltip
+                  title={
+                    photoGate.status === 'rejected'
+                      ? photoGate.reason || 'Your teacher asked for a clearer photo of your face.'
+                      : photoGate.status === 'pending'
+                        ? 'A teacher will look at this soon. You can keep using Nexus in the meantime.'
+                        : 'Your teacher has approved this photo.'
+                  }
+                >
+                  <Chip
+                    icon={photoChip.icon}
+                    label={photoChip.label}
+                    size="small"
+                    variant="outlined"
+                    color={photoChip.color}
+                    sx={{ fontWeight: 500 }}
+                  />
+                </Tooltip>
+              )}
               {teamsSynced && (
                 <Tooltip title="Photo synced to Microsoft Teams">
                   <Chip
