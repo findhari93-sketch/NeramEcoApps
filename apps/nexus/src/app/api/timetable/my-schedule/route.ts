@@ -3,7 +3,7 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { loadPlanShapes } from '@/lib/plan-shape-query';
 
-const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type)`;
+const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type)`;
 
 /**
  * GET /api/timetable/my-schedule?start={date}&end={date}

@@ -25,7 +25,10 @@ export interface ClassCardData {
   recording_url: string | null;
   batch_id: string | null;
   target_scope?: string | null;
+  meeting_group_id?: string | null;
   topic: { id: string; title: string; category: string } | null;
+  /** Topic from the Course Plan Builder (nexus_course_topics). Preferred over `topic`. */
+  course_topic?: { id: string; title: string } | null;
   teacher: { id: string; name: string; avatar_url: string | null } | null;
   batch: { id: string; name: string } | null;
   classroom?: { id: string; name: string; type: string } | null;
@@ -77,7 +80,8 @@ export default function ClassCard({
   // Build metadata parts: teacher + topic
   const metaParts: string[] = [];
   if (cls.teacher) metaParts.push(cls.teacher.name);
-  if (cls.topic) metaParts.push(cls.topic.title);
+  const topicLabel = cls.course_topic?.title || cls.topic?.title;
+  if (topicLabel) metaParts.push(topicLabel);
 
   return (
     <Box

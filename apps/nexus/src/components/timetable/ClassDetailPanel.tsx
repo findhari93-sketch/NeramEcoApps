@@ -269,7 +269,9 @@ export default function ClassDetailPanel({
 
         {/* Tags */}
         <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-          {cls.topic && <Chip label={cls.topic.title} size="small" />}
+          {(cls.course_topic?.title || cls.topic?.title) && (
+            <Chip label={cls.course_topic?.title || cls.topic?.title} size="small" />
+          )}
           {cls.batch && <Chip label={cls.batch.name} size="small" variant="outlined" color="secondary" />}
           {cls.teams_meeting_id && (
             <Chip

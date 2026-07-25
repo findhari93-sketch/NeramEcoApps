@@ -35,23 +35,11 @@ import { type ClassCardData } from '@/components/timetable/ClassCard';
 import { type HolidayInfo } from '@/components/timetable/date-utils';
 import { type PlanShape } from '@/lib/plan-shape';
 
-interface TopicOption {
-  id: string;
-  title: string;
-  category: string;
-}
-
-interface BatchOption {
-  id: string;
-  name: string;
-}
-
-interface ClassroomWithBatches {
+interface ClassroomOption {
   id: string;
   name: string;
   type: string;
   ms_team_id?: string | null;
-  batches: BatchOption[];
 }
 
 /** "Mon, 20 Jul". Built in IST so a late-evening class does not shift a day. */
@@ -91,9 +79,7 @@ export default function TeacherTimetable() {
   const [assignmentRefreshKey, setAssignmentRefreshKey] = useState(0);
   const [draftCount, setDraftCount] = useState(0);
   const [publishing, setPublishing] = useState(false);
-  const [topics, setTopics] = useState<TopicOption[]>([]);
-  const [batches, setBatches] = useState<BatchOption[]>([]);
-  const [classroomsWithBatches, setClassroomsWithBatches] = useState<ClassroomWithBatches[]>([]);
+  const [classroomOptions, setClassroomOptions] = useState<ClassroomOption[]>([]);
   // Pre-fill data for calendar slot click
   const [prefillDate, setPrefillDate] = useState<string>('');
   const [prefillTime, setPrefillTime] = useState<string>('');
@@ -345,66 +331,20 @@ export default function TeacherTimetable() {
     }
   };
 
-  // Fetch topics and batches for create dialog (batches for ALL classrooms)
+  // Classroom options for the Add Class dialog's multi-select (common first, then the rest).
+  // Batch granularity was dropped; the dialog loads its own Course Plan topics per selection.
   useEffect(() => {
-    if (!activeClassroom) return;
-
-    async function fetchMeta() {
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        // Fetch topics for active classroom
-        const topicsRes = await fetch(`/api/topics?classroom=${activeClassroom!.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (topicsRes.ok) {
-          const data = await topicsRes.json();
-          setTopics(data.topics || []);
-        }
-
-        // Fetch batches for active classroom (legacy)
-        const batchesRes = await fetch(`/api/classrooms/${activeClassroom!.id}/batches`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (batchesRes.ok) {
-          const data = await batchesRes.json();
-          setBatches(data.batches || []);
-        }
-
-        // Fetch batches for ALL classrooms (for the new classroom selector)
-        const nonCommonClassrooms = classrooms.filter((c) => c.type !== 'common');
-        const batchPromises = nonCommonClassrooms.map((c) =>
-          fetch(`/api/classrooms/${c.id}/batches`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }).then((r) => r.ok ? r.json() : { batches: [] }).catch(() => ({ batches: [] }))
-        );
-        const batchResults = await Promise.all(batchPromises);
-
-        const cwb: ClassroomWithBatches[] = [];
-        // Add common classroom first (no batches)
-        const common = classrooms.find((c) => c.type === 'common');
-        if (common) {
-          cwb.push({ id: common.id, name: common.name, type: common.type, ms_team_id: common.ms_team_id, batches: [] });
-        }
-        // Add regular classrooms with their batches
-        nonCommonClassrooms.forEach((c, i) => {
-          cwb.push({
-            id: c.id,
-            name: c.name,
-            type: c.type,
-            ms_team_id: c.ms_team_id,
-            batches: (batchResults[i].batches || []).map((b: any) => ({ id: b.id, name: b.name })),
-          });
-        });
-        setClassroomsWithBatches(cwb);
-      } catch (err) {
-        console.error('Failed to load metadata:', err);
-      }
-    }
-
-    fetchMeta();
-  }, [activeClassroom, classrooms, getToken]);
+    const common = classrooms.filter((c) => c.type === 'common');
+    const others = classrooms.filter((c) => c.type !== 'common');
+    setClassroomOptions(
+      [...common, ...others].map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        ms_team_id: c.ms_team_id,
+      })),
+    );
+  }, [classrooms]);
 
   // Auto-sync from Teams when page loads (background, non-blocking, 5-min cooldown)
   useEffect(() => {
@@ -1078,8 +1018,7 @@ export default function TeacherTimetable() {
           setPrefillTime('');
         }}
         editingClass={editingClass}
-        topics={topics}
-        classrooms={classroomsWithBatches}
+        classrooms={classroomOptions}
         defaultClassroomId={activeClassroom?.id || ''}
         getToken={getToken}
         onSaved={() => {

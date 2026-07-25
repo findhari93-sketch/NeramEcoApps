@@ -17,17 +17,19 @@ import {
   FormControl,
   FormHelperText,
   Switch,
-  ListSubheader,
   Chip,
   Collapse,
   RadioGroup,
   Radio,
   FormControlLabel,
   FormLabel,
+  Autocomplete,
+  Checkbox,
+  ListItemText,
+  CircularProgress,
 } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import SchoolIcon from '@mui/icons-material/School';
-import GroupsIcon from '@mui/icons-material/Groups';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -56,7 +58,8 @@ interface ClassroomOption {
   name: string;
   type: string;
   ms_team_id?: string | null;
-  batches: BatchOption[];
+  /** Batch granularity was dropped from the classroom picker; kept optional for legacy callers. */
+  batches?: BatchOption[];
 }
 
 interface ClassFormData {
@@ -64,9 +67,10 @@ interface ClassFormData {
   scheduled_date: string;
   start_time: string;
   end_time: string;
+  /** Course Plan Builder topic id (nexus_course_topics). */
   topic_id: string;
-  /** Encoded target: "classroom:{id}" or "batch:{classroomId}:{batchId}" */
-  target: string;
+  /** Classrooms this class targets. One row is created per classroom (shared meeting). */
+  classroom_ids: string[];
   create_meeting: boolean;
   description: string;
   // Meeting options
@@ -117,7 +121,7 @@ const emptyForm: ClassFormData = {
   start_time: '',
   end_time: '',
   topic_id: '',
-  target: '',
+  classroom_ids: [],
   create_meeting: false,
   description: '',
   meeting_scope: 'auto',
@@ -150,7 +154,8 @@ interface ClassCreateDialogProps {
   open: boolean;
   onClose: () => void;
   editingClass: ClassCardData | null;
-  topics: TopicOption[];
+  /** Legacy seed only; the dialog now loads Course Plan topics for the selected classroom(s). */
+  topics?: TopicOption[];
   /** All classrooms the teacher has access to, with their batches */
   classrooms: ClassroomOption[];
   /** Default classroom ID (active classroom) */
@@ -171,19 +176,6 @@ interface ClassCreateDialogProps {
   hasLinkedTeam?: boolean;
   commonClassroomId?: string | null;
   classroomName?: string;
-}
-
-/** Parse target string → { classroomId, batchId, scope } */
-function parseTarget(target: string): { classroomId: string; batchId: string | null; scope: 'all' | 'classroom' | 'batch' } {
-  if (target.startsWith('batch:')) {
-    const parts = target.split(':');
-    return { classroomId: parts[1], batchId: parts[2], scope: 'batch' };
-  }
-  if (target.startsWith('classroom:')) {
-    const cid = target.replace('classroom:', '');
-    return { classroomId: cid, batchId: null, scope: 'classroom' };
-  }
-  return { classroomId: '', batchId: null, scope: 'classroom' };
 }
 
 export default function ClassCreateDialog({
@@ -224,9 +216,12 @@ export default function ClassCreateDialog({
       })();
 
   const effectiveDefaultId = defaultClassroomId || legacyClassroomId || '';
-  const defaultTarget = effectiveDefaultId ? `classroom:${effectiveDefaultId}` : '';
+  const defaultClassroomIds = effectiveDefaultId ? [effectiveDefaultId] : [];
 
-  const [formData, setFormData] = useState<ClassFormData>({ ...emptyForm, target: defaultTarget });
+  const [formData, setFormData] = useState<ClassFormData>({ ...emptyForm, classroom_ids: defaultClassroomIds });
+  // Course Plan topics for the currently selected classroom(s), fetched on selection change.
+  const [topicOptions, setTopicOptions] = useState<TopicOption[]>(topics || []);
+  const [topicsLoading, setTopicsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [holidayConflict, setHolidayConflict] = useState<{ date: string; title: string } | null>(null);
@@ -264,21 +259,17 @@ export default function ClassCreateDialog({
 
   // Populate form when editing or opening
   useEffect(() => {
+    const fallbackIds = effectiveDefaultId ? [effectiveDefaultId] : [];
     if (editingClass) {
-      // Figure out target from editing class
-      let target = defaultTarget;
-      if (editingClass.batch_id && editingClass.classroom?.id) {
-        target = `batch:${editingClass.classroom.id}:${editingClass.batch_id}`;
-      } else if (editingClass.classroom?.id) {
-        target = `classroom:${editingClass.classroom.id}`;
-      }
+      // An existing class lives in a single classroom; map it back into the multi-select.
+      const classroomIds = editingClass.classroom?.id ? [editingClass.classroom.id] : fallbackIds;
       setFormData({
         title: editingClass.title,
         scheduled_date: editingClass.scheduled_date,
         start_time: editingClass.start_time,
         end_time: editingClass.end_time,
-        topic_id: editingClass.topic?.id || '',
-        target,
+        topic_id: editingClass.course_topic?.id || editingClass.topic?.id || '',
+        classroom_ids: classroomIds,
         create_meeting: false,
         description: editingClass.description || '',
         meeting_scope: 'auto',
@@ -291,7 +282,7 @@ export default function ClassCreateDialog({
     } else if (prefillDate || prefillTime) {
       setFormData({
         ...emptyForm,
-        target: defaultTarget,
+        classroom_ids: fallbackIds,
         scheduled_date: prefillDate || '',
         start_time: prefillTime || '',
         end_time: prefillTime ? (() => {
@@ -300,7 +291,7 @@ export default function ClassCreateDialog({
         })() : '',
       });
     } else {
-      setFormData({ ...emptyForm, target: defaultTarget });
+      setFormData({ ...emptyForm, classroom_ids: fallbackIds });
     }
     setError(null);
     setShowAdvanced(false);
@@ -309,21 +300,65 @@ export default function ClassCreateDialog({
     setAiPaste('');
     setAiError(null);
     setAiPromptCopied(false);
-  }, [editingClass, open, defaultTarget]);
+  }, [editingClass, open, effectiveDefaultId, prefillDate, prefillTime]);
 
-  const { classroomId: selectedClassroomId, batchId: selectedBatchId, scope } = parseTarget(formData.target);
+  // Selected classrooms → display info + meeting capability.
+  const selectedClassrooms = effectiveClassrooms.filter((c) => formData.classroom_ids.includes(c.id));
+  const isCommon = selectedClassrooms.some((c) => c.type === 'common');
+  const primaryClassroomId = formData.classroom_ids[0] || '';
+  const classroomIdsKey = formData.classroom_ids.join(',');
 
-  // Find the selected classroom for display info
-  const selectedClassroom = effectiveClassrooms.find((c) => c.id === selectedClassroomId);
-  const isCommon = selectedClassroom?.type === 'common';
+  // Load Course Plan topics for the selected classroom(s). The Topic picker shows only
+  // topics placed in the selected classroom's active teaching plan (union when several).
+  useEffect(() => {
+    if (!open) return;
+    const ids = classroomIdsKey ? classroomIdsKey.split(',') : [];
+    if (ids.length === 0) {
+      setTopicOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setTopicsLoading(true);
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const qs = ids.map((id) => `classroom=${encodeURIComponent(id)}`).join('&');
+        const res = await fetch(`/api/timetable/plan-topics?${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setTopicOptions(data.topics || []);
+        }
+      } catch {
+        // Non-fatal: the picker just stays empty.
+      } finally {
+        if (!cancelled) setTopicsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, classroomIdsKey, getToken]);
+
+  // Resolve the currently selected topic option (fall back to the editing class's topic
+  // so its label shows even before the plan-topics list loads).
+  const selectedTopic: TopicOption | null =
+    topicOptions.find((t) => t.id === formData.topic_id) ||
+    (editingClass?.course_topic && editingClass.course_topic.id === formData.topic_id
+      ? { id: editingClass.course_topic.id, title: editingClass.course_topic.title, category: 'General' }
+      : editingClass?.topic && editingClass.topic.id === formData.topic_id
+        ? { id: editingClass.topic.id, title: editingClass.topic.title, category: editingClass.topic.category || 'General' }
+        : null);
 
   const handleSubmit = async () => {
     if (!formData.title || !formData.scheduled_date || !formData.start_time || !formData.end_time) {
       setError('Please fill in all required fields');
       return;
     }
-    if (!formData.target) {
-      setError('Please select a classroom');
+    if (formData.classroom_ids.length === 0) {
+      setError('Please select at least one classroom');
       return;
     }
 
@@ -384,10 +419,10 @@ export default function ClassCreateDialog({
         scheduled_date: formData.scheduled_date,
         start_time: formData.start_time,
         end_time: formData.end_time,
-        classroom_id: selectedClassroomId,
-        topic_id: formData.topic_id || null,
-        batch_id: selectedBatchId || null,
-        target_scope: scope === 'batch' ? 'batch' : (isCommon ? 'all' : 'classroom'),
+        // Multi-classroom create; PATCH edits a single class so it also gets classroom_id.
+        classroom_ids: formData.classroom_ids,
+        classroom_id: primaryClassroomId,
+        course_topic_id: formData.topic_id || null,
         description: formData.description || null,
         lobby_bypass: formData.create_meeting ? formData.lobby_bypass : null,
         allowed_presenters: formData.create_meeting ? formData.allowed_presenters : null,
@@ -423,15 +458,13 @@ export default function ClassCreateDialog({
       onClose();
       onSaved();
 
-      // Tell the parent to create the Teams meeting in the background
+      // Tell the parent to create the Teams meeting in the background. Rows can span
+      // classrooms (and recurrence dates), so use each row's own classroom_id.
       if (wantsMeeting && onCreateMeetingInBackground) {
-        if (data.classes) {
-          // Recurrence: multiple classes created — create meetings for each
-          for (const cls of data.classes) {
-            onCreateMeetingInBackground(cls.id, selectedClassroomId, meetingScope);
-          }
-        } else if (data.class?.id) {
-          onCreateMeetingInBackground(data.class.id, selectedClassroomId, meetingScope);
+        const rows: { id: string; classroom_id: string }[] =
+          data.classes || (data.class ? [data.class] : []);
+        for (const cls of rows) {
+          onCreateMeetingInBackground(cls.id, cls.classroom_id, meetingScope);
         }
       }
     } catch (err) {
@@ -441,8 +474,8 @@ export default function ClassCreateDialog({
     }
   };
 
-  // Determine if the selected classroom has a linked Teams team
-  const selectedHasTeam = !!selectedClassroom?.ms_team_id;
+  // Meeting posts into a Team channel only when every selected classroom has a linked Team.
+  const selectedHasTeam = selectedClassrooms.length > 0 && selectedClassrooms.every((c) => !!c.ms_team_id);
 
   const toggleRecurrenceDay = (day: string) => {
     setFormData((f) => ({
@@ -460,99 +493,68 @@ export default function ClassCreateDialog({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
 
-          {/* Classroom & Batch selector */}
+          {/* Classroom multi-select — one class/meeting can target several classrooms. */}
           <FormControl fullWidth>
-            <InputLabel id="target-select-label" shrink>Classroom / Batch *</InputLabel>
+            <InputLabel id="classrooms-select-label" shrink>Classrooms *</InputLabel>
             <Select
-              labelId="target-select-label"
-              label="Classroom / Batch *"
+              labelId="classrooms-select-label"
+              label="Classrooms *"
+              multiple
               displayEmpty
-              value={formData.target}
-              onChange={(e) => setFormData((f) => ({ ...f, target: e.target.value as string }))}
+              value={formData.classroom_ids}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData((f) => ({
+                  ...f,
+                  classroom_ids: typeof val === 'string' ? val.split(',') : (val as string[]),
+                }));
+              }}
               notched
               MenuProps={{ PaperProps: { sx: { maxHeight: 350 } } }}
               sx={{ minHeight: 48 }}
-              renderValue={(val) => {
-                if (!val) return <em>-- Select Classroom --</em>;
-                const parsed = parseTarget(val as string);
-                const cls = effectiveClassrooms.find((c) => c.id === parsed.classroomId);
-                if (!cls) return val;
-                if (parsed.batchId) {
-                  const batch = cls.batches.find((b) => b.id === parsed.batchId);
-                  return (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <GroupsIcon sx={{ fontSize: 18, color: typeColors[cls.type] || 'text.secondary' }} />
-                      <span>{cls.name} &rsaquo; {batch?.name || 'Batch'}</span>
-                    </Box>
-                  );
-                }
+              renderValue={(selected) => {
+                const ids = selected as string[];
+                if (ids.length === 0) return <em>-- Select Classrooms --</em>;
+                const names = ids
+                  .map((id) => {
+                    const c = effectiveClassrooms.find((x) => x.id === id);
+                    if (!c) return null;
+                    return c.type === 'common' ? 'All Students (Common)' : c.name;
+                  })
+                  .filter(Boolean);
                 return (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {cls.type === 'common'
-                      ? <PeopleAltIcon sx={{ fontSize: 18, color: typeColors[cls.type] }} />
-                      : <SchoolIcon sx={{ fontSize: 18, color: typeColors[cls.type] }} />}
-                    <span>{cls.type === 'common' ? 'All Students (Common)' : cls.name}</span>
+                    {isCommon
+                      ? <PeopleAltIcon sx={{ fontSize: 18, color: typeColors.common }} />
+                      : <SchoolIcon sx={{ fontSize: 18, color: 'primary.main' }} />}
+                    <span>{names.join(', ')}</span>
                   </Box>
                 );
               }}
             >
-              <MenuItem value="" disabled>
-                <em>-- Select Classroom --</em>
-              </MenuItem>
-              {effectiveClassrooms.map((cls) => {
-                const items: React.ReactNode[] = [];
-                // Classroom-level option
-                items.push(
-                  <MenuItem
-                    key={`classroom:${cls.id}`}
-                    value={`classroom:${cls.id}`}
-                    sx={{ minHeight: 44 }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                      {cls.type === 'common'
-                        ? <PeopleAltIcon sx={{ fontSize: 20, color: typeColors[cls.type] }} />
-                        : <SchoolIcon sx={{ fontSize: 20, color: typeColors[cls.type] }} />}
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                          {cls.type === 'common' ? 'All Students' : cls.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                          {cls.type === 'common' ? 'Visible across all classrooms' : `All students in ${cls.name}`}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </MenuItem>
-                );
-                // Batch-level options (indented under classroom)
-                if (cls.batches.length > 0 && cls.type !== 'common') {
-                  items.push(
-                    <ListSubheader key={`batch-header-${cls.id}`} sx={{ fontWeight: 600, fontSize: '0.7rem', lineHeight: '28px', pl: 5.5, color: 'text.secondary' }}>
-                      BATCHES IN {cls.name.toUpperCase()}
-                    </ListSubheader>
-                  );
-                  for (const batch of cls.batches) {
-                    items.push(
-                      <MenuItem
-                        key={`batch:${cls.id}:${batch.id}`}
-                        value={`batch:${cls.id}:${batch.id}`}
-                        sx={{ pl: 5.5, minHeight: 40 }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <GroupsIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                          <Typography variant="body2">{batch.name}</Typography>
-                        </Box>
-                      </MenuItem>
-                    );
-                  }
-                }
-                return items;
-              })}
+              {effectiveClassrooms.map((cls) => (
+                <MenuItem key={cls.id} value={cls.id} sx={{ minHeight: 44 }}>
+                  <Checkbox
+                    checked={formData.classroom_ids.includes(cls.id)}
+                    sx={{ p: 0.5, mr: 1 }}
+                  />
+                  {cls.type === 'common'
+                    ? <PeopleAltIcon sx={{ fontSize: 20, mr: 1, color: typeColors.common }} />
+                    : <SchoolIcon sx={{ fontSize: 20, mr: 1, color: typeColors[cls.type] || 'text.secondary' }} />}
+                  <ListItemText
+                    primary={cls.type === 'common' ? 'All Students' : cls.name}
+                    secondary={cls.type === 'common' ? 'Visible across all classrooms' : `All students in ${cls.name}`}
+                    primaryTypographyProps={{ variant: 'body2', sx: { fontWeight: 600, lineHeight: 1.2 } }}
+                    secondaryTypographyProps={{ variant: 'caption', sx: { fontSize: '0.7rem' } }}
+                  />
+                </MenuItem>
+              ))}
             </Select>
             <FormHelperText>
-              {!formData.target && 'Choose who will see this class'}
-              {isCommon && 'This class will be visible to all students across all classrooms'}
-              {!isCommon && scope === 'classroom' && selectedClassroom && `Visible to all students in ${selectedClassroom.name}`}
-              {scope === 'batch' && 'Visible only to students in this batch'}
+              {formData.classroom_ids.length === 0 && 'Choose who will see this class'}
+              {formData.classroom_ids.length > 0 && isCommon && 'This class will be visible to all students across all classrooms'}
+              {formData.classroom_ids.length > 0 && !isCommon &&
+                `Visible to students in: ${selectedClassrooms.map((c) => c.name).join(', ')}`}
             </FormHelperText>
           </FormControl>
 
@@ -675,50 +677,44 @@ export default function ClassCreateDialog({
             </FormControl>
           </Box>
 
-          <FormControl fullWidth>
-            <InputLabel id="topic-select-label" shrink>Topic</InputLabel>
-            <Select
-              labelId="topic-select-label"
-              label="Topic"
-              displayEmpty
-              value={formData.topic_id}
-              onChange={(e) => setFormData((f) => ({ ...f, topic_id: e.target.value as string }))}
-              notched
-              MenuProps={{ PaperProps: { sx: { maxHeight: 300 } } }}
-              sx={{ minHeight: 48 }}
-            >
-              <MenuItem value="">
-                <em>-- Select Topic --</em>
-              </MenuItem>
-              {(() => {
-                const grouped = topics.reduce<Record<string, TopicOption[]>>((acc, t) => {
-                  const cat = t.category || 'General';
-                  if (!acc[cat]) acc[cat] = [];
-                  acc[cat].push(t);
-                  return acc;
-                }, {});
-                const categories = Object.keys(grouped);
-                if (categories.length <= 1) {
-                  return topics.map((t) => (
-                    <MenuItem key={t.id} value={t.id}>{t.title}</MenuItem>
-                  ));
-                }
-                return categories.map((cat) => [
-                  <ListSubheader key={`header-${cat}`} sx={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', lineHeight: '32px' }}>
-                    {cat}
-                  </ListSubheader>,
-                  ...grouped[cat].map((t) => (
-                    <MenuItem key={t.id} value={t.id} sx={{ pl: 3 }}>{t.title}</MenuItem>
-                  )),
-                ]);
-              })()}
-            </Select>
-            {topics.length === 0 && (
-              <FormHelperText>
-                No saved topics yet. Use Draft with AI below to fill the Title and Description.
-              </FormHelperText>
+          {/* Topic — searchable, from the selected classroom's Course Plan. */}
+          <Autocomplete
+            options={[...topicOptions].sort((a, b) =>
+              (a.category || 'General').localeCompare(b.category || 'General'),
             )}
-          </FormControl>
+            groupBy={(o) => o.category || 'General'}
+            getOptionLabel={(o) => o.title}
+            isOptionEqualToValue={(o, v) => o.id === v.id}
+            value={selectedTopic}
+            onChange={(_e, val) => setFormData((f) => ({ ...f, topic_id: val?.id || '' }))}
+            loading={topicsLoading}
+            fullWidth
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Topic"
+                placeholder="Search topics from the course plan"
+                InputLabelProps={{ ...params.InputLabelProps, shrink: true }}
+                helperText={
+                  formData.classroom_ids.length === 0
+                    ? 'Select a classroom to load its course plan topics'
+                    : !topicsLoading && topicOptions.length === 0
+                      ? 'No course plan topics for this classroom yet. Add topics in Course Plans → Builder.'
+                      : undefined
+                }
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {topicsLoading ? <CircularProgress color="inherit" size={18} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
+
 
           {/* ─── Draft with AI (copy-prompt / paste-back bridge) ─── */}
           <Box
@@ -1028,7 +1024,7 @@ export default function ClassCreateDialog({
         <Button
           variant="contained"
           onClick={handleSubmit}
-          disabled={submitting || !formData.title || !formData.scheduled_date || !formData.target}
+          disabled={submitting || !formData.title || !formData.scheduled_date || formData.classroom_ids.length === 0}
           sx={{ minHeight: 48 }}
         >
           {submitting ? 'Saving...' : editingClass ? 'Update' : 'Create'}

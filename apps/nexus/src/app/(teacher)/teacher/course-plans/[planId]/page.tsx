@@ -41,6 +41,7 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PlanShell from '@/components/course-plan/PlanShell';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePlanData } from '@/components/course-plan/usePlanData';
 import RepositoryPanel from '@/components/course-plan/RepositoryPanel';
 import FlowList from '@/components/course-plan/FlowList';
@@ -56,6 +57,7 @@ export default function PlanBuilderPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const planData = usePlanData(planId);
   const { data, plan, flow, busy, act, patch, setSnack, authFetch } = planData;
+  const { getTeacherToken } = useNexusAuthContext();
 
   const [placing, setPlacing] = useState<Placing | null>(null);
   const [repoOpen, setRepoOpen] = useState(false);
@@ -173,10 +175,21 @@ export default function PlanBuilderPage() {
       let teamsMsg = '';
       if (scTeams && res.class?.id) {
         try {
-          await authFetch('/api/timetable/teams-meeting', {
+          // Writing to the team's group calendar needs the elevated teacher
+          // token (Calendars.ReadWrite lives in nexusTeacher, not the base
+          // nexus scope authFetch uses), so acquire it directly here, the same
+          // way the Timetable page creates meetings.
+          const teacherToken = await getTeacherToken();
+          if (!teacherToken) throw new Error('No teacher token');
+          const mres = await fetch('/api/timetable/teams-meeting', {
             method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${teacherToken}`,
+            },
             body: JSON.stringify({ class_id: res.class.id, classroom_id: plan.classroom_id, scope: scScope }),
           });
+          if (!mres.ok) throw new Error('Teams meeting request failed');
           teamsMsg = ' Teams meeting created.';
         } catch {
           teamsMsg = ' Teams meeting could not be created; you can retry from the Timetable.';

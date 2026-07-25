@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
+import { addMemberToTeam } from '@/lib/teams-sync';
 import { getSupabaseAdminClient } from '@neram/database';
 
 /**
@@ -97,35 +98,59 @@ export async function POST(request: NextRequest) {
 
     const ensureSec = (t: string) => t.length === 5 ? `${t}:00` : t;
     const extras: Record<string, unknown> = {};
-    let meetingId: string;
-    let joinUrl: string;
+    let meetingId = '';
+    let joinUrl = '';
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
       // ── CHANNEL MEETING: proper group calendar event (shows in Teams channel + sends invites) ──
       // Writing to the team's group calendar requires the organizer to be a
-      // member/owner of that M365 group. If that call is denied (403
-      // ErrorAccessDenied) or otherwise fails, we don't want the teacher left
-      // with no meeting: fall back to a standalone meeting link (uses
-      // OnlineMeetings.ReadWrite, which is not membership-gated) and still
-      // announce it in the channel.
-      try {
-        const result = await createGroupCalendarEvent(
-          supabase, token, classroom.ms_team_id, classroom_id,
+      // MEMBER of that M365 group. Being only an owner is NOT enough: Microsoft
+      // gates the group mailbox/calendar on membership, so an owner-only teacher
+      // gets 403 ErrorAccessDenied here. So on the first failure we self-heal by
+      // adding the organizer as a member (app-only, idempotent) and retry once,
+      // keeping the teacher as the meeting organizer (so /me/onlineMeetings-based
+      // auto-record and Class Capture transcripts keep working). Only if the
+      // retry still fails (usually brand-new membership not yet provisioned on
+      // the group mailbox) do we fall back to a standalone link so the teacher is
+      // never left with no meeting.
+      const teamId = classroom.ms_team_id; // narrowed to string by the guard above
+      const createGroupEvent = () =>
+        createGroupCalendarEvent(
+          supabase, token, teamId, classroom_id,
           scheduledClass.batch_id, scheduledClass, user.email || '', ensureSec
         );
+
+      try {
+        const result = await createGroupEvent();
         meetingId = result.meetingId;
         joinUrl = result.joinUrl;
         extras.attendeeCount = result.attendeeCount;
-      } catch (err) {
-        console.error('Group calendar event failed, falling back to standalone meeting:', err);
-        const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
-        meetingId = meeting.id;
-        joinUrl = meeting.joinWebUrl;
-        // The stored scope reflects what was actually created.
-        scope = 'calendar_event';
-        extras.degraded = true;
-        extras.note =
-          'Created a standalone Teams meeting link because the team calendar was not writable (you may not be a member of the team). To get a native channel meeting, ask an admin to add you to the team.';
+      } catch (firstErr) {
+        console.error('Group calendar event failed; adding organizer as team member and retrying:', firstErr);
+        let retried = false;
+        try {
+          if (!msUser.oid) throw new Error('Missing organizer ms_oid for team membership self-heal');
+          await addMemberToTeam(teamId, msUser.oid);
+          const result = await createGroupEvent();
+          meetingId = result.meetingId;
+          joinUrl = result.joinUrl;
+          extras.attendeeCount = result.attendeeCount;
+          extras.membershipHealed = true;
+          retried = true;
+        } catch (retryErr) {
+          console.error('Group calendar event still failed after membership self-heal:', retryErr);
+        }
+
+        if (!retried) {
+          const meeting = await createStandaloneMeeting(token, scheduledClass, ensureSec);
+          meetingId = meeting.id;
+          joinUrl = meeting.joinWebUrl;
+          // The stored scope reflects what was actually created.
+          scope = 'calendar_event';
+          extras.degraded = true;
+          extras.note =
+            'Created a standalone Teams meeting link this time. Microsoft was still setting up your access to the class team calendar, native channel meetings will work on the next try.';
+        }
       }
 
       // Enable auto-record on the linked online meeting (best-effort, non-blocking).
@@ -219,7 +244,7 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'Failed to create Teams meeting';
     console.error('Teams meeting creation error:', message);
     const friendly = /access.?denied|forbidden|403|unauthor|invalid.*token|401/i.test(message)
-      ? 'Could not create a Teams meeting: Microsoft denied access. Sign out of Nexus and sign back in, then try again. If it keeps failing, make sure your account is a member of the class team.'
+      ? 'Could not create a Teams meeting: Microsoft denied access. Sign out of Nexus and sign back in, then try again.'
       : 'Could not create a Teams meeting right now. Please try again in a moment.';
     return NextResponse.json({ error: friendly }, { status: 500 });
   }

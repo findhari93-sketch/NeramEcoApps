@@ -6,7 +6,7 @@ import { loadPlanShapes } from '@/lib/plan-shape-query';
 import { notifyStudents } from '@/lib/notify-students';
 import { generateRecurrenceDates } from './recurrence';
 
-const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
+const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
 /**
  * GET /api/timetable?classroom={id}&start={date}&end={date}
@@ -179,101 +179,135 @@ export async function POST(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
     const {
-      classroom_id, title, scheduled_date, start_time, end_time,
-      topic_id, batch_id, teams_meeting_scope, target_scope, description,
+      classroom_id, classroom_ids, title, scheduled_date, start_time, end_time,
+      topic_id, course_topic_id, batch_id, teams_meeting_scope, target_scope, description,
       lobby_bypass, allowed_presenters, recurrence_rule, recurrence_end_date,
       publish_state,
     } = body;
 
-    if (!classroom_id || !title || !scheduled_date || !start_time || !end_time) {
+    // Multi-classroom: one logical class can target several classrooms. Each classroom
+    // still gets its own row (visibility is enrollment-based, no class<->classrooms join);
+    // sibling rows share a meeting_group_id so they read as one meeting. `classroom_ids`
+    // is the new field; `classroom_id` is kept for backward compatibility.
+    const classroomIds: string[] = Array.from(
+      new Set(
+        (Array.isArray(classroom_ids) && classroom_ids.length > 0
+          ? classroom_ids
+          : classroom_id
+            ? [classroom_id]
+            : []
+        ).filter(Boolean),
+      ),
+    );
+
+    if (classroomIds.length === 0 || !title || !scheduled_date || !start_time || !end_time) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const teacherId = await verifyTeacherRole(msUser.oid, classroom_id);
     const supabase = getSupabaseAdminClient();
 
-    const baseData: Record<string, unknown> = {
-      classroom_id,
+    // Verify the teacher can manage every selected classroom (also blocks archived ones).
+    // The teacher id is the same user across classrooms.
+    let teacherId: string | null = null;
+    for (const cid of classroomIds) {
+      teacherId = await verifyTeacherRole(msUser.oid, cid);
+    }
+
+    // Classroom types drive the display-only target_scope ('all' for the common cohort).
+    const { data: classroomRows } = await supabase
+      .from('nexus_classrooms')
+      .select('id, type')
+      .in('id', classroomIds);
+    const typeById = new Map<string, string>((classroomRows || []).map((c) => [c.id, c.type]));
+
+    const isDraftReq = publish_state === 'draft';
+    const publishedAt = isDraftReq ? null : new Date().toISOString();
+
+    // One shared meeting group when the class spans multiple classrooms.
+    const meetingGroupId = classroomIds.length > 1 ? crypto.randomUUID() : null;
+
+    const baseFor = (cid: string): Record<string, unknown> => ({
+      classroom_id: cid,
       title,
       start_time,
       end_time,
       teacher_id: teacherId,
+      // Topics now come from the Course Plan Builder (course_topic_id). topic_id is the
+      // legacy topic space, kept null unless a caller still sends it.
+      course_topic_id: course_topic_id || null,
       topic_id: topic_id || null,
       batch_id: batch_id || null,
+      // Only touch meeting_group_id when this class actually spans classrooms, so
+      // single-classroom creates keep working before the column migration is applied.
+      ...(meetingGroupId ? { meeting_group_id: meetingGroupId } : {}),
       teams_meeting_scope: teams_meeting_scope || null,
-      target_scope: target_scope || (batch_id ? 'batch' : 'classroom'),
+      target_scope: target_scope || (typeById.get(cid) === 'common' ? 'all' : 'classroom'),
       description: description || null,
       lobby_bypass: lobby_bypass || 'organization',
       allowed_presenters: allowed_presenters || 'organizer',
       status: 'scheduled',
       // Callers must opt IN to drafting. Everything that existed before the
       // planner (including the Teams sync) keeps publishing immediately.
-      publish_state: publish_state === 'draft' ? 'draft' : 'published',
-      published_at: publish_state === 'draft' ? null : new Date().toISOString(),
-    };
-    const isDraft = baseData.publish_state === 'draft';
+      publish_state: isDraftReq ? 'draft' : 'published',
+      published_at: publishedAt,
+    });
 
-    // Handle recurrence: generate multiple dates
+    // Dates: recurrence expands to many, otherwise a single date.
+    let dates: string[] = [scheduled_date];
+    const recurrenceGroupId = recurrence_rule && recurrence_end_date ? crypto.randomUUID() : null;
     if (recurrence_rule && recurrence_end_date) {
-      const dates = generateRecurrenceDates(scheduled_date, recurrence_end_date, recurrence_rule);
+      dates = generateRecurrenceDates(scheduled_date, recurrence_end_date, recurrence_rule);
       if (dates.length === 0) {
         return NextResponse.json({ error: 'No matching dates found for recurrence rule' }, { status: 400 });
       }
       if (dates.length > 90) {
         return NextResponse.json({ error: 'Recurrence generates too many classes (max 90)' }, { status: 400 });
       }
-
-      const groupId = crypto.randomUUID();
-      const rows = dates.map((date) => ({
-        ...baseData,
-        scheduled_date: date,
-        recurrence_rule: recurrence_rule,
-        recurrence_group_id: groupId,
-      }));
-
-      const { data, error } = await supabase
-        .from('nexus_scheduled_classes')
-        .insert(rows as any)
-        .select(CLASS_SELECT);
-
-      if (error) throw error;
-
-      // Notify for first class only (avoid spam). Drafts stay silent: students
-      // hear about them once, at publish.
-      try {
-        if (!isDraft && data && data.length > 0) {
-          await notifyClassCreated(classroom_id, `${title} (${data.length} classes)`, scheduled_date, data[0].id);
-        }
-      } catch {
-        // Don't fail creation if notification fails
-      }
-
-      return NextResponse.json({ classes: data, count: data?.length || 0 }, { status: 201 });
     }
 
-    // Single class insert
-    const insertData = { ...baseData, scheduled_date };
+    // One row per (classroom × date).
+    const rows = classroomIds.flatMap((cid) =>
+      dates.map((date) => ({
+        ...baseFor(cid),
+        scheduled_date: date,
+        ...(recurrenceGroupId
+          ? { recurrence_rule, recurrence_group_id: recurrenceGroupId }
+          : {}),
+      })),
+    );
 
     const { data, error } = await supabase
       .from('nexus_scheduled_classes')
-      .insert(insertData as any)
-      .select(CLASS_SELECT)
-      .single();
+      .insert(rows as any)
+      .select(CLASS_SELECT);
 
     if (error) throw error;
 
-    // Notify students, unless this is a draft the teacher is still planning.
+    // Notify students per classroom (students are enrolled per classroom). Send once
+    // per classroom for the first date only; drafts stay silent until publish.
     try {
-      if (!isDraft && data) {
-        await notifyClassCreated(classroom_id, title, scheduled_date, data.id);
+      if (!isDraftReq && data && data.length > 0) {
+        const label = dates.length > 1 ? `${title} (${dates.length} classes)` : title;
+        for (const cid of classroomIds) {
+          const first = data.find((c) => c.classroom_id === cid);
+          if (first) await notifyClassCreated(cid, label, scheduled_date, first.id);
+        }
       }
     } catch {
       // Don't fail creation if notification fails
     }
 
-    return NextResponse.json({
-      class: data,
-    }, { status: 201 });
+    // Return `classes` (always) plus `class` for the simple single-row case so older
+    // callers keep working.
+    return NextResponse.json(
+      {
+        classes: data,
+        count: data?.length || 0,
+        meeting_group_id: meetingGroupId,
+        ...(data && data.length === 1 ? { class: data[0] } : {}),
+      },
+      { status: 201 },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to create class';
     const status = message.includes('archived') ? 409 : message.includes('Only teachers') ? 403 : 500;
@@ -300,7 +334,7 @@ export async function PATCH(request: NextRequest) {
 
     // Only allow updating specific fields
     const allowedFields = [
-      'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'status',
+      'title', 'scheduled_date', 'start_time', 'end_time', 'topic_id', 'course_topic_id', 'status',
       'teams_meeting_url', 'teams_meeting_id', 'teams_meeting_join_url', 'teams_meeting_scope',
       'batch_id', 'recording_url', 'transcript_url', 'notes', 'description', 'target_scope',
       'lobby_bypass', 'allowed_presenters', 'auto_sync_recording', 'rescheduled_to',

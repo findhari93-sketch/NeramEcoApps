@@ -10435,6 +10435,7 @@ export type Database = {
           end_time: string
           id: string
           lobby_bypass: string | null
+          meeting_group_id: string | null
           notes: string | null
           organizer_name: string | null
           recording_duration_minutes: number | null
@@ -10466,6 +10467,7 @@ export type Database = {
           end_time: string
           id?: string
           lobby_bypass?: string | null
+          meeting_group_id?: string | null
           notes?: string | null
           organizer_name?: string | null
           recording_duration_minutes?: number | null
@@ -10497,6 +10499,7 @@ export type Database = {
           end_time?: string
           id?: string
           lobby_bypass?: string | null
+          meeting_group_id?: string | null
           notes?: string | null
           organizer_name?: string | null
           recording_duration_minutes?: number | null
